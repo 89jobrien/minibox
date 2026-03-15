@@ -1,0 +1,49 @@
+# Markdown files (except README.md and CLAUDE.md)
+*.md
+!README.md
+!CLAUDE.md
+
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock is committed for binary projects
+# Remove the line below if this becomes a library
+# Cargo.lock
+
+# Runtime directories (daemon creates these)
+/var/lib/minibox/
+/run/minibox/
+
+# Testing
+*.profraw
+*.profdata
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Local development
+.env
+.env.local
+*.log
+*.pid
+
+# Documentation build
+/target/doc/
+
+# Backup files
+*.bak
+*.orig

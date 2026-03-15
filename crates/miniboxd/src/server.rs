@@ -1,0 +1,95 @@
+//! Unix socket connection handler.
+//!
+//! Each accepted connection is handled by `handle_connection`.  The
+//! protocol is line-oriented JSON: the client writes one JSON line per
+//! request and the daemon responds with one JSON line per response.
+
+use anyhow::{Context, Result};
+use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::net::UnixStream;
+use tracing::{debug, info, warn};
+
+use crate::handler;
+use crate::state::DaemonState;
+
+/// Handle a single client connection.
+///
+/// Reads newline-delimited JSON requests, dispatches to handlers, and
+/// writes newline-delimited JSON responses.  Continues until the client
+/// closes the connection or a fatal IO error occurs.
+pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> Result<()> {
+    let (read_half, write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+    let mut writer = BufWriter::new(write_half);
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .await
+            .context("reading from client")?;
+
+        if bytes_read == 0 {
+            // Client closed the connection.
+            debug!("client disconnected");
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        debug!("received request: {}", trimmed);
+
+        let response = match serde_json::from_str::<DaemonRequest>(trimmed) {
+            Ok(request) => {
+                info!("dispatching request: {:?}", request);
+                dispatch(request, Arc::clone(&state)).await
+            }
+            Err(e) => {
+                warn!("failed to parse request '{}': {}", trimmed, e);
+                DaemonResponse::Error {
+                    message: format!("invalid request: {}", e),
+                }
+            }
+        };
+
+        let mut response_json =
+            serde_json::to_string(&response).context("serializing response")?;
+        response_json.push('\n');
+
+        debug!("sending response: {}", response_json.trim());
+
+        writer
+            .write_all(response_json.as_bytes())
+            .await
+            .context("writing response")?;
+        writer.flush().await.context("flushing response")?;
+    }
+
+    Ok(())
+}
+
+/// Route a parsed `DaemonRequest` to the appropriate handler.
+async fn dispatch(request: DaemonRequest, state: Arc<DaemonState>) -> DaemonResponse {
+    match request {
+        DaemonRequest::Run {
+            image,
+            tag,
+            command,
+            memory_limit_bytes,
+            cpu_weight,
+        } => {
+            handler::handle_run(image, tag, command, memory_limit_bytes, cpu_weight, state)
+                .await
+        }
+        DaemonRequest::Stop { id } => handler::handle_stop(id, state).await,
+        DaemonRequest::Remove { id } => handler::handle_remove(id, state).await,
+        DaemonRequest::List => handler::handle_list(state).await,
+        DaemonRequest::Pull { image, tag } => handler::handle_pull(image, tag, state).await,
+    }
+}

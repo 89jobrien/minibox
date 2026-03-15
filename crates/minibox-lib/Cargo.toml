@@ -1,0 +1,24 @@
+[package]
+name = "minibox-lib"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+nix = { workspace = true }
+libc = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+tempfile = { workspace = true }

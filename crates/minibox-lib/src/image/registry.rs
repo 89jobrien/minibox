@@ -1,0 +1,332 @@
+//! Docker Hub / OCI registry client.
+//!
+//! Supports anonymous token authentication (sufficient for public images) and
+//! pulls manifests and blobs from `registry-1.docker.io`.
+//!
+//! # Usage
+//!
+//! ```rust,no_run
+//! use minibox_lib::image::{ImageStore, registry::RegistryClient};
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let store = ImageStore::new("/var/lib/minibox/images")?;
+//!     let client = RegistryClient::new()?;
+//!     client.pull_image("library/ubuntu", "22.04", &store).await?;
+//!     Ok(())
+//! }
+//! ```
+
+use crate::error::RegistryError;
+use crate::image::layer::verify_digest;
+use crate::image::manifest::{
+    ManifestResponse, OciManifest, MEDIA_TYPE_DOCKER_MANIFEST,
+    MEDIA_TYPE_DOCKER_MANIFEST_LIST, MEDIA_TYPE_OCI_INDEX, MEDIA_TYPE_OCI_MANIFEST,
+};
+use crate::image::ImageStore;
+use anyhow::Context;
+use bytes::Bytes;
+use reqwest::Client;
+use serde::Deserialize;
+use tracing::{debug, info};
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const AUTH_URL: &str = "https://auth.docker.io/token";
+const REGISTRY_BASE: &str = "https://registry-1.docker.io/v2";
+
+// ---------------------------------------------------------------------------
+// Auth token response
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
+    token: String,
+}
+
+// ---------------------------------------------------------------------------
+// RegistryClient
+// ---------------------------------------------------------------------------
+
+/// A Docker Hub registry client.
+///
+/// Internally wraps a [`reqwest::Client`] with redirect following enabled
+/// (required for blob downloads which redirect to CDN).
+#[derive(Debug, Clone)]
+pub struct RegistryClient {
+    http: Client,
+}
+
+impl RegistryClient {
+    /// Create a new client. Follows redirects automatically.
+    pub fn new() -> anyhow::Result<Self> {
+        let http = Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build()
+            .map_err(RegistryError::Network)?;
+        Ok(Self { http })
+    }
+
+    // -----------------------------------------------------------------------
+    // Authentication
+    // -----------------------------------------------------------------------
+
+    /// Obtain an anonymous pull token for `image_name` from Docker Hub.
+    ///
+    /// The returned token should be passed to subsequent manifest/blob calls.
+    pub async fn authenticate(&self, image_name: &str) -> anyhow::Result<String> {
+        debug!("authenticating for image '{}'", image_name);
+
+        let url = format!(
+            "{AUTH_URL}?service=registry.docker.io&scope=repository:{image_name}:pull"
+        );
+
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| format!("auth request for {image_name}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let msg = resp.text().await.unwrap_or_else(|_| String::new());
+            return Err(RegistryError::AuthFailed {
+                image: image_name.to_owned(),
+                message: format!("HTTP {status}: {msg}"),
+            }
+            .into());
+        }
+
+        let token_resp: TokenResponse = resp
+            .json::<TokenResponse>()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| "parsing auth token response")?;
+
+        info!("authenticated for '{}'", image_name);
+        Ok(token_resp.token)
+    }
+
+    // -----------------------------------------------------------------------
+    // Manifest
+    // -----------------------------------------------------------------------
+
+    /// Fetch the manifest for `name:tag`.
+    ///
+    /// Handles both single-arch manifests and manifest lists. If the registry
+    /// returns a manifest list, the `linux/amd64` entry is selected and that
+    /// manifest is fetched.
+    pub async fn get_manifest(
+        &self,
+        name: &str,
+        tag: &str,
+        token: &str,
+    ) -> anyhow::Result<OciManifest> {
+        let url = format!("{REGISTRY_BASE}/{name}/manifests/{tag}");
+        debug!("fetching manifest {}", url);
+
+        let resp = self
+            .http
+            .get(&url)
+            .bearer_auth(token)
+            .header(
+                "Accept",
+                format!(
+                    "{}, {}, {}, {}",
+                    MEDIA_TYPE_OCI_MANIFEST,
+                    MEDIA_TYPE_OCI_INDEX,
+                    MEDIA_TYPE_DOCKER_MANIFEST,
+                    MEDIA_TYPE_DOCKER_MANIFEST_LIST,
+                ),
+            )
+            .send()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| format!("GET manifest {name}:{tag}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let msg = resp.text().await.unwrap_or_else(|_| String::new());
+            return Err(RegistryError::ManifestFetch {
+                name: name.to_owned(),
+                tag: tag.to_owned(),
+                message: format!("HTTP {status}: {msg}"),
+            }
+            .into());
+        }
+
+        // Use the Content-Type header to determine whether this is a manifest
+        // list or a single manifest.
+        let content_type = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v: &reqwest::header::HeaderValue| v.to_str().ok())
+            .unwrap_or("")
+            .to_owned();
+
+        let body: Bytes = resp
+            .bytes()
+            .await
+            .map_err(RegistryError::Network)?;
+
+        debug!(
+            "manifest response content-type='{}' size={}",
+            content_type,
+            body.len()
+        );
+
+        match ManifestResponse::parse(&body, &content_type)? {
+            ManifestResponse::Single(m) => Ok(m),
+            ManifestResponse::List(list) => {
+                // Find linux/amd64 and fetch that manifest.
+                let amd64 = list
+                    .find_linux_amd64()
+                    .ok_or(RegistryError::NoAmd64Manifest)?;
+                info!("manifest list resolved to amd64 digest={}", amd64.digest);
+                let digest = amd64.digest.clone();
+                // Recurse with the digest as the "tag".
+                Box::pin(self.get_manifest(name, &digest, token)).await
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Blob / layer pull
+    // -----------------------------------------------------------------------
+
+    /// Download a single blob by `digest` and return its raw bytes.
+    ///
+    /// Docker Hub redirects blob requests to a CDN; the client follows these
+    /// redirects automatically.
+    pub async fn pull_layer(
+        &self,
+        name: &str,
+        digest: &str,
+        token: &str,
+    ) -> anyhow::Result<Bytes> {
+        let url = format!("{REGISTRY_BASE}/{name}/blobs/{digest}");
+        debug!("pulling blob {} from {}", digest, url);
+
+        let resp = self
+            .http
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| format!("GET blob {digest}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let msg = resp.text().await.unwrap_or_else(|_| String::new());
+            return Err(RegistryError::BlobFetch {
+                digest: digest.to_owned(),
+                message: format!("HTTP {status}: {msg}"),
+            }
+            .into());
+        }
+
+        let data: Bytes = resp.bytes().await.map_err(RegistryError::Network)?;
+        info!("pulled blob {} ({} bytes)", digest, data.len());
+        Ok(data)
+    }
+
+    // -----------------------------------------------------------------------
+    // High-level pull
+    // -----------------------------------------------------------------------
+
+    /// Pull a complete image and store it locally.
+    ///
+    /// Steps:
+    /// 1. Authenticate.
+    /// 2. Fetch manifest (resolving manifest lists automatically).
+    /// 3. For each layer: download blob, verify digest, extract to store.
+    /// 4. Persist manifest.
+    pub async fn pull_image(
+        &self,
+        name: &str,
+        tag: &str,
+        store: &ImageStore,
+    ) -> anyhow::Result<()> {
+        info!("pulling image {}:{}", name, tag);
+
+        // 1. Authenticate.
+        let token = self
+            .authenticate(name)
+            .await
+            .with_context(|| format!("authenticate for {name}"))?;
+
+        // 2. Fetch manifest.
+        let manifest = self
+            .get_manifest(name, tag, &token)
+            .await
+            .with_context(|| format!("get manifest for {name}:{tag}"))?;
+
+        info!(
+            "manifest has {} layers for {}:{}",
+            manifest.layers.len(),
+            name,
+            tag
+        );
+
+        // 3. Download and store each layer.
+        for (idx, layer_desc) in manifest.layers.iter().enumerate() {
+            info!(
+                "pulling layer {}/{}: {}",
+                idx + 1,
+                manifest.layers.len(),
+                layer_desc.digest
+            );
+
+            // Build the expected layer directory path to check for existence.
+            let digest_key = layer_desc.digest.replace(':', "_");
+            let layer_dir = store
+                .base_dir
+                .join(name.replace('/', "_"))
+                .join(tag)
+                .join("layers")
+                .join(&digest_key);
+
+            if layer_dir.exists() {
+                debug!("layer {} already in store, skipping", layer_desc.digest);
+                continue;
+            }
+
+            let data = self
+                .pull_layer(name, &layer_desc.digest, &token)
+                .await
+                .with_context(|| format!("pull layer {}", layer_desc.digest))?;
+
+            // Verify digest before storing.
+            verify_digest(&data, &layer_desc.digest)
+                .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+
+            store
+                .store_layer(
+                    name,
+                    tag,
+                    &layer_desc.digest,
+                    std::io::Cursor::new(data),
+                )
+                .with_context(|| format!("store layer {}", layer_desc.digest))?;
+        }
+
+        // 4. Persist manifest.
+        store
+            .store_manifest(name, tag, &manifest)
+            .with_context(|| format!("store manifest for {name}:{tag}"))?;
+
+        info!("image {}:{} pulled and stored successfully", name, tag);
+        Ok(())
+    }
+}
+
+impl Default for RegistryClient {
+    fn default() -> Self {
+        Self::new().expect("failed to build RegistryClient")
+    }
+}
