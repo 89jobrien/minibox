@@ -6,6 +6,8 @@
 
 use anyhow::{Context, Result};
 use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
+use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
@@ -19,7 +21,33 @@ use crate::state::DaemonState;
 /// Reads newline-delimited JSON requests, dispatches to handlers, and
 /// writes newline-delimited JSON responses.  Continues until the client
 /// closes the connection or a fatal IO error occurs.
+///
+/// # Security
+///
+/// Authenticates the client via SO_PEERCRED and only accepts connections
+/// from root (UID 0).
 pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> Result<()> {
+    // SECURITY: Get peer credentials and verify UID is root
+    let raw_fd = stream.as_raw_fd();
+    let creds = getsockopt(raw_fd, PeerCredentials)
+        .context("failed to get peer credentials")?;
+
+    if creds.uid() != 0 {
+        warn!(
+            "rejecting connection from non-root UID {} (PID {})",
+            creds.uid(),
+            creds.pid()
+        );
+        // Close connection without processing requests
+        return Ok(());
+    }
+
+    info!(
+        "accepted connection from UID {} PID {}",
+        creds.uid(),
+        creds.pid()
+    );
+
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
     let mut writer = BufWriter::new(write_half);

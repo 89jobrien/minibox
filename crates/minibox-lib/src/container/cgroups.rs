@@ -17,6 +17,11 @@ pub struct CgroupConfig {
     /// CPU weight in the range 1-10000 (default kernel value is 100).
     /// `None` leaves the default.
     pub cpu_weight: Option<u64>,
+    /// Maximum number of PIDs (processes/threads). `None` means unlimited.
+    /// Default: 1024 to prevent fork bombs.
+    pub pids_max: Option<u64>,
+    /// I/O bandwidth limit in bytes/second. `None` means unlimited.
+    pub io_max_bytes_per_sec: Option<u64>,
 }
 
 /// Manages a single container cgroup under the minibox slice.
@@ -56,14 +61,38 @@ impl CgroupManager {
             source,
         })?;
 
+        // Memory limit
         if let Some(mem) = self.config.memory_limit_bytes {
+            // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
+            if mem < 4096 {
+                anyhow::bail!("memory limit must be >= 4096 bytes, got {}", mem);
+            }
             self.write_file("memory.max", &mem.to_string())?;
             debug!("set memory.max={}", mem);
         }
 
+        // CPU weight
         if let Some(cpu) = self.config.cpu_weight {
+            // SECURITY: Validate range (kernel range is 1-10000)
+            if cpu < 1 || cpu > 10000 {
+                anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
+            }
             self.write_file("cpu.weight", &cpu.to_string())?;
             debug!("set cpu.weight={}", cpu);
+        }
+
+        // SECURITY: PID limit to prevent fork bombs
+        let pids_limit = self.config.pids_max.unwrap_or(1024);
+        self.write_file("pids.max", &pids_limit.to_string())?;
+        debug!("set pids.max={}", pids_limit);
+
+        // SECURITY: I/O throttling to prevent disk DoS
+        if let Some(io_limit) = self.config.io_max_bytes_per_sec {
+            // Format: "major:minor rbps=<bytes> wbps=<bytes>"
+            // We'll use 8:0 (sda) as a default - in production, this should be configurable
+            let io_max_line = format!("8:0 rbps={} wbps={}", io_limit, io_limit);
+            self.write_file("io.max", &io_max_line)?;
+            debug!("set io.max={} bytes/sec", io_limit);
         }
 
         info!("cgroup created at {:?}", self.cgroup_path);

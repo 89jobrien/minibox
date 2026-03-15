@@ -73,6 +73,19 @@ async fn main() -> Result<()> {
 
     let listener = UnixListener::bind(sock_path)
         .with_context(|| format!("binding Unix socket at {}", SOCKET_PATH))?;
+
+    // SECURITY: Restrict socket permissions to owner (root) only
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(sock_path)?;
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o600); // Owner read/write only
+        std::fs::set_permissions(sock_path, permissions)
+            .context("setting socket permissions to 0600")?;
+        info!("socket permissions set to 0600 (root only)");
+    }
+
     info!("listening on {}", SOCKET_PATH);
 
     // ── Signal handling ────────────────────────────────────────────────────

@@ -26,9 +26,10 @@ use crate::image::manifest::{
 use crate::image::ImageStore;
 use anyhow::Context;
 use bytes::Bytes;
+use futures::stream::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,6 +37,10 @@ use tracing::{debug, info};
 
 const AUTH_URL: &str = "https://auth.docker.io/token";
 const REGISTRY_BASE: &str = "https://registry-1.docker.io/v2";
+
+// SECURITY: Resource limits to prevent DoS attacks
+const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+const MAX_LAYER_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GB
 
 // ---------------------------------------------------------------------------
 // Auth token response
@@ -168,11 +173,39 @@ impl RegistryClient {
             .unwrap_or("")
             .to_owned();
 
-        let body: Bytes = resp
-            .bytes()
-            .await
-            .map_err(RegistryError::Network)?;
+        // SECURITY: Check Content-Length header before reading
+        if let Some(content_length) = resp.headers().get("content-length") {
+            if let Ok(size_str) = content_length.to_str() {
+                if let Ok(size) = size_str.parse::<u64>() {
+                    if size > MAX_MANIFEST_SIZE {
+                        return Err(RegistryError::Other(format!(
+                            "manifest too large: {} bytes (max {})",
+                            size, MAX_MANIFEST_SIZE
+                        ))
+                        .into());
+                    }
+                }
+            }
+        }
 
+        // SECURITY: Use streaming reader with size limit
+        let mut body_stream = resp.bytes_stream();
+        let mut body = Vec::new();
+
+        while let Some(chunk_result) = body_stream.next().await {
+            let chunk = chunk_result.map_err(RegistryError::Network)?;
+            body.extend_from_slice(&chunk);
+
+            if body.len() as u64 > MAX_MANIFEST_SIZE {
+                return Err(RegistryError::Other(format!(
+                    "manifest exceeded size limit: {} bytes",
+                    MAX_MANIFEST_SIZE
+                ))
+                .into());
+            }
+        }
+
+        let body = Bytes::from(body);
         debug!(
             "manifest response content-type='{}' size={}",
             content_type,
@@ -230,7 +263,40 @@ impl RegistryClient {
             .into());
         }
 
-        let data: Bytes = resp.bytes().await.map_err(RegistryError::Network)?;
+        // SECURITY: Check Content-Length header before downloading
+        if let Some(content_length) = resp.headers().get("content-length") {
+            if let Ok(size_str) = content_length.to_str() {
+                if let Ok(size) = size_str.parse::<u64>() {
+                    if size > MAX_LAYER_SIZE {
+                        return Err(RegistryError::Other(format!(
+                            "layer too large: {} bytes (max {})",
+                            size, MAX_LAYER_SIZE
+                        ))
+                        .into());
+                    }
+                    debug!("layer size: {} bytes", size);
+                }
+            }
+        }
+
+        // SECURITY: Use streaming reader with size limit
+        let mut body_stream = resp.bytes_stream();
+        let mut data = Vec::new();
+
+        while let Some(chunk_result) = body_stream.next().await {
+            let chunk = chunk_result.map_err(RegistryError::Network)?;
+            data.extend_from_slice(&chunk);
+
+            if data.len() as u64 > MAX_LAYER_SIZE {
+                return Err(RegistryError::Other(format!(
+                    "layer exceeded size limit during download: {} bytes",
+                    MAX_LAYER_SIZE
+                ))
+                .into());
+            }
+        }
+
+        let data = Bytes::from(data);
         info!("pulled blob {} ({} bytes)", digest, data.len());
         Ok(data)
     }

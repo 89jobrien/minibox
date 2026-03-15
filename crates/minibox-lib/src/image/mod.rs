@@ -48,14 +48,16 @@ impl ImageStore {
     /// Returns `true` if the image `name:tag` has been pulled and its manifest
     /// is present on disk.
     pub fn has_image(&self, name: &str, tag: &str) -> bool {
-        self.manifest_path(name, tag).exists()
+        self.manifest_path(name, tag)
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 
     /// Return the ordered list of layer directories for `name:tag`
     /// (bottom-to-top, matching the order in the manifest).
     pub fn get_image_layers(&self, name: &str, tag: &str) -> anyhow::Result<Vec<PathBuf>> {
         let manifest = self.load_manifest(name, tag)?;
-        let layers_base = self.layers_dir(name, tag);
+        let layers_base = self.layers_dir(name, tag)?;
 
         let paths: Vec<PathBuf> = manifest
             .layers
@@ -81,7 +83,7 @@ impl ImageStore {
         tag: &str,
         manifest: &OciManifest,
     ) -> anyhow::Result<()> {
-        let path = self.manifest_path(name, tag);
+        let path = self.manifest_path(name, tag)?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| ImageError::StoreWrite {
                 path: parent.display().to_string(),
@@ -120,7 +122,7 @@ impl ImageStore {
         mut data_reader: R,
     ) -> anyhow::Result<PathBuf> {
         let digest_key = digest.replace(':', "_");
-        let dest = self.layers_dir(name, tag).join(&digest_key);
+        let dest = self.layers_dir(name, tag)?.join(&digest_key);
 
         if dest.exists() {
             debug!("layer {} already extracted at {:?}, skipping", digest, dest);
@@ -152,22 +154,89 @@ impl ImageStore {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    fn image_dir(&self, name: &str, tag: &str) -> PathBuf {
+    /// Get the directory path for an image, with security validation.
+    ///
+    /// # Security
+    ///
+    /// Validates that the image name and tag don't contain path traversal
+    /// sequences or other dangerous characters.
+    fn image_dir(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
+        // SECURITY: Validate name and tag
+        for (component_name, component) in [("image name", name), ("tag", tag)] {
+            // Reject empty strings
+            if component.is_empty() {
+                return Err(ImageError::Other(format!(
+                    "invalid {}: cannot be empty",
+                    component_name
+                ))
+                .into());
+            }
+
+            // Reject absolute paths
+            if component.starts_with('/') {
+                return Err(ImageError::Other(format!(
+                    "invalid {}: cannot start with /",
+                    component_name
+                ))
+                .into());
+            }
+
+            // Reject path traversal
+            if component.contains("..") {
+                return Err(ImageError::Other(format!(
+                    "invalid {}: cannot contain '..'",
+                    component_name
+                ))
+                .into());
+            }
+
+            // Reject null bytes
+            if component.contains('\0') {
+                return Err(ImageError::Other(format!(
+                    "invalid {}: cannot contain null bytes",
+                    component_name
+                ))
+                .into());
+            }
+        }
+
         // Replace '/' in image name (e.g. "library/ubuntu") with '_'
         let safe_name = name.replace('/', "_");
-        self.base_dir.join(safe_name).join(tag)
+        let result = self.base_dir.join(&safe_name).join(tag);
+
+        // SECURITY: Canonicalize and verify the result is still under base_dir
+        // Note: The path may not exist yet, so we validate the parent instead
+        if let Some(parent) = result.parent() {
+            if parent.exists() {
+                let canonical = parent.canonicalize()
+                    .with_context(|| format!("canonicalizing parent of image dir: {:?}", parent))?;
+                let canonical_base = self.base_dir.canonicalize()
+                    .with_context(|| format!("canonicalizing base dir: {:?}", self.base_dir))?;
+
+                if !canonical.starts_with(&canonical_base) {
+                    return Err(ImageError::Other(format!(
+                        "path traversal attempt: image dir {:?} is outside base {:?}",
+                        canonical, canonical_base
+                    ))
+                    .into());
+                }
+            }
+        }
+
+        debug!("validated image_dir for {}:{}: {:?}", name, tag, result);
+        Ok(result)
     }
 
-    fn manifest_path(&self, name: &str, tag: &str) -> PathBuf {
-        self.image_dir(name, tag).join("manifest.json")
+    fn manifest_path(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
+        Ok(self.image_dir(name, tag)?.join("manifest.json"))
     }
 
-    fn layers_dir(&self, name: &str, tag: &str) -> PathBuf {
-        self.image_dir(name, tag).join("layers")
+    fn layers_dir(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
+        Ok(self.image_dir(name, tag)?.join("layers"))
     }
 
     fn load_manifest(&self, name: &str, tag: &str) -> anyhow::Result<OciManifest> {
-        let path = self.manifest_path(name, tag);
+        let path = self.manifest_path(name, tag)?;
         if !path.exists() {
             return Err(ImageError::NotFound {
                 name: name.to_owned(),
