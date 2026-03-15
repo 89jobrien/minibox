@@ -10,8 +10,11 @@ use minibox_lib::protocol::ContainerInfo;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::debug;
+
+// SECURITY: Maximum concurrent container spawn operations to prevent fork bombs
+const MAX_CONCURRENT_SPAWNS: usize = 100;
 
 /// A complete record for a container tracked by the daemon.
 #[derive(Debug, Clone)]
@@ -35,6 +38,8 @@ pub struct DaemonState {
     containers: Arc<RwLock<HashMap<String, ContainerRecord>>>,
     /// Image cache / pull facility.
     pub image_store: Arc<ImageStore>,
+    /// SECURITY: Semaphore limiting concurrent container spawn operations
+    pub spawn_semaphore: Arc<Semaphore>,
 }
 
 impl DaemonState {
@@ -43,6 +48,7 @@ impl DaemonState {
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
             image_store: Arc::new(image_store),
+            spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
         }
     }
 

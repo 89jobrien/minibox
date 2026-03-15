@@ -16,6 +16,9 @@ use tracing::{debug, info, warn};
 use crate::handler;
 use crate::state::DaemonState;
 
+// SECURITY: Maximum request size to prevent memory exhaustion
+const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
+
 /// Handle a single client connection.
 ///
 /// Reads newline-delimited JSON requests, dispatches to handlers, and
@@ -66,12 +69,31 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> R
             break;
         }
 
+        // SECURITY: Reject requests exceeding size limit
+        if bytes_read > MAX_REQUEST_SIZE {
+            warn!(
+                "rejecting oversized request: {} bytes (max {})",
+                bytes_read, MAX_REQUEST_SIZE
+            );
+            let error_response = DaemonResponse::Error {
+                message: format!(
+                    "request too large: {} bytes (max {})",
+                    bytes_read, MAX_REQUEST_SIZE
+                ),
+            };
+            let mut error_json = serde_json::to_string(&error_response)?;
+            error_json.push('\n');
+            writer.write_all(error_json.as_bytes()).await?;
+            writer.flush().await?;
+            continue;
+        }
+
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        debug!("received request: {}", trimmed);
+        debug!("received request: {} bytes", trimmed.len());
 
         let response = match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {

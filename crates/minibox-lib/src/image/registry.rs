@@ -65,10 +65,18 @@ pub struct RegistryClient {
 }
 
 impl RegistryClient {
-    /// Create a new client. Follows redirects automatically.
+    /// Create a new client with secure HTTPS-only configuration.
+    ///
+    /// # Security
+    ///
+    /// - HTTPS-only: Rejects HTTP connections to prevent MitM attacks
+    /// - TLS 1.2+: Enforces minimum TLS version
+    /// - Redirect limits: Max 10 redirects to prevent redirect loops
     pub fn new() -> anyhow::Result<Self> {
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(10))
+            .https_only(true) // SECURITY: Reject HTTP, require HTTPS
+            .min_tls_version(reqwest::tls::Version::TLS_1_2) // SECURITY: Minimum TLS 1.2
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self { http })

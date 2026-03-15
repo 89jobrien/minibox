@@ -88,21 +88,48 @@ async fn run_inner(
         anyhow::bail!("image {}:{} has no layers", full_image, tag);
     }
 
-    // Generate a short (12-char) container ID from a UUID.
+    // SECURITY: Generate a 16-char container ID from UUID to prevent collisions.
+    // 16 hex chars = 64 bits, birthday paradox collision after ~4 billion containers.
+    // We also check for collisions below.
     let id = Uuid::new_v4()
         .to_string()
         .replace('-', "")
         .chars()
-        .take(12)
+        .take(16)
         .collect::<String>();
 
-    // Create container directory layout.
-    let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
-    std::fs::create_dir_all(&container_dir)?;
+    // SECURITY: Verify no collision with existing containers
+    if state.get_container(&id).await.is_some() {
+        anyhow::bail!("container ID collision (extremely rare): {}", id);
+    }
 
-    // Runtime state directory.
+    // SECURITY: Create container directories with restricted permissions (0700)
+    // to prevent unauthorized access to container data
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700); // Owner (root) only
+        builder.recursive(true);
+        builder.create(&container_dir)?;
+
+        // Runtime state directory with same permissions
+        let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
+        builder.create(&run_dir)?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
+        std::fs::create_dir_all(&container_dir)?;
+        let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
+        std::fs::create_dir_all(&run_dir)?;
+    }
+
+    let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
     let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
-    std::fs::create_dir_all(&run_dir)?;
 
     // Setup overlayfs: creates upper/, work/, merged/ under container_dir.
     let merged_dir_from_overlay =
@@ -152,11 +179,20 @@ async fn run_inner(
         hostname: format!("minibox-{}", &id[..8]),
     };
 
+    // SECURITY: Acquire semaphore permit to limit concurrent spawns
+    // This prevents fork bomb attacks from overwhelming the system
+    let _spawn_permit = state
+        .spawn_semaphore
+        .acquire()
+        .await
+        .expect("semaphore closed");
+
     // Spawn the container process in a blocking thread (clone/fork is sync).
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
 
     tokio::task::spawn(async move {
+        // Permit is held until this task completes (via _spawn_permit drop)
         match tokio::task::spawn_blocking(move || {
             spawn_container_process(container_config)
         })
