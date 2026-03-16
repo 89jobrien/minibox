@@ -1,0 +1,6 @@
+[Unit]
+Description=Minibox slice
+
+[Slice]
+Delegate=yes
+TasksMax=infinity

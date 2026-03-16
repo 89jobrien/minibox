@@ -7,6 +7,7 @@ use crate::error::ImageError;
 use anyhow::Context;
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
+use std::fs;
 use std::path::Path;
 use tar::{Archive, EntryType};
 use tracing::{debug, info, warn};
@@ -68,14 +69,63 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             .into());
         }
 
-        // Warn on symlinks to absolute paths and reject them
+        // Handle symlinks to absolute paths by rewriting into image root
         if entry_type == EntryType::Symlink {
             if let Ok(Some(link_target)) = entry.link_name() {
                 if link_target.is_absolute() {
-                    return Err(ImageError::LayerExtract(format!(
-                        "tar entry contains symlink to absolute path (security risk): {entry_path:?} -> {link_target:?}"
-                    ))
-                    .into());
+                    let rel_target = link_target.strip_prefix("/")
+                        .map_err(|_| ImageError::LayerExtract(format!(
+                            "invalid absolute symlink target: {link_target:?}"
+                        )))?;
+
+                    if has_parent_dir_component(rel_target) {
+                        return Err(ImageError::LayerExtract(format!(
+                            "tar entry contains symlink with parent traversal (security risk): {entry_path:?} -> {link_target:?}"
+                        ))
+                        .into());
+                    }
+
+                    let target_path = dest.join(&entry_path);
+                    if let Some(parent) = target_path.parent() {
+                        fs::create_dir_all(parent).with_context(|| {
+                            format!("creating parent dirs for symlink {target_path:?}")
+                        })?;
+                    }
+
+                    if target_path.exists() || target_path.symlink_metadata().is_ok() {
+                        let meta = target_path.symlink_metadata().ok();
+                        if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
+                            fs::remove_dir_all(&target_path).with_context(|| {
+                                format!("removing existing dir at {target_path:?}")
+                            })?;
+                        } else {
+                            fs::remove_file(&target_path).with_context(|| {
+                                format!("removing existing file at {target_path:?}")
+                            })?;
+                        }
+                    }
+
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::symlink;
+                        symlink(rel_target, &target_path).with_context(|| {
+                            format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
+                        })?;
+                    }
+
+                    #[cfg(not(unix))]
+                    {
+                        return Err(ImageError::LayerExtract(
+                            "absolute symlink rewrite is not supported on this platform".into(),
+                        )
+                        .into());
+                    }
+
+                    warn!(
+                        "rewrote absolute symlink into image root: {:?} -> {:?}",
+                        entry_path, rel_target
+                    );
+                    continue;
                 }
             }
         }

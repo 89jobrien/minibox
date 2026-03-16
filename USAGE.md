@@ -20,7 +20,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 # Build
 cargo build --release
 
-# Install binary + systemd unit
+# Install binary + systemd unit + minibox.slice
 sudo ./ops/install-systemd.sh
 
 # Enable and start

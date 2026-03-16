@@ -34,8 +34,16 @@ pub struct CgroupManager {
     config: CgroupConfig,
 }
 
-/// Root of the minibox cgroup slice inside the cgroupfs mount point.
-const MINIBOX_CGROUP_ROOT: &str = "/sys/fs/cgroup/minibox";
+/// Default root of the minibox cgroup slice inside the cgroupfs mount point.
+const DEFAULT_MINIBOX_CGROUP_ROOT: &str = "/sys/fs/cgroup/minibox";
+
+fn cgroup_root() -> PathBuf {
+    if let Ok(root) = std::env::var("MINIBOX_CGROUP_ROOT") {
+        PathBuf::from(root)
+    } else {
+        PathBuf::from(DEFAULT_MINIBOX_CGROUP_ROOT)
+    }
+}
 
 impl CgroupManager {
     /// Create a new manager for `container_id` with the given resource limits.
@@ -43,7 +51,7 @@ impl CgroupManager {
     /// This only builds the struct -- call [`create`](Self::create) to actually
     /// create the directory and write the limits.
     pub fn new(container_id: &str, config: CgroupConfig) -> Self {
-        let cgroup_path = PathBuf::from(MINIBOX_CGROUP_ROOT).join(container_id);
+        let cgroup_path = cgroup_root().join(container_id);
         Self {
             cgroup_path,
             config,
@@ -153,5 +161,5 @@ impl CgroupManager {
 ///
 /// Useful when only the *path* is needed (e.g., stored in [`Container`]).
 pub fn cgroup_path_for(container_id: &str) -> PathBuf {
-    PathBuf::from(MINIBOX_CGROUP_ROOT).join(container_id)
+    cgroup_root().join(container_id)
 }

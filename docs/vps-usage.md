@@ -14,7 +14,7 @@ This guide covers running `miniboxd` and using the CLI on this VPS.
 # Build
 cargo build --release
 
-# Install daemon, CLI, and systemd artifacts
+# Install daemon, CLI, and systemd artifacts (includes minibox.slice)
 sudo ./ops/install-systemd.sh
 
 # Enable and start the service
