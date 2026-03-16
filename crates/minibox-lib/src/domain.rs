@@ -342,7 +342,7 @@ pub trait ResourceLimiter: AsAny + Send + Sync {
 }
 
 /// Resource limit configuration for a container.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ResourceConfig {
     /// Maximum memory (RSS + swap) in bytes. `None` means unlimited.
     pub memory_limit_bytes: Option<u64>,

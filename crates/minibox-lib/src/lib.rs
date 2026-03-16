@@ -6,6 +6,7 @@
 //! communication protocol.
 
 pub mod adapters;
+#[cfg(target_os = "linux")]
 pub mod container;
 pub mod domain;
 pub mod error;

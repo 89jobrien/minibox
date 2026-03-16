@@ -51,25 +51,31 @@
 //! );
 //! ```
 
-// Platform-native adapters (Linux)
+// Platform-native adapters (Linux only)
 mod registry;
+#[cfg(target_os = "linux")]
 mod filesystem;
+#[cfg(target_os = "linux")]
 mod limiter;
+#[cfg(target_os = "linux")]
 mod runtime;
 
 // Cross-platform adapters
 mod wsl;
 mod docker_desktop;
 
-// Test doubles
+// Test doubles (always available for testing)
 pub mod mocks;
 
-// Linux-native exports
+// Linux-native exports (only on Linux)
 pub use registry::DockerHubRegistry;
+#[cfg(target_os = "linux")]
 pub use filesystem::OverlayFilesystem;
+#[cfg(target_os = "linux")]
 pub use limiter::CgroupV2Limiter;
+#[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
 
-// Cross-platform exports
+// Cross-platform exports (always available)
 pub use wsl::{WslRuntime, WslFilesystem, WslLimiter};
 pub use docker_desktop::{DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter};
