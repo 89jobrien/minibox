@@ -61,6 +61,23 @@ Stop using the delegated subgroup as the parent for containers. Instead:
 
 This can be enforced via `ExecStartPre` in the systemd unit.
 
+## Final Fix Applied (Works)
+The following upstream changes resolved the issue:
+- systemd unit:
+  - `DelegateSubgroup=supervisor`
+  - `MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service`
+- daemon:
+  - `miniboxd` migrates itself into a `supervisor` leaf cgroup on startup
+    (creates `/sys/fs/cgroup/<current>/supervisor` and writes its PID).
+
+Result after rebuild + reinstall:
+- `~/.cargo/bin/cargo build --release`
+- `sudo ./ops/install-systemd.sh`
+- `sudo systemctl daemon-reload`
+- `sudo systemctl restart miniboxd`
+- `sudo /usr/local/bin/minibox run alpine -- /bin/true`
+  - Succeeds and returns a container ID.
+
 ## Detailed Try Log (chronological)
 - Enable daemon + run:
   - `sudo systemctl enable --now miniboxd`
@@ -84,6 +101,18 @@ This can be enforced via `ExecStartPre` in the systemd unit.
   - `echo "+pids"` to `/yes/minibox/cgroup.subtree_control` returns `I/O error`
   - Explanation: `/yes` contains a process, so controllers cannot be enabled
     for its children in cgroup v2.
+- Pull new upstream changes:
+  - `DelegateSubgroup=supervisor` in systemd unit
+  - `miniboxd` self-migrates into `supervisor` leaf cgroup
+  - `MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service`
+- Rebuild and reinstall:
+  - `~/.cargo/bin/cargo build --release`
+  - `sudo ./ops/install-systemd.sh`
+  - `sudo systemctl daemon-reload`
+  - `sudo systemctl restart miniboxd`
+- Verify run succeeds:
+  - `sudo /usr/local/bin/minibox run alpine -- /bin/true`
+  - Returns container ID `766500c88f0347c1`
 
 ## Commands Used
 ```
@@ -102,4 +131,9 @@ sudo sh -c 'tr "\0" "\n" < /proc/<PID>/environ | grep MINIBOX_CGROUP_ROOT'
 sudo cat /sys/fs/cgroup/minibox.slice/miniboxd.service/yes/cgroup.subtree_control
 sudo cat /sys/fs/cgroup/minibox.slice/miniboxd.service/yes/minibox/cgroup.subtree_control
 sudo find /sys/fs/cgroup/minibox.slice/miniboxd.service/yes -maxdepth 2 -type d
+~/.cargo/bin/cargo build --release
+sudo ./ops/install-systemd.sh
+sudo systemctl daemon-reload
+sudo systemctl restart miniboxd
+sudo /usr/local/bin/minibox run alpine -- /bin/true
 ```
