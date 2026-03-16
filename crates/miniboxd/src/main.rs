@@ -88,6 +88,62 @@ impl AdapterSuite {
     }
 }
 
+/// Move the current process into a `supervisor` leaf cgroup.
+///
+/// Reads `/proc/self/cgroup` to find our current cgroup, creates a
+/// `supervisor/` child, and writes our PID there.  This frees the parent
+/// cgroup to enable `subtree_control` for container children.
+///
+/// No-op if we are already inside a `supervisor` leaf (e.g. systemd
+/// `DelegateSubgroup=supervisor` already handled this).
+#[cfg(target_os = "linux")]
+fn migrate_to_supervisor_cgroup() {
+    use std::fs;
+    use tracing::{debug, warn};
+
+    let cgroup_entry = match fs::read_to_string("/proc/self/cgroup") {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("could not read /proc/self/cgroup, skipping self-migration: {e}");
+            return;
+        }
+    };
+
+    // cgroup v2: single line "0::<path>"
+    let cgroup_path = match cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
+        Some(p) => p.trim().to_string(),
+        None => {
+            warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
+            return;
+        }
+    };
+
+    // Already in a supervisor leaf — nothing to do.
+    if cgroup_path.ends_with("/supervisor") {
+        debug!("already in supervisor cgroup, skipping self-migration");
+        return;
+    }
+
+    let cgroupfs = PathBuf::from("/sys/fs/cgroup");
+    // Strip leading '/' from the cgroup path for joining
+    let relative = cgroup_path.strip_prefix('/').unwrap_or(&cgroup_path);
+    let supervisor_dir = cgroupfs.join(relative).join("supervisor");
+
+    if let Err(e) = fs::create_dir_all(&supervisor_dir) {
+        warn!("could not create supervisor cgroup at {}: {e}", supervisor_dir.display());
+        return;
+    }
+
+    let procs_file = supervisor_dir.join("cgroup.procs");
+    let pid = std::process::id().to_string();
+    if let Err(e) = fs::write(&procs_file, &pid) {
+        warn!("could not migrate to supervisor cgroup: {e}");
+        return;
+    }
+
+    info!("migrated to supervisor cgroup at {}", supervisor_dir.display());
+}
+
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -108,6 +164,16 @@ async fn main() -> Result<()> {
     // ── Privilege check (native only) ────────────────────────────────────
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
         anyhow::bail!("miniboxd must run as root (native adapter suite)");
+    }
+
+    // ── Cgroup self-migration (native only) ──────────────────────────────
+    // cgroup v2 rule: a cgroup with processes cannot enable
+    // subtree_control for children.  When systemd DelegateSubgroup is
+    // configured it moves us into a leaf automatically, but for
+    // non-systemd environments we migrate ourselves into a "supervisor"
+    // leaf so the parent cgroup is free to delegate controllers.
+    if suite == AdapterSuite::Native {
+        migrate_to_supervisor_cgroup();
     }
 
     // ── Resolve paths (configurable via env vars for GKE) ───────────────
