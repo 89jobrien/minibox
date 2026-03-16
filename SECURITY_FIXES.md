@@ -15,7 +15,7 @@ This document summarizes the security improvements implemented for the minibox c
 
 ### Critical Severity (CVSS 7.5-9.8)
 
-#### 1. Path Traversal in Overlay Filesystem (CVSS 9.8) ✅
+#### 1. Path Traversal in Overlay Filesystem (CVSS 9.8) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Malicious image layers could mount arbitrary host directories
@@ -23,7 +23,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **Protection:** Rejects paths containing `..`, symlinks, or escaping base directory
 - **File:** `crates/minibox-lib/src/container/filesystem.rs`
 
-#### 2. Symlink Attack in Tar Extraction (CVSS 9.6) ✅
+#### 2. Symlink Attack in Tar Extraction (CVSS 9.6) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Zip Slip vulnerability allowing host file overwrites via crafted tar archives
@@ -35,7 +35,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Strips setuid/setgid bits
 - **File:** `crates/minibox-lib/src/image/layer.rs`
 
-#### 3. No Unix Socket Authentication (CVSS 7.8) ✅
+#### 3. No Unix Socket Authentication (CVSS 7.8) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Any local process could control the daemon
@@ -46,7 +46,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Client UID/PID logged for audit
 - **Files:** `crates/miniboxd/src/server.rs`, `main.rs`
 
-#### 4. Unlimited Image Pull Sizes (CVSS 7.5) ✅
+#### 4. Unlimited Image Pull Sizes (CVSS 7.5) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Disk exhaustion DoS via multi-gigabyte layer downloads
@@ -59,7 +59,7 @@ This document summarizes the security improvements implemented for the minibox c
 
 ### High Severity (CVSS 7.0-7.9)
 
-#### 5. Missing Cgroup PID/IO Limits (CVSS 7.5) ✅
+#### 5. Missing Cgroup PID/IO Limits (CVSS 7.5) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Fork bombs and disk I/O DoS attacks possible
@@ -70,7 +70,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Range validation for all cgroup values
 - **File:** `crates/minibox-lib/src/container/cgroups.rs`
 
-#### 6. Insecure Mount Flags (CVSS 7.8) ✅
+#### 6. Insecure Mount Flags (CVSS 7.8) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Setuid binaries and cgroup escape possible
@@ -81,7 +81,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Prevents privilege escalation
 - **File:** `crates/minibox-lib/src/container/filesystem.rs`
 
-#### 7. ImageStore Path Validation (CVSS 7.6) ✅
+#### 7. ImageStore Path Validation (CVSS 7.6) [FIXED]
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Path traversal via malicious image names/tags
@@ -92,7 +92,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Null byte rejection
 - **File:** `crates/minibox-lib/src/image/mod.rs`
 
-#### 8. HTTPS Enforcement for Registry (CVSS 7.4) ✅
+#### 8. HTTPS Enforcement for Registry (CVSS 7.4) [FIXED]
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** MitM attacks on image downloads possible
@@ -103,7 +103,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Prevents insecure image downloads
 - **File:** `crates/minibox-lib/src/image/registry.rs`
 
-#### 9. Directory Permission Issues (CVSS 7.1) ✅
+#### 9. Directory Permission Issues (CVSS 7.1) [FIXED]
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Container directories could be world-readable
@@ -113,7 +113,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Uses `DirBuilderExt` on Unix
 - **File:** `crates/miniboxd/src/handler.rs`
 
-#### 10. Concurrent Spawn DoS (CVSS 7.5) ✅
+#### 10. Concurrent Spawn DoS (CVSS 7.5) [FIXED]
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Fork bomb attacks via simultaneous spawn requests
@@ -125,7 +125,7 @@ This document summarizes the security improvements implemented for the minibox c
 
 ### Medium Severity (CVSS 6.0-6.9)
 
-#### 11. Request Size DoS (CVSS 6.2) ✅
+#### 11. Request Size DoS (CVSS 6.2) [FIXED]
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Unbounded JSON deserialization causing memory exhaustion
@@ -135,7 +135,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Descriptive error messages
 - **File:** `crates/miniboxd/src/server.rs`
 
-#### 12. Container ID Collisions ✅
+#### 12. Container ID Collisions [FIXED]
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Birthday paradox collisions after ~16M containers
@@ -151,7 +151,7 @@ This document summarizes the security improvements implemented for the minibox c
 
 ### High Priority (Not Yet Implemented)
 
-#### 1. Capability Dropping + Seccomp Filters (CVSS 8.4) 🔴
+#### 1. Capability Dropping + Seccomp Filters (CVSS 8.4) [CRITICAL]
 **Status:** Requires new dependencies
 
 - **Issue:** Containers run with full root capabilities
@@ -162,7 +162,7 @@ This document summarizes the security improvements implemented for the minibox c
   - Apply in container init before exec
 - **Estimated Effort:** 4-6 hours
 
-#### 2. Request Rate Limiting (CVSS 6.2) 🔴
+#### 2. Request Rate Limiting (CVSS 6.2) [CRITICAL]
 **Status:** Requires rate-limiting implementation
 
 - **Issue:** Request spam can cause CPU/memory exhaustion
@@ -174,21 +174,21 @@ This document summarizes the security improvements implemented for the minibox c
 
 ### Medium Priority (Architectural Improvements)
 
-#### 3. User Namespace Support (CVSS 8.4) 🟡
+#### 3. User Namespace Support (CVSS 8.4) [PENDING]
 **Status:** Major architectural change
 
 - **Issue:** Container root = host root
 - **Complexity:** High (requires UID/GID mapping, subuid/subgid configuration)
 - **Estimated Effort:** 8-12 hours
 
-#### 4. Image Signature Verification (CVSS 6.5) 🟡
+#### 4. Image Signature Verification (CVSS 6.5) [PENDING]
 **Status:** Requires OCI signature libraries
 
 - **Issue:** No cryptographic verification of image authenticity
 - **Required:** Sigstore/Cosign integration
 - **Estimated Effort:** 6-8 hours
 
-#### 5. State Persistence (Reliability Issue) 🟡
+#### 5. State Persistence (Reliability Issue) [PENDING]
 **Status:** Design phase
 
 - **Issue:** Daemon restart loses all container records
@@ -280,16 +280,16 @@ Security Comments:      25+
 
 ### SOC2 Type II Improvements
 
-- ✅ **CC6.1 (Access Controls):** Unix socket authentication implemented
-- ⚠️ **CC6.2 (Data Protection):** Directory permissions enforced, encryption pending
-- ⚠️ **CC7.2 (System Monitoring):** Security events logged, audit logging pending
-- ✅ **CC7.3 (Threat Detection):** Input validation prevents common attacks
+- [FIXED] **CC6.1 (Access Controls):** Unix socket authentication implemented
+- [NOTE] **CC6.2 (Data Protection):** Directory permissions enforced, encryption pending
+- [NOTE] **CC7.2 (System Monitoring):** Security events logged, audit logging pending
+- [FIXED] **CC7.3 (Threat Detection):** Input validation prevents common attacks
 
 ### PCI-DSS Improvements (if processing payment data)
 
-- ⚠️ **Req 2:** Secure defaults partially implemented
-- ✅ **Req 8:** Authentication implemented (root-only)
-- ⚠️ **Req 10:** Basic logging present, audit trails pending
+- [NOTE] **Req 2:** Secure defaults partially implemented
+- [FIXED] **Req 8:** Authentication implemented (root-only)
+- [NOTE] **Req 10:** Basic logging present, audit trails pending
 
 ---
 
