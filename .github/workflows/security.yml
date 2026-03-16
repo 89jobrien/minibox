@@ -1,0 +1,126 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily security scan at 02:00 UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  cargo-deny:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cargo-deny
+        run: |
+          wget https://github.com/EmbarkStudios/cargo-deny/releases/download/0.14.3/cargo-deny-0.14.3-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf cargo-deny-0.14.3-x86_64-unknown-linux-musl.tar.gz
+          mv cargo-deny-0.14.3-x86_64-unknown-linux-musl/cargo-deny ~/.cargo/bin/
+          cargo-deny --version
+
+      - name: Run cargo-deny
+        run: cargo deny check
+
+      - name: Upload results
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-deny-results
+          path: target/deny-*.json
+
+  cargo-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo-audit
+        run: cargo audit --deny warnings
+
+  clippy-security:
+    name: Security Lints (Clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Clippy with security lints
+        run: |
+          cargo clippy --workspace --all-targets -- \
+            -D warnings \
+            -W clippy::suspicious \
+            -W clippy::complexity \
+            -W clippy::perf \
+            -W clippy::style \
+            -W clippy::pedantic
+
+  semgrep:
+    name: Static Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --config=auto --error
+
+  security-summary:
+    name: Security Scan Summary
+    runs-on: ubuntu-latest
+    needs: [cargo-deny, cargo-audit, clippy-security, semgrep]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "Security scan complete"
+          echo "cargo-deny: ${{ needs.cargo-deny.result }}"
+          echo "cargo-audit: ${{ needs.cargo-audit.result }}"
+          echo "clippy-security: ${{ needs.clippy-security.result }}"
+          echo "semgrep: ${{ needs.semgrep.result }}"
+
+      - name: Fail if any scan failed
+        if: |
+          needs.cargo-deny.result == 'failure' ||
+          needs.cargo-audit.result == 'failure' ||
+          needs.clippy-security.result == 'failure' ||
+          needs.semgrep.result == 'failure'
+        run: exit 1

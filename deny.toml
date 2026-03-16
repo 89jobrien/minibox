@@ -1,0 +1,57 @@
+# cargo-deny configuration for security vulnerability scanning
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Check for crates with security vulnerabilities
+vulnerability = "deny"
+# Warn on crates that have been unmaintained for 6+ months
+unmaintained = "warn"
+# Warn on crates that have been yanked from crates.io
+yanked = "warn"
+# Ignore specific advisories (use sparingly)
+ignore = [
+    # Example: "RUSTSEC-2020-0036",
+]
+
+[licenses]
+# Deny licenses that are not OSI-approved or permissive
+unlicensed = "deny"
+# Allow specific licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+]
+# Deny copyleft licenses to avoid contamination
+deny = [
+    "GPL-3.0",
+    "AGPL-3.0",
+]
+# Confidence threshold for license detection (0.0 - 1.0)
+confidence-threshold = 0.8
+
+[bans]
+# Deny multiple versions of the same crate (reduces attack surface)
+multiple-versions = "warn"
+# Wildcards in dependencies are not recommended
+wildcards = "warn"
+# Highlight certain crates (e.g., known to have security issues)
+highlight = "all"
+# Deny specific crates
+deny = [
+    # Example: { name = "openssl", version = "*" },
+]
+# Skip checking specific crates
+skip = []
+# Skip specific crate trees
+skip-tree = []
+
+[sources]
+# Deny sources other than crates.io (prevent supply chain attacks)
+unknown-registry = "deny"
+unknown-git = "warn"
+# Allow specific git sources if needed
+allow-git = []
