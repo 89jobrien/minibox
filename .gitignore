@@ -8,6 +8,7 @@
 !ZOMBIENET_PATTERNS.md
 !USAGE.md
 !docs/vps-usage.md
+!docs/cgroup-findings.md
 
 # Claude Code local configuration
 .claude/
