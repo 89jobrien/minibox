@@ -1,7 +1,8 @@
-# Markdown files (except README.md and CLAUDE.md)
+# Markdown files (except README.md, CLAUDE.md, and TESTING.md)
 *.md
 !README.md
 !CLAUDE.md
+!TESTING.md
 
 # Claude Code local configuration
 .claude/
