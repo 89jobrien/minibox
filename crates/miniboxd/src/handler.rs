@@ -50,6 +50,8 @@ use crate::state::{ContainerRecord, DaemonState};
 ///     filesystem: Arc::new(OverlayFilesystem),
 ///     resource_limiter: Arc::new(CgroupV2Limiter),
 ///     runtime: Arc::new(LinuxNamespaceRuntime),
+///     containers_base: PathBuf::from("/var/lib/minibox/containers"),
+///     run_containers_base: PathBuf::from("/run/minibox/containers"),
 /// });
 /// ```
 #[derive(Clone)]
@@ -62,11 +64,11 @@ pub struct HandlerDependencies {
     pub resource_limiter: Arc<dyn ResourceLimiter>,
     /// Container runtime for spawning isolated processes.
     pub runtime: Arc<dyn ContainerRuntime>,
+    /// Base directory for persistent container data (overlay dirs).
+    pub containers_base: PathBuf,
+    /// Base directory for runtime container state (PID files).
+    pub run_containers_base: PathBuf,
 }
-
-/// Directories used by the daemon.
-const CONTAINERS_BASE: &str = "/var/lib/minibox/containers";
-const RUN_CONTAINERS_BASE: &str = "/run/minibox/containers";
 
 // ─── Run ────────────────────────────────────────────────────────────────────
 
@@ -145,33 +147,27 @@ async fn run_inner(
         anyhow::bail!("container ID collision (extremely rare): {}", id);
     }
 
+    let container_dir = deps.containers_base.join(&id);
+    let run_dir = deps.run_containers_base.join(&id);
+
     // SECURITY: Create container directories with restricted permissions (0700)
     // to prevent unauthorized access to container data
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
 
-        let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
         let mut builder = std::fs::DirBuilder::new();
         builder.mode(0o700); // Owner (root) only
         builder.recursive(true);
         builder.create(&container_dir)?;
-
-        // Runtime state directory with same permissions
-        let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
         builder.create(&run_dir)?;
     }
 
     #[cfg(not(unix))]
     {
-        let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
         std::fs::create_dir_all(&container_dir)?;
-        let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
         std::fs::create_dir_all(&run_dir)?;
     }
-
-    let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
-    let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
 
     // Setup overlayfs (using injected filesystem trait).
     let merged_dir_from_overlay = deps
@@ -234,6 +230,7 @@ async fn run_inner(
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
     let runtime_clone = Arc::clone(&deps.runtime);
+    let run_containers_base_clone = deps.run_containers_base.clone();
 
     tokio::task::spawn(async move {
         // Permit is held until this task completes (via _spawn_permit drop)
@@ -242,8 +239,7 @@ async fn run_inner(
                 info!("container {} started with PID {}", id_clone, pid);
 
                 // Write PID file.
-                let pid_file =
-                    PathBuf::from(RUN_CONTAINERS_BASE).join(&id_clone).join("pid");
+                let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
                 let _ = std::fs::write(&pid_file, pid.to_string());
 
                 state_clone.set_container_pid(&id_clone, pid).await;
@@ -388,7 +384,7 @@ async fn remove_inner(
     }
 
     // Unmount overlay (using injected filesystem trait).
-    let container_dir = PathBuf::from(CONTAINERS_BASE).join(id);
+    let container_dir = deps.containers_base.join(id);
     if container_dir.exists() {
         if let Err(e) = deps.filesystem.cleanup(&container_dir) {
             warn!("cleanup_mounts for {}: {}", id, e);
@@ -396,7 +392,7 @@ async fn remove_inner(
     }
 
     // Remove runtime state directory.
-    let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(id);
+    let run_dir = deps.run_containers_base.join(id);
     if run_dir.exists() {
         std::fs::remove_dir_all(&run_dir).ok();
     }

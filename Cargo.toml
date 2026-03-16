@@ -35,6 +35,7 @@ bytes = "1"
 futures = "0.3"
 tempfile = "3"
 async-trait = "0.1"
+walkdir = "2"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["async_tokio"] }

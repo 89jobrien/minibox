@@ -27,19 +27,22 @@ const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
 ///
 /// # Security
 ///
-/// Authenticates the client via SO_PEERCRED and only accepts connections
-/// from root (UID 0).
+/// When `require_root_auth` is true (native mode), authenticates the client
+/// via SO_PEERCRED and only accepts connections from root (UID 0).
+/// When false (GKE mode), accepts any UID since the daemon itself runs
+/// as non-root.
 pub async fn handle_connection(
     stream: UnixStream,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
+    require_root_auth: bool,
 ) -> Result<()> {
-    // SECURITY: Get peer credentials and verify UID is root
+    // SECURITY: Get peer credentials for audit logging
     let raw_fd = stream.as_raw_fd();
     let creds = getsockopt(raw_fd, PeerCredentials)
         .context("failed to get peer credentials")?;
 
-    if creds.uid() != 0 {
+    if require_root_auth && creds.uid() != 0 {
         warn!(
             "rejecting connection from non-root UID {} (PID {})",
             creds.uid(),

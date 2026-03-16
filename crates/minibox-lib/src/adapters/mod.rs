@@ -24,6 +24,11 @@
 //! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`ResourceLimiter`]
 //! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`ContainerRuntime`]
 //!
+//! **GKE Unprivileged (Linux, no CAP_SYS_ADMIN):**
+//! - [`NoopLimiter`]: No-op resource limiter (cgroups unavailable)
+//! - [`CopyFilesystem`]: Copy-based layer merging (no overlay FS)
+//! - [`ProotRuntime`]: proot (ptrace-based) fake chroot runtime
+//!
 //! **Cross-Platform (Windows via WSL2):**
 //! - [`WslRuntime`]: Windows Subsystem for Linux implementation
 //! - [`WslFilesystem`]: WSL2-based filesystem provider
@@ -66,6 +71,9 @@ mod limiter;
 #[cfg(target_os = "linux")]
 mod runtime;
 
+// GKE unprivileged adapters (proot-based, no kernel privileges needed)
+mod gke;
+
 // Cross-platform adapters
 mod wsl;
 mod docker_desktop;
@@ -82,6 +90,10 @@ pub use filesystem::OverlayFilesystem;
 pub use limiter::CgroupV2Limiter;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
+
+// GKE unprivileged exports (Linux only at runtime, but compile-check everywhere)
+#[cfg(target_os = "linux")]
+pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 
 // Cross-platform exports (always available)
 pub use wsl::{WslRuntime, WslFilesystem, WslLimiter};
