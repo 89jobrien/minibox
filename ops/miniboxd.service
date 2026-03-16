@@ -1,0 +1,18 @@
+[Unit]
+Description=Minibox daemon
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/miniboxd
+Restart=on-failure
+RestartSec=2
+User=root
+Group=root
+RuntimeDirectory=minibox
+RuntimeDirectoryMode=0700
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
