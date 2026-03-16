@@ -5,7 +5,6 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStartPre=/bin/sh -c 'if [ -w /sys/fs/cgroup/minibox.slice/miniboxd.service/cgroup.subtree_control ]; then echo "+cpu +memory +pids" > /sys/fs/cgroup/minibox.slice/miniboxd.service/cgroup.subtree_control; fi'
 ExecStart=/usr/local/bin/miniboxd
 Restart=on-failure
 RestartSec=2
@@ -13,6 +12,7 @@ User=root
 Group=root
 Slice=minibox.slice
 Delegate=yes
+DelegateControllers=cpu memory pids
 Environment=MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service/minibox
 RuntimeDirectory=minibox
 RuntimeDirectoryMode=0700
