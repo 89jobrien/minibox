@@ -9,6 +9,8 @@
 !USAGE.md
 !docs/vps-usage.md
 !docs/cgroup-findings.md
+!docs/plans/*.md
+!docs/plans/
 
 # Claude Code local configuration
 .claude/
