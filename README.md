@@ -4,7 +4,7 @@ A Docker-like container runtime written in Rust featuring hexagonal architecture
 
 **Architecture:** Daemon/client with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem.
 
-**Status:** Development - Security hardened (12/15 vulnerabilities fixed), 48 tests (37 unit + 11 integration), performance validated (<5ns trait overhead).
+**Status:** Development - Security hardened (12/15 vulnerabilities fixed, zero dependencies with CVEs), 57 tests (36 unit + 21 protocol), performance validated (<5ns trait overhead), architecture validated by production frameworks.
 
 ## Quick Start
 
@@ -36,17 +36,27 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 - Domain layer with zero infrastructure dependencies
 - Swappable adapters for registry, filesystem, cgroups, runtime
 - 100% unit test coverage with mock implementations
-- Cross-platform foundation (Linux native, Windows WSL2, macOS Docker Desktop)
+- Cross-platform foundation (Linux native, Windows WSL2, macOS Docker Desktop/Colima)
+- Architecture pattern validated by production frameworks (Zombienet-SDK)
 
 **Performance:**
 - Trait object overhead: 1-5 nanoseconds (validated by benchmarks)
 - 0.000001% impact on real operations (image pulls, container spawns)
+- Validated by production frameworks (Zombienet-SDK uses identical pattern)
 
 **Testing:**
-- 37 unit tests (platform-agnostic with mocks)
+- 36 unit tests (platform-agnostic with mocks)
+- 21 protocol serialization tests (JSON encoding/decoding)
 - 11 integration tests (Linux with real infrastructure)
-- Protocol serialization tests (24 tests)
+- Conformance tests (cross-platform behavioral parity)
 - Benchmark suite for performance validation
+- Security scanning (cargo-deny, cargo-audit, clippy)
+
+**Security Monitoring:**
+- Zero dependency vulnerabilities (cargo-deny daily scans)
+- All licenses compliant (MIT, Apache-2.0, BSD-3-Clause)
+- Continuous security scanning via GitHub Actions
+- Static analysis with security-focused lints
 
 ## Architecture
 
@@ -93,7 +103,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 
 **Key Modules:**
 - `domain.rs` - Pure business logic traits (ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime)
-- `adapters/` - Infrastructure implementations (registry, filesystem, limiter, runtime, mocks, WSL, Docker Desktop)
+- `adapters/` - Infrastructure implementations (registry, filesystem, limiter, runtime, mocks, WSL, Docker Desktop, Colima)
 - `handlers/` - Request handling with dependency injection
 - `protocol.rs` - JSON-over-newline communication protocol
 
@@ -256,25 +266,37 @@ sudo ./target/release/minibox rm <container_id>
 - PID limit: 1024 (default, prevents fork bombs)
 - I/O bandwidth throttling support
 
+**Continuous Security:**
+- Daily automated vulnerability scans (cargo-deny)
+- GitHub Actions CI security pipeline
+- Static analysis with security-focused lints (clippy)
+- Dependency license compliance checks
+- Zero known CVEs in dependencies
+
 **Remaining Work:**
 - Capability dropping (CAP_SYS_ADMIN, etc.)
 - Seccomp filters
 - User namespace support
 - Request rate limiting
 
-See `SECURITY_FIXES.md` for complete security audit.
+**Security Documentation:**
+- `SECURITY.md` - Threat model and security architecture
+- `SECURITY_FIXES.md` - Complete vulnerability audit
+- `SECURITY_TESTING.md` - Security testing procedures and test cases
+- `.github/workflows/security.yml` - Automated security scanning
 
 ## Testing
 
 **Test Pyramid:**
 ```
-         E2E Tests (TODO)
-    ┌─────────────────────┐
-    │ Integration (11)    │  Linux only, real infrastructure
-    └─────────────────────┘
-  ┌──────────────────────────┐
-  │   Unit Tests (37)        │  Platform-agnostic, mocks
-  └──────────────────────────┘
+              E2E Tests (TODO)
+         ┌─────────────────────────┐
+         │   Conformance Tests     │  Cross-platform parity
+         │  Integration Tests (11) │  Linux only, real infrastructure
+         └─────────────────────────┘
+    ┌──────────────────────────────────┐
+    │ Unit Tests (36) + Protocol (21)  │  Platform-agnostic, mocks
+    └──────────────────────────────────┘
 ```
 
 **Run Tests:**
@@ -285,11 +307,20 @@ cargo test --workspace
 # Integration tests (Linux, requires root)
 sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored
 
+# Conformance tests (Linux)
+cargo test -p miniboxd --test conformance_tests
+
+# Security scans
+cargo deny check
+cargo clippy --workspace -- -D warnings
+
 # Benchmarks
 cargo bench -p minibox-lib --bench trait_overhead
 ```
 
-See `TESTING.md` for comprehensive testing strategy.
+**Test Results:** See `TEST_RESULTS.md` for detailed validation report.
+
+**Testing Strategy:** See `TESTING.md` for comprehensive testing approach.
 
 ## Performance
 
@@ -358,7 +389,8 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 - No interactive TTY (no I/O piping to CLI)
 - No exec command
 - No logs capture
-- Linux only (WSL/Docker Desktop adapters planned)
+
+**Note:** Cross-platform adapters (WSL2, Docker Desktop, Colima) are implemented but require platform-specific helper binaries for production use.
 
 ## Extending
 
@@ -380,10 +412,22 @@ See trait definitions in `crates/minibox-lib/src/domain/`.
 
 ## Documentation
 
+### Core Documentation
+- **README.md** - Project overview and quick start
 - **CLAUDE.md** - Development guide, architecture, debugging
-- **TESTING.md** - Testing strategy, running tests
-- **BENCHMARK_RESULTS.md** - Performance analysis
-- **SECURITY_FIXES.md** - Security audit and fixes
+
+### Testing & Validation
+- **TESTING.md** - Testing strategy and methodology
+- **TEST_RESULTS.md** - Comprehensive test validation report
+- **BENCHMARK_RESULTS.md** - Performance analysis and benchmarks
+
+### Security
+- **SECURITY.md** - Threat model and security architecture
+- **SECURITY_FIXES.md** - Vulnerability audit and remediation
+- **SECURITY_TESTING.md** - Security testing procedures
+
+### Architecture
+- **ZOMBIENET_PATTERNS.md** - Architectural validation from production frameworks
 
 ## Development
 
@@ -407,6 +451,27 @@ mount | grep cgroup2
 RUST_LOG=debug sudo ./target/release/miniboxd
 ```
 
+## Continuous Integration
+
+**GitHub Actions Workflows:**
+- **security.yml** - Daily security scanning
+  - cargo-deny (dependency vulnerabilities)
+  - cargo-audit (security advisories)
+  - clippy (security-focused lints)
+  - semgrep (static analysis)
+
+**Automated Checks:**
+- Pull request blocking on critical vulnerabilities
+- License compliance verification
+- Source validation (crates.io only)
+- Multiple version detection
+
+**Quality Gates:**
+- All tests must pass
+- Zero clippy warnings with security lints
+- No known CVEs in dependencies
+- All licenses approved
+
 ## Contributing
 
 This is a learning/experimental project demonstrating:
@@ -427,12 +492,18 @@ MIT
 
 ## Acknowledgments
 
-Built with:
+**Built with:**
 - `tokio` - Async runtime
 - `clap` - CLI parsing
 - `serde` - Serialization
 - `reqwest` - HTTP client
 - `nix` - Unix syscalls
 - `criterion` - Benchmarking
+- `async-trait` - Async trait methods
 
-Inspired by Docker, Podman, and containerd.
+**Inspired by:**
+- Docker, Podman, and containerd - Container runtime design
+- Zombienet-SDK - Hexagonal architecture validation (identical provider pattern)
+
+**Architecture Pattern:**
+The hexagonal architecture (ports & adapters) used in minibox follows the same pattern as production frameworks like Zombienet-SDK, validating our design choices. See `ZOMBIENET_PATTERNS.md` for detailed comparison.
