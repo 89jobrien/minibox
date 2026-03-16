@@ -36,5 +36,8 @@ futures = "0.3"
 tempfile = "3"
 async-trait = "0.1"
 
+# Benchmarking
+criterion = { version = "0.5", features = ["async_tokio"] }
+
 # Internal crates
 minibox-lib = { path = "crates/minibox-lib" }

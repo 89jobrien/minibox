@@ -52,6 +52,14 @@
 //! - **Maintainability**: Clear separation of concerns
 //! - **Future-proofing**: Add new backends without changing business logic
 
+// Core domain traits
+mod networking;
+mod extensions;
+
+// Re-exports for public API
+pub use networking::*;
+pub use extensions::*;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;

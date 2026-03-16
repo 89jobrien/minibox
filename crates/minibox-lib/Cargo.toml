@@ -23,3 +23,10 @@ bytes = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
 async-trait = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "trait_overhead"
+harness = false
