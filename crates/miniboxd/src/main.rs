@@ -122,7 +122,9 @@ async fn main() -> Result<()> {
 
     // ── Shared state ───────────────────────────────────────────────────────
     let image_store = ImageStore::new(&images_dir).context("creating image store")?;
-    let state = Arc::new(DaemonState::new(image_store));
+    let state = Arc::new(DaemonState::new(image_store, Path::new(&data_dir)));
+    state.load_from_disk().await;
+    info!("state loaded from disk");
 
     // ── Dependency Injection (Composition Root) ───────────────────────────
     // Create concrete adapters implementing domain traits.
