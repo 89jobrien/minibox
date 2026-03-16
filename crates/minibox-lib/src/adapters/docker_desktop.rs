@@ -59,7 +59,7 @@
 
 use crate::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-    ResourceLimiter,
+    ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -159,6 +159,18 @@ impl AsAny for DockerDesktopRuntime {
 
 #[async_trait]
 impl ContainerRuntime for DockerDesktopRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        // Docker Desktop runs a Linux VM — cgroups/overlay/network available,
+        // but user namespace remapping is managed by Docker itself
+        RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: true,
+            supports_overlay_fs: true,
+            supports_network_isolation: true,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
         debug!(
             "spawning container via Docker Desktop: command={}, rootfs={:?}",

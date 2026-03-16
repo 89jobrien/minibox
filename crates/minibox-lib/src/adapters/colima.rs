@@ -14,8 +14,8 @@
 //! - Colima VM running (`colima start`)
 
 use crate::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ImageMetadata,
-    ResourceConfig, ResourceLimiter, AsAny,
+    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
+    ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -442,6 +442,17 @@ impl AsAny for ColimaRuntime {
 
 #[async_trait]
 impl ContainerRuntime for ColimaRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        // Colima runs a Lima VM with a full Linux kernel — all features available
+        RuntimeCapabilities {
+            supports_user_namespaces: true,
+            supports_cgroups_v2: true,
+            supports_overlay_fs: true,
+            supports_network_isolation: true,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
         // Serialize spawn config to JSON for passing to Lima VM
         let config_json = serde_json::to_string(&SpawnRequest {

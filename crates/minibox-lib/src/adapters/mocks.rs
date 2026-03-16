@@ -26,7 +26,7 @@
 
 use crate::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-    ImageRegistry, LayerInfo, ResourceConfig, ResourceLimiter,
+    ImageRegistry, LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -389,6 +389,16 @@ impl AsAny for MockRuntime {
 
 #[async_trait]
 impl ContainerRuntime for MockRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: false,
+            supports_network_isolation: false,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<u32> {
         let mut state = self.state.lock().unwrap();
         state.spawn_count += 1;

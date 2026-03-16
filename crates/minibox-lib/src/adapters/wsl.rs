@@ -50,7 +50,7 @@
 
 use crate::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-    ResourceLimiter,
+    ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -130,6 +130,17 @@ impl AsAny for WslRuntime {
 
 #[async_trait]
 impl ContainerRuntime for WslRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        // WSL2 delegates to a full Linux kernel — all features available
+        RuntimeCapabilities {
+            supports_user_namespaces: true,
+            supports_cgroups_v2: true,
+            supports_overlay_fs: true,
+            supports_network_isolation: true,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
         debug!(
             "spawning container via WSL: command={}, rootfs={:?}",

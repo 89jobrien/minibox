@@ -29,7 +29,7 @@
 
 use crate::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-    ResourceLimiter,
+    ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -297,6 +297,17 @@ impl AsAny for ProotRuntime {
 
 #[async_trait]
 impl ContainerRuntime for ProotRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        // proot runs unprivileged: no real namespaces, no cgroups, no overlay
+        RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: false,
+            supports_network_isolation: false,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
         debug!(
             "proot runtime: spawning command={} in rootfs={:?}",

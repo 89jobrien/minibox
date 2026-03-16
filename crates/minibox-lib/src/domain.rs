@@ -375,6 +375,43 @@ pub struct ResourceConfig {
 // Container Runtime Port
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Runtime Capabilities
+// ---------------------------------------------------------------------------
+
+/// Describes the isolation and resource features supported by a runtime adapter.
+///
+/// Callers can query capabilities to make decisions at runtime — for example,
+/// skipping user-namespace setup on adapters that don't support it, or
+/// falling back gracefully when cgroups v2 is unavailable.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// if runtime.capabilities().supports_network_isolation {
+///     // configure bridge/veth networking
+/// } else {
+///     // skip network setup, container shares host network
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct RuntimeCapabilities {
+    /// Supports Linux user namespace remapping (rootless containers).
+    pub supports_user_namespaces: bool,
+    /// Supports cgroups v2 for memory/CPU/PID resource limits.
+    pub supports_cgroups_v2: bool,
+    /// Supports overlay filesystem for copy-on-write container rootfs.
+    pub supports_overlay_fs: bool,
+    /// Supports network namespace isolation (separate network stack per container).
+    pub supports_network_isolation: bool,
+    /// Maximum number of concurrent containers, or `None` for unlimited.
+    pub max_containers: Option<usize>,
+}
+
+// ---------------------------------------------------------------------------
+// Container Runtime Port
+// ---------------------------------------------------------------------------
+
 /// Abstraction for spawning container processes with isolation.
 ///
 /// This trait defines the contract for container runtime implementations.
@@ -382,6 +419,13 @@ pub struct ResourceConfig {
 /// containerization technologies.
 #[async_trait]
 pub trait ContainerRuntime: AsAny + Send + Sync {
+    /// Return the static capabilities of this runtime adapter.
+    ///
+    /// Allows callers to discover what isolation features are available
+    /// without attempting operations that would fail. The returned struct
+    /// is cheap to construct and may be called frequently.
+    fn capabilities(&self) -> RuntimeCapabilities;
+
     /// Spawn a containerized process.
     ///
     /// Creates a new process with the configured isolation (namespaces,

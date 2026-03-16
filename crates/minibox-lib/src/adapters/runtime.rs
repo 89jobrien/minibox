@@ -6,7 +6,7 @@
 
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{spawn_container_process, ContainerConfig};
-use crate::domain::{AsAny, ContainerRuntime, ContainerSpawnConfig};
+use crate::domain::{AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;
@@ -103,6 +103,16 @@ impl AsAny for LinuxNamespaceRuntime {
 
 #[async_trait]
 impl ContainerRuntime for LinuxNamespaceRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        RuntimeCapabilities {
+            supports_user_namespaces: true,
+            supports_cgroups_v2: true,
+            supports_overlay_fs: true,
+            supports_network_isolation: true,
+            max_containers: None,
+        }
+    }
+
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
         debug!(
             "spawning container process: command={}, rootfs={:?}",
