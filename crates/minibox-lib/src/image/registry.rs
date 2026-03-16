@@ -29,7 +29,7 @@ use bytes::Bytes;
 use futures::stream::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 // ---------------------------------------------------------------------------
 // Constants

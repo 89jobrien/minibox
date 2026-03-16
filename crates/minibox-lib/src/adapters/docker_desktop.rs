@@ -133,7 +133,7 @@ impl DockerDesktopRuntime {
             anyhow::bail!("Docker helper command failed: {}", stderr);
         }
 
-        Ok(String::from_utf8(output.stdout).context("invalid UTF-8 from helper")?)
+        String::from_utf8(output.stdout).context("invalid UTF-8 from helper")
     }
 
     /// Convert macOS path to Docker-mounted path.
@@ -264,7 +264,7 @@ impl FilesystemProvider for DockerDesktopFilesystem {
         Ok(PathBuf::from(response.merged_path))
     }
 
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         // Called inside container process, handled by helper
         debug!("pivot_root delegated to Docker helper");
         Ok(())

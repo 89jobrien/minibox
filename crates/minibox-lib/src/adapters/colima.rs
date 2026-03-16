@@ -38,6 +38,12 @@ pub struct ColimaRegistry {
     limactl_path: String,
 }
 
+impl Default for ColimaRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColimaRegistry {
     pub fn new() -> Self {
         Self {
@@ -71,6 +77,7 @@ impl ColimaRegistry {
     }
 
     /// Convert macOS path to Lima VM path
+    #[allow(dead_code)]
     fn macos_to_lima_path(&self, macos_path: &Path) -> Result<String> {
         // Colima mounts host filesystem at /Users, /tmp, etc.
         let path_str = macos_path
@@ -181,6 +188,12 @@ pub struct ColimaFilesystem {
     limactl_path: String,
 }
 
+impl Default for ColimaFilesystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColimaFilesystem {
     pub fn new() -> Self {
         Self {
@@ -276,6 +289,12 @@ impl FilesystemProvider for ColimaFilesystem {
 pub struct ColimaLimiter {
     instance: String,
     limactl_path: String,
+}
+
+impl Default for ColimaLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ColimaLimiter {
@@ -380,6 +399,12 @@ impl ResourceLimiter for ColimaLimiter {
 pub struct ColimaRuntime {
     instance: String,
     limactl_path: String,
+}
+
+impl Default for ColimaRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ColimaRuntime {

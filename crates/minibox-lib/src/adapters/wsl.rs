@@ -106,7 +106,7 @@ impl WslRuntime {
             anyhow::bail!("WSL command failed: {}", stderr);
         }
 
-        Ok(String::from_utf8(output.stdout).context("invalid UTF-8 from WSL")?)
+        String::from_utf8(output.stdout).context("invalid UTF-8 from WSL")
     }
 
     /// Convert Windows path to WSL path (e.g., C:\Users\... -> /mnt/c/Users/...)
@@ -248,7 +248,7 @@ impl FilesystemProvider for WslFilesystem {
         Ok(merged_wsl_path.to_path_buf())
     }
 
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         // This is called inside the container process, which is already in WSL
         // The Linux helper handles pivot_root directly
         debug!("pivot_root delegated to WSL helper (called inside container)");
