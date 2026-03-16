@@ -6,6 +6,7 @@
 !SECURITY.md
 !SECURITY_TESTING.md
 !SECURITY_FIXES.md
+!TEST_RESULTS.md
 
 # Claude Code local configuration
 .claude/
