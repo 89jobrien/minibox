@@ -5,8 +5,9 @@
 //! [`FilesystemProvider`] trait.
 
 use crate::container::filesystem;
-use crate::domain::FilesystemProvider;
+use crate::domain::{AsAny, FilesystemProvider};
 use anyhow::Result;
+use std::any::Any;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -65,6 +66,12 @@ impl OverlayFilesystem {
 impl Default for OverlayFilesystem {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AsAny for OverlayFilesystem {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

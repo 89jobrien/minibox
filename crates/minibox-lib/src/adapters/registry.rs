@@ -4,11 +4,12 @@
 //! infrastructure code to implement the domain's [`ImageRegistry`] trait,
 //! following hexagonal architecture principles.
 
-use crate::domain::{ImageMetadata, ImageRegistry, LayerInfo};
+use crate::domain::{AsAny, ImageMetadata, ImageRegistry, LayerInfo};
 use crate::image::registry::RegistryClient;
 use crate::image::ImageStore;
 use anyhow::Result;
 use async_trait::async_trait;
+use std::any::Any;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
@@ -78,6 +79,12 @@ impl DockerHubRegistry {
     /// such as checking disk usage or manual cleanup.
     pub fn store(&self) -> &Arc<ImageStore> {
         &self.store
+    }
+}
+
+impl AsAny for DockerHubRegistry {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

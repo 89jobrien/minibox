@@ -45,6 +45,8 @@ mod filesystem;
 mod limiter;
 mod runtime;
 
+pub mod mocks;
+
 pub use registry::DockerHubRegistry;
 pub use filesystem::OverlayFilesystem;
 pub use limiter::CgroupV2Limiter;

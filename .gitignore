@@ -3,6 +3,9 @@
 !README.md
 !CLAUDE.md
 
+# Claude Code local configuration
+.claude/
+
 # Rust build artifacts
 /target/
 **/*.rs.bk

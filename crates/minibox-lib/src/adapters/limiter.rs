@@ -5,8 +5,9 @@
 //! [`ResourceLimiter`] trait.
 
 use crate::container::cgroups::{CgroupConfig, CgroupManager};
-use crate::domain::{ResourceConfig, ResourceLimiter};
+use crate::domain::{AsAny, ResourceConfig, ResourceLimiter};
 use anyhow::Result;
+use std::any::Any;
 use tracing::debug;
 
 /// cgroups v2 implementation of the [`ResourceLimiter`] trait.
@@ -74,6 +75,12 @@ impl CgroupV2Limiter {
 impl Default for CgroupV2Limiter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AsAny for CgroupV2Limiter {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

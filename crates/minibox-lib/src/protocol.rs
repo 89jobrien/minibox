@@ -152,3 +152,394 @@ pub fn decode_response(line: &[u8]) -> anyhow::Result<DaemonResponse> {
 
 /// Default Unix socket path for the minibox daemon.
 pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // Request serialization/deserialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_encode_decode_run_request_minimal() {
+        let req = DaemonRequest::Run {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Run {
+                image,
+                tag,
+                command,
+                memory_limit_bytes,
+                cpu_weight,
+            } => {
+                assert_eq!(image, "alpine");
+                assert_eq!(tag, None);
+                assert_eq!(command, vec!["/bin/sh"]);
+                assert_eq!(memory_limit_bytes, None);
+                assert_eq!(cpu_weight, None);
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_run_request_with_limits() {
+        let req = DaemonRequest::Run {
+            image: "ubuntu".to_string(),
+            tag: Some("22.04".to_string()),
+            command: vec!["/bin/bash".to_string(), "-c".to_string(), "echo hi".to_string()],
+            memory_limit_bytes: Some(536870912), // 512MB
+            cpu_weight: Some(500),
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Run {
+                image,
+                tag,
+                command,
+                memory_limit_bytes,
+                cpu_weight,
+            } => {
+                assert_eq!(image, "ubuntu");
+                assert_eq!(tag, Some("22.04".to_string()));
+                assert_eq!(command, vec!["/bin/bash", "-c", "echo hi"]);
+                assert_eq!(memory_limit_bytes, Some(536870912));
+                assert_eq!(cpu_weight, Some(500));
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_stop_request() {
+        let req = DaemonRequest::Stop {
+            id: "abc123".to_string(),
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Stop { id } => {
+                assert_eq!(id, "abc123");
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_remove_request() {
+        let req = DaemonRequest::Remove {
+            id: "xyz789".to_string(),
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Remove { id } => {
+                assert_eq!(id, "xyz789");
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_list_request() {
+        let req = DaemonRequest::List;
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        assert!(matches!(decoded, DaemonRequest::List));
+    }
+
+    #[test]
+    fn test_encode_decode_pull_request() {
+        let req = DaemonRequest::Pull {
+            image: "nginx".to_string(),
+            tag: Some("alpine".to_string()),
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Pull { image, tag } => {
+                assert_eq!(image, "nginx");
+                assert_eq!(tag, Some("alpine".to_string()));
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Response serialization/deserialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_encode_decode_container_created_response() {
+        let resp = DaemonResponse::ContainerCreated {
+            id: "container123".to_string(),
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let decoded = decode_response(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonResponse::ContainerCreated { id } => {
+                assert_eq!(id, "container123");
+            }
+            _ => panic!("wrong response type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_success_response() {
+        let resp = DaemonResponse::Success {
+            message: "container stopped".to_string(),
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let decoded = decode_response(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonResponse::Success { message } => {
+                assert_eq!(message, "container stopped");
+            }
+            _ => panic!("wrong response type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_error_response() {
+        let resp = DaemonResponse::Error {
+            message: "container not found".to_string(),
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let decoded = decode_response(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonResponse::Error { message } => {
+                assert_eq!(message, "container not found");
+            }
+            _ => panic!("wrong response type"),
+        }
+    }
+
+    #[test]
+    fn test_encode_decode_container_list_response() {
+        let containers = vec![
+            ContainerInfo {
+                id: "abc123".to_string(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "running".to_string(),
+                created_at: "2026-03-15T12:00:00Z".to_string(),
+                pid: Some(1234),
+            },
+            ContainerInfo {
+                id: "def456".to_string(),
+                image: "ubuntu:22.04".to_string(),
+                command: "/bin/bash".to_string(),
+                state: "stopped".to_string(),
+                created_at: "2026-03-15T11:00:00Z".to_string(),
+                pid: None,
+            },
+        ];
+
+        let resp = DaemonResponse::ContainerList {
+            containers: containers.clone(),
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let decoded = decode_response(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonResponse::ContainerList { containers: decoded_containers } => {
+                assert_eq!(decoded_containers.len(), 2);
+                assert_eq!(decoded_containers[0].id, "abc123");
+                assert_eq!(decoded_containers[0].pid, Some(1234));
+                assert_eq!(decoded_containers[1].id, "def456");
+                assert_eq!(decoded_containers[1].pid, None);
+            }
+            _ => panic!("wrong response type"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // JSON format validation tests (security)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_request_json_has_type_tag() {
+        let req = DaemonRequest::Run {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let json_str = String::from_utf8_lossy(&encoded);
+
+        assert!(json_str.contains("\"type\":\"Run\""));
+    }
+
+    #[test]
+    fn test_response_json_has_type_tag() {
+        let resp = DaemonResponse::Success {
+            message: "ok".to_string(),
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let json_str = String::from_utf8_lossy(&encoded);
+
+        assert!(json_str.contains("\"type\":\"Success\""));
+    }
+
+    #[test]
+    fn test_decode_request_strips_newline() {
+        let json_with_newline = b"{\"type\":\"List\"}\n";
+        let json_without_newline = b"{\"type\":\"List\"}";
+
+        let decoded_with = decode_request(json_with_newline).expect("decode with newline failed");
+        let decoded_without = decode_request(json_without_newline).expect("decode without newline failed");
+
+        assert!(matches!(decoded_with, DaemonRequest::List));
+        assert!(matches!(decoded_without, DaemonRequest::List));
+    }
+
+    #[test]
+    fn test_decode_response_strips_newline() {
+        let json_with_newline = b"{\"type\":\"Success\",\"message\":\"ok\"}\n";
+        let json_without_newline = b"{\"type\":\"Success\",\"message\":\"ok\"}";
+
+        let decoded_with = decode_response(json_with_newline).expect("decode with newline failed");
+        let decoded_without = decode_response(json_without_newline).expect("decode without newline failed");
+
+        assert!(matches!(decoded_with, DaemonResponse::Success { .. }));
+        assert!(matches!(decoded_without, DaemonResponse::Success { .. }));
+    }
+
+    #[test]
+    fn test_decode_malformed_json_fails() {
+        let malformed = b"{\"type\":\"Run\",\"image\":";
+        let result = decode_request(malformed);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_unknown_type_fails() {
+        let unknown_type = b"{\"type\":\"UnknownCommand\"}";
+        let result = decode_request(unknown_type);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_missing_required_field_fails() {
+        // Run request missing required "image" field
+        let missing_field = b"{\"type\":\"Run\",\"command\":[\"/bin/sh\"]}";
+        let result = decode_request(missing_field);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge cases and boundary tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_request_empty_command() {
+        let req = DaemonRequest::Run {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec![],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Run { command, .. } => {
+                assert_eq!(command.len(), 0);
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_run_request_max_memory_limit() {
+        let req = DaemonRequest::Run {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: Some(u64::MAX),
+            cpu_weight: None,
+        };
+
+        let encoded = encode_request(&req).expect("encode failed");
+        let decoded = decode_request(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonRequest::Run { memory_limit_bytes, .. } => {
+                assert_eq!(memory_limit_bytes, Some(u64::MAX));
+            }
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn test_container_info_special_characters() {
+        let info = ContainerInfo {
+            id: "abc123".to_string(),
+            image: "test/image:v1.0-alpha".to_string(),
+            command: "/bin/sh -c 'echo \"hello world\"'".to_string(),
+            state: "running".to_string(),
+            created_at: "2026-03-15T12:00:00Z".to_string(),
+            pid: Some(1234),
+        };
+
+        let resp = DaemonResponse::ContainerList {
+            containers: vec![info],
+        };
+
+        let encoded = encode_response(&resp).expect("encode failed");
+        let decoded = decode_response(&encoded).expect("decode failed");
+
+        match decoded {
+            DaemonResponse::ContainerList { containers } => {
+                assert_eq!(containers[0].command, "/bin/sh -c 'echo \"hello world\"'");
+            }
+            _ => panic!("wrong response type"),
+        }
+    }
+
+    #[test]
+    fn test_encoded_message_ends_with_newline() {
+        let req = DaemonRequest::List;
+        let encoded = encode_request(&req).expect("encode failed");
+
+        assert_eq!(encoded.last(), Some(&b'\n'));
+    }
+}

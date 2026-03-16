@@ -54,7 +54,19 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use std::any::Any;
 use std::path::{Path, PathBuf};
+
+// ---------------------------------------------------------------------------
+// Downcasting support for testing
+// ---------------------------------------------------------------------------
+
+/// Trait to enable downcasting trait objects back to concrete types.
+///
+/// This allows tests to access adapter-specific methods.
+pub trait AsAny: Send + Sync {
+    fn as_any(&self) -> &dyn Any;
+}
 
 // ---------------------------------------------------------------------------
 // Image Registry Port
@@ -85,7 +97,7 @@ use std::path::{Path, PathBuf};
 /// }
 /// ```
 #[async_trait]
-pub trait ImageRegistry: Send + Sync {
+pub trait ImageRegistry: AsAny + Send + Sync {
     /// Check if an image exists locally in the store.
     ///
     /// Returns `true` if the image has been pulled and cached locally,
@@ -172,7 +184,7 @@ pub struct LayerInfo {
 /// - Validate all paths to prevent traversal attacks
 /// - Mount filesystems with appropriate security flags (nosuid, nodev)
 /// - Properly clean up mounts to avoid resource leaks
-pub trait FilesystemProvider: Send + Sync {
+pub trait FilesystemProvider: AsAny + Send + Sync {
     /// Setup the container rootfs and return the merged directory path.
     ///
     /// Creates the necessary directory structure and mounts (e.g., overlay)
@@ -258,7 +270,7 @@ pub trait FilesystemProvider: Send + Sync {
 /// - Validate resource limit values (minimum thresholds)
 /// - Prevent resource DoS attacks (default PID limits)
 /// - Properly cleanup cgroups to avoid resource leaks
-pub trait ResourceLimiter: Send + Sync {
+pub trait ResourceLimiter: AsAny + Send + Sync {
     /// Create resource limits for a container.
     ///
     /// Creates the necessary control structures (e.g., cgroup directory)
@@ -347,7 +359,7 @@ pub struct ResourceConfig {
 /// Implementations might include Linux namespaces, Podman, or other
 /// containerization technologies.
 #[async_trait]
-pub trait ContainerRuntime: Send + Sync {
+pub trait ContainerRuntime: AsAny + Send + Sync {
     /// Spawn a containerized process.
     ///
     /// Creates a new process with the configured isolation (namespaces,
