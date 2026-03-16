@@ -2,7 +2,7 @@
 
 A Docker-like container runtime written in Rust featuring hexagonal architecture, comprehensive security hardening, and cross-platform support.
 
-**Architecture:** Daemon/client with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem.
+**Architecture:** Daemon/client with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and GKE unprivileged deployment support.
 
 **Status:** Development - Security hardened (12/15 vulnerabilities fixed, zero dependencies with CVEs), 57 tests (36 unit + 21 protocol), performance validated (<5ns trait overhead), architecture validated by production frameworks.
 
@@ -36,7 +36,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 - Domain layer with zero infrastructure dependencies
 - Swappable adapters for registry, filesystem, cgroups, runtime
 - 100% unit test coverage with mock implementations
-- Cross-platform foundation (Linux native, Windows WSL2, macOS Docker Desktop/Colima)
+- Cross-platform foundation (Linux native, GKE unprivileged, Windows WSL2, macOS Docker Desktop/Colima)
 - Architecture pattern validated by production frameworks (Zombienet-SDK)
 
 **Performance:**
@@ -87,6 +87,9 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 │                          │   │ • OverlayFS      │   │        │
 │                          │   │ • CgroupsV2      │   │        │
 │                          │   │ • LinuxRuntime   │   │        │
+│                          │   │ • ProotRuntime   │   │        │
+│                          │   │ • CopyFilesystem │   │        │
+│                          │   │ • NoopLimiter    │   │        │
 │                          │   └──────────────────┘   │        │
 │                          └──────────────────────────┘        │
 │                                                               │
@@ -103,7 +106,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 
 **Key Modules:**
 - `domain.rs` - Pure business logic traits (ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime)
-- `adapters/` - Infrastructure implementations (registry, filesystem, limiter, runtime, mocks, WSL, Docker Desktop, Colima)
+- `adapters/` - Infrastructure implementations (registry, filesystem, limiter, runtime, mocks, GKE, WSL, Docker Desktop, Colima)
 - `handlers/` - Request handling with dependency injection
 - `protocol.rs` - JSON-over-newline communication protocol
 
@@ -122,6 +125,33 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 - `OverlayFilesystem` - Linux overlayfs
 - `CgroupV2Limiter` - cgroups v2
 - `LinuxNamespaceRuntime` - clone() syscall
+
+### GKE (Unprivileged Pods)
+
+**Requirements:**
+- GKE Standard cluster (Autopilot not supported)
+- Linux container image with `proot` binary
+- No `CAP_SYS_ADMIN` needed
+
+**Adapters:**
+- `ProotRuntime` - ptrace-based fake chroot via proot (no namespaces or pivot_root needed)
+- `CopyFilesystem` - Copy-based layer merging (no overlay FS needed)
+- `NoopLimiter` - No-op resource limiter (no cgroup access)
+
+**Configuration:**
+```bash
+# Select GKE adapter at daemon startup
+MINIBOX_ADAPTER=gke miniboxd
+
+# Or specify proot binary location
+MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
+```
+
+**How it works:**
+Standard GKE pods lack `CAP_SYS_ADMIN`, blocking `mount()`, `pivot_root()`, `clone()` with namespace flags,
+overlay FS, and cgroup writes. The GKE adapter suite works within those constraints by using proot's ptrace-based
+syscall interception for fake chroot, plain file copying instead of overlay mounts, and skipping cgroup resource
+limits entirely. The same minibox binary runs in both native and GKE modes -- no recompilation needed.
 
 ### Windows (WSL2)
 
@@ -390,7 +420,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 - No exec command
 - No logs capture
 
-**Note:** Cross-platform adapters (WSL2, Docker Desktop, Colima) are implemented but require platform-specific helper binaries for production use.
+**Note:** Cross-platform adapters (GKE, WSL2, Docker Desktop, Colima) are implemented but require platform-specific dependencies (proot, helper binaries) for production use.
 
 ## Extending
 
@@ -483,7 +513,7 @@ This is a learning/experimental project demonstrating:
 Pull requests welcome for:
 - Feature implementations (networking, TTY, exec, logs)
 - Security improvements
-- Cross-platform support (WSL2/Docker Desktop helpers)
+- Cross-platform support (GKE, WSL2/Docker Desktop helpers)
 - Test coverage expansion
 
 ## License
