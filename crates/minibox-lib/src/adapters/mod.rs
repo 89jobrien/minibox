@@ -34,6 +34,12 @@
 //! - [`DockerDesktopFilesystem`]: Docker Desktop-based filesystem provider
 //! - [`DockerDesktopLimiter`]: Docker Desktop-based resource limiter
 //!
+//! **Cross-Platform (macOS via Colima/Lima):**
+//! - [`ColimaRegistry`]: Colima VM implementation of [`ImageRegistry`]
+//! - [`ColimaRuntime`]: Colima VM implementation
+//! - [`ColimaFilesystem`]: Colima-based filesystem provider
+//! - [`ColimaLimiter`]: Colima-based resource limiter
+//!
 //! # Usage
 //!
 //! Adapters are typically instantiated in the composition root (main.rs) and
@@ -63,6 +69,7 @@ mod runtime;
 // Cross-platform adapters
 mod wsl;
 mod docker_desktop;
+mod colima;
 
 // Test doubles (always available for testing)
 pub mod mocks;
@@ -79,3 +86,4 @@ pub use runtime::LinuxNamespaceRuntime;
 // Cross-platform exports (always available)
 pub use wsl::{WslRuntime, WslFilesystem, WslLimiter};
 pub use docker_desktop::{DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter};
+pub use colima::{ColimaRegistry, ColimaRuntime, ColimaFilesystem, ColimaLimiter};

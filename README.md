@@ -137,6 +137,24 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 - `DockerDesktopFilesystem` - Operations in helper container
 - `DockerDesktopLimiter` - cgroups in helper container
 
+### macOS (Colima)
+
+**Requirements:**
+- macOS 10.15+ (Catalina)
+- Colima installed (`brew install colima`)
+- Colima VM running (`colima start`)
+
+**Adapters:**
+- `ColimaRegistry` - Uses nerdctl for image operations
+- `ColimaRuntime` - Delegates to Lima VM
+- `ColimaFilesystem` - Overlay operations via limactl
+- `ColimaLimiter` - cgroups via limactl
+
+**Advantages:**
+- Fully open-source (no Docker Desktop licensing)
+- Lightweight VM compared to Docker Desktop
+- Native containerd/nerdctl integration
+
 ## Building
 
 ```bash
