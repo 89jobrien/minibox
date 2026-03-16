@@ -11,6 +11,7 @@
 !docs/cgroup-findings.md
 !docs/plans/*.md
 !docs/plans/
+!docs/superpowers/specs/*.md
 
 # Claude Code local configuration
 .claude/
