@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "miniboxd"
+path = "src/lib.rs"
+
 [[bin]]
 name = "miniboxd"
 path = "src/main.rs"
@@ -20,3 +24,6 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 nix = { workspace = true }
 libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

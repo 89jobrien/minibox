@@ -6,8 +6,10 @@
 
 use anyhow::{Context, Result};
 use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+#[cfg(target_os = "linux")]
 use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
-use std::os::unix::io::AsRawFd;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::AsFd;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
@@ -37,26 +39,35 @@ pub async fn handle_connection(
     deps: Arc<HandlerDependencies>,
     require_root_auth: bool,
 ) -> Result<()> {
-    // SECURITY: Get peer credentials for audit logging
-    let raw_fd = stream.as_raw_fd();
-    let creds = getsockopt(raw_fd, PeerCredentials)
-        .context("failed to get peer credentials")?;
+    // SECURITY: Get peer credentials for audit logging (Linux only)
+    #[cfg(target_os = "linux")]
+    {
+        let creds = getsockopt(&stream.as_fd(), PeerCredentials)
+            .context("failed to get peer credentials")?;
 
-    if require_root_auth && creds.uid() != 0 {
-        warn!(
-            "rejecting connection from non-root UID {} (PID {})",
+        if require_root_auth && creds.uid() != 0 {
+            warn!(
+                "rejecting connection from non-root UID {} (PID {})",
+                creds.uid(),
+                creds.pid()
+            );
+            return Ok(());
+        }
+
+        info!(
+            "accepted connection from UID {} PID {}",
             creds.uid(),
             creds.pid()
         );
-        // Close connection without processing requests
-        return Ok(());
     }
 
-    info!(
-        "accepted connection from UID {} PID {}",
-        creds.uid(),
-        creds.pid()
-    );
+    #[cfg(not(target_os = "linux"))]
+    {
+        if require_root_auth {
+            warn!("require_root_auth is true but peer credentials are not available on this platform; auth bypassed");
+        }
+        info!("accepted connection (peer credentials not available on this platform)");
+    }
 
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
@@ -79,13 +90,11 @@ pub async fn handle_connection(
         // SECURITY: Reject requests exceeding size limit
         if bytes_read > MAX_REQUEST_SIZE {
             warn!(
-                "rejecting oversized request: {} bytes (max {})",
-                bytes_read, MAX_REQUEST_SIZE
+                "rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"
             );
             let error_response = DaemonResponse::Error {
                 message: format!(
-                    "request too large: {} bytes (max {})",
-                    bytes_read, MAX_REQUEST_SIZE
+                    "request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"
                 ),
             };
             let mut error_json = serde_json::to_string(&error_response)?;
@@ -104,13 +113,13 @@ pub async fn handle_connection(
 
         let response = match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
-                info!("dispatching request: {:?}", request);
+                info!("dispatching request: {request:?}");
                 dispatch(request, Arc::clone(&state), Arc::clone(&deps)).await
             }
             Err(e) => {
-                warn!("failed to parse request '{}': {}", trimmed, e);
+                warn!("failed to parse request '{trimmed}': {e}");
                 DaemonResponse::Error {
-                    message: format!("invalid request: {}", e),
+                    message: format!("invalid request: {e}"),
                 }
             }
         };
@@ -119,7 +128,7 @@ pub async fn handle_connection(
             serde_json::to_string(&response).context("serializing response")?;
         response_json.push('\n');
 
-        debug!("sending response: {}", response_json.trim());
+        debug!("sending response: {}", response_json.trim_end());
 
         writer
             .write_all(response_json.as_bytes())

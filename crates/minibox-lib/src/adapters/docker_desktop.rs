@@ -130,7 +130,7 @@ impl DockerDesktopRuntime {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Docker helper command failed: {}", stderr);
+            anyhow::bail!("Docker helper command failed: {stderr}");
         }
 
         String::from_utf8(output.stdout).context("invalid UTF-8 from helper")
@@ -214,7 +214,7 @@ impl ContainerRuntime for DockerDesktopRuntime {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Docker helper spawn failed: {}", stderr);
+            anyhow::bail!("Docker helper spawn failed: {stderr}");
         }
 
         // Parse PID from stdout

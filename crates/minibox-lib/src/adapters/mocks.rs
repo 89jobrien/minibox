@@ -313,7 +313,7 @@ impl ResourceLimiter for MockLimiter {
         }
 
         state.created_cgroups.push(container_id.to_string());
-        Ok(format!("/mock/cgroup/{}", container_id))
+        Ok(format!("/mock/cgroup/{container_id}"))
     }
 
     fn add_process(&self, _container_id: &str, _pid: u32) -> Result<()> {

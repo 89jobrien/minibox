@@ -64,7 +64,7 @@ impl ColimaRegistry {
             .arg(&self.instance)
             .args(args)
             .output()
-            .map_err(|e| anyhow!("Failed to execute limactl: {}", e))?;
+            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
 
         if !output.status.success() {
             return Err(anyhow!(
@@ -89,10 +89,9 @@ impl ColimaRegistry {
             Ok(path_str.to_string())
         } else {
             // For other paths, they might not be mounted
-            Err(anyhow!(format!(
-                "Path not mounted in Lima VM: {}. Only /Users and /tmp are typically mounted.",
-                path_str
-            )))
+            Err(anyhow!(
+                "Path not mounted in Lima VM: {path_str}. Only /Users and /tmp are typically mounted."
+            ))
         }
     }
 }
@@ -106,13 +105,13 @@ impl AsAny for ColimaRegistry {
 #[async_trait]
 impl ImageRegistry for ColimaRegistry {
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        let full_name = format!("{}:{}", name, tag);
+        let full_name = format!("{name}:{tag}");
         let result = self.lima_exec(&["nerdctl", "image", "inspect", &full_name]);
         result.is_ok()
     }
 
     async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
-        let full_name = format!("{}:{}", name, tag);
+        let full_name = format!("{name}:{tag}");
 
         // Pull image using nerdctl inside Colima VM
         self.lima_exec(&["nerdctl", "pull", &full_name])?;
@@ -120,7 +119,7 @@ impl ImageRegistry for ColimaRegistry {
         // Get image metadata
         let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
-            .map_err(|e| anyhow!(format!("Failed to parse image metadata: {}", e)))?;
+            .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
 
         let image_data = inspect_data
             .first()
@@ -149,12 +148,12 @@ impl ImageRegistry for ColimaRegistry {
     }
 
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
-        let full_name = format!("{}:{}", name, tag);
+        let full_name = format!("{name}:{tag}");
 
         // Get image metadata
         let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
-            .map_err(|e| anyhow!(format!("Failed to parse image metadata: {}", e)))?;
+            .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
 
         let image_data = inspect_data
             .first()
@@ -167,7 +166,7 @@ impl ImageRegistry for ColimaRegistry {
             .map(|fs| {
                 fs.layers
                     .iter()
-                    .map(|layer_id| PathBuf::from(format!("/var/lib/containerd/layers/{}", layer_id)))
+                    .map(|layer_id| PathBuf::from(format!("/var/lib/containerd/layers/{layer_id}")))
                     .collect()
             })
             .unwrap_or_default();
@@ -208,13 +207,13 @@ impl ColimaFilesystem {
             .arg(&self.instance)
             .args(args)
             .output()
-            .map_err(|e| anyhow!(format!("Failed to execute limactl: {}", e)))?;
+            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
 
         if !output.status.success() {
-            return Err(anyhow!(format!(
+            return Err(anyhow!(
                 "Lima command failed: {}",
                 String::from_utf8_lossy(&output.stderr)
-            )));
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -311,13 +310,13 @@ impl ColimaLimiter {
             .arg(&self.instance)
             .args(args)
             .output()
-            .map_err(|e| anyhow!(format!("Failed to execute limactl: {}", e)))?;
+            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
 
         if !output.status.success() {
-            return Err(anyhow!(format!(
+            return Err(anyhow!(
                 "Lima command failed: {}",
                 String::from_utf8_lossy(&output.stderr)
-            )));
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -332,38 +331,38 @@ impl AsAny for ColimaLimiter {
 
 impl ResourceLimiter for ColimaLimiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
-        let cgroup_path = format!("/sys/fs/cgroup/minibox/{}", container_id);
+        let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
         // Create cgroup directory
         self.lima_exec(&["mkdir", "-p", &cgroup_path])?;
 
         // Set memory limit
         if let Some(memory_bytes) = config.memory_limit_bytes {
-            let memory_file = format!("{}/memory.max", cgroup_path);
-            self.lima_exec(&["sh", "-c", &format!("echo {} > {}", memory_bytes, memory_file)])?;
+            let memory_file = format!("{cgroup_path}/memory.max");
+            self.lima_exec(&["sh", "-c", &format!("echo {memory_bytes} > {memory_file}")])?;
         }
 
         // Set CPU weight
         if let Some(cpu_weight) = config.cpu_weight {
-            let cpu_file = format!("{}/cpu.weight", cgroup_path);
-            self.lima_exec(&["sh", "-c", &format!("echo {} > {}", cpu_weight, cpu_file)])?;
+            let cpu_file = format!("{cgroup_path}/cpu.weight");
+            self.lima_exec(&["sh", "-c", &format!("echo {cpu_weight} > {cpu_file}")])?;
         }
 
         // Set PID limit
         if let Some(pids_max) = config.pids_max {
-            let pids_file = format!("{}/pids.max", cgroup_path);
-            self.lima_exec(&["sh", "-c", &format!("echo {} > {}", pids_max, pids_file)])?;
+            let pids_file = format!("{cgroup_path}/pids.max");
+            self.lima_exec(&["sh", "-c", &format!("echo {pids_max} > {pids_file}")])?;
         }
 
         // Set I/O limit
         if let Some(io_max) = config.io_max_bytes_per_sec {
             // Format: "major:minor rbps=X wbps=X"
             // This is simplified - production would need device major:minor detection
-            let io_file = format!("{}/io.max", cgroup_path);
+            let io_file = format!("{cgroup_path}/io.max");
             self.lima_exec(&[
                 "sh",
                 "-c",
-                &format!("echo '8:0 rbps={} wbps={}' > {}", io_max, io_max, io_file),
+                &format!("echo '8:0 rbps={io_max} wbps={io_max}' > {io_file}"),
             ])?;
         }
 
@@ -371,16 +370,16 @@ impl ResourceLimiter for ColimaLimiter {
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
-        let cgroup_path = format!("/sys/fs/cgroup/minibox/{}", container_id);
-        let procs_file = format!("{}/cgroup.procs", cgroup_path);
+        let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
+        let procs_file = format!("{cgroup_path}/cgroup.procs");
 
-        self.lima_exec(&["sh", "-c", &format!("echo {} > {}", pid, procs_file)])?;
+        self.lima_exec(&["sh", "-c", &format!("echo {pid} > {procs_file}")])?;
 
         Ok(())
     }
 
     fn cleanup(&self, container_id: &str) -> Result<()> {
-        let cgroup_path = format!("/sys/fs/cgroup/minibox/{}", container_id);
+        let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
         // Remove cgroup directory
         self.lima_exec(&["rmdir", &cgroup_path])?;
@@ -421,13 +420,13 @@ impl ColimaRuntime {
             .arg(&self.instance)
             .args(args)
             .output()
-            .map_err(|e| anyhow!(format!("Failed to execute limactl: {}", e)))?;
+            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
 
         if !output.status.success() {
-            return Err(anyhow!(format!(
+            return Err(anyhow!(
                 "Lima command failed: {}",
                 String::from_utf8_lossy(&output.stderr)
-            )));
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -463,14 +462,14 @@ impl ContainerRuntime for ColimaRuntime {
             hostname: config.hostname.clone(),
             cgroup_path: config.cgroup_path.to_string_lossy().to_string(),
         })
-        .map_err(|e| anyhow!(format!("Failed to serialize config: {}", e)))?;
+        .map_err(|e| anyhow!("Failed to serialize config: {e}"))?;
 
         // Execute container spawn script inside Lima VM
         // This would call a helper script that uses containerd/runc
         let spawn_script = format!(
             r#"
             # Container spawn script for Lima VM
-            CONFIG='{}'
+            CONFIG='{config_json}'
 
             # Extract configuration
             ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
@@ -484,15 +483,14 @@ impl ContainerRuntime for ColimaRuntime {
                 chroot "$ROOTFS" "$COMMAND" &
 
             echo $!
-            "#,
-            config_json
+            "#
         );
 
         let output = self.lima_exec(&["sh", "-c", &spawn_script])?;
         let pid: u32 = output
             .trim()
             .parse()
-            .map_err(|e| anyhow!(format!("Invalid PID returned: {}", e)))?;
+            .map_err(|e| anyhow!("Invalid PID returned: {e}"))?;
 
         Ok(pid)
     }

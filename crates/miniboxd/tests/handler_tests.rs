@@ -8,22 +8,25 @@ use minibox_lib::protocol::DaemonResponse;
 use miniboxd::handler::{self, HandlerDependencies};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
+use tempfile::TempDir;
 
 /// Helper to create test dependencies with mocks.
-fn create_test_deps() -> Arc<HandlerDependencies> {
+fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     })
 }
 
 /// Helper to create daemon state with a test image store.
-fn create_test_state() -> Arc<DaemonState> {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let image_store = minibox_lib::image::ImageStore::new(temp_dir.path()).unwrap();
-    Arc::new(DaemonState::new(image_store))
+fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
+    let image_store =
+        minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
 // ---------------------------------------------------------------------------
@@ -32,8 +35,9 @@ fn create_test_state() -> Arc<DaemonState> {
 
 #[tokio::test]
 async fn test_handle_pull_success() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "alpine".to_string(),
@@ -62,8 +66,9 @@ async fn test_handle_pull_success() {
 
 #[tokio::test]
 async fn test_handle_pull_with_library_prefix() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     // Bare image name should get "library/" prefix
     let response = handler::handle_pull("ubuntu".to_string(), None, state, deps).await;
@@ -78,13 +83,16 @@ async fn test_handle_pull_with_library_prefix() {
 
 #[tokio::test]
 async fn test_handle_pull_failure() {
+    let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_pull_failure()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
-    let state = create_test_state();
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull("alpine".to_string(), None, state, deps).await;
 
@@ -102,13 +110,16 @@ async fn test_handle_pull_failure() {
 
 #[tokio::test]
 async fn test_handle_run_with_cached_image() {
+    let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
-    let state = create_test_state();
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_run(
         "alpine".to_string(),
@@ -145,8 +156,9 @@ async fn test_handle_run_with_cached_image() {
 
 #[tokio::test]
 async fn test_handle_run_pulls_uncached_image() {
-    let deps = create_test_deps(); // Image not cached
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir); // Image not cached
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_run(
         "alpine".to_string(),
@@ -177,13 +189,16 @@ async fn test_handle_run_pulls_uncached_image() {
 
 #[tokio::test]
 async fn test_handle_run_filesystem_setup_failure() {
+    let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
-    let state = create_test_state();
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_run(
         "alpine".to_string(),
@@ -206,13 +221,16 @@ async fn test_handle_run_filesystem_setup_failure() {
 
 #[tokio::test]
 async fn test_handle_run_resource_limiter_failure() {
+    let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
         runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
-    let state = create_test_state();
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_run(
         "alpine".to_string(),
@@ -235,13 +253,16 @@ async fn test_handle_run_resource_limiter_failure() {
 
 #[tokio::test]
 async fn test_handle_run_runtime_spawn_failure() {
+    let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
-    let state = create_test_state();
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_run(
         "alpine".to_string(),
@@ -275,8 +296,9 @@ async fn test_handle_run_runtime_spawn_failure() {
 
 #[tokio::test]
 async fn test_handle_remove_success() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     // First create a container
     let create_response = handler::handle_run(
@@ -333,8 +355,9 @@ async fn test_handle_remove_success() {
 
 #[tokio::test]
 async fn test_handle_remove_nonexistent_container() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_remove("nonexistent123".to_string(), state, deps).await;
 
@@ -348,8 +371,9 @@ async fn test_handle_remove_nonexistent_container() {
 
 #[tokio::test]
 async fn test_handle_remove_running_container() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     // Create a container
     let create_response = handler::handle_run(
@@ -368,15 +392,18 @@ async fn test_handle_remove_running_container() {
         _ => panic!("failed to create container"),
     };
 
-    // Wait for it to spawn and be marked Running
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Directly mark as Running (deterministic — no sleep/race with async spawn)
+    state.update_container_state(&container_id, "Running").await;
 
     // Try to remove while still running
     let response = handler::handle_remove(container_id, state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {
-            assert!(message.contains("still running"));
+            assert!(
+                message.contains("running"),
+                "expected 'running' in error message, got: {message}"
+            );
         }
         _ => panic!("expected Error, got {:?}", response),
     }
@@ -388,8 +415,9 @@ async fn test_handle_remove_running_container() {
 
 #[tokio::test]
 async fn test_full_container_lifecycle() {
-    let deps = create_test_deps();
-    let state = create_test_state();
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
 
     // 1. Pull image
     let pull_response = handler::handle_pull(

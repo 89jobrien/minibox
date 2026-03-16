@@ -95,9 +95,9 @@ pub async fn handle_run(
     {
         Ok(id) => DaemonResponse::ContainerCreated { id },
         Err(e) => {
-            error!("handle_run error: {:#}", e);
+            error!("handle_run error: {e:#}");
             DaemonResponse::Error {
-                message: format!("{:#}", e),
+                message: format!("{e:#}"),
             }
         }
     }
@@ -118,12 +118,12 @@ async fn run_inner(
     let full_image = if image.contains('/') {
         image.clone()
     } else {
-        format!("library/{}", image)
+        format!("library/{image}")
     };
 
     // Pull image if not cached (using injected registry trait).
     if !deps.registry.has_image(&full_image, &tag).await {
-        info!("image {}:{} not cached, pulling…", full_image, tag);
+        info!("image {full_image}:{tag} not cached, pulling…");
         deps.registry
             .pull_image(&full_image, &tag)
             .await
@@ -156,8 +156,7 @@ async fn run_inner(
     // SECURITY: Verify no collision with existing containers
     if state.get_container(&id).await.is_some() {
         return Err(DomainError::InvalidConfig(format!(
-            "container ID collision (extremely rare): {}",
-            id
+            "container ID collision (extremely rare): {id}"
         ))
         .into());
     }
@@ -201,7 +200,7 @@ async fn run_inner(
 
     // Build ContainerRecord in Created state; updated to Running once the
     // child PID is known.
-    let image_label = format!("{}:{}", image, tag);
+    let image_label = format!("{image}:{tag}");
     let command_str = command.join(" ");
     let record = ContainerRecord {
         info: ContainerInfo {
@@ -251,7 +250,7 @@ async fn run_inner(
         // Permit is held until this task completes (via _spawn_permit drop)
         match runtime_clone.spawn_process(&spawn_config).await {
             Ok(pid) => {
-                info!("container {} started with PID {}", id_clone, pid);
+                info!("container {id_clone} started with PID {pid}");
 
                 // Write PID file.
                 let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
@@ -267,7 +266,7 @@ async fn run_inner(
                 });
             }
             Err(e) => {
-                error!("failed to spawn container {}: {:#}", id_clone, e);
+                error!("failed to spawn container {id_clone}: {e:#}");
                 state_clone
                     .update_container_state(&id_clone, "Failed")
                     .await;
@@ -284,16 +283,16 @@ fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
     let nix_pid = Pid::from_raw(pid as i32);
     match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
-            info!("container {} exited with code {}", id, code);
+            info!("container {id} exited with code {code}");
         }
         Ok(WaitStatus::Signaled(_, sig, _)) => {
-            info!("container {} killed by signal {}", id, sig);
+            info!("container {id} killed by signal {sig}");
         }
         Ok(other) => {
-            info!("container {} wait status: {:?}", id, other);
+            info!("container {id} wait status: {other:?}");
         }
         Err(e) => {
-            warn!("waitpid for container {} error: {}", id, e);
+            warn!("waitpid for container {id} error: {e}");
         }
     }
 
@@ -318,12 +317,12 @@ fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
 pub async fn handle_stop(id: String, state: Arc<DaemonState>) -> DaemonResponse {
     match stop_inner(&id, &state).await {
         Ok(()) => DaemonResponse::Success {
-            message: format!("container {} stopped", id),
+            message: format!("container {id} stopped"),
         },
         Err(e) => {
-            error!("handle_stop error: {:#}", e);
+            error!("handle_stop error: {e:#}");
             DaemonResponse::Error {
-                message: format!("{:#}", e),
+                message: format!("{e:#}"),
             }
         }
     }
@@ -337,11 +336,11 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
 
     let pid = record
         .pid
-        .ok_or_else(|| anyhow::anyhow!("container {} has no PID (not running?)", id))?;
+        .ok_or_else(|| anyhow::anyhow!("container {id} has no PID (not running?)"))?;
 
     let nix_pid = Pid::from_raw(pid as i32);
 
-    info!("sending SIGTERM to container {} (PID {})", id, pid);
+    info!("sending SIGTERM to container {id} (PID {pid})");
     kill(nix_pid, Signal::SIGTERM).ok();
 
     // Wait up to 10 s for the process to exit.
@@ -353,7 +352,7 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
-            warn!("container {} did not exit in 10 s, sending SIGKILL", id);
+            warn!("container {id} did not exit in 10 s, sending SIGKILL");
             kill(nix_pid, Signal::SIGKILL).ok();
             break;
         }
@@ -373,12 +372,12 @@ pub async fn handle_remove(
 ) -> DaemonResponse {
     match remove_inner(&id, &state, &deps).await {
         Ok(()) => DaemonResponse::Success {
-            message: format!("container {} removed", id),
+            message: format!("container {id} removed"),
         },
         Err(e) => {
-            error!("handle_remove error: {:#}", e);
+            error!("handle_remove error: {e:#}");
             DaemonResponse::Error {
-                message: format!("{:#}", e),
+                message: format!("{e:#}"),
             }
         }
     }
@@ -402,7 +401,7 @@ async fn remove_inner(
     let container_dir = deps.containers_base.join(id);
     if container_dir.exists() {
         if let Err(e) = deps.filesystem.cleanup(&container_dir) {
-            warn!("cleanup_mounts for {}: {}", id, e);
+            warn!("cleanup_mounts for {id}: {e}");
         }
     }
 
@@ -414,7 +413,7 @@ async fn remove_inner(
 
     // Cleanup cgroup (using injected resource limiter trait).
     if let Err(e) = deps.resource_limiter.cleanup(id) {
-        warn!("cleanup cgroup for {}: {}", id, e);
+        warn!("cleanup cgroup for {id}: {e}");
     }
 
     state.remove_container(id).await;
@@ -442,18 +441,18 @@ pub async fn handle_pull(
     let full_image = if image.contains('/') {
         image.clone()
     } else {
-        format!("library/{}", image)
+        format!("library/{image}")
     };
 
     // Pull image (using injected registry trait).
     match deps.registry.pull_image(&full_image, &tag).await {
         Ok(_metadata) => DaemonResponse::Success {
-            message: format!("pulled {}:{}", image, tag),
+            message: format!("pulled {image}:{tag}"),
         },
         Err(e) => {
-            error!("handle_pull error: {:#}", e);
+            error!("handle_pull error: {e:#}");
             DaemonResponse::Error {
-                message: format!("{:#}", e),
+                message: format!("{e:#}"),
             }
         }
     }

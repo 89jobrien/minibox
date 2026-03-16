@@ -34,7 +34,7 @@ use minibox_lib::protocol::DaemonResponse;
 fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
     let temp_dir = TempDir::new().expect("failed to create temp dir");
     let image_store = ImageStore::new(temp_dir.path()).expect("failed to create image store");
-    let state = Arc::new(DaemonState::new(image_store));
+    let state = Arc::new(DaemonState::new(image_store, temp_dir.path()));
 
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(
@@ -44,6 +44,8 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         filesystem: Arc::new(OverlayFilesystem::new()),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
     });
 
     (deps, state, temp_dir)

@@ -149,11 +149,7 @@ impl RegistryClient {
             .header(
                 "Accept",
                 format!(
-                    "{}, {}, {}, {}",
-                    MEDIA_TYPE_OCI_MANIFEST,
-                    MEDIA_TYPE_OCI_INDEX,
-                    MEDIA_TYPE_DOCKER_MANIFEST,
-                    MEDIA_TYPE_DOCKER_MANIFEST_LIST,
+                    "{MEDIA_TYPE_OCI_MANIFEST}, {MEDIA_TYPE_OCI_INDEX}, {MEDIA_TYPE_DOCKER_MANIFEST}, {MEDIA_TYPE_DOCKER_MANIFEST_LIST}",
                 ),
             )
             .send()
@@ -187,8 +183,7 @@ impl RegistryClient {
                 if let Ok(size) = size_str.parse::<u64>() {
                     if size > MAX_MANIFEST_SIZE {
                         return Err(RegistryError::Other(format!(
-                            "manifest too large: {} bytes (max {})",
-                            size, MAX_MANIFEST_SIZE
+                            "manifest too large: {size} bytes (max {MAX_MANIFEST_SIZE})"
                         ))
                         .into());
                     }
@@ -206,8 +201,7 @@ impl RegistryClient {
 
             if body.len() as u64 > MAX_MANIFEST_SIZE {
                 return Err(RegistryError::Other(format!(
-                    "manifest exceeded size limit: {} bytes",
-                    MAX_MANIFEST_SIZE
+                    "manifest exceeded size limit: {MAX_MANIFEST_SIZE} bytes"
                 ))
                 .into());
             }
@@ -277,8 +271,7 @@ impl RegistryClient {
                 if let Ok(size) = size_str.parse::<u64>() {
                     if size > MAX_LAYER_SIZE {
                         return Err(RegistryError::Other(format!(
-                            "layer too large: {} bytes (max {})",
-                            size, MAX_LAYER_SIZE
+                            "layer too large: {size} bytes (max {MAX_LAYER_SIZE})"
                         ))
                         .into());
                     }
@@ -297,8 +290,7 @@ impl RegistryClient {
 
             if data.len() as u64 > MAX_LAYER_SIZE {
                 return Err(RegistryError::Other(format!(
-                    "layer exceeded size limit during download: {} bytes",
-                    MAX_LAYER_SIZE
+                    "layer exceeded size limit during download: {MAX_LAYER_SIZE} bytes"
                 ))
                 .into());
             }

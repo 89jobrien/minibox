@@ -18,6 +18,27 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+/// Create a `HandlerDependencies` with mocks, using `temp_dir` for path fields.
+fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    mock_deps_with_registry(MockRegistry::new(), temp_dir)
+}
+
+fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    Arc::new(HandlerDependencies {
+        registry: Arc::new(registry),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    })
+}
+
+fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
+    let image_store = minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    Arc::new(DaemonState::new(image_store, temp_dir.path()))
+}
+
 /// Conformance test suite for domain trait implementations.
 ///
 /// All adapters (Linux, WSL, Docker Desktop) must pass these tests
@@ -200,16 +221,9 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_pull_must_work_with_any_registry_adapter() {
-        let deps = Arc::new(HandlerDependencies {
-            registry: Arc::new(MockRegistry::new()),
-            filesystem: Arc::new(MockFilesystem::new()),
-            resource_limiter: Arc::new(MockLimiter::new()),
-            runtime: Arc::new(MockRuntime::new()),
-        });
-
         let temp_dir = TempDir::new().unwrap();
-        let image_store = minibox_lib::image::ImageStore::new(temp_dir.path()).unwrap();
-        let state = Arc::new(DaemonState::new(image_store));
+        let deps = mock_deps(&temp_dir);
+        let state = mock_state(&temp_dir);
 
         let response = handler::handle_pull(
             "alpine".to_string(),
@@ -227,16 +241,12 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_run_must_work_with_any_adapter_set() {
-        let deps = Arc::new(HandlerDependencies {
-            registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-            filesystem: Arc::new(MockFilesystem::new()),
-            resource_limiter: Arc::new(MockLimiter::new()),
-            runtime: Arc::new(MockRuntime::new()),
-        });
-
         let temp_dir = TempDir::new().unwrap();
-        let image_store = minibox_lib::image::ImageStore::new(temp_dir.path()).unwrap();
-        let state = Arc::new(DaemonState::new(image_store));
+        let deps = mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            &temp_dir,
+        );
+        let state = mock_state(&temp_dir);
 
         let response = handler::handle_run(
             "alpine".to_string(),
@@ -257,16 +267,12 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_remove_must_work_with_any_filesystem_adapter() {
-        let deps = Arc::new(HandlerDependencies {
-            registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-            filesystem: Arc::new(MockFilesystem::new()),
-            resource_limiter: Arc::new(MockLimiter::new()),
-            runtime: Arc::new(MockRuntime::new()),
-        });
-
         let temp_dir = TempDir::new().unwrap();
-        let image_store = minibox_lib::image::ImageStore::new(temp_dir.path()).unwrap();
-        let state = Arc::new(DaemonState::new(image_store));
+        let deps = mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            &temp_dir,
+        );
+        let state = mock_state(&temp_dir);
 
         // Create container first
         let create_response = handler::handle_run(
@@ -305,8 +311,6 @@ mod conformance {
 /// rather than asserting conformance.
 #[cfg(test)]
 mod platform_differences {
-    use super::*;
-
     #[test]
     #[ignore] // Documentation test
     fn linux_uses_native_overlayfs() {
@@ -348,8 +352,7 @@ mod performance_conformance {
         let elapsed = start.elapsed();
         assert!(
             elapsed.as_millis() < 1,
-            "Registry has_image must complete under 1ms, took {:?}",
-            elapsed
+            "Registry has_image must complete under 1ms, took {elapsed:?}",
         );
     }
 
@@ -365,8 +368,7 @@ mod performance_conformance {
 
         assert!(
             elapsed.as_millis() < 100,
-            "Filesystem setup must complete under 100ms, took {:?}",
-            elapsed
+            "Filesystem setup must complete under 100ms, took {elapsed:?}",
         );
     }
 
@@ -381,8 +383,7 @@ mod performance_conformance {
 
         assert!(
             elapsed.as_millis() < 10,
-            "Limiter create must complete under 10ms, took {:?}",
-            elapsed
+            "Limiter create must complete under 10ms, took {elapsed:?}",
         );
     }
 }

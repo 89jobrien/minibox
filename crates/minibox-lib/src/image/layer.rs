@@ -63,8 +63,7 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         // Reject device nodes
         if matches!(entry_type, EntryType::Block | EntryType::Char) {
             return Err(ImageError::LayerExtract(format!(
-                "tar entry contains device node (security risk): {:?}",
-                entry_path
+                "tar entry contains device node (security risk): {entry_path:?}"
             ))
             .into());
         }
@@ -74,8 +73,7 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             if let Ok(Some(link_target)) = entry.link_name() {
                 if link_target.is_absolute() {
                     return Err(ImageError::LayerExtract(format!(
-                        "tar entry contains symlink to absolute path (security risk): {:?} -> {:?}",
-                        entry_path, link_target
+                        "tar entry contains symlink to absolute path (security risk): {entry_path:?} -> {link_target:?}"
                     ))
                     .into());
                 }
@@ -103,8 +101,7 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         // Extract the entry
         entry.unpack_in(dest)
             .map_err(|e| ImageError::LayerExtract(format!(
-                "failed to extract entry {:?}: {e}",
-                entry_path
+                "failed to extract entry {entry_path:?}: {e}"
             )))?;
     }
 
@@ -124,8 +121,7 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     // Reject absolute paths
     if entry_path.is_absolute() {
         return Err(ImageError::LayerExtract(format!(
-            "tar entry uses absolute path (security risk): {:?}",
-            entry_path
+            "tar entry uses absolute path (security risk): {entry_path:?}"
         ))
         .into());
     }
@@ -133,8 +129,7 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     // Check for path traversal via .. components
     if has_parent_dir_component(entry_path) {
         return Err(ImageError::LayerExtract(format!(
-            "tar entry contains '..' component (path traversal): {:?}",
-            entry_path
+            "tar entry contains '..' component (path traversal): {entry_path:?}"
         ))
         .into());
     }
@@ -144,7 +139,7 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
 
     // Canonicalize dest for comparison (full_path may not exist yet)
     let canonical_dest = dest.canonicalize()
-        .with_context(|| format!("canonicalizing dest {:?}", dest))?;
+        .with_context(|| format!("canonicalizing dest {dest:?}"))?;
 
     // Check if the entry path when joined with dest would escape
     // We can't canonicalize full_path if it doesn't exist, so check the parent
@@ -153,8 +148,7 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
             let canonical_parent = parent.canonicalize()?;
             if !canonical_parent.starts_with(&canonical_dest) {
                 return Err(ImageError::LayerExtract(format!(
-                    "tar entry would escape destination: {:?}",
-                    entry_path
+                    "tar entry would escape destination: {entry_path:?}"
                 ))
                 .into());
             }

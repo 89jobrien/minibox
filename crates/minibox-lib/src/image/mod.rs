@@ -144,7 +144,7 @@ impl ImageStore {
             })?;
 
         extract_layer(&buf, &dest)
-            .with_context(|| format!("extracting layer {digest} to {:?}", dest))?;
+            .with_context(|| format!("extracting layer {digest} to {dest:?}"))?;
 
         info!("stored layer {} at {:?}", digest, dest);
         Ok(dest)
@@ -166,8 +166,7 @@ impl ImageStore {
             // Reject empty strings
             if component.is_empty() {
                 return Err(ImageError::Other(format!(
-                    "invalid {}: cannot be empty",
-                    component_name
+                    "invalid {component_name}: cannot be empty"
                 ))
                 .into());
             }
@@ -175,8 +174,7 @@ impl ImageStore {
             // Reject absolute paths
             if component.starts_with('/') {
                 return Err(ImageError::Other(format!(
-                    "invalid {}: cannot start with /",
-                    component_name
+                    "invalid {component_name}: cannot start with /"
                 ))
                 .into());
             }
@@ -184,8 +182,7 @@ impl ImageStore {
             // Reject path traversal
             if component.contains("..") {
                 return Err(ImageError::Other(format!(
-                    "invalid {}: cannot contain '..'",
-                    component_name
+                    "invalid {component_name}: cannot contain '..'"
                 ))
                 .into());
             }
@@ -193,8 +190,7 @@ impl ImageStore {
             // Reject null bytes
             if component.contains('\0') {
                 return Err(ImageError::Other(format!(
-                    "invalid {}: cannot contain null bytes",
-                    component_name
+                    "invalid {component_name}: cannot contain null bytes"
                 ))
                 .into());
             }
@@ -209,14 +205,13 @@ impl ImageStore {
         if let Some(parent) = result.parent() {
             if parent.exists() {
                 let canonical = parent.canonicalize()
-                    .with_context(|| format!("canonicalizing parent of image dir: {:?}", parent))?;
+                    .with_context(|| format!("canonicalizing parent of image dir: {parent:?}"))?;
                 let canonical_base = self.base_dir.canonicalize()
                     .with_context(|| format!("canonicalizing base dir: {:?}", self.base_dir))?;
 
                 if !canonical.starts_with(&canonical_base) {
                     return Err(ImageError::Other(format!(
-                        "path traversal attempt: image dir {:?} is outside base {:?}",
-                        canonical, canonical_base
+                        "path traversal attempt: image dir {canonical:?} is outside base {canonical_base:?}"
                     ))
                     .into());
                 }

@@ -69,24 +69,21 @@ impl AsAny for NoopLimiter {
 impl ResourceLimiter for NoopLimiter {
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
         debug!(
-            "noop limiter: skipping cgroup creation for container {}",
-            container_id
+            "noop limiter: skipping cgroup creation for container {container_id}"
         );
-        Ok(format!("noop:{}", container_id))
+        Ok(format!("noop:{container_id}"))
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
         debug!(
-            "noop limiter: skipping add_process({}) for container {}",
-            pid, container_id
+            "noop limiter: skipping add_process({pid}) for container {container_id}"
         );
         Ok(())
     }
 
     fn cleanup(&self, container_id: &str) -> Result<()> {
         debug!(
-            "noop limiter: skipping cleanup for container {}",
-            container_id
+            "noop limiter: skipping cleanup for container {container_id}"
         );
         Ok(())
     }
@@ -130,7 +127,7 @@ impl FilesystemProvider for CopyFilesystem {
     ) -> Result<PathBuf> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
-            .with_context(|| format!("creating merged dir {:?}", merged))?;
+            .with_context(|| format!("creating merged dir {merged:?}"))?;
 
         debug!(
             "copy filesystem: merging {} layers into {:?}",
@@ -142,7 +139,7 @@ impl FilesystemProvider for CopyFilesystem {
         for layer in image_layers {
             if layer.is_dir() {
                 copy_dir_into(layer, &merged)
-                    .with_context(|| format!("copying layer {:?}", layer))?;
+                    .with_context(|| format!("copying layer {layer:?}"))?;
             } else {
                 warn!("skipping non-directory layer: {:?}", layer);
             }
@@ -161,7 +158,7 @@ impl FilesystemProvider for CopyFilesystem {
         debug!("copy filesystem: removing {:?}", container_dir);
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
-                .with_context(|| format!("removing container dir {:?}", container_dir))?;
+                .with_context(|| format!("removing container dir {container_dir:?}"))?;
         }
         Ok(())
     }
@@ -173,7 +170,7 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
     use walkdir::WalkDir;
 
     for entry in WalkDir::new(src).min_depth(1) {
-        let entry = entry.with_context(|| format!("walking {:?}", src))?;
+        let entry = entry.with_context(|| format!("walking {src:?}"))?;
         let relative = entry
             .path()
             .strip_prefix(src)
@@ -184,11 +181,11 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
 
         if ft.is_dir() {
             std::fs::create_dir_all(&target)
-                .with_context(|| format!("creating dir {:?}", target))?;
+                .with_context(|| format!("creating dir {target:?}"))?;
             // Preserve directory permissions
             let metadata = entry.metadata().context("reading dir metadata")?;
             std::fs::set_permissions(&target, metadata.permissions())
-                .with_context(|| format!("setting permissions on {:?}", target))?;
+                .with_context(|| format!("setting permissions on {target:?}"))?;
         } else if ft.is_symlink() {
             let link_target = std::fs::read_link(entry.path())
                 .with_context(|| format!("reading symlink {:?}", entry.path()))?;
@@ -198,7 +195,7 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
             }
             #[cfg(unix)]
             std::os::unix::fs::symlink(&link_target, &target)
-                .with_context(|| format!("creating symlink {:?} -> {:?}", target, link_target))?;
+                .with_context(|| format!("creating symlink {target:?} -> {link_target:?}"))?;
             #[cfg(not(unix))]
             std::fs::copy(entry.path(), &target)
                 .with_context(|| format!("copying (non-unix symlink) {:?}", entry.path()))?;
@@ -212,7 +209,7 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
             // Preserve file permissions
             let metadata = entry.metadata().context("reading file metadata")?;
             std::fs::set_permissions(&target, metadata.permissions())
-                .with_context(|| format!("setting permissions on {:?}", target))?;
+                .with_context(|| format!("setting permissions on {target:?}"))?;
         } else {
             // Device nodes, named pipes, sockets — skip with warning
             warn!(
@@ -257,7 +254,7 @@ impl ProotRuntime {
     pub fn new(proot_path: impl Into<PathBuf>) -> Result<Self> {
         let proot_path = proot_path.into();
         if !proot_path.exists() {
-            anyhow::bail!("proot binary not found at {:?}", proot_path);
+            anyhow::bail!("proot binary not found at {proot_path:?}");
         }
         Ok(Self { proot_path })
     }
@@ -350,7 +347,7 @@ impl ContainerRuntime for ProotRuntime {
 
             let child = cmd
                 .spawn()
-                .with_context(|| format!("spawning proot at {:?}", proot_path))?;
+                .with_context(|| format!("spawning proot at {proot_path:?}"))?;
 
             let pid = child.id();
 
@@ -400,7 +397,7 @@ mod tests {
 
     #[test]
     fn noop_limiter_default() {
-        let limiter = NoopLimiter::default();
+        let limiter = NoopLimiter;
         let _ = limiter;
     }
 
@@ -525,7 +522,7 @@ mod tests {
 
     #[test]
     fn copy_filesystem_default() {
-        let fs = CopyFilesystem::default();
+        let fs = CopyFilesystem;
         let _ = fs;
     }
 
