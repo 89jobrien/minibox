@@ -18,10 +18,21 @@
 //!
 //! # Adapters
 //!
+//! **Platform-Native (Linux):**
 //! - [`DockerHubRegistry`]: Docker Hub implementation of [`ImageRegistry`]
 //! - [`OverlayFilesystem`]: Overlay filesystem implementation of [`FilesystemProvider`]
 //! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`ResourceLimiter`]
 //! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`ContainerRuntime`]
+//!
+//! **Cross-Platform (Windows via WSL2):**
+//! - [`WslRuntime`]: Windows Subsystem for Linux implementation
+//! - [`WslFilesystem`]: WSL2-based filesystem provider
+//! - [`WslLimiter`]: WSL2-based resource limiter
+//!
+//! **Cross-Platform (macOS via Docker Desktop):**
+//! - [`DockerDesktopRuntime`]: Docker Desktop VM implementation
+//! - [`DockerDesktopFilesystem`]: Docker Desktop-based filesystem provider
+//! - [`DockerDesktopLimiter`]: Docker Desktop-based resource limiter
 //!
 //! # Usage
 //!
@@ -40,14 +51,25 @@
 //! );
 //! ```
 
+// Platform-native adapters (Linux)
 mod registry;
 mod filesystem;
 mod limiter;
 mod runtime;
 
+// Cross-platform adapters
+mod wsl;
+mod docker_desktop;
+
+// Test doubles
 pub mod mocks;
 
+// Linux-native exports
 pub use registry::DockerHubRegistry;
 pub use filesystem::OverlayFilesystem;
 pub use limiter::CgroupV2Limiter;
 pub use runtime::LinuxNamespaceRuntime;
+
+// Cross-platform exports
+pub use wsl::{WslRuntime, WslFilesystem, WslLimiter};
+pub use docker_desktop::{DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter};
