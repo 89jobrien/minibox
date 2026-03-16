@@ -52,12 +52,12 @@
 //!
 //! ```rust,ignore
 //! use minibox_lib::adapters::DockerHubRegistry;
-//! use minibox_lib::domain::ImageRegistry;
+//! use minibox_lib::domain::DynImageRegistry;
 //! use minibox_lib::image::ImageStore;
 //! use std::sync::Arc;
 //!
 //! let store = Arc::new(ImageStore::new("/var/lib/minibox/images")?);
-//! let registry: Arc<dyn ImageRegistry> = Arc::new(
+//! let registry: DynImageRegistry = Arc::new(
 //!     DockerHubRegistry::new(store.clone())?
 //! );
 //! ```

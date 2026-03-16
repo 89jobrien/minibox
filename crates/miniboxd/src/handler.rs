@@ -13,8 +13,8 @@
 use anyhow::Result;
 use chrono::Utc;
 use minibox_lib::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ResourceConfig,
-    ResourceLimiter,
+    ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
+    DynImageRegistry, DynResourceLimiter, ResourceConfig,
 };
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
 use nix::sys::signal::{kill, Signal};
@@ -57,13 +57,13 @@ use crate::state::{ContainerRecord, DaemonState};
 #[derive(Clone)]
 pub struct HandlerDependencies {
     /// Image registry for pulling container images.
-    pub registry: Arc<dyn ImageRegistry>,
+    pub registry: DynImageRegistry,
     /// Filesystem provider for setting up container rootfs.
-    pub filesystem: Arc<dyn FilesystemProvider>,
+    pub filesystem: DynFilesystemProvider,
     /// Resource limiter for enforcing cgroup limits.
-    pub resource_limiter: Arc<dyn ResourceLimiter>,
+    pub resource_limiter: DynResourceLimiter,
     /// Container runtime for spawning isolated processes.
-    pub runtime: Arc<dyn ContainerRuntime>,
+    pub runtime: DynContainerRuntime,
     /// Base directory for persistent container data (overlay dirs).
     pub containers_base: PathBuf,
     /// Base directory for runtime container state (PID files).
@@ -124,12 +124,23 @@ async fn run_inner(
     // Pull image if not cached (using injected registry trait).
     if !deps.registry.has_image(&full_image, &tag).await {
         info!("image {}:{} not cached, pulling…", full_image, tag);
-        deps.registry.pull_image(&full_image, &tag).await?;
+        deps.registry
+            .pull_image(&full_image, &tag)
+            .await
+            .map_err(|e| DomainError::ImagePullFailed {
+                image: full_image.clone(),
+                tag: tag.clone(),
+                source: e,
+            })?;
     }
 
     let layer_dirs = deps.registry.get_image_layers(&full_image, &tag)?;
     if layer_dirs.is_empty() {
-        anyhow::bail!("image {}:{} has no layers", full_image, tag);
+        return Err(DomainError::EmptyImage {
+            name: full_image.clone(),
+            tag: tag.clone(),
+        }
+        .into());
     }
 
     // SECURITY: Generate a 16-char container ID from UUID to prevent collisions.
@@ -144,7 +155,11 @@ async fn run_inner(
 
     // SECURITY: Verify no collision with existing containers
     if state.get_container(&id).await.is_some() {
-        anyhow::bail!("container ID collision (extremely rare): {}", id);
+        return Err(DomainError::InvalidConfig(format!(
+            "container ID collision (extremely rare): {}",
+            id
+        ))
+        .into());
     }
 
     let container_dir = deps.containers_base.join(&id);
@@ -318,7 +333,7 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
     let record = state
         .get_container(id)
         .await
-        .ok_or_else(|| anyhow::anyhow!("container {} not found", id))?;
+        .ok_or_else(|| DomainError::ContainerNotFound { id: id.to_string() })?;
 
     let pid = record
         .pid
@@ -377,10 +392,10 @@ async fn remove_inner(
     let record = state
         .get_container(id)
         .await
-        .ok_or_else(|| anyhow::anyhow!("container {} not found", id))?;
+        .ok_or_else(|| DomainError::ContainerNotFound { id: id.to_string() })?;
 
     if record.info.state == "Running" {
-        anyhow::bail!("container {} is still running; stop it first", id);
+        return Err(DomainError::AlreadyRunning { id: id.to_string() }.into());
     }
 
     // Unmount overlay (using injected filesystem trait).

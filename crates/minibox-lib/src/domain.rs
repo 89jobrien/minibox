@@ -64,6 +64,20 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+// ---------------------------------------------------------------------------
+// Dyn type aliases
+// ---------------------------------------------------------------------------
+
+/// Type alias for a shared, dynamic [`ImageRegistry`] implementation.
+pub type DynImageRegistry = Arc<dyn ImageRegistry>;
+/// Type alias for a shared, dynamic [`FilesystemProvider`] implementation.
+pub type DynFilesystemProvider = Arc<dyn FilesystemProvider>;
+/// Type alias for a shared, dynamic [`ResourceLimiter`] implementation.
+pub type DynResourceLimiter = Arc<dyn ResourceLimiter>;
+/// Type alias for a shared, dynamic [`ContainerRuntime`] implementation.
+pub type DynContainerRuntime = Arc<dyn ContainerRuntime>;
 
 // ---------------------------------------------------------------------------
 // Downcasting support for testing
@@ -434,15 +448,46 @@ pub enum DomainError {
         tag: String,
     },
 
+    /// Image pull from registry failed.
+    #[error("failed to pull image '{image}:{tag}': {source}")]
+    ImagePullFailed {
+        /// Image name.
+        image: String,
+        /// Image tag.
+        tag: String,
+        /// Underlying error from the registry adapter.
+        #[source]
+        source: anyhow::Error,
+    },
+
+    /// Image has no layers (corrupted or invalid image).
+    #[error("image {name}:{tag} has no layers")]
+    EmptyImage {
+        /// Image name.
+        name: String,
+        /// Image tag.
+        tag: String,
+    },
+
     /// Container was not found in the daemon state.
-    #[error("container {id} not found")]
+    #[error("container '{id}' not found")]
     ContainerNotFound {
         /// Container ID.
         id: String,
     },
 
+    /// Container process failed to spawn.
+    #[error("container '{id}' failed to spawn: {source}")]
+    ContainerSpawnFailed {
+        /// Container ID.
+        id: String,
+        /// Underlying error from the runtime adapter.
+        #[source]
+        source: anyhow::Error,
+    },
+
     /// Attempted operation on a running container that requires it to be stopped.
-    #[error("container {id} is already running")]
+    #[error("container '{id}' is already running")]
     AlreadyRunning {
         /// Container ID.
         id: String,
@@ -456,14 +501,20 @@ pub enum DomainError {
     #[error("invalid resource limits: {0}")]
     InvalidResourceLimits(String),
 
-    /// Image has no layers (corrupted or invalid image).
-    #[error("image {name}:{tag} has no layers")]
-    EmptyImage {
-        /// Image name.
-        name: String,
-        /// Image tag.
-        tag: String,
+    /// A resource limit value exceeded the allowed maximum.
+    #[error("resource limit '{limit}': value {value} exceeds maximum {max}")]
+    ResourceLimitExceeded {
+        /// Name of the limit (e.g., `"memory_bytes"`).
+        limit: String,
+        /// The value that was provided.
+        value: u64,
+        /// The maximum allowed value.
+        max: u64,
     },
+
+    /// An infrastructure error that does not fit a more specific variant.
+    #[error(transparent)]
+    InfrastructureError(#[from] anyhow::Error),
 }
 
 // ---------------------------------------------------------------------------
