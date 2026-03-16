@@ -13,7 +13,7 @@ Group=root
 Slice=minibox.slice
 Delegate=yes
 DelegateSubgroup=yes
-Environment=MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service/minibox
+Environment=MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service/yes/minibox
 RuntimeDirectory=minibox
 RuntimeDirectoryMode=0700
 LimitNOFILE=1048576
