@@ -3,14 +3,19 @@
 //! Each public function corresponds to one `DaemonRequest` variant and
 //! returns a `DaemonResponse`.  Errors are caught and returned as
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
+//!
+//! # Hexagonal Architecture
+//!
+//! Handlers use dependency injection to receive infrastructure adapters
+//! via the [`HandlerDependencies`] struct. This allows the business logic
+//! to be tested independently of infrastructure concerns.
 
 use anyhow::Result;
 use chrono::Utc;
-use minibox_lib::container::cgroups::{CgroupConfig, CgroupManager};
-use minibox_lib::container::filesystem;
-use minibox_lib::container::namespace::NamespaceConfig;
-use minibox_lib::container::process::{spawn_container_process, ContainerConfig};
-use minibox_lib::image::registry::RegistryClient;
+use minibox_lib::domain::{
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ResourceConfig,
+    ResourceLimiter,
+};
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
@@ -21,6 +26,43 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::state::{ContainerRecord, DaemonState};
+
+// ---------------------------------------------------------------------------
+// Handler Dependencies (Dependency Injection)
+// ---------------------------------------------------------------------------
+
+/// Dependencies injected into request handlers.
+///
+/// This struct bundles all infrastructure adapters (trait implementations)
+/// that handlers need to perform their operations. Following hexagonal
+/// architecture principles, handlers depend on trait abstractions rather
+/// than concrete implementations.
+///
+/// # Usage
+///
+/// Created once in the composition root (main.rs) and passed to all handlers:
+///
+/// ```rust,ignore
+/// use minibox_lib::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+///
+/// let deps = Arc::new(HandlerDependencies {
+///     registry: Arc::new(DockerHubRegistry::new(store)?),
+///     filesystem: Arc::new(OverlayFilesystem),
+///     resource_limiter: Arc::new(CgroupV2Limiter),
+///     runtime: Arc::new(LinuxNamespaceRuntime),
+/// });
+/// ```
+#[derive(Clone)]
+pub struct HandlerDependencies {
+    /// Image registry for pulling container images.
+    pub registry: Arc<dyn ImageRegistry>,
+    /// Filesystem provider for setting up container rootfs.
+    pub filesystem: Arc<dyn FilesystemProvider>,
+    /// Resource limiter for enforcing cgroup limits.
+    pub resource_limiter: Arc<dyn ResourceLimiter>,
+    /// Container runtime for spawning isolated processes.
+    pub runtime: Arc<dyn ContainerRuntime>,
+}
 
 /// Directories used by the daemon.
 const CONTAINERS_BASE: &str = "/var/lib/minibox/containers";
@@ -36,6 +78,7 @@ pub async fn handle_run(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     match run_inner(
         image,
@@ -44,6 +87,7 @@ pub async fn handle_run(
         memory_limit_bytes,
         cpu_weight,
         state,
+        deps,
     )
     .await
     {
@@ -64,6 +108,7 @@ async fn run_inner(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
@@ -74,16 +119,13 @@ async fn run_inner(
         format!("library/{}", image)
     };
 
-    // Pull image if not cached.
-    if !state.image_store.has_image(&full_image, &tag) {
+    // Pull image if not cached (using injected registry trait).
+    if !deps.registry.has_image(&full_image, &tag).await {
         info!("image {}:{} not cached, pulling…", full_image, tag);
-        let client = RegistryClient::new()?;
-        client
-            .pull_image(&full_image, &tag, &state.image_store)
-            .await?;
+        deps.registry.pull_image(&full_image, &tag).await?;
     }
 
-    let layer_dirs = state.image_store.get_image_layers(&full_image, &tag)?;
+    let layer_dirs = deps.registry.get_image_layers(&full_image, &tag)?;
     if layer_dirs.is_empty() {
         anyhow::bail!("image {}:{} has no layers", full_image, tag);
     }
@@ -131,18 +173,20 @@ async fn run_inner(
     let container_dir = PathBuf::from(CONTAINERS_BASE).join(&id);
     let run_dir = PathBuf::from(RUN_CONTAINERS_BASE).join(&id);
 
-    // Setup overlayfs: creates upper/, work/, merged/ under container_dir.
-    let merged_dir_from_overlay =
-        filesystem::setup_overlay(&layer_dirs, &container_dir)?;
+    // Setup overlayfs (using injected filesystem trait).
+    let merged_dir_from_overlay = deps
+        .filesystem
+        .setup_rootfs(&layer_dirs, &container_dir)?;
 
-    // Setup cgroup using the CgroupManager API.
-    let cgroup_config = CgroupConfig {
+    // Setup cgroup (using injected resource limiter trait).
+    let resource_config = ResourceConfig {
         memory_limit_bytes,
         cpu_weight,
+        pids_max: Some(1024), // Default PID limit for security
+        io_max_bytes_per_sec: None,
     };
-    let cgroup_manager = CgroupManager::new(&id, cgroup_config);
-    cgroup_manager.create()?;
-    let cgroup_dir = cgroup_manager.cgroup_path.clone();
+    let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // Build ContainerRecord in Created state; updated to Running once the
     // child PID is known.
@@ -163,10 +207,10 @@ async fn run_inner(
     };
     state.add_container(record).await;
 
-    // Build the ContainerConfig for spawn_container_process.
+    // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command.first().cloned().unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
-    let container_config = ContainerConfig {
+    let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir_from_overlay.clone(),
         command: spawn_command,
         args: spawn_args,
@@ -174,7 +218,6 @@ async fn run_inner(
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
             "TERM=xterm".to_string(),
         ],
-        namespace_config: NamespaceConfig::all(),
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
     };
@@ -187,18 +230,15 @@ async fn run_inner(
         .await
         .expect("semaphore closed");
 
-    // Spawn the container process in a blocking thread (clone/fork is sync).
+    // Spawn the container process (using injected runtime trait).
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
+    let runtime_clone = Arc::clone(&deps.runtime);
 
     tokio::task::spawn(async move {
         // Permit is held until this task completes (via _spawn_permit drop)
-        match tokio::task::spawn_blocking(move || {
-            spawn_container_process(container_config)
-        })
-        .await
-        {
-            Ok(Ok(pid)) => {
+        match runtime_clone.spawn_process(&spawn_config).await {
+            Ok(pid) => {
                 info!("container {} started with PID {}", id_clone, pid);
 
                 // Write PID file.
@@ -215,14 +255,8 @@ async fn run_inner(
                     daemon_wait_for_exit(pid, &id_wait, state_wait);
                 });
             }
-            Ok(Err(e)) => {
-                error!("failed to spawn container {}: {:#}", id_clone, e);
-                state_clone
-                    .update_container_state(&id_clone, "Failed")
-                    .await;
-            }
             Err(e) => {
-                error!("spawn_blocking join error for {}: {}", id_clone, e);
+                error!("failed to spawn container {}: {:#}", id_clone, e);
                 state_clone
                     .update_container_state(&id_clone, "Failed")
                     .await;
@@ -321,8 +355,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
 // ─── Remove ─────────────────────────────────────────────────────────────────
 
 /// Clean up a stopped container: unmount overlay, delete dirs, remove cgroup.
-pub async fn handle_remove(id: String, state: Arc<DaemonState>) -> DaemonResponse {
-    match remove_inner(&id, &state).await {
+pub async fn handle_remove(
+    id: String,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    match remove_inner(&id, &state, &deps).await {
         Ok(()) => DaemonResponse::Success {
             message: format!("container {} removed", id),
         },
@@ -335,7 +373,11 @@ pub async fn handle_remove(id: String, state: Arc<DaemonState>) -> DaemonRespons
     }
 }
 
-async fn remove_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
+async fn remove_inner(
+    id: &str,
+    state: &Arc<DaemonState>,
+    deps: &Arc<HandlerDependencies>,
+) -> Result<()> {
     let record = state
         .get_container(id)
         .await
@@ -345,10 +387,10 @@ async fn remove_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         anyhow::bail!("container {} is still running; stop it first", id);
     }
 
-    // Unmount overlay.
+    // Unmount overlay (using injected filesystem trait).
     let container_dir = PathBuf::from(CONTAINERS_BASE).join(id);
     if container_dir.exists() {
-        if let Err(e) = filesystem::cleanup_mounts(&container_dir) {
+        if let Err(e) = deps.filesystem.cleanup(&container_dir) {
             warn!("cleanup_mounts for {}: {}", id, e);
         }
     }
@@ -359,9 +401,8 @@ async fn remove_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         std::fs::remove_dir_all(&run_dir).ok();
     }
 
-    // Cleanup cgroup.
-    let cgroup_manager = CgroupManager::new(id, CgroupConfig::default());
-    if let Err(e) = cgroup_manager.cleanup() {
+    // Cleanup cgroup (using injected resource limiter trait).
+    if let Err(e) = deps.resource_limiter.cleanup(id) {
         warn!("cleanup cgroup for {}: {}", id, e);
     }
 
@@ -383,7 +424,8 @@ pub async fn handle_list(state: Arc<DaemonState>) -> DaemonResponse {
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,
-    state: Arc<DaemonState>,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     let tag = tag.unwrap_or_else(|| "latest".to_string());
     let full_image = if image.contains('/') {
@@ -392,17 +434,9 @@ pub async fn handle_pull(
         format!("library/{}", image)
     };
 
-    let client = match RegistryClient::new() {
-        Ok(c) => c,
-        Err(e) => {
-            return DaemonResponse::Error {
-                message: format!("failed to create registry client: {}", e),
-            };
-        }
-    };
-
-    match client.pull_image(&full_image, &tag, &state.image_store).await {
-        Ok(()) => DaemonResponse::Success {
+    // Pull image (using injected registry trait).
+    match deps.registry.pull_image(&full_image, &tag).await {
+        Ok(_metadata) => DaemonResponse::Success {
             message: format!("pulled {}:{}", image, tag),
         },
         Err(e) => {

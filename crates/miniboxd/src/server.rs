@@ -13,7 +13,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tracing::{debug, info, warn};
 
-use crate::handler;
+use crate::handler::{self, HandlerDependencies};
 use crate::state::DaemonState;
 
 // SECURITY: Maximum request size to prevent memory exhaustion
@@ -29,7 +29,11 @@ const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
 ///
 /// Authenticates the client via SO_PEERCRED and only accepts connections
 /// from root (UID 0).
-pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> Result<()> {
+pub async fn handle_connection(
+    stream: UnixStream,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> Result<()> {
     // SECURITY: Get peer credentials and verify UID is root
     let raw_fd = stream.as_raw_fd();
     let creds = getsockopt(raw_fd, PeerCredentials)
@@ -98,7 +102,7 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> R
         let response = match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
                 info!("dispatching request: {:?}", request);
-                dispatch(request, Arc::clone(&state)).await
+                dispatch(request, Arc::clone(&state), Arc::clone(&deps)).await
             }
             Err(e) => {
                 warn!("failed to parse request '{}': {}", trimmed, e);
@@ -125,7 +129,11 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<DaemonState>) -> R
 }
 
 /// Route a parsed `DaemonRequest` to the appropriate handler.
-async fn dispatch(request: DaemonRequest, state: Arc<DaemonState>) -> DaemonResponse {
+async fn dispatch(
+    request: DaemonRequest,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
     match request {
         DaemonRequest::Run {
             image,
@@ -134,12 +142,20 @@ async fn dispatch(request: DaemonRequest, state: Arc<DaemonState>) -> DaemonResp
             memory_limit_bytes,
             cpu_weight,
         } => {
-            handler::handle_run(image, tag, command, memory_limit_bytes, cpu_weight, state)
-                .await
+            handler::handle_run(
+                image,
+                tag,
+                command,
+                memory_limit_bytes,
+                cpu_weight,
+                state,
+                deps,
+            )
+            .await
         }
         DaemonRequest::Stop { id } => handler::handle_stop(id, state).await,
-        DaemonRequest::Remove { id } => handler::handle_remove(id, state).await,
+        DaemonRequest::Remove { id } => handler::handle_remove(id, state, deps).await,
         DaemonRequest::List => handler::handle_list(state).await,
-        DaemonRequest::Pull { image, tag } => handler::handle_pull(image, tag, state).await,
+        DaemonRequest::Pull { image, tag } => handler::handle_pull(image, tag, state, deps).await,
     }
 }

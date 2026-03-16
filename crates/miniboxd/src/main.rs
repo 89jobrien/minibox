@@ -16,6 +16,10 @@ mod server;
 mod state;
 
 use anyhow::{Context, Result};
+use handler::HandlerDependencies;
+use minibox_lib::adapters::{
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
+};
 use minibox_lib::image::ImageStore;
 use state::DaemonState;
 use std::path::Path;
@@ -63,6 +67,29 @@ async fn main() -> Result<()> {
     let image_store = ImageStore::new(IMAGES_DIR).context("creating image store")?;
     let state = Arc::new(DaemonState::new(image_store));
 
+    // ── Dependency Injection (Composition Root) ───────────────────────────
+    // Create concrete adapters implementing domain traits.
+    // This is the only place that knows about specific implementations.
+
+    // DockerHubRegistry needs shared access to the image store
+    let registry = Arc::new(
+        DockerHubRegistry::new(Arc::clone(&state.image_store))
+            .context("creating Docker Hub registry adapter")?,
+    );
+    let filesystem = Arc::new(OverlayFilesystem::new());
+    let resource_limiter = Arc::new(CgroupV2Limiter::new());
+    let runtime = Arc::new(LinuxNamespaceRuntime::new());
+
+    // Bundle dependencies for injection into handlers.
+    let deps = Arc::new(HandlerDependencies {
+        registry,
+        filesystem,
+        resource_limiter,
+        runtime,
+    });
+
+    info!("dependency injection configured");
+
     // ── Socket ─────────────────────────────────────────────────────────────
     let sock_path = Path::new(SOCKET_PATH);
     if sock_path.exists() {
@@ -100,8 +127,9 @@ async fn main() -> Result<()> {
                     Ok((stream, _addr)) => {
                         info!("accepted new client connection");
                         let state_clone = Arc::clone(&state);
+                        let deps_clone = Arc::clone(&deps);
                         tokio::spawn(async move {
-                            if let Err(e) = server::handle_connection(stream, state_clone).await {
+                            if let Err(e) = server::handle_connection(stream, state_clone, deps_clone).await {
                                 // Log but do not crash the daemon on a per-connection error.
                                 error!("connection handler error: {:#}", e);
                             }
