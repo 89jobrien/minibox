@@ -533,7 +533,4 @@ MIT
 
 **Inspired by:**
 - Docker, Podman, and containerd - Container runtime design
-- Zombienet-SDK - Hexagonal architecture validation (identical provider pattern)
-
-**Architecture Pattern:**
-The hexagonal architecture (ports & adapters) used in minibox follows the same pattern as production frameworks like Zombienet-SDK, validating our design choices. See `ZOMBIENET_PATTERNS.md` for detailed comparison.
+- Zombienet-SDK
