@@ -7,6 +7,7 @@
 !TEST_RESULTS.md
 !ZOMBIENET_PATTERNS.md
 !USAGE.md
+!docs/vps-usage.md
 
 # Claude Code local configuration
 .claude/
