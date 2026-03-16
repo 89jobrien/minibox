@@ -5,6 +5,7 @@
 //! Linux namespace isolation, overlay filesystem setup, and the daemon/CLI
 //! communication protocol.
 
+pub mod adapters;
 pub mod container;
 pub mod domain;
 pub mod error;
