@@ -12,6 +12,7 @@ User=root
 Group=root
 Slice=minibox.slice
 Delegate=yes
+DelegateSubgroup=yes
 Environment=MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service/minibox
 RuntimeDirectory=minibox
 RuntimeDirectoryMode=0700
