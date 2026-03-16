@@ -20,6 +20,23 @@ sudo ./target/release/minibox pull alpine
 sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 ```
 
+## Ops Runtime (systemd)
+
+```bash
+# Build
+cargo build --release
+
+# Install binary + systemd unit
+sudo ./ops/install-systemd.sh
+
+# Enable and start
+sudo systemctl enable --now miniboxd
+
+# Verify
+sudo systemctl status miniboxd --no-pager
+sudo /usr/local/bin/minibox ps
+```
+
 ## Features
 
 ### Core Capabilities
