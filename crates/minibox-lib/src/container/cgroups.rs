@@ -69,6 +69,12 @@ impl CgroupManager {
             source,
         })?;
 
+        // Enable controllers on the parent cgroup so child cgroups can use them.
+        // Without this, writing pids.max/memory.max/etc. in the child fails with
+        // Permission denied because the controllers aren't delegated.
+        let root = cgroup_root();
+        enable_subtree_controllers(&root)?;
+
         // Memory limit
         if let Some(mem) = self.config.memory_limit_bytes {
             // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
@@ -155,6 +161,31 @@ impl CgroupManager {
             .with_context(|| format!("writing cgroup file {filename}"))?;
         Ok(())
     }
+}
+
+/// Enable cgroup controllers (`pids`, `memory`, `cpu`, `io`) in
+/// `cgroup.subtree_control` of the given directory so that child cgroups
+/// can use the corresponding resource-limit files.
+///
+/// Idempotent: controllers that are already enabled are silently skipped.
+fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
+    let subtree_control = dir.join("cgroup.subtree_control");
+    let current = fs::read_to_string(&subtree_control).unwrap_or_default();
+
+    for controller in &["pids", "memory", "cpu", "io"] {
+        if !current.split_whitespace().any(|c| c == *controller) {
+            let value = format!("+{controller}");
+            debug!("enabling controller {value} in {:?}", subtree_control);
+            if let Err(e) = fs::write(&subtree_control, &value) {
+                // Non-fatal: the controller may not be available on this host.
+                warn!(
+                    "could not enable {controller} in {}: {e}",
+                    subtree_control.display()
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Build the cgroup path for a container without constructing a full manager.
