@@ -188,6 +188,14 @@ impl Stats {
     }
 }
 
+fn stats_for(samples: &[u64]) -> Option<Stats> {
+    if samples.is_empty() {
+        None
+    } else {
+        Some(Stats::from_samples(samples))
+    }
+}
+
 fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     if !cfg.suites.is_empty() {
         return cfg.suites.iter().any(|suite| suite == name);
@@ -252,6 +260,7 @@ fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option
                     message.push_str(&format!("\nstdout: {stdout}"));
                 }
                 errors.push(message);
+                return None;
             }
             Some(result)
         }
@@ -337,7 +346,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 name: "pull_alpine".to_string(),
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
-                stats: Some(Stats::from_samples(&durations)),
+                stats: stats_for(&durations),
             });
         }
         suites.push(pull_suite);
@@ -360,7 +369,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             name: "run_true".to_string(),
             iterations: durations.len(),
             durations_micros: durations.clone(),
-            stats: Some(Stats::from_samples(&durations)),
+            stats: stats_for(&durations),
         });
         suites.push(run_suite);
     }
@@ -384,7 +393,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             name: "exec_echo".to_string(),
             iterations: durations.len(),
             durations_micros: durations.clone(),
-            stats: Some(Stats::from_samples(&durations)),
+            stats: stats_for(&durations),
         });
         suites.push(exec_suite);
     }
@@ -400,7 +409,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 name: "pull_alpine".to_string(),
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
-                stats: Some(Stats::from_samples(&durations)),
+                stats: stats_for(&durations),
             });
         }
         if let Some(run) =
@@ -411,7 +420,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 name: "run_true".to_string(),
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
-                stats: Some(Stats::from_samples(&durations)),
+                stats: stats_for(&durations),
             });
         }
         suites.push(e2e_suite);
