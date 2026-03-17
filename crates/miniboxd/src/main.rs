@@ -29,10 +29,6 @@ compile_error!("miniboxd requires Linux");
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
-use miniboxd::handler::HandlerDependencies;
-#[cfg(target_os = "linux")]
-use miniboxd::state::DaemonState;
-#[cfg(target_os = "linux")]
 use minibox_lib::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
 };
@@ -41,13 +37,17 @@ use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox_lib::image::ImageStore;
 #[cfg(target_os = "linux")]
+use miniboxd::handler::HandlerDependencies;
+#[cfg(target_os = "linux")]
+use miniboxd::state::DaemonState;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
 #[cfg(target_os = "linux")]
 use tokio::net::UnixListener;
 #[cfg(target_os = "linux")]
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 #[cfg(target_os = "linux")]
 use tracing::{error, info, warn};
 
@@ -130,7 +130,10 @@ fn migrate_to_supervisor_cgroup() {
     let supervisor_dir = cgroupfs.join(relative).join("supervisor");
 
     if let Err(e) = fs::create_dir_all(&supervisor_dir) {
-        warn!("could not create supervisor cgroup at {}: {e}", supervisor_dir.display());
+        warn!(
+            "could not create supervisor cgroup at {}: {e}",
+            supervisor_dir.display()
+        );
         return;
     }
 
@@ -141,7 +144,10 @@ fn migrate_to_supervisor_cgroup() {
         return;
     }
 
-    info!("migrated to supervisor cgroup at {}", supervisor_dir.display());
+    info!(
+        "migrated to supervisor cgroup at {}",
+        supervisor_dir.display()
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -177,21 +183,19 @@ async fn main() -> Result<()> {
     }
 
     // ── Resolve paths (configurable via env vars for GKE) ───────────────
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .unwrap_or_else(|_| "/var/lib/minibox".to_string());
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .unwrap_or_else(|_| DEFAULT_RUN_DIR.to_string());
+    let data_dir =
+        std::env::var("MINIBOX_DATA_DIR").unwrap_or_else(|_| "/var/lib/minibox".to_string());
+    let run_dir = std::env::var("MINIBOX_RUN_DIR").unwrap_or_else(|_| DEFAULT_RUN_DIR.to_string());
 
     let images_dir = format!("{data_dir}/images");
     let containers_dir = format!("{data_dir}/containers");
     let run_containers_dir = format!("{run_dir}/containers");
-    let socket_path_str = std::env::var("MINIBOX_SOCKET_PATH")
-        .unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
+    let socket_path_str =
+        std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
 
     // ── Directories ──────────────────────────────────────────────────────
     for dir in &[&images_dir, &containers_dir, &run_dir, &run_containers_dir] {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("creating directory {dir}"))?;
+        std::fs::create_dir_all(dir).with_context(|| format!("creating directory {dir}"))?;
     }
 
     // ── Shared state ─────────────────────────────────────────────────────
@@ -223,8 +227,8 @@ async fn main() -> Result<()> {
                 DockerHubRegistry::new(Arc::clone(&state.image_store))
                     .context("creating Docker Hub registry adapter")?,
             );
-            let proot_runtime = ProotRuntime::from_env()
-                .context("initialising proot runtime for GKE adapter")?;
+            let proot_runtime =
+                ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
             Arc::new(HandlerDependencies {
                 registry,
                 filesystem: Arc::new(CopyFilesystem::new()),

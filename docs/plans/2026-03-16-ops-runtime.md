@@ -13,6 +13,7 @@
 ### Task 1: Add systemd unit file
 
 **Files:**
+
 - Create: `ops/miniboxd.service`
 
 **Step 1: Write the unit file**
@@ -53,6 +54,7 @@ git commit -m "ops: add systemd unit for miniboxd"
 ### Task 2: Add tmpfiles config for /run/minibox
 
 **Files:**
+
 - Create: `ops/miniboxd.tmpfiles.conf`
 
 **Step 1: Write tmpfiles config**
@@ -76,6 +78,7 @@ git commit -m "ops: add tmpfiles config for runtime socket dir"
 ### Task 3: Add install script for systemd artifacts
 
 **Files:**
+
 - Create: `ops/install-systemd.sh`
 
 **Step 1: Write install script**
@@ -113,11 +116,12 @@ git commit -m "ops: add install script for systemd setup"
 ### Task 4: Document ops runtime workflow
 
 **Files:**
+
 - Modify: `README.md`
 
 **Step 1: Add a new “Ops Runtime (systemd)” section**
 
-```markdown
+````markdown
 ## Ops Runtime (systemd)
 
 ```bash
@@ -134,18 +138,21 @@ sudo systemctl enable --now miniboxd
 sudo systemctl status miniboxd --no-pager
 sudo /usr/local/bin/minibox ps
 ```
-```
+````
+
+````
 
 **Step 2: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: add ops runtime instructions"
-```
+````
 
 ### Task 5: Verify runtime flow (manual)
 
 **Files:**
+
 - None
 
 **Step 1: Build**

@@ -83,3 +83,15 @@ MINIBOX_ADAPTER=colima ./target/release/miniboxd
 
 **Integration Notes**
 The CLI communicates with the daemon over a Unix socket at `/run/minibox/miniboxd.sock` on Linux. If `minibox ps` fails with “No such file or directory,” the daemon is not running or the socket has not been created yet. Ensure the daemon is started and healthy (`systemctl status miniboxd` or `journalctl -u miniboxd -f`).
+
+## Benchmark
+
+Build and run the benchmark CLI:
+
+```
+cargo build -p minibox-bench
+./target/debug/minibox-bench --dry-run
+./target/debug/minibox-bench
+```
+
+Results are written to `bench/results/<timestamp>.json` and `bench/results/<timestamp>.txt`.

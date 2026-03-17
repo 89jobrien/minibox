@@ -4,6 +4,7 @@ members = [
     "crates/minibox-lib",
     "crates/miniboxd",
     "crates/minibox-cli",
+    "crates/minibox-bench",
 ]
 
 [workspace.package]

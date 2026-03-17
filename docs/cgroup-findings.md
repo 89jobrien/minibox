@@ -1,6 +1,7 @@
 # Cgroup Debug Findings (miniboxd on VPS)
 
 ## Context
+
 - `miniboxd` runs under systemd at `minibox.slice/miniboxd.service`.
 - `minibox pull alpine` succeeds after earlier layer extraction fixes.
 - `minibox run alpine -- /bin/true` was failing with:
@@ -17,7 +18,7 @@ Two earlier attempts failed to solve this:
 
 1. **Enabling controllers on the service cgroup** -- worked for the
    immediate child, but the `minibox/` subdirectory had `cgroup.type =
-   domain invalid` and couldn't delegate further (I/O error).
+domain invalid` and couldn't delegate further (I/O error).
 2. **`DelegateSubgroup=yes`** -- `DelegateSubgroup` takes a cgroup name
    string, not a boolean. Setting it to `yes` created a literal `/yes`
    subgroup. The daemon lived in `/yes`, so the same no-internal-processes
@@ -45,17 +46,20 @@ pure inner node that can freely enable `subtree_control`.
 ### Changes made
 
 **`ops/miniboxd.service`:**
+
 - `DelegateSubgroup=supervisor` -- systemd places the daemon in
   `/miniboxd.service/supervisor/` automatically (requires systemd >= 254).
 - `MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service` --
   containers are created directly under the service cgroup.
 
 **`crates/miniboxd/src/main.rs`:**
+
 - Added `migrate_to_supervisor_cgroup()` runtime fallback. On startup the
   daemon reads `/proc/self/cgroup`, creates a `supervisor/` child, and moves
   its own PID there. No-op if systemd `DelegateSubgroup` already handled it.
 
 **`crates/minibox-lib/src/container/cgroups.rs`:**
+
 - `enable_subtree_controllers()` writes `+pids +memory +cpu +io` to
   `cgroup.subtree_control` at the cgroup root before creating container
   children. Idempotent, non-fatal if a controller is unavailable.
@@ -63,6 +67,7 @@ pure inner node that can freely enable `subtree_control`.
 ## Evidence Collected (historical)
 
 ### Service cgroup (before DelegateSubgroup)
+
 - `cgroup.controllers`: `cpuset cpu io memory pids`
 - `cgroup.subtree_control`: empty (no controllers delegated to children)
 - `cgroup.type`: `domain`
@@ -70,17 +75,20 @@ pure inner node that can freely enable `subtree_control`.
 - Service cgroup directory has `minibox/` child present.
 
 ### minibox child cgroup
+
 - `minibox/` exists under the service cgroup and already contains a per-container child
   (`cf0235011ade432a`).
 - `minibox/cgroup.subtree_control`: empty (no controllers enabled for its children)
 
 ### systemd unit properties (before DelegateSubgroup)
+
 - `Delegate=yes`
 - `Slice=minibox.slice`
 - `ControlGroup=/minibox.slice/miniboxd.service`
 - `DelegateSubgroup` is empty
 
 ### After DelegateSubgroup=yes (broken)
+
 - `DelegateSubgroup=yes` creates a delegated subgroup at:
   - `/sys/fs/cgroup/minibox.slice/miniboxd.service/yes`
 - The running daemon is inside that subgroup:
@@ -91,7 +99,9 @@ pure inner node that can freely enable `subtree_control`.
     for its children in cgroup v2.
 
 ## Final Fix Applied (Works)
+
 The following upstream changes resolved the issue:
+
 - systemd unit:
   - `DelegateSubgroup=supervisor`
   - `MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/minibox.slice/miniboxd.service`
@@ -100,6 +110,7 @@ The following upstream changes resolved the issue:
     (creates `/sys/fs/cgroup/<current>/supervisor` and writes its PID).
 
 Result after rebuild + reinstall:
+
 - `~/.cargo/bin/cargo build --release`
 - `sudo ./ops/install-systemd.sh`
 - `sudo systemctl daemon-reload`
@@ -108,6 +119,7 @@ Result after rebuild + reinstall:
   - Succeeds and returns a container ID.
 
 ## Detailed Try Log (chronological)
+
 - Enable daemon + run:
   - `sudo systemctl enable --now miniboxd`
   - `sudo /usr/local/bin/minibox run alpine -- /bin/true`
@@ -144,6 +156,7 @@ Result after rebuild + reinstall:
   - Returns container ID `766500c88f0347c1`
 
 ## Verification Commands
+
 ```bash
 # Check daemon is in supervisor leaf
 sudo systemctl status miniboxd --no-pager
@@ -158,6 +171,7 @@ sudo /usr/local/bin/minibox run alpine -- /bin/true
 ```
 
 ## Commands Used
+
 ```
 sudo cat /sys/fs/cgroup/minibox.slice/miniboxd.service/cgroup.subtree_control
 sudo cat /sys/fs/cgroup/minibox.slice/miniboxd.service/cgroup.procs

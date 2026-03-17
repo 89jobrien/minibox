@@ -30,6 +30,9 @@ Cargo.lock is committed for binary projects
 /var/lib/minibox/
 /run/minibox/
 
+# Benchmark output
+/bench/results/
+
 # Testing
 *.profraw
 *.profdata
