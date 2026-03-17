@@ -177,17 +177,15 @@ impl RegistryClient {
             .to_owned();
 
         // SECURITY: Check Content-Length header before reading
-        if let Some(content_length) = resp.headers().get("content-length") {
-            if let Ok(size_str) = content_length.to_str() {
-                if let Ok(size) = size_str.parse::<u64>() {
-                    if size > MAX_MANIFEST_SIZE {
-                        return Err(RegistryError::Other(format!(
-                            "manifest too large: {size} bytes (max {MAX_MANIFEST_SIZE})"
-                        ))
-                        .into());
-                    }
-                }
-            }
+        if let Some(content_length) = resp.headers().get("content-length")
+            && let Ok(size_str) = content_length.to_str()
+            && let Ok(size) = size_str.parse::<u64>()
+            && size > MAX_MANIFEST_SIZE
+        {
+            return Err(RegistryError::Other(format!(
+                "manifest too large: {size} bytes (max {MAX_MANIFEST_SIZE})"
+            ))
+            .into());
         }
 
         // SECURITY: Use streaming reader with size limit
@@ -260,18 +258,17 @@ impl RegistryClient {
         }
 
         // SECURITY: Check Content-Length header before downloading
-        if let Some(content_length) = resp.headers().get("content-length") {
-            if let Ok(size_str) = content_length.to_str() {
-                if let Ok(size) = size_str.parse::<u64>() {
-                    if size > MAX_LAYER_SIZE {
-                        return Err(RegistryError::Other(format!(
-                            "layer too large: {size} bytes (max {MAX_LAYER_SIZE})"
-                        ))
-                        .into());
-                    }
-                    debug!("layer size: {} bytes", size);
-                }
+        if let Some(content_length) = resp.headers().get("content-length")
+            && let Ok(size_str) = content_length.to_str()
+            && let Ok(size) = size_str.parse::<u64>()
+        {
+            if size > MAX_LAYER_SIZE {
+                return Err(RegistryError::Other(format!(
+                    "layer too large: {size} bytes (max {MAX_LAYER_SIZE})"
+                ))
+                .into());
             }
+            debug!("layer size: {} bytes", size);
         }
 
         // SECURITY: Use streaming reader with size limit

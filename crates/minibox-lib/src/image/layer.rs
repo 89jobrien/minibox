@@ -73,65 +73,61 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         }
 
         // Handle symlinks to absolute paths by rewriting into image root
-        if entry_type == EntryType::Symlink {
-            if let Ok(Some(link_target)) = entry.link_name() {
-                if link_target.is_absolute() {
-                    let rel_target = link_target.strip_prefix("/").map_err(|_| {
-                        ImageError::LayerExtract(format!(
-                            "invalid absolute symlink target: {link_target:?}"
-                        ))
-                    })?;
+        if entry_type == EntryType::Symlink
+            && let Ok(Some(link_target)) = entry.link_name()
+            && link_target.is_absolute()
+        {
+            let rel_target = link_target.strip_prefix("/").map_err(|_| {
+                ImageError::LayerExtract(format!(
+                    "invalid absolute symlink target: {link_target:?}"
+                ))
+            })?;
 
-                    if has_parent_dir_component(rel_target) {
-                        return Err(ImageError::LayerExtract(format!(
-                            "tar entry contains symlink with parent traversal (security risk): {entry_path:?} -> {link_target:?}"
-                        ))
-                        .into());
-                    }
+            if has_parent_dir_component(rel_target) {
+                return Err(ImageError::LayerExtract(format!(
+                    "tar entry contains symlink with parent traversal (security risk): {entry_path:?} -> {link_target:?}"
+                ))
+                .into());
+            }
 
-                    let target_path = dest.join(&entry_path);
-                    if let Some(parent) = target_path.parent() {
-                        fs::create_dir_all(parent).with_context(|| {
-                            format!("creating parent dirs for symlink {target_path:?}")
-                        })?;
-                    }
+            let target_path = dest.join(&entry_path);
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("creating parent dirs for symlink {target_path:?}"))?;
+            }
 
-                    if target_path.exists() || target_path.symlink_metadata().is_ok() {
-                        let meta = target_path.symlink_metadata().ok();
-                        if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
-                            fs::remove_dir_all(&target_path).with_context(|| {
-                                format!("removing existing dir at {target_path:?}")
-                            })?;
-                        } else {
-                            fs::remove_file(&target_path).with_context(|| {
-                                format!("removing existing file at {target_path:?}")
-                            })?;
-                        }
-                    }
-
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::symlink;
-                        symlink(rel_target, &target_path).with_context(|| {
-                            format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
-                        })?;
-                    }
-
-                    #[cfg(not(unix))]
-                    {
-                        return Err(ImageError::LayerExtract(
-                            "absolute symlink rewrite is not supported on this platform".into(),
-                        )
-                        .into());
-                    }
-
-                    warn!(
-                        "rewrote absolute symlink into image root: {:?} -> {:?}",
-                        entry_path, rel_target
-                    );
-                    continue;
+            if target_path.exists() || target_path.symlink_metadata().is_ok() {
+                let meta = target_path.symlink_metadata().ok();
+                if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
+                    fs::remove_dir_all(&target_path)
+                        .with_context(|| format!("removing existing dir at {target_path:?}"))?;
+                } else {
+                    fs::remove_file(&target_path)
+                        .with_context(|| format!("removing existing file at {target_path:?}"))?;
                 }
             }
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::symlink;
+                symlink(rel_target, &target_path).with_context(|| {
+                    format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
+                })?;
+            }
+
+            #[cfg(not(unix))]
+            {
+                return Err(ImageError::LayerExtract(
+                    "absolute symlink rewrite is not supported on this platform".into(),
+                )
+                .into());
+            }
+
+            warn!(
+                "rewrote absolute symlink into image root: {:?} -> {:?}",
+                entry_path, rel_target
+            );
+            continue;
         }
 
         // SECURITY: Strip setuid/setgid bits from file permissions
@@ -199,15 +195,15 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
 
     // Check if the entry path when joined with dest would escape
     // We can't canonicalize full_path if it doesn't exist, so check the parent
-    if let Some(parent) = full_path.parent() {
-        if parent.exists() {
-            let canonical_parent = parent.canonicalize()?;
-            if !canonical_parent.starts_with(&canonical_dest) {
-                return Err(ImageError::LayerExtract(format!(
-                    "tar entry would escape destination: {entry_path:?}"
-                ))
-                .into());
-            }
+    if let Some(parent) = full_path.parent()
+        && parent.exists()
+    {
+        let canonical_parent = parent.canonicalize()?;
+        if !canonical_parent.starts_with(&canonical_dest) {
+            return Err(ImageError::LayerExtract(format!(
+                "tar entry would escape destination: {entry_path:?}"
+            ))
+            .into());
         }
     }
 

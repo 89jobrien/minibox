@@ -16,7 +16,7 @@ use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -86,7 +86,7 @@ impl Container {
     pub fn new(
         image: impl Into<String>,
         command: Vec<String>,
-        base_dir: &PathBuf,
+        base_dir: &Path,
         _cgroup_config: CgroupConfig,
     ) -> anyhow::Result<Self> {
         let id = Uuid::new_v4()
@@ -119,7 +119,7 @@ impl Container {
     /// 4. Store the child PID and transition to [`Running`](ContainerState::Running).
     pub fn start(
         &mut self,
-        base_dir: &PathBuf,
+        base_dir: &Path,
         image_layers: &[PathBuf],
         cgroup_config: CgroupConfig,
     ) -> anyhow::Result<()> {
@@ -236,7 +236,7 @@ impl Container {
     /// Remove the container: clean up the overlay mounts and mark as removed.
     ///
     /// The container must be in the [`Stopped`](ContainerState::Stopped) state.
-    pub fn remove(&mut self, base_dir: &PathBuf) -> anyhow::Result<()> {
+    pub fn remove(&mut self, base_dir: &Path) -> anyhow::Result<()> {
         if self.state == ContainerState::Running {
             bail!("container {} is still running; stop it first", self.id);
         }

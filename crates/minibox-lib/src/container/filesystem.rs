@@ -218,7 +218,7 @@ pub fn setup_overlay_with_base(
 
     // SECURITY: Validate all layer paths to prevent path traversal.
     for layer_path in image_layers {
-        validate_layer_path(layer_path, &images_base)
+        validate_layer_path(layer_path, images_base)
             .with_context(|| format!("validating layer path {:?}", layer_path))?;
     }
 

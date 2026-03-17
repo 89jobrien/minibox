@@ -137,12 +137,11 @@ fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
 fn close_extra_fds() {
     if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
         for entry in entries.flatten() {
-            if let Ok(name) = entry.file_name().into_string() {
-                if let Ok(fd) = name.parse::<RawFd>() {
-                    if fd > 2 {
-                        unsafe { libc::close(fd) };
-                    }
-                }
+            if let Ok(name) = entry.file_name().into_string()
+                && let Ok(fd) = name.parse::<RawFd>()
+                && fd > 2
+            {
+                unsafe { libc::close(fd) };
             }
         }
     }

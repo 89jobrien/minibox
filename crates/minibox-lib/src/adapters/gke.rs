@@ -255,12 +255,12 @@ impl ProotRuntime {
         }
 
         // Search PATH for proot
-        if let Ok(output) = std::process::Command::new("which").arg("proot").output() {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Self::new(path);
-                }
+        if let Ok(output) = std::process::Command::new("which").arg("proot").output()
+            && output.status.success()
+        {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Self::new(path);
             }
         }
 

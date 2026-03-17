@@ -88,7 +88,7 @@ impl CgroupManager {
         // CPU weight
         if let Some(cpu) = self.config.cpu_weight {
             // SECURITY: Validate range (kernel range is 1-10000)
-            if cpu < 1 || cpu > 10000 {
+            if !(1..=10000).contains(&cpu) {
                 anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
