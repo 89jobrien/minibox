@@ -313,38 +313,33 @@ impl RegistryClient {
         tag: &str,
         store: &ImageStore,
     ) -> anyhow::Result<()> {
+        let pull_start = std::time::Instant::now();
         info!("pulling image {}:{}", name, tag);
 
         // 1. Authenticate.
+        let t = std::time::Instant::now();
         let token = self
             .authenticate(name)
             .instrument(tracing::info_span!("auth"))
             .await
             .with_context(|| format!("authenticate for {name}"))?;
+        info!("auth completed in {:.2?}", t.elapsed());
 
         // 2. Fetch manifest.
+        let t = std::time::Instant::now();
         let manifest = self
             .get_manifest(name, tag, &token)
             .instrument(tracing::info_span!("manifest"))
             .await
             .with_context(|| format!("get manifest for {name}:{tag}"))?;
-
         info!(
-            "manifest has {} layers for {}:{}",
-            manifest.layers.len(),
-            name,
-            tag
+            "manifest fetched in {:.2?} ({} layers)",
+            t.elapsed(),
+            manifest.layers.len()
         );
 
         // 3. Download and store each layer.
         for (idx, layer_desc) in manifest.layers.iter().enumerate() {
-            info!(
-                "pulling layer {}/{}: {}",
-                idx + 1,
-                manifest.layers.len(),
-                layer_desc.digest
-            );
-
             // Build the expected layer directory path to check for existence.
             let digest_key = layer_desc.digest.replace(':', "_");
             let layer_dir = store
@@ -355,7 +350,12 @@ impl RegistryClient {
                 .join(&digest_key);
 
             if layer_dir.exists() {
-                debug!("layer {} already in store, skipping", layer_desc.digest);
+                info!(
+                    "layer {}/{}: {} (cached)",
+                    idx + 1,
+                    manifest.layers.len(),
+                    &layer_desc.digest[..19]
+                );
                 continue;
             }
 
@@ -366,27 +366,46 @@ impl RegistryClient {
                 digest = &layer_desc.digest[..19],
             );
 
+            let layer_start = std::time::Instant::now();
+            let t = std::time::Instant::now();
             let data = self
                 .pull_layer(name, &layer_desc.digest, &token)
                 .instrument(layer_span.clone())
                 .await
                 .with_context(|| format!("pull layer {}", layer_desc.digest))?;
+            let download_ms = t.elapsed();
 
-            // Verify digest before storing.
             let _guard = layer_span.enter();
+
+            let t = std::time::Instant::now();
             {
                 let _span = tracing::info_span!("verify_digest").entered();
                 verify_digest(&data, &layer_desc.digest)
                     .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
             }
+            let verify_ms = t.elapsed();
 
+            let t = std::time::Instant::now();
             {
                 let _span = tracing::info_span!("extract", bytes = data.len()).entered();
                 store
                     .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
                     .with_context(|| format!("store layer {}", layer_desc.digest))?;
             }
+            let extract_ms = t.elapsed();
+
             drop(_guard);
+
+            info!(
+                "layer {}/{} ({}) done in {:.2?} — download {:.2?} verify {:.2?} extract {:.2?}",
+                idx + 1,
+                manifest.layers.len(),
+                &layer_desc.digest[..19],
+                layer_start.elapsed(),
+                download_ms,
+                verify_ms,
+                extract_ms,
+            );
         }
 
         // 4. Persist manifest.
@@ -397,7 +416,12 @@ impl RegistryClient {
                 .with_context(|| format!("store manifest for {name}:{tag}"))?;
         }
 
-        info!("image {}:{} pulled and stored successfully", name, tag);
+        info!(
+            "image {}:{} pulled in {:.2?}",
+            name,
+            tag,
+            pull_start.elapsed()
+        );
         Ok(())
     }
 }
