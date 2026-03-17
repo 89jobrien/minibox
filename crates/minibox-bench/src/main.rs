@@ -34,6 +34,18 @@ struct TestResult {
     durations_micros: Vec<u64>,
 }
 
+fn write_json(report: &BenchReport, path: &str) -> std::io::Result<()> {
+    let json = serde_json::to_string_pretty(report).unwrap();
+    std::fs::write(path, json)
+}
+
+fn write_table(report: &BenchReport, path: &str) -> std::io::Result<()> {
+    let mut out = String::new();
+    out.push_str("minibox benchmark results\n\n");
+    out.push_str(&format!("suites: {}\n", report.suites.len()));
+    std::fs::write(path, out)
+}
+
 #[derive(Debug)]
 struct CmdResult {
     success: bool,
@@ -298,5 +310,13 @@ mod tests {
         let cfg = BenchConfig::default();
         let report = run_suites(&cfg, true).unwrap();
         assert!(!report.suites.is_empty());
+    }
+
+    #[test]
+    fn report_writes_json() {
+        let report = BenchReport::empty();
+        let path = "/tmp/bench-report.json";
+        write_json(&report, path).unwrap();
+        assert!(std::path::Path::new(path).exists());
     }
 }
