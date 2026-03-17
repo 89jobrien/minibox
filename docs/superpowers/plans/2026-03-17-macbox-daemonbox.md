@@ -161,10 +161,19 @@ Expected: `Finished` with no errors.
 - [ ] **Step 10: Run existing handler tests**
 
 ```bash
-cargo test -p miniboxd
+cargo nextest run -p miniboxd -p daemonbox
 ```
 
 Expected: all tests pass. The tests in `crates/miniboxd/tests/handler_tests.rs` import `miniboxd::handler` and `miniboxd::state` — these resolve through the lib.rs shim to `daemonbox`.
+
+- [ ] **Step 10a: Clippy + fmt on new crate**
+
+```bash
+cargo fmt -p daemonbox --check
+cargo clippy -p daemonbox -- -D warnings
+```
+
+Expected: no warnings, no fmt diff.
 
 - [ ] **Step 11: Commit**
 
@@ -434,13 +443,15 @@ pub fn colima_deps(
 }
 ```
 
-- [ ] **Step 9: Run macbox tests**
+- [ ] **Step 9: Fmt, clippy, and tests on macbox**
 
 ```bash
-cargo test -p macbox
+cargo fmt -p macbox --check
+cargo clippy -p macbox -- -D warnings
+cargo nextest run -p macbox
 ```
 
-Expected: all tests pass. (On macOS; skip on Linux — the `compile_error!` gate means this crate won't be tested there.)
+Expected: no fmt diff, no warnings, all tests pass.
 
 - [ ] **Step 10: Check workspace compiles on macOS**
 
@@ -670,29 +681,30 @@ git commit -m "feat: add macboxd — macOS-native daemon binary"
 
 ## Task 4: Final verification
 
-- [ ] **Step 1: Full lib test suite (macOS)**
+- [ ] **Step 1: Full test suite (macOS)**
 
 ```bash
-cargo test -p minibox-lib -p daemonbox
+cargo nextest run -p minibox-lib -p daemonbox -p macbox
 ```
 
 Expected: all tests pass.
 
-- [ ] **Step 2: miniboxd tests still pass (macOS)**
+- [ ] **Step 2: miniboxd tests still pass**
 
 ```bash
-cargo test -p miniboxd --lib
+cargo nextest run -p miniboxd
 ```
 
 Expected: all tests pass (handler/state tests resolve through lib.rs shim).
 
-- [ ] **Step 3: macbox tests pass**
+- [ ] **Step 3: Clippy + fmt on all new crates**
 
 ```bash
-cargo test -p macbox
+cargo fmt -p daemonbox -p macbox -p macboxd --check
+cargo clippy -p daemonbox -p macbox -p macboxd -- -D warnings
 ```
 
-Expected: all tests pass.
+Expected: no fmt diff, no warnings. Fix all warnings before proceeding.
 
 - [ ] **Step 4: Full check on macOS (per-crate, not --workspace)**
 
