@@ -25,12 +25,11 @@
 //! ```
 
 use crate::domain::{
-    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
     ImageRegistry, LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::Result;
 use async_trait::async_trait;
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -91,17 +90,6 @@ impl MockRegistry {
     }
 }
 
-impl Default for MockRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for MockRegistry {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 #[async_trait]
 impl ImageRegistry for MockRegistry {
@@ -198,17 +186,6 @@ impl MockFilesystem {
     }
 }
 
-impl Default for MockFilesystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for MockFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl FilesystemProvider for MockFilesystem {
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
@@ -291,17 +268,6 @@ impl MockLimiter {
     }
 }
 
-impl Default for MockLimiter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for MockLimiter {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl ResourceLimiter for MockLimiter {
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
@@ -375,17 +341,6 @@ impl MockRuntime {
     }
 }
 
-impl Default for MockRuntime {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for MockRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 #[async_trait]
 impl ContainerRuntime for MockRuntime {
@@ -412,6 +367,8 @@ impl ContainerRuntime for MockRuntime {
         Ok(pid)
     }
 }
+
+crate::adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 
 #[cfg(test)]
 mod tests {
