@@ -66,7 +66,10 @@ fn find_binary(name: &str) -> PathBuf {
 struct DaemonFixture {
     child: Child,
     socket_path: PathBuf,
+    // Held for Drop: TempDir deletes itself when dropped.
+    #[allow(dead_code)]
     data_dir: TempDir,
+    #[allow(dead_code)]
     run_dir: TempDir,
     cgroup_root: PathBuf,
     cli_bin: PathBuf,
@@ -180,6 +183,7 @@ impl DaemonFixture {
     }
 
     /// Send SIGTERM to the daemon.
+    #[allow(dead_code)]
     fn sigterm(&self) {
         // SAFETY: Sending SIGTERM to our known child process PID. The PID is valid
         // because we spawned it and haven't yet waited on it.
@@ -227,7 +231,7 @@ impl Drop for DaemonFixture {
                         if let Ok(sub_entries) = std::fs::read_dir(&path) {
                             for sub in sub_entries.flatten() {
                                 if sub.path().is_dir() {
-                                    let _ = std::fs::remove_dir(&sub.path());
+                                    let _ = std::fs::remove_dir(sub.path());
                                 }
                             }
                         }
