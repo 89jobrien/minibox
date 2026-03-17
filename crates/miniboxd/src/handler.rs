@@ -400,10 +400,10 @@ async fn remove_inner(
 
     // Unmount overlay (using injected filesystem trait).
     let container_dir = deps.containers_base.join(id);
-    if container_dir.exists() {
-        if let Err(e) = deps.filesystem.cleanup(&container_dir) {
-            warn!("cleanup_mounts for {id}: {e}");
-        }
+    if container_dir.exists()
+        && let Err(e) = deps.filesystem.cleanup(&container_dir)
+    {
+        warn!("cleanup_mounts for {id}: {e}");
     }
 
     // Remove runtime state directory.
