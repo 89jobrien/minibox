@@ -61,3 +61,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Install script to deploy the daemon and CLI binaries with systemd setup.
 - systemd slice (`minibox.slice`) for resource isolation; allow safe absolute symlinks in the slice.
 - systemd cgroup controller delegation; removed unsupported `DelegateControllers` option.
+
+## [v0.0.4] - 2026-03-16
+
+### Added
+
+- GKE unprivileged adapter suite using `proot`, copy-FS, and a no-op resource limiter for rootless/GKE environments. Selected via `MINIBOX_ADAPTER=gke`.
+- `RuntimeCapabilities` struct and `capabilities()` method on `ContainerRuntime` trait for runtime feature detection.
+- In-memory container state tracking that survives handler restarts within a daemon session (note: state is still lost on daemon process exit).
+
+### Changed
+
+- Adopted `Dyn` type aliases and structured `DomainError` variants for cleaner error handling across adapters.
+- Enforced Linux-only compilation via `compile_error!` macro instead of a runtime cfg gate.
+- Extracted `miniboxd` as its own lib crate; modernized format strings throughout.
