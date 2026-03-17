@@ -25,6 +25,7 @@ futures = { workspace = true }
 tempfile = { workspace = true }
 async-trait = { workspace = true }
 walkdir = { workspace = true }
+minibox-macros = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
