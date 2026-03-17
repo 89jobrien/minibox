@@ -136,9 +136,11 @@ impl Drop for CgroupTestGuard {
 ```
 
 **Env var override test:**
+
 - `test_cgroup_root_env_override` — set `MINIBOX_CGROUP_ROOT` to test path, create via `ResourceLimiter` trait, verify cgroup appears under test path (not default `/sys/fs/cgroup/minibox`)
 
 **Cgroup lifecycle tests:**
+
 - `test_cgroup_create_and_verify_directory` — `limiter.create()`, verify dir exists
 - `test_cgroup_memory_limit_written_and_readable` — set memory.max, read back, verify
 - `test_cgroup_cpu_weight_written_and_readable` — same for cpu.weight
@@ -150,15 +152,18 @@ impl Drop for CgroupTestGuard {
 - `test_cgroup_cleanup_idempotent` — cleanup already-removed cgroup is not an error
 
 **Controller delegation tests:**
+
 - `test_subtree_controllers_enabled` — verify parent's `cgroup.subtree_control` contains expected controllers
 - `test_cgroup_in_delegated_subtree` — verify test cgroup root can create children and write limits
 
 **Validation / error tests:**
+
 - `test_cgroup_rejects_memory_below_minimum` — memory < 4096 returns error
 - `test_cgroup_rejects_invalid_cpu_weight` — cpu_weight 0 or 10001 returns error
 - `test_cgroup_add_process_invalid_pid` — adding invalid PID fails gracefully
 
 **Controller availability tests:**
+
 - `test_cgroup_io_controller_unavailable` — if `io` controller is not in `cgroup.controllers`, verify `limiter.create()` succeeds (non-fatal warning) but `io.max` is not written
 
 ### 3. Daemon+CLI E2E Tests
@@ -168,6 +173,7 @@ impl Drop for CgroupTestGuard {
 Starts real `miniboxd` and exercises `minibox` CLI as subprocesses.
 
 **`DaemonFixture` helper:**
+
 - Starts `miniboxd` with env overrides: temp `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MINIBOX_SOCKET_PATH`, `MINIBOX_CGROUP_ROOT`
 - Polls for socket file to appear (100ms intervals, 10s timeout). On timeout: panic with daemon stderr captured for debugging.
 - `fn cli(&self, args: &[&str]) -> Command` — pre-configured Command with `--socket` pointing at temp socket
@@ -213,10 +219,12 @@ This avoids the `CARGO_BIN_EXE_` cross-crate limitation (`minibox` CLI is in `mi
 **Parallelism:** `--test-threads=1` for v1. Each test gets isolated socket/data/cgroup paths so parallel is possible later.
 
 **Image operations:**
+
 - `test_e2e_pull_alpine` — exit 0, stdout contains "pulled"
 - `test_e2e_pull_nonexistent` — non-zero exit, stderr has error
 
 **Container lifecycle:**
+
 - `test_e2e_run_echo` — run echo command, verify container created
 - `test_e2e_ps_shows_container` — run sleep container, ps shows Running
 - `test_e2e_stop_container` — stop running container, verify Stopped
@@ -224,20 +232,25 @@ This avoids the `CARGO_BIN_EXE_` cross-crate limitation (`minibox` CLI is in `mi
 - `test_e2e_rm_running_rejected` — rm running container returns error
 
 **Resource limits:**
+
 - `test_e2e_run_with_memory_limit` — verify memory.max in cgroup
 - `test_e2e_run_with_cpu_weight` — verify cpu.weight in cgroup
 
 **Cleanup verification:**
+
 - `test_e2e_cgroup_cleaned_after_rm` — run → stop → rm, cgroup dir gone
 - `test_e2e_overlay_cleaned_after_rm` — same, no overlay mount remains
 
 **Socket/auth:**
+
 - `test_e2e_nonroot_rejected` — non-root connection refused (skip if always root)
 
 **Supervisor cgroup migration:**
+
 - `test_e2e_daemon_migrates_to_supervisor` — after daemon starts, read `/proc/{daemon_pid}/cgroup`, verify path ends with `/supervisor`. This validates the `migrate_to_supervisor_cgroup()` fix from commit `8e97d3f`.
 
 **Signal handling:**
+
 - `test_e2e_sigterm_clean_shutdown` — SIGTERM daemon, socket removed, exit 0
 
 ### 4. Justfile
@@ -320,6 +333,7 @@ nuke-test-state:
 ### Runtime cleanup (per-test)
 
 Each test uses a `TestGuard` or Drop-based cleanup:
+
 - Cgroup dirs: remove `/sys/fs/cgroup/minibox-test-{uuid}/`
 - Overlay mounts: unmount before removing dirs
 - Temp dirs: `tempfile::TempDir` handles this
@@ -340,6 +354,7 @@ Each test uses a `TestGuard` or Drop-based cleanup:
 ## File Layout
 
 **New files:**
+
 ```
 justfile
 crates/minibox-lib/src/preflight.rs
@@ -348,12 +363,14 @@ crates/miniboxd/tests/e2e_tests.rs
 ```
 
 **Modified files:**
+
 ```
 crates/minibox-lib/src/lib.rs
 TESTING.md
 ```
 
 **Unchanged:**
+
 ```
 crates/miniboxd/tests/integration_tests.rs
 crates/miniboxd/tests/handler_tests.rs
@@ -366,14 +383,14 @@ No new external crates. Uses existing workspace deps: `uuid`, `tempfile`, `nix`,
 
 ## Test Counts
 
-| Layer | New Tests | Existing | Total |
-|-------|-----------|----------|-------|
-| Unit (mock) | 0 | ~37 | ~37 |
-| Conformance | 0 | ~15 | ~15 |
-| Integration (cgroup) | ~17 | 0 | ~17 |
-| Integration (existing) | 0 | 11 | 11 |
-| E2E (daemon+CLI) | ~14 | 0 | ~14 |
-| **Total** | **~31** | **~63** | **~94** |
+| Layer                  | New Tests | Existing | Total   |
+| ---------------------- | --------- | -------- | ------- |
+| Unit (mock)            | 0         | ~37      | ~37     |
+| Conformance            | 0         | ~15      | ~15     |
+| Integration (cgroup)   | ~17       | 0        | ~17     |
+| Integration (existing) | 0         | 11       | 11      |
+| E2E (daemon+CLI)       | ~14       | 0        | ~14     |
+| **Total**              | **~31**   | **~63**  | **~94** |
 
 Note: Existing test counts are approximate and should be verified during implementation.
 
