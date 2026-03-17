@@ -34,3 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Added `SAFETY` comments to all unsafe blocks; deepened cgroup cleanup on container exit.
+
+## [v0.0.8] - 2026-03-16
+
+### Added
+
+- Benchmark tooling (`bench/`) with CLI config, command runner, test suites, report writers, stats helper, and dry-run mode.
+- Benchmark report schema for structured JSON output.
+- Suite selection and per-suite reporting; skip stats on failed runs.
