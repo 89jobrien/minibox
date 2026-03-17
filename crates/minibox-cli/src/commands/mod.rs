@@ -12,16 +12,25 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tracing::debug;
 
-/// Unix socket path of the running daemon.
-pub const SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+/// Default Unix socket path of the running daemon.
+const DEFAULT_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+
+/// Resolve the daemon socket path.
+///
+/// Checks `MINIBOX_SOCKET_PATH` env var first, falls back to default.
+fn socket_path() -> String {
+    std::env::var("MINIBOX_SOCKET_PATH")
+        .unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string())
+}
 
 /// Open a connection to the daemon, send one request, and return the response.
 ///
 /// The protocol is a single JSON line → single JSON line.
 pub async fn send_request(request: &DaemonRequest) -> Result<DaemonResponse> {
-    let stream = UnixStream::connect(SOCKET_PATH)
+    let path = socket_path();
+    let stream = UnixStream::connect(&path)
         .await
-        .with_context(|| format!("connecting to daemon at {}", SOCKET_PATH))?;
+        .with_context(|| format!("connecting to daemon at {}", path))?;
 
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
