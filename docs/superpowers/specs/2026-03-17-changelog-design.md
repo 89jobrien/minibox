@@ -31,33 +31,36 @@ Not: `feat: Add GKE unprivileged adapter suite (proot, copy FS, no-op limiter)`
 
 ## Versions
 
-| Version | Theme | Date |
-|---------|-------|------|
-| `[Unreleased]` | Future work placeholder | — |
-| `v0.0.10` | CI pipelines, clippy fixes, rustls | 2026-03-17 |
-| `v0.0.9` | Test pyramid: e2e, integration, preflight | 2026-03-16 |
-| `v0.0.8` | Benchmark tooling | 2026-03-16 |
-| `v0.0.7` | Cgroup v2 delegation fixes | 2026-03-16 |
-| `v0.0.6` | Ops/systemd deployment | 2026-03-16 |
-| `v0.0.5` | GKE adapter & DomainError patterns | 2026-03-16 |
-| `v0.0.4` | Cross-platform adapters & trait expansion | 2026-03-16 |
-| `v0.0.3` | Hexagonal architecture refactor | 2026-03-16 |
-| `v0.0.2` | Security hardening | 2026-03-15 |
-| `v0.0.1` | Initial runtime | 2026-03-15 |
+| Version        | Theme                                     | Date       |
+| -------------- | ----------------------------------------- | ---------- |
+| `[Unreleased]` | Future work placeholder                   | —          |
+| `v0.0.10`      | CI pipelines, clippy fixes, rustls        | 2026-03-17 |
+| `v0.0.9`       | Test pyramid: e2e, integration, preflight | 2026-03-16 |
+| `v0.0.8`       | Benchmark tooling                         | 2026-03-16 |
+| `v0.0.7`       | Cgroup v2 delegation fixes                | 2026-03-16 |
+| `v0.0.6`       | Ops/systemd deployment                    | 2026-03-16 |
+| `v0.0.5`       | GKE adapter & DomainError patterns        | 2026-03-16 |
+| `v0.0.4`       | Cross-platform adapters & trait expansion | 2026-03-16 |
+| `v0.0.3`       | Hexagonal architecture refactor           | 2026-03-16 |
+| `v0.0.2`       | Security hardening                        | 2026-03-15 |
+| `v0.0.1`       | Initial runtime                           | 2026-03-15 |
 
 ## Commit-to-Version Mapping
 
 All commits listed. Omittable commits (doc/chore/merge with no user-visible impact) are marked with `[omit]`.
 
 ### v0.0.1 — Initial runtime
+
 - cc51b1b — Initial commit
 
 ### v0.0.2 — Security hardening
+
 - 8ea4f73 — Fix critical vulnerabilities (CVSS 7.5-9.8)
 - 2fc7036 — High-priority hardening measures
 - abb1981 — `[omit]` Security fixes documentation
 
 ### v0.0.3 — Hexagonal architecture refactor
+
 - 9056f19 — Domain layer (Phase 1/5)
 - 66a60cd — Infrastructure adapters (Phase 2/5)
 - 1fd1638 — Dependency injection to handlers (Phase 3/5)
@@ -95,6 +98,7 @@ Note: commits 9056f19–08ac7d1 above are grouped into v0.0.3 as part of the sam
 (See mapping note above — v0.0.4 and v0.0.5 themes merged; commits are split at d57b1b3.)
 
 ### v0.0.6 — Ops/systemd deployment
+
 - d738fcf — Add Justfile with sync, build, smoke, and test recipes
 - beca3d0 — `[omit]` Add ops runtime plan
 - 43a9ee3 — Add systemd unit for miniboxd
@@ -110,6 +114,7 @@ Note: commits 9056f19–08ac7d1 above are grouped into v0.0.3 as part of the sam
 - 33e606c — Remove unsupported DelegateControllers option
 
 ### v0.0.7 — Cgroup v2 delegation fixes
+
 - 6c08f14 — `[omit]` Document cgroup debug findings
 - 922272b — Enable cgroup subtree controllers before writing limits
 - a93fcdd — Enable DelegateSubgroup for miniboxd
@@ -121,6 +126,7 @@ Note: commits 9056f19–08ac7d1 above are grouped into v0.0.3 as part of the sam
 - 14ef5f9 — `[omit]` Merge cgroup findings update
 
 ### v0.0.8 — Benchmark tooling
+
 - d0d4517 — `[omit]` Add benchmark design doc
 - ba1f9f3 — `[omit]` Ignore .worktrees
 - 10b42a3 — `[omit]` Add e2e test infrastructure design spec
@@ -145,6 +151,7 @@ Note: commits 9056f19–08ac7d1 above are grouped into v0.0.3 as part of the sam
 - b58b06f — `[omit]` Merge commit
 
 ### v0.0.9 — Test pyramid: e2e, integration, preflight
+
 - 72f77c8 — Make CLI socket path configurable via `MINIBOX_SOCKET_PATH`
 - b76f4c6 — Add preflight host capability probing module
 - 21f3b9a — Add Justfile task runner for test workflows (`just test-unit`, `just test-e2e`, etc.)
@@ -156,6 +163,7 @@ Note: commits 9056f19–08ac7d1 above are grouped into v0.0.3 as part of the sam
 - 2330985 — `[omit]` Update CLAUDE.md
 
 ### v0.0.10 — CI, clippy, rustls
+
 - 6cb130f — Add CI, release, and integration GitHub Actions workflows
 - 1a4c283 — Add security-critical path validation and tar extraction tests
 - 18e0472 — Resolve all clippy warnings for CI

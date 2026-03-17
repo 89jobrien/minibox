@@ -5,6 +5,7 @@ This document outlines security testing procedures, test cases, and tools for va
 ## Overview
 
 Security testing ensures that:
+
 - Isolation mechanisms prevent container escapes
 - Input validation blocks malicious payloads
 - Authentication prevents unauthorized access
@@ -711,6 +712,7 @@ pip install semgrep
 ## Changelog
 
 ### 2026-03-16
+
 - Created comprehensive security testing guide
 - Defined test cases for all security controls
 - Established fuzzing strategy

@@ -84,36 +84,42 @@ We use CVSS 3.1 scoring:
 #### 1. Unix Socket API (Daemon)
 
 **Attack Vectors:**
+
 - Malicious JSON requests
 - Resource exhaustion via concurrent requests
 - Authentication bypass attempts
 - Request size DoS
 
 **Mitigations:**
+
 - SO_PEERCRED authentication (root-only)
 - 1 MB request size limit
 - Concurrent spawn semaphore (100 max)
 - Socket permissions 0600
 
 **Residual Risks:**
+
 - Request rate limiting not yet implemented
 - No request throttling per client
 
 #### 2. Container Runtime
 
 **Attack Vectors:**
+
 - Container escape via namespace violations
 - Privilege escalation via setuid binaries
 - Fork bombs
 - Resource exhaustion (memory, CPU, disk I/O)
 
 **Mitigations:**
+
 - Linux namespaces (PID, Mount, UTS, IPC, Network)
 - cgroups v2 limits (memory, CPU weight, PID max, I/O throttling)
 - Secure mount flags (MS_NOSUID, MS_NODEV, MS_NOEXEC)
 - Read-only /sys mount
 
 **Residual Risks:**
+
 - No capability dropping (running with full root capabilities)
 - No seccomp filters
 - No user namespace remapping
@@ -121,12 +127,14 @@ We use CVSS 3.1 scoring:
 #### 3. Image Registry
 
 **Attack Vectors:**
+
 - Man-in-the-middle attacks
 - Malicious image layers
 - Zip Slip attacks via crafted tar archives
 - Disk exhaustion via large images
 
 **Mitigations:**
+
 - HTTPS-only connections with TLS 1.2+
 - 10 GB per-layer size limit
 - 10 MB manifest size limit
@@ -134,23 +142,27 @@ We use CVSS 3.1 scoring:
 - Setuid/setgid bit stripping
 
 **Residual Risks:**
+
 - No image signature verification
 - No content trust/Notary support
 
 #### 4. Filesystem Operations
 
 **Attack Vectors:**
+
 - Path traversal via malicious image names/tags
 - Symlink attacks
 - Directory permission violations
 
 **Mitigations:**
+
 - Path canonicalization with .. rejection
 - Symlink validation
 - 0700 permissions on container directories
 - Overlay filesystem path validation
 
 **Residual Risks:**
+
 - No filesystem quota enforcement
 
 ### Threat Actors
@@ -158,15 +170,18 @@ We use CVSS 3.1 scoring:
 #### 1. Malicious Container User
 
 **Capabilities:**
+
 - Can execute arbitrary code inside container
 - Has root privileges inside container namespace
 
 **Goals:**
+
 - Escape container to host
 - Escalate privileges on host
 - Access other containers' data
 
 **Mitigations:**
+
 - Namespace isolation
 - cgroups resource limits
 - Secure mount flags
@@ -175,15 +190,18 @@ We use CVSS 3.1 scoring:
 #### 2. Malicious Registry Provider
 
 **Capabilities:**
+
 - Control over image layers and manifests
 - Can craft malicious tar archives
 
 **Goals:**
+
 - Execute code on host during image pull
 - Exfiltrate host data
 - Corrupt host filesystem
 
 **Mitigations:**
+
 - HTTPS enforcement
 - Tar entry validation
 - Size limits
@@ -192,15 +210,18 @@ We use CVSS 3.1 scoring:
 #### 3. Local Unprivileged User
 
 **Capabilities:**
+
 - Can attempt Unix socket connections
 - Can read world-readable files
 
 **Goals:**
+
 - Control daemon without authorization
 - Access container data
 - Cause denial of service
 
 **Mitigations:**
+
 - SO_PEERCRED authentication
 - Socket permissions 0600
 - Container directory permissions 0700
@@ -210,6 +231,7 @@ We use CVSS 3.1 scoring:
 ### Defense in Depth Layers
 
 **Layer 1: Input Validation**
+
 - Request size limits (1 MB)
 - Image size limits (10 GB/layer)
 - Path canonicalization
@@ -217,17 +239,20 @@ We use CVSS 3.1 scoring:
 - Range validation for cgroup values
 
 **Layer 2: Authentication & Authorization**
+
 - SO_PEERCRED Unix socket authentication
 - Root-only daemon access (UID 0)
 - Socket permissions enforcement
 
 **Layer 3: Isolation**
+
 - Linux namespaces (PID, Mount, UTS, IPC, Network)
 - cgroups v2 resource limits
 - Overlay filesystem with secure mount flags
 - Read-only /sys mount
 
 **Layer 4: Resource Limits**
+
 - Memory limits (configurable)
 - CPU weight (configurable)
 - PID limits (1024 default)
@@ -235,6 +260,7 @@ We use CVSS 3.1 scoring:
 - Concurrent spawn semaphore (100)
 
 **Layer 5: Network Security**
+
 - HTTPS-only registry connections
 - TLS 1.2+ minimum
 - Isolated network namespace per container
@@ -249,6 +275,7 @@ pub fn validate_layer_path(base: &Path, layer: &Path) -> Result<PathBuf>
 
 **Purpose:** Prevent path traversal attacks in overlay filesystem
 **Validation:**
+
 - Canonicalizes paths
 - Rejects .. components
 - Ensures paths stay within base directory
@@ -263,6 +290,7 @@ pub fn validate_layer_path(base: &Path, layer: &Path) -> Result<PathBuf>
 
 **Purpose:** Prevent Zip Slip attacks during image extraction
 **Validation:**
+
 - Rejects absolute symlinks
 - Rejects .. components in paths
 - Rejects device nodes, pipes
@@ -278,6 +306,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 
 **Purpose:** Ensure only root can control daemon
 **Validation:**
+
 - SO_PEERCRED credential retrieval
 - UID 0 check
 - Audit logging of client PID/UID
@@ -289,12 +318,14 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Unit Tests
 
 **Coverage Requirements:**
+
 - 100% coverage of security-critical functions
 - Path validation edge cases
 - Tar entry validation edge cases
 - Authentication logic
 
 **Test Cases:**
+
 - Valid and invalid paths
 - Symlink attacks
 - Path traversal attempts
@@ -303,6 +334,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Integration Tests
 
 **Required Tests:**
+
 - Real tar archives with malicious entries
 - Docker Hub image pull with size enforcement
 - cgroups limit enforcement
@@ -314,6 +346,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Security Tests
 
 **Planned Tests:**
+
 - Container escape attempts
 - Privilege escalation attempts
 - Fork bomb resistance
@@ -321,6 +354,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 - Network isolation verification
 
 **Tools:**
+
 - Custom test harness
 - Fuzzing with cargo-fuzz
 - Static analysis with cargo-clippy
@@ -328,6 +362,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Penetration Testing
 
 **Scope:**
+
 - Container escape attempts
 - Privilege escalation
 - Authentication bypass
@@ -340,16 +375,19 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Automated Scanning
 
 **Dependency Vulnerabilities:**
+
 - Tool: cargo-deny
 - Frequency: On every commit (GitHub Actions)
 - Action: Block PRs with critical vulnerabilities
 
 **Static Analysis:**
+
 - Tool: cargo-clippy with security lints
 - Frequency: Pre-commit hook + CI
 - Action: Enforce zero warnings
 
 **Code Scanning:**
+
 - Tool: GitHub Advanced Security (optional)
 - Frequency: On every push
 - Action: Review alerts
@@ -357,6 +395,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### Manual Reviews
 
 **Security-Focused Code Review:**
+
 - All changes to security-critical paths require review
 - Focus areas:
   - Input validation
@@ -365,6 +404,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
   - Filesystem operations
 
 **Periodic Security Audits:**
+
 - Frequency: Quarterly
 - Scope: Full codebase review
 - Focus: New attack vectors, evolving threats
@@ -406,6 +446,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### SOC2 Type II
 
 **Relevant Controls:**
+
 - CC6.1: Access controls implemented (Unix socket auth)
 - CC6.2: Data protection via directory permissions
 - CC7.2: Security event logging
@@ -414,6 +455,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ### PCI-DSS (if applicable)
 
 **Relevant Requirements:**
+
 - Req 2: Secure defaults partially implemented
 - Req 8: Authentication implemented (root-only)
 - Req 10: Basic logging present
@@ -452,12 +494,14 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 ## Changelog
 
 ### 2026-03-16
+
 - Created comprehensive security policy
 - Documented threat model and attack surfaces
 - Established security testing strategy
 - Defined continuous monitoring approach
 
 ### 2026-03-15
+
 - Fixed 12 critical/high severity vulnerabilities
 - Implemented input validation and authentication
 - Added resource limits and isolation controls

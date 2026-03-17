@@ -11,15 +11,15 @@ All platform-agnostic tests pass successfully. Security scanning shows zero vuln
 
 ### Test Status
 
-| Category | Tests | Status | Notes |
-|----------|-------|--------|-------|
-| Unit Tests | 36 | ✅ PASS | All platform-agnostic tests |
-| Protocol Tests | 21 | ✅ PASS | JSON serialization validated |
-| Conformance Tests | N/A | ⏸️ SKIP | Requires Linux (in miniboxd crate) |
-| Integration Tests | 11 | ⏸️ SKIP | Requires Linux with root |
-| Benchmarks | 6 | ✅ PASS | Performance validated |
-| Security Scans | 4 | ✅ PASS | Zero vulnerabilities |
-| Code Quality | Clippy | ✅ PASS | All security lints enabled |
+| Category          | Tests  | Status  | Notes                              |
+| ----------------- | ------ | ------- | ---------------------------------- |
+| Unit Tests        | 36     | ✅ PASS | All platform-agnostic tests        |
+| Protocol Tests    | 21     | ✅ PASS | JSON serialization validated       |
+| Conformance Tests | N/A    | ⏸️ SKIP | Requires Linux (in miniboxd crate) |
+| Integration Tests | 11     | ⏸️ SKIP | Requires Linux with root           |
+| Benchmarks        | 6      | ✅ PASS | Performance validated              |
+| Security Scans    | 4      | ✅ PASS | Zero vulnerabilities               |
+| Code Quality      | Clippy | ✅ PASS | All security lints enabled         |
 
 ## Detailed Results
 
@@ -28,6 +28,7 @@ All platform-agnostic tests pass successfully. Security scanning shows zero vuln
 **Command:** `cargo test --workspace --lib`
 
 **Results:**
+
 ```
 running 37 tests
 test adapters::colima::tests::test_colima_registry_creation ... ok
@@ -47,6 +48,7 @@ test result: ok. 36 passed; 0 failed; 1 ignored; 0 measured
 ```
 
 **Coverage:**
+
 - Adapter creation tests (Colima, WSL, Docker Desktop)
 - Mock implementations (all 4 domain traits)
 - Protocol serialization/deserialization (24 tests)
@@ -57,6 +59,7 @@ test result: ok. 36 passed; 0 failed; 1 ignored; 0 measured
 **Command:** `cargo test -p minibox-lib protocol`
 
 **Results:**
+
 ```
 test protocol::tests::test_decode_malformed_json_fails ... ok
 test protocol::tests::test_decode_request_strips_newline ... ok
@@ -84,6 +87,7 @@ test result: ok. 21 passed; 0 failed
 ```
 
 **Validation:**
+
 - JSON encoding/decoding for all request/response types
 - Newline termination
 - Error handling for malformed JSON
@@ -96,20 +100,21 @@ test result: ok. 21 passed; 0 failed
 
 **Results:**
 
-| Benchmark | Time | Change vs Baseline | Status |
-|-----------|------|-------------------|--------|
-| registry_direct_has_image | 60.5 ns | -0.79% (improved) | ✅ |
-| registry_trait_object_has_image | 61.2 ns | -7.11% (improved) | ✅ |
-| filesystem_direct_setup | 39.9 ns | +0.97% (noise) | ✅ |
-| filesystem_trait_object_setup | 40.3 ns | +1.66% (noise) | ✅ |
-| limiter_direct_create | 36.4 ns | -1.86% (noise) | ✅ |
-| limiter_trait_object_create | 36.8 ns | +4.12% (noise) | ✅ |
-| runtime_direct_spawn | 28.6 ns | -0.22% (noise) | ✅ |
-| runtime_trait_object_spawn | 29.7 ns | +0.76% (noise) | ✅ |
-| arc_clone | 3.52 ns | -0.13% (noise) | ✅ |
-| downcast_to_concrete | 0.75 ns | -0.28% (noise) | ✅ |
+| Benchmark                       | Time    | Change vs Baseline | Status |
+| ------------------------------- | ------- | ------------------ | ------ |
+| registry_direct_has_image       | 60.5 ns | -0.79% (improved)  | ✅     |
+| registry_trait_object_has_image | 61.2 ns | -7.11% (improved)  | ✅     |
+| filesystem_direct_setup         | 39.9 ns | +0.97% (noise)     | ✅     |
+| filesystem_trait_object_setup   | 40.3 ns | +1.66% (noise)     | ✅     |
+| limiter_direct_create           | 36.4 ns | -1.86% (noise)     | ✅     |
+| limiter_trait_object_create     | 36.8 ns | +4.12% (noise)     | ✅     |
+| runtime_direct_spawn            | 28.6 ns | -0.22% (noise)     | ✅     |
+| runtime_trait_object_spawn      | 29.7 ns | +0.76% (noise)     | ✅     |
+| arc_clone                       | 3.52 ns | -0.13% (noise)     | ✅     |
+| downcast_to_concrete            | 0.75 ns | -0.28% (noise)     | ✅     |
 
 **Analysis:**
+
 - **Trait overhead:** 0.2-4.5 nanoseconds (consistent with architecture design)
 - **Registry improved:** 7% faster than baseline
 - **All changes within noise:** No performance regressions
@@ -122,6 +127,7 @@ test result: ok. 21 passed; 0 failed
 **Command:** `cargo deny check advisories`
 
 **Results:**
+
 ```
 advisories ok
 ```
@@ -136,6 +142,7 @@ advisories ok
 **Command:** `cargo deny check licenses`
 
 **Results:**
+
 ```
 licenses ok
 ```
@@ -151,6 +158,7 @@ licenses ok
 **Command:** `cargo deny check bans`
 
 **Results:**
+
 ```
 bans ok
 ```
@@ -165,6 +173,7 @@ bans ok
 **Command:** `cargo deny check sources`
 
 **Results:**
+
 ```
 sources ok
 ```
@@ -179,6 +188,7 @@ sources ok
 **Command:** `cargo clippy -p minibox-lib -- -D warnings -W clippy::suspicious -W clippy::complexity`
 
 **Results:**
+
 ```
 Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.87s
 ```
@@ -193,6 +203,7 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.87s
   - Default lints include security-focused rules
 
 **Fixed During Testing:**
+
 - Added Default trait implementations (clippy::derivable_impls)
 - Removed unused imports
 - Added license declarations to all crates
@@ -209,6 +220,7 @@ Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.87s
 **Reason:** Conformance tests are in miniboxd crate which depends on Linux-specific adapters (CgroupV2Limiter, OverlayFilesystem, LinuxNamespaceRuntime). These tests validate behavioral parity across Linux/WSL2/Docker Desktop/Colima adapters.
 
 **To Run on Linux:**
+
 ```bash
 cargo test -p miniboxd --test conformance_tests
 ```
@@ -224,6 +236,7 @@ cargo test -p miniboxd --test conformance_tests
 **Reason:** Integration tests use real infrastructure (Docker Hub, cgroups, overlayfs) which requires Linux kernel features and root access.
 
 **To Run on Linux:**
+
 ```bash
 sudo -E cargo test -p miniboxd --test integration_tests -- --ignored --test-threads=1
 ```
@@ -237,11 +250,13 @@ sudo -E cargo test -p miniboxd --test integration_tests -- --ignored --test-thre
 **File:** `.github/workflows/security.yml`
 
 **Triggers:**
+
 - Push to main/develop
 - Pull requests
 - Daily at 02:00 UTC
 
 **Jobs:**
+
 1. **cargo-deny:** Dependency vulnerability scanning
 2. **cargo-audit:** Security advisory checking
 3. **clippy-security:** Security-focused linting
@@ -252,16 +267,19 @@ sudo -E cargo test -p miniboxd --test integration_tests -- --ignored --test-thre
 ## Test Environment
 
 **Hardware:**
+
 - Platform: macOS (Apple Silicon)
 - Architecture: aarch64-apple-darwin
 
 **Software:**
+
 - Rust: 1.83+
 - Cargo: 1.83+
 - cargo-deny: 0.19.0
 - Criterion: 0.5.1
 
 **Dependencies:**
+
 - tokio: 1.50.0 (async runtime)
 - serde: 1.0.228 (serialization)
 - reqwest: 0.12.28 (HTTP client)

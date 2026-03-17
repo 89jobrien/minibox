@@ -16,6 +16,7 @@ This document summarizes the security improvements implemented for the minibox c
 ### Critical Severity (CVSS 7.5-9.8)
 
 #### 1. Path Traversal in Overlay Filesystem (CVSS 9.8) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Malicious image layers could mount arbitrary host directories
@@ -24,6 +25,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/container/filesystem.rs`
 
 #### 2. Symlink Attack in Tar Extraction (CVSS 9.6) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Zip Slip vulnerability allowing host file overwrites via crafted tar archives
@@ -36,6 +38,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/image/layer.rs`
 
 #### 3. No Unix Socket Authentication (CVSS 7.8) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Any local process could control the daemon
@@ -47,6 +50,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **Files:** `crates/miniboxd/src/server.rs`, `main.rs`
 
 #### 4. Unlimited Image Pull Sizes (CVSS 7.5) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Disk exhaustion DoS via multi-gigabyte layer downloads
@@ -60,6 +64,7 @@ This document summarizes the security improvements implemented for the minibox c
 ### High Severity (CVSS 7.0-7.9)
 
 #### 5. Missing Cgroup PID/IO Limits (CVSS 7.5) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Fork bombs and disk I/O DoS attacks possible
@@ -71,6 +76,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/container/cgroups.rs`
 
 #### 6. Insecure Mount Flags (CVSS 7.8) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Setuid binaries and cgroup escape possible
@@ -82,6 +88,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/container/filesystem.rs`
 
 #### 7. ImageStore Path Validation (CVSS 7.6) [FIXED]
+
 **Status:** Fixed in commit `8ea4f73`
 
 - **Issue:** Path traversal via malicious image names/tags
@@ -93,6 +100,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/image/mod.rs`
 
 #### 8. HTTPS Enforcement for Registry (CVSS 7.4) [FIXED]
+
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** MitM attacks on image downloads possible
@@ -104,6 +112,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/minibox-lib/src/image/registry.rs`
 
 #### 9. Directory Permission Issues (CVSS 7.1) [FIXED]
+
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Container directories could be world-readable
@@ -114,6 +123,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/miniboxd/src/handler.rs`
 
 #### 10. Concurrent Spawn DoS (CVSS 7.5) [FIXED]
+
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Fork bomb attacks via simultaneous spawn requests
@@ -126,6 +136,7 @@ This document summarizes the security improvements implemented for the minibox c
 ### Medium Severity (CVSS 6.0-6.9)
 
 #### 11. Request Size DoS (CVSS 6.2) [FIXED]
+
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Unbounded JSON deserialization causing memory exhaustion
@@ -136,6 +147,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **File:** `crates/miniboxd/src/server.rs`
 
 #### 12. Container ID Collisions [FIXED]
+
 **Status:** Fixed in commit `2fc7036`
 
 - **Issue:** Birthday paradox collisions after ~16M containers
@@ -152,6 +164,7 @@ This document summarizes the security improvements implemented for the minibox c
 ### High Priority (Not Yet Implemented)
 
 #### 1. Capability Dropping + Seccomp Filters (CVSS 8.4) [CRITICAL]
+
 **Status:** Requires new dependencies
 
 - **Issue:** Containers run with full root capabilities
@@ -163,6 +176,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **Estimated Effort:** 4-6 hours
 
 #### 2. Request Rate Limiting (CVSS 6.2) [CRITICAL]
+
 **Status:** Requires rate-limiting implementation
 
 - **Issue:** Request spam can cause CPU/memory exhaustion
@@ -175,6 +189,7 @@ This document summarizes the security improvements implemented for the minibox c
 ### Medium Priority (Architectural Improvements)
 
 #### 3. User Namespace Support (CVSS 8.4) [PENDING]
+
 **Status:** Major architectural change
 
 - **Issue:** Container root = host root
@@ -182,6 +197,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **Estimated Effort:** 8-12 hours
 
 #### 4. Image Signature Verification (CVSS 6.5) [PENDING]
+
 **Status:** Requires OCI signature libraries
 
 - **Issue:** No cryptographic verification of image authenticity
@@ -189,6 +205,7 @@ This document summarizes the security improvements implemented for the minibox c
 - **Estimated Effort:** 6-8 hours
 
 #### 5. State Persistence (Reliability Issue) [PENDING]
+
 **Status:** Design phase
 
 - **Issue:** Daemon restart loses all container records
@@ -199,16 +216,16 @@ This document summarizes the security improvements implemented for the minibox c
 
 ## Security Posture Comparison
 
-| Aspect | Before | After Critical Fixes | After High-Priority Fixes |
-|--------|--------|---------------------|--------------------------|
-| **Container Escape** | CRITICAL | LOW | LOW |
-| **Privilege Escalation** | CRITICAL | LOW | LOW |
-| **Resource Exhaustion** | HIGH | MEDIUM | **LOW** |
-| **Authentication** | NONE | Root-only | Root-only |
-| **Input Validation** | MINIMAL | Comprehensive | Comprehensive |
-| **Network Security** | WEAK | MEDIUM | **STRONG** |
-| **DoS Resistance** | NONE | MEDIUM | **STRONG** |
-| **Overall Risk** | **NOT SAFE** | Internal Testing | **Controlled Deployment** |
+| Aspect                   | Before       | After Critical Fixes | After High-Priority Fixes |
+| ------------------------ | ------------ | -------------------- | ------------------------- |
+| **Container Escape**     | CRITICAL     | LOW                  | LOW                       |
+| **Privilege Escalation** | CRITICAL     | LOW                  | LOW                       |
+| **Resource Exhaustion**  | HIGH         | MEDIUM               | **LOW**                   |
+| **Authentication**       | NONE         | Root-only            | Root-only                 |
+| **Input Validation**     | MINIMAL      | Comprehensive        | Comprehensive             |
+| **Network Security**     | WEAK         | MEDIUM               | **STRONG**                |
+| **DoS Resistance**       | NONE         | MEDIUM               | **STRONG**                |
+| **Overall Risk**         | **NOT SAFE** | Internal Testing     | **Controlled Deployment** |
 
 ---
 
@@ -268,6 +285,7 @@ Security Comments:      25+
 ### Dependency Impact
 
 **New Dependencies Required for Full Hardening:**
+
 - `caps` (capability management)
 - `seccompiler` (seccomp filter generation)
 - `governor` or similar (rate limiting)
@@ -300,6 +318,7 @@ The minibox container runtime has undergone significant security hardening with 
 **Current Status:** Suitable for controlled internal deployments with monitoring
 
 **Next Steps:**
+
 1. Implement capability dropping and seccomp (4-6 hours)
 2. Add request rate limiting (2-3 hours)
 3. Develop comprehensive test suite (20-30 hours)

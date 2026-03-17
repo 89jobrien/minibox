@@ -13,6 +13,7 @@ Zombienet-SDK is a Rust testing framework for blockchain networks that uses a pr
 ### 1. Provider Trait Pattern (Identical to Our Adapters)
 
 **Their Pattern:**
+
 ```rust
 pub type DynProvider = Arc<dyn Provider + Send + Sync>;
 pub type DynNamespace = Arc<dyn ProviderNamespace + Send + Sync>;
@@ -28,6 +29,7 @@ pub trait Provider {
 ```
 
 **Our Pattern:**
+
 ```rust
 pub trait ImageRegistry: AsAny + Send + Sync {
     async fn has_image(&self, name: &str, tag: &str) -> bool;
@@ -39,11 +41,13 @@ Arc<dyn ImageRegistry>
 ```
 
 **Similarity:**
+
 - Both use `Arc<dyn Trait + Send + Sync>` for dynamic dispatch
 - Both use `async_trait` for async methods
 - Both define type aliases for ergonomics (`DynProvider` vs our usage of `Arc<dyn Trait>`)
 
 **What We Can Adopt:**
+
 ```rust
 // Add type aliases for cleaner API
 pub type DynImageRegistry = Arc<dyn ImageRegistry + Send + Sync>;
@@ -55,6 +59,7 @@ pub type DynContainerRuntime = Arc<dyn ContainerRuntime + Send + Sync>;
 ### 2. Comprehensive Error Enum with thiserror
 
 **Their Pattern:**
+
 ```rust
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -76,12 +81,14 @@ pub enum ProviderError {
 ```
 
 **Benefits:**
+
 - Structured errors with context (container ID, command, etc.)
 - Wrapped `anyhow::Error` for underlying causes
 - `#[from]` for automatic error conversion
 - Rich error messages with interpolation
 
 **What We Can Adopt:**
+
 ```rust
 // Extend our DomainError enum with more context
 #[derive(Debug, thiserror::Error)]
@@ -110,6 +117,7 @@ pub enum DomainError {
 ### 3. Capability-Based Design
 
 **Their Pattern:**
+
 ```rust
 pub struct ProviderCapabilities {
     requires_image: bool,
@@ -124,11 +132,13 @@ impl Provider {
 ```
 
 **What This Enables:**
+
 - Runtime feature detection
 - Conditional behavior based on provider capabilities
 - Clear documentation of what each provider supports
 
 **What We Can Adopt:**
+
 ```rust
 pub struct RuntimeCapabilities {
     pub supports_user_namespaces: bool,
@@ -153,6 +163,7 @@ if runtime.capabilities().supports_user_namespaces {
 ### 4. Hierarchical Resource Model
 
 **Their Pattern:**
+
 ```
 Provider
   └─ Namespace (workspace isolation)
@@ -160,6 +171,7 @@ Provider
 ```
 
 **Our Potential Hierarchy:**
+
 ```
 ContainerRuntime
   └─ Namespace (future: multi-container networks)
@@ -167,6 +179,7 @@ ContainerRuntime
 ```
 
 **Benefits:**
+
 - Logical grouping of related containers
 - Namespace-level resource limits
 - Easier cleanup (destroy namespace destroys all nodes)
@@ -174,6 +187,7 @@ ContainerRuntime
 ### 5. JSON-Based Serialization for State
 
 **Their Pattern:**
+
 ```rust
 #[async_trait]
 pub trait ProviderNode: erased_serde::Serialize {
@@ -187,11 +201,13 @@ async fn create_namespace_from_json(
 ```
 
 **Benefits:**
+
 - Easy state persistence
 - Configuration as code
 - Network topology as JSON
 
 **What We Can Adopt:**
+
 ```rust
 use erased_serde::Serialize;
 
@@ -218,6 +234,7 @@ impl DaemonState {
 ### 6. Shared Types Module
 
 **Their Structure:**
+
 ```
 crates/provider/src/
 ├── lib.rs              # Main traits
@@ -231,11 +248,13 @@ crates/provider/src/
 ```
 
 **Benefits:**
+
 - Reduces duplication
 - Ensures consistency across providers
 - Clear separation of concerns
 
 **What We Can Adopt:**
+
 ```
 crates/minibox-lib/src/
 ├── domain.rs
@@ -254,6 +273,7 @@ crates/minibox-lib/src/
 ### 7. File Server Pattern
 
 **Their Pattern:**
+
 ```
 crates/file-server/     # Standalone HTTP file server
 ```
@@ -261,6 +281,7 @@ crates/file-server/     # Standalone HTTP file server
 They use a dedicated file server for serving files to containers.
 
 **What We Can Adopt:**
+
 - Add HTTP file server for serving files into containers
 - Useful for configuration injection without volume mounts
 - Enables secure file distribution to isolated containers
@@ -270,6 +291,7 @@ They use a dedicated file server for serving files to containers.
 ### Workspace Organization
 
 **Their Cargo.toml:**
+
 ```toml
 [workspace]
 members = [
@@ -289,6 +311,7 @@ license = "MIT"
 ```
 
 **Our Cargo.toml (already similar):**
+
 ```toml
 [workspace]
 members = [
@@ -309,11 +332,13 @@ Both use workspace-level package configuration for consistency.
 
 **Their Pattern:**
 All provider operations are async, even when underlying implementation might be sync. This provides:
+
 - Consistent API across providers
 - Future-proofing for async implementations
 - Better resource utilization
 
 **What We Already Do:**
+
 ```rust
 #[async_trait]
 pub trait ImageRegistry {
@@ -328,11 +353,13 @@ We already follow this pattern!
 ### Provider-Agnostic Tests
 
 **Their Approach:**
+
 - Tests use `DynProvider` trait objects
 - Same tests run against native, docker, and kubernetes providers
 - Validates behavioral parity
 
 **Our Approach (already implemented):**
+
 - Conformance tests use mock implementations
 - Tests validate all adapters behave identically
 - See `crates/miniboxd/tests/conformance_tests.rs`
@@ -358,6 +385,7 @@ pub struct HandlerDependencies {
 ```
 
 **Benefits:**
+
 - Cleaner API
 - Easier to read signatures
 - Matches industry standard (zombienet, kubernetes-rs, etc.)
@@ -395,6 +423,7 @@ pub enum DomainError {
 ```
 
 **Benefits:**
+
 - Better error messages with context
 - Easier debugging
 - Structured error data for logging
@@ -416,6 +445,7 @@ pub trait ContainerRuntime {
 ```
 
 **Benefits:**
+
 - Runtime feature detection
 - Graceful degradation
 - Clear documentation of provider limitations
@@ -434,6 +464,7 @@ impl DaemonState {
 ```
 
 **Benefits:**
+
 - Daemon restart doesn't lose state
 - State can be inspected/debugged
 - Enables migration/backup
@@ -469,6 +500,7 @@ impl DaemonState {
 ## Conclusion
 
 Zombienet-SDK validates our hexagonal architecture approach and provides proven patterns for:
+
 - Error handling (structured thiserror enums)
 - Type ergonomics (type aliases for Arc<dyn Trait>)
 - Capability detection (runtime feature queries)
