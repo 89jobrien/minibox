@@ -18,7 +18,7 @@
 macro_rules! as_any {
     ($($t:ty),+ $(,)?) => {
         $(
-            impl $crate::domain::AsAny for $t {
+            impl crate::domain::AsAny for $t {
                 fn as_any(&self) -> &dyn ::std::any::Any {
                     self
                 }
@@ -60,7 +60,7 @@ macro_rules! default_new {
 #[macro_export]
 macro_rules! adapt {
     ($($t:ty),+ $(,)?) => {
-        as_any!($($t),+);
-        default_new!($($t),+);
+        $crate::as_any!($($t),+);
+        $crate::default_new!($($t),+);
     };
 }

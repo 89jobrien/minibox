@@ -4,6 +4,7 @@
 //! [`crate::container::filesystem`] to implement the domain's
 //! [`FilesystemProvider`] trait.
 
+use crate::adapt;
 use crate::container::filesystem;
 use crate::domain::{FilesystemProvider};
 use anyhow::Result;

@@ -4,6 +4,7 @@
 //! [`crate::container::cgroups`] to implement the domain's
 //! [`ResourceLimiter`] trait.
 
+use crate::adapt;
 use crate::container::cgroups::{CgroupConfig, CgroupManager};
 use crate::domain::{ResourceConfig, ResourceLimiter};
 use anyhow::Result;

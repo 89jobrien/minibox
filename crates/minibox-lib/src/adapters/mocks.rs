@@ -24,6 +24,7 @@
 //! }
 //! ```
 
+use crate::{adapt};
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
     ImageRegistry, LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
@@ -368,7 +369,7 @@ impl ContainerRuntime for MockRuntime {
     }
 }
 
-crate::adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
+adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 
 #[cfg(test)]
 mod tests {

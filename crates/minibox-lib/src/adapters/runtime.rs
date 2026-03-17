@@ -4,6 +4,7 @@
 //! [`crate::container::process`] to implement the domain's
 //! [`ContainerRuntime`] trait.
 
+use crate::adapt;
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
 use crate::domain::{ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};

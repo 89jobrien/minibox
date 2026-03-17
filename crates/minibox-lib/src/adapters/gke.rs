@@ -27,6 +27,7 @@
 //! Activated by setting `MINIBOX_ADAPTER=gke` at daemon startup. The same
 //! binary works in both native and GKE modes — no recompilation needed.
 
+use crate::{adapt, as_any};
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
     ResourceLimiter, RuntimeCapabilities,

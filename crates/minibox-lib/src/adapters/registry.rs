@@ -4,6 +4,7 @@
 //! infrastructure code to implement the domain's [`ImageRegistry`] trait,
 //! following hexagonal architecture principles.
 
+use crate::as_any;
 use crate::domain::{ImageMetadata, ImageRegistry, LayerInfo};
 use crate::image::ImageStore;
 use crate::image::registry::RegistryClient;

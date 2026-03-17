@@ -1060,6 +1060,7 @@ dependencies = [
  "futures",
  "hex",
  "libc",
+ "minibox-macros",
  "nix",
  "reqwest",
  "serde",
@@ -1073,6 +1074,10 @@ dependencies = [
  "uuid",
  "walkdir",
 ]
+
+[[package]]
+name = "minibox-macros"
+version = "0.1.0"
 
 [[package]]
 name = "miniboxd"
