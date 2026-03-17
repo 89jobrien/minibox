@@ -91,3 +91,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Clippy lints resolved; license declarations added to all crates.
+
+## [v0.0.2] - 2026-03-15
+
+### Security
+
+- Fixed critical vulnerabilities (CVSS 7.5–9.8): Zip Slip path traversal in tar extraction, symlink escape in overlay filesystem setup.
+- Implemented high-priority hardening: `SO_PEERCRED` Unix socket authentication (root-only), manifest/layer size limits (10 MB / 1 GB / 5 GB total), setuid/setgid bit stripping, device node rejection.
+
+## [v0.0.1] - 2026-03-15
+
+### Added
+
+- Initial Docker-like container runtime in Rust with daemon (`miniboxd`) and CLI (`minibox`) binaries.
+- OCI image pulling from Docker Hub using anonymous token auth and v2 manifest/blob API.
+- Linux namespace isolation: PID, mount, UTS, IPC, and network namespaces via `clone(2)`.
+- cgroups v2 resource limits: `memory.max` and `cpu.weight` per container.
+- Overlay filesystem support: stacked read-only layers plus per-container read-write upper dir.
+- Container lifecycle: `pull`, `run`, `ps`, `stop`, `rm` commands over a Unix socket JSON protocol.
+- In-memory container state machine: Created → Running → Stopped.
+- Background reaper task to detect container exit and update state.
