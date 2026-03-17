@@ -70,9 +70,11 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 - `state.rs` — in-memory `DaemonState` (container records, spawn semaphore)
 - `server.rs` — Unix socket listener, `SO_PEERCRED` auth, per-connection task
 
-**Dependencies:** `minibox-lib`, `tokio`, `serde_json`, `tracing`, `nix`, `uuid`, `chrono`, `anyhow`
+**Dependencies:** `minibox-lib`, `tokio`, `serde_json`, `tracing`, `nix` (POSIX subset: signal, wait, socket), `uuid`, `chrono`, `anyhow`
 
-**What it does NOT contain:** any `#[cfg(target_os = "linux")]` compile guards; any concrete adapter types; any path defaults.
+**What it does NOT contain:** any `compile_error!` guards; any concrete adapter types; any path defaults.
+
+**Note on `#[cfg]`:** Per-feature `#[cfg(target_os)]` blocks are fine and already exist in `server.rs` (peer credential auth has a `#[cfg(not(target_os = "linux"))]` fallback). `nix` signal/wait APIs used in `handler.rs` are POSIX and work on macOS.
 
 **After extraction, `miniboxd/src/` contains only `main.rs`** — adapter wiring, path resolution, and daemon startup.
 
@@ -92,6 +94,8 @@ pub fn preflight() -> Result<ColimaStatus, MacboxError>;
 pub async fn ensure_vm_running() -> Result<(), MacboxError>;
 
 /// Build HandlerDependencies wired with the Colima adapter suite.
+/// Signature is illustrative; may accept additional context (e.g. ImageStore)
+/// matching what miniboxd's composition root provides today.
 pub fn colima_deps(containers_base: PathBuf, run_containers_base: PathBuf)
     -> HandlerDependencies;
 
@@ -113,6 +117,8 @@ pub enum ColimaStatus {
 ```
 
 **Dependencies:** `minibox-lib`, `macros`, `anyhow`, `thiserror`, `tokio`, `tracing`
+
+**Dependencies:** `daemonbox` (for `HandlerDependencies`), `minibox-lib` (for Colima adapter types), `anyhow`, `thiserror`, `tokio`, `tracing`
 
 **Platform gate:** `#[cfg(target_os = "macos")]` on the crate — compile error on non-macOS.
 
@@ -160,11 +166,14 @@ The `compile_error!("miniboxd requires Linux")` guard stays in `miniboxd/main.rs
 ## Dependency Graph
 
 ```
-miniboxd  ──► daemonbox ──► minibox-lib
-macboxd   ──► daemonbox ──► minibox-lib
-macboxd   ──► macbox    ──► minibox-lib
+miniboxd    ──► daemonbox ──► minibox-lib
+macboxd     ──► daemonbox ──► minibox-lib
+macboxd     ──► macbox    ──► daemonbox
+                              minibox-lib
 minibox-cli ──► minibox-lib  (unchanged)
 ```
+
+`macbox` depends on `daemonbox` because `HandlerDependencies` (the adapter bundle type) lives in `daemonbox/handler.rs` after the move. `macbox::colima_deps()` constructs and returns it.
 
 ---
 
@@ -224,4 +233,4 @@ pub enum MacboxError {
 2. `cargo build --workspace` succeeds on Linux (no regressions).
 3. All existing lib and handler tests pass.
 4. `macboxd` starts, calls preflight, and accepts connections on macOS with Colima running.
-5. `minibox pull alpine && minibox run alpine -- /bin/echo hello` succeeds end-to-end via `macboxd`.
+5. `minibox pull alpine && minibox run alpine -- /bin/echo hello` succeeds end-to-end via `macboxd`. (Depends on existing Colima adapter completeness, not new work in this spec.)
