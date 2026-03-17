@@ -50,3 +50,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Enabled cgroup subtree controllers before writing resource limits, fixing permission errors on cgroups v2.
 - Introduced a supervisor leaf cgroup so the daemon can delegate controllers to container sub-cgroups.
 - Pointed the cgroup root at the delegated subgroup; enabled `DelegateSubgroup` in the systemd unit.
+
+## [v0.0.6] - 2026-03-16
+
+### Added
+
+- Justfile with `sync`, `build`, `smoke`, and `test` recipes for common development workflows.
+- systemd unit file for `miniboxd` with cgroup delegation and `DelegateSubgroup` support.
+- `tmpfiles.d` config to create the runtime socket directory at `/run/minibox/` on boot.
+- Install script to deploy the daemon and CLI binaries with systemd setup.
+- systemd slice (`minibox.slice`) for resource isolation; allow safe absolute symlinks in the slice.
+- systemd cgroup controller delegation; removed unsupported `DelegateControllers` option.
