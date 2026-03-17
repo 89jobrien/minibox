@@ -28,12 +28,11 @@
 //! binary works in both native and GKE modes — no recompilation needed.
 
 use crate::domain::{
-    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
     ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 
@@ -51,18 +50,6 @@ pub struct NoopLimiter;
 impl NoopLimiter {
     pub fn new() -> Self {
         Self
-    }
-}
-
-impl Default for NoopLimiter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for NoopLimiter {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -98,18 +85,6 @@ pub struct CopyFilesystem;
 impl CopyFilesystem {
     pub fn new() -> Self {
         Self
-    }
-}
-
-impl Default for CopyFilesystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AsAny for CopyFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -268,12 +243,6 @@ impl ProotRuntime {
     }
 }
 
-impl AsAny for ProotRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
 #[async_trait]
 impl ContainerRuntime for ProotRuntime {
     fn capabilities(&self) -> RuntimeCapabilities {
@@ -345,6 +314,13 @@ impl ContainerRuntime for ProotRuntime {
         Ok(pid)
     }
 }
+
+// ============================================================================
+// Macro-generated implementations
+// ============================================================================
+
+adapt!(NoopLimiter, CopyFilesystem);
+as_any!(ProotRuntime);
 
 // ============================================================================
 // Tests
