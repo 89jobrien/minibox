@@ -57,14 +57,16 @@
 //! 3. Execute minibox operations inside Linux environment
 //! 4. Return results to macOS host
 
-use crate::domain::{
-    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-    ResourceLimiter, RuntimeCapabilities,
+use crate::{
+    as_any,
+    domain::{
+        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
+        ResourceLimiter, RuntimeCapabilities,
+    },
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::debug;
@@ -151,11 +153,6 @@ impl DockerDesktopRuntime {
     }
 }
 
-impl AsAny for DockerDesktopRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 #[async_trait]
 impl ContainerRuntime for DockerDesktopRuntime {
@@ -243,11 +240,6 @@ impl DockerDesktopFilesystem {
     }
 }
 
-impl AsAny for DockerDesktopFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl FilesystemProvider for DockerDesktopFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
@@ -314,11 +306,6 @@ impl DockerDesktopLimiter {
     }
 }
 
-impl AsAny for DockerDesktopLimiter {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl ResourceLimiter for DockerDesktopLimiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
@@ -434,3 +421,5 @@ mod tests {
         assert_eq!(docker_path.unwrap(), "/Users/test/file.txt");
     }
 }
+
+as_any!(DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter);

@@ -48,14 +48,16 @@
 //! wsl -d Ubuntu sudo cp target/release/minibox-wsl-helper /usr/local/bin/
 //! ```
 
-use crate::domain::{
-    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-    ResourceLimiter, RuntimeCapabilities,
+use crate::{
+    as_any,
+    domain::{
+        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
+        ResourceLimiter, RuntimeCapabilities,
+    },
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::debug;
@@ -122,11 +124,6 @@ impl WslRuntime {
     }
 }
 
-impl AsAny for WslRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 #[async_trait]
 impl ContainerRuntime for WslRuntime {
@@ -212,11 +209,6 @@ impl WslFilesystem {
     }
 }
 
-impl AsAny for WslFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl FilesystemProvider for WslFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
@@ -291,11 +283,6 @@ impl WslLimiter {
     }
 }
 
-impl AsAny for WslLimiter {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
 
 impl ResourceLimiter for WslLimiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
@@ -418,3 +405,5 @@ mod tests {
         assert!(wsl_path.unwrap().contains("/mnt/c/"));
     }
 }
+
+as_any!(WslRuntime, WslFilesystem, WslLimiter);
