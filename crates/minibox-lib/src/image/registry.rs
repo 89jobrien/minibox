@@ -29,7 +29,7 @@ use bytes::Bytes;
 use futures::stream::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{debug, info};
+use tracing::{Instrument, debug, info, instrument};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,6 +89,7 @@ impl RegistryClient {
     /// Obtain an anonymous pull token for `image_name` from Docker Hub.
     ///
     /// The returned token should be passed to subsequent manifest/blob calls.
+    #[instrument(skip(self), fields(image = image_name))]
     pub async fn authenticate(&self, image_name: &str) -> anyhow::Result<String> {
         debug!("authenticating for image '{}'", image_name);
 
@@ -132,6 +133,7 @@ impl RegistryClient {
     /// Handles both single-arch manifests and manifest lists. If the registry
     /// returns a manifest list, the `linux/amd64` entry is selected and that
     /// manifest is fetched.
+    #[instrument(skip(self, token), fields(image = %format!("{name}:{tag}")))]
     pub async fn get_manifest(
         &self,
         name: &str,
@@ -234,6 +236,7 @@ impl RegistryClient {
     ///
     /// Docker Hub redirects blob requests to a CDN; the client follows these
     /// redirects automatically.
+    #[instrument(skip(self, token), fields(digest = &digest[..19]))]
     pub async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> anyhow::Result<Bytes> {
         let url = format!("{REGISTRY_BASE}/{name}/blobs/{digest}");
         debug!("pulling blob {} from {}", digest, url);
@@ -303,6 +306,7 @@ impl RegistryClient {
     /// 2. Fetch manifest (resolving manifest lists automatically).
     /// 3. For each layer: download blob, verify digest, extract to store.
     /// 4. Persist manifest.
+    #[instrument(skip(self, store), fields(image = %format!("{name}:{tag}")))]
     pub async fn pull_image(
         &self,
         name: &str,
@@ -314,12 +318,14 @@ impl RegistryClient {
         // 1. Authenticate.
         let token = self
             .authenticate(name)
+            .instrument(tracing::info_span!("auth"))
             .await
             .with_context(|| format!("authenticate for {name}"))?;
 
         // 2. Fetch manifest.
         let manifest = self
             .get_manifest(name, tag, &token)
+            .instrument(tracing::info_span!("manifest"))
             .await
             .with_context(|| format!("get manifest for {name}:{tag}"))?;
 
@@ -353,24 +359,43 @@ impl RegistryClient {
                 continue;
             }
 
+            let layer_span = tracing::info_span!(
+                "layer",
+                n = idx + 1,
+                total = manifest.layers.len(),
+                digest = &layer_desc.digest[..19],
+            );
+
             let data = self
                 .pull_layer(name, &layer_desc.digest, &token)
+                .instrument(layer_span.clone())
                 .await
                 .with_context(|| format!("pull layer {}", layer_desc.digest))?;
 
             // Verify digest before storing.
-            verify_digest(&data, &layer_desc.digest)
-                .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+            let _guard = layer_span.enter();
+            {
+                let _span = tracing::info_span!("verify_digest").entered();
+                verify_digest(&data, &layer_desc.digest)
+                    .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+            }
 
-            store
-                .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
-                .with_context(|| format!("store layer {}", layer_desc.digest))?;
+            {
+                let _span = tracing::info_span!("extract", bytes = data.len()).entered();
+                store
+                    .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
+                    .with_context(|| format!("store layer {}", layer_desc.digest))?;
+            }
+            drop(_guard);
         }
 
         // 4. Persist manifest.
-        store
-            .store_manifest(name, tag, &manifest)
-            .with_context(|| format!("store manifest for {name}:{tag}"))?;
+        {
+            let _span = tracing::info_span!("store_manifest").entered();
+            store
+                .store_manifest(name, tag, &manifest)
+                .with_context(|| format!("store manifest for {name}:{tag}"))?;
+        }
 
         info!("image {}:{} pulled and stored successfully", name, tag);
         Ok(())

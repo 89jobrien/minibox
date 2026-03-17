@@ -22,7 +22,7 @@ use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::state::{ContainerRecord, DaemonState};
@@ -432,6 +432,7 @@ pub async fn handle_list(state: Arc<DaemonState>) -> DaemonResponse {
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
 /// Pull an image from Docker Hub and cache it locally.
+#[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,

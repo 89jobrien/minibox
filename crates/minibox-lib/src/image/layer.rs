@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 use tar::{Archive, EntryType};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 // Helper to check for parent directory components
 fn has_parent_dir_component(path: &Path) -> bool {
@@ -35,6 +35,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 ///
 /// * `tar_gz_data` -- Raw bytes of the `.tar.gz` blob.
 /// * `dest` -- Directory to extract into.
+#[instrument(skip(tar_gz_data, dest), fields(bytes = tar_gz_data.len(), dest = %dest.display()))]
 pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
     debug!(
         "extracting layer ({} bytes) to {:?}",
