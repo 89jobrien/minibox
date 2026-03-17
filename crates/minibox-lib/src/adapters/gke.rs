@@ -233,6 +233,7 @@ pub struct ProotRuntime {
     proot_path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl ProotRuntime {
     /// Create a new proot runtime with an explicit binary path.
     ///

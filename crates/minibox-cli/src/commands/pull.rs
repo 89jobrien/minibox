@@ -11,7 +11,7 @@ use crate::commands::send_request;
 /// layer downloads can take time, prints a "Pulling…" indicator before
 /// sending the request and waits for the (potentially slow) daemon response.
 pub async fn execute(image: String, tag: String) -> Result<()> {
-    eprintln!("Pulling {}:{}…", image, tag);
+    eprintln!("Pulling {image}:{tag}…");
 
     let request = DaemonRequest::Pull {
         image: image.clone(),
@@ -20,15 +20,15 @@ pub async fn execute(image: String, tag: String) -> Result<()> {
 
     match send_request(&request).await? {
         DaemonResponse::Success { message } => {
-            println!("{}", message);
+            println!("{message}");
             Ok(())
         }
         DaemonResponse::Error { message } => {
-            eprintln!("error: {}", message);
+            eprintln!("error: {message}");
             std::process::exit(1);
         }
         other => {
-            eprintln!("unexpected response: {:?}", other);
+            eprintln!("unexpected response: {other:?}");
             std::process::exit(1);
         }
     }

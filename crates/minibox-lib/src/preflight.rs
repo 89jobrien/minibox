@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn test_probe_does_not_panic() {
         let caps = probe();
-        let _ = format!("{:?}", caps);
+        let _ = format!("{caps:?}");
     }
 
     #[test]

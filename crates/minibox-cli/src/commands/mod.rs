@@ -29,7 +29,7 @@ pub async fn send_request(request: &DaemonRequest) -> Result<DaemonResponse> {
     let path = socket_path();
     let stream = UnixStream::connect(&path)
         .await
-        .with_context(|| format!("connecting to daemon at {}", path))?;
+        .with_context(|| format!("connecting to daemon at {path}"))?;
 
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);

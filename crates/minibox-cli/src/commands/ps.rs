@@ -81,11 +81,11 @@ pub async fn execute() -> Result<()> {
             Ok(())
         }
         DaemonResponse::Error { message } => {
-            eprintln!("error: {}", message);
+            eprintln!("error: {message}");
             std::process::exit(1);
         }
         other => {
-            eprintln!("unexpected response: {:?}", other);
+            eprintln!("unexpected response: {other:?}");
             std::process::exit(1);
         }
     }

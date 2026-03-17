@@ -8,6 +8,7 @@ struct BenchReport {
 }
 
 impl BenchReport {
+    #[allow(dead_code)]
     fn empty() -> Self {
         Self::default()
     }
@@ -152,6 +153,7 @@ impl BenchConfig {
         })
     }
 
+    #[allow(dead_code)]
     fn default() -> Self {
         Self {
             iters: 20,
@@ -256,7 +258,7 @@ fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option
             if !result.success {
                 let stderr = result.stderr.trim();
                 let stdout = result.stdout.trim();
-                let mut message = format!("command failed: {} {:?}", path, args);
+                let mut message = format!("command failed: {path} {args:?}");
                 if !stderr.is_empty() {
                     message.push_str(&format!("\nstderr: {stderr}"));
                 }
@@ -269,7 +271,7 @@ fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option
             Some(result)
         }
         Err(err) => {
-            errors.push(format!("command error: {} {:?}: {err}", path, args));
+            errors.push(format!("command error: {path} {args:?}: {err}"));
             None
         }
     }
@@ -502,6 +504,6 @@ mod tests {
             ..BenchConfig::default()
         };
         let report = run_benchmark(&cfg).unwrap();
-        assert!(report.suites.is_empty() == false);
+        assert!(!report.suites.is_empty());
     }
 }

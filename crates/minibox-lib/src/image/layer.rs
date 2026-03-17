@@ -215,6 +215,42 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Verify that `data` matches `expected_digest`.
+///
+/// The digest must be in `sha256:<hex>` format as used by OCI manifests.
+///
+/// # Errors
+///
+/// Returns [`ImageError::DigestMismatch`] if the computed hash does not match
+/// the expected value, or an error if `expected_digest` is malformed.
+pub fn verify_digest(data: &[u8], expected_digest: &str) -> anyhow::Result<()> {
+    let expected_hex =
+        expected_digest
+            .strip_prefix("sha256:")
+            .ok_or_else(|| ImageError::DigestMismatch {
+                digest: expected_digest.to_owned(),
+                expected: expected_digest.to_owned(),
+                actual: "(could not parse prefix)".into(),
+            })?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    let actual_hex = hex::encode(result);
+
+    if actual_hex != expected_hex {
+        return Err(ImageError::DigestMismatch {
+            digest: expected_digest.to_owned(),
+            expected: expected_hex.to_owned(),
+            actual: actual_hex,
+        }
+        .into());
+    }
+
+    debug!("digest verified: sha256:{}", actual_hex);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,7 +328,7 @@ mod tests {
         // Checksum: set field to spaces, sum all bytes, write back
         header[148..156].fill(b' ');
         let sum: u32 = header.iter().map(|&b| b as u32).sum();
-        let cksum = format!("{:06o}\0 ", sum);
+        let cksum = format!("{sum:06o}\0 ");
         header[148..156].copy_from_slice(cksum.as_bytes());
 
         // tar = header block + two end-of-archive zero blocks
@@ -472,40 +508,4 @@ mod tests {
                 || err.to_string().to_lowercase().contains("digest")
         );
     }
-}
-
-/// Verify that `data` matches `expected_digest`.
-///
-/// The digest must be in `sha256:<hex>` format as used by OCI manifests.
-///
-/// # Errors
-///
-/// Returns [`ImageError::DigestMismatch`] if the computed hash does not match
-/// the expected value, or an error if `expected_digest` is malformed.
-pub fn verify_digest(data: &[u8], expected_digest: &str) -> anyhow::Result<()> {
-    let expected_hex =
-        expected_digest
-            .strip_prefix("sha256:")
-            .ok_or_else(|| ImageError::DigestMismatch {
-                digest: expected_digest.to_owned(),
-                expected: expected_digest.to_owned(),
-                actual: "(could not parse prefix)".into(),
-            })?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    let actual_hex = hex::encode(result);
-
-    if actual_hex != expected_hex {
-        return Err(ImageError::DigestMismatch {
-            digest: expected_digest.to_owned(),
-            expected: expected_hex.to_owned(),
-            actual: actual_hex,
-        }
-        .into());
-    }
-
-    debug!("digest verified: sha256:{}", actual_hex);
-    Ok(())
 }
