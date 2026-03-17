@@ -64,7 +64,7 @@ fn find_binary(name: &str) -> PathBuf {
 
 /// RAII fixture that starts a real miniboxd and provides CLI access.
 struct DaemonFixture {
-    child: Child,
+    child: Option<Child>,
     socket_path: PathBuf,
     data_dir: TempDir,
     run_dir: TempDir,
@@ -77,18 +77,15 @@ impl DaemonFixture {
     ///
     /// Panics if the daemon fails to start within 10 seconds.
     fn start() -> Self {
-        let data_dir = TempDir::with_prefix("minibox-test-data-")
-            .expect("create temp data dir");
-        let run_dir = TempDir::with_prefix("minibox-test-run-")
-            .expect("create temp run dir");
+        let data_dir = TempDir::with_prefix("minibox-test-data-").expect("create temp data dir");
+        let run_dir = TempDir::with_prefix("minibox-test-run-").expect("create temp run dir");
 
         let socket_path = run_dir.path().join("miniboxd.sock");
 
         // Create cgroup root under our own cgroup (not top-level, which
         // fails on systemd hosts). Read /proc/self/cgroup to find our
         // current cgroup, then create a test subtree there.
-        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup")
-            .unwrap_or_default();
+        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
         let cgroup_rel = self_cgroup
             .lines()
             .find_map(|l| l.strip_prefix("0::"))
@@ -122,7 +119,7 @@ impl DaemonFixture {
             .unwrap_or_else(|e| panic!("failed to start miniboxd at {:?}: {e}", daemon_bin));
 
         let fixture = Self {
-            child,
+            child: Some(child),
             socket_path: socket_path.clone(),
             data_dir,
             run_dir,
@@ -151,7 +148,10 @@ impl DaemonFixture {
 
     /// Return the daemon's PID.
     fn daemon_pid(&self) -> u32 {
-        self.child.id()
+        self.child
+            .as_ref()
+            .expect("daemon child missing")
+            .id()
     }
 
     /// Create a Command for the minibox CLI pre-configured with our socket.
@@ -177,8 +177,12 @@ impl DaemonFixture {
     /// Kill daemon and capture stderr for debugging.
     /// Only call when the daemon is expected to have failed.
     fn kill_and_capture_stderr(&mut self) -> String {
-        let _ = self.child.kill();
-        let output = self.child.wait_with_output();
+        let mut child = match self.child.take() {
+            Some(child) => child,
+            None => return "(daemon already reaped)".to_string(),
+        };
+        let _ = child.kill();
+        let output = child.wait_with_output();
         match output {
             Ok(o) => String::from_utf8_lossy(&o.stderr).to_string(),
             Err(e) => format!("(could not capture stderr: {e})"),
@@ -187,32 +191,36 @@ impl DaemonFixture {
 
     /// Send SIGTERM to the daemon.
     fn sigterm(&self) {
+        let child = self.child.as_ref().expect("daemon child missing");
         // SAFETY: Sending SIGTERM to our known child process PID. The PID is valid
         // because we spawned it and haven't yet waited on it.
         unsafe {
-            libc::kill(self.child.id() as i32, libc::SIGTERM);
+            libc::kill(child.id() as i32, libc::SIGTERM);
         }
     }
 }
 
 impl Drop for DaemonFixture {
     fn drop(&mut self) {
+        let Some(mut child) = self.child.take() else {
+            return;
+        };
         // 1. Send SIGTERM
         // SAFETY: Sending signal to our known child process PID.
         unsafe {
-            libc::kill(self.child.id() as i32, libc::SIGTERM);
+            libc::kill(child.id() as i32, libc::SIGTERM);
         }
 
         // 2. Wait up to 5s for clean exit
         let start = Instant::now();
         loop {
-            match self.child.try_wait() {
+            match child.try_wait() {
                 Ok(Some(_)) => break,
                 Ok(None) => {
                     if start.elapsed() > Duration::from_secs(5) {
                         // 3. Escalate to SIGKILL
-                        let _ = self.child.kill();
-                        let _ = self.child.wait();
+                        let _ = child.kill();
+                        let _ = child.wait();
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(100));
@@ -266,8 +274,7 @@ fn test_e2e_pull_alpine() {
         "pull should succeed.\nstdout: {stdout}\nstderr: {stderr}"
     );
     assert!(
-        stdout.to_lowercase().contains("pull")
-            || stdout.to_lowercase().contains("alpine"),
+        stdout.to_lowercase().contains("pull") || stdout.to_lowercase().contains("alpine"),
         "stdout should mention pull/alpine, got: {stdout}"
     );
 }
@@ -376,7 +383,10 @@ fn test_e2e_rm_container() {
 
         // Verify it's gone from ps
         let (_, ps_out, _) = fixture.run_cli(&["ps"]);
-        assert!(!ps_out.contains(&id), "container should not appear in ps after rm");
+        assert!(
+            !ps_out.contains(&id),
+            "container should not appear in ps after rm"
+        );
     } else {
         eprintln!("SKIPPED: could not extract container ID from: {stdout}");
     }
@@ -428,7 +438,10 @@ fn test_e2e_run_with_memory_limit() {
         "/bin/sleep",
         "30",
     ]);
-    assert!(success, "run with memory limit should succeed, stdout: {stdout}");
+    assert!(
+        success,
+        "run with memory limit should succeed, stdout: {stdout}"
+    );
 
     std::thread::sleep(Duration::from_millis(500));
 
@@ -461,7 +474,10 @@ fn test_e2e_run_with_cpu_weight() {
         "/bin/sleep",
         "30",
     ]);
-    assert!(success, "run with cpu-weight should succeed, stdout: {stdout}");
+    assert!(
+        success,
+        "run with cpu-weight should succeed, stdout: {stdout}"
+    );
 
     std::thread::sleep(Duration::from_millis(500));
 
@@ -625,7 +641,8 @@ fn test_e2e_sigterm_clean_shutdown() {
     // Wait for exit
     let start = Instant::now();
     loop {
-        match fixture.child.try_wait() {
+        let child = fixture.child.as_mut().expect("daemon child missing");
+        match child.try_wait() {
             Ok(Some(status)) => {
                 assert!(
                     status.success() || status.code() == Some(0),

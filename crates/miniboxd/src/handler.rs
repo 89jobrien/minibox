@@ -17,7 +17,7 @@ use minibox_lib::domain::{
     DynImageRegistry, DynResourceLimiter, ResourceConfig,
 };
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -184,9 +184,7 @@ async fn run_inner(
     }
 
     // Setup overlayfs (using injected filesystem trait).
-    let merged_dir_from_overlay = deps
-        .filesystem
-        .setup_rootfs(&layer_dirs, &container_dir)?;
+    let merged_dir_from_overlay = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
 
     // Setup cgroup (using injected resource limiter trait).
     let resource_config = ResourceConfig {
@@ -218,7 +216,10 @@ async fn run_inner(
     state.add_container(record).await;
 
     // Build the ContainerSpawnConfig for the runtime.
-    let spawn_command = command.first().cloned().unwrap_or_else(|| "/bin/sh".to_string());
+    let spawn_command = command
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir_from_overlay.clone(),
@@ -279,7 +280,7 @@ async fn run_inner(
 
 /// Block until the container PID exits, then update its state in the daemon.
 fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
-    use nix::sys::wait::{waitpid, WaitStatus};
+    use nix::sys::wait::{WaitStatus, waitpid};
     let nix_pid = Pid::from_raw(pid as i32);
     match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
@@ -399,10 +400,10 @@ async fn remove_inner(
 
     // Unmount overlay (using injected filesystem trait).
     let container_dir = deps.containers_base.join(id);
-    if container_dir.exists() {
-        if let Err(e) = deps.filesystem.cleanup(&container_dir) {
-            warn!("cleanup_mounts for {id}: {e}");
-        }
+    if container_dir.exists()
+        && let Err(e) = deps.filesystem.cleanup(&container_dir)
+    {
+        warn!("cleanup_mounts for {id}: {e}");
     }
 
     // Remove runtime state directory.

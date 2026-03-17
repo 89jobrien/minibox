@@ -8,6 +8,7 @@ struct BenchReport {
 }
 
 impl BenchReport {
+    #[allow(dead_code)]
     fn empty() -> Self {
         Self::default()
     }
@@ -152,6 +153,7 @@ impl BenchConfig {
         })
     }
 
+    #[allow(dead_code)]
     fn default() -> Self {
         Self {
             iters: 20,
@@ -177,7 +179,11 @@ impl Stats {
         sorted.sort_unstable();
         let min = *sorted.first().unwrap_or(&0);
         let sum: u64 = sorted.iter().sum();
-        let avg = if sorted.is_empty() { 0 } else { sum / sorted.len() as u64 };
+        let avg = if sorted.is_empty() {
+            0
+        } else {
+            sum / sorted.len() as u64
+        };
         let p95_idx = if sorted.is_empty() {
             0
         } else {
@@ -252,7 +258,7 @@ fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option
             if !result.success {
                 let stderr = result.stderr.trim();
                 let stdout = result.stdout.trim();
-                let mut message = format!("command failed: {} {:?}", path, args);
+                let mut message = format!("command failed: {path} {args:?}");
                 if !stderr.is_empty() {
                     message.push_str(&format!("\nstderr: {stderr}"));
                 }
@@ -265,7 +271,7 @@ fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option
             Some(result)
         }
         Err(err) => {
-            errors.push(format!("command error: {} {:?}: {err}", path, args));
+            errors.push(format!("command error: {path} {args:?}: {err}"));
             None
         }
     }
@@ -359,9 +365,11 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
         };
         let mut durations = Vec::with_capacity(cfg.iters);
         for _ in 0..cfg.iters {
-            if let Some(run) =
-                run_cmd_record(&minibox_bin, &["run", "alpine", "--", "/bin/true"], &mut errors)
-            {
+            if let Some(run) = run_cmd_record(
+                &minibox_bin,
+                &["run", "alpine", "--", "/bin/true"],
+                &mut errors,
+            ) {
                 durations.push(run.duration_micros);
             }
         }
@@ -412,9 +420,11 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 stats: stats_for(&durations),
             });
         }
-        if let Some(run) =
-            run_cmd_record(&minibox_bin, &["run", "alpine", "--", "/bin/true"], &mut errors)
-        {
+        if let Some(run) = run_cmd_record(
+            &minibox_bin,
+            &["run", "alpine", "--", "/bin/true"],
+            &mut errors,
+        ) {
             let durations = vec![run.duration_micros];
             e2e_suite.tests.push(TestResult {
                 name: "run_true".to_string(),
@@ -434,7 +444,9 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
 }
 
 fn print_help() {
-    println!("minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>\n  --out-dir <path>");
+    println!(
+        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>\n  --out-dir <path>"
+    );
 }
 
 #[cfg(test)]
@@ -492,6 +504,6 @@ mod tests {
             ..BenchConfig::default()
         };
         let report = run_benchmark(&cfg).unwrap();
-        assert!(report.suites.is_empty() == false);
+        assert!(!report.suites.is_empty());
     }
 }

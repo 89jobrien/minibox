@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Minibox Metrics Report</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: #151820;
+      --text: #e6e6e6;
+      --muted: #9aa3b2;
+      --accent: #67d3b4;
+    }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 600px at 10% 0%, #182030, #0b0c10 55%);
+      color: var(--text);
+    }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid #1f2430;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 24px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    main {
+      padding: 24px 32px;
+      display: grid;
+      gap: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid #202636;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .meta {
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .stat {
+      background: #0f1218;
+      border: 1px solid #1f2533;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .stat .value {
+      font-size: 20px;
+      margin-top: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid #202636;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .empty { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Minibox Metrics Report</h1>
+    <div class="sub">Static export with embedded runs</div>
+  </header>
+  <main>
+    
+<section class="panel">
+  <h2>2026-03-17T05-57-13Z</h2>
+  <div class="meta">
+    <div><strong>SHA:</strong> 78c28ee6a7de89be30893dfe9c55067eab350210</div>
+    <div><strong>Branch:</strong> metrics-dashboard</div>
+    <div><strong>Timestamp:</strong> 2026-03-17T05-57-13Z</div>
+  </div>
+  <div class="grid">
+    <div class="stat"><div>Total Tests</div><div class="value">0</div></div>
+    <div class="stat"><div>Passed</div><div class="value">0</div></div>
+    <div class="stat"><div>Failed</div><div class="value">0</div></div>
+    <div class="stat"><div>Ignored</div><div class="value">0</div></div>
+  </div>
+  <h3>Bench Reports</h3>
+  <div class="empty">No benchmark reports found.</div>
+  <h3>Test Failures</h3>
+  <div class="empty">No failures recorded.</div>
+</section>
+
+  </main>
+</body>
+</html>

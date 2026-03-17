@@ -64,7 +64,9 @@ pub async fn handle_connection(
     #[cfg(not(target_os = "linux"))]
     {
         if require_root_auth {
-            warn!("require_root_auth is true but peer credentials are not available on this platform; auth bypassed");
+            warn!(
+                "require_root_auth is true but peer credentials are not available on this platform; auth bypassed"
+            );
         }
         info!("accepted connection (peer credentials not available on this platform)");
     }
@@ -89,13 +91,9 @@ pub async fn handle_connection(
 
         // SECURITY: Reject requests exceeding size limit
         if bytes_read > MAX_REQUEST_SIZE {
-            warn!(
-                "rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"
-            );
+            warn!("rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})");
             let error_response = DaemonResponse::Error {
-                message: format!(
-                    "request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"
-                ),
+                message: format!("request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"),
             };
             let mut error_json = serde_json::to_string(&error_response)?;
             error_json.push('\n');
@@ -124,8 +122,7 @@ pub async fn handle_connection(
             }
         };
 
-        let mut response_json =
-            serde_json::to_string(&response).context("serializing response")?;
+        let mut response_json = serde_json::to_string(&response).context("serializing response")?;
         response_json.push('\n');
 
         debug!("sending response: {}", response_json.trim_end());

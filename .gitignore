@@ -3,6 +3,7 @@
 !README.md
 !CLAUDE.md
 !TESTING.md
+!CHANGELOG.md
 !SECURITY.md
 !TEST_RESULTS.md
 !ZOMBIENET_PATTERNS.md
@@ -11,6 +12,8 @@
 !docs/cgroup-findings.md
 !docs/plans/*.md
 !docs/plans/
+!docs/superpowers/**/*.md
+!docs/superpowers/
 
 # Claude Code local configuration
 .claude/

@@ -134,9 +134,7 @@ where
     if pid < 0 {
         // SAFETY: clone failed, so the trampoline was never called and the
         // pointer still owns the allocation.
-        let _ = unsafe {
-            Box::from_raw(child_arg as *mut Box<dyn FnOnce() -> isize + Send>)
-        };
+        let _ = unsafe { Box::from_raw(child_arg as *mut Box<dyn FnOnce() -> isize + Send>) };
         let errno = nix::errno::Errno::last();
         return Err(NamespaceError::CloneFailed(format!(
             "libc::clone returned {pid}: {errno}"

@@ -221,7 +221,10 @@ impl ContainerRuntime for DockerDesktopRuntime {
         let stdout = String::from_utf8(output.stdout)?;
         let response: DockerSpawnResponse = serde_json::from_str(&stdout)?;
 
-        debug!("container spawned in Docker Desktop with PID {}", response.pid);
+        debug!(
+            "container spawned in Docker Desktop with PID {}",
+            response.pid
+        );
         Ok(response.pid)
     }
 }
@@ -283,11 +286,15 @@ impl FilesystemProvider for DockerDesktopFilesystem {
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
-        debug!("cleaning up filesystem via Docker Desktop: dir={:?}", container_dir);
+        debug!(
+            "cleaning up filesystem via Docker Desktop: dir={:?}",
+            container_dir
+        );
 
         let container_dir_docker = self.runtime.macos_to_docker_path(container_dir)?;
 
-        self.runtime.docker_exec(&["cleanup", &container_dir_docker], None)?;
+        self.runtime
+            .docker_exec(&["cleanup", &container_dir_docker], None)?;
 
         Ok(())
     }
@@ -339,7 +346,8 @@ impl ResourceLimiter for DockerDesktopLimiter {
             pid, container_id
         );
 
-        self.runtime.docker_exec(&["add-process", container_id, &pid.to_string()], None)?;
+        self.runtime
+            .docker_exec(&["add-process", container_id, &pid.to_string()], None)?;
 
         Ok(())
     }
@@ -347,7 +355,8 @@ impl ResourceLimiter for DockerDesktopLimiter {
     fn cleanup(&self, container_id: &str) -> Result<()> {
         debug!("cleaning up cgroup {} via Docker Desktop", container_id);
 
-        self.runtime.docker_exec(&["cleanup-cgroup", container_id], None)?;
+        self.runtime
+            .docker_exec(&["cleanup-cgroup", container_id], None)?;
 
         Ok(())
     }
@@ -407,8 +416,8 @@ mod tests {
 
     #[test]
     fn test_custom_docker_bin() {
-        let runtime = DockerDesktopRuntime::new("helper:latest")
-            .with_docker_bin("/usr/local/bin/docker");
+        let runtime =
+            DockerDesktopRuntime::new("helper:latest").with_docker_bin("/usr/local/bin/docker");
         assert_eq!(runtime.docker_bin, "/usr/local/bin/docker");
     }
 

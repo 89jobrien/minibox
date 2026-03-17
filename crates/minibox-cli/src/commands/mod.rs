@@ -19,8 +19,7 @@ const DEFAULT_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 ///
 /// Checks `MINIBOX_SOCKET_PATH` env var first, falls back to default.
 fn socket_path() -> String {
-    std::env::var("MINIBOX_SOCKET_PATH")
-        .unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string())
+    std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string())
 }
 
 /// Open a connection to the daemon, send one request, and return the response.
@@ -30,7 +29,7 @@ pub async fn send_request(request: &DaemonRequest) -> Result<DaemonResponse> {
     let path = socket_path();
     let stream = UnixStream::connect(&path)
         .await
-        .with_context(|| format!("connecting to daemon at {}", path))?;
+        .with_context(|| format!("connecting to daemon at {path}"))?;
 
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
@@ -57,7 +56,6 @@ pub async fn send_request(request: &DaemonRequest) -> Result<DaemonResponse> {
 
     debug!("received: {}", line.trim());
 
-    let response: DaemonResponse =
-        serde_json::from_str(line.trim()).context("parsing response")?;
+    let response: DaemonResponse = serde_json::from_str(line.trim()).context("parsing response")?;
     Ok(response)
 }

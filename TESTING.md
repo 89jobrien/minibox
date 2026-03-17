@@ -51,6 +51,7 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 **Requirements:** None (run anywhere)
 
 **Files:**
+
 - `crates/miniboxd/tests/handler_tests.rs` — handler logic with mock adapters
 - `crates/miniboxd/tests/conformance_tests.rs` — trait contract verification with mocks
 - `crates/minibox-lib/src/protocol.rs` — protocol serialization
@@ -63,12 +64,14 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 **Requirements:** Linux kernel 5.0+, root, cgroups v2, Docker Hub access
 
 **Files:**
+
 - `crates/miniboxd/tests/cgroup_tests.rs` — ResourceLimiter trait against real cgroupfs
 - `crates/miniboxd/tests/integration_tests.rs` — handler-level tests with real infrastructure
 
 **Run:** `just test-integration`
 
 **Lifecycle e2e (integration test):**
+
 - `test_complete_container_lifecycle` (in `crates/miniboxd/tests/integration_tests.rs`)
 - **Run:** `just test-e2e`
 
@@ -80,6 +83,7 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 **Requirements:** Linux kernel 5.0+, root, cgroups v2, built binaries
 
 **Files:**
+
 - `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
 
 **Run:** `just test-e2e-suite`

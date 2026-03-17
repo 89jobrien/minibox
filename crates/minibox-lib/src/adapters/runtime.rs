@@ -5,7 +5,7 @@
 //! [`ContainerRuntime`] trait.
 
 use crate::container::namespace::NamespaceConfig;
-use crate::container::process::{spawn_container_process, ContainerConfig};
+use crate::container::process::{ContainerConfig, spawn_container_process};
 use crate::domain::{AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -132,10 +132,8 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
 
         // IMPORTANT: spawn_container_process uses blocking syscalls (clone/fork)
         // We must run it in a blocking thread to avoid blocking the async runtime
-        let pid = tokio::task::spawn_blocking(move || {
-            spawn_container_process(container_config)
-        })
-        .await??; // First ? for join error, second ? for spawn error
+        let pid = tokio::task::spawn_blocking(move || spawn_container_process(container_config))
+            .await??; // First ? for join error, second ? for spawn error
 
         debug!("container process spawned with PID {}", pid);
         Ok(pid)
@@ -154,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_runtime_default() {
-        let runtime = LinuxNamespaceRuntime::default();
+        let runtime = LinuxNamespaceRuntime;
         let _ = runtime;
     }
 

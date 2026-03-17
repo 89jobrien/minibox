@@ -103,10 +103,7 @@ mod conformance {
         let container_dir = PathBuf::from("/container");
 
         let result = fs.setup_rootfs(&layers, &container_dir);
-        assert!(
-            result.is_ok(),
-            "Filesystem must successfully setup rootfs"
-        );
+        assert!(result.is_ok(), "Filesystem must successfully setup rootfs");
 
         let merged = result.unwrap();
         assert!(

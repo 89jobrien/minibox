@@ -54,8 +54,7 @@ impl CgroupTestGuard {
 
     fn create_test_cgroup(name: &str) -> PathBuf {
         // Read our current cgroup
-        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup")
-            .unwrap_or_default();
+        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
         let cgroup_rel = self_cgroup
             .lines()
             .find_map(|l| l.strip_prefix("0::"))
@@ -71,7 +70,10 @@ impl CgroupTestGuard {
         let test_leaf = base.join(format!("{name}-leaf"));
         let _ = std::fs::create_dir_all(&test_leaf);
         // Move ourselves into the leaf
-        let _ = std::fs::write(test_leaf.join("cgroup.procs"), std::process::id().to_string());
+        let _ = std::fs::write(
+            test_leaf.join("cgroup.procs"),
+            std::process::id().to_string(),
+        );
 
         // Now create the test root as a sibling
         let root = base.join(name);
@@ -113,7 +115,7 @@ impl Drop for CgroupTestGuard {
                         if let Ok(sub_entries) = std::fs::read_dir(&path) {
                             for sub in sub_entries.flatten() {
                                 if sub.path().is_dir() {
-                                    let _ = std::fs::remove_dir(&sub.path());
+                                    let _ = std::fs::remove_dir(sub.path());
                                 }
                             }
                         }
@@ -125,7 +127,8 @@ impl Drop for CgroupTestGuard {
         }
 
         // Also clean up the leaf cgroup we created for ourselves
-        let leaf_name = self.root
+        let leaf_name = self
+            .root
             .file_name()
             .map(|n| format!("{}-leaf", n.to_string_lossy()))
             .unwrap_or_default();
@@ -162,7 +165,8 @@ fn test_cgroup_root_env_override() {
         ..Default::default()
     };
 
-    let cgroup_path = limiter.create("env-override-test", &config)
+    let cgroup_path = limiter
+        .create("env-override-test", &config)
         .expect("create should succeed");
 
     // Verify the cgroup was created under our test root, not the default
@@ -174,7 +178,9 @@ fn test_cgroup_root_env_override() {
     );
 
     // Cleanup
-    limiter.cleanup("env-override-test").expect("cleanup should succeed");
+    limiter
+        .cleanup("env-override-test")
+        .expect("cleanup should succeed");
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +197,8 @@ fn test_cgroup_create_and_verify_directory() {
     let limiter = real_limiter();
     let config = ResourceConfig::default();
 
-    let cgroup_path = limiter.create("test-create", &config)
+    let cgroup_path = limiter
+        .create("test-create", &config)
         .expect("create should succeed");
 
     assert!(
@@ -219,9 +226,13 @@ fn test_cgroup_memory_limit_written_and_readable() {
 
     let cgroup_path = limiter.create("test-mem", &config).expect("create");
 
-    let memory_max = std::fs::read_to_string(format!("{}/memory.max", cgroup_path))
-        .expect("read memory.max");
-    assert_eq!(memory_max.trim(), "134217728", "memory.max should be 128MB in bytes");
+    let memory_max =
+        std::fs::read_to_string(format!("{}/memory.max", cgroup_path)).expect("read memory.max");
+    assert_eq!(
+        memory_max.trim(),
+        "134217728",
+        "memory.max should be 128MB in bytes"
+    );
 
     limiter.cleanup("test-mem").expect("cleanup");
 }
@@ -242,8 +253,8 @@ fn test_cgroup_cpu_weight_written_and_readable() {
 
     let cgroup_path = limiter.create("test-cpu", &config).expect("create");
 
-    let cpu_weight = std::fs::read_to_string(format!("{}/cpu.weight", cgroup_path))
-        .expect("read cpu.weight");
+    let cpu_weight =
+        std::fs::read_to_string(format!("{}/cpu.weight", cgroup_path)).expect("read cpu.weight");
     assert_eq!(cpu_weight.trim(), "250");
 
     limiter.cleanup("test-cpu").expect("cleanup");
@@ -261,10 +272,12 @@ fn test_cgroup_pids_max_default() {
     // No pids_max set — should default to 1024
     let config = ResourceConfig::default();
 
-    let cgroup_path = limiter.create("test-pids-default", &config).expect("create");
+    let cgroup_path = limiter
+        .create("test-pids-default", &config)
+        .expect("create");
 
-    let pids_max = std::fs::read_to_string(format!("{}/pids.max", cgroup_path))
-        .expect("read pids.max");
+    let pids_max =
+        std::fs::read_to_string(format!("{}/pids.max", cgroup_path)).expect("read pids.max");
     assert_eq!(pids_max.trim(), "1024", "default pids.max should be 1024");
 
     limiter.cleanup("test-pids-default").expect("cleanup");
@@ -286,8 +299,8 @@ fn test_cgroup_pids_max_custom() {
 
     let cgroup_path = limiter.create("test-pids-custom", &config).expect("create");
 
-    let pids_max = std::fs::read_to_string(format!("{}/pids.max", cgroup_path))
-        .expect("read pids.max");
+    let pids_max =
+        std::fs::read_to_string(format!("{}/pids.max", cgroup_path)).expect("read pids.max");
     assert_eq!(pids_max.trim(), "512");
 
     limiter.cleanup("test-pids-custom").expect("cleanup");
@@ -315,8 +328,7 @@ fn test_cgroup_io_max_written() {
 
     let cgroup_path = limiter.create("test-io", &config).expect("create");
 
-    let io_max = std::fs::read_to_string(format!("{}/io.max", cgroup_path))
-        .expect("read io.max");
+    let io_max = std::fs::read_to_string(format!("{}/io.max", cgroup_path)).expect("read io.max");
     assert!(
         io_max.contains("rbps=10485760"),
         "io.max should contain rbps=10485760, got: {}",
@@ -346,7 +358,9 @@ fn test_cgroup_add_process() {
     let child_pid = child.id();
 
     // Add the child to the cgroup
-    limiter.add_process("test-add-proc", child_pid).expect("add_process");
+    limiter
+        .add_process("test-add-proc", child_pid)
+        .expect("add_process");
 
     // Verify the PID appears in cgroup.procs
     let procs = std::fs::read_to_string(format!("{}/cgroup.procs", cgroup_path))
@@ -418,12 +432,10 @@ fn test_subtree_controllers_enabled() {
     let config = ResourceConfig::default();
 
     // Creating a cgroup should enable subtree controllers on the parent
-    let cgroup_path = limiter.create("test-subtree", &config).expect("create");
+    let _cgroup_path = limiter.create("test-subtree", &config).expect("create");
 
-    let subtree_ctl = std::fs::read_to_string(
-        guard.root().join("cgroup.subtree_control"),
-    )
-    .unwrap_or_default();
+    let subtree_ctl =
+        std::fs::read_to_string(guard.root().join("cgroup.subtree_control")).unwrap_or_default();
 
     // At minimum, pids and memory should be enabled (cpu and io may vary)
     assert!(
@@ -567,12 +579,18 @@ fn test_cgroup_io_controller_unavailable() {
     let result = limiter.create("test-io-avail", &config);
     if caps.cgroup_controllers.iter().any(|c| c == "io") {
         // io controller available — create should succeed and write io.max
-        assert!(result.is_ok(), "create should succeed when io controller is available");
+        assert!(
+            result.is_ok(),
+            "create should succeed when io controller is available"
+        );
     } else {
         // io controller unavailable — create will fail when writing io.max
         // This documents the current behavior: io.max write propagates errors.
         // A future improvement could make this non-fatal.
-        assert!(result.is_err(), "create fails when io controller is unavailable and io limit is set");
+        assert!(
+            result.is_err(),
+            "create fails when io controller is unavailable and io limit is set"
+        );
     }
 
     let _ = limiter.cleanup("test-io-avail");

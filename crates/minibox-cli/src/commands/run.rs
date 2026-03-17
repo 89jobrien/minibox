@@ -26,15 +26,15 @@ pub async fn execute(
 
     match send_request(&request).await? {
         DaemonResponse::ContainerCreated { id } => {
-            println!("{}", id);
+            println!("{id}");
             Ok(())
         }
         DaemonResponse::Error { message } => {
-            eprintln!("error: {}", message);
+            eprintln!("error: {message}");
             std::process::exit(1);
         }
         other => {
-            eprintln!("unexpected response: {:?}", other);
+            eprintln!("unexpected response: {other:?}");
             std::process::exit(1);
         }
     }

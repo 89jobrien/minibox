@@ -39,10 +39,18 @@ pub async fn execute() -> Result<()> {
             );
 
             // Separator
-            println!("{}", "-".repeat(COL_ID + COL_IMAGE + COL_COMMAND + COL_STATE + COL_CREATED + COL_PID + 10));
+            println!(
+                "{}",
+                "-".repeat(
+                    COL_ID + COL_IMAGE + COL_COMMAND + COL_STATE + COL_CREATED + COL_PID + 10
+                )
+            );
 
             for c in &containers {
-                let pid_str = c.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".to_string());
+                let pid_str = c
+                    .pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "-".to_string());
 
                 // Truncate long fields to keep the table tidy.
                 let image = truncate(&c.image, COL_IMAGE);
@@ -73,11 +81,11 @@ pub async fn execute() -> Result<()> {
             Ok(())
         }
         DaemonResponse::Error { message } => {
-            eprintln!("error: {}", message);
+            eprintln!("error: {message}");
             std::process::exit(1);
         }
         other => {
-            eprintln!("unexpected response: {:?}", other);
+            eprintln!("unexpected response: {other:?}");
             std::process::exit(1);
         }
     }

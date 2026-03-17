@@ -219,11 +219,7 @@ impl AsAny for WslFilesystem {
 }
 
 impl FilesystemProvider for WslFilesystem {
-    fn setup_rootfs(
-        &self,
-        image_layers: &[PathBuf],
-        container_dir: &Path,
-    ) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         debug!(
             "setting up rootfs via WSL: layers={:?}, dir={:?}",
             image_layers, container_dir
@@ -245,12 +241,9 @@ impl FilesystemProvider for WslFilesystem {
         let json = serde_json::to_string(&request)?;
 
         // Execute setup command
-        let output = self.runtime.wsl_exec(&[
-            "sudo",
-            &self.runtime.helper_path,
-            "setup-rootfs",
-            &json,
-        ])?;
+        let output =
+            self.runtime
+                .wsl_exec(&["sudo", &self.runtime.helper_path, "setup-rootfs", &json])?;
 
         let response: WslFilesystemSetupResponse = serde_json::from_str(&output)?;
 
@@ -318,22 +311,16 @@ impl ResourceLimiter for WslLimiter {
 
         let json = serde_json::to_string(&request)?;
 
-        let output = self.runtime.wsl_exec(&[
-            "sudo",
-            &self.runtime.helper_path,
-            "create-cgroup",
-            &json,
-        ])?;
+        let output =
+            self.runtime
+                .wsl_exec(&["sudo", &self.runtime.helper_path, "create-cgroup", &json])?;
 
         let response: WslCgroupCreateResponse = serde_json::from_str(&output)?;
         Ok(response.cgroup_path)
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
-        debug!(
-            "adding process {} to cgroup {} via WSL",
-            pid, container_id
-        );
+        debug!("adding process {} to cgroup {} via WSL", pid, container_id);
 
         self.runtime.wsl_exec(&[
             "sudo",

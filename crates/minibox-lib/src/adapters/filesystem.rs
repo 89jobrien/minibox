@@ -87,11 +87,7 @@ impl AsAny for OverlayFilesystem {
 }
 
 impl FilesystemProvider for OverlayFilesystem {
-    fn setup_rootfs(
-        &self,
-        image_layers: &[PathBuf],
-        container_dir: &Path,
-    ) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         debug!(
             "setting up overlay rootfs with {} layers at {:?}",
             image_layers.len(),

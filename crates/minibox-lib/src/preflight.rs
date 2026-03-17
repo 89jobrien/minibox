@@ -102,10 +102,7 @@ pub fn format_report(caps: &HostCapabilities) -> String {
             .map(|v| v.to_string())
             .unwrap_or_else(|| "N/A".to_string())
     ));
-    lines.push(format!(
-        "     minibox.slice: {}",
-        caps.minibox_slice_active
-    ));
+    lines.push(format!("     minibox.slice: {}", caps.minibox_slice_active));
 
     lines.join("\n")
 }
@@ -148,10 +145,7 @@ fn probe_kernel_version() -> (u32, u32, u32) {
         Err(_) => return (0, 0, 0),
     };
     // "Linux version 6.1.0-18-amd64 ..."
-    let version_str = content
-        .split_whitespace()
-        .nth(2)
-        .unwrap_or("0.0.0");
+    let version_str = content.split_whitespace().nth(2).unwrap_or("0.0.0");
     parse_kernel_version(version_str)
 }
 
@@ -199,10 +193,7 @@ fn probe_systemd_available() -> bool {
 }
 
 fn probe_systemd_version() -> Option<u32> {
-    let output = Command::new("systemctl")
-        .arg("--version")
-        .output()
-        .ok()?;
+    let output = Command::new("systemctl").arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -241,7 +232,7 @@ mod tests {
     #[test]
     fn test_probe_does_not_panic() {
         let caps = probe();
-        let _ = format!("{:?}", caps);
+        let _ = format!("{caps:?}");
     }
 
     #[test]

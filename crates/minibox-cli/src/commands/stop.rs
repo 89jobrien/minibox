@@ -14,15 +14,15 @@ pub async fn execute(id: String) -> Result<()> {
 
     match send_request(&request).await? {
         DaemonResponse::Success { message } => {
-            println!("{}", message);
+            println!("{message}");
             Ok(())
         }
         DaemonResponse::Error { message } => {
-            eprintln!("error: {}", message);
+            eprintln!("error: {message}");
             std::process::exit(1);
         }
         other => {
-            eprintln!("unexpected response: {:?}", other);
+            eprintln!("unexpected response: {other:?}");
             std::process::exit(1);
         }
     }

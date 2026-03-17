@@ -68,23 +68,17 @@ impl AsAny for NoopLimiter {
 
 impl ResourceLimiter for NoopLimiter {
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
-        debug!(
-            "noop limiter: skipping cgroup creation for container {container_id}"
-        );
+        debug!("noop limiter: skipping cgroup creation for container {container_id}");
         Ok(format!("noop:{container_id}"))
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
-        debug!(
-            "noop limiter: skipping add_process({pid}) for container {container_id}"
-        );
+        debug!("noop limiter: skipping add_process({pid}) for container {container_id}");
         Ok(())
     }
 
     fn cleanup(&self, container_id: &str) -> Result<()> {
-        debug!(
-            "noop limiter: skipping cleanup for container {container_id}"
-        );
+        debug!("noop limiter: skipping cleanup for container {container_id}");
         Ok(())
     }
 }
@@ -120,11 +114,7 @@ impl AsAny for CopyFilesystem {
 }
 
 impl FilesystemProvider for CopyFilesystem {
-    fn setup_rootfs(
-        &self,
-        image_layers: &[PathBuf],
-        container_dir: &Path,
-    ) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
             .with_context(|| format!("creating merged dir {merged:?}"))?;
@@ -171,17 +161,13 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
 
     for entry in WalkDir::new(src).min_depth(1) {
         let entry = entry.with_context(|| format!("walking {src:?}"))?;
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .context("stripping prefix")?;
+        let relative = entry.path().strip_prefix(src).context("stripping prefix")?;
         let target = dst.join(relative);
 
         let ft = entry.file_type();
 
         if ft.is_dir() {
-            std::fs::create_dir_all(&target)
-                .with_context(|| format!("creating dir {target:?}"))?;
+            std::fs::create_dir_all(&target).with_context(|| format!("creating dir {target:?}"))?;
             // Preserve directory permissions
             let metadata = entry.metadata().context("reading dir metadata")?;
             std::fs::set_permissions(&target, metadata.permissions())
@@ -247,6 +233,7 @@ pub struct ProotRuntime {
     proot_path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl ProotRuntime {
     /// Create a new proot runtime with an explicit binary path.
     ///
@@ -268,21 +255,16 @@ impl ProotRuntime {
         }
 
         // Search PATH for proot
-        if let Ok(output) = std::process::Command::new("which")
-            .arg("proot")
-            .output()
+        if let Ok(output) = std::process::Command::new("which").arg("proot").output()
+            && output.status.success()
         {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Self::new(path);
-                }
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Self::new(path);
             }
         }
 
-        anyhow::bail!(
-            "proot not found: set MINIBOX_PROOT_PATH or install proot in PATH"
-        )
+        anyhow::bail!("proot not found: set MINIBOX_PROOT_PATH or install proot in PATH")
     }
 }
 
@@ -517,7 +499,10 @@ mod tests {
     #[test]
     fn copy_filesystem_cleanup_nonexistent_is_ok() {
         let fs = CopyFilesystem::new();
-        assert!(fs.cleanup(Path::new("/tmp/nonexistent-minibox-test")).is_ok());
+        assert!(
+            fs.cleanup(Path::new("/tmp/nonexistent-minibox-test"))
+                .is_ok()
+        );
     }
 
     #[test]

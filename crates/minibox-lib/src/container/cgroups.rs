@@ -88,7 +88,7 @@ impl CgroupManager {
         // CPU weight
         if let Some(cpu) = self.config.cpu_weight {
             // SECURITY: Validate range (kernel range is 1-10000)
-            if cpu < 1 || cpu > 10000 {
+            if !(1..=10000).contains(&cpu) {
                 anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
@@ -118,12 +118,10 @@ impl CgroupManager {
     pub fn add_process(&self, pid: u32) -> anyhow::Result<()> {
         debug!("adding PID {} to cgroup {:?}", pid, self.cgroup_path);
         let path = self.cgroup_path.join("cgroup.procs");
-        fs::write(&path, format!("{}\n", pid)).map_err(|source| {
-            CgroupError::AddProcessFailed {
-                pid,
-                path: path.display().to_string(),
-                source,
-            }
+        fs::write(&path, format!("{}\n", pid)).map_err(|source| CgroupError::AddProcessFailed {
+            pid,
+            path: path.display().to_string(),
+            source,
         })?;
         info!("added PID {} to cgroup", pid);
         Ok(())
@@ -136,7 +134,10 @@ impl CgroupManager {
     pub fn cleanup(&self) -> anyhow::Result<()> {
         debug!("removing cgroup {:?}", self.cgroup_path);
         if !self.cgroup_path.exists() {
-            warn!("cgroup {:?} already gone, skipping cleanup", self.cgroup_path);
+            warn!(
+                "cgroup {:?} already gone, skipping cleanup",
+                self.cgroup_path
+            );
             return Ok(());
         }
         fs::remove_dir(&self.cgroup_path).map_err(|source| CgroupError::CleanupFailed {

@@ -3,6 +3,7 @@
 This document provides practical usage workflows for `minibox` across local Linux, ops/systemd, and other environments.
 
 **Quick Start (Linux)**
+
 ```bash
 # Build
 cargo build --release
@@ -16,6 +17,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 ```
 
 **Local Ops (systemd)**
+
 ```bash
 # Build
 cargo build --release
@@ -32,6 +34,7 @@ sudo /usr/local/bin/minibox ps
 ```
 
 **Common CLI Workflows**
+
 ```bash
 # List containers
 sudo /usr/local/bin/minibox ps
@@ -46,6 +49,7 @@ sudo /usr/local/bin/minibox run alpine -- /bin/echo "Hello from minibox!"
 **Environment-Specific Usage**
 
 **GKE (Unprivileged Pods)**
+
 ```bash
 # Select GKE adapter at daemon startup
 MINIBOX_ADAPTER=gke sudo ./target/release/miniboxd
@@ -55,6 +59,7 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke sudo ./target/releas
 ```
 
 **Windows (WSL2)**
+
 ```bash
 # Build and run inside WSL2
 cargo build --release
@@ -62,24 +67,12 @@ sudo ./target/release/miniboxd
 sudo ./target/release/minibox ps
 ```
 
-**macOS (Docker Desktop)**
-```bash
-# Build and run with Docker Desktop adapters
-cargo build --release
-MINIBOX_ADAPTER=docker-desktop ./target/release/miniboxd
-./target/release/minibox ps
-```
+**macOS (Colima / Docker Desktop)**
 
-**macOS (Colima)**
-```bash
-# Ensure Colima is running
-colima start
-
-# Build and run with Colima adapters
-cargo build --release
-MINIBOX_ADAPTER=colima ./target/release/miniboxd
-./target/release/minibox ps
-```
+The Colima and Docker Desktop adapters exist in `minibox-lib` but are not yet
+wired into `miniboxd`. The daemon currently only accepts `MINIBOX_ADAPTER=native`
+(default) or `MINIBOX_ADAPTER=gke`. macOS development requires a Linux VM
+(Colima, Lima, Docker Desktop) and running the daemon inside it.
 
 **Integration Notes**
 The CLI communicates with the daemon over a Unix socket at `/run/minibox/miniboxd.sock` on Linux. If `minibox ps` fails with “No such file or directory,” the daemon is not running or the socket has not been created yet. Ensure the daemon is started and healthy (`systemctl status miniboxd` or `journalctl -u miniboxd -f`).

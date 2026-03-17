@@ -19,6 +19,7 @@
 The CLI hardcodes the socket path to `/run/minibox/miniboxd.sock`. E2E tests need to point at a temp socket. Add `MINIBOX_SOCKET_PATH` env var support.
 
 **Files:**
+
 - Modify: `crates/minibox-cli/src/commands/mod.rs`
 
 - [ ] **Step 1: Write the failing test**
@@ -70,6 +71,7 @@ git commit -m "feat: make CLI socket path configurable via MINIBOX_SOCKET_PATH e
 ### Task 2: Create preflight module
 
 **Files:**
+
 - Create: `crates/minibox-lib/src/preflight.rs`
 - Modify: `crates/minibox-lib/src/lib.rs`
 
@@ -87,7 +89,7 @@ Note: do NOT gate this behind `#[cfg(target_os = "linux")]` — the probe functi
 
 Create `crates/minibox-lib/src/preflight.rs`:
 
-```rust
+````rust
 //! Host capability probing for test infrastructure and diagnostics.
 //!
 //! Probes the current host for features needed by minibox: cgroups v2,
@@ -345,7 +347,7 @@ mod tests {
         assert!(report.contains("Minibox Host Capabilities"));
     }
 }
-```
+````
 
 - [ ] **Step 3: Verify it compiles and unit tests pass**
 
@@ -364,6 +366,7 @@ git commit -m "feat: add preflight host capability probing module"
 ### Task 3: Create justfile
 
 **Files:**
+
 - Create: `justfile`
 
 - [ ] **Step 1: Create justfile**
@@ -451,13 +454,14 @@ git commit -m "feat: add justfile task runner for test workflows"
 ### Task 4: Create CgroupTestGuard and test helpers
 
 **Files:**
+
 - Create: `crates/miniboxd/tests/cgroup_tests.rs`
 
 - [ ] **Step 1: Create cgroup_tests.rs with test infrastructure**
 
 Create `crates/miniboxd/tests/cgroup_tests.rs` with the guard, helpers, and first test:
 
-```rust
+````rust
 //! Cgroup v2 integration tests exercising the ResourceLimiter trait
 //! against real cgroupfs.
 //!
@@ -1028,7 +1032,7 @@ fn test_cgroup_io_controller_unavailable() {
 
     let _ = limiter.cleanup("test-io-avail");
 }
-```
+````
 
 - [ ] **Step 2: Verify it compiles**
 
@@ -1049,13 +1053,14 @@ git commit -m "feat: add cgroup v2 integration tests exercising ResourceLimiter 
 ### Task 5: Create DaemonFixture and e2e test helpers
 
 **Files:**
+
 - Create: `crates/miniboxd/tests/e2e_tests.rs`
 
 - [ ] **Step 1: Create e2e_tests.rs with DaemonFixture and first tests**
 
 Create `crates/miniboxd/tests/e2e_tests.rs`:
 
-```rust
+````rust
 //! End-to-end tests: start real miniboxd + minibox CLI binaries.
 //!
 //! Tests the full stack through Unix socket: daemon startup, image pull,
@@ -1733,7 +1738,7 @@ fn extract_container_id(output: &str) -> Option<String> {
     }
     None
 }
-```
+````
 
 - [ ] **Step 2: Verify it compiles**
 
@@ -1754,6 +1759,7 @@ git commit -m "feat: add daemon+CLI e2e tests with DaemonFixture harness"
 ### Task 6: Update TESTING.md
 
 **Files:**
+
 - Modify: `TESTING.md`
 
 - [ ] **Step 1: Update TESTING.md**
@@ -1766,8 +1772,8 @@ Replace the entire contents of `TESTING.md` with:
 This document describes the testing strategy for the minibox container runtime.
 
 ## Test Pyramid
-
 ```
+
                  ┌─────────────┐
                  │  E2E Tests  │  (Daemon + CLI binaries)
                  │  ~14 tests  │
@@ -1780,7 +1786,8 @@ This document describes the testing strategy for the minibox container runtime.
        │     Unit + Conformance      │  (Mocks, any platform)
        │        ~52 tests            │
        └──────────────────────────────┘
-```
+
+````
 
 ## Quick Reference
 
@@ -1804,7 +1811,7 @@ just clean              # Full cargo clean
 just clean-test         # Test artifacts only
 just clean-stale        # Old artifacts (>7 days)
 just nuke-test-state    # Kill orphans, remove cgroups/mounts
-```
+````
 
 ## Test Layers
 
@@ -1813,6 +1820,7 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 **Requirements:** None (run anywhere)
 
 **Files:**
+
 - `crates/miniboxd/tests/handler_tests.rs` — handler logic with mock adapters
 - `crates/miniboxd/tests/conformance_tests.rs` — trait contract verification with mocks
 - `crates/minibox-lib/src/protocol.rs` — protocol serialization
@@ -1825,6 +1833,7 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 **Requirements:** Linux kernel 5.0+, root, cgroups v2, Docker Hub access
 
 **Files:**
+
 - `crates/miniboxd/tests/cgroup_tests.rs` — ResourceLimiter trait against real cgroupfs
 - `crates/miniboxd/tests/integration_tests.rs` — handler-level tests with real infrastructure
 
@@ -1838,6 +1847,7 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 **Requirements:** Linux kernel 5.0+, root, cgroups v2, built binaries
 
 **Files:**
+
 - `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
 
 **Run:** `just test-e2e`
@@ -1851,20 +1861,22 @@ The preflight module (`crates/minibox-lib/src/preflight.rs`) probes the host for
 capabilities needed by integration and e2e tests. Run `just doctor` to see a report.
 
 Tests use `require_capability!` to skip gracefully when prerequisites are missing.
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add TESTING.md
 git commit -m "docs: update TESTING.md with full test pyramid and just recipes"
-```
+````
 
 ---
 
 ### Task 7: Add gitignore exception for plans
 
 **Files:**
+
 - Modify: `.gitignore`
 
 - [ ] **Step 1: Add plans directory exception**
@@ -1906,6 +1918,6 @@ If compilation or tests fail, fix and commit with descriptive message.
 
 **Order matters:** Tasks 1-3 (Chunk 1) must complete before Task 4 (Chunk 2), which must complete before Task 5 (Chunk 3). Tasks 6-8 (Chunk 4) depend on all prior chunks.
 
-**Testing the tests:** Tasks 4 and 5 create tests that require Linux + root + cgroups v2. They can be verified to compile on macOS but can only be *run* on the target Linux host. The `#![cfg(target_os = "linux")]` gate ensures they compile away on non-Linux.
+**Testing the tests:** Tasks 4 and 5 create tests that require Linux + root + cgroups v2. They can be verified to compile on macOS but can only be _run_ on the target Linux host. The `#![cfg(target_os = "linux")]` gate ensures they compile away on non-Linux.
 
 **Suppressing warnings:** The `CgroupTestGuard` is constructed for its side effects (env var and cgroup setup) and cleanup (Drop). Some tests will have `guard` variables that appear unused — prefix with `_guard` if warnings are annoying, but the binding is intentionally held for its Drop.

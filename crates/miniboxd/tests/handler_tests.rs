@@ -24,8 +24,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 /// Helper to create daemon state with a test image store.
 fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store =
-        minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -52,7 +51,7 @@ async fn test_handle_pull_success() {
             assert!(message.contains("pulled"));
             assert!(message.contains("alpine"));
         }
-        _ => panic!("expected Success response, got {:?}", response),
+        _ => panic!("expected Success response, got {response:?}"),
     }
 
     // Verify pull was called
@@ -100,7 +99,7 @@ async fn test_handle_pull_failure() {
         DaemonResponse::Error { message } => {
             assert!(message.contains("mock pull failure"));
         }
-        _ => panic!("expected Error response, got {:?}", response),
+        _ => panic!("expected Error response, got {response:?}"),
     }
 }
 
@@ -142,7 +141,7 @@ async fn test_handle_run_with_cached_image() {
             let container = state.get_container(&id).await;
             assert!(container.is_some());
         }
-        _ => panic!("expected ContainerCreated response, got {:?}", response),
+        _ => panic!("expected ContainerCreated response, got {response:?}"),
     }
 
     // Image was cached, so pull should NOT have been called
@@ -175,7 +174,7 @@ async fn test_handle_run_pulls_uncached_image() {
         DaemonResponse::ContainerCreated { .. } => {
             // Success - image was pulled
         }
-        _ => panic!("expected ContainerCreated, got {:?}", response),
+        _ => panic!("expected ContainerCreated, got {response:?}"),
     }
 
     // Image was not cached, so pull SHOULD have been called
@@ -215,7 +214,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         DaemonResponse::Error { message } => {
             assert!(message.contains("filesystem setup failure"));
         }
-        _ => panic!("expected Error response, got {:?}", response),
+        _ => panic!("expected Error response, got {response:?}"),
     }
 }
 
@@ -247,7 +246,7 @@ async fn test_handle_run_resource_limiter_failure() {
         DaemonResponse::Error { message } => {
             assert!(message.contains("resource limiter create failure"));
         }
-        _ => panic!("expected Error response, got {:?}", response),
+        _ => panic!("expected Error response, got {response:?}"),
     }
 }
 
@@ -286,7 +285,7 @@ async fn test_handle_run_runtime_spawn_failure() {
             assert!(container.is_some());
             assert_eq!(container.unwrap().info.state, "Failed");
         }
-        _ => panic!("expected ContainerCreated, got {:?}", response),
+        _ => panic!("expected ContainerCreated, got {response:?}"),
     }
 }
 
@@ -324,14 +323,15 @@ async fn test_handle_remove_success() {
     state.update_container_state(&container_id, "Stopped").await;
 
     // Now remove it
-    let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps.clone()).await;
+    let remove_response =
+        handler::handle_remove(container_id.clone(), state.clone(), deps.clone()).await;
 
     match remove_response {
         DaemonResponse::Success { message } => {
             assert!(message.contains("removed"));
             assert!(message.contains(&container_id));
         }
-        _ => panic!("expected Success, got {:?}", remove_response),
+        _ => panic!("expected Success, got {remove_response:?}"),
     }
 
     // Container should be gone from state
@@ -365,7 +365,7 @@ async fn test_handle_remove_nonexistent_container() {
         DaemonResponse::Error { message } => {
             assert!(message.contains("not found"));
         }
-        _ => panic!("expected Error, got {:?}", response),
+        _ => panic!("expected Error, got {response:?}"),
     }
 }
 
@@ -405,7 +405,7 @@ async fn test_handle_remove_running_container() {
                 "expected 'running' in error message, got: {message}"
             );
         }
-        _ => panic!("expected Error, got {:?}", response),
+        _ => panic!("expected Error, got {response:?}"),
     }
 }
 
@@ -433,7 +433,11 @@ async fn test_full_container_lifecycle() {
     let run_response = handler::handle_run(
         "nginx".to_string(),
         Some("alpine".to_string()),
-        vec!["/bin/sh".to_string(), "-c".to_string(), "echo test".to_string()],
+        vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo test".to_string(),
+        ],
         Some(256 * 1024 * 1024), // 256MB
         Some(750),               // CPU weight
         state.clone(),

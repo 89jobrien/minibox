@@ -14,14 +14,15 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 #[cfg(target_os = "linux")]
-use nix::mount::{mount, umount2, MntFlags, MsFlags};
+use nix::mount::{MntFlags, MsFlags, mount, umount2};
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("minibox only supports Linux");
 
 // Path validation utilities
 fn has_parent_dir_component(path: &Path) -> bool {
-    path.components().any(|c| matches!(c, std::path::Component::ParentDir))
+    path.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +118,7 @@ pub fn setup_overlay_with_base(
 
     // SECURITY: Validate all layer paths to prevent path traversal.
     for layer_path in image_layers {
-        validate_layer_path(layer_path, &images_base)
+        validate_layer_path(layer_path, images_base)
             .with_context(|| format!("validating layer path {:?}", layer_path))?;
     }
 
@@ -147,10 +148,7 @@ pub fn setup_overlay_with_base(
         Some(options.as_str()),
     )
     .map_err(|source| {
-        FilesystemError::OverlayMount(format!(
-            "mount overlay -> {}: {source}",
-            merged.display()
-        ))
+        FilesystemError::OverlayMount(format!("mount overlay -> {}: {source}", merged.display()))
     })
     .with_context(|| "overlay mount failed")?;
 
@@ -298,4 +296,104 @@ pub fn cleanup_mounts(container_dir: &Path) -> anyhow::Result<()> {
 
     info!("container mounts cleaned up for {:?}", container_dir);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // ---------------------------------------------------------------------------
+    // has_parent_dir_component
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn detects_dotdot_at_start() {
+        assert!(has_parent_dir_component(Path::new("../escape")));
+    }
+
+    #[test]
+    fn detects_dotdot_in_middle() {
+        assert!(has_parent_dir_component(Path::new("foo/../bar")));
+    }
+
+    #[test]
+    fn detects_dotdot_multi_hop() {
+        assert!(has_parent_dir_component(Path::new("a/b/../../etc/passwd")));
+    }
+
+    #[test]
+    fn clean_relative_path_passes() {
+        assert!(!has_parent_dir_component(Path::new("foo/bar/baz")));
+    }
+
+    #[test]
+    fn single_dot_passes() {
+        assert!(!has_parent_dir_component(Path::new(".")));
+    }
+
+    #[test]
+    fn absolute_path_without_dotdot_passes() {
+        // has_parent_dir_component only checks for ParentDir, not absolute
+        assert!(!has_parent_dir_component(Path::new("/absolute/path")));
+    }
+
+    // ---------------------------------------------------------------------------
+    // validate_layer_path
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn dotdot_at_start_rejected() {
+        let base = TempDir::new().unwrap();
+        let err = validate_layer_path(Path::new("../escape"), base.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("path traversal") || err.to_string().contains(".."),
+            "expected path traversal error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn dotdot_in_middle_rejected() {
+        let base = TempDir::new().unwrap();
+        let err = validate_layer_path(Path::new("foo/../bar"), base.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("path traversal") || err.to_string().contains(".."),
+            "expected path traversal error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn path_outside_base_rejected() {
+        let base = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        // other.path() is a real dir but not under base
+        let err = validate_layer_path(other.path(), base.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("path traversal") || err.to_string().contains("outside"),
+            "expected outside-base error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn valid_subdir_within_base_accepted() {
+        let base = TempDir::new().unwrap();
+        let subdir = base.path().join("images").join("alpine").join("layer1");
+        std::fs::create_dir_all(&subdir).unwrap();
+        validate_layer_path(&subdir, base.path()).unwrap();
+    }
+
+    #[test]
+    fn deeply_nested_subdir_accepted() {
+        let base = TempDir::new().unwrap();
+        let subdir = base.path().join("a").join("b").join("c").join("d");
+        std::fs::create_dir_all(&subdir).unwrap();
+        validate_layer_path(&subdir, base.path()).unwrap();
+    }
+
+    #[test]
+    fn path_equal_to_base_accepted() {
+        let base = TempDir::new().unwrap();
+        // The base dir itself counts as within base
+        validate_layer_path(base.path(), base.path()).unwrap();
+    }
 }

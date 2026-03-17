@@ -50,6 +50,7 @@ sudo /usr/local/bin/minibox ps
 ### Architecture
 
 **Hexagonal Architecture** (Ports & Adapters):
+
 - Domain layer with zero infrastructure dependencies
 - Swappable adapters for registry, filesystem, cgroups, runtime
 - 100% unit test coverage with mock implementations
@@ -57,11 +58,13 @@ sudo /usr/local/bin/minibox ps
 - Architecture pattern validated by production frameworks (Zombienet-SDK)
 
 **Performance:**
+
 - Trait object overhead: 1-5 nanoseconds (validated by benchmarks)
 - 0.000001% impact on real operations (image pulls, container spawns)
 - Validated by production frameworks (Zombienet-SDK uses identical pattern)
 
 **Testing:**
+
 - 36 unit tests (platform-agnostic with mocks)
 - 21 protocol serialization tests (JSON encoding/decoding)
 - 11 integration tests (Linux with real infrastructure)
@@ -70,6 +73,7 @@ sudo /usr/local/bin/minibox ps
 - Security scanning (cargo-deny, cargo-audit, clippy)
 
 **Security Monitoring:**
+
 - Zero dependency vulnerabilities (cargo-deny daily scans)
 - All licenses compliant (MIT, Apache-2.0, BSD-3-Clause)
 - Continuous security scanning via GitHub Actions
@@ -115,13 +119,14 @@ sudo /usr/local/bin/minibox ps
 
 ## Crate Structure
 
-| Crate | Type | Description |
-|-------|------|-------------|
+| Crate         | Type    | Description                                          |
+| ------------- | ------- | ---------------------------------------------------- |
 | `minibox-lib` | Library | Domain layer, adapters, infrastructure (2,491 lines) |
-| `miniboxd` | Binary | Async daemon with handler logic |
-| `minibox-cli` | Binary | CLI client |
+| `miniboxd`    | Binary  | Async daemon with handler logic                      |
+| `minibox-cli` | Binary  | CLI client                                           |
 
 **Key Modules:**
+
 - `domain.rs` - Pure business logic traits (ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime)
 - `adapters/` - Infrastructure implementations (registry, filesystem, limiter, runtime, mocks, GKE, WSL, Docker Desktop, Colima)
 - `handlers/` - Request handling with dependency injection
@@ -132,12 +137,14 @@ sudo /usr/local/bin/minibox ps
 ### Linux (Native)
 
 **Requirements:**
+
 - Linux kernel 5.0+ (4.0+ minimum)
 - cgroups v2 unified hierarchy
 - Overlay filesystem support
 - Root privileges
 
 **Adapters:**
+
 - `DockerHubRegistry` - Docker Hub v2 API
 - `OverlayFilesystem` - Linux overlayfs
 - `CgroupV2Limiter` - cgroups v2
@@ -146,16 +153,19 @@ sudo /usr/local/bin/minibox ps
 ### GKE (Unprivileged Pods)
 
 **Requirements:**
+
 - GKE Standard cluster (Autopilot not supported)
 - Linux container image with `proot` binary
 - No `CAP_SYS_ADMIN` needed
 
 **Adapters:**
+
 - `ProotRuntime` - ptrace-based fake chroot via proot (no namespaces or pivot_root needed)
 - `CopyFilesystem` - Copy-based layer merging (no overlay FS needed)
 - `NoopLimiter` - No-op resource limiter (no cgroup access)
 
 **Configuration:**
+
 ```bash
 # Select GKE adapter at daemon startup
 MINIBOX_ADAPTER=gke miniboxd
@@ -173,11 +183,13 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 ### Windows (WSL2)
 
 **Requirements:**
+
 - Windows 10/11 with WSL2
 - Ubuntu 20.04+ distribution
 - minibox-wsl-helper binary in WSL
 
 **Adapters:**
+
 - `WslRuntime` - Delegates to WSL Linux environment
 - `WslFilesystem` - Overlay operations via WSL
 - `WslLimiter` - cgroups via WSL
@@ -185,11 +197,13 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 ### macOS (Docker Desktop)
 
 **Requirements:**
+
 - macOS 10.15+ (Catalina)
 - Docker Desktop 4.0+
 - minibox-docker-helper container
 
 **Adapters:**
+
 - `DockerDesktopRuntime` - Delegates to Docker VM
 - `DockerDesktopFilesystem` - Operations in helper container
 - `DockerDesktopLimiter` - cgroups in helper container
@@ -197,17 +211,20 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 ### macOS (Colima)
 
 **Requirements:**
+
 - macOS 10.15+ (Catalina)
 - Colima installed (`brew install colima`)
 - Colima VM running (`colima start`)
 
 **Adapters:**
+
 - `ColimaRegistry` - Uses nerdctl for image operations
 - `ColimaRuntime` - Delegates to Lima VM
 - `ColimaFilesystem` - Overlay operations via limactl
 - `ColimaLimiter` - cgroups via limactl
 
 **Advantages:**
+
 - Fully open-source (no Docker Desktop licensing)
 - Lightweight VM compared to Docker Desktop
 - Native containerd/nerdctl integration
@@ -277,12 +294,14 @@ sudo ./target/release/minibox rm <container_id>
 ### Fixed Vulnerabilities (12/15)
 
 **Critical (CVSS 7.5-9.8):**
+
 - [FIXED] Path traversal in overlay filesystem (CVSS 9.8)
 - [FIXED] Symlink attack in tar extraction (CVSS 9.6)
 - [FIXED] No Unix socket authentication (CVSS 7.8)
 - [FIXED] Unlimited image pull sizes (CVSS 7.5)
 
 **High (CVSS 7.0-7.9):**
+
 - [FIXED] Missing cgroup PID/IO limits (CVSS 7.5)
 - [FIXED] Insecure mount flags (CVSS 7.8)
 - [FIXED] ImageStore path validation (CVSS 7.6)
@@ -291,29 +310,34 @@ sudo ./target/release/minibox rm <container_id>
 - [FIXED] Concurrent spawn DoS (CVSS 7.5)
 
 **Medium (CVSS 6.0-6.9):**
+
 - [FIXED] Request size DoS (CVSS 6.2)
 - [FIXED] Container ID collisions
 
 ### Security Features
 
 **Input Validation:**
+
 - Path canonicalization with `..` rejection
 - Tar entry validation (no Zip Slip attacks)
 - Request size limits (1MB max)
 - Image size limits (10GB per layer)
 
 **Authentication:**
+
 - SO_PEERCRED Unix socket authentication
 - Root-only daemon access (UID 0)
 - Socket permissions: 0600
 
 **Isolation:**
+
 - Mount flags: MS_NOSUID, MS_NODEV, MS_NOEXEC
 - Read-only /sys mount
 - PID limit: 1024 (default, prevents fork bombs)
 - I/O bandwidth throttling support
 
 **Continuous Security:**
+
 - Daily automated vulnerability scans (cargo-deny)
 - GitHub Actions CI security pipeline
 - Static analysis with security-focused lints (clippy)
@@ -321,12 +345,14 @@ sudo ./target/release/minibox rm <container_id>
 - Zero known CVEs in dependencies
 
 **Remaining Work:**
+
 - Capability dropping (CAP_SYS_ADMIN, etc.)
 - Seccomp filters
 - User namespace support
 - Request rate limiting
 
 **Security Documentation:**
+
 - `SECURITY.md` - Threat model and security architecture
 - `SECURITY_FIXES.md` - Complete vulnerability audit
 - `SECURITY_TESTING.md` - Security testing procedures and test cases
@@ -335,6 +361,7 @@ sudo ./target/release/minibox rm <container_id>
 ## Testing
 
 **Test Pyramid:**
+
 ```
               E2E Tests
          ┌─────────────────────────┐
@@ -347,6 +374,7 @@ sudo ./target/release/minibox rm <container_id>
 ```
 
 **Run Tests:**
+
 ```bash
 # Unit tests (any platform)
 cargo test --workspace
@@ -380,6 +408,7 @@ cargo bench -p minibox-lib --bench trait_overhead
 **Hexagonal Architecture Overhead:** 1-5 nanoseconds per trait call
 
 **Benchmark Results:**
+
 - Registry: +4.5ns (+7.3%)
 - Filesystem: +0.2ns (+0.5%)
 - Limiter: -2.0ns (-5.4%, faster!)
@@ -396,6 +425,7 @@ See `BENCHMARK_RESULTS.md` for detailed analysis.
 JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 
 **Request Examples:**
+
 ```json
 {"type":"Run","image":"alpine","tag":"latest","command":["/bin/sh"],"memory_limit_bytes":null,"cpu_weight":null}
 {"type":"Pull","image":"ubuntu","tag":"22.04"}
@@ -405,6 +435,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 ```
 
 **Response Examples:**
+
 ```json
 {"type":"ContainerCreated","id":"a1b2c3d4e5f6"}
 {"type":"Success","message":"image alpine:latest pulled"}
@@ -414,13 +445,13 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 
 ## Directory Layout
 
-| Path | Purpose |
-|------|---------|
-| `/run/minibox/miniboxd.sock` | Daemon Unix socket |
-| `/run/minibox/containers/{id}/` | Runtime state (PID files) |
-| `/var/lib/minibox/images/` | Image layers + manifests |
+| Path                                | Purpose                            |
+| ----------------------------------- | ---------------------------------- |
+| `/run/minibox/miniboxd.sock`        | Daemon Unix socket                 |
+| `/run/minibox/containers/{id}/`     | Runtime state (PID files)          |
+| `/var/lib/minibox/images/`          | Image layers + manifests           |
 | `/var/lib/minibox/containers/{id}/` | Overlay dirs (merged, upper, work) |
-| `/sys/fs/cgroup/minibox/{id}/` | Per-container cgroups |
+| `/sys/fs/cgroup/minibox/{id}/`      | Per-container cgroups              |
 
 ## Container Lifecycle
 
@@ -435,6 +466,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 ## Current Limitations
 
 **v0.1 - Development:**
+
 - No networking (containers get isolated netns but no bridge/veth)
 - No user namespace remapping (runs as root)
 - No Dockerfile/build support
@@ -448,6 +480,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 ## Extending
 
 **Domain traits defined for:**
+
 - [READY] Networking - Bridge, veth pairs, port mappings
 - [READY] TTY Support - Pseudo-terminals for interactive shells
 - [READY] Exec - Run commands in live containers
@@ -455,6 +488,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 - [READY] State Store - Persistent container records
 
 **Implementation required:**
+
 - `BridgeNetworking` adapter (Linux bridge + veth)
 - `PseudoTerminal` adapter (/dev/pts)
 - `NamespaceExec` adapter (setns syscall)
@@ -466,31 +500,37 @@ See trait definitions in `crates/minibox-lib/src/domain/`.
 ## Documentation
 
 ### Core Documentation
+
 - **README.md** - Project overview and quick start
 - **CLAUDE.md** - Development guide, architecture, debugging
 
 ### Testing & Validation
+
 - **TESTING.md** - Testing strategy and methodology
 - **TEST_RESULTS.md** - Comprehensive test validation report
 - **BENCHMARK_RESULTS.md** - Performance analysis and benchmarks
 
 ### Security
+
 - **SECURITY.md** - Threat model and security architecture
 - **SECURITY_FIXES.md** - Vulnerability audit and remediation
 - **SECURITY_TESTING.md** - Security testing procedures
 
 ### Architecture
+
 - **ZOMBIENET_PATTERNS.md** - Architectural validation from production frameworks
 
 ## Development
 
 **Requirements:**
+
 - Rust 1.75+
 - Linux kernel 4.0+ (5.0+ recommended)
 - cgroups v2 enabled
 - Root access
 
 **Recommended:**
+
 ```bash
 # Check kernel features
 grep CONFIG_USER_NS /boot/config-$(uname -r)
@@ -507,6 +547,7 @@ RUST_LOG=debug sudo ./target/release/miniboxd
 ## Continuous Integration
 
 **GitHub Actions Workflows:**
+
 - **security.yml** - Daily security scanning
   - cargo-deny (dependency vulnerabilities)
   - cargo-audit (security advisories)
@@ -514,12 +555,14 @@ RUST_LOG=debug sudo ./target/release/miniboxd
   - semgrep (static analysis)
 
 **Automated Checks:**
+
 - Pull request blocking on critical vulnerabilities
 - License compliance verification
 - Source validation (crates.io only)
 - Multiple version detection
 
 **Quality Gates:**
+
 - All tests must pass
 - Zero clippy warnings with security lints
 - No known CVEs in dependencies
@@ -528,12 +571,14 @@ RUST_LOG=debug sudo ./target/release/miniboxd
 ## Contributing
 
 This is a learning/experimental project demonstrating:
+
 - Hexagonal architecture in Rust
 - Container runtime fundamentals
 - Security-first development
 - Comprehensive testing strategies
 
 Pull requests welcome for:
+
 - Feature implementations (networking, TTY, exec, logs)
 - Security improvements
 - Cross-platform support (GKE, WSL2/Docker Desktop helpers)
@@ -546,6 +591,7 @@ MIT
 ## Acknowledgments
 
 **Built with:**
+
 - `tokio` - Async runtime
 - `clap` - CLI parsing
 - `serde` - Serialization
@@ -555,5 +601,6 @@ MIT
 - `async-trait` - Async trait methods
 
 **Inspired by:**
+
 - Docker, Podman, and containerd - Container runtime design
 - Zombienet-SDK
