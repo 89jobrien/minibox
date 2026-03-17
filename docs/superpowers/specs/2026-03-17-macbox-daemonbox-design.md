@@ -28,7 +28,8 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 - No new container features.
 - No TTY, exec, networking, or log capture.
 - No changes to the Linux adapter suites (native, GKE).
-- `macboxd` does not need a systemd unit (launchd is out of scope for this iteration).
+- `macboxd` does not need a launchd unit (out of scope for this iteration).
+- Fixing Colima's `waitpid` semantics (known limitation: containers run inside the Lima VM, so `daemon_wait_for_exit` using `waitpid` won't work for Colima-spawned processes — tracked separately).
 
 ---
 
@@ -74,9 +75,9 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 
 **What it does NOT contain:** any `compile_error!` guards; any concrete adapter types; any path defaults.
 
-**Note on `#[cfg]`:** Per-feature `#[cfg(target_os)]` blocks are fine and already exist in `server.rs` (peer credential auth has a `#[cfg(not(target_os = "linux"))]` fallback). `nix` signal/wait APIs used in `handler.rs` are POSIX and work on macOS.
+**Note on `#[cfg]`:** Per-feature `#[cfg(target_os)]` blocks are fine. `server.rs` already has a `#[cfg(not(target_os = "linux"))]` fallback for peer credential auth. `nix` signal/wait APIs in `handler.rs` (`kill`, `waitpid`) are POSIX and work on macOS.
 
-**After extraction, `miniboxd/src/` contains only `main.rs`** — adapter wiring, path resolution, and daemon startup.
+**After extraction, `miniboxd/src/` contains `main.rs` and a thin `lib.rs` shim** (see Migration section).
 
 ---
 
@@ -94,15 +95,16 @@ pub fn preflight() -> Result<ColimaStatus, MacboxError>;
 pub async fn ensure_vm_running() -> Result<(), MacboxError>;
 
 /// Build HandlerDependencies wired with the Colima adapter suite.
-/// Signature is illustrative; may accept additional context (e.g. ImageStore)
-/// matching what miniboxd's composition root provides today.
-pub fn colima_deps(containers_base: PathBuf, run_containers_base: PathBuf)
-    -> HandlerDependencies;
+/// Takes the same arguments macboxd's composition root has at hand.
+pub fn colima_deps(
+    containers_base: PathBuf,
+    run_containers_base: PathBuf,
+) -> HandlerDependencies;
 
 /// macOS default paths.
 pub mod paths {
-    pub fn data_dir() -> PathBuf;   // ~/Library/Application Support/macbox
-    pub fn run_dir() -> PathBuf;    // /tmp/macbox
+    pub fn data_dir() -> PathBuf;    // ~/Library/Application Support/macbox
+    pub fn run_dir() -> PathBuf;     // /tmp/macbox
     pub fn socket_path() -> PathBuf; // /tmp/macbox/macboxd.sock
 }
 ```
@@ -115,8 +117,6 @@ pub enum ColimaStatus {
     NotInstalled,
 }
 ```
-
-**Dependencies:** `minibox-lib`, `macros`, `anyhow`, `thiserror`, `tokio`, `tracing`
 
 **Dependencies:** `daemonbox` (for `HandlerDependencies`), `minibox-lib` (for Colima adapter types), `anyhow`, `thiserror`, `tokio`, `tracing`
 
@@ -134,9 +134,11 @@ pub enum ColimaStatus {
 3. Call `macbox::ensure_vm_running()` — start VM if stopped.
 4. Resolve paths via `macbox::paths::*` (overridable via env vars for tests).
 5. Create directories, remove stale socket.
-6. Build `HandlerDependencies` via `macbox::colima_deps(...)`.
-7. Start `daemonbox` server loop.
-8. Handle SIGTERM / SIGINT for clean shutdown.
+6. Create `ImageStore` at the resolved images path.
+7. Create `DaemonState` with the `ImageStore`.
+8. Build `HandlerDependencies` via `macbox::colima_deps(...)`.
+9. Start `daemonbox` server loop.
+10. Handle SIGTERM / SIGINT for clean shutdown.
 
 **No `#[cfg(target_os = "linux")]` guards anywhere in this crate.**
 
@@ -147,6 +149,7 @@ pub enum ColimaStatus {
 `miniboxd/src/` before:
 ```
 main.rs
+lib.rs    ← re-exports handler, state, server for integration tests
 handler.rs
 state.rs
 server.rs
@@ -154,26 +157,36 @@ server.rs
 
 `miniboxd/src/` after:
 ```
-main.rs   ← only file; imports handler/state/server from daemonbox
+main.rs   ← adapter wiring + startup (unchanged logic, updated imports)
+lib.rs    ← thin shim: re-exports from daemonbox for test backward compat
+```
+
+`miniboxd/src/lib.rs` after migration:
+```rust
+// Backward-compatible re-exports so existing integration tests
+// importing `miniboxd::handler` etc. continue to compile.
+pub use daemonbox::handler;
+pub use daemonbox::server;
+pub use daemonbox::state;
 ```
 
 `miniboxd/Cargo.toml` gains `daemonbox = { workspace = true }`.
 
-The `compile_error!("miniboxd requires Linux")` guard stays in `miniboxd/main.rs` — Linux-only is still correct for the native adapter suite.
+The `compile_error!("miniboxd requires Linux")` guard stays in `miniboxd/main.rs`.
 
 ---
 
 ## Dependency Graph
 
 ```
-miniboxd    ──► daemonbox ──► minibox-lib
-macboxd     ──► daemonbox ──► minibox-lib
-macboxd     ──► macbox    ──► daemonbox
-                              minibox-lib
-minibox-cli ──► minibox-lib  (unchanged)
+miniboxd    ──► daemonbox  ──► minibox-lib
+macboxd     ──► daemonbox  ──► minibox-lib
+macboxd     ──► macbox     ──► daemonbox
+                               minibox-lib
+minibox-cli ──► minibox-lib   (unchanged)
 ```
 
-`macbox` depends on `daemonbox` because `HandlerDependencies` (the adapter bundle type) lives in `daemonbox/handler.rs` after the move. `macbox::colima_deps()` constructs and returns it.
+`macbox` depends on `daemonbox` because `HandlerDependencies` lives in `daemonbox/handler.rs` after the move. `macbox::colima_deps()` constructs and returns it.
 
 ---
 
@@ -186,9 +199,10 @@ minibox-cli ──► minibox-lib  (unchanged)
 | Move   | `crates/miniboxd/src/handler.rs` → `crates/daemonbox/src/handler.rs` |
 | Move   | `crates/miniboxd/src/state.rs` → `crates/daemonbox/src/state.rs` |
 | Move   | `crates/miniboxd/src/server.rs` → `crates/daemonbox/src/server.rs` |
-| Modify | `crates/miniboxd/src/main.rs` — replace module declarations with `use daemonbox::*` |
+| Modify | `crates/miniboxd/src/lib.rs` — replace module bodies with `pub use daemonbox::*` re-exports |
+| Modify | `crates/miniboxd/src/main.rs` — update imports to use `daemonbox::` paths |
 | Modify | `crates/miniboxd/Cargo.toml` — add `daemonbox` dependency |
-| Modify | `Cargo.toml` — add `daemonbox`, `macbox`, `macboxd` to workspace members |
+| Modify | `Cargo.toml` — add `daemonbox`, `macbox`, `macboxd` to workspace members and workspace.dependencies |
 | Create | `crates/macbox/Cargo.toml` |
 | Create | `crates/macbox/src/lib.rs` |
 | Create | `crates/macbox/src/preflight.rs` |
@@ -223,7 +237,7 @@ pub enum MacboxError {
 - `daemonbox` unit tests: move existing `miniboxd` handler/state tests into `daemonbox/src/`.
 - `macbox` unit tests: mock `ColimaStatus` variants, test path resolution, test `preflight()` with injected executor (same pattern as `ColimaRegistry`'s `LimaExecutor`).
 - `macboxd` integration: manual smoke test (`macboxd &` → `minibox pull alpine` → `minibox run alpine -- echo hi`). No automated E2E for macOS yet.
-- Existing `miniboxd` tests must pass unchanged after the move.
+- Existing `miniboxd` integration tests must pass unchanged (via `lib.rs` re-export shim).
 
 ---
 
@@ -233,4 +247,4 @@ pub enum MacboxError {
 2. `cargo build --workspace` succeeds on Linux (no regressions).
 3. All existing lib and handler tests pass.
 4. `macboxd` starts, calls preflight, and accepts connections on macOS with Colima running.
-5. `minibox pull alpine && minibox run alpine -- /bin/echo hello` succeeds end-to-end via `macboxd`. (Depends on existing Colima adapter completeness, not new work in this spec.)
+5. `minibox pull alpine && minibox run alpine -- /bin/echo hello` succeeds via `macboxd`. (Depends on existing Colima adapter completeness, not new work in this spec.)
