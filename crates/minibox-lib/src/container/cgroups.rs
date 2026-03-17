@@ -103,10 +103,18 @@ impl CgroupManager {
         // SECURITY: I/O throttling to prevent disk DoS
         if let Some(io_limit) = self.config.io_max_bytes_per_sec {
             // Format: "major:minor rbps=<bytes> wbps=<bytes>"
-            // We'll use 8:0 (sda) as a default - in production, this should be configurable
-            let io_max_line = format!("8:0 rbps={} wbps={}", io_limit, io_limit);
-            self.write_file("io.max", &io_max_line)?;
-            debug!("set io.max={} bytes/sec", io_limit);
+            // Detect the first available block device dynamically so this works
+            // on VMs using virtio (vda/253:0) as well as bare-metal (sda/8:0).
+            match find_first_block_device() {
+                Some(dev) => {
+                    let io_max_line = format!("{} rbps={} wbps={}", dev, io_limit, io_limit);
+                    self.write_file("io.max", &io_max_line)?;
+                    debug!("set io.max={} bytes/sec on device {}", io_limit, dev);
+                }
+                None => {
+                    warn!("no block device found in /sys/block, skipping io.max configuration");
+                }
+            }
         }
 
         info!("cgroup created at {:?}", self.cgroup_path);
@@ -116,6 +124,9 @@ impl CgroupManager {
     /// Add a running process to this cgroup by writing its PID to
     /// `cgroup.procs`.
     pub fn add_process(&self, pid: u32) -> anyhow::Result<()> {
+        if pid == 0 {
+            anyhow::bail!("PID 0 is not a valid process ID");
+        }
         debug!("adding PID {} to cgroup {:?}", pid, self.cgroup_path);
         let path = self.cgroup_path.join("cgroup.procs");
         fs::write(&path, format!("{}\n", pid)).map_err(|source| CgroupError::AddProcessFailed {
@@ -162,6 +173,27 @@ impl CgroupManager {
             .with_context(|| format!("writing cgroup file {filename}"))?;
         Ok(())
     }
+}
+
+/// Return the `MAJOR:MINOR` string for the first block device found under
+/// `/sys/block/`, or `None` if no block devices are present.
+///
+/// Used to build a valid `io.max` entry; the exact device does not matter
+/// for resource-limit purposes — the kernel applies the limit to every
+/// device the cgroup's processes access.
+fn find_first_block_device() -> Option<String> {
+    let sys_block = std::path::Path::new("/sys/block");
+    let entries = fs::read_dir(sys_block).ok()?;
+    for entry in entries.flatten() {
+        let dev_path = entry.path().join("dev");
+        if let Ok(dev) = fs::read_to_string(&dev_path) {
+            let dev = dev.trim();
+            if !dev.is_empty() {
+                return Some(dev.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Enable cgroup controllers (`pids`, `memory`, `cpu`, `io`) in
