@@ -73,3 +73,6 @@ bench:
     cargo build -p minibox-bench
     ./target/debug/minibox-bench --dry-run
     ./target/debug/minibox-bench
+
+metrics-report:
+    uv run python scripts/collect_metrics.py --reports-dir artifacts/reports
