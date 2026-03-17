@@ -187,6 +187,8 @@ impl DaemonFixture {
 
     /// Send SIGTERM to the daemon.
     fn sigterm(&self) {
+        // SAFETY: Sending SIGTERM to our known child process PID. The PID is valid
+        // because we spawned it and haven't yet waited on it.
         unsafe {
             libc::kill(self.child.id() as i32, libc::SIGTERM);
         }
@@ -196,6 +198,7 @@ impl DaemonFixture {
 impl Drop for DaemonFixture {
     fn drop(&mut self) {
         // 1. Send SIGTERM
+        // SAFETY: Sending signal to our known child process PID.
         unsafe {
             libc::kill(self.child.id() as i32, libc::SIGTERM);
         }
@@ -616,6 +619,7 @@ fn test_e2e_sigterm_clean_shutdown() {
 
     // Send SIGTERM directly (don't use fixture.sigterm() — we want to
     // manually wait and then let Drop handle cleanup without double-signal)
+    // SAFETY: Sending signal to our known child process PID.
     unsafe { libc::kill(pid, libc::SIGTERM) };
 
     // Wait for exit

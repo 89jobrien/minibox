@@ -102,13 +102,22 @@ impl Drop for CgroupTestGuard {
             None => unsafe { std::env::remove_var("MINIBOX_CGROUP_ROOT") },
         }
 
-        // Clean up: remove child cgroups first, then the root
+        // Clean up: remove child cgroups first, then the root.
+        // cgroupfs only supports rmdir — recurse two levels for nested cgroups.
         if self.root.exists() {
-            // Remove any children (container cgroups created by tests)
             if let Ok(entries) = std::fs::read_dir(&self.root) {
                 for entry in entries.flatten() {
-                    if entry.path().is_dir() {
-                        let _ = std::fs::remove_dir(&entry.path());
+                    let path = entry.path();
+                    if path.is_dir() {
+                        // Recurse one level for nested cgroups (e.g., supervisor/)
+                        if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                            for sub in sub_entries.flatten() {
+                                if sub.path().is_dir() {
+                                    let _ = std::fs::remove_dir(&sub.path());
+                                }
+                            }
+                        }
+                        let _ = std::fs::remove_dir(&path);
                     }
                 }
             }
