@@ -14,13 +14,13 @@
 //! - Colima VM running (`colima start`)
 
 use crate::domain::{
-    AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
     ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
+use crate::adapt;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -46,12 +46,6 @@ pub struct ColimaRegistry {
     limactl_path: String,
     /// Optional injected executor (used in tests to avoid real limactl calls).
     executor: Option<LimaExecutor>,
-}
-
-impl Default for ColimaRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ColimaRegistry {
@@ -111,12 +105,6 @@ impl ColimaRegistry {
                 "Path not mounted in Lima VM: {path_str}. Only /Users and /tmp are typically mounted."
             ))
         }
-    }
-}
-
-impl AsAny for ColimaRegistry {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -241,12 +229,6 @@ pub struct ColimaFilesystem {
     executor: Option<LimaExecutor>,
 }
 
-impl Default for ColimaFilesystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ColimaFilesystem {
     pub fn new() -> Self {
         Self {
@@ -275,12 +257,6 @@ impl ColimaFilesystem {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    }
-}
-
-impl AsAny for ColimaFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -349,12 +325,6 @@ pub struct ColimaLimiter {
     executor: Option<LimaExecutor>,
 }
 
-impl Default for ColimaLimiter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ColimaLimiter {
     pub fn new() -> Self {
         Self {
@@ -383,12 +353,6 @@ impl ColimaLimiter {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    }
-}
-
-impl AsAny for ColimaLimiter {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -464,12 +428,6 @@ pub struct ColimaRuntime {
     executor: Option<LimaExecutor>,
 }
 
-impl Default for ColimaRuntime {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ColimaRuntime {
     pub fn new() -> Self {
         Self {
@@ -503,12 +461,6 @@ impl ColimaRuntime {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    }
-}
-
-impl AsAny for ColimaRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -596,6 +548,8 @@ struct RootFs {
     #[serde(rename = "Layers")]
     layers: Vec<String>,
 }
+
+adapt!(ColimaRegistry, ColimaFilesystem, ColimaLimiter, ColimaRuntime);
 
 #[cfg(test)]
 mod tests {
