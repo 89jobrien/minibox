@@ -115,7 +115,7 @@ impl Drop for CgroupTestGuard {
                         if let Ok(sub_entries) = std::fs::read_dir(&path) {
                             for sub in sub_entries.flatten() {
                                 if sub.path().is_dir() {
-                                    let _ = std::fs::remove_dir(&sub.path());
+                                    let _ = std::fs::remove_dir(sub.path());
                                 }
                             }
                         }
@@ -432,7 +432,7 @@ fn test_subtree_controllers_enabled() {
     let config = ResourceConfig::default();
 
     // Creating a cgroup should enable subtree controllers on the parent
-    let cgroup_path = limiter.create("test-subtree", &config).expect("create");
+    let _cgroup_path = limiter.create("test-subtree", &config).expect("create");
 
     let subtree_ctl =
         std::fs::read_to_string(guard.root().join("cgroup.subtree_control")).unwrap_or_default();
