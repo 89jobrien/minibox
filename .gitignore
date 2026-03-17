@@ -11,12 +11,10 @@
 !docs/cgroup-findings.md
 !docs/plans/*.md
 !docs/plans/
-!docs/superpowers/specs/*.md
-!docs/superpowers/plans/*.md
 
 # Claude Code local configuration
 .claude/
-.claude.local.md
+.worktrees/
 
 # Rust build artifacts
 /target/
@@ -31,6 +29,9 @@ Cargo.lock is committed for binary projects
 # Runtime directories (daemon creates these)
 /var/lib/minibox/
 /run/minibox/
+
+# Benchmark output
+/bench/results/
 
 # Testing
 *.profraw
