@@ -18,12 +18,12 @@
 //! ```
 
 use crate::error::RegistryError;
+use crate::image::ImageStore;
 use crate::image::layer::verify_digest;
 use crate::image::manifest::{
-    ManifestResponse, OciManifest, MEDIA_TYPE_DOCKER_MANIFEST,
-    MEDIA_TYPE_DOCKER_MANIFEST_LIST, MEDIA_TYPE_OCI_INDEX, MEDIA_TYPE_OCI_MANIFEST,
+    MEDIA_TYPE_DOCKER_MANIFEST, MEDIA_TYPE_DOCKER_MANIFEST_LIST, MEDIA_TYPE_OCI_INDEX,
+    MEDIA_TYPE_OCI_MANIFEST, ManifestResponse, OciManifest,
 };
-use crate::image::ImageStore;
 use anyhow::Context;
 use bytes::Bytes;
 use futures::stream::StreamExt;
@@ -92,9 +92,8 @@ impl RegistryClient {
     pub async fn authenticate(&self, image_name: &str) -> anyhow::Result<String> {
         debug!("authenticating for image '{}'", image_name);
 
-        let url = format!(
-            "{AUTH_URL}?service=registry.docker.io&scope=repository:{image_name}:pull"
-        );
+        let url =
+            format!("{AUTH_URL}?service=registry.docker.io&scope=repository:{image_name}:pull");
 
         let resp = self
             .http
@@ -237,12 +236,7 @@ impl RegistryClient {
     ///
     /// Docker Hub redirects blob requests to a CDN; the client follows these
     /// redirects automatically.
-    pub async fn pull_layer(
-        &self,
-        name: &str,
-        digest: &str,
-        token: &str,
-    ) -> anyhow::Result<Bytes> {
+    pub async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> anyhow::Result<Bytes> {
         let url = format!("{REGISTRY_BASE}/{name}/blobs/{digest}");
         debug!("pulling blob {} from {}", digest, url);
 
@@ -372,12 +366,7 @@ impl RegistryClient {
                 .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
 
             store
-                .store_layer(
-                    name,
-                    tag,
-                    &layer_desc.digest,
-                    std::io::Cursor::new(data),
-                )
+                .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
                 .with_context(|| format!("store layer {}", layer_desc.digest))?;
         }
 

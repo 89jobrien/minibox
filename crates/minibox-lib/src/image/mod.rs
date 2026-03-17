@@ -91,13 +91,12 @@ impl ImageStore {
             })?;
         }
 
-        let json = serde_json::to_string_pretty(manifest).map_err(|source| {
-            ImageError::ManifestParse {
+        let json =
+            serde_json::to_string_pretty(manifest).map_err(|source| ImageError::ManifestParse {
                 name: name.to_owned(),
                 tag: tag.to_owned(),
                 source,
-            }
-        })?;
+            })?;
 
         std::fs::write(&path, json).map_err(|source| ImageError::StoreWrite {
             path: path.display().to_string(),
@@ -204,9 +203,12 @@ impl ImageStore {
         // Note: The path may not exist yet, so we validate the parent instead
         if let Some(parent) = result.parent() {
             if parent.exists() {
-                let canonical = parent.canonicalize()
+                let canonical = parent
+                    .canonicalize()
                     .with_context(|| format!("canonicalizing parent of image dir: {parent:?}"))?;
-                let canonical_base = self.base_dir.canonicalize()
+                let canonical_base = self
+                    .base_dir
+                    .canonicalize()
                     .with_context(|| format!("canonicalizing base dir: {:?}", self.base_dir))?;
 
                 if !canonical.starts_with(&canonical_base) {

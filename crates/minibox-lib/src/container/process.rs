@@ -5,10 +5,10 @@
 //! command. The parent receives the child's PID.
 
 use crate::container::filesystem::pivot_root_to;
-use crate::container::namespace::{clone_with_namespaces, NamespaceConfig};
+use crate::container::namespace::{NamespaceConfig, clone_with_namespaces};
 use crate::error::ProcessError;
 use anyhow::Context;
-use nix::sys::wait::{waitpid, WaitStatus};
+use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::execvp;
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
@@ -82,8 +82,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     // 2. Add ourselves to the cgroup so resource limits apply.
     //    We write PID 0 which the kernel interprets as "current process"
     //    for cgroup.procs.
-    add_self_to_cgroup(&config.cgroup_path)
-        .with_context(|| "child: add_self_to_cgroup")?;
+    add_self_to_cgroup(&config.cgroup_path).with_context(|| "child: add_self_to_cgroup")?;
 
     // 3. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;
@@ -100,9 +99,10 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     let mut argv: Vec<CString> = Vec::with_capacity(config.args.len() + 1);
     argv.push(cmd.clone());
     for arg in &config.args {
-        argv.push(CString::new(arg.as_str()).map_err(|_| {
-            ProcessError::SpawnFailed(format!("invalid argument: {arg}"))
-        })?);
+        argv.push(
+            CString::new(arg.as_str())
+                .map_err(|_| ProcessError::SpawnFailed(format!("invalid argument: {arg}")))?,
+        );
     }
 
     debug!("execvp {:?} {:?}", cmd, argv);

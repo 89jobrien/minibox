@@ -545,14 +545,18 @@ mod tests {
         let registry = ColimaRegistry::new();
 
         // Valid paths
-        assert!(registry
-            .macos_to_lima_path(Path::new("/Users/joe/project"))
-            .is_ok());
+        assert!(
+            registry
+                .macos_to_lima_path(Path::new("/Users/joe/project"))
+                .is_ok()
+        );
         assert!(registry.macos_to_lima_path(Path::new("/tmp/test")).is_ok());
 
         // Invalid paths (not mounted)
-        assert!(registry
-            .macos_to_lima_path(Path::new("/var/lib/minibox"))
-            .is_err());
+        assert!(
+            registry
+                .macos_to_lima_path(Path::new("/var/lib/minibox"))
+                .is_err()
+        );
     }
 }

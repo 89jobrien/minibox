@@ -14,7 +14,8 @@ use tracing::{debug, info, warn};
 
 // Helper to check for parent directory components
 fn has_parent_dir_component(path: &Path) -> bool {
-    path.components().any(|c| matches!(c, std::path::Component::ParentDir))
+    path.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
 /// Extract a gzip-compressed tar layer into `dest`.
@@ -45,13 +46,15 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
     let mut archive = Archive::new(gz);
 
     // SECURITY: Manually iterate entries to validate each one
-    for entry_result in archive.entries()
+    for entry_result in archive
+        .entries()
         .map_err(|e| ImageError::LayerExtract(format!("failed to read tar entries: {e}")))?
     {
         let mut entry = entry_result
             .map_err(|e| ImageError::LayerExtract(format!("failed to read tar entry: {e}")))?;
 
-        let entry_path = entry.path()
+        let entry_path = entry
+            .path()
             .map_err(|e| ImageError::LayerExtract(format!("invalid entry path: {e}")))?
             .into_owned();
 
@@ -73,10 +76,11 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         if entry_type == EntryType::Symlink {
             if let Ok(Some(link_target)) = entry.link_name() {
                 if link_target.is_absolute() {
-                    let rel_target = link_target.strip_prefix("/")
-                        .map_err(|_| ImageError::LayerExtract(format!(
+                    let rel_target = link_target.strip_prefix("/").map_err(|_| {
+                        ImageError::LayerExtract(format!(
                             "invalid absolute symlink target: {link_target:?}"
-                        )))?;
+                        ))
+                    })?;
 
                     if has_parent_dir_component(rel_target) {
                         return Err(ImageError::LayerExtract(format!(
@@ -133,7 +137,9 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         // SECURITY: Strip setuid/setgid bits from file permissions
         // We don't trust image-provided permissions for these bits
         if entry_type == EntryType::Regular {
-            let mode = entry.header().mode()
+            let mode = entry
+                .header()
+                .mode()
                 .map_err(|e| ImageError::LayerExtract(format!("failed to get mode: {e}")))?;
 
             // Remove setuid (04000), setgid (02000), and sticky (01000) bits
@@ -149,10 +155,9 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
         }
 
         // Extract the entry
-        entry.unpack_in(dest)
-            .map_err(|e| ImageError::LayerExtract(format!(
-                "failed to extract entry {entry_path:?}: {e}"
-            )))?;
+        entry.unpack_in(dest).map_err(|e| {
+            ImageError::LayerExtract(format!("failed to extract entry {entry_path:?}: {e}"))
+        })?;
     }
 
     info!("layer extracted to {:?}", dest);
@@ -188,7 +193,8 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     let full_path = dest.join(entry_path);
 
     // Canonicalize dest for comparison (full_path may not exist yet)
-    let canonical_dest = dest.canonicalize()
+    let canonical_dest = dest
+        .canonicalize()
         .with_context(|| format!("canonicalizing dest {dest:?}"))?;
 
     // Check if the entry path when joined with dest would escape
@@ -218,13 +224,14 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
 /// Returns [`ImageError::DigestMismatch`] if the computed hash does not match
 /// the expected value, or an error if `expected_digest` is malformed.
 pub fn verify_digest(data: &[u8], expected_digest: &str) -> anyhow::Result<()> {
-    let expected_hex = expected_digest
-        .strip_prefix("sha256:")
-        .ok_or_else(|| ImageError::DigestMismatch {
-            digest: expected_digest.to_owned(),
-            expected: expected_digest.to_owned(),
-            actual: "(could not parse prefix)".into(),
-        })?;
+    let expected_hex =
+        expected_digest
+            .strip_prefix("sha256:")
+            .ok_or_else(|| ImageError::DigestMismatch {
+                digest: expected_digest.to_owned(),
+                expected: expected_digest.to_owned(),
+                actual: "(could not parse prefix)".into(),
+            })?;
 
     let mut hasher = Sha256::new();
     hasher.update(data);

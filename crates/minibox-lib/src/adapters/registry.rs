@@ -5,8 +5,8 @@
 //! following hexagonal architecture principles.
 
 use crate::domain::{AsAny, ImageMetadata, ImageRegistry, LayerInfo};
-use crate::image::registry::RegistryClient;
 use crate::image::ImageStore;
+use crate::image::registry::RegistryClient;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;
@@ -99,9 +99,7 @@ impl ImageRegistry for DockerHubRegistry {
         debug!("pulling image {}:{} from Docker Hub", name, tag);
 
         // Delegate to existing RegistryClient
-        self.client
-            .pull_image(name, tag, &self.store)
-            .await?;
+        self.client.pull_image(name, tag, &self.store).await?;
 
         // Extract layer paths to build metadata
         let layer_paths = self.store.get_image_layers(name, tag)?;

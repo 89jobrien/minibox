@@ -6,7 +6,7 @@
 //!
 //! Run with: `cargo bench --bench trait_overhead`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_lib::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ResourceConfig,
@@ -25,11 +25,7 @@ fn bench_registry_direct_call(c: &mut Criterion) {
         let registry = MockRegistry::new().with_cached_image("alpine", "latest");
         let rt = Runtime::new().unwrap();
 
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(registry.has_image("alpine", "latest")).await
-            })
-        });
+        b.iter(|| rt.block_on(async { black_box(registry.has_image("alpine", "latest")).await }));
     });
 }
 
@@ -39,11 +35,7 @@ fn bench_registry_trait_object_call(c: &mut Criterion) {
             Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
         let rt = Runtime::new().unwrap();
 
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(registry.has_image("alpine", "latest")).await
-            })
-        });
+        b.iter(|| rt.block_on(async { black_box(registry.has_image("alpine", "latest")).await }));
     });
 }
 
@@ -53,9 +45,7 @@ fn bench_filesystem_direct_call(c: &mut Criterion) {
         let layers = vec![PathBuf::from("/layer1")];
         let container_dir = PathBuf::from("/container");
 
-        b.iter(|| {
-            black_box(fs.setup_rootfs(&layers, &container_dir)).ok()
-        });
+        b.iter(|| black_box(fs.setup_rootfs(&layers, &container_dir)).ok());
     });
 }
 
@@ -65,9 +55,7 @@ fn bench_filesystem_trait_object_call(c: &mut Criterion) {
         let layers = vec![PathBuf::from("/layer1")];
         let container_dir = PathBuf::from("/container");
 
-        b.iter(|| {
-            black_box(fs.setup_rootfs(&layers, &container_dir)).ok()
-        });
+        b.iter(|| black_box(fs.setup_rootfs(&layers, &container_dir)).ok());
     });
 }
 
@@ -76,9 +64,7 @@ fn bench_limiter_direct_call(c: &mut Criterion) {
         let limiter = MockLimiter::new();
         let config = ResourceConfig::default();
 
-        b.iter(|| {
-            black_box(limiter.create("container-123", &config)).ok()
-        });
+        b.iter(|| black_box(limiter.create("container-123", &config)).ok());
     });
 }
 
@@ -87,9 +73,7 @@ fn bench_limiter_trait_object_call(c: &mut Criterion) {
         let limiter: Arc<dyn ResourceLimiter> = Arc::new(MockLimiter::new());
         let config = ResourceConfig::default();
 
-        b.iter(|| {
-            black_box(limiter.create("container-123", &config)).ok()
-        });
+        b.iter(|| black_box(limiter.create("container-123", &config)).ok());
     });
 }
 
@@ -106,11 +90,7 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
             cgroup_path: PathBuf::from("/cgroup"),
         };
 
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(runtime.spawn_process(&config).await).ok()
-            })
-        });
+        b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
     });
 }
 
@@ -127,11 +107,7 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
             cgroup_path: PathBuf::from("/cgroup"),
         };
 
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(runtime.spawn_process(&config).await).ok()
-            })
-        });
+        b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
     });
 }
 
@@ -141,12 +117,9 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
 
 fn bench_arc_clone(c: &mut Criterion) {
     c.bench_function("arc_clone", |b| {
-        let registry: Arc<dyn ImageRegistry> =
-            Arc::new(MockRegistry::new());
+        let registry: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
 
-        b.iter(|| {
-            black_box(Arc::clone(&registry))
-        });
+        b.iter(|| black_box(Arc::clone(&registry)));
     });
 }
 
@@ -156,12 +129,9 @@ fn bench_arc_clone(c: &mut Criterion) {
 
 fn bench_downcast(c: &mut Criterion) {
     c.bench_function("downcast_to_concrete", |b| {
-        let registry: Arc<dyn ImageRegistry> =
-            Arc::new(MockRegistry::new());
+        let registry: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
 
-        b.iter(|| {
-            black_box(registry.as_any().downcast_ref::<MockRegistry>())
-        });
+        b.iter(|| black_box(registry.as_any().downcast_ref::<MockRegistry>()));
     });
 }
 

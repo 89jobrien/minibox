@@ -24,8 +24,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 /// Helper to create daemon state with a test image store.
 fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store =
-        minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -324,7 +323,8 @@ async fn test_handle_remove_success() {
     state.update_container_state(&container_id, "Stopped").await;
 
     // Now remove it
-    let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps.clone()).await;
+    let remove_response =
+        handler::handle_remove(container_id.clone(), state.clone(), deps.clone()).await;
 
     match remove_response {
         DaemonResponse::Success { message } => {
@@ -433,7 +433,11 @@ async fn test_full_container_lifecycle() {
     let run_response = handler::handle_run(
         "nginx".to_string(),
         Some("alpine".to_string()),
-        vec!["/bin/sh".to_string(), "-c".to_string(), "echo test".to_string()],
+        vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo test".to_string(),
+        ],
         Some(256 * 1024 * 1024), // 256MB
         Some(750),               // CPU weight
         state.clone(),

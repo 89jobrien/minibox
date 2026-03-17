@@ -14,14 +14,15 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 #[cfg(target_os = "linux")]
-use nix::mount::{mount, umount2, MntFlags, MsFlags};
+use nix::mount::{MntFlags, MsFlags, mount, umount2};
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("minibox only supports Linux");
 
 // Path validation utilities
 fn has_parent_dir_component(path: &Path) -> bool {
-    path.components().any(|c| matches!(c, std::path::Component::ParentDir))
+    path.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
 // ---------------------------------------------------------------------------
@@ -147,10 +148,7 @@ pub fn setup_overlay_with_base(
         Some(options.as_str()),
     )
     .map_err(|source| {
-        FilesystemError::OverlayMount(format!(
-            "mount overlay -> {}: {source}",
-            merged.display()
-        ))
+        FilesystemError::OverlayMount(format!("mount overlay -> {}: {source}", merged.display()))
     })
     .with_context(|| "overlay mount failed")?;
 

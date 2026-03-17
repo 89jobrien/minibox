@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
 
 pub const MEDIA_TYPE_OCI_MANIFEST: &str = "application/vnd.oci.image.manifest.v1+json";
 pub const MEDIA_TYPE_OCI_INDEX: &str = "application/vnd.oci.image.index.v1+json";
-pub const MEDIA_TYPE_DOCKER_MANIFEST: &str =
-    "application/vnd.docker.distribution.manifest.v2+json";
+pub const MEDIA_TYPE_DOCKER_MANIFEST: &str = "application/vnd.docker.distribution.manifest.v2+json";
 pub const MEDIA_TYPE_DOCKER_MANIFEST_LIST: &str =
     "application/vnd.docker.distribution.manifest.list.v2+json";
 

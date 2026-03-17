@@ -1,0 +1,60 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  integration:
+    name: Integration + E2E
+    # Requires a self-hosted Linux runner with:
+    #   - root access (or passwordless sudo)
+    #   - cgroups v2 unified hierarchy
+    #   - overlay filesystem support
+    #   - Docker Hub connectivity (for image pulls)
+    # Register runner with labels: self-hosted, linux, privileged
+    runs-on: [self-hosted, linux, privileged]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-integration-
+
+      - name: Preflight check
+        run: cargo test -p minibox-lib preflight::tests -- --nocapture 2>&1 || true
+
+      - name: Build release binaries
+        run: cargo build --release
+
+      - name: Cgroup integration tests
+        run: sudo -E cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture
+
+      - name: Daemon + CLI e2e tests
+        run: |
+          cargo test -p miniboxd --test e2e_tests --release --no-run --message-format=json 2>/dev/null \
+            | jq -r 'select(.executable) | .executable' > /tmp/minibox-e2e-bin
+          sudo -E MINIBOX_TEST_BIN_DIR="${PWD}/target/release" \
+            $(cat /tmp/minibox-e2e-bin) --test-threads=1 --nocapture
+
+      - name: Lifecycle e2e (Docker Hub)
+        run: |
+          sudo -E cargo test -p miniboxd --test integration_tests \
+            -- --ignored test_complete_container_lifecycle --nocapture
+
+      - name: Clean test state
+        if: always()
+        run: |
+          sudo pkill -f 'miniboxd.*minibox-test' 2>/dev/null || true
+          sudo mount | grep 'minibox-test' | awk '{print $3}' | xargs -r sudo umount 2>/dev/null || true
+          sudo find /sys/fs/cgroup -name 'minibox-test-*' -type d -exec rmdir {} \; 2>/dev/null || true
+          sudo rm -rf /tmp/minibox-test-* 2>/dev/null || true

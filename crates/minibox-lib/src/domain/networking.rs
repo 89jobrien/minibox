@@ -149,8 +149,7 @@ impl std::fmt::Display for Protocol {
 }
 
 /// Network statistics for a container.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NetworkStats {
     /// Bytes received by container
     pub rx_bytes: u64,
@@ -176,4 +175,3 @@ pub struct NetworkStats {
     /// Transmit drops
     pub tx_dropped: u64,
 }
-

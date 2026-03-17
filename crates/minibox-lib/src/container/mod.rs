@@ -8,13 +8,13 @@ pub mod filesystem;
 pub mod namespace;
 pub mod process;
 
-use crate::container::cgroups::{cgroup_path_for, CgroupConfig, CgroupManager};
+use crate::container::cgroups::{CgroupConfig, CgroupManager, cgroup_path_for};
 use crate::container::filesystem::{cleanup_mounts, setup_overlay};
 use crate::container::namespace::NamespaceConfig;
-use crate::container::process::{spawn_container_process, wait_for_exit, ContainerConfig};
-use anyhow::{bail, Context};
+use crate::container::process::{ContainerConfig, spawn_container_process, wait_for_exit};
+use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
@@ -190,10 +190,7 @@ impl Container {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         let mut exited = false;
         while std::time::Instant::now() < deadline {
-            match nix::sys::wait::waitpid(
-                nix_pid,
-                Some(nix::sys::wait::WaitPidFlag::WNOHANG),
-            ) {
+            match nix::sys::wait::waitpid(nix_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
                 Ok(nix::sys::wait::WaitStatus::StillAlive) => {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
@@ -214,7 +211,10 @@ impl Container {
         }
 
         if !exited {
-            info!("container {} did not exit gracefully, sending SIGKILL", self.id);
+            info!(
+                "container {} did not exit gracefully, sending SIGKILL",
+                self.id
+            );
             if let Err(e) = kill(nix_pid, Signal::SIGKILL) {
                 warn!("SIGKILL to PID {} failed: {}", pid, e);
             }
@@ -238,10 +238,7 @@ impl Container {
     /// The container must be in the [`Stopped`](ContainerState::Stopped) state.
     pub fn remove(&mut self, base_dir: &PathBuf) -> anyhow::Result<()> {
         if self.state == ContainerState::Running {
-            bail!(
-                "container {} is still running; stop it first",
-                self.id
-            );
+            bail!("container {} is still running; stop it first", self.id);
         }
         if self.state == ContainerState::Removed {
             return Ok(());

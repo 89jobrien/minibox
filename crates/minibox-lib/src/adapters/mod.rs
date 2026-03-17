@@ -63,11 +63,11 @@
 //! ```
 
 // Platform-native adapters (Linux only)
-mod registry;
 #[cfg(target_os = "linux")]
 mod filesystem;
 #[cfg(target_os = "linux")]
 mod limiter;
+mod registry;
 #[cfg(target_os = "linux")]
 mod runtime;
 
@@ -75,19 +75,19 @@ mod runtime;
 mod gke;
 
 // Cross-platform adapters
-mod wsl;
-mod docker_desktop;
 mod colima;
+mod docker_desktop;
+mod wsl;
 
 // Test doubles (always available for testing)
 pub mod mocks;
 
 // Linux-native exports (only on Linux)
-pub use registry::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use filesystem::OverlayFilesystem;
 #[cfg(target_os = "linux")]
 pub use limiter::CgroupV2Limiter;
+pub use registry::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
 
@@ -96,6 +96,6 @@ pub use runtime::LinuxNamespaceRuntime;
 pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 
 // Cross-platform exports (always available)
-pub use wsl::{WslRuntime, WslFilesystem, WslLimiter};
-pub use docker_desktop::{DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter};
-pub use colima::{ColimaRegistry, ColimaRuntime, ColimaFilesystem, ColimaLimiter};
+pub use colima::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
+pub use wsl::{WslFilesystem, WslLimiter, WslRuntime};

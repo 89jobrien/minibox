@@ -53,12 +53,12 @@
 //! - **Future-proofing**: Add new backends without changing business logic
 
 // Core domain traits
-mod networking;
 mod extensions;
+mod networking;
 
 // Re-exports for public API
-pub use networking::*;
 pub use extensions::*;
+pub use networking::*;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -232,11 +232,7 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     ///
     /// MUST validate that `image_layers` paths don't contain `..` or
     /// escape the allowed base directory.
-    fn setup_rootfs(
-        &self,
-        image_layers: &[PathBuf],
-        container_dir: &Path,
-    ) -> Result<PathBuf>;
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf>;
 
     /// Pivot root inside the container process.
     ///

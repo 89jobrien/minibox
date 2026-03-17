@@ -20,14 +20,16 @@
 
 #![cfg(target_os = "linux")]
 
-use minibox_lib::adapters::{CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem};
+use minibox_lib::adapters::{
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
+};
 use minibox_lib::image::ImageStore;
+use minibox_lib::protocol::DaemonResponse;
 use miniboxd::handler::{self, HandlerDependencies};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
-use minibox_lib::protocol::DaemonResponse;
 
 /// Helper to create real infrastructure dependencies with temporary storage.
 fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
@@ -60,8 +62,8 @@ fn require_root() {
 
 /// Check if cgroups v2 is available.
 fn require_cgroups_v2() {
-    let cgroup_mount = std::fs::read_to_string("/proc/mounts")
-        .expect("failed to read /proc/mounts");
+    let cgroup_mount =
+        std::fs::read_to_string("/proc/mounts").expect("failed to read /proc/mounts");
 
     if !cgroup_mount.contains("cgroup2") {
         panic!("cgroups v2 not available. Ensure /sys/fs/cgroup is mounted as cgroup2");
@@ -100,7 +102,8 @@ async fn test_pull_real_image_from_dockerhub() {
     assert!(state.image_store.has_image("library/alpine", "latest"));
 
     // Verify layers were extracted
-    let layers = state.image_store
+    let layers = state
+        .image_store
         .get_image_layers("library/alpine", "latest")
         .expect("failed to get layers");
     assert!(!layers.is_empty(), "image should have layers");
@@ -197,9 +200,13 @@ async fn test_run_container_with_resource_limits() {
     let response = handler::handle_run(
         "alpine".to_string(),
         Some("latest".to_string()),
-        vec!["/bin/sh".to_string(), "-c".to_string(), "sleep 1".to_string()],
+        vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "sleep 1".to_string(),
+        ],
         Some(128 * 1024 * 1024), // 128MB memory limit
-        Some(250),                // CPU weight 250 (quarter of default)
+        Some(250),               // CPU weight 250 (quarter of default)
         state.clone(),
         deps,
     )
@@ -267,23 +274,23 @@ async fn test_container_removal_cleanup() {
     state.update_container_state(&container_id, "Stopped").await;
 
     // Remove container
-    let remove_response = handler::handle_remove(
-        container_id.clone(),
-        state.clone(),
-        deps,
-    )
-    .await;
+    let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
 
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
 
     // Verify cleanup
     let container = state.get_container(&container_id).await;
-    assert!(container.is_none(), "container should be removed from state");
+    assert!(
+        container.is_none(),
+        "container should be removed from state"
+    );
 
     // Verify cgroup was cleaned up
     let cgroup_path = format!("/sys/fs/cgroup/minibox/{}", container_id);
-    assert!(!std::path::Path::new(&cgroup_path).exists(),
-            "cgroup should be removed");
+    assert!(
+        !std::path::Path::new(&cgroup_path).exists(),
+        "cgroup should be removed"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +314,8 @@ async fn test_overlay_filesystem_setup() {
     .await;
 
     // Get layer paths
-    let layers = state.image_store
+    let layers = state
+        .image_store
         .get_image_layers("library/alpine", "latest")
         .expect("failed to get layers");
 
@@ -315,14 +323,21 @@ async fn test_overlay_filesystem_setup() {
     let container_dir = _temp.path().join("test-container");
     std::fs::create_dir(&container_dir).expect("failed to create container dir");
 
-    let rootfs = deps.filesystem
+    let rootfs = deps
+        .filesystem
         .setup_rootfs(&layers, &container_dir)
         .expect("failed to setup rootfs");
 
     // Verify merged directory exists and contains expected files
     assert!(rootfs.exists(), "rootfs should exist");
-    assert!(rootfs.join("bin").exists(), "bin directory should exist in rootfs");
-    assert!(rootfs.join("etc").exists(), "etc directory should exist in rootfs");
+    assert!(
+        rootfs.join("bin").exists(),
+        "bin directory should exist in rootfs"
+    );
+    assert!(
+        rootfs.join("etc").exists(),
+        "etc directory should exist in rootfs"
+    );
 
     // Cleanup
     deps.filesystem
@@ -359,9 +374,13 @@ async fn test_complete_container_lifecycle() {
     let run_response = handler::handle_run(
         "alpine".to_string(),
         Some("latest".to_string()),
-        vec!["/bin/sh".to_string(), "-c".to_string(), "echo test && sleep 1".to_string()],
+        vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo test && sleep 1".to_string(),
+        ],
         Some(256 * 1024 * 1024), // 256MB
-        Some(500),                // CPU weight 500
+        Some(500),               // CPU weight 500
         state.clone(),
         deps.clone(),
     )
@@ -389,12 +408,7 @@ async fn test_complete_container_lifecycle() {
 
     // 6. Mark as stopped and remove
     state.update_container_state(&container_id, "Stopped").await;
-    let remove_response = handler::handle_remove(
-        container_id.clone(),
-        state.clone(),
-        deps,
-    )
-    .await;
+    let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
 
     // 7. Verify complete cleanup
@@ -432,8 +446,11 @@ async fn test_multiple_concurrent_containers() {
             handler::handle_run(
                 "alpine".to_string(),
                 Some("latest".to_string()),
-                vec!["/bin/sh".to_string(), "-c".to_string(),
-                     format!("echo container {} && sleep 1", i)],
+                vec![
+                    "/bin/sh".to_string(),
+                    "-c".to_string(),
+                    format!("echo container {} && sleep 1", i),
+                ],
                 Some(64 * 1024 * 1024), // 64MB per container
                 None,
                 state_clone,

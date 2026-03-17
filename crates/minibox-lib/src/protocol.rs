@@ -201,7 +201,11 @@ mod tests {
         let req = DaemonRequest::Run {
             image: "ubuntu".to_string(),
             tag: Some("22.04".to_string()),
-            command: vec!["/bin/bash".to_string(), "-c".to_string(), "echo hi".to_string()],
+            command: vec![
+                "/bin/bash".to_string(),
+                "-c".to_string(),
+                "echo hi".to_string(),
+            ],
             memory_limit_bytes: Some(536870912), // 512MB
             cpu_weight: Some(500),
         };
@@ -374,7 +378,9 @@ mod tests {
         let decoded = decode_response(&encoded).expect("decode failed");
 
         match decoded {
-            DaemonResponse::ContainerList { containers: decoded_containers } => {
+            DaemonResponse::ContainerList {
+                containers: decoded_containers,
+            } => {
                 assert_eq!(decoded_containers.len(), 2);
                 assert_eq!(decoded_containers[0].id, "abc123");
                 assert_eq!(decoded_containers[0].pid, Some(1234));
@@ -423,7 +429,8 @@ mod tests {
         let json_without_newline = b"{\"type\":\"List\"}";
 
         let decoded_with = decode_request(json_with_newline).expect("decode with newline failed");
-        let decoded_without = decode_request(json_without_newline).expect("decode without newline failed");
+        let decoded_without =
+            decode_request(json_without_newline).expect("decode without newline failed");
 
         assert!(matches!(decoded_with, DaemonRequest::List));
         assert!(matches!(decoded_without, DaemonRequest::List));
@@ -435,7 +442,8 @@ mod tests {
         let json_without_newline = b"{\"type\":\"Success\",\"message\":\"ok\"}";
 
         let decoded_with = decode_response(json_with_newline).expect("decode with newline failed");
-        let decoded_without = decode_response(json_without_newline).expect("decode without newline failed");
+        let decoded_without =
+            decode_response(json_without_newline).expect("decode without newline failed");
 
         assert!(matches!(decoded_with, DaemonResponse::Success { .. }));
         assert!(matches!(decoded_without, DaemonResponse::Success { .. }));
@@ -502,7 +510,9 @@ mod tests {
         let decoded = decode_request(&encoded).expect("decode failed");
 
         match decoded {
-            DaemonRequest::Run { memory_limit_bytes, .. } => {
+            DaemonRequest::Run {
+                memory_limit_bytes, ..
+            } => {
                 assert_eq!(memory_limit_bytes, Some(u64::MAX));
             }
             _ => panic!("wrong request type"),

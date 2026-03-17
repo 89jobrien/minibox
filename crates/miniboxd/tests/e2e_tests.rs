@@ -77,18 +77,15 @@ impl DaemonFixture {
     ///
     /// Panics if the daemon fails to start within 10 seconds.
     fn start() -> Self {
-        let data_dir = TempDir::with_prefix("minibox-test-data-")
-            .expect("create temp data dir");
-        let run_dir = TempDir::with_prefix("minibox-test-run-")
-            .expect("create temp run dir");
+        let data_dir = TempDir::with_prefix("minibox-test-data-").expect("create temp data dir");
+        let run_dir = TempDir::with_prefix("minibox-test-run-").expect("create temp run dir");
 
         let socket_path = run_dir.path().join("miniboxd.sock");
 
         // Create cgroup root under our own cgroup (not top-level, which
         // fails on systemd hosts). Read /proc/self/cgroup to find our
         // current cgroup, then create a test subtree there.
-        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup")
-            .unwrap_or_default();
+        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
         let cgroup_rel = self_cgroup
             .lines()
             .find_map(|l| l.strip_prefix("0::"))
@@ -266,8 +263,7 @@ fn test_e2e_pull_alpine() {
         "pull should succeed.\nstdout: {stdout}\nstderr: {stderr}"
     );
     assert!(
-        stdout.to_lowercase().contains("pull")
-            || stdout.to_lowercase().contains("alpine"),
+        stdout.to_lowercase().contains("pull") || stdout.to_lowercase().contains("alpine"),
         "stdout should mention pull/alpine, got: {stdout}"
     );
 }
@@ -376,7 +372,10 @@ fn test_e2e_rm_container() {
 
         // Verify it's gone from ps
         let (_, ps_out, _) = fixture.run_cli(&["ps"]);
-        assert!(!ps_out.contains(&id), "container should not appear in ps after rm");
+        assert!(
+            !ps_out.contains(&id),
+            "container should not appear in ps after rm"
+        );
     } else {
         eprintln!("SKIPPED: could not extract container ID from: {stdout}");
     }
@@ -428,7 +427,10 @@ fn test_e2e_run_with_memory_limit() {
         "/bin/sleep",
         "30",
     ]);
-    assert!(success, "run with memory limit should succeed, stdout: {stdout}");
+    assert!(
+        success,
+        "run with memory limit should succeed, stdout: {stdout}"
+    );
 
     std::thread::sleep(Duration::from_millis(500));
 
@@ -461,7 +463,10 @@ fn test_e2e_run_with_cpu_weight() {
         "/bin/sleep",
         "30",
     ]);
-    assert!(success, "run with cpu-weight should succeed, stdout: {stdout}");
+    assert!(
+        success,
+        "run with cpu-weight should succeed, stdout: {stdout}"
+    );
 
     std::thread::sleep(Duration::from_millis(500));
 
