@@ -11,6 +11,7 @@ pub mod container;
 pub mod domain;
 pub mod error;
 pub mod image;
+pub mod preflight;
 pub mod protocol;
 
 pub use error::MiniboxError;
