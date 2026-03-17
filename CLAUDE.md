@@ -66,6 +66,9 @@ just test-unit          # unit tests, any platform
 just test-integration   # cgroup tests, Linux+root
 just test-e2e           # daemon+CLI tests, Linux+root
 just doctor             # preflight capability check
+
+# Run benchmarks (minibox-lib only)
+cargo bench -p minibox-lib          # protocol codec encode/decode
 ```
 
 **Test Status:**
@@ -223,9 +226,15 @@ Understanding these helps prioritize feature development:
 - **No exec command**: Cannot run commands in existing containers
 - **No logs capture**: Container output not stored
 - **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `colima`, `docker_desktop`, and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` only accepts `native` or `gke` — passing anything else causes the daemon to bail at startup.
+- **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
 
 ## Debugging
+
+### Cgroup v2 gotchas (relevant when modifying `cgroups.rs`)
+
+- `io.max` requires `MAJOR:MINOR` of a real block device — Colima VM uses virtio (`vda` = 253:0), not sda (8:0). Use `find_first_block_device()` (reads `/sys/block/*/dev`) rather than hardcoding.
+- PID 0 is silently accepted by kernel 6.8 but is never valid — validate explicitly before writing to `cgroup.procs`.
+- A cgroup cannot have both processes AND children (cgroup v2 "no internal process" rule). Tests run inside a dedicated `minibox-test-slice/runner-leaf` cgroup via `scripts/run-cgroup-tests.sh`.
 
 ### Check kernel features
 
