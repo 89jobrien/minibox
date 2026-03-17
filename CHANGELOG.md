@@ -75,3 +75,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Adopted `Dyn` type aliases and structured `DomainError` variants for cleaner error handling across adapters.
 - Enforced Linux-only compilation via `compile_error!` macro instead of a runtime cfg gate.
 - Extracted `miniboxd` as its own lib crate; modernized format strings throughout.
+
+## [v0.0.3] - 2026-03-16
+
+### Added
+
+- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `minibox-lib/src/domain.rs`.
+- Infrastructure adapters implementing domain traits for native Linux (namespaces, overlay FS, cgroups v2) and cross-platform stubs (Windows/macOS).
+- Dependency injection wired into daemon handlers; mock adapter implementations for unit tests.
+- Comprehensive unit tests using mock adapters; integration tests against real Linux infrastructure.
+- Cross-platform conformance test suite validating adapter contracts.
+- Colima/Lima adapter for running containers on macOS via a Linux VM.
+- Comprehensive security framework: path canonicalization, `..` rejection, symlink validation, device node blocking, and setuid/setgid stripping.
+
+### Fixed
+
+- Clippy lints resolved; license declarations added to all crates.
