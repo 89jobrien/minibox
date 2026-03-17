@@ -70,10 +70,13 @@ just doctor             # preflight capability check
 
 **Test Status:**
 
-- Protocol serialization + adapters: ~50 tests passing
+- Unit + conformance: ~53 lib tests + 12 handler + 10 conformance passing
+- Cgroup integration: 16 tests (Linux+root, `just test-integration`)
+- E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
+- Existing integration: 8 tests (Linux+root)
 - Path validation: TODO (security-critical)
 - Tar entry validation: TODO (security-critical)
-- E2E tests: design spec + impl plan written (`docs/superpowers/specs/`, `docs/plans/`)
+- Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
 ## Architecture Overview
 
@@ -88,6 +91,8 @@ Three crates in cargo workspace:
 ### Critical Design Patterns
 
 **Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `minibox-lib/src/domain.rs` are implemented by adapters in `minibox-lib/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
+
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root) and `gke` (proot, copy FS, no-op limiter, unprivileged). Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
@@ -115,6 +120,11 @@ Three crates in cargo workspace:
 7. On exit, reaper updates state to Stopped
 
 ### Key Modules
+
+**minibox-lib/src/**:
+
+- `preflight.rs`: Host capability probing (cgroups v2, overlay, systemd, kernel version). Used by `just doctor` and test `require_capability!` macro.
+- `domain.rs`: Trait definitions (ports) for hexagonal architecture
 
 **minibox-lib/src/container/**:
 
@@ -232,9 +242,9 @@ lsmod | grep overlay
 ### Inspect container state
 
 ```bash
-# View cgroup limits
-cat /sys/fs/cgroup/minibox/{container_id}/memory.max
-cat /sys/fs/cgroup/minibox/{container_id}/cpu.weight
+# View cgroup limits (path depends on systemd config, check MINIBOX_CGROUP_ROOT)
+cat /sys/fs/cgroup/minibox.slice/miniboxd.service/{container_id}/memory.max
+cat /sys/fs/cgroup/minibox.slice/miniboxd.service/{container_id}/cpu.weight
 
 # Check overlay mount
 mount | grep minibox
@@ -269,6 +279,7 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
+- `MINIBOX_ADAPTER` — adapter suite: `native` (default) or `gke`
 
 ## Skills Available
 
