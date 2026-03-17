@@ -46,6 +46,9 @@ See `TESTING.md` for comprehensive testing strategy and guidelines.
 **Quick reference:**
 
 ```bash
+# On macOS, only minibox-lib tests run — miniboxd and minibox-cli have
+# compile_error!() guards. Use: cargo test -p minibox-lib
+
 # Run all tests (requires Linux)
 cargo test --workspace
 
