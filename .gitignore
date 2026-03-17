@@ -12,6 +12,7 @@
 !docs/plans/*.md
 !docs/plans/
 !docs/superpowers/specs/*.md
+!docs/superpowers/plans/*.md
 
 # Claude Code local configuration
 .claude/
