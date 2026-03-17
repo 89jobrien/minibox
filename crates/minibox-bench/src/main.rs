@@ -34,6 +34,85 @@ struct TestResult {
     durations_micros: Vec<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct BenchConfig {
+    iters: usize,
+    cold: bool,
+    warm: bool,
+    dry_run: bool,
+    suites: Vec<String>,
+    out_dir: String,
+}
+
+impl BenchConfig {
+    fn from_args(args: Vec<String>) -> Result<Self, String> {
+        let mut iters = 20usize;
+        let mut cold = true;
+        let mut warm = true;
+        let mut dry_run = false;
+        let mut suites = Vec::new();
+        let mut out_dir = "bench/results".to_string();
+
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--iters" => {
+                    i += 1;
+                    let val = args
+                        .get(i)
+                        .ok_or_else(|| "--iters requires a value".to_string())?;
+                    iters = val.parse().map_err(|_| "invalid --iters".to_string())?;
+                }
+                "--cold" => cold = true,
+                "--no-cold" => cold = false,
+                "--warm" => warm = true,
+                "--no-warm" => warm = false,
+                "--dry-run" => dry_run = true,
+                "--suite" => {
+                    i += 1;
+                    let val = args
+                        .get(i)
+                        .ok_or_else(|| "--suite requires a value".to_string())?;
+                    suites.push(val.to_string());
+                }
+                "--out-dir" => {
+                    i += 1;
+                    let val = args
+                        .get(i)
+                        .ok_or_else(|| "--out-dir requires a value".to_string())?;
+                    out_dir = val.to_string();
+                }
+                "--help" | "-h" => {
+                    print_help();
+                    std::process::exit(0);
+                }
+                other => return Err(format!("unknown argument: {other}")),
+            }
+            i += 1;
+        }
+
+        Ok(Self {
+            iters,
+            cold,
+            warm,
+            dry_run,
+            suites,
+            out_dir,
+        })
+    }
+
+    fn default() -> Self {
+        Self {
+            iters: 20,
+            cold: true,
+            warm: true,
+            dry_run: false,
+            suites: Vec::new(),
+            out_dir: "bench/results".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Stats {
     min: u64,
@@ -62,6 +141,10 @@ fn main() {
     println!("minibox-bench: not yet implemented");
 }
 
+fn print_help() {
+    println!("minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>\n  --out-dir <path>");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +163,12 @@ mod tests {
         assert_eq!(stats.min, 10);
         assert_eq!(stats.avg, 30);
         assert_eq!(stats.p95, 50);
+    }
+
+    #[test]
+    fn default_iters_is_20() {
+        let args = vec!["bench".to_string()];
+        let cfg = BenchConfig::from_args(args).unwrap();
+        assert_eq!(cfg.iters, 20);
     }
 }
