@@ -336,13 +336,13 @@ sudo ./target/release/minibox rm <container_id>
 
 **Test Pyramid:**
 ```
-              E2E Tests (TODO)
+              E2E Tests
          ┌─────────────────────────┐
          │   Conformance Tests     │  Cross-platform parity
-         │  Integration Tests (11) │  Linux only, real infrastructure
+         │  Integration Tests      │  Linux only, real infrastructure
          └─────────────────────────┘
     ┌──────────────────────────────────┐
-    │ Unit Tests (36) + Protocol (21)  │  Platform-agnostic, mocks
+    │ Unit Tests + Protocol Tests      │  Platform-agnostic, mocks
     └──────────────────────────────────┘
 ```
 
@@ -352,7 +352,13 @@ sudo ./target/release/minibox rm <container_id>
 cargo test --workspace
 
 # Integration tests (Linux, requires root)
-sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored
+just test-integration
+
+# E2E lifecycle test (Linux, requires root + network)
+just test-e2e
+
+# E2E daemon+CLI suite (Linux, requires root)
+just test-e2e-suite
 
 # Conformance tests (Linux)
 cargo test -p miniboxd --test conformance_tests

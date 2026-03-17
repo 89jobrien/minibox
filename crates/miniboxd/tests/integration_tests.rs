@@ -21,7 +21,6 @@
 #![cfg(target_os = "linux")]
 
 use minibox_lib::adapters::{CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem};
-use minibox_lib::domain::{ImageRegistry, ResourceConfig};
 use minibox_lib::image::ImageStore;
 use miniboxd::handler::{self, HandlerDependencies};
 use miniboxd::state::DaemonState;
@@ -33,7 +32,8 @@ use minibox_lib::protocol::DaemonResponse;
 /// Helper to create real infrastructure dependencies with temporary storage.
 fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
     let temp_dir = TempDir::new().expect("failed to create temp dir");
-    let image_store = ImageStore::new(temp_dir.path()).expect("failed to create image store");
+    let images_dir = temp_dir.path().join("images");
+    let image_store = ImageStore::new(&images_dir).expect("failed to create image store");
     let state = Arc::new(DaemonState::new(image_store, temp_dir.path()));
 
     let deps = Arc::new(HandlerDependencies {
@@ -41,7 +41,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
             DockerHubRegistry::new(Arc::clone(&state.image_store))
                 .expect("failed to create registry"),
         ),
-        filesystem: Arc::new(OverlayFilesystem::new()),
+        filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
         containers_base: temp_dir.path().join("containers"),

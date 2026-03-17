@@ -34,7 +34,8 @@ just test-all
 # Individual test layers
 just test-unit          # Mock-based, any platform
 just test-integration   # Linux, root, cgroups v2
-just test-e2e           # Linux, root, built binaries
+just test-e2e           # Linux, root, full lifecycle (integration test)
+just test-e2e-suite     # Linux, root, built binaries
 
 # Cleanup
 just clean              # Full cargo clean
@@ -67,6 +68,10 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 
 **Run:** `just test-integration`
 
+**Lifecycle e2e (integration test):**
+- `test_complete_container_lifecycle` (in `crates/miniboxd/tests/integration_tests.rs`)
+- **Run:** `just test-e2e`
+
 **Architecture:** Tests exercise domain traits (hexagonal ports) and verify outcomes
 by reading real infrastructure state (cgroupfs, procfs, mount table).
 
@@ -77,7 +82,7 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 **Files:**
 - `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
 
-**Run:** `just test-e2e`
+**Run:** `just test-e2e-suite`
 
 **Architecture:** `DaemonFixture` starts an isolated daemon instance with temp dirs,
 then runs CLI commands as subprocesses. RAII cleanup on drop.

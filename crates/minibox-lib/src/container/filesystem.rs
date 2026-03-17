@@ -90,6 +90,20 @@ fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
 /// All layer paths are validated to prevent path traversal attacks. Paths
 /// containing `..`, symlinks, or absolute references are rejected.
 pub fn setup_overlay(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
+    // Default base for production.
+    let images_base = PathBuf::from("/var/lib/minibox/images");
+    setup_overlay_with_base(image_layers, container_dir, &images_base)
+}
+
+/// Set up an overlay filesystem for a container using a custom images base.
+///
+/// This is used by tests and other callers that store images outside the
+/// default `/var/lib/minibox/images` directory.
+pub fn setup_overlay_with_base(
+    image_layers: &[PathBuf],
+    container_dir: &Path,
+    images_base: &Path,
+) -> anyhow::Result<PathBuf> {
     let merged = container_dir.join("merged");
     let upper = container_dir.join("upper");
     let work = container_dir.join("work");
@@ -101,9 +115,7 @@ pub fn setup_overlay(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::
         })?;
     }
 
-    // SECURITY: Validate all layer paths to prevent path traversal
-    // Expected base: /var/lib/minibox/images/
-    let images_base = PathBuf::from("/var/lib/minibox/images");
+    // SECURITY: Validate all layer paths to prevent path traversal.
     for layer_path in image_layers {
         validate_layer_path(layer_path, &images_base)
             .with_context(|| format!("validating layer path {:?}", layer_path))?;

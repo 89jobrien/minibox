@@ -51,15 +51,26 @@ use tracing::debug;
 /// // Later, cleanup
 /// fs.cleanup(&container_dir)?;
 /// ```
-#[derive(Debug, Clone, Copy)]
-pub struct OverlayFilesystem;
+#[derive(Debug, Clone)]
+pub struct OverlayFilesystem {
+    images_base: PathBuf,
+}
 
 impl OverlayFilesystem {
     /// Create a new overlay filesystem adapter.
     ///
     /// This is a zero-sized type, so construction is trivial.
     pub fn new() -> Self {
-        Self
+        Self {
+            images_base: PathBuf::from("/var/lib/minibox/images"),
+        }
+    }
+
+    /// Create a new overlay filesystem adapter with a custom images base.
+    pub fn new_with_base(images_base: impl Into<PathBuf>) -> Self {
+        Self {
+            images_base: images_base.into(),
+        }
     }
 }
 
@@ -88,7 +99,7 @@ impl FilesystemProvider for OverlayFilesystem {
         );
 
         // Delegate to existing filesystem implementation
-        filesystem::setup_overlay(image_layers, container_dir)
+        filesystem::setup_overlay_with_base(image_layers, container_dir, &self.images_base)
     }
 
     fn pivot_root(&self, new_root: &Path) -> Result<()> {

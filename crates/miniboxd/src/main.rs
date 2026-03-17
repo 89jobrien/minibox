@@ -253,15 +253,41 @@ async fn main() -> Result<()> {
     let listener = UnixListener::bind(sock_path)
         .with_context(|| format!("binding Unix socket at {socket_path_str}"))?;
 
-    // SECURITY: Restrict socket permissions to owner only
+    // SECURITY: Restrict socket permissions; allow overrides for group access.
     {
         use std::os::unix::fs::PermissionsExt;
+        let mut mode = 0o600;
+        if let Ok(mode_str) = std::env::var("MINIBOX_SOCKET_MODE") {
+            let mode_str = mode_str.trim();
+            let mode_str = mode_str.strip_prefix("0o").unwrap_or(mode_str);
+            match u32::from_str_radix(mode_str, 8) {
+                Ok(parsed) => mode = parsed,
+                Err(err) => warn!("invalid MINIBOX_SOCKET_MODE={mode_str}: {err}"),
+            }
+        }
+
+        if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
+            let group_name = group_name.trim();
+            if !group_name.is_empty() {
+                match nix::unistd::Group::from_name(group_name)
+                    .with_context(|| format!("looking up group {group_name}"))?
+                {
+                    Some(group) => {
+                        nix::unistd::chown(sock_path, None, Some(group.gid))
+                            .with_context(|| format!("setting socket group to {group_name}"))?;
+                        info!("socket group set to {group_name}");
+                    }
+                    None => warn!("MINIBOX_SOCKET_GROUP={group_name} not found"),
+                }
+            }
+        }
+
         let metadata = std::fs::metadata(sock_path)?;
         let mut permissions = metadata.permissions();
-        permissions.set_mode(0o600);
+        permissions.set_mode(mode);
         std::fs::set_permissions(sock_path, permissions)
-            .context("setting socket permissions to 0600")?;
-        info!("socket permissions set to 0600");
+            .with_context(|| format!("setting socket permissions to {mode:04o}"))?;
+        info!("socket permissions set to {mode:04o}");
     }
 
     info!("listening on {socket_path_str}");
