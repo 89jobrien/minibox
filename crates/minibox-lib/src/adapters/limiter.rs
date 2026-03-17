@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_limiter_default() {
-        let limiter = CgroupV2Limiter::default();
+        let limiter = CgroupV2Limiter;
         let _ = limiter;
     }
 

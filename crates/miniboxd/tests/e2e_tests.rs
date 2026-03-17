@@ -14,7 +14,7 @@
 
 use minibox_lib::preflight;
 use minibox_lib::require_capability;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -175,11 +175,8 @@ impl DaemonFixture {
     /// Only call when the daemon is expected to have failed.
     fn kill_and_capture_stderr(&mut self) -> String {
         let _ = self.child.kill();
-        let output = self.child.wait_with_output();
-        match output {
-            Ok(o) => String::from_utf8_lossy(&o.stderr).to_string(),
-            Err(e) => format!("(could not capture stderr: {e})"),
-        }
+        let _ = self.child.wait();
+        "(daemon stderr captured at spawn; see test output above)".to_string()
     }
 
     /// Send SIGTERM to the daemon.

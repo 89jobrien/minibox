@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_runtime_default() {
-        let runtime = LinuxNamespaceRuntime::default();
+        let runtime = LinuxNamespaceRuntime;
         let _ = runtime;
     }
 
