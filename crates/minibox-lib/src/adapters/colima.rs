@@ -23,6 +23,14 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
+
+/// Injectable executor for Lima VM commands.
+///
+/// Accepts a slice of arguments (as passed to `limactl shell <instance>`)
+/// and returns stdout as a String.  The default implementation invokes a
+/// real `limactl` subprocess; tests inject a fake closure instead.
+type LimaExecutor = Arc<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 
 // ============================================================================
 // Colima Image Registry Adapter
@@ -36,6 +44,8 @@ pub struct ColimaRegistry {
     instance: String,
     /// Path to limactl binary
     limactl_path: String,
+    /// Optional injected executor (used in tests to avoid real limactl calls).
+    executor: Option<LimaExecutor>,
 }
 
 impl Default for ColimaRegistry {
@@ -49,6 +59,7 @@ impl ColimaRegistry {
         Self {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
+            executor: None,
         }
     }
 
@@ -57,8 +68,15 @@ impl ColimaRegistry {
         self
     }
 
-    /// Execute command inside Colima VM via limactl shell
+    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
+        self.executor = Some(executor);
+        self
+    }
+
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
+        if let Some(exec) = &self.executor {
+            return exec(args);
+        }
         let output = Command::new(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
@@ -149,27 +167,62 @@ impl ImageRegistry for ColimaRegistry {
 
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
         let full_name = format!("{name}:{tag}");
+        // Use a path under /tmp — Lima mounts /tmp into the VM, so these
+        // paths are accessible from both the macOS host and the Lima VM.
+        let safe_name = name.replace('/', "-");
+        let export_base = format!("/tmp/minibox-layers/{safe_name}/{tag}");
 
-        // Get image metadata
         let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
             .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
 
         let image_data = inspect_data
             .first()
-            .ok_or_else(|| anyhow!("No image data returned".to_string()))?;
+            .ok_or_else(|| anyhow!("No image data returned"))?;
 
-        // Extract layer paths
-        let layer_paths = image_data
+        let layer_ids = image_data
             .root_fs
             .as_ref()
-            .map(|fs| {
-                fs.layers
-                    .iter()
-                    .map(|layer_id| PathBuf::from(format!("/var/lib/containerd/layers/{layer_id}")))
-                    .collect()
-            })
+            .map(|fs| fs.layers.clone())
             .unwrap_or_default();
+
+        if layer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Export the image to the shared /tmp location and unpack it.
+        // `nerdctl save` produces a Docker-format tar: each layer is a
+        // directory containing layer.tar.  We extract the outer tar and
+        // then extract each layer.tar into a rootfs/ subdirectory.
+        let tar_path = format!("{export_base}.tar");
+        self.lima_exec(&[
+            "sh",
+            "-c",
+            &format!(
+                "mkdir -p {export_base} && nerdctl save {full_name} -o {tar_path} && tar xf {tar_path} -C {export_base}"
+            ),
+        ])?;
+
+        // Build one host-accessible path per layer.
+        let layer_paths = layer_ids
+            .iter()
+            .map(|layer_id| {
+                // Use the first 12 hex chars of the digest as the directory name.
+                let short_id = layer_id
+                    .trim_start_matches("sha256:")
+                    .chars()
+                    .take(12)
+                    .collect::<String>();
+                let layer_dir = format!("{export_base}/{short_id}");
+                // Extract the layer tar into a rootfs/ subdirectory inside the VM.
+                let _ = self.lima_exec(&[
+                    "sh",
+                    "-c",
+                    &format!("mkdir -p {layer_dir}/rootfs && tar xf {layer_dir}/layer.tar -C {layer_dir}/rootfs 2>/dev/null || true"),
+                ]);
+                PathBuf::from(format!("{layer_dir}/rootfs"))
+            })
+            .collect();
 
         Ok(layer_paths)
     }
@@ -185,6 +238,7 @@ impl ImageRegistry for ColimaRegistry {
 pub struct ColimaFilesystem {
     instance: String,
     limactl_path: String,
+    executor: Option<LimaExecutor>,
 }
 
 impl Default for ColimaFilesystem {
@@ -198,10 +252,14 @@ impl ColimaFilesystem {
         Self {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
+            executor: None,
         }
     }
 
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
+        if let Some(exec) = &self.executor {
+            return exec(args);
+        }
         let output = Command::new(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
@@ -288,6 +346,7 @@ impl FilesystemProvider for ColimaFilesystem {
 pub struct ColimaLimiter {
     instance: String,
     limactl_path: String,
+    executor: Option<LimaExecutor>,
 }
 
 impl Default for ColimaLimiter {
@@ -301,10 +360,14 @@ impl ColimaLimiter {
         Self {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
+            executor: None,
         }
     }
 
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
+        if let Some(exec) = &self.executor {
+            return exec(args);
+        }
         let output = Command::new(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
@@ -398,6 +461,7 @@ impl ResourceLimiter for ColimaLimiter {
 pub struct ColimaRuntime {
     instance: String,
     limactl_path: String,
+    executor: Option<LimaExecutor>,
 }
 
 impl Default for ColimaRuntime {
@@ -411,10 +475,19 @@ impl ColimaRuntime {
         Self {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
+            executor: None,
         }
     }
 
+    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
+        self.executor = Some(executor);
+        self
+    }
+
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
+        if let Some(exec) = &self.executor {
+            return exec(args);
+        }
         let output = Command::new(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
@@ -464,23 +537,23 @@ impl ContainerRuntime for ColimaRuntime {
         })
         .map_err(|e| anyhow!("Failed to serialize config: {e}"))?;
 
-        // Execute container spawn script inside Lima VM
-        // This would call a helper script that uses containerd/runc
+        // Execute container spawn script inside Lima VM.
+        // Args are serialised in the JSON config and extracted via jq.
         let spawn_script = format!(
             r#"
-            # Container spawn script for Lima VM
             CONFIG='{config_json}'
 
-            # Extract configuration
             ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
             COMMAND=$(echo "$CONFIG" | jq -r '.command')
             HOSTNAME=$(echo "$CONFIG" | jq -r '.hostname')
             CGROUP=$(echo "$CONFIG" | jq -r '.cgroup_path')
 
-            # Use unshare to create namespaces (simplified)
+            # Build args array from JSON
+            mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
+
             unshare --pid --mount --uts --ipc --net \
                 --fork --kill-child \
-                chroot "$ROOTFS" "$COMMAND" &
+                chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
 
             echo $!
             "#
@@ -557,6 +630,78 @@ mod tests {
             registry
                 .macos_to_lima_path(Path::new("/var/lib/minibox"))
                 .is_err()
+        );
+    }
+
+    /// Layer paths must live under /tmp or /Users — the Lima-shared mounts
+    /// accessible from the macOS host.  Returning /var/lib/containerd/...
+    /// gives paths that only exist inside the VM.
+    #[test]
+    fn get_image_layers_returns_host_accessible_paths() {
+        let fake_inspect =
+            r#"[{"Size":1024,"RootFS":{"Layers":["sha256:abc123def456","sha256:def456abc789"]}}]"#;
+
+        let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+            if args.contains(&"inspect") {
+                Ok(fake_inspect.to_string())
+            } else {
+                Ok(String::new())
+            }
+        }));
+
+        let layers = registry.get_image_layers("alpine", "latest").unwrap();
+
+        assert_eq!(layers.len(), 2, "should return one path per layer");
+        for layer in &layers {
+            let s = layer.to_string_lossy();
+            assert!(
+                s.starts_with("/tmp/") || s.starts_with("/Users/"),
+                "layer path {s:?} is not in a Lima-shared directory (/tmp or /Users)"
+            );
+        }
+    }
+
+    /// spawn_process must include config.args in the shell script sent to the
+    /// Lima VM.  The current implementation only substitutes $COMMAND and
+    /// silently drops all arguments.
+    #[tokio::test]
+    async fn spawn_process_includes_args_in_script() {
+        use crate::domain::ContainerSpawnConfig;
+        use std::sync::{Arc, Mutex};
+
+        let captured = Arc::new(Mutex::new(String::new()));
+        let cap = captured.clone();
+
+        let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
+            // Capture the sh -c script
+            if let Some(pos) = args.iter().position(|&a| a == "-c") {
+                if let Some(script) = args.get(pos + 1) {
+                    *cap.lock().unwrap() = script.to_string();
+                }
+            }
+            Ok("42\n".to_string())
+        }));
+
+        let config = ContainerSpawnConfig {
+            rootfs: PathBuf::from("/tmp/rootfs"),
+            command: "/bin/echo".to_string(),
+            args: vec!["hello".to_string(), "world".to_string()],
+            env: vec![],
+            hostname: "test-container".to_string(),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+        };
+
+        let pid = runtime.spawn_process(&config).await.unwrap();
+        assert_eq!(pid, 42);
+
+        let script = captured.lock().unwrap().clone();
+        assert!(
+            script.contains("hello"),
+            "spawn script missing arg 'hello': {script}"
+        );
+        assert!(
+            script.contains("world"),
+            "spawn script missing arg 'world': {script}"
         );
     }
 }

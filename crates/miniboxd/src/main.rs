@@ -12,6 +12,8 @@
 //!   Requires root.
 //! - **gke**: proot (ptrace), copy-based FS, no-op limiter.
 //!   Runs unprivileged in standard GKE pods.
+//! - **colima**: delegates to Colima/Lima VM via limactl + nerdctl.
+//!   No local root required; requires Colima running on the host.
 //!
 //! # Startup sequence
 //! 1. Initialise tracing.
@@ -34,6 +36,8 @@ use minibox_lib::adapters::{
 };
 #[cfg(target_os = "linux")]
 use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
+#[cfg(target_os = "linux")]
+use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
 use minibox_lib::image::ImageStore;
 #[cfg(target_os = "linux")]
@@ -71,6 +75,9 @@ enum AdapterSuite {
     Native,
     /// GKE unprivileged: proot, copy FS, no-op limiter. No root needed.
     Gke,
+    /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
+    /// Does not require local root (operations run inside the Lima VM).
+    Colima,
 }
 
 #[cfg(target_os = "linux")]
@@ -79,9 +86,10 @@ impl AdapterSuite {
     fn from_env() -> Result<Self> {
         match std::env::var("MINIBOX_ADAPTER").as_deref() {
             Ok("gke") => Ok(Self::Gke),
+            Ok("colima") => Ok(Self::Colima),
             Ok("native") | Err(_) => Ok(Self::Native),
             Ok(other) => anyhow::bail!(
-                "unknown MINIBOX_ADAPTER value {:?} (expected \"native\" or \"gke\")",
+                "unknown MINIBOX_ADAPTER value {:?} (expected \"native\", \"gke\", or \"colima\")",
                 other
             ),
         }
@@ -168,6 +176,8 @@ async fn main() -> Result<()> {
     info!("adapter suite: {suite:?}");
 
     // ── Privilege check (native only) ────────────────────────────────────
+    // Colima delegates operations to the Lima VM via limactl, so local root
+    // is not required.  GKE runs unprivileged by design.
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
         anyhow::bail!("miniboxd must run as root (native adapter suite)");
     }
@@ -182,7 +192,7 @@ async fn main() -> Result<()> {
         migrate_to_supervisor_cgroup();
     }
 
-    // ── Resolve paths (configurable via env vars for GKE) ───────────────
+    // ── Resolve paths (configurable via env vars) ───────────────────────
     let data_dir =
         std::env::var("MINIBOX_DATA_DIR").unwrap_or_else(|_| "/var/lib/minibox".to_string());
     let run_dir = std::env::var("MINIBOX_RUN_DIR").unwrap_or_else(|_| DEFAULT_RUN_DIR.to_string());
@@ -205,6 +215,7 @@ async fn main() -> Result<()> {
     info!("state loaded from disk");
 
     // ── Dependency Injection (Composition Root) ─────────────────────────
+    // Colima delegates to Lima VM, so local root auth is not required.
     let require_root_auth = suite == AdapterSuite::Native;
 
     let deps = match suite {
@@ -234,6 +245,16 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(CopyFilesystem::new()),
                 resource_limiter: Arc::new(NoopLimiter::new()),
                 runtime: Arc::new(proot_runtime),
+                containers_base: PathBuf::from(&containers_dir),
+                run_containers_base: PathBuf::from(&run_containers_dir),
+            })
+        }
+        AdapterSuite::Colima => {
+            Arc::new(HandlerDependencies {
+                registry: Arc::new(ColimaRegistry::new()),
+                filesystem: Arc::new(ColimaFilesystem::new()),
+                resource_limiter: Arc::new(ColimaLimiter::new()),
+                runtime: Arc::new(ColimaRuntime::new()),
                 containers_base: PathBuf::from(&containers_dir),
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })

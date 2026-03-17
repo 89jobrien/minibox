@@ -180,9 +180,23 @@ overlay FS, and cgroup writes. The GKE adapter suite works within those constrai
 syscall interception for fake chroot, plain file copying instead of overlay mounts, and skipping cgroup resource
 limits entirely. The same minibox binary runs in both native and GKE modes -- no recompilation needed.
 
+### Adapter Wiring Status
+
+| Adapter Suite | `MINIBOX_ADAPTER` value | Daemon wired? | Status |
+|---------------|------------------------|---------------|--------|
+| Native Linux  | `native` (default)     | ✅ Yes         | Production |
+| GKE (proot)   | `gke`                  | ✅ Yes         | Production |
+| macOS Colima  | `colima`               | ⚙️ In progress | Library only — not yet accepted by daemon |
+| macOS Docker Desktop | `docker-desktop` | ❌ No       | Library only — not yet accepted by daemon |
+| Windows WSL2  | `wsl`                  | ❌ No          | Library only — not yet accepted by daemon |
+
+Passing an unwired value to `MINIBOX_ADAPTER` causes the daemon to exit at startup with an unrecognized adapter error.
+
 ### Windows (WSL2)
 
-**Requirements:**
+> **Status: Library only** — `WslRuntime`, `WslFilesystem`, `WslLimiter` are implemented in `minibox-lib` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=wsl` is not currently accepted.
+
+**Requirements (when wired):**
 
 - Windows 10/11 with WSL2
 - Ubuntu 20.04+ distribution
@@ -196,7 +210,9 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 
 ### macOS (Docker Desktop)
 
-**Requirements:**
+> **Status: Library only** — `DockerDesktopRuntime`, `DockerDesktopFilesystem`, `DockerDesktopLimiter` are implemented in `minibox-lib` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` is not currently accepted.
+
+**Requirements (when wired):**
 
 - macOS 10.15+ (Catalina)
 - Docker Desktop 4.0+
@@ -210,7 +226,9 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 
 ### macOS (Colima)
 
-**Requirements:**
+> **Status: In progress** — `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter` are implemented and tested in `minibox-lib`. Wiring into `miniboxd` is in progress; `MINIBOX_ADAPTER=colima` is not yet accepted.
+
+**Requirements (when wired):**
 
 - macOS 10.15+ (Catalina)
 - Colima installed (`brew install colima`)
@@ -218,8 +236,8 @@ limits entirely. The same minibox binary runs in both native and GKE modes -- no
 
 **Adapters:**
 
-- `ColimaRegistry` - Uses nerdctl for image operations
-- `ColimaRuntime` - Delegates to Lima VM
+- `ColimaRegistry` - Image operations via `nerdctl` in Lima VM; layers exported to `/tmp/minibox-layers/` (Lima-shared path accessible from macOS host)
+- `ColimaRuntime` - Container spawn via `limactl shell` + chroot in VM; args passed correctly via `mapfile`
 - `ColimaFilesystem` - Overlay operations via limactl
 - `ColimaLimiter` - cgroups via limactl
 
@@ -475,7 +493,7 @@ JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`).
 - No exec command
 - No logs capture
 
-**Note:** Cross-platform adapters (GKE, WSL2, Docker Desktop, Colima) are implemented but require platform-specific dependencies (proot, helper binaries) for production use.
+**Note:** GKE adapter is fully wired and production-ready. WSL2, Docker Desktop, and Colima adapter suites are implemented in `minibox-lib` but not yet wired into `miniboxd` — see the [Adapter Wiring Status](#adapter-wiring-status) table.
 
 ## Extending
 

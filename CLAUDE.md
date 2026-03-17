@@ -223,6 +223,7 @@ Understanding these helps prioritize feature development:
 - **No exec command**: Cannot run commands in existing containers
 - **No logs capture**: Container output not stored
 - **No Dockerfile support**: Image-only workflow
+- **Adapter wiring incomplete**: `colima`, `docker_desktop`, and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` only accepts `native` or `gke` — passing anything else causes the daemon to bail at startup.
 
 ## Debugging
 
