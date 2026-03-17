@@ -170,7 +170,42 @@ impl Stats {
 }
 
 fn main() {
-    println!("minibox-bench: not yet implemented");
+    let args: Vec<String> = std::env::args().collect();
+    let cfg = match BenchConfig::from_args(args) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!("error: {err}");
+            std::process::exit(2);
+        }
+    };
+
+    let report = match run_benchmark(&cfg) {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("error: {err}");
+            std::process::exit(1);
+        }
+    };
+
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    let json_path = format!("{}/{}.json", cfg.out_dir, timestamp);
+    let table_path = format!("{}/{}.txt", cfg.out_dir, timestamp);
+    if let Err(e) = std::fs::create_dir_all(&cfg.out_dir) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+    if let Err(e) = write_json(&report, &json_path) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+    if let Err(e) = write_table(&report, &table_path) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+}
+
+fn run_benchmark(cfg: &BenchConfig) -> Result<BenchReport, String> {
+    run_suites(cfg, cfg.dry_run)
 }
 
 fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
@@ -318,5 +353,15 @@ mod tests {
         let path = "/tmp/bench-report.json";
         write_json(&report, path).unwrap();
         assert!(std::path::Path::new(path).exists());
+    }
+
+    #[test]
+    fn dry_run_skips_execution() {
+        let cfg = BenchConfig {
+            dry_run: true,
+            ..BenchConfig::default()
+        };
+        let report = run_benchmark(&cfg).unwrap();
+        assert!(report.suites.is_empty() == false);
     }
 }
