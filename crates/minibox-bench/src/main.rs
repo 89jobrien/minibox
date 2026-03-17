@@ -32,6 +32,7 @@ struct TestResult {
     name: String,
     iterations: usize,
     durations_micros: Vec<u64>,
+    stats: Option<Stats>,
 }
 
 fn write_json(report: &BenchReport, path: &str) -> std::io::Result<()> {
@@ -42,7 +43,25 @@ fn write_json(report: &BenchReport, path: &str) -> std::io::Result<()> {
 fn write_table(report: &BenchReport, path: &str) -> std::io::Result<()> {
     let mut out = String::new();
     out.push_str("minibox benchmark results\n\n");
-    out.push_str(&format!("suites: {}\n", report.suites.len()));
+    out.push_str(&format!("suites: {}\n\n", report.suites.len()));
+    out.push_str("suite\ttest\titers\tmin(ms)\tavg(ms)\tp95(ms)\n");
+    for suite in &report.suites {
+        for test in &suite.tests {
+            let stats = test.stats.as_ref();
+            let (min, avg, p95) = match stats {
+                Some(s) => (
+                    format!("{:.3}", s.min as f64 / 1000.0),
+                    format!("{:.3}", s.avg as f64 / 1000.0),
+                    format!("{:.3}", s.p95 as f64 / 1000.0),
+                ),
+                None => ("n/a".to_string(), "n/a".to_string(), "n/a".to_string()),
+            };
+            out.push_str(&format!(
+                "{}\t{}\t{}\t{}\t{}\t{}\n",
+                suite.name, test.name, test.iterations, min, avg, p95
+            ));
+        }
+    }
     std::fs::write(path, out)
 }
 
@@ -145,7 +164,7 @@ impl BenchConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 struct Stats {
     min: u64,
     avg: u64,
@@ -166,6 +185,80 @@ impl Stats {
         };
         let p95 = *sorted.get(p95_idx).unwrap_or(&0);
         Self { min, avg, p95 }
+    }
+}
+
+fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
+    if !cfg.suites.is_empty() {
+        return cfg.suites.iter().any(|suite| suite == name);
+    }
+
+    match name {
+        "pull" | "e2e" => cfg.cold,
+        "run" | "exec" => cfg.warm,
+        _ => true,
+    }
+}
+
+fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
+    let mut suites = Vec::new();
+    for name in ["pull", "run", "exec", "e2e"] {
+        if suite_enabled(cfg, name) {
+            suites.push(name.to_string());
+        }
+    }
+    suites
+}
+
+fn read_cmd_trim(path: &str, args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new(path).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !stdout.is_empty() {
+        return Some(stdout);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stderr.is_empty() {
+        None
+    } else {
+        Some(stderr)
+    }
+}
+
+fn build_metadata(minibox_bin: &str) -> Metadata {
+    Metadata {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        hostname: read_cmd_trim("hostname", &[]).unwrap_or_else(|| "unknown".to_string()),
+        git_sha: read_cmd_trim("git", &["rev-parse", "HEAD"])
+            .unwrap_or_else(|| "unknown".to_string()),
+        minibox_version: read_cmd_trim(minibox_bin, &["--version"])
+            .unwrap_or_else(|| "unknown".to_string()),
+    }
+}
+
+fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option<CmdResult> {
+    match run_cmd(path, args) {
+        Ok(result) => {
+            if !result.success {
+                let stderr = result.stderr.trim();
+                let stdout = result.stdout.trim();
+                let mut message = format!("command failed: {} {:?}", path, args);
+                if !stderr.is_empty() {
+                    message.push_str(&format!("\nstderr: {stderr}"));
+                }
+                if !stdout.is_empty() {
+                    message.push_str(&format!("\nstdout: {stdout}"));
+                }
+                errors.push(message);
+            }
+            Some(result)
+        }
+        Err(err) => {
+            errors.push(format!("command error: {} {:?}: {err}", path, args));
+            None
+        }
     }
 }
 
@@ -209,97 +302,125 @@ fn run_benchmark(cfg: &BenchConfig) -> Result<BenchReport, String> {
 }
 
 fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
+    let minibox_bin = std::env::var("MINIBOX_BIN").unwrap_or_else(|_| "minibox".to_string());
+    let metadata = build_metadata(&minibox_bin);
+    let selected_suites = planned_suites(cfg);
+    let mut suites = Vec::new();
+    let mut errors = Vec::new();
+
+    if selected_suites.is_empty() {
+        errors.push("no suites selected (use --suite or enable --cold/--warm)".to_string());
+    }
+
     if dry_run {
-        return Ok(BenchReport {
-            metadata: Metadata::default(),
-            suites: vec![SuiteResult {
-                name: "dry_run".to_string(),
+        for suite in selected_suites {
+            suites.push(SuiteResult {
+                name: suite,
                 tests: Vec::new(),
-            }],
-            errors: Vec::new(),
+            });
+        }
+        return Ok(BenchReport {
+            metadata,
+            suites,
+            errors,
         });
     }
 
-    let mut suites = Vec::new();
+    if suite_enabled(cfg, "pull") {
+        let mut pull_suite = SuiteResult {
+            name: "pull".to_string(),
+            tests: Vec::new(),
+        };
+        if let Some(pull) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
+            let durations = vec![pull.duration_micros];
+            pull_suite.tests.push(TestResult {
+                name: "pull_alpine".to_string(),
+                iterations: durations.len(),
+                durations_micros: durations.clone(),
+                stats: Some(Stats::from_samples(&durations)),
+            });
+        }
+        suites.push(pull_suite);
+    }
 
-    // Pull suite
-    let pull = run_cmd("/usr/local/bin/minibox", &["pull", "alpine"]).map_err(|e| e.to_string())?;
-    let mut pull_suite = SuiteResult {
-        name: "pull".to_string(),
-        tests: Vec::new(),
-    };
-    pull_suite.tests.push(TestResult {
-        name: "pull_alpine".to_string(),
-        iterations: 1,
-        durations_micros: vec![pull.duration_micros],
-    });
-    suites.push(pull_suite);
-
-    // Run suite
-    let mut run_suite = SuiteResult {
-        name: "run".to_string(),
-        tests: Vec::new(),
-    };
-    for _ in 0..cfg.iters {
-        let run = run_cmd(
-            "/usr/local/bin/minibox",
-            &["run", "alpine", "--", "/bin/true"],
-        )
-        .map_err(|e| e.to_string())?;
+    if suite_enabled(cfg, "run") {
+        let mut run_suite = SuiteResult {
+            name: "run".to_string(),
+            tests: Vec::new(),
+        };
+        let mut durations = Vec::with_capacity(cfg.iters);
+        for _ in 0..cfg.iters {
+            if let Some(run) =
+                run_cmd_record(&minibox_bin, &["run", "alpine", "--", "/bin/true"], &mut errors)
+            {
+                durations.push(run.duration_micros);
+            }
+        }
         run_suite.tests.push(TestResult {
             name: "run_true".to_string(),
-            iterations: 1,
-            durations_micros: vec![run.duration_micros],
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: Some(Stats::from_samples(&durations)),
         });
+        suites.push(run_suite);
     }
-    suites.push(run_suite);
 
-    // Exec suite
-    let mut exec_suite = SuiteResult {
-        name: "exec".to_string(),
-        tests: Vec::new(),
-    };
-    for _ in 0..cfg.iters {
-        let exec = run_cmd(
-            "/usr/local/bin/minibox",
-            &["run", "alpine", "--", "/bin/echo", "ok"],
-        )
-        .map_err(|e| e.to_string())?;
+    if suite_enabled(cfg, "exec") {
+        let mut exec_suite = SuiteResult {
+            name: "exec".to_string(),
+            tests: Vec::new(),
+        };
+        let mut durations = Vec::with_capacity(cfg.iters);
+        for _ in 0..cfg.iters {
+            if let Some(exec) = run_cmd_record(
+                &minibox_bin,
+                &["run", "alpine", "--", "/bin/echo", "ok"],
+                &mut errors,
+            ) {
+                durations.push(exec.duration_micros);
+            }
+        }
         exec_suite.tests.push(TestResult {
             name: "exec_echo".to_string(),
-            iterations: 1,
-            durations_micros: vec![exec.duration_micros],
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: Some(Stats::from_samples(&durations)),
         });
+        suites.push(exec_suite);
     }
-    suites.push(exec_suite);
 
-    // E2E suite (pull + run)
-    let mut e2e_suite = SuiteResult {
-        name: "e2e".to_string(),
-        tests: Vec::new(),
-    };
-    let pull = run_cmd("/usr/local/bin/minibox", &["pull", "alpine"]).map_err(|e| e.to_string())?;
-    let run = run_cmd(
-        "/usr/local/bin/minibox",
-        &["run", "alpine", "--", "/bin/true"],
-    )
-    .map_err(|e| e.to_string())?;
-    e2e_suite.tests.push(TestResult {
-        name: "pull_alpine".to_string(),
-        iterations: 1,
-        durations_micros: vec![pull.duration_micros],
-    });
-    e2e_suite.tests.push(TestResult {
-        name: "run_true".to_string(),
-        iterations: 1,
-        durations_micros: vec![run.duration_micros],
-    });
-    suites.push(e2e_suite);
+    if suite_enabled(cfg, "e2e") {
+        let mut e2e_suite = SuiteResult {
+            name: "e2e".to_string(),
+            tests: Vec::new(),
+        };
+        if let Some(pull) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
+            let durations = vec![pull.duration_micros];
+            e2e_suite.tests.push(TestResult {
+                name: "pull_alpine".to_string(),
+                iterations: durations.len(),
+                durations_micros: durations.clone(),
+                stats: Some(Stats::from_samples(&durations)),
+            });
+        }
+        if let Some(run) =
+            run_cmd_record(&minibox_bin, &["run", "alpine", "--", "/bin/true"], &mut errors)
+        {
+            let durations = vec![run.duration_micros];
+            e2e_suite.tests.push(TestResult {
+                name: "run_true".to_string(),
+                iterations: durations.len(),
+                durations_micros: durations.clone(),
+                stats: Some(Stats::from_samples(&durations)),
+            });
+        }
+        suites.push(e2e_suite);
+    }
 
     Ok(BenchReport {
-        metadata: Metadata::default(),
+        metadata,
         suites,
-        errors: Vec::new(),
+        errors,
     })
 }
 
