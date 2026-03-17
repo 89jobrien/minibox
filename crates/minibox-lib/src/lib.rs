@@ -11,7 +11,6 @@ pub mod container;
 pub mod domain;
 pub mod error;
 pub mod image;
-pub mod macros;
 pub mod preflight;
 pub mod protocol;
 
