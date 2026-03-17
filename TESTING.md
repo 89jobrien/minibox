@@ -1,65 +1,90 @@
 # Testing Strategy for Minibox
 
-This document describes the comprehensive testing strategy for the minibox container runtime.
+This document describes the testing strategy for the minibox container runtime.
 
 ## Test Pyramid
 
 ```
                  ┌─────────────┐
-                 │   E2E Tests │  (Manual, daemon + CLI)
-                 │    (TODO)   │
+                 │  E2E Tests  │  (Daemon + CLI binaries)
+                 │  ~14 tests  │
                  └─────────────┘
             ┌─────────────────────┐
-            │ Integration Tests   │  (Linux only, real infrastructure)
-            │    11 tests         │
+            │ Integration Tests   │  (Real infrastructure)
+            │  ~28 tests          │
             └─────────────────────┘
        ┌──────────────────────────────┐
-       │     Unit Tests              │  (Platform-agnostic, mocks)
-       │ 13 handler + 24 protocol    │
+       │     Unit + Conformance      │  (Mocks, any platform)
+       │        ~52 tests            │
        └──────────────────────────────┘
 ```
 
-## Test Categories
+## Quick Reference
 
-### 1. Unit Tests (37 tests)
+```bash
+# Install just (task runner) if not already installed
+cargo install just
 
-**Location:** `crates/miniboxd/tests/handler_tests.rs`, `crates/minibox-lib/src/protocol.rs`
+# Check host capabilities
+just doctor
+
+# Run all tests (full pipeline with cleanup)
+just test-all
+
+# Individual test layers
+just test-unit          # Mock-based, any platform
+just test-integration   # Linux, root, cgroups v2
+just test-e2e           # Linux, root, built binaries
+
+# Cleanup
+just clean              # Full cargo clean
+just clean-test         # Test artifacts only
+just clean-stale        # Old artifacts (>7 days)
+just nuke-test-state    # Kill orphans, remove cgroups/mounts
+```
+
+## Test Layers
+
+### 1. Unit + Conformance Tests (~52 tests)
 
 **Requirements:** None (run anywhere)
 
-**Purpose:** Test business logic in isolation using mock implementations
+**Files:**
+- `crates/miniboxd/tests/handler_tests.rs` — handler logic with mock adapters
+- `crates/miniboxd/tests/conformance_tests.rs` — trait contract verification with mocks
+- `crates/minibox-lib/src/protocol.rs` — protocol serialization
+- `crates/minibox-lib/src/preflight.rs` — kernel version parsing
 
-**Run:**
-```bash
-cargo test -p miniboxd --test handler_tests
-cargo test -p minibox-lib protocol::tests
-```
+**Run:** `just test-unit`
 
-### 2. Integration Tests (11 tests)
+### 2. Integration Tests (~28 tests)
 
-**Location:** `crates/miniboxd/tests/integration_tests.rs`
+**Requirements:** Linux kernel 5.0+, root, cgroups v2, Docker Hub access
 
-**Requirements:** Linux kernel 5.0+, root, Docker Hub access
+**Files:**
+- `crates/miniboxd/tests/cgroup_tests.rs` — ResourceLimiter trait against real cgroupfs
+- `crates/miniboxd/tests/integration_tests.rs` — handler-level tests with real infrastructure
 
-**Run:**
-```bash
-sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored
-```
+**Run:** `just test-integration`
 
-### 3. End-to-End Tests (TODO)
+**Architecture:** Tests exercise domain traits (hexagonal ports) and verify outcomes
+by reading real infrastructure state (cgroupfs, procfs, mount table).
 
-Manual testing with daemon + CLI.
+### 3. E2E Tests (~14 tests)
 
-## Running Tests
+**Requirements:** Linux kernel 5.0+, root, cgroups v2, built binaries
 
-### All Unit Tests
-```bash
-cargo test --workspace
-```
+**Files:**
+- `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
 
-### Integration Tests (Linux)
-```bash
-sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored
-```
+**Run:** `just test-e2e`
 
-For complete testing documentation, see full TESTING.md in repository.
+**Architecture:** `DaemonFixture` starts an isolated daemon instance with temp dirs,
+then runs CLI commands as subprocesses. RAII cleanup on drop.
+
+## Preflight / Doctor
+
+The preflight module (`crates/minibox-lib/src/preflight.rs`) probes the host for
+capabilities needed by integration and e2e tests. Run `just doctor` to see a report.
+
+Tests use `require_capability!` to skip gracefully when prerequisites are missing.
