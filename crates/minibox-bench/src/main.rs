@@ -34,6 +34,26 @@ struct TestResult {
     durations_micros: Vec<u64>,
 }
 
+#[derive(Debug)]
+struct CmdResult {
+    success: bool,
+    stdout: String,
+    stderr: String,
+    duration_micros: u64,
+}
+
+fn run_cmd(path: &str, args: &[&str]) -> std::io::Result<CmdResult> {
+    let start = std::time::Instant::now();
+    let output = std::process::Command::new(path).args(args).output()?;
+    let duration_micros = start.elapsed().as_micros() as u64;
+    Ok(CmdResult {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        duration_micros,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct BenchConfig {
     iters: usize,
@@ -170,5 +190,11 @@ mod tests {
         let args = vec!["bench".to_string()];
         let cfg = BenchConfig::from_args(args).unwrap();
         assert_eq!(cfg.iters, 20);
+    }
+
+    #[test]
+    fn command_runner_captures_exit_status() {
+        let result = run_cmd("/bin/true", &[]).unwrap();
+        assert!(result.success);
     }
 }
