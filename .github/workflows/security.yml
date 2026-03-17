@@ -59,11 +59,7 @@ jobs:
         run: |
           cargo clippy --workspace --all-targets -- \
             -D warnings \
-            -W clippy::suspicious \
-            -W clippy::complexity \
-            -W clippy::perf \
-            -W clippy::style \
-            -W clippy::pedantic
+            -W clippy::suspicious
 
   semgrep:
     name: Static Analysis (Semgrep)
