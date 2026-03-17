@@ -60,15 +60,20 @@ cargo test -p minibox-lib protocol::tests
 
 # Run with output
 cargo test -- --nocapture
+
+# Task runner (preferred for integration/e2e)
+just test-unit          # unit tests, any platform
+just test-integration   # cgroup tests, Linux+root
+just test-e2e           # daemon+CLI tests, Linux+root
+just doctor             # preflight capability check
 ```
 
 **Test Status:**
 
-- Protocol serialization: 24 tests implemented
+- Protocol serialization + adapters: ~50 tests passing
 - Path validation: TODO (security-critical)
 - Tar entry validation: TODO (security-critical)
-- Registry mocking: TODO
-- E2E tests: TODO
+- E2E tests: design spec + impl plan written (`docs/superpowers/specs/`, `docs/plans/`)
 
 ## Architecture Overview
 
@@ -81,6 +86,8 @@ Three crates in cargo workspace:
 3. **minibox-cli** (binary): CLI client sending commands to daemon
 
 ### Critical Design Patterns
+
+**Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `minibox-lib/src/domain.rs` are implemented by adapters in `minibox-lib/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
@@ -179,7 +186,8 @@ Image pulls enforce limits to prevent DoS:
 
 ### Cgroups
 
-- `/sys/fs/cgroup/minibox/{id}/`: Per-container cgroup directory
+- `/sys/fs/cgroup/minibox.slice/miniboxd.service/{id}/`: Per-container cgroup (systemd-managed)
+- `/sys/fs/cgroup/minibox.slice/miniboxd.service/supervisor/`: Daemon's own leaf cgroup
 
 ## System Requirements
 
@@ -252,6 +260,15 @@ When extending minibox:
 3. **Image operations**: Extend `minibox-lib/src/image/` modules
 4. **State persistence**: Consider replacing HashMap in `state.rs` with serialized storage
 5. **Networking**: Implement in new `network.rs` module, add bridge/veth setup in container init
+
+## Environment Variables
+
+Override runtime paths (useful for testing and non-standard deployments):
+
+- `MINIBOX_DATA_DIR` — image/container storage (default: `/var/lib/minibox`)
+- `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
+- `MINIBOX_SOCKET_PATH` — Unix socket path
+- `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 
 ## Skills Available
 
