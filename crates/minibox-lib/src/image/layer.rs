@@ -59,6 +59,13 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             .map_err(|e| ImageError::LayerExtract(format!("invalid entry path: {e}")))?
             .into_owned();
 
+        // Skip root directory entry — "." and "./" are tar markers for the
+        // archive root. dest already exists; extracting these is a no-op and
+        // their path normalisation confuses the escape check below.
+        if entry_path == Path::new(".") || entry_path == Path::new("./") {
+            continue;
+        }
+
         // SECURITY: Validate entry path doesn't escape destination
         validate_tar_entry_path(&entry_path, dest)?;
 
