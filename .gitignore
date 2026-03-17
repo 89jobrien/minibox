@@ -8,6 +8,7 @@
 !TEST_RESULTS.md
 !ZOMBIENET_PATTERNS.md
 !USAGE.md
+!CODEBASE_ANALYSIS.md
 !docs/vps-usage.md
 !docs/cgroup-findings.md
 !docs/plans/*.md
