@@ -161,6 +161,101 @@ fn main() {
     println!("minibox-bench: not yet implemented");
 }
 
+fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
+    if dry_run {
+        return Ok(BenchReport {
+            metadata: Metadata::default(),
+            suites: vec![SuiteResult {
+                name: "dry_run".to_string(),
+                tests: Vec::new(),
+            }],
+            errors: Vec::new(),
+        });
+    }
+
+    let mut suites = Vec::new();
+
+    // Pull suite
+    let pull = run_cmd("/usr/local/bin/minibox", &["pull", "alpine"]).map_err(|e| e.to_string())?;
+    let mut pull_suite = SuiteResult {
+        name: "pull".to_string(),
+        tests: Vec::new(),
+    };
+    pull_suite.tests.push(TestResult {
+        name: "pull_alpine".to_string(),
+        iterations: 1,
+        durations_micros: vec![pull.duration_micros],
+    });
+    suites.push(pull_suite);
+
+    // Run suite
+    let mut run_suite = SuiteResult {
+        name: "run".to_string(),
+        tests: Vec::new(),
+    };
+    for _ in 0..cfg.iters {
+        let run = run_cmd(
+            "/usr/local/bin/minibox",
+            &["run", "alpine", "--", "/bin/true"],
+        )
+        .map_err(|e| e.to_string())?;
+        run_suite.tests.push(TestResult {
+            name: "run_true".to_string(),
+            iterations: 1,
+            durations_micros: vec![run.duration_micros],
+        });
+    }
+    suites.push(run_suite);
+
+    // Exec suite
+    let mut exec_suite = SuiteResult {
+        name: "exec".to_string(),
+        tests: Vec::new(),
+    };
+    for _ in 0..cfg.iters {
+        let exec = run_cmd(
+            "/usr/local/bin/minibox",
+            &["run", "alpine", "--", "/bin/echo", "ok"],
+        )
+        .map_err(|e| e.to_string())?;
+        exec_suite.tests.push(TestResult {
+            name: "exec_echo".to_string(),
+            iterations: 1,
+            durations_micros: vec![exec.duration_micros],
+        });
+    }
+    suites.push(exec_suite);
+
+    // E2E suite (pull + run)
+    let mut e2e_suite = SuiteResult {
+        name: "e2e".to_string(),
+        tests: Vec::new(),
+    };
+    let pull = run_cmd("/usr/local/bin/minibox", &["pull", "alpine"]).map_err(|e| e.to_string())?;
+    let run = run_cmd(
+        "/usr/local/bin/minibox",
+        &["run", "alpine", "--", "/bin/true"],
+    )
+    .map_err(|e| e.to_string())?;
+    e2e_suite.tests.push(TestResult {
+        name: "pull_alpine".to_string(),
+        iterations: 1,
+        durations_micros: vec![pull.duration_micros],
+    });
+    e2e_suite.tests.push(TestResult {
+        name: "run_true".to_string(),
+        iterations: 1,
+        durations_micros: vec![run.duration_micros],
+    });
+    suites.push(e2e_suite);
+
+    Ok(BenchReport {
+        metadata: Metadata::default(),
+        suites,
+        errors: Vec::new(),
+    })
+}
+
 fn print_help() {
     println!("minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>\n  --out-dir <path>");
 }
@@ -196,5 +291,12 @@ mod tests {
     fn command_runner_captures_exit_status() {
         let result = run_cmd("/bin/true", &[]).unwrap();
         assert!(result.success);
+    }
+
+    #[test]
+    fn suite_has_results() {
+        let cfg = BenchConfig::default();
+        let report = run_suites(&cfg, true).unwrap();
+        assert!(!report.suites.is_empty());
     }
 }
