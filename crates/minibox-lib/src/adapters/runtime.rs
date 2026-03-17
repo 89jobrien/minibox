@@ -6,10 +6,9 @@
 
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
-use crate::domain::{AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};
+use crate::domain::{ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};
 use anyhow::Result;
 use async_trait::async_trait;
-use std::any::Any;
 use tracing::debug;
 
 /// Linux namespaces implementation of the [`ContainerRuntime`] trait.
@@ -89,17 +88,8 @@ impl LinuxNamespaceRuntime {
     }
 }
 
-impl Default for LinuxNamespaceRuntime {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl AsAny for LinuxNamespaceRuntime {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+adapt!(LinuxNamespaceRuntime);
 
 #[async_trait]
 impl ContainerRuntime for LinuxNamespaceRuntime {

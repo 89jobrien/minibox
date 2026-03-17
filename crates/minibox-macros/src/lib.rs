@@ -6,7 +6,8 @@
 //! - [`default_new!`] — implement `Default` via `Self::new()` for one or more types
 //! - [`adapt!`] — implement both `AsAny` and `Default` for one or more types
 
-/// Implement [`minibox_lib::domain::AsAny`] for one or more types.
+/// Implement `AsAny` for one or more types. When used from within minibox-lib,
+/// `$crate` resolves to the minibox-lib crate context.
 ///
 /// # Example
 /// ```rust,ignore
@@ -47,7 +48,7 @@ macro_rules! default_new {
     };
 }
 
-/// Implement both [`minibox_lib::domain::AsAny`] and `Default` for one or more types.
+/// Implement both `AsAny` and `Default` for one or more types.
 ///
 /// Equivalent to calling [`as_any!`] and [`default_new!`] with the same list.
 /// Only valid for types whose `new()` takes no arguments.

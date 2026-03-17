@@ -5,9 +5,8 @@
 //! [`FilesystemProvider`] trait.
 
 use crate::container::filesystem;
-use crate::domain::{AsAny, FilesystemProvider};
+use crate::domain::{FilesystemProvider};
 use anyhow::Result;
-use std::any::Any;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -74,17 +73,8 @@ impl OverlayFilesystem {
     }
 }
 
-impl Default for OverlayFilesystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl AsAny for OverlayFilesystem {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+adapt!(OverlayFilesystem);
 
 impl FilesystemProvider for OverlayFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
