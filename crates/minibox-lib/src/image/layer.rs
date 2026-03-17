@@ -215,6 +215,265 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::{Compression, write::GzEncoder};
+    use tar::{Builder, EntryType, Header};
+    use tempfile::TempDir;
+
+    // ---------------------------------------------------------------------------
+    // Tar archive builders for tests
+    // ---------------------------------------------------------------------------
+
+    fn tar_gz_with_regular_file(name: &str, content: &[u8]) -> Vec<u8> {
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path(name).unwrap();
+        h.set_size(content.len() as u64);
+        h.set_entry_type(EntryType::Regular);
+        h.set_mode(0o644);
+        h.set_cksum();
+        ar.append(&h, content).unwrap();
+        ar.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn tar_gz_with_device(name: &str, device_type: EntryType) -> Vec<u8> {
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path(name).unwrap();
+        h.set_size(0);
+        h.set_entry_type(device_type);
+        h.set_mode(0o644);
+        h.set_cksum();
+        ar.append(&h, &[][..]).unwrap();
+        ar.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn tar_gz_with_symlink(name: &str, target: &str) -> Vec<u8> {
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path(name).unwrap();
+        h.set_size(0);
+        h.set_entry_type(EntryType::Symlink);
+        h.set_link_name(target).unwrap();
+        h.set_mode(0o777);
+        h.set_cksum();
+        ar.append(&h, &[][..]).unwrap();
+        ar.into_inner().unwrap().finish().unwrap()
+    }
+
+    /// Build a raw tar.gz with a manually crafted header so we can embed
+    /// paths that the `tar` crate's builder would normally reject (e.g. `../`).
+    fn raw_tar_gz_with_filename(filename: &str) -> Vec<u8> {
+        use flate2::{Compression, write::GzEncoder};
+        use std::io::Write;
+
+        let mut header = [0u8; 512];
+        // Name field: bytes 0-99
+        let name = filename.as_bytes();
+        let len = name.len().min(100);
+        header[..len].copy_from_slice(&name[..len]);
+        // Mode: 0000644\0
+        header[100..108].copy_from_slice(b"0000644\0");
+        // uid/gid/size/mtime as zero octal
+        header[108..116].copy_from_slice(b"0000000\0");
+        header[116..124].copy_from_slice(b"0000000\0");
+        header[124..136].copy_from_slice(b"00000000000\0");
+        header[136..148].copy_from_slice(b"00000000000\0");
+        // type flag '0' = regular file
+        header[156] = b'0';
+        // ustar magic
+        header[257..263].copy_from_slice(b"ustar ");
+        header[263..265].copy_from_slice(b" \0");
+        // Checksum: set field to spaces, sum all bytes, write back
+        header[148..156].fill(b' ');
+        let sum: u32 = header.iter().map(|&b| b as u32).sum();
+        let cksum = format!("{:06o}\0 ", sum);
+        header[148..156].copy_from_slice(cksum.as_bytes());
+
+        // tar = header block + two end-of-archive zero blocks
+        let mut tar_bytes = Vec::new();
+        tar_bytes.extend_from_slice(&header);
+        tar_bytes.extend_from_slice(&[0u8; 1024]);
+
+        let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+        gz.write_all(&tar_bytes).unwrap();
+        gz.finish().unwrap()
+    }
+
+    // ---------------------------------------------------------------------------
+    // validate_tar_entry_path
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn absolute_path_rejected() {
+        let dest = TempDir::new().unwrap();
+        let err = validate_tar_entry_path(Path::new("/etc/passwd"), dest.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("absolute"),
+            "expected 'absolute' in: {err}"
+        );
+    }
+
+    #[test]
+    fn dotdot_prefix_rejected() {
+        let dest = TempDir::new().unwrap();
+        let err = validate_tar_entry_path(Path::new("../escape"), dest.path()).unwrap_err();
+        assert!(err.to_string().contains(".."), "expected '..' in: {err}");
+    }
+
+    #[test]
+    fn dotdot_in_middle_rejected() {
+        let dest = TempDir::new().unwrap();
+        let err =
+            validate_tar_entry_path(Path::new("foo/../../etc/passwd"), dest.path()).unwrap_err();
+        assert!(err.to_string().contains(".."), "expected '..' in: {err}");
+    }
+
+    #[test]
+    fn normal_relative_path_accepted() {
+        let dest = TempDir::new().unwrap();
+        validate_tar_entry_path(Path::new("usr/bin/something"), dest.path()).unwrap();
+    }
+
+    #[test]
+    fn deeply_nested_relative_path_accepted() {
+        let dest = TempDir::new().unwrap();
+        validate_tar_entry_path(Path::new("a/b/c/d/e/f"), dest.path()).unwrap();
+    }
+
+    // ---------------------------------------------------------------------------
+    // extract_layer — end-to-end
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn regular_file_extracted_correctly() {
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_regular_file("hello.txt", b"hello world");
+        extract_layer(&tar_gz, dest.path()).unwrap();
+        assert_eq!(
+            std::fs::read(dest.path().join("hello.txt")).unwrap(),
+            b"hello world"
+        );
+    }
+
+    #[test]
+    fn nested_regular_file_extracted() {
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_regular_file("usr/local/bin/tool", b"binary");
+        extract_layer(&tar_gz, dest.path()).unwrap();
+        assert!(dest.path().join("usr/local/bin/tool").exists());
+    }
+
+    #[test]
+    fn block_device_entry_rejected() {
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_device("dev/sda", EntryType::Block);
+        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("device"),
+            "expected 'device' in: {err}"
+        );
+    }
+
+    #[test]
+    fn char_device_entry_rejected() {
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_device("dev/null", EntryType::Char);
+        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("device"),
+            "expected 'device' in: {err}"
+        );
+    }
+
+    #[test]
+    fn dotdot_tar_entry_rejected() {
+        let dest = TempDir::new().unwrap();
+        // Use a raw tar so we can embed ../ in the filename, bypassing
+        // the tar crate's builder-level path validation.
+        let tar_gz = raw_tar_gz_with_filename("../escape.txt");
+        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("..") || err.to_string().contains("traversal"),
+            "expected path traversal error, got: {err}"
+        );
+        // Confirm nothing escaped the dest directory
+        assert!(!dest.path().parent().unwrap().join("escape.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_symlink_rewritten_to_relative() {
+        let dest = TempDir::new().unwrap();
+        // /bin/sh is an absolute symlink target — should be rewritten to bin/sh
+        let tar_gz = tar_gz_with_symlink("link_to_sh", "/bin/sh");
+        extract_layer(&tar_gz, dest.path()).unwrap();
+        let link = dest.path().join("link_to_sh");
+        assert!(
+            link.symlink_metadata().is_ok(),
+            "symlink should have been created"
+        );
+        let target = std::fs::read_link(&link).unwrap();
+        assert!(
+            !target.is_absolute(),
+            "symlink target should have been rewritten to relative, got: {target:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn absolute_symlink_with_parent_traversal_rejected() {
+        let dest = TempDir::new().unwrap();
+        // Symlink whose absolute target, when relativized, contains ../
+        let tar_gz = tar_gz_with_symlink("evil_link", "/../../etc/shadow");
+        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("traversal") || err.to_string().contains(".."),
+            "expected traversal error, got: {err}"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // verify_digest
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn correct_digest_accepted() {
+        use sha2::{Digest as _, Sha256};
+        let data = b"test data";
+        let hash = hex::encode(Sha256::digest(data));
+        let digest = format!("sha256:{hash}");
+        verify_digest(data, &digest).unwrap();
+    }
+
+    #[test]
+    fn wrong_digest_rejected() {
+        let err = verify_digest(
+            b"hello",
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("mismatch")
+                || err.to_string().to_lowercase().contains("digest")
+        );
+    }
+
+    #[test]
+    fn missing_prefix_rejected() {
+        let err = verify_digest(b"hello", "abc123").unwrap_err();
+        assert!(
+            err.to_string().contains("mismatch")
+                || err.to_string().to_lowercase().contains("digest")
+        );
+    }
+}
+
 /// Verify that `data` matches `expected_digest`.
 ///
 /// The digest must be in `sha256:<hex>` format as used by OCI manifests.
