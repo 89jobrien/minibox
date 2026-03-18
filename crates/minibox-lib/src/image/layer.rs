@@ -538,6 +538,37 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
+    // relative_path
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn relative_path_same_dir() {
+        // bin/echo -> /bin/busybox: target is in same dir, result is just filename
+        assert_eq!(
+            relative_path(Path::new("bin"), Path::new("bin/busybox")),
+            std::path::PathBuf::from("busybox")
+        );
+    }
+
+    #[test]
+    fn relative_path_cross_dir() {
+        // usr/local/bin/python -> /usr/bin/python: go up two dirs, then into bin
+        assert_eq!(
+            relative_path(Path::new("usr/local/bin"), Path::new("usr/bin/python")),
+            std::path::PathBuf::from("../../bin/python")
+        );
+    }
+
+    #[test]
+    fn relative_path_root_to_nested() {
+        // symlink at root level -> /usr/bin/python: no parent dirs to climb
+        assert_eq!(
+            relative_path(Path::new(""), Path::new("usr/bin/python")),
+            std::path::PathBuf::from("usr/bin/python")
+        );
+    }
+
+    // ---------------------------------------------------------------------------
     // verify_digest
     // ---------------------------------------------------------------------------
 
