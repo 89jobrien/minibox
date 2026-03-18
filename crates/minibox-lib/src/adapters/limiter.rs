@@ -72,7 +72,6 @@ impl CgroupV2Limiter {
     }
 }
 
-
 adapt!(CgroupV2Limiter);
 
 impl ResourceLimiter for CgroupV2Limiter {

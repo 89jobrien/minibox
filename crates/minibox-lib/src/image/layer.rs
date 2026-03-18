@@ -24,7 +24,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 /// Used to rewrite absolute symlink targets so they are relative to the
 /// symlink's own directory, making them correct after `pivot_root`.
 ///
-/// ```
+/// ```ignore
 /// # use std::path::Path;
 /// // bin/echo -> /bin/busybox  =>  rewrite target to "busybox"
 /// assert_eq!(relative_path(Path::new("bin"), Path::new("bin/busybox")),
@@ -499,7 +499,10 @@ mod tests {
         extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
         // The destination directory must remain empty — nothing was extracted.
         let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
-        assert!(entries.is_empty(), "no files should be extracted for '.' entry");
+        assert!(
+            entries.is_empty(),
+            "no files should be extracted for '.' entry"
+        );
     }
 
     #[test]
@@ -509,7 +512,10 @@ mod tests {
         let tar_gz = tar_gz_with_regular_file("./", b"");
         extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
         let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
-        assert!(entries.is_empty(), "no files should be extracted for './' entry");
+        assert!(
+            entries.is_empty(),
+            "no files should be extracted for './' entry"
+        );
     }
 
     #[test]

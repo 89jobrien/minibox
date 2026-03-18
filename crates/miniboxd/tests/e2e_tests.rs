@@ -148,10 +148,7 @@ impl DaemonFixture {
 
     /// Return the daemon's PID.
     fn daemon_pid(&self) -> u32 {
-        self.child
-            .as_ref()
-            .expect("daemon child missing")
-            .id()
+        self.child.as_ref().expect("daemon child missing").id()
     }
 
     /// Create a Command for the minibox CLI pre-configured with our socket.

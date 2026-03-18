@@ -1,7 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use minibox_lib::protocol::{
-    decode_request, decode_response, encode_request, encode_response, ContainerInfo, DaemonRequest,
-    DaemonResponse,
+    ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
+    encode_response,
 };
 
 fn small_run_request() -> DaemonRequest {

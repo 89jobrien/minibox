@@ -24,10 +24,10 @@
 //! }
 //! ```
 
-use crate::{adapt};
+use crate::adapt;
 use crate::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-    ImageRegistry, LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
+    LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -90,7 +90,6 @@ impl MockRegistry {
         self.state.lock().unwrap().pull_count
     }
 }
-
 
 #[async_trait]
 impl ImageRegistry for MockRegistry {
@@ -187,7 +186,6 @@ impl MockFilesystem {
     }
 }
 
-
 impl FilesystemProvider for MockFilesystem {
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         let mut state = self.state.lock().unwrap();
@@ -269,7 +267,6 @@ impl MockLimiter {
     }
 }
 
-
 impl ResourceLimiter for MockLimiter {
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
         let mut state = self.state.lock().unwrap();
@@ -341,7 +338,6 @@ impl MockRuntime {
         self.state.lock().unwrap().spawn_count
     }
 }
-
 
 #[async_trait]
 impl ContainerRuntime for MockRuntime {
@@ -460,7 +456,10 @@ mod macro_contract_tests {
     fn mock_registry_downcasts_to_concrete() {
         let arc: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
         let result = arc.as_ref().as_any().downcast_ref::<MockRegistry>();
-        assert!(result.is_some(), "MockRegistry must downcast to itself via as_any()");
+        assert!(
+            result.is_some(),
+            "MockRegistry must downcast to itself via as_any()"
+        );
     }
 
     #[test]
@@ -482,12 +481,29 @@ mod macro_contract_tests {
     #[test]
     fn all_mock_types_downcast_correctly() {
         let fs: Arc<dyn FilesystemProvider> = Arc::new(MockFilesystem::new());
-        assert!(fs.as_ref().as_any().downcast_ref::<MockFilesystem>().is_some());
+        assert!(
+            fs.as_ref()
+                .as_any()
+                .downcast_ref::<MockFilesystem>()
+                .is_some()
+        );
 
         let limiter: Arc<dyn ResourceLimiter> = Arc::new(MockLimiter::new());
-        assert!(limiter.as_ref().as_any().downcast_ref::<MockLimiter>().is_some());
+        assert!(
+            limiter
+                .as_ref()
+                .as_any()
+                .downcast_ref::<MockLimiter>()
+                .is_some()
+        );
 
         let runtime: Arc<dyn ContainerRuntime> = Arc::new(MockRuntime::new());
-        assert!(runtime.as_ref().as_any().downcast_ref::<MockRuntime>().is_some());
+        assert!(
+            runtime
+                .as_ref()
+                .as_any()
+                .downcast_ref::<MockRuntime>()
+                .is_some()
+        );
     }
 }

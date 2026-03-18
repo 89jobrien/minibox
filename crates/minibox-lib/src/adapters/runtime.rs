@@ -89,7 +89,6 @@ impl LinuxNamespaceRuntime {
     }
 }
 
-
 adapt!(LinuxNamespaceRuntime);
 
 #[async_trait]

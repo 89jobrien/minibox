@@ -35,9 +35,9 @@ use minibox_lib::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
-#[cfg(target_os = "linux")]
 use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+#[cfg(target_os = "linux")]
+use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox_lib::image::ImageStore;
 #[cfg(target_os = "linux")]
@@ -249,16 +249,14 @@ async fn main() -> Result<()> {
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
         }
-        AdapterSuite::Colima => {
-            Arc::new(HandlerDependencies {
-                registry: Arc::new(ColimaRegistry::new()),
-                filesystem: Arc::new(ColimaFilesystem::new()),
-                resource_limiter: Arc::new(ColimaLimiter::new()),
-                runtime: Arc::new(ColimaRuntime::new()),
-                containers_base: PathBuf::from(&containers_dir),
-                run_containers_base: PathBuf::from(&run_containers_dir),
-            })
-        }
+        AdapterSuite::Colima => Arc::new(HandlerDependencies {
+            registry: Arc::new(ColimaRegistry::new()),
+            filesystem: Arc::new(ColimaFilesystem::new()),
+            resource_limiter: Arc::new(ColimaLimiter::new()),
+            runtime: Arc::new(ColimaRuntime::new()),
+            containers_base: PathBuf::from(&containers_dir),
+            run_containers_base: PathBuf::from(&run_containers_dir),
+        }),
     };
 
     info!("dependency injection configured");

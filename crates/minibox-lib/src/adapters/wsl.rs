@@ -124,7 +124,6 @@ impl WslRuntime {
     }
 }
 
-
 #[async_trait]
 impl ContainerRuntime for WslRuntime {
     fn capabilities(&self) -> RuntimeCapabilities {
@@ -209,7 +208,6 @@ impl WslFilesystem {
     }
 }
 
-
 impl FilesystemProvider for WslFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         debug!(
@@ -282,7 +280,6 @@ impl WslLimiter {
         }
     }
 }
-
 
 impl ResourceLimiter for WslLimiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {

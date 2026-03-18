@@ -153,7 +153,6 @@ impl DockerDesktopRuntime {
     }
 }
 
-
 #[async_trait]
 impl ContainerRuntime for DockerDesktopRuntime {
     fn capabilities(&self) -> RuntimeCapabilities {
@@ -240,7 +239,6 @@ impl DockerDesktopFilesystem {
     }
 }
 
-
 impl FilesystemProvider for DockerDesktopFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         debug!(
@@ -305,7 +303,6 @@ impl DockerDesktopLimiter {
         }
     }
 }
-
 
 impl ResourceLimiter for DockerDesktopLimiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
@@ -422,4 +419,8 @@ mod tests {
     }
 }
 
-as_any!(DockerDesktopRuntime, DockerDesktopFilesystem, DockerDesktopLimiter);
+as_any!(
+    DockerDesktopRuntime,
+    DockerDesktopFilesystem,
+    DockerDesktopLimiter
+);

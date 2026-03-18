@@ -13,10 +13,10 @@
 //! - Colima installed (`brew install colima`)
 //! - Colima VM running (`colima start`)
 
-use crate::{adapt};
+use crate::adapt;
 use crate::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-    ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
+    ResourceConfig, ResourceLimiter, RuntimeCapabilities,
 };
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -549,7 +549,12 @@ struct RootFs {
     layers: Vec<String>,
 }
 
-adapt!(ColimaRegistry, ColimaFilesystem, ColimaLimiter, ColimaRuntime);
+adapt!(
+    ColimaRegistry,
+    ColimaFilesystem,
+    ColimaLimiter,
+    ColimaRuntime
+);
 
 #[cfg(test)]
 mod tests {

@@ -14,6 +14,10 @@
 /// as_any!(DockerHubRegistry);
 /// as_any!(WslRuntime, WslFilesystem, WslLimiter);
 /// ```
+// `crate::domain::AsAny` is intentional: in macro_rules!, `crate` resolves at
+// the call site, so this expands to `minibox_lib::domain::AsAny` when used in
+// minibox-lib. Using `$crate` here would wrongly resolve to minibox-macros.
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! as_any {
     ($($t:ty),+ $(,)?) => {

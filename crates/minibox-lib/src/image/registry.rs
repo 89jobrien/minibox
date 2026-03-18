@@ -382,15 +382,16 @@ impl RegistryClient {
 
                 let verify_start = std::time::Instant::now();
                 {
-                    let _span = tracing::info_span!("verify_digest").entered();
-                    verify_digest(&data, &layer_desc.digest)
-                        .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+                    let _span = tracing::debug_span!("verify_digest").entered();
+                    verify_digest(&data, &layer_desc.digest).with_context(|| {
+                        format!("digest verification for {}", layer_desc.digest)
+                    })?;
                 }
                 let verify = verify_start.elapsed();
 
                 let extract_start = std::time::Instant::now();
                 {
-                    let _span = tracing::info_span!("extract", bytes = data.len()).entered();
+                    let _span = tracing::debug_span!("extract", bytes = data.len()).entered();
                     store
                         .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
                         .with_context(|| format!("store layer {}", layer_desc.digest))?;
@@ -412,7 +413,7 @@ impl RegistryClient {
 
         // 4. Persist manifest.
         {
-            let _span = tracing::info_span!("store_manifest").entered();
+            let _span = tracing::debug_span!("store_manifest").entered();
             store
                 .store_manifest(name, tag, &manifest)
                 .with_context(|| format!("store manifest for {name}:{tag}"))?;

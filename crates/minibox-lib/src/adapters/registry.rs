@@ -82,7 +82,6 @@ impl DockerHubRegistry {
     }
 }
 
-
 as_any!(DockerHubRegistry);
 
 #[async_trait]

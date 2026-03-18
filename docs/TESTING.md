@@ -14,8 +14,8 @@ This document describes the testing strategy for the minibox container runtime.
             │  ~28 tests          │
             └─────────────────────┘
        ┌──────────────────────────────┐
-       │     Unit + Conformance      │  (Mocks, any platform)
-       │        ~52 tests            │
+       │     Unit + Conformance       │  (Mocks, any platform)
+       │        ~52 tests             │
        └──────────────────────────────┘
 ```
 

@@ -6,7 +6,7 @@
 
 use crate::adapt;
 use crate::container::filesystem;
-use crate::domain::{FilesystemProvider};
+use crate::domain::FilesystemProvider;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -73,7 +73,6 @@ impl OverlayFilesystem {
         }
     }
 }
-
 
 adapt!(OverlayFilesystem);
 
