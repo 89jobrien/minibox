@@ -236,6 +236,43 @@ Understanding these helps prioritize feature development:
 - **No Dockerfile support**: Image-only workflow
 - **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
 
+## Tracing Contract
+
+All structured events follow these conventions. When adding new `warn!`/`info!`/`debug!`/`error!` calls, match the patterns below.
+
+### Severity discipline
+
+| Level | Usage |
+|---|---|
+| `error!` | Unrecoverable failures: container init crash, fatal exec errors |
+| `warn!` | Security rejections, degraded behaviour, best-effort failures (unmount, cgroup cleanup, signal) |
+| `info!` | Lifecycle milestones: container start/stop/remove, image pull phases, overlay mount, pivot_root |
+| `debug!` | Implementation detail: syscall arguments, byte counts, internal state transitions |
+
+### Event message convention
+
+Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rejected device node"`, `"pivot_root: complete"`, `"container: process started"`.
+
+### Canonical field names
+
+| Field | Type | Used in |
+|---|---|---|
+| `pid` | u32 | Container process ID |
+| `child_pid` | i32 | Cloned child PID (`namespace.rs`) |
+| `clone_flags` | i32 | Raw `clone(2)` flags (`namespace.rs`) |
+| `container_id` | &str | Container UUID |
+| `entry` | &Path | Tar entry path (all `layer.rs` security events) |
+| `kind` | &EntryType | Tar entry type (device node rejection) |
+| `target` / `original_target` | &Path | Symlink target before rewrite |
+| `rewritten_target` | &Path | Symlink target after absolute→relative rewrite |
+| `mode_before` / `mode_after` | u32 | Raw permission bits (octal) before/after strip |
+| `new_root` | &Path | `pivot_root` destination path |
+| `fds_closed` | usize | Extra FDs closed before exec (`process.rs`) |
+| `command` | &str | Container entrypoint command |
+| `rootfs` | &Path | Container rootfs path |
+
+**Rule**: use `key = value` structured fields for queryable data — never embed structured values in the message string (e.g. use `pid = pid_value`, not `"PID={pid}"` in the message).
+
 ## Debugging
 
 ### Macro and doctest gotchas

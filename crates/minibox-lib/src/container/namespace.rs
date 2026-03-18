@@ -99,7 +99,10 @@ where
     // SIGCHLD must be set so the parent can waitpid on the child.
     let flags_raw = clone_flags.bits() | libc::SIGCHLD;
 
-    debug!("cloning child with flags={:#x}", flags_raw);
+    debug!(
+        clone_flags = flags_raw,
+        "namespace: cloning container child"
+    );
 
     // Allocate the child stack.  We zero-initialise to avoid UB from
     // uninitialised reads if the child touches guard pages.
@@ -147,6 +150,6 @@ where
     // this Vec.
     drop(stack);
 
-    info!("cloned container child PID={}", pid);
+    info!(child_pid = pid, "namespace: container child cloned");
     Ok(nix::unistd::Pid::from_raw(pid))
 }

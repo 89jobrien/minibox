@@ -201,8 +201,10 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             }
 
             warn!(
-                "rewrote absolute symlink: {:?} -> {:?} (was {:?})",
-                entry_path, rel_target, link_target
+                entry = ?entry_path,
+                original_target = ?link_target,
+                rewritten_target = ?rel_target,
+                "tar: rewrote absolute symlink to relative"
             );
             continue;
         }
@@ -219,8 +221,10 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             let safe_mode = mode & 0o777;
             if mode != safe_mode {
                 warn!(
-                    "stripped special bits from {:?}: {:#o} -> {:#o}",
-                    entry_path, mode, safe_mode
+                    entry = ?entry_path,
+                    mode_before = mode,
+                    mode_after = safe_mode,
+                    "tar: stripped special permission bits"
                 );
             }
             // Note: tar crate doesn't provide set_mode(), so we rely on umask

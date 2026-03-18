@@ -43,10 +43,7 @@ pub struct ContainerConfig {
 ///
 /// Returns the child PID on success.
 pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<u32> {
-    info!(
-        "spawning container process: command={} rootfs={:?}",
-        config.command, config.rootfs
-    );
+    info!(command = %config.command, rootfs = ?config.rootfs, "container: spawning process");
 
     let ns_config = config.namespace_config.clone();
     let pid = clone_with_namespaces(&ns_config, move || {
@@ -64,7 +61,7 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<u32> {
     .with_context(|| "failed to spawn container process")?;
 
     let pid_raw = pid.as_raw() as u32;
-    info!("container process started with PID={}", pid_raw);
+    info!(pid = pid_raw, "container: process started");
     Ok(pid_raw)
 }
 

@@ -171,7 +171,7 @@ pub fn setup_overlay_with_base(
 /// 4. Call `pivot_root(new_root, put_old)`.
 /// 5. `chdir("/")` and unmount + remove `.put_old/`.
 pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
-    debug!("pivoting root to {:?}", new_root);
+    debug!(new_root = ?new_root, "pivot_root: starting");
 
     // Disconnect this mount namespace from the parent's propagation tree.
     // After CLONE_NEWNS the child inherits shared mounts; pivot_root(2)
@@ -284,7 +284,7 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 
     fs::remove_dir("/.put_old").ok(); // best-effort
 
-    info!("pivot_root complete, new root is {:?}", new_root);
+    info!(new_root = ?new_root, "pivot_root: complete");
     Ok(())
 }
 
