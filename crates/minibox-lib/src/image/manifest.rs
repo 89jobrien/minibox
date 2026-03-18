@@ -1,8 +1,7 @@
 //! OCI image manifest and manifest list types.
 //!
-//! We support both single-arch manifests
-//! (`application/vnd.oci.image.manifest.v1+json`) and multi-arch manifest
-//! lists (`application/vnd.oci.image.index.v1+json` /
+//! We support both single-arch manifests (`application/vnd.oci.image.manifest.v1+json`)
+//! and multi-arch manifest lists (`application/vnd.oci.image.index.v1+json`
 //! `application/vnd.docker.distribution.manifest.list.v2+json`).
 
 use serde::{Deserialize, Serialize};
@@ -122,5 +121,224 @@ impl ManifestResponse {
             let manifest: OciManifest = serde_json::from_slice(body)?;
             Ok(ManifestResponse::Single(manifest))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // ManifestResponse::parse — single-arch manifests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn parse_oci_single_manifest() {
+        let body = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "config": {
+                "mediaType": "application/vnd.oci.image.config.v1+json",
+                "size": 1234,
+                "digest": "sha256:abc123"
+            },
+            "layers": [
+                {
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                    "size": 5678,
+                    "digest": "sha256:def456"
+                }
+            ]
+        });
+        let json = serde_json::to_vec(&body).unwrap();
+
+        let result = ManifestResponse::parse(&json, "application/vnd.oci.image.manifest.v1+json");
+        assert!(result.is_ok());
+        match result.unwrap() {
+            ManifestResponse::Single(m) => {
+                assert_eq!(m.schema_version, 2);
+                assert_eq!(m.layers.len(), 1);
+                assert_eq!(m.layers[0].digest, "sha256:def456");
+            }
+            ManifestResponse::List(_) => panic!("expected Single, got List"),
+        }
+    }
+
+    #[test]
+    fn parse_docker_v2_single_manifest() {
+        let body = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+            "config": {
+                "mediaType": "application/vnd.docker.container.image.v1+json",
+                "size": 100,
+                "digest": "sha256:config123"
+            },
+            "layers": []
+        });
+        let json = serde_json::to_vec(&body).unwrap();
+
+        let result = ManifestResponse::parse(
+            &json,
+            "application/vnd.docker.distribution.manifest.v2+json",
+        );
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ManifestResponse::Single(_)));
+    }
+
+    // -------------------------------------------------------------------------
+    // ManifestResponse::parse — manifest lists
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn parse_docker_manifest_list() {
+        let body = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+            "manifests": [
+                {
+                    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                    "size": 528,
+                    "digest": "sha256:linux_amd64",
+                    "platform": { "architecture": "amd64", "os": "linux" }
+                },
+                {
+                    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                    "size": 528,
+                    "digest": "sha256:linux_arm64",
+                    "platform": { "architecture": "arm64", "os": "linux" }
+                }
+            ]
+        });
+        let json = serde_json::to_vec(&body).unwrap();
+
+        let result = ManifestResponse::parse(
+            &json,
+            "application/vnd.docker.distribution.manifest.list.v2+json",
+        );
+        assert!(result.is_ok());
+        match result.unwrap() {
+            ManifestResponse::List(list) => {
+                assert_eq!(list.manifests.len(), 2);
+            }
+            ManifestResponse::Single(_) => panic!("expected List, got Single"),
+        }
+    }
+
+    #[test]
+    fn parse_oci_image_index() {
+        let body = serde_json::json!({
+            "schemaVersion": 2,
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "manifests": [
+                {
+                    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                    "size": 1000,
+                    "digest": "sha256:arm_manifest",
+                    "platform": { "architecture": "arm64", "os": "linux", "variant": "v8" }
+                }
+            ]
+        });
+        let json = serde_json::to_vec(&body).unwrap();
+
+        let result =
+            ManifestResponse::parse(&json, "application/vnd.oci.image.index.v1+json");
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ManifestResponse::List(_)));
+    }
+
+    // -------------------------------------------------------------------------
+    // ManifestList::find_linux_amd64
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn find_linux_amd64_returns_correct_descriptor() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_DOCKER_MANIFEST_LIST.to_string(),
+            manifests: vec![
+                Descriptor {
+                    media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                    size: 100,
+                    digest: "sha256:arm_digest".to_string(),
+                    platform: Some(Platform {
+                        architecture: "arm64".to_string(),
+                        os: "linux".to_string(),
+                        variant: Some("v8".to_string()),
+                    }),
+                },
+                Descriptor {
+                    media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                    size: 200,
+                    digest: "sha256:amd64_digest".to_string(),
+                    platform: Some(Platform {
+                        architecture: "amd64".to_string(),
+                        os: "linux".to_string(),
+                        variant: None,
+                    }),
+                },
+            ],
+        };
+
+        let found = list.find_linux_amd64();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().digest, "sha256:amd64_digest");
+    }
+
+    #[test]
+    fn find_linux_amd64_returns_none_when_missing() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_OCI_INDEX.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_OCI_MANIFEST.to_string(),
+                size: 100,
+                digest: "sha256:windows_digest".to_string(),
+                platform: Some(Platform {
+                    architecture: "amd64".to_string(),
+                    os: "windows".to_string(),
+                    variant: None,
+                }),
+            }],
+        };
+
+        assert!(list.find_linux_amd64().is_none());
+    }
+
+    #[test]
+    fn find_linux_amd64_returns_none_for_empty_list() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_OCI_INDEX.to_string(),
+            manifests: vec![],
+        };
+
+        assert!(list.find_linux_amd64().is_none());
+    }
+
+    #[test]
+    fn find_linux_amd64_skips_entries_without_platform() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_DOCKER_MANIFEST_LIST.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                size: 100,
+                digest: "sha256:no_platform".to_string(),
+                platform: None,
+            }],
+        };
+
+        assert!(list.find_linux_amd64().is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // parse — invalid JSON
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn parse_returns_error_for_invalid_json() {
+        let result = ManifestResponse::parse(b"not json", "application/vnd.oci.image.manifest.v1+json");
+        assert!(result.is_err());
     }
 }
