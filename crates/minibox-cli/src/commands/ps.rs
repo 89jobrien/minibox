@@ -102,3 +102,47 @@ fn truncate(s: &str, max: usize) -> String {
         t
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_empty_string_unchanged() {
+        assert_eq!(truncate("", 10), "");
+    }
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_one_over_limit_adds_ellipsis() {
+        // 6 chars, max 5 → take 4 + "…"
+        assert_eq!(truncate("hello!", 5), "hell…");
+    }
+
+    #[test]
+    fn truncate_long_string_adds_ellipsis() {
+        assert_eq!(truncate("hello world", 8), "hello w…");
+    }
+
+    #[test]
+    fn truncate_max_one_produces_single_ellipsis() {
+        // max=1, saturating_sub(1)=0 → take 0 chars, push "…"
+        assert_eq!(truncate("ab", 1), "…");
+    }
+
+    #[test]
+    fn truncate_counts_unicode_chars_not_bytes() {
+        // "café" is 4 chars but 5 bytes; should be treated as 4 chars
+        assert_eq!(truncate("café", 4), "café");
+        assert_eq!(truncate("café!", 4), "caf…");
+    }
+}

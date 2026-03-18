@@ -22,6 +22,33 @@ fn socket_path() -> String {
     std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Env var tests mutate process-global state.  Serialise them with a mutex
+    // so parallel test threads cannot observe each other's writes.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn socket_path_defaults_when_env_unset() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // SAFETY: single-threaded via ENV_LOCK; no other thread reads this var
+        unsafe { std::env::remove_var("MINIBOX_SOCKET_PATH") };
+        assert_eq!(socket_path(), DEFAULT_SOCKET_PATH);
+    }
+
+    #[test]
+    fn socket_path_returns_env_var_when_set() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // SAFETY: single-threaded via ENV_LOCK; no other thread reads this var
+        unsafe { std::env::set_var("MINIBOX_SOCKET_PATH", "/tmp/test-minibox.sock") };
+        let result = socket_path();
+        unsafe { std::env::remove_var("MINIBOX_SOCKET_PATH") };
+        assert_eq!(result, "/tmp/test-minibox.sock");
+    }
+}
+
 /// Open a connection to the daemon, send one request, and return the response.
 ///
 /// The protocol is a single JSON line → single JSON line.
