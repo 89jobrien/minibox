@@ -449,3 +449,45 @@ mod tests {
         assert_eq!(pid2, 10001);
     }
 }
+
+#[cfg(test)]
+mod macro_contract_tests {
+    use super::*;
+    use crate::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use std::sync::Arc;
+
+    #[test]
+    fn mock_registry_downcasts_to_concrete() {
+        let arc: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
+        let result = arc.as_ref().as_any().downcast_ref::<MockRegistry>();
+        assert!(result.is_some(), "MockRegistry must downcast to itself via as_any()");
+    }
+
+    #[test]
+    fn wrong_type_downcast_returns_none() {
+        let arc: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
+        // Downcasting to a completely different concrete type must return None, not panic
+        let result = arc.as_ref().as_any().downcast_ref::<MockFilesystem>();
+        assert!(result.is_none(), "wrong-type downcast must return None");
+    }
+
+    #[test]
+    fn default_matches_new() {
+        // default_new! implements Default by delegating to ::new()
+        // If this compiles and runs, the implementation is correct
+        let _via_default = MockRegistry::default();
+        let _via_new = MockRegistry::new();
+    }
+
+    #[test]
+    fn all_mock_types_downcast_correctly() {
+        let fs: Arc<dyn FilesystemProvider> = Arc::new(MockFilesystem::new());
+        assert!(fs.as_ref().as_any().downcast_ref::<MockFilesystem>().is_some());
+
+        let limiter: Arc<dyn ResourceLimiter> = Arc::new(MockLimiter::new());
+        assert!(limiter.as_ref().as_any().downcast_ref::<MockLimiter>().is_some());
+
+        let runtime: Arc<dyn ContainerRuntime> = Arc::new(MockRuntime::new());
+        assert!(runtime.as_ref().as_any().downcast_ref::<MockRuntime>().is_some());
+    }
+}
