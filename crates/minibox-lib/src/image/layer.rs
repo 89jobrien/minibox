@@ -18,6 +18,51 @@ fn has_parent_dir_component(path: &Path) -> bool {
         .any(|c| matches!(c, std::path::Component::ParentDir))
 }
 
+/// Compute a relative path from `from_dir` to `to`, both relative to the
+/// container root (no leading `/`).
+///
+/// Used to rewrite absolute symlink targets so they are relative to the
+/// symlink's own directory, making them correct after `pivot_root`.
+///
+/// ```
+/// # use std::path::Path;
+/// // bin/echo -> /bin/busybox  =>  rewrite target to "busybox"
+/// assert_eq!(relative_path(Path::new("bin"), Path::new("bin/busybox")),
+///            std::path::PathBuf::from("busybox"));
+/// // usr/local/bin/python -> /usr/bin/python  =>  "../../bin/python"
+/// assert_eq!(relative_path(Path::new("usr/local/bin"), Path::new("usr/bin/python")),
+///            std::path::PathBuf::from("../../bin/python"));
+/// ```
+fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
+    use std::path::Component;
+    let from: Vec<_> = from_dir
+        .components()
+        .filter(|c| !matches!(c, Component::CurDir))
+        .collect();
+    let to_parts: Vec<_> = to
+        .components()
+        .filter(|c| !matches!(c, Component::CurDir))
+        .collect();
+
+    let common = from
+        .iter()
+        .zip(to_parts.iter())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    let mut result = std::path::PathBuf::new();
+    for _ in &from[common..] {
+        result.push("..");
+    }
+    for part in &to_parts[common..] {
+        result.push(part.as_os_str());
+    }
+    if result.as_os_str().is_empty() {
+        result.push(".");
+    }
+    result
+}
+
 /// Extract a gzip-compressed tar layer into `dest`.
 ///
 /// Any files inside the tar are extracted relative to `dest`. The destination
@@ -80,23 +125,37 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             .into());
         }
 
-        // Handle symlinks to absolute paths by rewriting into image root
+        // Handle symlinks to absolute paths by rewriting to a path that is
+        // relative to the symlink's own directory.
+        //
+        // Example: entry `bin/echo` with target `/bin/busybox`
+        //   entry_dir  = "bin"
+        //   abs_target = "bin/busybox"   (strip leading "/")
+        //   rel        = "busybox"       (relative from "bin" to "bin/busybox")
+        //
+        // This is necessary because inside the container (after pivot_root)
+        // absolute symlinks resolve correctly, but on the HOST during extraction
+        // they would point into the host filesystem.
         if entry_type == EntryType::Symlink
             && let Ok(Some(link_target)) = entry.link_name()
             && link_target.is_absolute()
         {
-            let rel_target = link_target.strip_prefix("/").map_err(|_| {
+            let abs_target = link_target.strip_prefix("/").map_err(|_| {
                 ImageError::LayerExtract(format!(
                     "invalid absolute symlink target: {link_target:?}"
                 ))
             })?;
 
-            if has_parent_dir_component(rel_target) {
+            if has_parent_dir_component(abs_target) {
                 return Err(ImageError::LayerExtract(format!(
                     "tar entry contains symlink with parent traversal (security risk): {entry_path:?} -> {link_target:?}"
                 ))
                 .into());
             }
+
+            // Compute path relative to the symlink's directory.
+            let entry_dir = entry_path.parent().unwrap_or(Path::new(""));
+            let rel_target = relative_path(entry_dir, abs_target);
 
             let target_path = dest.join(&entry_path);
             if let Some(parent) = target_path.parent() {
@@ -118,7 +177,7 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::symlink;
-                symlink(rel_target, &target_path).with_context(|| {
+                symlink(&rel_target, &target_path).with_context(|| {
                     format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
                 })?;
             }
@@ -132,8 +191,8 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             }
 
             warn!(
-                "rewrote absolute symlink into image root: {:?} -> {:?}",
-                entry_path, rel_target
+                "rewrote absolute symlink: {:?} -> {:?} (was {:?})",
+                entry_path, rel_target, link_target
             );
             continue;
         }
