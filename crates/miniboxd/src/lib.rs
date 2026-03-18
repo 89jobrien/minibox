@@ -1,11 +1,12 @@
-//! miniboxd library — exposes handler and state modules for integration tests.
+//! miniboxd library — re-exports from daemonbox for backward compatibility.
 //!
-//! These modules are public for test access only and should not be considered
-//! a stable public API.
+//! These re-exports exist so that integration tests importing
+//! `miniboxd::handler`, `miniboxd::state`, or `miniboxd::server` continue
+//! to compile without changes after the move to `daemonbox`.
 
 #[doc(hidden)]
-pub mod handler;
+pub use daemonbox::handler;
 #[doc(hidden)]
-pub mod server;
+pub use daemonbox::server;
 #[doc(hidden)]
-pub mod state;
+pub use daemonbox::state;
