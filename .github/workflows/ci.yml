@@ -56,9 +56,34 @@ jobs:
       - name: Unit tests (lib)
         run: cargo test --workspace --lib
       - name: Handler tests
-        run: cargo test -p miniboxd --test handler_tests
+        run: cargo test -p daemonbox --test handler_tests
       - name: Conformance tests
-        run: cargo test -p miniboxd --test conformance_tests
+        run: cargo test -p daemonbox --test conformance_tests
+
+  macos:
+    name: macOS (cross-platform crates)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-macos-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-macos-
+      - name: Clippy (cross-platform crates)
+        run: cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+      - name: Tests (cross-platform crates)
+        run: cargo test -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
+      - name: Handler tests
+        run: cargo test -p daemonbox --test handler_tests
+      - name: Conformance tests
+        run: cargo test -p daemonbox --test conformance_tests
 
   build:
     name: Build

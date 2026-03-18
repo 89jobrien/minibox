@@ -12,8 +12,8 @@ use minibox_lib::domain::{
     ResourceLimiter,
 };
 use minibox_lib::protocol::DaemonResponse;
-use miniboxd::handler::{self, HandlerDependencies};
-use miniboxd::state::DaemonState;
+use daemonbox::handler::{self, HandlerDependencies};
+use daemonbox::state::DaemonState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;

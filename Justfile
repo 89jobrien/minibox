@@ -21,9 +21,9 @@ smoke:
 
 # Unit tests (mock-based, any platform)
 test-unit:
-    cargo test --workspace --lib
-    cargo test -p miniboxd --test handler_tests
-    cargo test -p miniboxd --test conformance_tests
+    cargo test -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --lib
+    cargo test -p daemonbox --test handler_tests
+    cargo test -p daemonbox --test conformance_tests
 
 # Cgroup integration tests (Linux, root)
 test-integration:
