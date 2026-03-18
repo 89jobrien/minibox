@@ -529,6 +529,49 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn busybox_applet_symlink_correct() {
+        // bin/echo -> /bin/busybox: after rewrite, target should be "busybox" (same dir)
+        // This is the specific busybox case that was broken before the fix.
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_symlink("bin/echo", "/bin/busybox");
+        extract_layer(&tar_gz, dest.path()).unwrap();
+        let link = dest.path().join("bin/echo");
+        assert!(link.symlink_metadata().is_ok(), "symlink should exist");
+        let target = std::fs::read_link(&link).unwrap();
+        assert!(
+            !target.is_absolute(),
+            "target must be relative, got: {target:?}"
+        );
+        assert_eq!(
+            target,
+            std::path::PathBuf::from("busybox"),
+            "bin/echo -> /bin/busybox should rewrite to 'busybox'"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cross_dir_absolute_symlink_rewritten() {
+        // usr/local/bin/python -> /usr/bin/python: rewritten to ../../bin/python
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_symlink("usr/local/bin/python", "/usr/bin/python");
+        extract_layer(&tar_gz, dest.path()).unwrap();
+        let link = dest.path().join("usr/local/bin/python");
+        assert!(link.symlink_metadata().is_ok(), "symlink should exist");
+        let target = std::fs::read_link(&link).unwrap();
+        assert!(
+            !target.is_absolute(),
+            "target must be relative, got: {target:?}"
+        );
+        assert_eq!(
+            target,
+            std::path::PathBuf::from("../../bin/python"),
+            "usr/local/bin/python -> /usr/bin/python should rewrite to '../../bin/python'"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn absolute_symlink_rewritten_to_relative() {
         let dest = TempDir::new().unwrap();
         // /bin/sh is an absolute symlink target — should be rewritten to bin/sh
