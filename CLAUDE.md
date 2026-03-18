@@ -73,13 +73,19 @@ cargo bench -p minibox-lib          # protocol codec encode/decode
 
 **Test Status:**
 
-- Unit + conformance: ~53 lib tests + 12 handler + 10 conformance passing
+- Unit + conformance: ~81 lib tests + 12 handler + 10 conformance passing
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
-- Path validation: TODO (security-critical)
-- Tar entry validation: TODO (security-critical)
 - Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`
+
+**macOS quality gates** (`miniboxd`/`minibox-cli` have `compile_error!()` — `--workspace` clippy/test fails):
+
+```bash
+cargo test -p minibox-lib
+cargo clippy -p minibox-lib -p minibox-macros -- -D warnings
+cargo fmt --all --check
+```
 
 ## Architecture Overview
 
@@ -231,6 +237,11 @@ Understanding these helps prioritize feature development:
 - **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
 
 ## Debugging
+
+### Macro and doctest gotchas
+
+- **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (minibox-lib), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
+- **Private fn doctests** — mark with ```` ```ignore ```` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
 
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
