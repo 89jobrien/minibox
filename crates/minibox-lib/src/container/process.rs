@@ -145,9 +145,14 @@ fn close_extra_fds() {
             .filter_map(|n| n.parse::<RawFd>().ok())
             .filter(|&fd| fd > 2)
             .collect();
+        let count = fds.len();
         for fd in fds {
             unsafe { libc::close(fd) };
         }
+        debug!(
+            fds_closed = count,
+            "closed extra file descriptors before exec"
+        );
     }
 }
 
