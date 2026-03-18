@@ -6,6 +6,7 @@ members = [
     "crates/minibox-cli",
     "crates/minibox-bench",
     "crates/minibox-macros",
+    "crates/daemonbox",
 ]
 
 [workspace.package]
@@ -45,3 +46,4 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 # Internal crates
 minibox-lib = { path = "crates/minibox-lib" }
 minibox-macros = { path = "crates/minibox-macros" }
+daemonbox = { path = "crates/daemonbox" }
