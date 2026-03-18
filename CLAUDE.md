@@ -46,8 +46,8 @@ See `TESTING.md` for comprehensive testing strategy and guidelines.
 **Quick reference:**
 
 ```bash
-# On macOS, only minibox-lib tests run — miniboxd and minibox-cli have
-# compile_error!() guards. Use: cargo test -p minibox-lib
+# On macOS, miniboxd has a compile_error!() guard; minibox-cli does not.
+# Use: cargo test -p minibox-lib && cargo test -p minibox-cli
 
 # Run all tests (requires Linux)
 cargo test --workspace
@@ -73,16 +73,17 @@ cargo bench -p minibox-lib          # protocol codec encode/decode
 
 **Test Status:**
 
-- Unit + conformance: ~81 lib tests + 12 handler + 10 conformance passing
+- Unit + conformance: ~81 lib tests + 9 cli tests + 12 handler + 10 conformance passing
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
 - Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
-**macOS quality gates** (`miniboxd`/`minibox-cli` have `compile_error!()` — `--workspace` clippy/test fails):
+**macOS quality gates** (`miniboxd` has `compile_error!()` — `--workspace` clippy/test fails):
 
 ```bash
 cargo test -p minibox-lib
+cargo test -p minibox-cli
 cargo clippy -p minibox-lib -p minibox-macros -- -D warnings
 cargo fmt --all --check
 ```
@@ -274,6 +275,10 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 **Rule**: use `key = value` structured fields for queryable data — never embed structured values in the message string (e.g. use `pid = pid_value`, not `"PID={pid}"` in the message).
 
 ## Debugging
+
+### Testing gotchas
+
+- **`std::env::set_var`/`remove_var` are `unsafe` in Rust 2024** — wrap in `unsafe {}` and serialise with a `static Mutex<()>` guard to prevent parallel test races (see `commands/mod.rs` tests for the pattern).
 
 ### Macro and doctest gotchas
 
