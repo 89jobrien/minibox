@@ -103,6 +103,8 @@ Three crates in cargo workspace:
 
 **State Management**: In-memory HashMap in `miniboxd/src/state.rs` tracks containers. Not persisted - daemon restart loses all records. Container state machine: Created → Running → Stopped.
 
+**CLI returns immediately** — `minibox run` prints the container ID as soon as the daemon creates it, *before* the container process has exec'd. Actual execution success/failure is only visible in `journalctl -u miniboxd`. A fast `time minibox run ...` does not confirm the container ran.
+
 **Image Storage**: Layers stored as extracted directories in `/var/lib/minibox/images/{image}/{digest}/`. Overlay filesystem stacks layers (read-only lower dirs) + container-specific upper/work dirs.
 
 ### Container Lifecycle Flow
@@ -229,6 +231,13 @@ Understanding these helps prioritize feature development:
 - **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
 
 ## Debugging
+
+### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
+
+- **`pivot_root` requires `MS_PRIVATE` first** — after `CLONE_NEWNS` the child inherits shared mount propagation from the parent; `pivot_root` fails EINVAL unless you call `mount("", "/", MS_REC|MS_PRIVATE)` inside the child before the bind-mount.
+- **`close_extra_fds` must collect before closing** — iterating `/proc/self/fd` and calling `close()` inside the loop closes the `ReadDir`'s own FD, causing a panic. Collect all FD numbers into a `Vec` first, then close.
+- **Absolute symlink rewrite in `layer.rs`** — `strip_prefix("/")` gives a path relative to the container root, not the symlink's directory. Use `relative_path(entry_dir, abs_target)` (defined in `layer.rs`) to get the correct relative target; otherwise busybox applet symlinks resolve to non-existent paths (e.g. `/bin/bin/busybox`).
+- **Tar root entries** — `"."` and `"./"` entries in OCI layers must be skipped before path validation; `Path::join("./")` normalizes the CurDir component away, causing a false path-escape error.
 
 ### Cgroup v2 gotchas (relevant when modifying `cgroups.rs`)
 
