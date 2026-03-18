@@ -491,6 +491,28 @@ mod tests {
     }
 
     #[test]
+    fn root_dot_entry_skipped() {
+        // "." is the tar root marker — extract_layer must skip it silently (no error,
+        // no file extracted).
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_regular_file(".", b"");
+        extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
+        // The destination directory must remain empty — nothing was extracted.
+        let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
+        assert!(entries.is_empty(), "no files should be extracted for '.' entry");
+    }
+
+    #[test]
+    fn root_dot_slash_entry_skipped() {
+        // "./" variant of the same root marker
+        let dest = TempDir::new().unwrap();
+        let tar_gz = tar_gz_with_regular_file("./", b"");
+        extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
+        let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
+        assert!(entries.is_empty(), "no files should be extracted for './' entry");
+    }
+
+    #[test]
     fn dotdot_tar_entry_rejected() {
         let dest = TempDir::new().unwrap();
         // Use a raw tar so we can embed ../ in the filename, bypassing
