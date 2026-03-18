@@ -134,15 +134,19 @@ fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
 /// We read `/proc/self/fd` to enumerate open FDs so we don't blindly iterate
 /// up to some large limit. Failures are silently ignored -- we are about to
 /// exec anyway.
+///
+/// Entries are collected into a Vec before any `close()` calls to avoid
+/// closing the directory iterator's own FD mid-iteration.
 fn close_extra_fds() {
     if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
-        for entry in entries.flatten() {
-            if let Ok(name) = entry.file_name().into_string()
-                && let Ok(fd) = name.parse::<RawFd>()
-                && fd > 2
-            {
-                unsafe { libc::close(fd) };
-            }
+        let fds: Vec<RawFd> = entries
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter_map(|n| n.parse::<RawFd>().ok())
+            .filter(|&fd| fd > 2)
+            .collect();
+        for fd in fds {
+            unsafe { libc::close(fd) };
         }
     }
 }
