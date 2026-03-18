@@ -94,6 +94,18 @@ pub enum ImageError {
     #[error("layer extraction failed: {0}")]
     LayerExtract(String),
 
+    /// A tar entry was a block or character device node, which is rejected for
+    /// security reasons.  The `entry` field is the path of the offending entry.
+    #[error("tar entry is a device node (security rejected): {entry}")]
+    DeviceNodeRejected { entry: String },
+
+    /// A tar entry's symlink target contained `..` components after the
+    /// absolute→relative rewrite, which would escape the container root.
+    #[error(
+        "tar entry symlink traverses parent directory (security rejected): {entry} -> {target}"
+    )]
+    SymlinkTraversalRejected { entry: String, target: String },
+
     #[error("failed to write to image store at {path}: {source}")]
     StoreWrite {
         path: String,

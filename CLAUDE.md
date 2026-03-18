@@ -261,9 +261,9 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 | `child_pid` | i32 | Cloned child PID (`namespace.rs`) |
 | `clone_flags` | i32 | Raw `clone(2)` flags (`namespace.rs`) |
 | `container_id` | &str | Container UUID |
-| `entry` | &Path | Tar entry path (all `layer.rs` security events) |
+| `entry` | &Path | Tar entry path (all `layer.rs` security events) → `ImageError::DeviceNodeRejected.entry` / `SymlinkTraversalRejected.entry` |
 | `kind` | &EntryType | Tar entry type (device node rejection) |
-| `target` / `original_target` | &Path | Symlink target before rewrite |
+| `target` / `original_target` | &Path | Symlink target before rewrite → `ImageError::SymlinkTraversalRejected.target` |
 | `rewritten_target` | &Path | Symlink target after absolute→relative rewrite |
 | `mode_before` / `mode_after` | u32 | Raw permission bits (octal) before/after strip |
 | `new_root` | &Path | `pivot_root` destination path |

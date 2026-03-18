@@ -122,11 +122,11 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
             warn!(
                 entry = ?entry_path,
                 kind = ?entry_type,
-                "rejecting tar entry: device node (security risk)"
+                "tar: rejected device node (security risk)"
             );
-            return Err(ImageError::LayerExtract(format!(
-                "tar entry contains device node (security risk): {entry_path:?}"
-            ))
+            return Err(ImageError::DeviceNodeRejected {
+                entry: format!("{entry_path:?}"),
+            }
             .into());
         }
 
@@ -155,11 +155,12 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
                 warn!(
                     entry = ?entry_path,
                     target = ?link_target,
-                    "rejecting tar entry: symlink with parent traversal (security risk)"
+                    "tar: rejected symlink with parent traversal (security risk)"
                 );
-                return Err(ImageError::LayerExtract(format!(
-                    "tar entry contains symlink with parent traversal (security risk): {entry_path:?} -> {link_target:?}"
-                ))
+                return Err(ImageError::SymlinkTraversalRejected {
+                    entry: format!("{entry_path:?}"),
+                    target: format!("{link_target:?}"),
+                }
                 .into());
             }
 
