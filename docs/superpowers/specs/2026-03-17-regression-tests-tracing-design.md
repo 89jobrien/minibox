@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-17
 **Scope:** macOS-runnable unit tests + tracing hotpath fix
-**Crates touched:** `minibox-lib`, `minibox-macros` (tests only), `registry.rs` (code change)
+**Crates touched:** `minibox-lib` (tests + code change)
 
 ---
 
@@ -11,8 +11,8 @@
 The council analysis flagged three gaps from recent work:
 
 1. The `"."` / `"./"` tar root-entry skip and the absolute-symlink rewrite fix in `layer.rs` have no regression coverage.
-2. The `minibox-macros` crate (`as_any!`, `default_new!`, `adapt!`) has no tests documenting downcast contracts or failure modes.
-3. Fine-grained inner spans in `registry.rs` (`verify_digest`, `extract`, `store_manifest`) fire at `INFO` level on every layer pull, adding span overhead to the hot path that should only appear at `DEBUG`.
+2. The `as_any!`, `default_new!`, and `adapt!` macros (defined in `minibox-macros`, used in `minibox-lib`) have no tests documenting downcast contracts or failure modes.
+3. Three fine-grained inner spans in `registry.rs` (`verify_digest`, `extract`, `store_manifest`) fire at `INFO` level, adding span overhead where `DEBUG` is more appropriate.
 
 All work runs on macOS. No Linux-only or root-required tests are included.
 
@@ -24,7 +24,7 @@ All work runs on macOS. No Linux-only or root-required tests are included.
 
 ### `relative_path` unit tests
 
-The `relative_path` function (used by the absolute-symlink rewrite path) has doctests but no named unit tests. Add:
+The `relative_path` function (used by the absolute-symlink rewrite path) has two doctests already. The named unit tests below are complementary — they give each case an explicit name for regression tracking and verify the edge case of an empty `from_dir`:
 
 | Test | Input `(from_dir, to)` | Expected result |
 |------|------------------------|-----------------|
@@ -36,23 +36,23 @@ The `relative_path` function (used by the absolute-symlink rewrite path) has doc
 
 The `extract_layer` function silently skips `"."` and `"./"` entries. Without a test, a future refactor could accidentally re-enable the false path-escape error for these entries. Add:
 
-| Test | Tar contains | Expected outcome |
-|------|-------------|-----------------|
-| `root_dot_entry_skipped` | single `"."` regular-file entry | `Ok(())`, no file created |
-| `root_dot_slash_entry_skipped` | single `"./"` regular-file entry | `Ok(())`, no file created |
+| Test | Tar builder call | Expected outcome |
+|------|-----------------|-----------------|
+| `root_dot_entry_skipped` | `tar_gz_with_regular_file(".", b"")` | `Ok(())`, no file created |
+| `root_dot_slash_entry_skipped` | `tar_gz_with_regular_file("./", b"")` | `Ok(())`, no file created |
 
-These use the existing `tar_gz_with_regular_file` builder.
+Both call the existing `tar_gz_with_regular_file` builder with `"."` or `"./"` as the `name` argument. After extraction, assert that no file named `"."` or `"./"` appears in the destination directory.
 
 ### Absolute-symlink rewrite tests
 
-The busybox applet case (symlink in same directory as target) and the cross-directory case are the two scenarios that were broken before the fix. Add:
+The busybox applet case (symlink in same directory as its target) and the cross-directory case are the two scenarios that were broken before the fix. Add:
 
 | Test | Symlink entry | Expected target after extraction |
 |------|--------------|----------------------------------|
 | `busybox_applet_symlink_correct` | `bin/echo -> /bin/busybox` | `"busybox"` (relative, same dir) |
 | `cross_dir_absolute_symlink_rewritten` | `usr/local/bin/python -> /usr/bin/python` | `"../../bin/python"` |
 
-Both are `#[cfg(unix)]` and use `tar_gz_with_symlink`. Both verify the symlink is relative after extraction.
+Both are `#[cfg(unix)]` and use `tar_gz_with_symlink`. After calling `extract_layer`, read the symlink with `std::fs::read_link` and assert the target is relative (not absolute).
 
 ---
 
@@ -60,14 +60,16 @@ Both are `#[cfg(unix)]` and use `tar_gz_with_symlink`. Both verify the symlink i
 
 **File:** `crates/minibox-lib/src/adapters/mocks.rs`, new `#[cfg(test)]` block at bottom.
 
-The `as_any!` macro hardcodes `crate::domain::AsAny`, so tests must live inside `minibox-lib`. The mock adapters (`MockRegistry`, `MockFilesystem`, `MockLimiter`, `MockRuntime`) already use `adapt!`, making `mocks.rs` the natural test site.
+The `as_any!` macro body uses `crate::domain::AsAny`. Because `macro_rules!` path resolution happens at the call site, `crate` resolves to whichever crate expands the macro — in this case `minibox-lib`. `minibox-macros` itself has no `domain` module, so tests must live in `minibox-lib`. The mock adapters (`MockRegistry`, `MockFilesystem`, `MockLimiter`, `MockRuntime`) already use `adapt!`, making `mocks.rs` the natural test site.
+
+**Calling convention:** `Arc<dyn Trait>` does not auto-deref to `AsAny`. Use `arc.as_ref().as_any()` to reach the trait method through the `dyn` reference.
 
 ### Tests
 
 | Test | What it proves |
 |------|---------------|
-| `mock_registry_downcasts_to_concrete` | `Arc<dyn ImageRegistry>` holding `MockRegistry` returns `Some(&MockRegistry)` from `as_any().downcast_ref()` |
-| `wrong_type_downcast_returns_none` | Same `Arc` downcasted to `MockFilesystem` returns `None` |
+| `mock_registry_downcasts_to_concrete` | `arc.as_ref().as_any().downcast_ref::<MockRegistry>()` returns `Some` |
+| `wrong_type_downcast_returns_none` | Same arc downcasted to `MockFilesystem` returns `None` (no panic) |
 | `default_matches_new` | `MockRegistry::default()` compiles and runs (proves `default_new!` delegates to `::new()`) |
 | `all_mock_types_downcast_correctly` | `MockFilesystem`, `MockLimiter`, `MockRuntime` each downcast to their own concrete type |
 
@@ -84,16 +86,23 @@ These tests document the contract: "anything passed through `adapt!` can be reco
 Three spans inside `pull_image` are currently `info_span!`:
 
 ```rust
-let _span = tracing::info_span!("verify_digest").entered();
-let _span = tracing::info_span!("extract", bytes = data.len()).entered();
-let _span = tracing::info_span!("store_manifest").entered();
+let _span = tracing::info_span!("verify_digest").entered();   // inside layer loop (per-layer)
+let _span = tracing::info_span!("extract", bytes = ...).entered(); // inside layer loop (per-layer)
+// ...
+let _span = tracing::info_span!("store_manifest").entered();  // outside layer loop (once per pull)
 ```
 
-These fire on every layer pull when `RUST_LOG=info` (the default in production), adding span creation and subscriber notification overhead to what are already CPU-bound operations. The outer per-layer `info_span!("layer", ...)` already captures the important timing; these inner spans are sub-step detail that belongs at `DEBUG`.
+`verify_digest` and `extract` fire once per layer (hot path under concurrent pulls). `store_manifest` fires once per image pull. All three represent sub-step detail already captured by the surrounding `info_span!("layer", ...)` and `#[instrument]` spans; they belong at `DEBUG`.
+
+There are also two manual `info_span!` calls for top-level pull phases that should **stay** at INFO:
+```rust
+.instrument(tracing::info_span!("auth"))    // top-level auth phase
+.instrument(tracing::info_span!("manifest")) // top-level manifest phase
+```
 
 ### Change
 
-Replace the three `info_span!` calls with `debug_span!`:
+Replace only the three inner spans with `debug_span!`:
 
 ```rust
 let _span = tracing::debug_span!("verify_digest").entered();
@@ -102,12 +111,15 @@ let _span = tracing::debug_span!("store_manifest").entered();
 ```
 
 **What stays at INFO:**
-- The outer `info_span!("layer", ...)` per-layer span
+- `info_span!("auth")` and `info_span!("manifest")` — top-level pull phase spans
+- `info_span!("layer", ...)` — per-layer outer span
 - All `info!` timing summary lines (auth time, manifest time, per-layer breakdown)
 - `#[instrument]` on `pull_image`, `authenticate`, `get_manifest`, `pull_layer`
 
 **What moves to DEBUG:**
-- Sub-step spans within a layer: `verify_digest`, `extract`, `store_manifest`
+- `verify_digest` span (per-layer)
+- `extract` span (per-layer)
+- `store_manifest` span (once per pull)
 
 `Instant::now()` calls are not gated — they are cheap vDSO reads and gating them would add conditional complexity for negligible gain.
 
