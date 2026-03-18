@@ -173,13 +173,29 @@ pub fn setup_overlay_with_base(
 pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
     debug!("pivoting root to {:?}", new_root);
 
-    // pivot_root requires new_root to be a mount point.
-    // SECURITY: Include nosuid and nodev flags
+    // Disconnect this mount namespace from the parent's propagation tree.
+    // After CLONE_NEWNS the child inherits shared mounts; pivot_root(2)
+    // requires the new root to be on a different mount than the current
+    // root, which fails (EINVAL) if the tree is still shared.
+    mount(
+        None::<&str>,
+        "/",
+        None::<&str>,
+        MsFlags::MS_REC | MsFlags::MS_PRIVATE,
+        None::<&str>,
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "private".into(),
+        target: "/".into(),
+        source,
+    })?;
+
+    // Bind-mount new_root onto itself to make it a discrete mount point.
     mount(
         Some(new_root),
         new_root,
         None::<&str>,
-        MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
         None::<&str>,
     )
     .map_err(|source| FilesystemError::Mount {
