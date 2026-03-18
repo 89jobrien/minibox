@@ -349,12 +349,14 @@ impl RegistryClient {
                 .join("layers")
                 .join(&digest_key);
 
+            let digest_short = layer_desc.digest.get(..19).unwrap_or(&layer_desc.digest);
+
             if layer_dir.exists() {
                 info!(
                     "layer {}/{}: {} (cached)",
                     idx + 1,
                     manifest.layers.len(),
-                    &layer_desc.digest[..19]
+                    digest_short
                 );
                 continue;
             }
@@ -363,49 +365,49 @@ impl RegistryClient {
                 "layer",
                 n = idx + 1,
                 total = manifest.layers.len(),
-                digest = &layer_desc.digest[..19],
+                digest = digest_short,
             );
 
             let layer_start = std::time::Instant::now();
-            let t = std::time::Instant::now();
+            let download_start = std::time::Instant::now();
             let data = self
                 .pull_layer(name, &layer_desc.digest, &token)
                 .instrument(layer_span.clone())
                 .await
                 .with_context(|| format!("pull layer {}", layer_desc.digest))?;
-            let download_ms = t.elapsed();
+            let download = download_start.elapsed();
 
-            let _guard = layer_span.enter();
-
-            let t = std::time::Instant::now();
             {
-                let _span = tracing::info_span!("verify_digest").entered();
-                verify_digest(&data, &layer_desc.digest)
-                    .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+                let _guard = layer_span.enter();
+
+                let verify_start = std::time::Instant::now();
+                {
+                    let _span = tracing::info_span!("verify_digest").entered();
+                    verify_digest(&data, &layer_desc.digest)
+                        .with_context(|| format!("digest verification for {}", layer_desc.digest))?;
+                }
+                let verify = verify_start.elapsed();
+
+                let extract_start = std::time::Instant::now();
+                {
+                    let _span = tracing::info_span!("extract", bytes = data.len()).entered();
+                    store
+                        .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
+                        .with_context(|| format!("store layer {}", layer_desc.digest))?;
+                }
+                let extract = extract_start.elapsed();
+
+                info!(
+                    "layer {}/{} ({}) done in {:.2?} — download {:.2?} verify {:.2?} extract {:.2?}",
+                    idx + 1,
+                    manifest.layers.len(),
+                    digest_short,
+                    layer_start.elapsed(),
+                    download,
+                    verify,
+                    extract,
+                );
             }
-            let verify_ms = t.elapsed();
-
-            let t = std::time::Instant::now();
-            {
-                let _span = tracing::info_span!("extract", bytes = data.len()).entered();
-                store
-                    .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
-                    .with_context(|| format!("store layer {}", layer_desc.digest))?;
-            }
-            let extract_ms = t.elapsed();
-
-            drop(_guard);
-
-            info!(
-                "layer {}/{} ({}) done in {:.2?} — download {:.2?} verify {:.2?} extract {:.2?}",
-                idx + 1,
-                manifest.layers.len(),
-                &layer_desc.digest[..19],
-                layer_start.elapsed(),
-                download_ms,
-                verify_ms,
-                extract_ms,
-            );
         }
 
         // 4. Persist manifest.
