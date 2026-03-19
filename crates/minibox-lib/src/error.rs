@@ -161,6 +161,9 @@ pub enum RegistryError {
     #[error("no linux/amd64 manifest found in manifest list")]
     NoAmd64Manifest,
 
+    #[error("layer task failed for {digest}: {message}")]
+    LayerTask { digest: String, message: String },
+
     #[error("registry error: {0}")]
     Other(String),
 }
@@ -245,4 +248,24 @@ pub enum ProcessError {
 
     #[error("process error: {0}")]
     Other(String),
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layer_task_error_formats() {
+        let e = RegistryError::LayerTask {
+            digest: "sha256:abc123".into(),
+            message: "task panicked".into(),
+        };
+        let s = e.to_string();
+        assert!(s.contains("sha256:abc123"), "got: {s}");
+        assert!(s.contains("task panicked"), "got: {s}");
+    }
 }
