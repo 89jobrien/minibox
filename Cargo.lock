@@ -1102,6 +1102,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "daemonbox",
+ "libc",
  "minibox-lib",
  "nix",
  "serde",

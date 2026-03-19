@@ -27,3 +27,4 @@ nix = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+libc = { workspace = true }
