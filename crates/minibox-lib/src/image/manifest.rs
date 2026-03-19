@@ -241,8 +241,7 @@ mod tests {
         });
         let json = serde_json::to_vec(&body).unwrap();
 
-        let result =
-            ManifestResponse::parse(&json, "application/vnd.oci.image.index.v1+json");
+        let result = ManifestResponse::parse(&json, "application/vnd.oci.image.index.v1+json");
         assert!(result.is_ok());
         assert!(matches!(result.unwrap(), ManifestResponse::List(_)));
     }
@@ -338,7 +337,8 @@ mod tests {
 
     #[test]
     fn parse_returns_error_for_invalid_json() {
-        let result = ManifestResponse::parse(b"not json", "application/vnd.oci.image.manifest.v1+json");
+        let result =
+            ManifestResponse::parse(b"not json", "application/vnd.oci.image.manifest.v1+json");
         assert!(result.is_err());
     }
 }

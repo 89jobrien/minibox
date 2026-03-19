@@ -16,7 +16,7 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 
 ## Goals
 
-1. Enable `macboxd` to compile and run natively on macOS.
+1. Enable `macboxd` to compile and run natively on macOS.let's
 2. Extract shared daemon logic into `daemonbox` so both `miniboxd` and `macboxd` depend on it — no duplication.
 3. Give `macbox` ownership of macOS-specific orchestration (Colima preflight, VM lifecycle, path conventions, adapter wiring).
 4. Preserve and reinforce the hexagonal architecture: `daemonbox` depends only on domain port traits; adapter wiring stays in composition roots.
@@ -67,6 +67,7 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 **Purpose:** All daemon logic that is not platform-specific.
 
 **Contents (moved from `miniboxd/src/`):**
+
 - `handler.rs` — request handlers for each `DaemonRequest` variant
 - `state.rs` — in-memory `DaemonState` (container records, spawn semaphore)
 - `server.rs` — Unix socket listener, `SO_PEERCRED` auth, per-connection task
@@ -110,6 +111,7 @@ pub mod paths {
 ```
 
 **`ColimaStatus`:**
+
 ```rust
 pub enum ColimaStatus {
     Running,
@@ -129,6 +131,7 @@ pub enum ColimaStatus {
 **Purpose:** macOS-native daemon binary. Structurally identical to `miniboxd/main.rs` but uses `macbox` for adapter wiring and path conventions.
 
 **`main.rs` responsibilities:**
+
 1. Init tracing.
 2. Call `macbox::preflight()` — fail fast if Colima not installed.
 3. Call `macbox::ensure_vm_running()` — start VM if stopped.
@@ -147,6 +150,7 @@ pub enum ColimaStatus {
 ## Migration: `miniboxd`
 
 `miniboxd/src/` before:
+
 ```
 main.rs
 lib.rs    ← re-exports handler, state, server for integration tests
@@ -156,12 +160,14 @@ server.rs
 ```
 
 `miniboxd/src/` after:
+
 ```
 main.rs   ← adapter wiring + startup (unchanged logic, updated imports)
 lib.rs    ← thin shim: re-exports from daemonbox for test backward compat
 ```
 
 `miniboxd/src/lib.rs` after migration:
+
 ```rust
 // Backward-compatible re-exports so existing integration tests
 // importing `miniboxd::handler` etc. continue to compile.
@@ -192,23 +198,23 @@ minibox-cli ──► minibox-lib   (unchanged)
 
 ## File Map
 
-| Action | Path |
-|--------|------|
-| Create | `crates/daemonbox/Cargo.toml` |
-| Create | `crates/daemonbox/src/lib.rs` |
-| Move   | `crates/miniboxd/src/handler.rs` → `crates/daemonbox/src/handler.rs` |
-| Move   | `crates/miniboxd/src/state.rs` → `crates/daemonbox/src/state.rs` |
-| Move   | `crates/miniboxd/src/server.rs` → `crates/daemonbox/src/server.rs` |
-| Modify | `crates/miniboxd/src/lib.rs` — replace module bodies with `pub use daemonbox::*` re-exports |
-| Modify | `crates/miniboxd/src/main.rs` — update imports to use `daemonbox::` paths |
-| Modify | `crates/miniboxd/Cargo.toml` — add `daemonbox` dependency |
+| Action | Path                                                                                                |
+| ------ | --------------------------------------------------------------------------------------------------- |
+| Create | `crates/daemonbox/Cargo.toml`                                                                       |
+| Create | `crates/daemonbox/src/lib.rs`                                                                       |
+| Move   | `crates/miniboxd/src/handler.rs` → `crates/daemonbox/src/handler.rs`                                |
+| Move   | `crates/miniboxd/src/state.rs` → `crates/daemonbox/src/state.rs`                                    |
+| Move   | `crates/miniboxd/src/server.rs` → `crates/daemonbox/src/server.rs`                                  |
+| Modify | `crates/miniboxd/src/lib.rs` — replace module bodies with `pub use daemonbox::*` re-exports         |
+| Modify | `crates/miniboxd/src/main.rs` — update imports to use `daemonbox::` paths                           |
+| Modify | `crates/miniboxd/Cargo.toml` — add `daemonbox` dependency                                           |
 | Modify | `Cargo.toml` — add `daemonbox`, `macbox`, `macboxd` to workspace members and workspace.dependencies |
-| Create | `crates/macbox/Cargo.toml` |
-| Create | `crates/macbox/src/lib.rs` |
-| Create | `crates/macbox/src/preflight.rs` |
-| Create | `crates/macbox/src/paths.rs` |
-| Create | `crates/macboxd/Cargo.toml` |
-| Create | `crates/macboxd/src/main.rs` |
+| Create | `crates/macbox/Cargo.toml`                                                                          |
+| Create | `crates/macbox/src/lib.rs`                                                                          |
+| Create | `crates/macbox/src/preflight.rs`                                                                    |
+| Create | `crates/macbox/src/paths.rs`                                                                        |
+| Create | `crates/macboxd/Cargo.toml`                                                                         |
+| Create | `crates/macboxd/src/main.rs`                                                                        |
 
 ---
 

@@ -14,13 +14,13 @@
 
 ## File Map
 
-| File | Change |
-|------|--------|
-| `Cargo.toml` (workspace) | Add `tokio-util`, `pin-project-lite` |
-| `crates/minibox-lib/Cargo.toml` | Add `tokio-util`, `pin-project-lite` |
-| `crates/minibox-lib/src/error.rs` | Add `RegistryError::LayerTask` variant |
-| `crates/minibox-lib/src/image/layer.rs` | Add `HashingReader<R>`, change `extract_layer(&[u8])` → `extract_layer(impl Read)` |
-| `crates/minibox-lib/src/image/mod.rs` | Rewrite `store_layer`: remove `read_to_end` buffer, add atomic temp-dir+rename |
+| File                                       | Change                                                                                                                     |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml` (workspace)                   | Add `tokio-util`, `pin-project-lite`                                                                                       |
+| `crates/minibox-lib/Cargo.toml`            | Add `tokio-util`, `pin-project-lite`                                                                                       |
+| `crates/minibox-lib/src/error.rs`          | Add `RegistryError::LayerTask` variant                                                                                     |
+| `crates/minibox-lib/src/image/layer.rs`    | Add `HashingReader<R>`, change `extract_layer(&[u8])` → `extract_layer(impl Read)`                                         |
+| `crates/minibox-lib/src/image/mod.rs`      | Rewrite `store_layer`: remove `read_to_end` buffer, add atomic temp-dir+rename                                             |
 | `crates/minibox-lib/src/image/registry.rs` | Add `LimitedStream`, change `pull_layer` → returns `reqwest::Response`, replace sequential loop with `JoinSet`+`Semaphore` |
 
 ---
@@ -28,12 +28,14 @@
 ## Task 1: Add dependencies
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/minibox-lib/Cargo.toml`
 
 - [ ] **Step 1: Add workspace deps**
 
 In `Cargo.toml` under `[workspace.dependencies]`, add:
+
 ```toml
 tokio-util = { version = "0.7", features = ["io"] }
 pin-project-lite = "0.2"
@@ -42,6 +44,7 @@ pin-project-lite = "0.2"
 - [ ] **Step 2: Add to minibox-lib**
 
 In `crates/minibox-lib/Cargo.toml` under `[dependencies]`, add:
+
 ```toml
 tokio-util = { workspace = true }
 pin-project-lite = { workspace = true }
@@ -52,6 +55,7 @@ pin-project-lite = { workspace = true }
 ```bash
 cargo check -p minibox-lib
 ```
+
 Expected: no errors.
 
 - [ ] **Step 4: fmt + commit**
@@ -67,11 +71,13 @@ git commit -m "chore: add tokio-util and pin-project-lite deps"
 ## Task 2: Add `RegistryError::LayerTask` to `error.rs`
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/error.rs`
 
 - [ ] **Step 1: Write failing test**
 
 At the bottom of `error.rs`, add a `#[cfg(test)]` block:
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -95,11 +101,13 @@ mod tests {
 ```bash
 cargo test -p minibox-lib error::tests::layer_task_error_formats
 ```
+
 Expected: compile error — `LayerTask` variant does not exist yet.
 
 - [ ] **Step 3: Add the variant**
 
 In `crates/minibox-lib/src/error.rs`, inside `RegistryError`, add after the `Other` variant:
+
 ```rust
 #[error("layer task failed for {digest}: {message}")]
 LayerTask { digest: String, message: String },
@@ -110,6 +118,7 @@ LayerTask { digest: String, message: String },
 ```bash
 cargo nextest run -p minibox-lib error::tests
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: clippy + fmt + commit**
@@ -126,6 +135,7 @@ git commit -m "feat: add RegistryError::LayerTask for JoinError wrapping"
 ## Task 3: Add `HashingReader<R>` to `layer.rs`
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/image/layer.rs`
 
 `HashingReader` is a transparent `std::io::Read` wrapper that feeds all bytes through a `Sha256` hasher. It goes at the top of the file (after imports). It wraps the **compressed** byte stream (before `GzDecoder`) so it hashes what the registry sent, matching the OCI manifest digest spec.
@@ -133,6 +143,7 @@ git commit -m "feat: add RegistryError::LayerTask for JoinError wrapping"
 - [ ] **Step 1: Write failing tests**
 
 Add at the bottom of the existing `#[cfg(test)]` block in `layer.rs`:
+
 ```rust
 // ---------------------------------------------------------------------------
 // HashingReader
@@ -176,11 +187,13 @@ fn hashing_reader_bytes_read_counter() {
 ```bash
 cargo test -p minibox-lib image::layer::tests::hashing_reader
 ```
+
 Expected: compile error — `HashingReader` not defined yet.
 
 - [ ] **Step 3: Implement `HashingReader`**
 
 Add after the existing imports at the top of `layer.rs`:
+
 ```rust
 use sha2::{Digest as _, Sha256};
 
@@ -234,6 +247,7 @@ Note: `sha2` is already imported elsewhere in the crate — check if the `use sh
 ```bash
 cargo nextest run -p minibox-lib image::layer::tests
 ```
+
 Expected: all PASS (new tests + existing layer tests).
 
 - [ ] **Step 5: clippy + fmt + commit**
@@ -250,6 +264,7 @@ git commit -m "feat: add HashingReader to layer.rs — transparent SHA-256 in-fl
 ## Task 4: Change `extract_layer` signature from `&[u8]` to `impl Read`
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/image/layer.rs`
 
 The existing `#[instrument]` attribute references `tar_gz_data.len()` which will not compile after the signature change. Drop the `bytes` field from the instrument macro.
@@ -259,11 +274,13 @@ The existing `#[instrument]` attribute references `tar_gz_data.len()` which will
 ```bash
 cargo nextest run -p minibox-lib image::layer::tests
 ```
+
 Expected: all PASS.
 
 - [ ] **Step 2: Change the signature and fix `#[instrument]`**
 
 In `layer.rs`, change:
+
 ```rust
 #[instrument(skip(tar_gz_data, dest), fields(bytes = tar_gz_data.len(), dest = %dest.display()))]
 pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
@@ -277,6 +294,7 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
 ```
 
 To:
+
 ```rust
 #[instrument(skip(reader, dest), fields(dest = %dest.display()))]
 pub fn extract_layer(reader: impl std::io::Read, dest: &Path) -> anyhow::Result<()> {
@@ -292,6 +310,7 @@ Everything else in the function body is unchanged.
 ```bash
 cargo nextest run -p minibox-lib image::layer::tests
 ```
+
 Expected: all PASS. (Existing tests use `extract_layer(&tar_gz, dest.path())` where `&[u8]: Read` — they still compile.)
 
 - [ ] **Step 4: Fix the `store_layer` caller in `mod.rs`**
@@ -301,6 +320,7 @@ Expected: all PASS. (Existing tests use `extract_layer(&tar_gz, dest.path())` wh
 ```bash
 cargo check -p minibox-lib
 ```
+
 Expected: no errors.
 
 - [ ] **Step 5: clippy + fmt + commit**
@@ -317,6 +337,7 @@ git commit -m "refactor: extract_layer accepts impl Read instead of &[u8]"
 ## Task 5: Make `store_layer` atomic (temp-dir + rename)
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/image/mod.rs`
 
 Replace the `read_to_end` buffer + direct `extract_layer` call with: extract into `{digest_key}.tmp`, rename to final `{digest_key}` on success. This ensures `dest` is always either absent or fully written — never partially extracted. Handles duplicate-digest races idempotently.
@@ -324,6 +345,7 @@ Replace the `read_to_end` buffer + direct `extract_layer` call with: extract int
 - [ ] **Step 1: Write failing tests**
 
 Add a `#[cfg(test)]` block at the bottom of `crates/minibox-lib/src/image/mod.rs`:
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -414,6 +436,7 @@ mod tests {
 ```bash
 cargo nextest run -p minibox-lib image::mod::tests
 ```
+
 Expected: `store_layer_no_dest_after_bad_data` FAILS (current code leaves the partially-created dir behind). Others may pass.
 
 - [ ] **Step 3: Rewrite `store_layer` with atomic pattern**
@@ -491,6 +514,7 @@ Also remove the `mut` from `data_reader` in the parameter (it's no longer needed
 ```bash
 cargo nextest run -p minibox-lib
 ```
+
 Expected: all PASS.
 
 - [ ] **Step 5: clippy + fmt + commit**
@@ -507,9 +531,11 @@ git commit -m "refactor: store_layer uses atomic temp-dir+rename, removes read_t
 ## Task 6: Parallel `pull_image` with `JoinSet` + `Semaphore` + streaming
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/image/registry.rs`
 
 This is the main task. It:
+
 1. Adds `LimitedStream` (private struct, ~25 lines)
 2. Refactors `pull_layer` to return `reqwest::Response` instead of `Bytes`
 3. Replaces the sequential `for` loop in `pull_image` with a `JoinSet` + `Arc<Semaphore>` parallel pipeline
@@ -519,6 +545,7 @@ Each layer task: acquire permit → check cache → HTTP GET → wrap in `Limite
 - [ ] **Step 1: Add imports at the top of `registry.rs`**
 
 Add to the existing `use` block:
+
 ```rust
 use crate::error::ImageError;
 use crate::image::layer::HashingReader;
@@ -536,6 +563,7 @@ Remove `use bytes::Bytes;` if it's only used by the old `pull_layer` return type
 - [ ] **Step 2: Add `LimitedStream`**
 
 Add after the constants block (after `MAX_LAYER_SIZE`):
+
 ```rust
 // ---------------------------------------------------------------------------
 // LimitedStream
@@ -772,6 +800,7 @@ while let Some(result) = join_set.join_next().await {
 ```
 
 Also add after the constants:
+
 ```rust
 const MAX_CONCURRENT_LAYERS: usize = 4;
 ```
@@ -789,6 +818,7 @@ If there are unused import warnings (e.g. `Bytes` no longer used directly in reg
 ```bash
 cargo nextest run -p minibox-lib
 ```
+
 Expected: all PASS. This exercises `HashingReader`, `extract_layer`, `store_layer`, and all existing layer security tests.
 
 - [ ] **Step 7: clippy + fmt**

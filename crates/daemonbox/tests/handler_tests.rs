@@ -3,10 +3,10 @@
 //! These tests demonstrate the testability benefits of hexagonal architecture.
 //! All tests run without real infrastructure (no Docker Hub, cgroups, or Linux).
 
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use minibox_lib::protocol::DaemonResponse;
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
+use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 

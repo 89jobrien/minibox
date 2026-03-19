@@ -1,6 +1,26 @@
 default:
     @just --list
 
+# Format all crates
+fmt:
+    cargo fmt --all
+
+# Check formatting without applying
+fmt-check:
+    cargo fmt --all -- --check
+
+# Lint cross-platform crates (macOS-safe; excludes miniboxd which has compile_error! on macOS)
+lint:
+    cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+
+# Pre-commit: format check + lint + unit tests (macOS-safe)
+pre-commit: fmt-check lint test-unit
+    @echo "Pre-commit checks passed"
+
+# CI gate (same as pre-commit; used in workflows)
+ci: fmt-check lint test-unit
+    @echo "CI checks passed"
+
 # Preflight capability check
 doctor:
     @cargo test -p minibox-lib preflight::tests -- --nocapture 2>&1 || true
@@ -25,6 +45,10 @@ test-unit:
     cargo test -p daemonbox --test handler_tests
     cargo test -p daemonbox --test conformance_tests
 
+# Fast parallel test runner via nextest (any platform; reuses pre-commit build artifacts)
+nextest:
+    cargo nextest run -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
+
 # Cgroup integration tests (Linux, root)
 test-integration:
     sudo -E cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture
@@ -43,6 +67,27 @@ test-e2e-suite:
 
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
+
+# Stage all + commit (triggers pre-commit hook); use single quotes for multi-line messages
+commit msg:
+    git add -A
+    git commit -m "{{msg}}"
+
+# Push and clean non-critical artifacts on success
+# Preserves: incremental cache, registry (keeps future compiles fast)
+# Removes: debug/release executables, test binaries, .dSYM bundles
+push *args:
+    git push {{args}}
+    just clean-artifacts
+
+# Remove non-critical build outputs (preserves incremental cache and registry)
+clean-artifacts:
+    find target/debug -maxdepth 1 -type f -delete 2>/dev/null || true
+    find target/release -maxdepth 1 -type f -delete 2>/dev/null || true
+    find target -type d -name '*.dSYM' -exec rm -rf {} + 2>/dev/null || true
+    find target/debug/deps -maxdepth 1 -type f ! -name '*.d' -delete 2>/dev/null || true
+    find target/release/deps -maxdepth 1 -type f ! -name '*.d' -delete 2>/dev/null || true
+    @echo "artifacts cleaned"
 
 # Remove all build artifacts
 clean:

@@ -47,24 +47,24 @@ sudo /usr/local/bin/minibox ps
 
 ## Crate Structure
 
-| Crate | Type | Description |
-|---|---|---|
-| `minibox-lib` | Library | Domain layer, adapters, image management, protocol |
+| Crate            | Type    | Description                                            |
+| ---------------- | ------- | ------------------------------------------------------ |
+| `minibox-lib`    | Library | Domain layer, adapters, image management, protocol     |
 | `minibox-macros` | Library | `adapt!`, `as_any!`, `default_new!` boilerplate macros |
-| `miniboxd` | Binary | Async daemon — Unix socket listener, request handlers |
-| `minibox-cli` | Binary | CLI client |
-| `minibox-bench` | Binary | Criterion benchmark suite |
+| `miniboxd`       | Binary  | Async daemon — Unix socket listener, request handlers  |
+| `minibox-cli`    | Binary  | CLI client                                             |
+| `minibox-bench`  | Binary  | Criterion benchmark suite                              |
 
 **Key modules in `minibox-lib`:**
 
-| Module | Purpose |
-|---|---|
-| `domain.rs` | Port traits: `ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`, `ContainerRuntime` |
-| `adapters/` | Concrete adapter implementations + mocks |
-| `container/` | Namespace setup, cgroups, overlay FS, process spawn |
-| `image/` | Docker Hub v2 API client, OCI manifest parsing, tar extraction |
-| `protocol.rs` | JSON-over-newline request/response types |
-| `preflight.rs` | Host capability probing (`just doctor`) |
+| Module         | Purpose                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| `domain.rs`    | Port traits: `ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`, `ContainerRuntime` |
+| `adapters/`    | Concrete adapter implementations + mocks                                                  |
+| `container/`   | Namespace setup, cgroups, overlay FS, process spawn                                       |
+| `image/`       | Docker Hub v2 API client, OCI manifest parsing, tar extraction                            |
+| `protocol.rs`  | JSON-over-newline request/response types                                                  |
+| `preflight.rs` | Host capability probing (`just doctor`)                                                   |
 
 ---
 
@@ -109,13 +109,13 @@ The domain layer has zero infrastructure dependencies. Adapters are swapped at d
 
 ### Adapter Wiring Status
 
-| Adapter Suite | `MINIBOX_ADAPTER` | Wired into daemon | Status |
-|---|---|---|---|
-| Native Linux | `native` (default) | ✅ Yes | Production |
-| GKE unprivileged | `gke` | ✅ Yes | Production |
-| macOS Colima | `colima` | ⚙️ In progress | Library only |
-| macOS Docker Desktop | `docker-desktop` | ❌ No | Library only |
-| Windows WSL2 | `wsl` | ❌ No | Library only |
+| Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status       |
+| -------------------- | ------------------ | ----------------- | ------------ |
+| Native Linux         | `native` (default) | ✅ Yes            | Production   |
+| GKE unprivileged     | `gke`              | ✅ Yes            | Production   |
+| macOS Colima         | `colima`           | ⚙️ In progress    | Library only |
+| macOS Docker Desktop | `docker-desktop`   | ❌ No             | Library only |
+| Windows WSL2         | `wsl`              | ❌ No             | Library only |
 
 Passing an unwired value causes the daemon to exit at startup with an error.
 
@@ -125,11 +125,11 @@ Passing an unwired value causes the daemon to exit at startup with an error.
 
 **Requirements:** Linux 5.0+ (4.0+ minimum), cgroups v2, overlayfs, root.
 
-| Adapter | Implementation |
-|---|---|
-| `DockerHubRegistry` | Docker Hub v2 API with anonymous auth |
-| `OverlayFilesystem` | Linux overlayfs via `mount()` |
-| `CgroupV2Limiter` | cgroups v2 unified hierarchy |
+| Adapter                 | Implementation                         |
+| ----------------------- | -------------------------------------- |
+| `DockerHubRegistry`     | Docker Hub v2 API with anonymous auth  |
+| `OverlayFilesystem`     | Linux overlayfs via `mount()`          |
+| `CgroupV2Limiter`       | cgroups v2 unified hierarchy           |
 | `LinuxNamespaceRuntime` | `clone()` syscall with namespace flags |
 
 ---
@@ -138,11 +138,11 @@ Passing an unwired value causes the daemon to exit at startup with an error.
 
 Standard GKE pods lack `CAP_SYS_ADMIN`, which blocks `mount()`, `pivot_root()`, namespace-flagged `clone()`, and cgroup writes. The GKE adapter suite works within those constraints:
 
-| Adapter | Implementation |
-|---|---|
-| `ProotRuntime` | ptrace-based fake chroot via `proot` binary |
-| `CopyFilesystem` | Plain file copy instead of overlay mount |
-| `NoopLimiter` | No-op (cgroup access unavailable) |
+| Adapter          | Implementation                              |
+| ---------------- | ------------------------------------------- |
+| `ProotRuntime`   | ptrace-based fake chroot via `proot` binary |
+| `CopyFilesystem` | Plain file copy instead of overlay mount    |
+| `NoopLimiter`    | No-op (cgroup access unavailable)           |
 
 ```bash
 MINIBOX_ADAPTER=gke miniboxd
@@ -200,10 +200,10 @@ MINIBOX_ADAPTER=gke miniboxd          # GKE adapter
 
 **Resource limit flags:**
 
-| Flag | Type | Default | Notes |
-|---|---|---|---|
-| `--memory` | bytes | unlimited | e.g. `536870912` for 512 MB |
-| `--cpu-weight` | 1–10000 | 100 | relative CPU share |
+| Flag           | Type    | Default   | Notes                       |
+| -------------- | ------- | --------- | --------------------------- |
+| `--memory`     | bytes   | unlimited | e.g. `536870912` for 512 MB |
+| `--cpu-weight` | 1–10000 | 100       | relative CPU share          |
 
 ---
 
@@ -239,14 +239,14 @@ See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile g
 
 ### What's hardened
 
-| Area | Protection |
-|---|---|
-| Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction |
-| Tar extraction | Rejects `..`, absolute symlinks, device nodes, strips setuid/setgid |
-| Socket auth | `SO_PEERCRED` — UID 0 only, socket mode `0600` |
-| DoS limits | 1 MB request max, 10 MB manifest max, 1 GB per layer, 5 GB total image |
-| Mount flags | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` |
-| PID limit | 1024 per container (default) |
+| Area           | Protection                                                             |
+| -------------- | ---------------------------------------------------------------------- |
+| Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction     |
+| Tar extraction | Rejects `..`, absolute symlinks, device nodes, strips setuid/setgid    |
+| Socket auth    | `SO_PEERCRED` — UID 0 only, socket mode `0600`                         |
+| DoS limits     | 1 MB request max, 10 MB manifest max, 1 GB per layer, 5 GB total image |
+| Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC`                                   |
+| PID limit      | 1024 per container (default)                                           |
 
 ### Remaining work
 
@@ -275,13 +275,13 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 Domain traits are already defined for upcoming features. Adding a capability means implementing the trait and wiring the adapter:
 
-| Trait | Adapter needed | Notes |
-|---|---|---|
-| `BridgeNetworking` | Linux bridge + veth | |
-| `PseudoTerminal` | `/dev/pts` | |
-| `ContainerExec` | `setns` syscall | |
-| `LogStore` | JSON-lines file | |
-| `StateStore` | SQLite / sled | replaces in-memory HashMap |
+| Trait              | Adapter needed      | Notes                      |
+| ------------------ | ------------------- | -------------------------- |
+| `BridgeNetworking` | Linux bridge + veth |                            |
+| `PseudoTerminal`   | `/dev/pts`          |                            |
+| `ContainerExec`    | `setns` syscall     |                            |
+| `LogStore`         | JSON-lines file     |                            |
+| `StateStore`       | SQLite / sled       | replaces in-memory HashMap |
 
 Trait definitions live in `crates/minibox-lib/src/domain.rs`.
 
@@ -309,13 +309,13 @@ cargo deny check
 
 **Environment variables:**
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `MINIBOX_ADAPTER` | `native` | Adapter suite selection |
-| `MINIBOX_DATA_DIR` | `/var/lib/minibox` | Image + container storage |
-| `MINIBOX_RUN_DIR` | `/run/minibox` | Socket + runtime state |
-| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root |
-| `RUST_LOG` | — | Tracing log level (e.g. `debug`) |
+| Variable              | Default                                         | Purpose                          |
+| --------------------- | ----------------------------------------------- | -------------------------------- |
+| `MINIBOX_ADAPTER`     | `native`                                        | Adapter suite selection          |
+| `MINIBOX_DATA_DIR`    | `/var/lib/minibox`                              | Image + container storage        |
+| `MINIBOX_RUN_DIR`     | `/run/minibox`                                  | Socket + runtime state           |
+| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root                      |
+| `RUST_LOG`            | —                                               | Tracing log level (e.g. `debug`) |
 
 See `CLAUDE.md` for full development guide, debugging tips, and architecture details.
 

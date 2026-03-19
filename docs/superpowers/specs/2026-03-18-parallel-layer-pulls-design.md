@@ -25,13 +25,13 @@ Layer 2 does not start until layer 1 is fully extracted. A 5-layer image with 20
 
 ### Component Changes
 
-| File | Change |
-|------|--------|
-| `layer.rs` | `extract_layer(&[u8], &Path)` → `extract_layer(impl Read, &Path)`. Add `HashingReader<R>`. |
-| `image/mod.rs` | `store_layer` removes internal `read_to_end` buffer; passes reader directly to `extract_layer`. |
-| `registry.rs` | Replace sequential `for` loop with `JoinSet` + `Arc<Semaphore>`. `pull_layer` returns `reqwest::Response` instead of `Bytes`. Add `MAX_CONCURRENT_LAYERS = 4`. Add `LimitedStream`. The existing `info!("pulled blob {} ({} bytes)", ...)` log line moves into the `spawn_blocking` result, logging compressed bytes received (available from `HashingReader`'s byte count) after extraction completes. |
-| `error.rs` | Add `RegistryError::LayerTask { digest, message }` for `JoinError` wrapping. |
-| `Cargo.toml` | Add `tokio-util = { version = "0.7", features = ["io"] }` and `pin-project-lite = "0.2"` to workspace and `minibox-lib`. |
+#### File: Change
+
+- `layer.rs`: `extract_layer(&[u8], &Path)` → `extract_layer(impl Read, &Path)`. Add `HashingReader<R>`.
+- `image/mod.rs`: `store_layer` removes internal `read_to_end` buffer; passes reader directly to `extract_layer`.
+- `registry.rs`: Replace sequential `for` loop with `JoinSet` + `Arc<Semaphore>`. `pull_layer` returns `reqwest::Response` instead of `Bytes`. Add `MAX_CONCURRENT_LAYERS = 4`. Add `LimitedStream`. The existing `info!("pulled blob {} ({} bytes)", ...)` log line moves into the `spawn_blocking` result, logging compressed bytes received (available from `HashingReader`'s byte count) after extraction completes.
+- `error.rs`: Add `RegistryError::LayerTask { digest, message }` for `JoinError` wrapping.
+- `Cargo.toml`: Add `tokio-util = { version = "0.7", features = ["io"] }` and `pin-project-lite = "0.2"` to workspace and `minibox-lib`.
 
 ### `HashingReader<R: Read>`
 
@@ -208,33 +208,37 @@ Digest verification moves from before extraction to after:
 ### New Dependency
 
 `tokio-util` with `io` feature provides:
+
 - `tokio_util::io::StreamReader` — wraps `Stream<Item=Bytes>` into `AsyncRead`
 - `tokio_util::io::SyncIoBridge` — bridges `AsyncRead` into `std::io::Read` for use inside `spawn_blocking`
 
 ## Error Handling Summary
 
-| Case | Error |
-|------|-------|
-| HTTP error / network drop mid-stream | `RegistryError::BlobFetch` |
-| Digest mismatch after extraction | `ImageError::DigestMismatch` |
-| `spawn_blocking` panic | `RegistryError::LayerTask` |
-| Rollback failure | Warning logged; `DigestMismatch` still returned |
+| Case                                 | Error                                           |
+| ------------------------------------ | ----------------------------------------------- |
+| HTTP error / network drop mid-stream | `RegistryError::BlobFetch`                      |
+| Digest mismatch after extraction     | `ImageError::DigestMismatch`                    |
+| `spawn_blocking` panic               | `RegistryError::LayerTask`                      |
+| Rollback failure                     | Warning logged; `DigestMismatch` still returned |
 
 On any task error, `pull_image` calls `join_set.abort_all()` and drains remaining tasks before propagating. Manifest is never written on partial failure.
 
 ## Testing
 
 ### Existing Tests (unchanged)
+
 - All `layer.rs` unit tests pass — `extract_layer` signature change is backward-compatible via `std::io::Cursor`
 - Existing e2e tests exercise `pull_image` end-to-end on Linux+root and cover the parallel path
 
 ### New Unit Tests
 
 **In `layer.rs`:**
+
 - `hashing_reader_computes_correct_digest` — feed known bytes, verify `finalize()` matches expected sha256
 - `hashing_reader_transparent_read` — verify bytes pass through `HashingReader` unchanged
 
 **In `registry.rs`:**
+
 - `pull_image_parallel_cache_skip` — construct an `ImageStore` with pre-existing layer dirs; assert skipped layers produce no HTTP requests
 
 ## Non-Goals

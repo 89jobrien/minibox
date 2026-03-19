@@ -14,9 +14,9 @@
 
 ## Files
 
-| File | Change |
-|------|--------|
-| `crates/minibox-lib/src/image/layer.rs` | Add 7 tests to existing `#[cfg(test)]` block |
+| File                                       | Change                                       |
+| ------------------------------------------ | -------------------------------------------- |
+| `crates/minibox-lib/src/image/layer.rs`    | Add 7 tests to existing `#[cfg(test)]` block |
 | `crates/minibox-lib/src/adapters/mocks.rs` | Add 4 tests to existing `#[cfg(test)]` block |
 | `crates/minibox-lib/src/image/registry.rs` | Change 3 spans: `info_span!` → `debug_span!` |
 
@@ -64,12 +64,15 @@ fn relative_path_root_to_nested() {
 ```
 
 - [ ] **Run the tests:**
+
 ```bash
 cargo test -p minibox-lib image::layer::tests::relative_path -- --nocapture
 ```
+
 Expected: 3 tests pass.
 
 - [ ] **Commit:**
+
 ```bash
 git add crates/minibox-lib/src/image/layer.rs
 git commit -m "test: add named unit tests for relative_path"
@@ -110,12 +113,15 @@ fn root_dot_slash_entry_skipped() {
 ```
 
 - [ ] **Run the tests:**
+
 ```bash
 cargo test -p minibox-lib image::layer::tests::root_dot -- --nocapture
 ```
+
 Expected: 2 tests pass.
 
 - [ ] **Commit:**
+
 ```bash
 git add crates/minibox-lib/src/image/layer.rs
 git commit -m "test: add regression tests for tar root-entry skip"
@@ -177,12 +183,15 @@ fn cross_dir_absolute_symlink_rewritten() {
 ```
 
 - [ ] **Run the tests:**
+
 ```bash
 cargo test -p minibox-lib image::layer::tests -- --nocapture
 ```
+
 Expected: all layer tests pass including the 2 new ones.
 
 - [ ] **Commit:**
+
 ```bash
 git add crates/minibox-lib/src/image/layer.rs
 git commit -m "test: add regression tests for absolute symlink rewriting (busybox applet + cross-dir)"
@@ -245,12 +254,15 @@ mod macro_contract_tests {
 ```
 
 - [ ] **Run the tests:**
+
 ```bash
 cargo test -p minibox-lib adapters::mocks::macro_contract_tests -- --nocapture
 ```
+
 Expected: 4 tests pass.
 
 - [ ] **Commit:**
+
 ```bash
 git add crates/minibox-lib/src/adapters/mocks.rs
 git commit -m "test: add macro contract tests for as_any!/default_new!/adapt! downcast behaviour"
@@ -267,6 +279,7 @@ Three spans inside `pull_image` are `info_span!` but represent sub-step detail t
 - [ ] **Apply the three substitutions** in `pull_image`:
 
   Line with `tracing::info_span!("verify_digest")`:
+
   ```rust
   // Before:
   let _span = tracing::info_span!("verify_digest").entered();
@@ -275,6 +288,7 @@ Three spans inside `pull_image` are `info_span!` but represent sub-step detail t
   ```
 
   Line with `tracing::info_span!("extract", bytes = data.len())`:
+
   ```rust
   // Before:
   let _span = tracing::info_span!("extract", bytes = data.len()).entered();
@@ -283,6 +297,7 @@ Three spans inside `pull_image` are `info_span!` but represent sub-step detail t
   ```
 
   Line with `tracing::info_span!("store_manifest")`:
+
   ```rust
   // Before:
   let _span = tracing::info_span!("store_manifest").entered();
@@ -293,14 +308,17 @@ Three spans inside `pull_image` are `info_span!` but represent sub-step detail t
   The `auth` and `manifest` phase spans remain `info_span!` — do not touch them.
 
 - [ ] **Verify it compiles and all tests still pass:**
+
 ```bash
 cargo test -p minibox-lib
 cargo clippy -p minibox-lib -- -D warnings
 cargo fmt --all --check
 ```
+
 Expected: all tests pass, no clippy warnings, no fmt diff.
 
 - [ ] **Commit:**
+
 ```bash
 git add crates/minibox-lib/src/image/registry.rs
 git commit -m "perf: downgrade inner pull spans from info_span to debug_span (verify_digest, extract, store_manifest)"

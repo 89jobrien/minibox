@@ -26,19 +26,19 @@ All work runs on macOS. No Linux-only or root-required tests are included.
 
 The `relative_path` function (used by the absolute-symlink rewrite path) has two doctests already. The named unit tests below are complementary — they give each case an explicit name for regression tracking and verify the edge case of an empty `from_dir`:
 
-| Test | Input `(from_dir, to)` | Expected result |
-|------|------------------------|-----------------|
-| `relative_path_same_dir` | `("bin", "bin/busybox")` | `"busybox"` |
-| `relative_path_cross_dir` | `("usr/local/bin", "usr/bin/python")` | `"../../bin/python"` |
-| `relative_path_root_to_nested` | `("", "usr/bin/python")` | `"usr/bin/python"` |
+| Test                           | Input `(from_dir, to)`                | Expected result      |
+| ------------------------------ | ------------------------------------- | -------------------- |
+| `relative_path_same_dir`       | `("bin", "bin/busybox")`              | `"busybox"`          |
+| `relative_path_cross_dir`      | `("usr/local/bin", "usr/bin/python")` | `"../../bin/python"` |
+| `relative_path_root_to_nested` | `("", "usr/bin/python")`              | `"usr/bin/python"`   |
 
 ### Tar root-entry skip tests
 
 The `extract_layer` function silently skips `"."` and `"./"` entries. Without a test, a future refactor could accidentally re-enable the false path-escape error for these entries. Add:
 
-| Test | Tar builder call | Expected outcome |
-|------|-----------------|-----------------|
-| `root_dot_entry_skipped` | `tar_gz_with_regular_file(".", b"")` | `Ok(())`, no file created |
+| Test                           | Tar builder call                      | Expected outcome          |
+| ------------------------------ | ------------------------------------- | ------------------------- |
+| `root_dot_entry_skipped`       | `tar_gz_with_regular_file(".", b"")`  | `Ok(())`, no file created |
 | `root_dot_slash_entry_skipped` | `tar_gz_with_regular_file("./", b"")` | `Ok(())`, no file created |
 
 Both call the existing `tar_gz_with_regular_file` builder with `"."` or `"./"` as the `name` argument. After extraction, assert that no file named `"."` or `"./"` appears in the destination directory.
@@ -47,10 +47,10 @@ Both call the existing `tar_gz_with_regular_file` builder with `"."` or `"./"` a
 
 The busybox applet case (symlink in same directory as its target) and the cross-directory case are the two scenarios that were broken before the fix. Add:
 
-| Test | Symlink entry | Expected target after extraction |
-|------|--------------|----------------------------------|
-| `busybox_applet_symlink_correct` | `bin/echo -> /bin/busybox` | `"busybox"` (relative, same dir) |
-| `cross_dir_absolute_symlink_rewritten` | `usr/local/bin/python -> /usr/bin/python` | `"../../bin/python"` |
+| Test                                   | Symlink entry                             | Expected target after extraction |
+| -------------------------------------- | ----------------------------------------- | -------------------------------- |
+| `busybox_applet_symlink_correct`       | `bin/echo -> /bin/busybox`                | `"busybox"` (relative, same dir) |
+| `cross_dir_absolute_symlink_rewritten` | `usr/local/bin/python -> /usr/bin/python` | `"../../bin/python"`             |
 
 Both are `#[cfg(unix)]` and use `tar_gz_with_symlink`. After calling `extract_layer`, read the symlink with `std::fs::read_link` and assert the target is relative (not absolute).
 
@@ -66,12 +66,12 @@ The `as_any!` macro body uses `crate::domain::AsAny`. Because `macro_rules!` pat
 
 ### Tests
 
-| Test | What it proves |
-|------|---------------|
-| `mock_registry_downcasts_to_concrete` | `arc.as_ref().as_any().downcast_ref::<MockRegistry>()` returns `Some` |
-| `wrong_type_downcast_returns_none` | Same arc downcasted to `MockFilesystem` returns `None` (no panic) |
-| `default_matches_new` | `MockRegistry::default()` compiles and runs (proves `default_new!` delegates to `::new()`) |
-| `all_mock_types_downcast_correctly` | `MockFilesystem`, `MockLimiter`, `MockRuntime` each downcast to their own concrete type |
+| Test                                  | What it proves                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `mock_registry_downcasts_to_concrete` | `arc.as_ref().as_any().downcast_ref::<MockRegistry>()` returns `Some`                      |
+| `wrong_type_downcast_returns_none`    | Same arc downcasted to `MockFilesystem` returns `None` (no panic)                          |
+| `default_matches_new`                 | `MockRegistry::default()` compiles and runs (proves `default_new!` delegates to `::new()`) |
+| `all_mock_types_downcast_correctly`   | `MockFilesystem`, `MockLimiter`, `MockRuntime` each downcast to their own concrete type    |
 
 These tests document the contract: "anything passed through `adapt!` can be recovered as its concrete type via `as_any()`; wrong-type downcasts return `None` rather than panicking."
 
@@ -95,6 +95,7 @@ let _span = tracing::info_span!("store_manifest").entered();  // outside layer l
 `verify_digest` and `extract` fire once per layer (hot path under concurrent pulls). `store_manifest` fires once per image pull. All three represent sub-step detail already captured by the surrounding `info_span!("layer", ...)` and `#[instrument]` spans; they belong at `DEBUG`.
 
 There are also two manual `info_span!` calls for top-level pull phases that should **stay** at INFO:
+
 ```rust
 .instrument(tracing::info_span!("auth"))    // top-level auth phase
 .instrument(tracing::info_span!("manifest")) // top-level manifest phase
@@ -111,12 +112,14 @@ let _span = tracing::debug_span!("store_manifest").entered();
 ```
 
 **What stays at INFO:**
+
 - `info_span!("auth")` and `info_span!("manifest")` — top-level pull phase spans
 - `info_span!("layer", ...)` — per-layer outer span
 - All `info!` timing summary lines (auth time, manifest time, per-layer breakdown)
 - `#[instrument]` on `pull_image`, `authenticate`, `get_manifest`, `pull_layer`
 
 **What moves to DEBUG:**
+
 - `verify_digest` span (per-layer)
 - `extract` span (per-layer)
 - `store_manifest` span (once per pull)
