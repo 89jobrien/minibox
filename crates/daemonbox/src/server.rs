@@ -1,19 +1,18 @@
-//! Unix socket connection handler.
+//! Transport-agnostic daemon connection handler.
 //!
-//! Each accepted connection is handled by `handle_connection`.  The
-//! protocol is line-oriented JSON: the client writes one JSON line per
-//! request and the daemon responds with one JSON line per response.
+//! Callers provide a [`ServerListener`] impl — Unix socket or Named Pipe.
+//! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
+//!
+//! The protocol is line-oriented JSON: the client writes one JSON line per
+//! request and the daemon responds with one or more JSON lines per response.
+//! Streaming responses (`ContainerOutput`) continue until `ContainerStopped`.
 
 use anyhow::{Context, Result};
 use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
-#[cfg(target_os = "linux")]
-use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
-#[cfg(target_os = "linux")]
-use std::os::unix::io::AsFd;
+use std::future::Future;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio::net::UnixStream;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::handler::{self, HandlerDependencies};
 use crate::state::DaemonState;
@@ -21,57 +20,105 @@ use crate::state::DaemonState;
 // SECURITY: Maximum request size to prevent memory exhaustion
 const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
 
-/// Handle a single client connection.
+/// Peer credentials from an accepted connection.
+#[derive(Debug, Clone)]
+pub struct PeerCreds {
+    pub uid: u32,
+    pub pid: i32,
+}
+
+/// Platform-agnostic server listener.
 ///
-/// Reads newline-delimited JSON requests, dispatches to handlers, and
-/// writes newline-delimited JSON responses.  Continues until the client
-/// closes the connection or a fatal IO error occurs.
+/// Implementors wrap a platform-specific listener (Unix socket, Named Pipe, etc.)
+/// and yield a stream + optional peer credentials on each `accept()` call.
+pub trait ServerListener: Send + 'static {
+    type Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static;
+
+    /// Accept the next incoming connection.
+    ///
+    /// Returns the stream and optional peer credentials. On platforms where
+    /// credential inspection is not available (e.g., Windows named pipes),
+    /// `PeerCreds` may be `None`.
+    fn accept(
+        &self,
+    ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
+}
+
+/// Run the daemon accept loop until `shutdown` resolves.
 ///
-/// # Security
+/// # Arguments
 ///
-/// When `require_root_auth` is true (native mode), authenticates the client
-/// via SO_PEERCRED and only accepts connections from root (UID 0).
-/// When false (GKE mode), accepts any UID since the daemon itself runs
-/// as non-root.
-pub async fn handle_connection(
-    stream: UnixStream,
+/// * `listener` — platform-specific listener implementing [`ServerListener`]
+/// * `state` — shared daemon state
+/// * `deps` — handler dependencies (adapters)
+/// * `require_root_auth` — when `true`, rejects connections from non-root UIDs
+/// * `shutdown` — future that resolves when the daemon should stop
+pub async fn run_server<L, F>(
+    listener: L,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     require_root_auth: bool,
-) -> Result<()> {
-    // SECURITY: Get peer credentials for audit logging (Linux only)
-    #[cfg(target_os = "linux")]
-    {
-        let creds = getsockopt(&stream.as_fd(), PeerCredentials)
-            .context("failed to get peer credentials")?;
-
-        if require_root_auth && creds.uid() != 0 {
-            warn!(
-                "rejecting connection from non-root UID {} (PID {})",
-                creds.uid(),
-                creds.pid()
-            );
-            return Ok(());
+    shutdown: F,
+) -> Result<()>
+where
+    L: ServerListener,
+    F: Future<Output = ()>,
+{
+    tokio::pin!(shutdown);
+    loop {
+        tokio::select! {
+            accept_result = listener.accept() => {
+                match accept_result {
+                    Ok((stream, peer_creds)) => {
+                        if let Some(ref creds) = peer_creds {
+                            if require_root_auth && creds.uid != 0 {
+                                warn!(uid = creds.uid, pid = creds.pid, "server: rejecting non-root connection");
+                                continue;
+                            }
+                            info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
+                        } else {
+                            if require_root_auth {
+                                warn!("server: peer credentials unavailable; require_root_auth bypassed");
+                            }
+                            info!("server: accepted connection (no peer credentials)");
+                        }
+                        let state_clone = Arc::clone(&state);
+                        let deps_clone = Arc::clone(&deps);
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_connection(stream, state_clone, deps_clone).await {
+                                error!("connection error: {e:#}");
+                            }
+                        });
+                    }
+                    Err(e) => error!("server: accept error: {e}"),
+                }
+            }
+            _ = &mut shutdown => {
+                info!("server: shutdown signal received");
+                break;
+            }
         }
-
-        info!(
-            "accepted connection from UID {} PID {}",
-            creds.uid(),
-            creds.pid()
-        );
     }
+    Ok(())
+}
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        if require_root_auth {
-            warn!(
-                "require_root_auth is true but peer credentials are not available on this platform; auth bypassed"
-            );
-        }
-        info!("accepted connection (peer credentials not available on this platform)");
-    }
-
-    let (read_half, write_half) = stream.into_split();
+/// Handle a single client connection, generic over stream type.
+///
+/// Reads newline-delimited JSON requests, dispatches to handlers, and
+/// writes newline-delimited JSON responses. Continues until the client
+/// closes the connection or a fatal IO error occurs.
+///
+/// Streaming responses (`ContainerOutput`) are forwarded until the terminal
+/// `ContainerStopped` message closes the exchange.
+pub async fn handle_connection<S>(
+    stream: S,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+{
+    let (read_half, write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
     let mut writer = BufWriter::new(write_half);
     let mut line = String::new();
@@ -155,7 +202,7 @@ pub async fn handle_connection(
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// Non-streaming responses always terminate immediately.  Streaming responses
+/// Non-streaming responses always terminate immediately. Streaming responses
 /// (`ContainerOutput`) continue until `ContainerStopped` (which is terminal).
 fn is_terminal_response(r: &DaemonResponse) -> bool {
     !matches!(r, DaemonResponse::ContainerOutput { .. })
@@ -207,5 +254,25 @@ async fn dispatch(
             let response = handler::handle_pull(image, tag, state, deps).await;
             let _ = tx.send(response).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peer_creds_fields_accessible() {
+        let p = PeerCreds { uid: 1000, pid: 42 };
+        assert_eq!(p.uid, 1000);
+        assert_eq!(p.pid, 42);
+    }
+
+    #[test]
+    fn peer_creds_clone() {
+        let p = PeerCreds { uid: 0, pid: 1 };
+        let q = p.clone();
+        assert_eq!(q.uid, 0);
+        assert_eq!(q.pid, 1);
     }
 }
