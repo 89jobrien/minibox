@@ -53,7 +53,7 @@ use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
 use linuxbox::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
@@ -303,8 +303,13 @@ async fn main() -> Result<()> {
                 DockerHubRegistry::new(Arc::clone(&state.image_store))
                     .context("creating Docker Hub registry adapter")?,
             );
+            let ghcr_registry = Arc::new(
+                GhcrRegistry::new(Arc::clone(&state.image_store))
+                    .context("creating GHCR registry adapter")?,
+            );
             Arc::new(HandlerDependencies {
                 registry,
+                ghcr_registry,
                 filesystem: Arc::new(OverlayFilesystem::new()),
                 resource_limiter: Arc::new(CgroupV2Limiter::new()),
                 runtime: Arc::new(LinuxNamespaceRuntime::new()),
@@ -318,10 +323,15 @@ async fn main() -> Result<()> {
                 DockerHubRegistry::new(Arc::clone(&state.image_store))
                     .context("creating Docker Hub registry adapter")?,
             );
+            let ghcr_registry = Arc::new(
+                GhcrRegistry::new(Arc::clone(&state.image_store))
+                    .context("creating GHCR registry adapter")?,
+            );
             let proot_runtime =
                 ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
             Arc::new(HandlerDependencies {
                 registry,
+                ghcr_registry,
                 filesystem: Arc::new(CopyFilesystem::new()),
                 resource_limiter: Arc::new(NoopLimiter::new()),
                 runtime: Arc::new(proot_runtime),
@@ -330,15 +340,22 @@ async fn main() -> Result<()> {
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
         }
-        AdapterSuite::Colima => Arc::new(HandlerDependencies {
-            registry: Arc::new(ColimaRegistry::new()),
-            filesystem: Arc::new(ColimaFilesystem::new()),
-            resource_limiter: Arc::new(ColimaLimiter::new()),
-            runtime: Arc::new(ColimaRuntime::new()),
-            network_provider: Arc::new(NoopNetwork::new()),
-            containers_base: containers_dir.clone(),
-            run_containers_base: PathBuf::from(&run_containers_dir),
-        }),
+        AdapterSuite::Colima => {
+            let ghcr_registry = Arc::new(
+                GhcrRegistry::new(Arc::clone(&state.image_store))
+                    .context("creating GHCR registry adapter")?,
+            );
+            Arc::new(HandlerDependencies {
+                registry: Arc::new(ColimaRegistry::new()),
+                ghcr_registry,
+                filesystem: Arc::new(ColimaFilesystem::new()),
+                resource_limiter: Arc::new(ColimaLimiter::new()),
+                runtime: Arc::new(ColimaRuntime::new()),
+                network_provider: Arc::new(NoopNetwork::new()),
+                containers_base: containers_dir.clone(),
+                run_containers_base: PathBuf::from(&run_containers_dir),
+            })
+        }
     };
 
     info!("dependency injection configured");
