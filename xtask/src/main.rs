@@ -22,7 +22,7 @@ fn main() -> Result<()> {
         None => {
             eprintln!("Available tasks:");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
-            eprintln!("  prepush          nextest + coverage + flamegraph");
+            eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
@@ -51,7 +51,7 @@ fn pre_commit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-push gate: nextest + coverage + flamegraph
+/// Pre-push gate: nextest + coverage
 fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -66,9 +66,6 @@ fn prepush(sh: &Shell) -> Result<()> {
     .run()
     .context("coverage failed")?;
     eprintln!("coverage: target/llvm-cov/html/index.html");
-    cmd!(sh, "samply record ./target/release/minibox-bench")
-        .run()
-        .context("flamegraph failed")?;
     Ok(())
 }
 
