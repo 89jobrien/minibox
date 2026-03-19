@@ -30,9 +30,21 @@
 //! - [`ProotRuntime`]: proot (ptrace-based) fake chroot runtime
 //!
 //! **Cross-Platform (Windows via WSL2):**
-//! - [`WslRuntime`]: Windows Subsystem for Linux implementation
-//! - [`WslFilesystem`]: WSL2-based filesystem provider
-//! - [`WslLimiter`]: WSL2-based resource limiter
+//! - [`Wsl2Runtime`]: Windows Subsystem for Linux implementation
+//! - [`Wsl2Filesystem`]: WSL2-based filesystem provider
+//! - [`Wsl2Limiter`]: WSL2-based resource limiter
+//!
+//! **Cross-Platform (macOS via Virtualization.framework — Phase 2):**
+//! - [`VfRuntime`]: Apple Virtualization Framework runtime stub
+//! - [`VfFilesystem`]: VF filesystem provider stub
+//! - [`VfLimiter`]: VF resource limiter stub
+//! - [`VfRegistry`]: VF image registry stub
+//!
+//! **Cross-Platform (Windows via HCS — Phase 2):**
+//! - [`HcsRuntime`]: Windows Host Compute Service runtime stub
+//! - [`HcsFilesystem`]: HCS filesystem provider stub
+//! - [`HcsLimiter`]: HCS resource limiter stub
+//! - [`HcsRegistry`]: HCS image registry stub
 //!
 //! **Cross-Platform (macOS via Docker Desktop):**
 //! - [`DockerDesktopRuntime`]: Docker Desktop VM implementation
@@ -77,7 +89,9 @@ mod gke;
 // Cross-platform adapters
 mod colima;
 mod docker_desktop;
-mod wsl;
+mod hcs;
+mod vf;
+mod wsl2;
 
 // Test doubles (always available for testing)
 pub mod mocks;
@@ -98,4 +112,6 @@ pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 // Cross-platform exports (always available)
 pub use colima::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
-pub use wsl::{WslFilesystem, WslLimiter, WslRuntime};
+pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
+pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
+pub use wsl2::{Wsl2Filesystem, Wsl2Limiter, Wsl2Runtime};

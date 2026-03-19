@@ -10,9 +10,9 @@
 //! ┌────────────────────────────────────────┐
 //! │  miniboxd (Windows)                    │
 //! │  ┌──────────────┐                      │
-//! │  │ WslRuntime   │                      │
-//! │  │ WslFilesystem│  ---wsl.exe--->      │
-//! │  │ WslLimiter   │                      │
+//! │  │ Wsl2Runtime   │                      │
+//! │  │ Wsl2Filesystem│  ---wsl.exe--->      │
+//! │  │ Wsl2Limiter   │                      │
 //! │  └──────────────┘                      │
 //! └────────────────────────────────────────┘
 //!                 │
@@ -66,14 +66,14 @@ use tracing::debug;
 ///
 /// Delegates all container operations to a Linux helper binary running in WSL2.
 #[derive(Debug, Clone)]
-pub struct WslRuntime {
+pub struct Wsl2Runtime {
     /// WSL distribution name (e.g., "Ubuntu", "Debian")
     distro: String,
     /// Path to helper binary in WSL (e.g., "/usr/local/bin/minibox-wsl-helper")
     helper_path: String,
 }
 
-impl WslRuntime {
+impl Wsl2Runtime {
     /// Create a new WSL runtime adapter.
     ///
     /// # Arguments
@@ -84,7 +84,7 @@ impl WslRuntime {
     /// # Example
     ///
     /// ```rust,ignore
-    /// let runtime = WslRuntime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
+    /// let runtime = Wsl2Runtime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
     /// ```
     pub fn new(distro: impl Into<String>, helper_path: impl Into<String>) -> Self {
         Self {
@@ -125,7 +125,7 @@ impl WslRuntime {
 }
 
 #[async_trait]
-impl ContainerRuntime for WslRuntime {
+impl ContainerRuntime for Wsl2Runtime {
     fn capabilities(&self) -> RuntimeCapabilities {
         // WSL2 delegates to a full Linux kernel — all features available
         RuntimeCapabilities {
@@ -199,19 +199,19 @@ impl ContainerRuntime for WslRuntime {
 ///
 /// Delegates overlay filesystem operations to WSL2.
 #[derive(Debug, Clone)]
-pub struct WslFilesystem {
-    runtime: WslRuntime,
+pub struct Wsl2Filesystem {
+    runtime: Wsl2Runtime,
 }
 
-impl WslFilesystem {
+impl Wsl2Filesystem {
     pub fn new(distro: impl Into<String>, helper_path: impl Into<String>) -> Self {
         Self {
-            runtime: WslRuntime::new(distro, helper_path),
+            runtime: Wsl2Runtime::new(distro, helper_path),
         }
     }
 }
 
-impl FilesystemProvider for WslFilesystem {
+impl FilesystemProvider for Wsl2Filesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         debug!(
             "setting up rootfs via WSL: layers={:?}, dir={:?}",
@@ -226,7 +226,7 @@ impl FilesystemProvider for WslFilesystem {
 
         let container_dir_wsl = self.runtime.windows_to_wsl_path(container_dir)?;
 
-        let request = WslFilesystemSetupRequest {
+        let request = Wsl2FilesystemSetupRequest {
             layers: layers_wsl?,
             container_dir: container_dir_wsl,
         };
@@ -238,7 +238,7 @@ impl FilesystemProvider for WslFilesystem {
             self.runtime
                 .wsl_exec(&["sudo", &self.runtime.helper_path, "setup-rootfs", &json])?;
 
-        let response: WslFilesystemSetupResponse = serde_json::from_str(&output)?;
+        let response: Wsl2FilesystemSetupResponse = serde_json::from_str(&output)?;
 
         // Convert WSL path back to Windows
         let merged_wsl_path = Path::new(&response.merged_path);
@@ -272,19 +272,19 @@ impl FilesystemProvider for WslFilesystem {
 ///
 /// Delegates cgroups operations to WSL2.
 #[derive(Debug, Clone)]
-pub struct WslLimiter {
-    runtime: WslRuntime,
+pub struct Wsl2Limiter {
+    runtime: Wsl2Runtime,
 }
 
-impl WslLimiter {
+impl Wsl2Limiter {
     pub fn new(distro: impl Into<String>, helper_path: impl Into<String>) -> Self {
         Self {
-            runtime: WslRuntime::new(distro, helper_path),
+            runtime: Wsl2Runtime::new(distro, helper_path),
         }
     }
 }
 
-impl ResourceLimiter for WslLimiter {
+impl ResourceLimiter for Wsl2Limiter {
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
         debug!(
             "creating cgroup via WSL: id={}, config={:?}",
@@ -357,14 +357,14 @@ struct WslSpawnResponse {
 
 /// Request to setup overlay filesystem.
 #[derive(Debug, Serialize, Deserialize)]
-struct WslFilesystemSetupRequest {
+struct Wsl2FilesystemSetupRequest {
     layers: Vec<String>,
     container_dir: String,
 }
 
 /// Response from filesystem setup.
 #[derive(Debug, Serialize, Deserialize)]
-struct WslFilesystemSetupResponse {
+struct Wsl2FilesystemSetupResponse {
     merged_path: String,
 }
 
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_wsl_runtime_creation() {
-        let runtime = WslRuntime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
+        let runtime = Wsl2Runtime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
         assert_eq!(runtime.distro, "Ubuntu");
         assert_eq!(runtime.helper_path, "/usr/local/bin/minibox-wsl-helper");
     }
@@ -396,7 +396,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[ignore] // Requires WSL2 installed
     fn test_wsl_path_conversion() {
-        let runtime = WslRuntime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
+        let runtime = Wsl2Runtime::new("Ubuntu", "/usr/local/bin/minibox-wsl-helper");
         let windows_path = Path::new("C:\\Users\\test\\file.txt");
 
         let wsl_path = runtime.windows_to_wsl_path(windows_path);
@@ -406,4 +406,4 @@ mod tests {
     }
 }
 
-as_any!(WslRuntime, WslFilesystem, WslLimiter);
+as_any!(Wsl2Runtime, Wsl2Filesystem, Wsl2Limiter);

@@ -1,9 +1,14 @@
 //! miniboxd — container runtime daemon.
 //!
-//! Listens on a Unix socket and serves JSON-over-newline requests from
-//! `minibox` CLI clients.
+//! Listens on a Unix socket (Linux/macOS) or Named Pipe (Windows) and serves
+//! JSON-over-newline requests from `minibox` CLI clients.
 //!
-//! # Adapter suites
+//! Platform dispatch:
+//! - Linux  → native namespaces, overlay FS, cgroups v2 via this file
+//! - macOS  → delegates to `macbox::start()`
+//! - Windows → delegates to `winbox::start()`
+//!
+//! # Adapter suites (Linux)
 //!
 //! The daemon supports multiple adapter suites selected via the
 //! `MINIBOX_ADAPTER` environment variable:
@@ -15,21 +20,37 @@
 //! - **colima**: delegates to Colima/Lima VM via limactl + nerdctl.
 //!   No local root required; requires Colima running on the host.
 //!
-//! # Startup sequence
+//! # Startup sequence (Linux)
 //! 1. Initialise tracing.
 //! 2. Select adapter suite from `MINIBOX_ADAPTER`.
 //! 3. Resolve directory paths (configurable via env vars).
 //! 4. Create required directories.
 //! 5. Remove stale socket file.
 //! 6. Bind `UnixListener`.
-//! 7. Accept connections, spawning a tokio task per client.
+//! 7. Accept connections via `daemonbox::server::run_server`.
 //! 8. Gracefully shut down on SIGTERM / SIGINT.
 
-#[cfg(not(target_os = "linux"))]
-compile_error!("miniboxd requires Linux");
+// ── macOS ─────────────────────────────────────────────────────────────────
+#[cfg(target_os = "macos")]
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    macbox::start().await
+}
 
+// ── Windows ───────────────────────────────────────────────────────────────
+#[cfg(target_os = "windows")]
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    winbox::start().await
+}
+
+// ── Linux ─────────────────────────────────────────────────────────────────
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use daemonbox::handler::HandlerDependencies;
+#[cfg(target_os = "linux")]
+use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
 use minibox_lib::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
@@ -41,10 +62,6 @@ use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox_lib::image::ImageStore;
 #[cfg(target_os = "linux")]
-use miniboxd::handler::HandlerDependencies;
-#[cfg(target_os = "linux")]
-use miniboxd::state::DaemonState;
-#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
@@ -55,17 +72,12 @@ use tokio::signal::unix::{SignalKind, signal};
 #[cfg(target_os = "linux")]
 use tracing::{error, info, warn};
 
-// -------------------------------------------------------------------------
-// Default paths (native mode)
-// -------------------------------------------------------------------------
+// ── Default paths ─────────────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
-/// Default daemon runtime state directory.
 const DEFAULT_RUN_DIR: &str = "/run/minibox";
 
-// -------------------------------------------------------------------------
-// Adapter suite selection
-// -------------------------------------------------------------------------
+// ── Adapter suite selection ───────────────────────────────────────────────
 
 /// Which set of adapters to use for container operations.
 #[cfg(target_os = "linux")]
@@ -76,13 +88,11 @@ enum AdapterSuite {
     /// GKE unprivileged: proot, copy FS, no-op limiter. No root needed.
     Gke,
     /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
-    /// Does not require local root (operations run inside the Lima VM).
     Colima,
 }
 
 #[cfg(target_os = "linux")]
 impl AdapterSuite {
-    /// Read `MINIBOX_ADAPTER` env var. Defaults to `Native`.
     fn from_env() -> Result<Self> {
         match std::env::var("MINIBOX_ADAPTER").as_deref() {
             Ok("gke") => Ok(Self::Gke),
@@ -97,13 +107,6 @@ impl AdapterSuite {
 }
 
 /// Move the current process into a `supervisor` leaf cgroup.
-///
-/// Reads `/proc/self/cgroup` to find our current cgroup, creates a
-/// `supervisor/` child, and writes our PID there.  This frees the parent
-/// cgroup to enable `subtree_control` for container children.
-///
-/// No-op if we are already inside a `supervisor` leaf (e.g. systemd
-/// `DelegateSubgroup=supervisor` already handled this).
 #[cfg(target_os = "linux")]
 fn migrate_to_supervisor_cgroup() {
     use std::fs;
@@ -117,7 +120,6 @@ fn migrate_to_supervisor_cgroup() {
         }
     };
 
-    // cgroup v2: single line "0::<path>"
     let cgroup_path = match cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
         Some(p) => p.trim().to_string(),
         None => {
@@ -126,14 +128,12 @@ fn migrate_to_supervisor_cgroup() {
         }
     };
 
-    // Already in a supervisor leaf — nothing to do.
     if cgroup_path.ends_with("/supervisor") {
         debug!("already in supervisor cgroup, skipping self-migration");
         return;
     }
 
     let cgroupfs = PathBuf::from("/sys/fs/cgroup");
-    // Strip leading '/' from the cgroup path for joining
     let relative = cgroup_path.strip_prefix('/').unwrap_or(&cgroup_path);
     let supervisor_dir = cgroupfs.join(relative).join("supervisor");
 
@@ -158,6 +158,33 @@ fn migrate_to_supervisor_cgroup() {
     );
 }
 
+// ── UnixServerListener ────────────────────────────────────────────────────
+
+#[cfg(target_os = "linux")]
+struct UnixServerListener(UnixListener);
+
+#[cfg(target_os = "linux")]
+impl daemonbox::server::ServerListener for UnixServerListener {
+    type Stream = tokio::net::UnixStream;
+
+    async fn accept(&self) -> anyhow::Result<(Self::Stream, Option<daemonbox::server::PeerCreds>)> {
+        let (stream, _addr) = self.0.accept().await?;
+        let creds = {
+            use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
+            use std::os::unix::io::AsFd;
+            getsockopt(&stream.as_fd(), PeerCredentials).ok().map(|c| {
+                daemonbox::server::PeerCreds {
+                    uid: c.uid(),
+                    pid: c.pid(),
+                }
+            })
+        };
+        Ok((stream, creds))
+    }
+}
+
+// ── Linux main ────────────────────────────────────────────────────────────
+
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -176,23 +203,16 @@ async fn main() -> Result<()> {
     info!("adapter suite: {suite:?}");
 
     // ── Privilege check (native only) ────────────────────────────────────
-    // Colima delegates operations to the Lima VM via limactl, so local root
-    // is not required.  GKE runs unprivileged by design.
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
         anyhow::bail!("miniboxd must run as root (native adapter suite)");
     }
 
     // ── Cgroup self-migration (native only) ──────────────────────────────
-    // cgroup v2 rule: a cgroup with processes cannot enable
-    // subtree_control for children.  When systemd DelegateSubgroup is
-    // configured it moves us into a leaf automatically, but for
-    // non-systemd environments we migrate ourselves into a "supervisor"
-    // leaf so the parent cgroup is free to delegate controllers.
     if suite == AdapterSuite::Native {
         migrate_to_supervisor_cgroup();
     }
 
-    // ── Resolve paths (configurable via env vars) ───────────────────────
+    // ── Resolve paths ────────────────────────────────────────────────────
     let data_dir =
         std::env::var("MINIBOX_DATA_DIR").unwrap_or_else(|_| "/var/lib/minibox".to_string());
     let run_dir = std::env::var("MINIBOX_RUN_DIR").unwrap_or_else(|_| DEFAULT_RUN_DIR.to_string());
@@ -214,8 +234,7 @@ async fn main() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
-    // ── Dependency Injection (Composition Root) ─────────────────────────
-    // Colima delegates to Lima VM, so local root auth is not required.
+    // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
     let deps = match suite {
@@ -269,7 +288,7 @@ async fn main() -> Result<()> {
             .with_context(|| format!("removing stale socket {socket_path_str}"))?;
     }
 
-    let listener = UnixListener::bind(sock_path)
+    let raw_listener = UnixListener::bind(sock_path)
         .with_context(|| format!("binding Unix socket at {socket_path_str}"))?;
 
     // SECURITY: Restrict socket permissions; allow overrides for group access.
@@ -314,39 +333,17 @@ async fn main() -> Result<()> {
     // ── Signal handling ──────────────────────────────────────────────────
     let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("SIGINT handler")?;
-
-    // ── Accept loop ──────────────────────────────────────────────────────
-    loop {
+    let shutdown = async move {
         tokio::select! {
-            accept_result = listener.accept() => {
-                match accept_result {
-                    Ok((stream, _addr)) => {
-                        info!("accepted new client connection");
-                        let state_clone = Arc::clone(&state);
-                        let deps_clone = Arc::clone(&deps);
-                        tokio::spawn(async move {
-                            if let Err(e) = miniboxd::server::handle_connection(stream, state_clone, deps_clone, require_root_auth).await {
-                                error!("connection handler error: {e:#}");
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        error!("accept error: {e}");
-                    }
-                }
-            }
-
-            _ = sigterm.recv() => {
-                info!("received SIGTERM, shutting down");
-                break;
-            }
-
-            _ = sigint.recv() => {
-                info!("received SIGINT, shutting down");
-                break;
-            }
+            _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
+            _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
         }
-    }
+    };
+
+    let listener = UnixServerListener(raw_listener);
+
+    // ── Accept loop via run_server ────────────────────────────────────────
+    daemonbox::server::run_server(listener, state, deps, require_root_auth, shutdown).await?;
 
     // ── Cleanup ──────────────────────────────────────────────────────────
     if sock_path.exists() {
