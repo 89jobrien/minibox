@@ -27,7 +27,7 @@
 use crate::adapt;
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities,
+    LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -351,7 +351,7 @@ impl ContainerRuntime for MockRuntime {
         }
     }
 
-    async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut state = self.state.lock().unwrap();
         state.spawn_count += 1;
 
@@ -361,7 +361,10 @@ impl ContainerRuntime for MockRuntime {
 
         let pid = state.next_pid;
         state.next_pid += 1;
-        Ok(pid)
+        Ok(SpawnResult {
+            pid,
+            output_reader: None,
+        })
     }
 }
 
@@ -434,6 +437,7 @@ mod tests {
             env: vec![],
             hostname: "mock-host".to_string(),
             cgroup_path: PathBuf::from("/mock/cgroup"),
+            capture_output: false,
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -441,8 +445,8 @@ mod tests {
         assert_eq!(runtime.spawn_count(), 1);
 
         // Second spawn should give different PID
-        let pid2 = runtime.spawn_process(&config).await.unwrap();
-        assert_eq!(pid2, 10001);
+        let result2 = runtime.spawn_process(&config).await.unwrap();
+        assert_eq!(result2.pid, 10001);
     }
 }
 

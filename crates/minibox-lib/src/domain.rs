@@ -66,6 +66,9 @@ use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(unix)]
+use std::os::fd::OwnedFd;
+
 // ---------------------------------------------------------------------------
 // Dyn type aliases
 // ---------------------------------------------------------------------------
@@ -446,7 +449,20 @@ pub trait ContainerRuntime: AsAny + Send + Sync {
     ///
     /// This operation typically requires blocking I/O (fork/clone syscalls)
     /// and should be called from a blocking thread context in async code.
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32>;
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult>;
+}
+
+/// Result returned by [`ContainerRuntime::spawn_process`].
+pub struct SpawnResult {
+    /// PID of the spawned container init process.
+    pub pid: u32,
+    /// Present when [`ContainerSpawnConfig::capture_output`] was `true`.
+    /// The read end of a pipe connected to the container's stdout+stderr.
+    #[cfg(unix)]
+    pub output_reader: Option<OwnedFd>,
+    /// Placeholder for non-Unix builds where pipes are not supported.
+    #[cfg(not(unix))]
+    pub output_reader: Option<std::convert::Infallible>,
 }
 
 /// Configuration for spawning a containerized process.
@@ -464,6 +480,9 @@ pub struct ContainerSpawnConfig {
     pub hostname: String,
     /// Path to the cgroup directory for this container.
     pub cgroup_path: PathBuf,
+    /// When `true`, container stdout+stderr are captured to a pipe.
+    /// The read end is returned in [`SpawnResult::output_reader`].
+    pub capture_output: bool,
 }
 
 // ---------------------------------------------------------------------------

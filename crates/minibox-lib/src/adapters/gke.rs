@@ -29,7 +29,7 @@
 
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig, ResourceLimiter,
-    RuntimeCapabilities,
+    RuntimeCapabilities, SpawnResult,
 };
 use crate::{adapt, as_any};
 use anyhow::{Context, Result};
@@ -257,7 +257,7 @@ impl ContainerRuntime for ProotRuntime {
         }
     }
 
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         debug!(
             "proot runtime: spawning command={} in rootfs={:?}",
             config.command, config.rootfs
@@ -312,7 +312,10 @@ impl ContainerRuntime for ProotRuntime {
         .await??;
 
         debug!("proot runtime: spawned with PID {}", pid);
-        Ok(pid)
+        Ok(SpawnResult {
+            pid,
+            output_reader: None,
+        })
     }
 }
 

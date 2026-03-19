@@ -52,7 +52,7 @@ use crate::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RuntimeCapabilities,
+        ResourceLimiter, RuntimeCapabilities, SpawnResult,
     },
 };
 use anyhow::{Context, Result};
@@ -137,7 +137,7 @@ impl ContainerRuntime for WslRuntime {
         }
     }
 
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         debug!(
             "spawning container via WSL: command={}, rootfs={:?}",
             config.command, config.rootfs
@@ -188,7 +188,10 @@ impl ContainerRuntime for WslRuntime {
             serde_json::from_str(&stdout).context("failed to parse spawn response")?;
 
         debug!("container spawned in WSL with PID {}", response.pid);
-        Ok(response.pid)
+        Ok(SpawnResult {
+            pid: response.pid,
+            output_reader: None,
+        })
     }
 }
 

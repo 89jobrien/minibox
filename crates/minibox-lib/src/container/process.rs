@@ -6,6 +6,7 @@
 
 use crate::container::filesystem::pivot_root_to;
 use crate::container::namespace::{NamespaceConfig, clone_with_namespaces};
+use crate::domain::SpawnResult;
 use crate::error::ProcessError;
 use anyhow::Context;
 use nix::sys::wait::{WaitStatus, waitpid};
@@ -32,6 +33,8 @@ pub struct ContainerConfig {
     pub cgroup_path: PathBuf,
     /// Hostname to set inside the UTS namespace.
     pub hostname: String,
+    /// When `true`, container stdout+stderr are captured via a pipe.
+    pub capture_output: bool,
 }
 
 /// Spawn the container init process.
@@ -41,16 +44,52 @@ pub struct ContainerConfig {
 ///    stray file descriptors, then `exec`s the user command.
 /// 3. Parent: returns the child PID.
 ///
-/// Returns the child PID on success.
-pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<u32> {
+/// Returns a [`SpawnResult`] containing the child PID and, when
+/// `config.capture_output` is true, the read end of a pipe connected to
+/// the container's stdout+stderr.
+#[cfg(target_os = "linux")]
+pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnResult> {
+    use nix::fcntl::OFlag;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
     info!(command = %config.command, rootfs = ?config.rootfs, "container: spawning process");
 
+    // Create output pipe before cloning so both parent and child inherit it.
+    let (read_fd_raw, write_fd_raw): (RawFd, RawFd) = if config.capture_output {
+        let (r, w) = nix::unistd::pipe2(OFlag::O_CLOEXEC).context("creating output pipe")?;
+        // Extract raw FDs before moving into the closure (OwnedFd is not Clone).
+        let r_raw = r.as_raw_fd();
+        let w_raw = w.as_raw_fd();
+        // Forget OwnedFds — we manage lifetimes manually across fork.
+        std::mem::forget(r);
+        std::mem::forget(w);
+        (r_raw, w_raw)
+    } else {
+        (-1, -1)
+    };
+
+    let capture_output = config.capture_output;
     let ns_config = config.namespace_config.clone();
     let pid = clone_with_namespaces(&ns_config, move || {
         // ----------------------------------------------------------------
         // Everything here runs in the child process.
         // We must not return; we must either exec or call _exit.
         // ----------------------------------------------------------------
+
+        // Redirect stdout and stderr to the write end of the pipe.
+        if capture_output && write_fd_raw >= 0 {
+            unsafe {
+                libc::dup2(write_fd_raw, libc::STDOUT_FILENO);
+                libc::dup2(write_fd_raw, libc::STDERR_FILENO);
+                // Close the original write_fd slot (now dup'd into 1 and 2).
+                // O_CLOEXEC on the original means exec would close it anyway,
+                // but we close explicitly to be tidy.
+                libc::close(write_fd_raw);
+                // Close the read end — child must not hold it.
+                libc::close(read_fd_raw);
+            }
+        }
+
         if let Err(e) = child_init(config) {
             error!("container init failed: {:#}", e);
             unsafe { libc::_exit(127) };
@@ -60,9 +99,31 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<u32> {
     })
     .with_context(|| "failed to spawn container process")?;
 
+    // Parent: close the write end so the read end gets EOF when the child exits.
+    if capture_output && write_fd_raw >= 0 {
+        unsafe { libc::close(write_fd_raw) };
+    }
+
     let pid_raw = pid.as_raw() as u32;
     info!(pid = pid_raw, "container: process started");
-    Ok(pid_raw)
+
+    let output_reader = if capture_output && read_fd_raw >= 0 {
+        // SAFETY: we created this fd above and haven't closed/moved it in parent.
+        Some(unsafe { OwnedFd::from_raw_fd(read_fd_raw) })
+    } else {
+        None
+    };
+
+    Ok(SpawnResult {
+        pid: pid_raw,
+        output_reader,
+    })
+}
+
+/// Non-Linux stub: always errors because namespace containers require Linux.
+#[cfg(not(target_os = "linux"))]
+pub fn spawn_container_process(_config: ContainerConfig) -> anyhow::Result<SpawnResult> {
+    anyhow::bail!("spawn_container_process is only supported on Linux")
 }
 
 /// Logic executed inside the cloned child process.

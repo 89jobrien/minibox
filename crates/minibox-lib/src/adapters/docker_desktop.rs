@@ -61,7 +61,7 @@ use crate::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RuntimeCapabilities,
+        ResourceLimiter, RuntimeCapabilities, SpawnResult,
     },
 };
 use anyhow::{Context, Result};
@@ -167,7 +167,7 @@ impl ContainerRuntime for DockerDesktopRuntime {
         }
     }
 
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         debug!(
             "spawning container via Docker Desktop: command={}, rootfs={:?}",
             config.command, config.rootfs
@@ -221,7 +221,10 @@ impl ContainerRuntime for DockerDesktopRuntime {
             "container spawned in Docker Desktop with PID {}",
             response.pid
         );
-        Ok(response.pid)
+        Ok(SpawnResult {
+            pid: response.pid,
+            output_reader: None,
+        })
     }
 }
 
