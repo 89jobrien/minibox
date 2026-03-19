@@ -120,17 +120,13 @@ fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
 ///
 /// # Arguments
 ///
-/// * `tar_gz_data` -- Raw bytes of the `.tar.gz` blob.
+/// * `reader` -- Reader yielding the gzip-compressed tar bytes.
 /// * `dest` -- Directory to extract into.
-#[instrument(skip(tar_gz_data, dest), fields(bytes = tar_gz_data.len(), dest = %dest.display()))]
-pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
-    debug!(
-        "extracting layer ({} bytes) to {:?}",
-        tar_gz_data.len(),
-        dest
-    );
+#[instrument(skip(reader, dest), fields(dest = %dest.display()))]
+pub fn extract_layer(reader: impl std::io::Read, dest: &Path) -> anyhow::Result<()> {
+    debug!("extracting layer to {:?}", dest);
 
-    let gz = GzDecoder::new(tar_gz_data);
+    let gz = GzDecoder::new(reader);
     let mut archive = Archive::new(gz);
 
     // SECURITY: Manually iterate entries to validate each one
@@ -510,7 +506,7 @@ mod tests {
     fn regular_file_extracted_correctly() {
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_regular_file("hello.txt", b"hello world");
-        extract_layer(&tar_gz, dest.path()).unwrap();
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap();
         assert_eq!(
             std::fs::read(dest.path().join("hello.txt")).unwrap(),
             b"hello world"
@@ -521,7 +517,7 @@ mod tests {
     fn nested_regular_file_extracted() {
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_regular_file("usr/local/bin/tool", b"binary");
-        extract_layer(&tar_gz, dest.path()).unwrap();
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap();
         assert!(dest.path().join("usr/local/bin/tool").exists());
     }
 
@@ -529,7 +525,7 @@ mod tests {
     fn block_device_entry_rejected() {
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_device("dev/sda", EntryType::Block);
-        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        let err = extract_layer(tar_gz.as_slice(), dest.path()).unwrap_err();
         assert!(
             err.to_string().contains("device"),
             "expected 'device' in: {err}"
@@ -540,7 +536,7 @@ mod tests {
     fn char_device_entry_rejected() {
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_device("dev/null", EntryType::Char);
-        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        let err = extract_layer(tar_gz.as_slice(), dest.path()).unwrap_err();
         assert!(
             err.to_string().contains("device"),
             "expected 'device' in: {err}"
@@ -553,7 +549,7 @@ mod tests {
         // no file extracted).
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_regular_file(".", b"");
-        extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap(); // must not error
         // The destination directory must remain empty — nothing was extracted.
         let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
         assert!(
@@ -567,7 +563,7 @@ mod tests {
         // "./" variant of the same root marker
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_regular_file("./", b"");
-        extract_layer(&tar_gz, dest.path()).unwrap(); // must not error
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap(); // must not error
         let entries: Vec<_> = std::fs::read_dir(dest.path()).unwrap().collect();
         assert!(
             entries.is_empty(),
@@ -581,7 +577,7 @@ mod tests {
         // Use a raw tar so we can embed ../ in the filename, bypassing
         // the tar crate's builder-level path validation.
         let tar_gz = raw_tar_gz_with_filename("../escape.txt");
-        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        let err = extract_layer(tar_gz.as_slice(), dest.path()).unwrap_err();
         assert!(
             err.to_string().contains("..") || err.to_string().contains("traversal"),
             "expected path traversal error, got: {err}"
@@ -597,7 +593,7 @@ mod tests {
         // This is the specific busybox case that was broken before the fix.
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_symlink("bin/echo", "/bin/busybox");
-        extract_layer(&tar_gz, dest.path()).unwrap();
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap();
         let link = dest.path().join("bin/echo");
         assert!(link.symlink_metadata().is_ok(), "symlink should exist");
         let target = std::fs::read_link(&link).unwrap();
@@ -618,7 +614,7 @@ mod tests {
         // usr/local/bin/python -> /usr/bin/python: rewritten to ../../bin/python
         let dest = TempDir::new().unwrap();
         let tar_gz = tar_gz_with_symlink("usr/local/bin/python", "/usr/bin/python");
-        extract_layer(&tar_gz, dest.path()).unwrap();
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap();
         let link = dest.path().join("usr/local/bin/python");
         assert!(link.symlink_metadata().is_ok(), "symlink should exist");
         let target = std::fs::read_link(&link).unwrap();
@@ -639,7 +635,7 @@ mod tests {
         let dest = TempDir::new().unwrap();
         // /bin/sh is an absolute symlink target — should be rewritten to bin/sh
         let tar_gz = tar_gz_with_symlink("link_to_sh", "/bin/sh");
-        extract_layer(&tar_gz, dest.path()).unwrap();
+        extract_layer(tar_gz.as_slice(), dest.path()).unwrap();
         let link = dest.path().join("link_to_sh");
         assert!(
             link.symlink_metadata().is_ok(),
@@ -658,7 +654,7 @@ mod tests {
         let dest = TempDir::new().unwrap();
         // Symlink whose absolute target, when relativized, contains ../
         let tar_gz = tar_gz_with_symlink("evil_link", "/../../etc/shadow");
-        let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+        let err = extract_layer(tar_gz.as_slice(), dest.path()).unwrap_err();
         assert!(
             err.to_string().contains("traversal") || err.to_string().contains(".."),
             "expected traversal error, got: {err}"

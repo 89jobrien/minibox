@@ -142,7 +142,7 @@ impl ImageStore {
                 source,
             })?;
 
-        extract_layer(&buf, &dest)
+        extract_layer(buf.as_slice(), &dest)
             .with_context(|| format!("extracting layer {digest} to {dest:?}"))?;
 
         info!("stored layer {} at {:?}", digest, dest);
