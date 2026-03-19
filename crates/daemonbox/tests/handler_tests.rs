@@ -126,6 +126,7 @@ async fn test_handle_run_with_cached_image() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps.clone(),
     )
@@ -165,6 +166,7 @@ async fn test_handle_run_pulls_uncached_image() {
         vec!["/bin/echo".to_string(), "hello".to_string()],
         Some(512 * 1024 * 1024), // 512MB memory limit
         Some(500),               // CPU weight
+        false,
         state,
         deps.clone(),
     )
@@ -205,6 +207,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state,
         deps,
     )
@@ -237,6 +240,7 @@ async fn test_handle_run_resource_limiter_failure() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state,
         deps,
     )
@@ -269,6 +273,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps,
     )
@@ -306,6 +311,7 @@ async fn test_handle_remove_success() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps.clone(),
     )
@@ -382,6 +388,7 @@ async fn test_handle_remove_running_container() {
         vec!["/bin/sh".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps.clone(),
     )
@@ -440,6 +447,7 @@ async fn test_full_container_lifecycle() {
         ],
         Some(256 * 1024 * 1024), // 256MB
         Some(750),               // CPU weight
+        false,
         state.clone(),
         deps.clone(),
     )
