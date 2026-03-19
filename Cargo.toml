@@ -40,6 +40,8 @@ futures = "0.3"
 tempfile = "3"
 async-trait = "0.1"
 walkdir = "2"
+tokio-util = { version = "0.7", features = ["io"] }
+pin-project-lite = "0.2"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["async_tokio"] }
