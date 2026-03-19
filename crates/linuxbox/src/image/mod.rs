@@ -15,6 +15,7 @@ use crate::error::ImageError;
 use crate::image::layer::extract_layer;
 use crate::image::manifest::OciManifest;
 use anyhow::Context;
+use minibox_macros::{normalize_digest, normalize_name};
 use std::io::Read;
 use std::path::PathBuf;
 use tracing::{debug, info};
@@ -64,7 +65,7 @@ impl ImageStore {
             .iter()
             .map(|desc| {
                 // Digest format: "sha256:<hex>"
-                let digest_key = desc.digest.replace(':', "_");
+                let digest_key = normalize_digest!(desc.digest);
                 layers_base.join(&digest_key)
             })
             .collect();
@@ -120,7 +121,7 @@ impl ImageStore {
         digest: &str,
         mut data_reader: R,
     ) -> anyhow::Result<PathBuf> {
-        let digest_key = digest.replace(':', "_");
+        let digest_key = normalize_digest!(digest);
         let dest = self.layers_dir(name, tag)?.join(&digest_key);
 
         if dest.exists() {
@@ -196,7 +197,7 @@ impl ImageStore {
         }
 
         // Replace '/' in image name (e.g. "library/ubuntu") with '_'
-        let safe_name = name.replace('/', "_");
+        let safe_name = normalize_name!(name);
         let result = self.base_dir.join(&safe_name).join(tag);
 
         // SECURITY: Canonicalize and verify the result is still under base_dir

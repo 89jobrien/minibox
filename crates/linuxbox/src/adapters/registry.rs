@@ -14,6 +14,7 @@ use minibox_core::as_any;
 use minibox_core::domain::{ImageMetadata, ImageRegistry, LayerInfo};
 use minibox_core::image::ImageStore;
 use minibox_core::image::registry::RegistryClient;
+use minibox_macros::denormalize_digest;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
@@ -130,11 +131,11 @@ impl ImageRegistry for DockerHubRegistry {
         let layers: Vec<LayerInfo> = layer_paths
             .iter()
             .map(|path| {
-                let digest = path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .replace('_', ":");
+                let digest = denormalize_digest!(
+                    path.file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown")
+                );
 
                 LayerInfo {
                     digest,

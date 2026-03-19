@@ -28,3 +28,5 @@ pub use minibox_core::error;
 pub use minibox_core::image;
 pub use minibox_core::preflight;
 pub use minibox_core::protocol;
+// Convenience re-exports for ImageRef used by daemonbox and miniboxd.
+pub use minibox_core::image::reference::{ImageRef, ImageRefError};
