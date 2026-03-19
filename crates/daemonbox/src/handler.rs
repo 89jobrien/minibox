@@ -175,6 +175,9 @@ async fn handle_run_streaming(
 
     // Spawn blocking task to drain the pipe and forward chunks.
     let tx_clone = tx.clone();
+    // SAFETY: OwnedFd is not Send on all platforms, so we transfer ownership via raw fd.
+    // The OwnedFd is consumed by into_raw_fd() (no drop), and from_raw_fd() inside the
+    // closure takes sole ownership. No other code touches reader_raw after this point.
     let reader_raw = output_reader.into_raw_fd();
     let drain_handle = tokio::task::spawn_blocking(move || {
         use std::io::Read;
@@ -202,7 +205,11 @@ async fn handle_run_streaming(
     });
 
     // Wait for the child process to exit.
-    let exit_code = wait_for_pid_async(pid).await;
+    use minibox_lib::container::process::wait_for_exit;
+    let exit_code = tokio::task::spawn_blocking(move || wait_for_exit(pid))
+        .await
+        .unwrap_or(Ok(-1))
+        .unwrap_or(-1);
 
     // Wait for drain to finish before sending ContainerStopped
     // so all output is flushed before the terminal message.
@@ -359,26 +366,6 @@ async fn run_inner_capture(
     state.set_container_pid(&id, pid).await;
 
     Ok((id, pid, output_reader))
-}
-
-/// Wait for a child process to exit and return its exit code.
-#[cfg(target_os = "linux")]
-async fn wait_for_pid_async(pid: u32) -> i32 {
-    tokio::task::spawn_blocking(move || {
-        use nix::sys::wait::{WaitStatus, waitpid};
-        let nix_pid = nix::unistd::Pid::from_raw(pid as i32);
-        match waitpid(nix_pid, None) {
-            Ok(WaitStatus::Exited(_, code)) => code,
-            Ok(WaitStatus::Signaled(_, sig, _)) => -(sig as i32),
-            Ok(_) => 0,
-            Err(e) => {
-                warn!(pid = pid, error = %e, "wait_for_pid_async: waitpid failed");
-                -1
-            }
-        }
-    })
-    .await
-    .unwrap_or(-1)
 }
 
 async fn run_inner(
