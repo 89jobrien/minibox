@@ -17,19 +17,25 @@
 //! }
 //! ```
 
-use crate::error::RegistryError;
+use crate::error::{ImageError, RegistryError};
 use crate::image::ImageStore;
-use crate::image::layer::verify_digest;
+use crate::image::layer::HashingReader;
 use crate::image::manifest::{
     MEDIA_TYPE_DOCKER_MANIFEST, MEDIA_TYPE_DOCKER_MANIFEST_LIST, MEDIA_TYPE_OCI_INDEX,
     MEDIA_TYPE_OCI_MANIFEST, ManifestResponse, OciManifest,
 };
 use anyhow::Context;
 use bytes::Bytes;
-use futures::stream::StreamExt;
+use futures::StreamExt as _;
+use pin_project_lite::pin_project;
 use reqwest::Client;
 use serde::Deserialize;
-use tracing::{Instrument, debug, info, instrument};
+use std::io;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tokio_util::io::{StreamReader, SyncIoBridge};
+use tracing::{Instrument, debug, info, instrument, warn};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,6 +47,59 @@ const REGISTRY_BASE: &str = "https://registry-1.docker.io/v2";
 // SECURITY: Resource limits to prevent DoS attacks
 const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
 const MAX_LAYER_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GB
+const MAX_CONCURRENT_LAYERS: usize = 4;
+
+// ---------------------------------------------------------------------------
+// LimitedStream
+// ---------------------------------------------------------------------------
+
+pin_project! {
+    /// Wraps an async byte stream and returns an error if total bytes exceed `limit`.
+    ///
+    /// Used to enforce [`MAX_LAYER_SIZE`] during streaming download without
+    /// buffering the full blob in memory.
+    struct LimitedStream<S> {
+        #[pin]
+        inner: S,
+        remaining: u64,
+    }
+}
+
+impl<S> LimitedStream<S> {
+    fn new(inner: S, limit: u64) -> Self {
+        Self {
+            inner,
+            remaining: limit,
+        }
+    }
+}
+
+impl<S: futures::Stream<Item = io::Result<Bytes>>> futures::Stream for LimitedStream<S> {
+    type Item = io::Result<Bytes>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.project();
+        match this.inner.poll_next(cx) {
+            std::task::Poll::Ready(Some(Ok(chunk))) => {
+                if chunk.len() as u64 > *this.remaining {
+                    std::task::Poll::Ready(Some(Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("layer exceeded size limit of {MAX_LAYER_SIZE} bytes"),
+                    ))))
+                } else {
+                    *this.remaining -= chunk.len() as u64;
+                    std::task::Poll::Ready(Some(Ok(chunk)))
+                }
+            }
+            std::task::Poll::Ready(Some(Err(e))) => std::task::Poll::Ready(Some(Err(e))),
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Auth token response
@@ -232,12 +291,17 @@ impl RegistryClient {
     // Blob / layer pull
     // -----------------------------------------------------------------------
 
-    /// Download a single blob by `digest` and return its raw bytes.
+    /// Start a blob download and return the HTTP response for streaming.
     ///
-    /// Docker Hub redirects blob requests to a CDN; the client follows these
-    /// redirects automatically.
+    /// Performs status and `Content-Length` header checks before returning.
+    /// The caller enforces the streaming byte limit via [`LimitedStream`].
     #[instrument(skip(self, token), fields(digest = &digest[..19]))]
-    pub async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> anyhow::Result<Bytes> {
+    async fn pull_layer(
+        &self,
+        name: &str,
+        digest: &str,
+        token: &str,
+    ) -> anyhow::Result<reqwest::Response> {
         let url = format!("{REGISTRY_BASE}/{name}/blobs/{digest}");
         debug!("pulling blob {} from {}", digest, url);
 
@@ -260,39 +324,19 @@ impl RegistryClient {
             .into());
         }
 
-        // SECURITY: Check Content-Length header before downloading
+        // Advisory content-length check (LimitedStream enforces the hard limit).
         if let Some(content_length) = resp.headers().get("content-length")
             && let Ok(size_str) = content_length.to_str()
             && let Ok(size) = size_str.parse::<u64>()
+            && size > MAX_LAYER_SIZE
         {
-            if size > MAX_LAYER_SIZE {
-                return Err(RegistryError::Other(format!(
-                    "layer too large: {size} bytes (max {MAX_LAYER_SIZE})"
-                ))
-                .into());
-            }
-            debug!("layer size: {} bytes", size);
+            return Err(RegistryError::Other(format!(
+                "layer too large per Content-Length: {size} bytes (max {MAX_LAYER_SIZE})"
+            ))
+            .into());
         }
 
-        // SECURITY: Use streaming reader with size limit
-        let mut body_stream = resp.bytes_stream();
-        let mut data = Vec::new();
-
-        while let Some(chunk_result) = body_stream.next().await {
-            let chunk = chunk_result.map_err(RegistryError::Network)?;
-            data.extend_from_slice(&chunk);
-
-            if data.len() as u64 > MAX_LAYER_SIZE {
-                return Err(RegistryError::Other(format!(
-                    "layer exceeded size limit during download: {MAX_LAYER_SIZE} bytes"
-                ))
-                .into());
-            }
-        }
-
-        let data = Bytes::from(data);
-        info!("pulled blob {} ({} bytes)", digest, data.len());
-        Ok(data)
+        Ok(resp)
     }
 
     // -----------------------------------------------------------------------
@@ -338,76 +382,123 @@ impl RegistryClient {
             manifest.layers.len()
         );
 
-        // 3. Download and store each layer.
-        for (idx, layer_desc) in manifest.layers.iter().enumerate() {
-            // Build the expected layer directory path to check for existence.
-            let digest_key = layer_desc.digest.replace(':', "_");
-            let layer_dir = store
-                .base_dir
-                .join(name.replace('/', "_"))
-                .join(tag)
-                .join("layers")
-                .join(&digest_key);
+        // 3. Download and store each layer in parallel (bounded by MAX_CONCURRENT_LAYERS).
+        let total_layers = manifest.layers.len();
+        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_LAYERS));
+        let mut join_set: JoinSet<anyhow::Result<()>> = JoinSet::new();
 
-            let digest_short = layer_desc.digest.get(..19).unwrap_or(&layer_desc.digest);
+        for (idx, layer_desc) in manifest.layers.iter().cloned().enumerate() {
+            let client = self.clone();
+            let store = store.clone();
+            let token = token.clone();
+            let sem = semaphore.clone();
+            let name = name.to_owned();
+            let tag = tag.to_owned();
 
-            if layer_dir.exists() {
-                info!(
-                    "layer {}/{}: {} (cached)",
-                    idx + 1,
-                    manifest.layers.len(),
-                    digest_short
-                );
-                continue;
-            }
+            join_set.spawn(async move {
+                let _permit = sem.acquire_owned().await.expect("semaphore closed");
 
-            let layer_span = tracing::info_span!(
-                "layer",
-                n = idx + 1,
-                total = manifest.layers.len(),
-                digest = digest_short,
-            );
+                let digest_key = layer_desc.digest.replace(':', "_");
+                let layer_dir = store
+                    .base_dir
+                    .join(name.replace('/', "_"))
+                    .join(&tag)
+                    .join("layers")
+                    .join(&digest_key);
 
-            let layer_start = std::time::Instant::now();
-            let download_start = std::time::Instant::now();
-            let data = self
-                .pull_layer(name, &layer_desc.digest, &token)
-                .instrument(layer_span.clone())
-                .await
-                .with_context(|| format!("pull layer {}", layer_desc.digest))?;
-            let download = download_start.elapsed();
-
-            {
-                let _guard = layer_span.enter();
-
-                let verify_start = std::time::Instant::now();
-                {
-                    let _span = tracing::debug_span!("verify_digest").entered();
-                    verify_digest(&data, &layer_desc.digest).with_context(|| {
-                        format!("digest verification for {}", layer_desc.digest)
-                    })?;
+                if layer_dir.exists() {
+                    info!(
+                        "layer {}/{}: {} (cached)",
+                        idx + 1,
+                        total_layers,
+                        &layer_desc.digest[..19]
+                    );
+                    return Ok(());
                 }
-                let verify = verify_start.elapsed();
 
-                let extract_start = std::time::Instant::now();
-                {
-                    let _span = tracing::debug_span!("extract", bytes = data.len()).entered();
+                let layer_start = std::time::Instant::now();
+
+                // Start the HTTP download (async).
+                let response = client
+                    .pull_layer(&name, &layer_desc.digest, &token)
+                    .await
+                    .with_context(|| format!("pull layer {}", layer_desc.digest))?;
+
+                // Bridge async stream → sync Read inside spawn_blocking.
+                let limited_stream = LimitedStream::new(
+                    response.bytes_stream().map(|r| r.map_err(io::Error::other)),
+                    MAX_LAYER_SIZE,
+                );
+                let handle = tokio::runtime::Handle::current();
+                let digest = layer_desc.digest.clone();
+
+                tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                    let sync_reader =
+                        SyncIoBridge::new_with_handle(StreamReader::new(limited_stream), handle);
+                    let mut hashing_reader = HashingReader::new(sync_reader);
+
+                    // Extract (bytes flow: HTTP → LimitedStream → SyncIoBridge → HashingReader → GzDecoder → tar).
                     store
-                        .store_layer(name, tag, &layer_desc.digest, std::io::Cursor::new(data))
-                        .with_context(|| format!("store layer {}", layer_desc.digest))?;
-                }
-                let extract = extract_start.elapsed();
+                        .store_layer(&name, &tag, &digest, &mut hashing_reader)
+                        .with_context(|| format!("store layer {digest}"))?;
 
-                info!(
-                    "layer {}/{} ({}) done in {:.2?} — download {:.2?} verify {:.2?} extract {:.2?}",
-                    idx + 1,
-                    manifest.layers.len(),
-                    digest_short,
-                    layer_start.elapsed(),
-                    download,
-                    verify,
-                    extract,
-                );
+                    // Verify digest against what we actually received (OCI: digest is over compressed bytes).
+                    let bytes = hashing_reader.bytes_read();
+                    let actual = hashing_reader.finalize();
+                    let expected_hex = digest
+                        .strip_prefix("sha256:")
+                        .ok_or_else(|| anyhow::anyhow!("unexpected digest format: {digest}"))?;
+
+                    if actual != expected_hex {
+                        // store_layer used atomic rename — remove the final dest if we wrote it.
+                        if let Err(e) = std::fs::remove_dir_all(&layer_dir) {
+                            warn!("failed to remove layer dir after digest mismatch: {}", e);
+                        }
+                        return Err(ImageError::DigestMismatch {
+                            digest: digest.clone(),
+                            expected: expected_hex.to_owned(),
+                            actual,
+                        }
+                        .into());
+                    }
+
+                    info!(
+                        "layer {}/{} ({}) done in {:.2?} — {} bytes",
+                        idx + 1,
+                        total_layers,
+                        &digest[..19],
+                        layer_start.elapsed(),
+                        bytes,
+                    );
+                    Ok(())
+                })
+                .await
+                .map_err(|join_err| {
+                    anyhow::Error::from(RegistryError::LayerTask {
+                        digest: layer_desc.digest.clone(),
+                        message: join_err.to_string(),
+                    })
+                })??;
+                Ok(())
+            });
+        }
+
+        // Collect results; abort remaining tasks on first error.
+        while let Some(result) = join_set.join_next().await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    join_set.abort_all();
+                    return Err(e);
+                }
+                Err(join_err) => {
+                    join_set.abort_all();
+                    return Err(RegistryError::LayerTask {
+                        digest: "(unknown)".into(),
+                        message: join_err.to_string(),
+                    }
+                    .into());
+                }
             }
         }
 
