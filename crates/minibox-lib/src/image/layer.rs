@@ -12,6 +12,48 @@ use std::path::Path;
 use tar::{Archive, EntryType};
 use tracing::{debug, info, instrument, warn};
 
+/// Transparent [`std::io::Read`] wrapper that computes a SHA-256 digest of all
+/// bytes passing through it.
+///
+/// Wraps the **compressed** byte stream (before [`flate2::read::GzDecoder`]) so
+/// the hash matches the OCI manifest digest, which is computed over the
+/// compressed blob.
+pub struct HashingReader<R> {
+    inner: R,
+    hasher: Sha256,
+    bytes_read: u64,
+}
+
+impl<R: std::io::Read> HashingReader<R> {
+    pub fn new(inner: R) -> Self {
+        Self {
+            inner,
+            hasher: Sha256::new(),
+            bytes_read: 0,
+        }
+    }
+
+    /// Finalise the hasher and return the hex-encoded SHA-256 digest of all
+    /// bytes read so far.
+    pub fn finalize(self) -> String {
+        hex::encode(self.hasher.finalize())
+    }
+
+    /// Total compressed bytes read through this reader.
+    pub fn bytes_read(&self) -> u64 {
+        self.bytes_read
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for HashingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.hasher.update(&buf[..n]);
+        self.bytes_read += n as u64;
+        Ok(n)
+    }
+}
+
 // Helper to check for parent directory components
 fn has_parent_dir_component(path: &Path) -> bool {
     path.components()
@@ -652,6 +694,42 @@ mod tests {
             relative_path(Path::new(""), Path::new("usr/bin/python")),
             std::path::PathBuf::from("usr/bin/python")
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // HashingReader
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn hashing_reader_computes_correct_digest() {
+        use sha2::{Digest as _, Sha256};
+
+        let data = b"hello parallel layers";
+        let expected_hex = hex::encode(Sha256::digest(data));
+
+        let mut reader = HashingReader::new(std::io::Cursor::new(data));
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut out).unwrap();
+
+        assert_eq!(reader.finalize(), expected_hex);
+    }
+
+    #[test]
+    fn hashing_reader_transparent_read() {
+        let data = b"some bytes 12345";
+        let mut reader = HashingReader::new(std::io::Cursor::new(data));
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut out).unwrap();
+        assert_eq!(out, data);
+    }
+
+    #[test]
+    fn hashing_reader_bytes_read_counter() {
+        let data = b"counting bytes here";
+        let mut reader = HashingReader::new(std::io::Cursor::new(data));
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut out).unwrap();
+        assert_eq!(reader.bytes_read(), data.len() as u64);
     }
 
     // ---------------------------------------------------------------------------
