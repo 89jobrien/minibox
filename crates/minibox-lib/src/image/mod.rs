@@ -262,6 +262,20 @@ impl ImageStore {
         Ok(self.image_dir(name, tag)?.join("layers"))
     }
 
+    /// Returns the path for a specific layer directory.
+    ///
+    /// Applies the same security validation as `image_dir` (null byte
+    /// rejection, `..` rejection, canonicalize assertion).
+    pub(crate) fn layer_path(
+        &self,
+        name: &str,
+        tag: &str,
+        digest: &str,
+    ) -> anyhow::Result<PathBuf> {
+        let digest_key = digest.replace(':', "_");
+        Ok(self.layers_dir(name, tag)?.join(&digest_key))
+    }
+
     fn load_manifest(&self, name: &str, tag: &str) -> anyhow::Result<OciManifest> {
         let path = self.manifest_path(name, tag)?;
         if !path.exists() {

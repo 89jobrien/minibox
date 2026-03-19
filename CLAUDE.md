@@ -191,7 +191,7 @@ In `layer.rs`, manual entry validation prevents Zip Slip attacks:
 Image pulls enforce limits to prevent DoS:
 
 - Max manifest size: 10MB (`registry.rs`)
-- Max layer size: 1GB per layer
+- Max layer size: 10GB per layer
 - Total image size limit: 5GB
 
 ## Directory Structure

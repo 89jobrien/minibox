@@ -19,7 +19,7 @@
 
 use crate::error::{ImageError, RegistryError};
 use crate::image::ImageStore;
-use crate::image::layer::HashingReader;
+use crate::image::layer::{HashingReader, extract_layer};
 use crate::image::manifest::{
     MEDIA_TYPE_DOCKER_MANIFEST, MEDIA_TYPE_DOCKER_MANIFEST_LIST, MEDIA_TYPE_OCI_INDEX,
     MEDIA_TYPE_OCI_MANIFEST, ManifestResponse, OciManifest,
@@ -35,7 +35,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio_util::io::{StreamReader, SyncIoBridge};
-use tracing::{Instrument, debug, info, instrument, warn};
+use tracing::{Instrument, debug, info, instrument};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -398,31 +398,28 @@ impl RegistryClient {
             join_set.spawn(async move {
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
 
-                let digest_key = layer_desc.digest.replace(':', "_");
-                let layer_dir = store
-                    .base_dir
-                    .join(name.replace('/', "_"))
-                    .join(&tag)
-                    .join("layers")
-                    .join(&digest_key);
+                let layer_start = std::time::Instant::now();
+                let digest = layer_desc.digest.clone();
 
+                // Early-exit if already cached (validated path via layer_path).
+                let layer_dir = store
+                    .layer_path(&name, &tag, &digest)
+                    .with_context(|| format!("layer path for {digest}"))?;
                 if layer_dir.exists() {
                     info!(
                         "layer {}/{}: {} (cached)",
                         idx + 1,
                         total_layers,
-                        &layer_desc.digest[..19]
+                        &digest[..19]
                     );
                     return Ok(());
                 }
 
-                let layer_start = std::time::Instant::now();
-
                 // Start the HTTP download (async).
                 let response = client
-                    .pull_layer(&name, &layer_desc.digest, &token)
+                    .pull_layer(&name, &digest, &token)
                     .await
-                    .with_context(|| format!("pull layer {}", layer_desc.digest))?;
+                    .with_context(|| format!("pull layer {digest}"))?;
 
                 // Bridge async stream → sync Read inside spawn_blocking.
                 let limited_stream = LimitedStream::new(
@@ -430,19 +427,44 @@ impl RegistryClient {
                     MAX_LAYER_SIZE,
                 );
                 let handle = tokio::runtime::Handle::current();
-                let digest = layer_desc.digest.clone();
 
                 tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
                     let sync_reader =
                         SyncIoBridge::new_with_handle(StreamReader::new(limited_stream), handle);
                     let mut hashing_reader = HashingReader::new(sync_reader);
 
-                    // Extract (bytes flow: HTTP → LimitedStream → SyncIoBridge → HashingReader → GzDecoder → tar).
-                    store
-                        .store_layer(&name, &tag, &digest, &mut hashing_reader)
-                        .with_context(|| format!("store layer {digest}"))?;
+                    // Compute paths.
+                    let dest = store
+                        .layer_path(&name, &tag, &digest)
+                        .with_context(|| format!("layer path for {digest}"))?;
 
-                    // Verify digest against what we actually received (OCI: digest is over compressed bytes).
+                    // Early return if cached (race: another task may have committed first).
+                    if dest.exists() {
+                        return Ok(());
+                    }
+
+                    let tmp = dest.with_extension("tmp");
+
+                    // Clean up any stale tmp from a prior crash.
+                    if tmp.exists() {
+                        std::fs::remove_dir_all(&tmp)
+                            .with_context(|| format!("cleaning stale tmp {tmp:?}"))?;
+                    }
+
+                    std::fs::create_dir_all(&tmp).map_err(|source| ImageError::StoreWrite {
+                        path: tmp.display().to_string(),
+                        source,
+                    })?;
+
+                    // Extract (bytes flow: HTTP → LimitedStream → SyncIoBridge → HashingReader → GzDecoder → tar).
+                    if let Err(e) = extract_layer(&mut hashing_reader, &tmp)
+                        .with_context(|| format!("extracting layer {digest} to {tmp:?}"))
+                    {
+                        std::fs::remove_dir_all(&tmp).ok();
+                        return Err(e);
+                    }
+
+                    // Verify digest BEFORE renaming to final location.
                     let bytes = hashing_reader.bytes_read();
                     let actual = hashing_reader.finalize();
                     let expected_hex = digest
@@ -450,16 +472,30 @@ impl RegistryClient {
                         .ok_or_else(|| anyhow::anyhow!("unexpected digest format: {digest}"))?;
 
                     if actual != expected_hex {
-                        // store_layer used atomic rename — remove the final dest if we wrote it.
-                        if let Err(e) = std::fs::remove_dir_all(&layer_dir) {
-                            warn!("failed to remove layer dir after digest mismatch: {}", e);
-                        }
+                        std::fs::remove_dir_all(&tmp).ok(); // tmp is still at tmp path, safe to remove
                         return Err(ImageError::DigestMismatch {
                             digest: digest.clone(),
                             expected: expected_hex.to_owned(),
                             actual,
                         }
                         .into());
+                    }
+
+                    // Atomically commit: rename tmp → dest.
+                    match std::fs::rename(&tmp, &dest) {
+                        Ok(()) => {}
+                        Err(_) if dest.exists() => {
+                            // Another task won the race on a duplicate-digest layer. Clean up our tmp.
+                            std::fs::remove_dir_all(&tmp).ok();
+                        }
+                        Err(source) => {
+                            std::fs::remove_dir_all(&tmp).ok();
+                            return Err(ImageError::StoreWrite {
+                                path: dest.display().to_string(),
+                                source,
+                            }
+                            .into());
+                        }
                     }
 
                     info!(
