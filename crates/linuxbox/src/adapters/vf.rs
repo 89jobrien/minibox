@@ -146,7 +146,10 @@ impl ImageRegistry for VfRegistry {
     }
 
     /// Not yet implemented — always returns an error.
-    async fn pull_image(&self, _name: &str, _tag: &str) -> Result<ImageMetadata> {
+    async fn pull_image(
+        &self,
+        _image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata> {
         anyhow::bail!("VfRegistry: not yet implemented (Phase 2)")
     }
 

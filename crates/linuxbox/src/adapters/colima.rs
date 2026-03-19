@@ -201,8 +201,13 @@ impl ImageRegistry for ColimaRegistry {
     ///
     /// Returns an error if `nerdctl pull` or `nerdctl image inspect` fail inside
     /// the VM, or if the inspect JSON cannot be parsed.
-    async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
-        let full_name = format!("{name}:{tag}");
+    async fn pull_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata> {
+        let cache_name = image_ref.cache_name();
+        let tag = image_ref.tag.clone();
+        let full_name = format!("{cache_name}:{tag}");
 
         // Pull image using nerdctl inside the Colima VM.
         self.lima_exec(&["nerdctl", "pull", &full_name])?;
@@ -233,8 +238,8 @@ impl ImageRegistry for ColimaRegistry {
             .unwrap_or_default();
 
         Ok(ImageMetadata {
-            name: name.to_string(),
-            tag: tag.to_string(),
+            name: cache_name,
+            tag,
             layers,
         })
     }

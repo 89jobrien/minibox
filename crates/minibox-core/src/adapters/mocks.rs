@@ -132,7 +132,12 @@ impl ImageRegistry for MockRegistry {
     /// cache and returns [`ImageMetadata`] with two fixed mock layers. On
     /// failure (configured via [`with_pull_failure`]) returns an error
     /// without modifying the cache.
-    async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
+    async fn pull_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata> {
+        let name = image_ref.cache_name();
+        let tag = image_ref.tag.clone();
         let mut state = self.state.lock().unwrap();
         state.pull_count += 1;
 
@@ -141,13 +146,11 @@ impl ImageRegistry for MockRegistry {
         }
 
         // Simulate a successful pull by adding the image to the local cache.
-        state
-            .cached_images
-            .push((name.to_string(), tag.to_string()));
+        state.cached_images.push((name.clone(), tag.clone()));
 
         Ok(ImageMetadata {
-            name: name.to_string(),
-            tag: tag.to_string(),
+            name,
+            tag,
             layers: vec![
                 LayerInfo {
                     digest: "sha256:mock-layer-1".to_string(),

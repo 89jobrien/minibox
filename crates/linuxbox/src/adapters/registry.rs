@@ -112,18 +112,25 @@ impl ImageRegistry for DockerHubRegistry {
     /// Propagates errors from [`RegistryClient::pull_image`] (network, auth,
     /// manifest parse) or from [`ImageStore::get_image_layers`] if the layer
     /// directories cannot be located after a successful pull.
-    async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
+    async fn pull_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata> {
+        let api_name = image_ref.repository(); // "library/alpine" or "org/image"
+        let store_name = image_ref.cache_name(); // "library/alpine" or "ghcr.io/org/image"
+        let tag = &image_ref.tag;
+
         debug!(
-            image_name = name,
+            image_name = %store_name,
             image_tag = tag,
             "registry: pulling from Docker Hub"
         );
 
         // Delegate network I/O and tar extraction to RegistryClient.
-        self.client.pull_image(name, tag, &self.store).await?;
+        self.client.pull_image(&api_name, tag, &self.store).await?;
 
         // Locate the on-disk layer directories written by RegistryClient.
-        let layer_paths = self.store.get_image_layers(name, tag)?;
+        let layer_paths = self.store.get_image_layers(&store_name, tag)?;
 
         // Build LayerInfo from layer directory names.
         // Directory names encode the digest with ':' replaced by '_' for
@@ -146,7 +153,7 @@ impl ImageRegistry for DockerHubRegistry {
             .collect();
 
         Ok(ImageMetadata {
-            name: name.to_string(),
+            name: store_name,
             tag: tag.to_string(),
             layers,
         })

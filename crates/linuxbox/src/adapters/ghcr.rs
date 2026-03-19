@@ -4,13 +4,13 @@
 //! token (PAT) with `read:packages` scope as `GHCR_TOKEN` to access private images;
 //! public images work without a token.
 
-use crate::as_any;
-use crate::domain::{ImageMetadata, ImageRegistry, LayerInfo};
-use crate::image::ImageStore;
-use crate::image::manifest::ManifestResponse;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
+use minibox_core::as_any;
+use minibox_core::domain::{ImageMetadata, ImageRegistry, LayerInfo};
+use minibox_core::image::ImageStore;
+use minibox_core::image::manifest::ManifestResponse;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -255,25 +255,30 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(&store_key, tag)
     }
 
-    async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
-        let store_key = format!("ghcr.io/{name}");
+    async fn pull_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata> {
+        let store_key = image_ref.cache_name(); // "ghcr.io/org/image"
+        let repo = image_ref.repository(); // "org/image" (for ghcr.io API path)
+        let tag = &image_ref.tag;
         info!("ghcr: pulling {store_key}:{tag}");
 
         let token = self
-            .authenticate(name)
+            .authenticate(&repo)
             .await
-            .with_context(|| format!("ghcr: authenticate for {name}"))?;
+            .with_context(|| format!("ghcr: authenticate for {repo}"))?;
 
         let manifest = self
-            .get_manifest(name, tag, &token)
+            .get_manifest(&repo, tag, &token)
             .await
-            .with_context(|| format!("ghcr: get manifest for {name}:{tag}"))?;
+            .with_context(|| format!("ghcr: get manifest for {repo}:{tag}"))?;
 
         let mut layer_infos = Vec::new();
         for layer in &manifest.layers {
             let digest = &layer.digest;
             let data = self
-                .pull_layer(name, digest, &token)
+                .pull_layer(&repo, digest, &token)
                 .await
                 .with_context(|| format!("ghcr: pull layer {digest}"))?;
 
