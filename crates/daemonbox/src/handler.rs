@@ -73,12 +73,14 @@ pub struct HandlerDependencies {
 // ─── Run ────────────────────────────────────────────────────────────────────
 
 /// Create and start a new container from `image:tag`, executing `command`.
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_run(
     image: String,
     tag: Option<String>,
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
+    _ephemeral: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {

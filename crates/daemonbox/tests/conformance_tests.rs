@@ -251,6 +251,7 @@ mod conformance {
             vec!["/bin/sh".to_string()],
             None,
             None,
+            false,
             state,
             deps,
         )
@@ -278,6 +279,7 @@ mod conformance {
             vec!["/bin/sh".to_string()],
             None,
             None,
+            false,
             state.clone(),
             deps.clone(),
         )

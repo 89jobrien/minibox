@@ -33,6 +33,11 @@ pub enum DaemonRequest {
         memory_limit_bytes: Option<u64>,
         /// Optional CPU weight (cgroup `cpu.weight`, range 1-10000).
         cpu_weight: Option<u64>,
+        /// If `true`, the daemon streams stdout/stderr back and sends
+        /// `ContainerStopped` when the process exits.  Defaults to `false`
+        /// (fire-and-forget behaviour) for backwards compatibility.
+        #[serde(default)]
+        ephemeral: bool,
     },
 
     /// Stop a running container by ID.
@@ -63,6 +68,14 @@ pub enum DaemonRequest {
 // Responses (Daemon -> CLI)
 // ---------------------------------------------------------------------------
 
+/// Which output stream a [`DaemonResponse::ContainerOutput`] chunk came from.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputStreamKind {
+    Stdout,
+    Stderr,
+}
+
 /// A response sent from the daemon back to the CLI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -89,6 +102,27 @@ pub enum DaemonResponse {
     Error {
         /// Human-readable error description.
         message: String,
+    },
+
+    /// A chunk of output from a running container's stdout or stderr.
+    ///
+    /// `data` is base64-encoded raw bytes.  Sent zero or more times before
+    /// [`DaemonResponse::ContainerStopped`].  Only emitted when the
+    /// originating [`DaemonRequest::Run`] had `ephemeral: true`.
+    ContainerOutput {
+        /// Which stream the data came from.
+        stream: OutputStreamKind,
+        /// Base64-encoded raw bytes.
+        data: String,
+    },
+
+    /// Terminal message after a streaming run.
+    ///
+    /// Exactly one per ephemeral run; signals end of the
+    /// [`DaemonResponse::ContainerOutput`] stream.
+    ContainerStopped {
+        /// Exit code of the container process.
+        exit_code: i32,
     },
 }
 
@@ -173,6 +207,7 @@ mod tests {
             command: vec!["/bin/sh".to_string()],
             memory_limit_bytes: None,
             cpu_weight: None,
+            ephemeral: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -185,6 +220,7 @@ mod tests {
                 command,
                 memory_limit_bytes,
                 cpu_weight,
+                ..
             } => {
                 assert_eq!(image, "alpine");
                 assert_eq!(tag, None);
@@ -208,6 +244,7 @@ mod tests {
             ],
             memory_limit_bytes: Some(536870912), // 512MB
             cpu_weight: Some(500),
+            ephemeral: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -220,6 +257,7 @@ mod tests {
                 command,
                 memory_limit_bytes,
                 cpu_weight,
+                ..
             } => {
                 assert_eq!(image, "ubuntu");
                 assert_eq!(tag, Some("22.04".to_string()));
@@ -403,6 +441,7 @@ mod tests {
             command: vec!["/bin/sh".to_string()],
             memory_limit_bytes: None,
             cpu_weight: None,
+            ephemeral: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -483,6 +522,7 @@ mod tests {
             command: vec![],
             memory_limit_bytes: None,
             cpu_weight: None,
+            ephemeral: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -504,6 +544,7 @@ mod tests {
             command: vec!["/bin/sh".to_string()],
             memory_limit_bytes: Some(u64::MAX),
             cpu_weight: None,
+            ephemeral: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -551,5 +592,66 @@ mod tests {
         let encoded = encode_request(&req).expect("encode failed");
 
         assert_eq!(encoded.last(), Some(&b'\n'));
+    }
+
+    // -----------------------------------------------------------------------
+    // Streaming / ephemeral protocol tests (Task 5)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn run_request_defaults_ephemeral_false() {
+        let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run { ephemeral, .. } => assert!(!ephemeral),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn run_request_explicit_ephemeral_true() {
+        let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"ephemeral":true}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run { ephemeral, .. } => assert!(ephemeral),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn container_output_roundtrip() {
+        let msg = DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: "aGVsbG8=".to_owned(), // base64("hello")
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: DaemonResponse = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonResponse::ContainerOutput { stream, data } => {
+                assert_eq!(stream, OutputStreamKind::Stdout);
+                assert_eq!(data, "aGVsbG8=");
+            }
+            _ => panic!("expected ContainerOutput"),
+        }
+    }
+
+    #[test]
+    fn container_stopped_roundtrip() {
+        let msg = DaemonResponse::ContainerStopped { exit_code: 42 };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"exit_code\":42"));
+        let back: DaemonResponse = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonResponse::ContainerStopped { exit_code } => assert_eq!(exit_code, 42),
+            _ => panic!("expected ContainerStopped"),
+        }
+    }
+
+    #[test]
+    fn output_stream_kind_serde_lowercase() {
+        let stdout = serde_json::to_string(&OutputStreamKind::Stdout).unwrap();
+        let stderr = serde_json::to_string(&OutputStreamKind::Stderr).unwrap();
+        assert_eq!(stdout, r#""stdout""#);
+        assert_eq!(stderr, r#""stderr""#);
     }
 }

@@ -22,6 +22,7 @@ pub async fn execute(
         command,
         memory_limit_bytes,
         cpu_weight,
+        ephemeral: false,
     };
 
     match send_request(&request).await? {

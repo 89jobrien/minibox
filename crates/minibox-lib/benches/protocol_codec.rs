@@ -11,6 +11,7 @@ fn small_run_request() -> DaemonRequest {
         command: vec!["/bin/sh".to_string()],
         memory_limit_bytes: None,
         cpu_weight: None,
+        ephemeral: false,
     }
 }
 
@@ -24,6 +25,7 @@ fn large_run_request() -> DaemonRequest {
         command,
         memory_limit_bytes: Some(512 * 1024 * 1024),
         cpu_weight: Some(7500),
+        ephemeral: false,
     }
 }
 

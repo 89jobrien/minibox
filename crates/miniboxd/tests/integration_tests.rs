@@ -161,6 +161,7 @@ async fn test_run_simple_container() {
         vec!["/bin/echo".to_string(), "hello from container".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps,
     )
@@ -207,6 +208,7 @@ async fn test_run_container_with_resource_limits() {
         ],
         Some(128 * 1024 * 1024), // 128MB memory limit
         Some(250),               // CPU weight 250 (quarter of default)
+        false,
         state.clone(),
         deps,
     )
@@ -257,6 +259,7 @@ async fn test_container_removal_cleanup() {
         vec!["/bin/true".to_string()],
         None,
         None,
+        false,
         state.clone(),
         deps.clone(),
     )
@@ -381,6 +384,7 @@ async fn test_complete_container_lifecycle() {
         ],
         Some(256 * 1024 * 1024), // 256MB
         Some(500),               // CPU weight 500
+        false,
         state.clone(),
         deps.clone(),
     )
@@ -453,6 +457,7 @@ async fn test_multiple_concurrent_containers() {
                 ],
                 Some(64 * 1024 * 1024), // 64MB per container
                 None,
+                false,
                 state_clone,
                 deps_clone,
             )
