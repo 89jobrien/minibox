@@ -17,8 +17,6 @@ use minibox_lib::domain::{
     DynImageRegistry, DynResourceLimiter, ResourceConfig,
 };
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
-use nix::sys::signal::{Signal, kill};
-use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -546,8 +544,10 @@ async fn run_inner(
 }
 
 /// Block until the container PID exits, then update its state in the daemon.
+#[cfg(unix)]
 fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
     use nix::sys::wait::{WaitStatus, waitpid};
+    use nix::unistd::Pid;
     let nix_pid = Pid::from_raw(pid as i32);
     match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
@@ -579,6 +579,16 @@ fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
     }
 }
 
+#[cfg(windows)]
+fn daemon_wait_for_exit(_pid: u32, _id: &str, _state: Arc<DaemonState>) {
+    // No-op on Windows. Container stays "Running" until explicit stop/remove.
+}
+
+#[cfg(not(any(unix, windows)))]
+fn daemon_wait_for_exit(_pid: u32, _id: &str, _state: Arc<DaemonState>) {
+    // No-op on this platform.
+}
+
 // ─── Stop ───────────────────────────────────────────────────────────────────
 
 /// Send SIGTERM to a container, then SIGKILL after 10 seconds if needed.
@@ -596,7 +606,11 @@ pub async fn handle_stop(id: String, state: Arc<DaemonState>) -> DaemonResponse 
     }
 }
 
+#[cfg(unix)]
 async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
+    use nix::sys::signal::{Signal, kill};
+    use nix::unistd::Pid;
+
     let record = state
         .get_container(id)
         .await
@@ -628,6 +642,19 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
 
     state.update_container_state(id, "Stopped").await;
     Ok(())
+}
+
+#[cfg(windows)]
+async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
+    anyhow::bail!(
+        "handle_stop not yet implemented on Windows for container {id} \
+         — use the HCS/WSL2 adapter stop path"
+    )
+}
+
+#[cfg(not(any(unix, windows)))]
+async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
+    anyhow::bail!("handle_stop not supported on this platform for container {id}")
 }
 
 // ─── Remove ─────────────────────────────────────────────────────────────────
