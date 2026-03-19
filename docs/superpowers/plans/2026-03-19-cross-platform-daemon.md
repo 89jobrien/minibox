@@ -1,4 +1,3 @@
-
 ---
 status: done
 completed: "2026-03-19"
