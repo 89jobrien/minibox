@@ -96,6 +96,9 @@ mod wsl2;
 // Network adapters (always available — no platform restrictions)
 pub mod network;
 
+// GitHub Container Registry adapter (cross-platform)
+pub mod ghcr;
+
 // Test doubles (always available for testing)
 pub mod mocks;
 
@@ -121,6 +124,7 @@ pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
 };
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
+pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};
 pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
