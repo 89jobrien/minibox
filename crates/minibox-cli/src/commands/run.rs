@@ -57,7 +57,7 @@ pub async fn execute(
             DaemonResponse::ContainerOutput { stream, data } => {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(&data)
-                    .unwrap_or_default();
+                    .context("failed to decode container output chunk")?;
                 match stream {
                     OutputStreamKind::Stdout => {
                         std::io::stdout().write_all(&bytes)?;
@@ -83,7 +83,7 @@ pub async fn execute(
             }
             other => {
                 eprintln!("run: unexpected response: {other:?}");
-                break;
+                std::process::exit(1);
             }
         }
     }
