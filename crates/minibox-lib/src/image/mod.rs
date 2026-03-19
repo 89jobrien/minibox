@@ -15,7 +15,6 @@ use crate::error::ImageError;
 use crate::image::layer::extract_layer;
 use crate::image::manifest::OciManifest;
 use anyhow::Context;
-use std::io::Read;
 use std::path::PathBuf;
 use tracing::{debug, info};
 
@@ -113,12 +112,17 @@ impl ImageStore {
     /// `data_reader` is consumed and its contents are extracted into
     /// `{layers_dir}/{digest_key}/`. The digest is NOT verified here -- call
     /// [`layer::verify_digest`] before passing data if you need verification.
-    pub fn store_layer<R: Read>(
+    ///
+    /// The extraction is atomic: data is written to a `.tmp` sibling directory
+    /// first, then renamed to the final destination. If extraction fails the
+    /// temp directory is removed, so the destination is never left partially
+    /// populated.
+    pub fn store_layer<R: std::io::Read>(
         &self,
         name: &str,
         tag: &str,
         digest: &str,
-        mut data_reader: R,
+        data_reader: R,
     ) -> anyhow::Result<PathBuf> {
         let digest_key = digest.replace(':', "_");
         let dest = self.layers_dir(name, tag)?.join(&digest_key);
@@ -128,22 +132,48 @@ impl ImageStore {
             return Ok(dest);
         }
 
-        std::fs::create_dir_all(&dest).map_err(|source| ImageError::StoreWrite {
-            path: dest.display().to_string(),
+        // Extract into a sibling temp directory, then atomically rename.
+        // This ensures dest is always either absent or fully written.
+        let tmp = dest.with_extension("tmp");
+
+        // Clean up any stale tmp from a prior crash.
+        if tmp.exists() {
+            std::fs::remove_dir_all(&tmp).map_err(|source| ImageError::StoreWrite {
+                path: tmp.display().to_string(),
+                source,
+            })?;
+        }
+
+        std::fs::create_dir_all(&tmp).map_err(|source| ImageError::StoreWrite {
+            path: tmp.display().to_string(),
             source,
         })?;
 
-        // Read all bytes (needed for the extractor which needs full data).
-        let mut buf = Vec::new();
-        data_reader
-            .read_to_end(&mut buf)
-            .map_err(|source| ImageError::StoreRead {
-                path: digest.to_owned(),
-                source,
-            })?;
-
-        extract_layer(buf.as_slice(), &dest)
-            .with_context(|| format!("extracting layer {digest} to {dest:?}"))?;
+        match extract_layer(data_reader, &tmp)
+            .with_context(|| format!("extracting layer {digest} to {tmp:?}"))
+        {
+            Ok(()) => {
+                match std::fs::rename(&tmp, &dest) {
+                    Ok(()) => {}
+                    Err(_) if dest.exists() => {
+                        // Duplicate-digest race: another task finished first. Clean up our tmp.
+                        std::fs::remove_dir_all(&tmp).ok();
+                    }
+                    Err(source) => {
+                        std::fs::remove_dir_all(&tmp).ok();
+                        return Err(ImageError::StoreWrite {
+                            path: dest.display().to_string(),
+                            source,
+                        }
+                        .into());
+                    }
+                }
+            }
+            Err(e) => {
+                std::fs::remove_dir_all(&tmp).ok(); // best-effort cleanup
+                return Err(e);
+            }
+        }
 
         info!("stored layer {} at {:?}", digest, dest);
         Ok(dest)
@@ -252,5 +282,105 @@ impl ImageStore {
                 source,
             })
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::{Compression, write::GzEncoder};
+    use tar::{Builder, Header};
+    use tempfile::TempDir;
+
+    fn make_tar_gz(filename: &str, content: &[u8]) -> Vec<u8> {
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path(filename).unwrap();
+        h.set_size(content.len() as u64);
+        h.set_mode(0o644);
+        h.set_cksum();
+        ar.append(&h, content).unwrap();
+        ar.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[test]
+    fn store_layer_dest_exists_after_success() {
+        let base = TempDir::new().unwrap();
+        let store = ImageStore::new(base.path()).unwrap();
+        let data = make_tar_gz("hello.txt", b"world");
+        let digest = "sha256:aabbccdd";
+
+        let dest = store
+            .store_layer(
+                "library_alpine",
+                "latest",
+                digest,
+                std::io::Cursor::new(&data),
+            )
+            .unwrap();
+
+        assert!(dest.exists(), "dest should exist after successful store");
+        assert!(
+            dest.join("hello.txt").exists(),
+            "file should be inside dest"
+        );
+
+        // tmp dir should be gone
+        let tmp = dest.with_extension("tmp");
+        assert!(!tmp.exists(), "tmp dir should be cleaned up");
+    }
+
+    #[test]
+    fn store_layer_no_dest_after_bad_data() {
+        let base = TempDir::new().unwrap();
+        let store = ImageStore::new(base.path()).unwrap();
+
+        // Invalid tar.gz data
+        let err = store
+            .store_layer(
+                "library_alpine",
+                "latest",
+                "sha256:bad",
+                std::io::Cursor::new(b"not a tar"),
+            )
+            .unwrap_err();
+
+        assert!(
+            err.to_string().to_lowercase().contains("extract")
+                || err.to_string().contains("failed"),
+            "expected extraction error, got: {err}"
+        );
+
+        // dest must not exist (no partial layer dir)
+        let digest_key = "sha256_bad";
+        let dest = store
+            .base_dir
+            .join("library_alpine")
+            .join("latest")
+            .join("layers")
+            .join(digest_key);
+        assert!(
+            !dest.exists(),
+            "dest must not exist after failed extraction"
+        );
+    }
+
+    #[test]
+    fn store_layer_idempotent_if_dest_exists() {
+        let base = TempDir::new().unwrap();
+        let store = ImageStore::new(base.path()).unwrap();
+        let data = make_tar_gz("f.txt", b"content");
+        let digest = "sha256:idempotent";
+
+        let dest1 = store
+            .store_layer("img", "v1", digest, std::io::Cursor::new(&data))
+            .unwrap();
+        let dest2 = store
+            .store_layer("img", "v1", digest, std::io::Cursor::new(&data))
+            .unwrap();
+
+        assert_eq!(dest1, dest2);
+        assert!(dest1.exists());
     }
 }
