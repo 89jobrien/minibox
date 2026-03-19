@@ -67,6 +67,15 @@ just test-integration   # cgroup tests, Linux+root
 just test-e2e           # daemon+CLI tests, Linux+root
 just doctor             # preflight capability check
 
+# xtask (used directly by CI and just targets)
+cargo xtask pre-commit      # fmt-check + lint + release build (macOS-safe)
+cargo xtask prepush         # nextest + llvm-cov coverage
+cargo xtask test-unit       # all unit + conformance tests
+cargo xtask test-e2e-suite  # daemon+CLI e2e tests (Linux, root)
+cargo xtask nuke-test-state # kill orphans, unmount overlays, clean cgroups/tmp
+cargo xtask clean-artifacts # remove non-critical build outputs
+cargo xtask bench           # run benchmark binary
+
 # Run benchmarks (minibox-lib only)
 cargo bench -p minibox-lib          # protocol codec encode/decode
 ```
@@ -367,9 +376,6 @@ Override runtime paths (useful for testing and non-standard deployments):
 
 Global minibox skills available across all projects:
 
-- `minibox:build-test`: Build automation and testing workflows
-- `minibox:runtime`: Container debugging and daemon operations
-- `minibox:setup`: Environment configuration and kernel feature verification
-- `minibox:architecture`: Codebase navigation and component details
+- `mbx:minibox-ci`: CI operations — self-hosted runner management, GHA diagnostics, xtask gates
 
-Invoke with `/` prefix, e.g., `/minibox:setup` or `/minibox:runtime`.
+Invoke with `/` prefix, e.g., `/mbx:minibox-ci`.
