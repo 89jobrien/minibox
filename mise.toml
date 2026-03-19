@@ -1,1 +1,4 @@
+[tools]
+rust = "1.88.0"
+
 [tasks]

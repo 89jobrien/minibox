@@ -21,6 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: xtask unit tests
-        run: cargo xtask test-unit
+        run: mise exec -- cargo xtask test-unit
       - name: miniboxd unit tests
-        run: ~/.cargo/bin/cargo nextest run -p miniboxd --lib
+        run: mise exec -- cargo nextest run -p miniboxd --lib
