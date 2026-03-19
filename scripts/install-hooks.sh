@@ -22,7 +22,7 @@ chmod +x .git/hooks/pre-commit
 cat > .git/hooks/pre-push << 'EOF'
 #!/bin/sh
 echo "Running pre-push checks..."
-just nextest
+just prepush
 EOF
 
 chmod +x .git/hooks/pre-push
@@ -60,7 +60,7 @@ echo "Git hooks installed successfully!"
 echo
 echo "Installed hooks:"
 echo "  - pre-commit: fmt-check + lint + test-unit"
-echo "  - pre-push:   nextest (fast, reuses pre-commit artifacts)"
+echo "  - pre-push:   nextest + coverage + flamegraph"
 echo "  - commit-msg: conventional commit format (warning only)"
 echo
 echo "To bypass hooks (not recommended):"
