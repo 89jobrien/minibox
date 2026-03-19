@@ -110,6 +110,26 @@ impl AdapterSuite {
     }
 }
 
+/// Resolve the image/container data directory based on effective UID.
+///
+/// Resolution order:
+/// 1. `MINIBOX_DATA_DIR` env var (explicit override)
+/// 2. `~/.mbx/cache/` if uid is non-root
+/// 3. `/var/lib/minibox/` if uid is root
+#[cfg(target_os = "linux")]
+fn resolve_data_dir_for_uid(uid: u32) -> std::path::PathBuf {
+    if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
+        return std::path::PathBuf::from(explicit);
+    }
+    if uid == 0 {
+        std::path::PathBuf::from("/var/lib/minibox")
+    } else {
+        std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".mbx/cache"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/minibox"))
+    }
+}
+
 /// Move the current daemon process into a `supervisor` leaf cgroup.
 ///
 /// cgroups v2 enforces the "no internal process" rule: a cgroup that has child
@@ -246,25 +266,31 @@ async fn main() -> Result<()> {
         migrate_to_supervisor_cgroup();
     }
 
-    // ── Resolve paths ────────────────────────────────────────────────────
-    let data_dir =
-        std::env::var("MINIBOX_DATA_DIR").unwrap_or_else(|_| "/var/lib/minibox".to_string());
+    // ── Resolve paths (configurable via env vars) ───────────────────────
+    let uid = nix::unistd::getuid().as_raw();
+    let data_dir = resolve_data_dir_for_uid(uid);
     let run_dir = std::env::var("MINIBOX_RUN_DIR").unwrap_or_else(|_| DEFAULT_RUN_DIR.to_string());
 
-    let images_dir = format!("{data_dir}/images");
-    let containers_dir = format!("{data_dir}/containers");
+    let images_dir = data_dir.join("images");
+    let containers_dir = data_dir.join("containers");
     let run_containers_dir = format!("{run_dir}/containers");
     let socket_path_str =
         std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
 
     // ── Directories ──────────────────────────────────────────────────────
-    for dir in &[&images_dir, &containers_dir, &run_dir, &run_containers_dir] {
-        std::fs::create_dir_all(dir).with_context(|| format!("creating directory {dir}"))?;
+    for dir in &[
+        images_dir.as_path(),
+        containers_dir.as_path(),
+        Path::new(&run_dir),
+        Path::new(&run_containers_dir),
+    ] {
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("creating directory {}", dir.display()))?;
     }
 
     // ── Shared state ─────────────────────────────────────────────────────
     let image_store = ImageStore::new(&images_dir).context("creating image store")?;
-    let state = Arc::new(DaemonState::new(image_store, Path::new(&data_dir)));
+    let state = Arc::new(DaemonState::new(image_store, &data_dir));
     state.load_from_disk().await;
     info!("state loaded from disk");
 
@@ -283,7 +309,7 @@ async fn main() -> Result<()> {
                 resource_limiter: Arc::new(CgroupV2Limiter::new()),
                 runtime: Arc::new(LinuxNamespaceRuntime::new()),
                 network_provider: Arc::new(NoopNetwork::new()),
-                containers_base: PathBuf::from(&containers_dir),
+                containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
         }
@@ -300,7 +326,7 @@ async fn main() -> Result<()> {
                 resource_limiter: Arc::new(NoopLimiter::new()),
                 runtime: Arc::new(proot_runtime),
                 network_provider: Arc::new(NoopNetwork::new()),
-                containers_base: PathBuf::from(&containers_dir),
+                containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
         }
@@ -310,7 +336,7 @@ async fn main() -> Result<()> {
             resource_limiter: Arc::new(ColimaLimiter::new()),
             runtime: Arc::new(ColimaRuntime::new()),
             network_provider: Arc::new(NoopNetwork::new()),
-            containers_base: PathBuf::from(&containers_dir),
+            containers_base: containers_dir.clone(),
             run_containers_base: PathBuf::from(&run_containers_dir),
         }),
     };
@@ -388,4 +414,52 @@ async fn main() -> Result<()> {
     }
     info!("miniboxd stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // SAFETY: env var mutations are serialised with ENV_LOCK
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn resolve_data_dir_non_root_uses_home() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            std::env::remove_var("MINIBOX_DATA_DIR");
+            std::env::set_var("HOME", "/home/testuser");
+        }
+        let dir = resolve_data_dir_for_uid(1000);
+        unsafe {
+            std::env::remove_var("HOME");
+        }
+        assert_eq!(dir, PathBuf::from("/home/testuser/.mbx/cache"));
+    }
+
+    #[test]
+    fn resolve_data_dir_root_uses_var_lib() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            std::env::remove_var("MINIBOX_DATA_DIR");
+        }
+        let dir = resolve_data_dir_for_uid(0);
+        assert_eq!(dir, PathBuf::from("/var/lib/minibox"));
+    }
+
+    #[test]
+    fn resolve_data_dir_env_override_takes_precedence() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            std::env::set_var("MINIBOX_DATA_DIR", "/custom/path");
+        }
+        let dir_non_root = resolve_data_dir_for_uid(1000);
+        let dir_root = resolve_data_dir_for_uid(0);
+        unsafe {
+            std::env::remove_var("MINIBOX_DATA_DIR");
+        }
+        assert_eq!(dir_non_root, PathBuf::from("/custom/path"));
+        assert_eq!(dir_root, PathBuf::from("/custom/path"));
+    }
 }
