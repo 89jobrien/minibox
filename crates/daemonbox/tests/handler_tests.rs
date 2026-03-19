@@ -10,6 +10,37 @@ use minibox_lib::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+/// Helper that calls `handle_run` via a channel and returns the first response.
+///
+/// `handle_run` now sends responses via a channel rather than returning them,
+/// so tests use this wrapper to recover the single response for non-ephemeral runs.
+#[allow(clippy::too_many_arguments)]
+async fn handle_run_once(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    ephemeral: bool,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        ephemeral,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    rx.recv().await.expect("handler sent no response")
+}
+
 /// Helper to create test dependencies with mocks.
 fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
@@ -120,7 +151,7 @@ async fn test_handle_run_with_cached_image() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec!["/bin/sh".to_string()],
@@ -160,7 +191,7 @@ async fn test_handle_run_pulls_uncached_image() {
     let deps = create_test_deps_with_dir(&temp_dir); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         None, // defaults to "latest"
         vec!["/bin/echo".to_string(), "hello".to_string()],
@@ -201,7 +232,7 @@ async fn test_handle_run_filesystem_setup_failure() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         None,
         vec!["/bin/sh".to_string()],
@@ -234,7 +265,7 @@ async fn test_handle_run_resource_limiter_failure() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         None,
         vec!["/bin/sh".to_string()],
@@ -267,7 +298,7 @@ async fn test_handle_run_runtime_spawn_failure() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         None,
         vec!["/bin/sh".to_string()],
@@ -305,7 +336,7 @@ async fn test_handle_remove_success() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // First create a container
-    let create_response = handler::handle_run(
+    let create_response = handle_run_once(
         "alpine".to_string(),
         None,
         vec!["/bin/sh".to_string()],
@@ -382,7 +413,7 @@ async fn test_handle_remove_running_container() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // Create a container
-    let create_response = handler::handle_run(
+    let create_response = handle_run_once(
         "alpine".to_string(),
         None,
         vec!["/bin/sh".to_string()],
@@ -437,7 +468,7 @@ async fn test_full_container_lifecycle() {
     assert!(matches!(pull_response, DaemonResponse::Success { .. }));
 
     // 2. Run container with resource limits
-    let run_response = handler::handle_run(
+    let run_response = handle_run_once(
         "nginx".to_string(),
         Some("alpine".to_string()),
         vec![

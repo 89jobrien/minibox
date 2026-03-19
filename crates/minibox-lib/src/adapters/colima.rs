@@ -16,7 +16,7 @@
 use crate::adapt;
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    ResourceConfig, ResourceLimiter, RuntimeCapabilities,
+    ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
 };
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -477,7 +477,7 @@ impl ContainerRuntime for ColimaRuntime {
         }
     }
 
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         // Serialize spawn config to JSON for passing to Lima VM
         let config_json = serde_json::to_string(&SpawnRequest {
             rootfs: config.rootfs.to_string_lossy().to_string(),
@@ -517,7 +517,10 @@ impl ContainerRuntime for ColimaRuntime {
             .parse()
             .map_err(|e| anyhow!("Invalid PID returned: {e}"))?;
 
-        Ok(pid)
+        Ok(SpawnResult {
+            pid,
+            output_reader: None,
+        })
     }
 }
 
@@ -648,10 +651,11 @@ mod tests {
             env: vec![],
             hostname: "test-container".to_string(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            capture_output: false,
         };
 
-        let pid = runtime.spawn_process(&config).await.unwrap();
-        assert_eq!(pid, 42);
+        let result = runtime.spawn_process(&config).await.unwrap();
+        assert_eq!(result.pid, 42);
 
         let script = captured.lock().unwrap().clone();
         assert!(

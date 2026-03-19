@@ -18,6 +18,34 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+/// Helper that wraps `handle_run` with a channel, returning the first response.
+#[allow(clippy::too_many_arguments)]
+async fn handle_run_once(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    ephemeral: bool,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        ephemeral,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    rx.recv().await.expect("handler sent no response")
+}
+
 /// Create a `HandlerDependencies` with mocks, using `temp_dir` for path fields.
 fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     mock_deps_with_registry(MockRegistry::new(), temp_dir)
@@ -184,12 +212,13 @@ mod conformance {
             env: vec![],
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
+            capture_output: false,
         };
 
         let result = runtime.spawn_process(&config).await;
         assert!(result.is_ok(), "Runtime must spawn process successfully");
 
-        let pid = result.unwrap();
+        let pid = result.unwrap().pid;
         assert!(pid > 0, "Runtime must return valid PID (> 0)");
     }
 
@@ -203,10 +232,11 @@ mod conformance {
             env: vec![],
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
+            capture_output: false,
         };
 
-        let pid1 = runtime.spawn_process(&config).await.unwrap();
-        let pid2 = runtime.spawn_process(&config).await.unwrap();
+        let pid1 = runtime.spawn_process(&config).await.unwrap().pid;
+        let pid2 = runtime.spawn_process(&config).await.unwrap().pid;
 
         assert_ne!(pid1, pid2, "Runtime must return unique PIDs");
         assert!(pid2 > pid1, "Runtime PIDs should increment");
@@ -245,7 +275,7 @@ mod conformance {
         );
         let state = mock_state(&temp_dir);
 
-        let response = handler::handle_run(
+        let response = handle_run_once(
             "alpine".to_string(),
             Some("latest".to_string()),
             vec!["/bin/sh".to_string()],
@@ -273,7 +303,7 @@ mod conformance {
         let state = mock_state(&temp_dir);
 
         // Create container first
-        let create_response = handler::handle_run(
+        let create_response = handle_run_once(
             "alpine".to_string(),
             Some("latest".to_string()),
             vec!["/bin/sh".to_string()],

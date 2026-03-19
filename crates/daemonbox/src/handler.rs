@@ -22,6 +22,7 @@ use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -73,6 +74,10 @@ pub struct HandlerDependencies {
 // ─── Run ────────────────────────────────────────────────────────────────────
 
 /// Create and start a new container from `image:tag`, executing `command`.
+///
+/// Responses are sent via `tx`.  Non-ephemeral runs send exactly one message.
+/// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
+/// followed by one terminal `ContainerStopped` message.
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_run(
     image: String,
@@ -80,11 +85,29 @@ pub async fn handle_run(
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
-    _ephemeral: bool,
+    #[allow(unused_variables)] ephemeral: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
-) -> DaemonResponse {
-    match run_inner(
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    #[cfg(target_os = "linux")]
+    if ephemeral {
+        handle_run_streaming(
+            image,
+            tag,
+            command,
+            memory_limit_bytes,
+            cpu_weight,
+            state,
+            deps,
+            tx,
+        )
+        .await;
+        return;
+    }
+
+    // Non-ephemeral (or non-Linux): single response.
+    let response = match run_inner(
         image,
         tag,
         command,
@@ -102,7 +125,262 @@ pub async fn handle_run(
                 message: format!("{e:#}"),
             }
         }
+    };
+    let _ = tx.send(response).await;
+}
+
+/// Streaming ephemeral run: sends `ContainerOutput` chunks then `ContainerStopped`.
+///
+/// The container stdout+stderr are forwarded via the channel until EOF, then
+/// the exit code is reported.
+#[cfg(target_os = "linux")]
+async fn handle_run_streaming(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    use minibox_lib::protocol::OutputStreamKind;
+    use std::os::fd::IntoRawFd;
+
+    // Build the container ID and rootfs via the shared inner setup, but we need
+    // capture_output=true. We inline a variant of run_inner here.
+    let result = run_inner_capture(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        Arc::clone(&state),
+        Arc::clone(&deps),
+    )
+    .await;
+
+    let (container_id, pid, output_reader) = match result {
+        Ok(triple) => triple,
+        Err(e) => {
+            error!("handle_run_streaming setup error: {e:#}");
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("{e:#}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    // Spawn blocking task to drain the pipe and forward chunks.
+    let tx_clone = tx.clone();
+    let reader_raw = output_reader.into_raw_fd();
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+
+        // SAFETY: we own this fd from the pipe created in spawn_container_process.
+        let mut file = unsafe { std::fs::File::from_raw_fd(reader_raw) };
+        let mut buf = [0u8; 4096];
+        loop {
+            match file.read(&mut buf) {
+                Ok(0) => break, // EOF — child exited and closed its write end.
+                Ok(n) => {
+                    use base64::Engine;
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    let _ = tx_clone.blocking_send(DaemonResponse::ContainerOutput {
+                        stream: OutputStreamKind::Stdout,
+                        data: encoded,
+                    });
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    // Wait for the child process to exit.
+    let exit_code = wait_for_pid_async(pid).await;
+
+    // Auto-remove ephemeral container state.
+    state.remove_container(&container_id).await;
+
+    let _ = tx
+        .send(DaemonResponse::ContainerStopped { exit_code })
+        .await;
+}
+
+/// Like `run_inner` but returns `(container_id, pid, output_reader)` with
+/// `capture_output = true` in the spawn config.
+///
+/// Only compiled on Linux because the output pipe requires Linux primitives.
+#[cfg(target_os = "linux")]
+async fn run_inner_capture(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> Result<(String, u32, std::os::fd::OwnedFd)> {
+    let tag = tag.unwrap_or_else(|| "latest".to_string());
+
+    let full_image = if image.contains('/') {
+        image.clone()
+    } else {
+        format!("library/{image}")
+    };
+
+    if !deps.registry.has_image(&full_image, &tag).await {
+        info!("image {full_image}:{tag} not cached, pulling…");
+        deps.registry
+            .pull_image(&full_image, &tag)
+            .await
+            .map_err(|e| DomainError::ImagePullFailed {
+                image: full_image.clone(),
+                tag: tag.clone(),
+                source: e,
+            })?;
     }
+
+    let layer_dirs = deps.registry.get_image_layers(&full_image, &tag)?;
+    if layer_dirs.is_empty() {
+        return Err(DomainError::EmptyImage {
+            name: full_image.clone(),
+            tag: tag.clone(),
+        }
+        .into());
+    }
+
+    let id = Uuid::new_v4()
+        .to_string()
+        .replace('-', "")
+        .chars()
+        .take(16)
+        .collect::<String>();
+
+    if state.get_container(&id).await.is_some() {
+        return Err(DomainError::InvalidConfig(format!(
+            "container ID collision (extremely rare): {id}"
+        ))
+        .into());
+    }
+
+    let container_dir = deps.containers_base.join(&id);
+    let run_dir = deps.run_containers_base.join(&id);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.recursive(true);
+        builder.create(&container_dir)?;
+        builder.create(&run_dir)?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::create_dir_all(&container_dir)?;
+        std::fs::create_dir_all(&run_dir)?;
+    }
+
+    let merged_dir = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+
+    let resource_config = ResourceConfig {
+        memory_limit_bytes,
+        cpu_weight,
+        pids_max: Some(1024),
+        io_max_bytes_per_sec: None,
+    };
+    let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir = PathBuf::from(cgroup_dir_str);
+
+    let image_label = format!("{image}:{tag}");
+    let command_str = command.join(" ");
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: id.clone(),
+            image: image_label,
+            command: command_str,
+            state: "Created".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: merged_dir.clone(),
+        cgroup_path: cgroup_dir.clone(),
+    };
+    state.add_container(record).await;
+
+    let spawn_command = command
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "/bin/sh".to_string());
+    let spawn_args = command.iter().skip(1).cloned().collect();
+    let spawn_config = ContainerSpawnConfig {
+        rootfs: merged_dir.clone(),
+        command: spawn_command,
+        args: spawn_args,
+        env: vec![
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+            "TERM=xterm".to_string(),
+        ],
+        cgroup_path: cgroup_dir.clone(),
+        hostname: format!("minibox-{}", &id[..8]),
+        capture_output: true,
+    };
+
+    let _spawn_permit = state
+        .spawn_semaphore
+        .acquire()
+        .await
+        .expect("semaphore closed");
+
+    let spawn_result = tokio::task::spawn_blocking({
+        let runtime = Arc::clone(&deps.runtime);
+        let cfg = spawn_config.clone();
+        move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("one-shot runtime")
+                .block_on(runtime.spawn_process(&cfg))
+        }
+    })
+    .await??;
+
+    let pid = spawn_result.pid;
+    let output_reader = spawn_result.output_reader.ok_or_else(|| {
+        anyhow::anyhow!("capture_output=true but runtime returned no output_reader")
+    })?;
+
+    // Write PID file and update state.
+    let pid_file = deps.run_containers_base.join(&id).join("pid");
+    let _ = std::fs::write(&pid_file, pid.to_string());
+    state.set_container_pid(&id, pid).await;
+
+    Ok((id, pid, output_reader))
+}
+
+/// Wait for a child process to exit and return its exit code.
+#[cfg(target_os = "linux")]
+async fn wait_for_pid_async(pid: u32) -> i32 {
+    tokio::task::spawn_blocking(move || {
+        use nix::sys::wait::{WaitStatus, waitpid};
+        let nix_pid = nix::unistd::Pid::from_raw(pid as i32);
+        match waitpid(nix_pid, None) {
+            Ok(WaitStatus::Exited(_, code)) => code,
+            Ok(WaitStatus::Signaled(_, sig, _)) => -(sig as i32),
+            Ok(_) => 0,
+            Err(e) => {
+                warn!(pid = pid, error = %e, "wait_for_pid_async: waitpid failed");
+                -1
+            }
+        }
+    })
+    .await
+    .unwrap_or(-1)
 }
 
 async fn run_inner(
@@ -233,6 +511,7 @@ async fn run_inner(
         ],
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
+        capture_output: false,
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -252,7 +531,8 @@ async fn run_inner(
     tokio::task::spawn(async move {
         // Permit is held until this task completes (via _spawn_permit drop)
         match runtime_clone.spawn_process(&spawn_config).await {
-            Ok(pid) => {
+            Ok(spawn_result) => {
+                let pid = spawn_result.pid;
                 info!("container {id_clone} started with PID {pid}");
 
                 // Write PID file.

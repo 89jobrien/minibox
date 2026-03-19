@@ -109,40 +109,66 @@ pub async fn handle_connection(
 
         debug!("received request: {} bytes", trimmed.len());
 
-        let response = match serde_json::from_str::<DaemonRequest>(trimmed) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+
+        match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
                 info!("dispatching request: {request:?}");
-                dispatch(request, Arc::clone(&state), Arc::clone(&deps)).await
+                let state_c = Arc::clone(&state);
+                let deps_c = Arc::clone(&deps);
+                tokio::spawn(async move {
+                    dispatch(request, state_c, deps_c, tx).await;
+                });
             }
             Err(e) => {
                 warn!("failed to parse request '{trimmed}': {e}");
-                DaemonResponse::Error {
-                    message: format!("invalid request: {e}"),
-                }
+                let _ = tx
+                    .send(DaemonResponse::Error {
+                        message: format!("invalid request: {e}"),
+                    })
+                    .await;
             }
-        };
+        }
 
-        let mut response_json = serde_json::to_string(&response).context("serializing response")?;
-        response_json.push('\n');
+        while let Some(response) = rx.recv().await {
+            let terminal = is_terminal_response(&response);
+            let mut response_json =
+                serde_json::to_string(&response).context("serializing response")?;
+            response_json.push('\n');
 
-        debug!("sending response: {}", response_json.trim_end());
+            debug!("sending response: {}", response_json.trim_end());
 
-        writer
-            .write_all(response_json.as_bytes())
-            .await
-            .context("writing response")?;
-        writer.flush().await.context("flushing response")?;
+            writer
+                .write_all(response_json.as_bytes())
+                .await
+                .context("writing response")?;
+            writer.flush().await.context("flushing response")?;
+
+            if terminal {
+                break;
+            }
+        }
     }
 
     Ok(())
 }
 
-/// Route a parsed `DaemonRequest` to the appropriate handler.
+/// Returns true for response types that terminate a request/response exchange.
+///
+/// Non-streaming responses always terminate immediately.  Streaming responses
+/// (`ContainerOutput`) continue until `ContainerStopped` (which is terminal).
+fn is_terminal_response(r: &DaemonResponse) -> bool {
+    !matches!(r, DaemonResponse::ContainerOutput { .. })
+}
+
+/// Route a parsed `DaemonRequest` to the appropriate handler, sending
+/// responses through `tx`.
 async fn dispatch(
     request: DaemonRequest,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
-) -> DaemonResponse {
+    tx: tokio::sync::mpsc::Sender<DaemonResponse>,
+) {
     match request {
         DaemonRequest::Run {
             image,
@@ -161,12 +187,25 @@ async fn dispatch(
                 ephemeral,
                 state,
                 deps,
+                tx,
             )
-            .await
+            .await;
         }
-        DaemonRequest::Stop { id } => handler::handle_stop(id, state).await,
-        DaemonRequest::Remove { id } => handler::handle_remove(id, state, deps).await,
-        DaemonRequest::List => handler::handle_list(state).await,
-        DaemonRequest::Pull { image, tag } => handler::handle_pull(image, tag, state, deps).await,
+        DaemonRequest::Stop { id } => {
+            let response = handler::handle_stop(id, state).await;
+            let _ = tx.send(response).await;
+        }
+        DaemonRequest::Remove { id } => {
+            let response = handler::handle_remove(id, state, deps).await;
+            let _ = tx.send(response).await;
+        }
+        DaemonRequest::List => {
+            let response = handler::handle_list(state).await;
+            let _ = tx.send(response).await;
+        }
+        DaemonRequest::Pull { image, tag } => {
+            let response = handler::handle_pull(image, tag, state, deps).await;
+            let _ = tx.send(response).await;
+        }
     }
 }

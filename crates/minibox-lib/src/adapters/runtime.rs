@@ -7,7 +7,7 @@
 use crate::adapt;
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
-use crate::domain::{ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities};
+use crate::domain::{ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult};
 use anyhow::Result;
 use async_trait::async_trait;
 use tracing::debug;
@@ -103,11 +103,13 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
         }
     }
 
-    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<u32> {
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         debug!(
             "spawning container process: command={}, rootfs={:?}",
             config.command, config.rootfs
         );
+
+        let capture_output = config.capture_output;
 
         // Convert domain ContainerSpawnConfig to infrastructure ContainerConfig
         let container_config = ContainerConfig {
@@ -118,15 +120,17 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
             namespace_config: NamespaceConfig::all(), // All namespaces enabled
             cgroup_path: config.cgroup_path.clone(),
             hostname: config.hostname.clone(),
+            capture_output,
         };
 
         // IMPORTANT: spawn_container_process uses blocking syscalls (clone/fork)
         // We must run it in a blocking thread to avoid blocking the async runtime
-        let pid = tokio::task::spawn_blocking(move || spawn_container_process(container_config))
-            .await??; // First ? for join error, second ? for spawn error
+        let spawn_result =
+            tokio::task::spawn_blocking(move || spawn_container_process(container_config))
+                .await??; // First ? for join error, second ? for spawn error
 
-        debug!("container process spawned with PID {}", pid);
-        Ok(pid)
+        debug!("container process spawned with PID {}", spawn_result.pid);
+        Ok(spawn_result)
     }
 }
 
