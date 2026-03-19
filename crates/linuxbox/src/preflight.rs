@@ -106,8 +106,31 @@ pub fn format_report(caps: &HostCapabilities) -> String {
             .unwrap_or_else(|| "N/A".to_string())
     ));
     lines.push(format!("     minibox.slice: {}", caps.minibox_slice_active));
+    lines.push(format!("     data dir:    {}", active_data_dir().display()));
 
     lines.join("\n")
+}
+
+/// Resolve the active data directory using the same logic as the daemon.
+///
+/// Checks `MINIBOX_DATA_DIR` first, then falls back to `/var/lib/minibox`
+/// for root or `~/.mbx/cache` for non-root users.
+fn active_data_dir() -> std::path::PathBuf {
+    if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
+        return std::path::PathBuf::from(explicit);
+    }
+    #[cfg(unix)]
+    let is_root = unsafe { libc::geteuid() == 0 };
+    #[cfg(not(unix))]
+    let is_root = false;
+
+    if is_root {
+        std::path::PathBuf::from("/var/lib/minibox")
+    } else {
+        std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".mbx/cache"))
+            .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/minibox"))
+    }
 }
 
 // ---------------------------------------------------------------------------
