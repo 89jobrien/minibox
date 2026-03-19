@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-03-16"
+branch: main
+note: systemd unit, tmpfiles, install script all in ops/
+---
 # Ops Runtime Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

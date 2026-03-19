@@ -1,3 +1,7 @@
+---
+status: archived
+note: Never built; manual protocol tests used instead
+---
 # Macro: Protocol Test Utilities
 
 **Date:** 2026-03-17

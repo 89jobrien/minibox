@@ -1,4 +1,10 @@
 
+---
+status: done
+completed: "2026-03-19"
+branch: feat/cross-platform-daemon
+note: Platform dispatch, macbox/winbox, ServerListener all shipped
+---
 # Cross-Platform Daemon Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

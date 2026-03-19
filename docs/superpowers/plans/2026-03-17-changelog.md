@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-03-17"
+branch: main
+note: CHANGELOG shipped v0.0.1–v0.0.10
+---
 # CHANGELOG Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.

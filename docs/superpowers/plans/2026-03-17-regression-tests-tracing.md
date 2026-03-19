@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-03-17"
+branch: main
+note: All regression tests shipped, tracing contract finalized
+---
 # Regression Tests & Tracing Level Gating Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
