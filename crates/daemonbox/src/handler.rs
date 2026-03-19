@@ -176,7 +176,7 @@ async fn handle_run_streaming(
     // Spawn blocking task to drain the pipe and forward chunks.
     let tx_clone = tx.clone();
     let reader_raw = output_reader.into_raw_fd();
-    tokio::task::spawn_blocking(move || {
+    let drain_handle = tokio::task::spawn_blocking(move || {
         use std::io::Read;
 
         // SAFETY: we own this fd from the pipe created in spawn_container_process.
@@ -193,13 +193,22 @@ async fn handle_run_streaming(
                         data: encoded,
                     });
                 }
-                Err(_) => break,
+                Err(e) => {
+                    warn!(pid = pid, error = %e, "pipe drain: read error");
+                    break;
+                }
             }
         }
     });
 
     // Wait for the child process to exit.
     let exit_code = wait_for_pid_async(pid).await;
+
+    // Wait for drain to finish before sending ContainerStopped
+    // so all output is flushed before the terminal message.
+    if let Err(e) = drain_handle.await {
+        warn!(pid = pid, "pipe drain task panicked: {:?}", e);
+    }
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
@@ -337,18 +346,7 @@ async fn run_inner_capture(
         .await
         .expect("semaphore closed");
 
-    let spawn_result = tokio::task::spawn_blocking({
-        let runtime = Arc::clone(&deps.runtime);
-        let cfg = spawn_config.clone();
-        move || {
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("one-shot runtime")
-                .block_on(runtime.spawn_process(&cfg))
-        }
-    })
-    .await??;
+    let spawn_result = deps.runtime.spawn_process(&spawn_config).await?;
 
     let pid = spawn_result.pid;
     let output_reader = spawn_result.output_reader.ok_or_else(|| {

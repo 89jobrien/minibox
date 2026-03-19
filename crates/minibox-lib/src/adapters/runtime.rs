@@ -69,10 +69,11 @@ use tracing::debug;
 ///         env: vec!["PATH=/usr/bin".to_string()],
 ///         hostname: "container-abc123".to_string(),
 ///         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/abc123"),
+///         capture_output: false,
 ///     };
 ///
-///     let pid = runtime.spawn_process(&config).await?;
-///     println!("Container started with PID {}", pid);
+///     let spawn_result = runtime.spawn_process(&config).await?;
+///     println!("Container started with PID {}", spawn_result.pid);
 ///
 ///     Ok(())
 /// }
