@@ -12,14 +12,36 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tracing::debug;
 
-/// Default Unix socket path of the running daemon.
-const DEFAULT_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
-
-/// Resolve the daemon socket path.
+/// Resolve the daemon socket path (or Named Pipe name on Windows).
 ///
-/// Checks `MINIBOX_SOCKET_PATH` env var first, falls back to default.
+/// Checks platform-specific env vars first, then falls back to a
+/// platform-appropriate default.
+///
+/// | Platform | Env var               | Default                          |
+/// |----------|-----------------------|----------------------------------|
+/// | Linux    | `MINIBOX_SOCKET_PATH` | `/run/minibox/miniboxd.sock`     |
+/// | macOS    | `MINIBOX_SOCKET_PATH` | `/tmp/minibox/miniboxd.sock`     |
+/// | Windows  | `MINIBOX_PIPE_NAME`   | `\\.\pipe\miniboxd`              |
 fn socket_path() -> String {
-    std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| DEFAULT_SOCKET_PATH.to_string())
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("MINIBOX_SOCKET_PATH")
+            .unwrap_or_else(|_| "/run/minibox/miniboxd.sock".to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var("MINIBOX_SOCKET_PATH")
+            .unwrap_or_else(|_| "/tmp/minibox/miniboxd.sock".to_string())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("MINIBOX_PIPE_NAME").unwrap_or_else(|_| r"\\.\pipe\miniboxd".to_string())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        std::env::var("MINIBOX_SOCKET_PATH")
+            .unwrap_or_else(|_| "/run/minibox/miniboxd.sock".to_string())
+    }
 }
 
 #[cfg(test)]
@@ -35,17 +57,41 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         // SAFETY: single-threaded via ENV_LOCK; no other thread reads this var
         unsafe { std::env::remove_var("MINIBOX_SOCKET_PATH") };
-        assert_eq!(socket_path(), DEFAULT_SOCKET_PATH);
+        #[cfg(not(target_os = "windows"))]
+        unsafe {
+            std::env::remove_var("MINIBOX_PIPE_NAME")
+        };
+        let path = socket_path();
+        // Default varies by platform; verify it contains "minibox" and ends with
+        // a known suffix (sock on Unix, pipe prefix on Windows).
+        #[cfg(target_os = "linux")]
+        assert_eq!(path, "/run/minibox/miniboxd.sock");
+        #[cfg(target_os = "macos")]
+        assert_eq!(path, "/tmp/minibox/miniboxd.sock");
+        #[cfg(target_os = "windows")]
+        assert!(path.starts_with(r"\\.\pipe\"));
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        assert!(path.contains("minibox"));
     }
 
     #[test]
     fn socket_path_returns_env_var_when_set() {
         let _guard = ENV_LOCK.lock().unwrap();
         // SAFETY: single-threaded via ENV_LOCK; no other thread reads this var
-        unsafe { std::env::set_var("MINIBOX_SOCKET_PATH", "/tmp/test-minibox.sock") };
-        let result = socket_path();
-        unsafe { std::env::remove_var("MINIBOX_SOCKET_PATH") };
-        assert_eq!(result, "/tmp/test-minibox.sock");
+        #[cfg(not(target_os = "windows"))]
+        {
+            unsafe { std::env::set_var("MINIBOX_SOCKET_PATH", "/tmp/test-minibox.sock") };
+            let result = socket_path();
+            unsafe { std::env::remove_var("MINIBOX_SOCKET_PATH") };
+            assert_eq!(result, "/tmp/test-minibox.sock");
+        }
+        #[cfg(target_os = "windows")]
+        {
+            unsafe { std::env::set_var("MINIBOX_PIPE_NAME", r"\\.\pipe\miniboxd-test") };
+            let result = socket_path();
+            unsafe { std::env::remove_var("MINIBOX_PIPE_NAME") };
+            assert_eq!(result, r"\\.\pipe\miniboxd-test");
+        }
     }
 }
 
