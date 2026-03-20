@@ -8,6 +8,10 @@ Minibox is a Docker-like container runtime written in Rust featuring daemon/clie
 
 ## Build and Development Commands
 
+### Justfile recipes
+
+Recipes using bash-specific features (arrays, `local`, `declare`, functions) require a `#!/usr/bin/env bash` shebang as the first line — Just defaults to `sh` otherwise.
+
 ### Building
 
 ```bash
@@ -46,8 +50,8 @@ See `TESTING.md` for comprehensive testing strategy and guidelines.
 **Quick reference:**
 
 ```bash
-# On macOS, miniboxd has a compile_error!() guard; minibox-cli does not.
-# Use: cargo test -p minibox-lib && cargo test -p minibox-cli
+# On macOS, miniboxd dispatches to macbox::start() — full workspace builds.
+# Use cargo xtask test-unit for the cross-platform unit test suite.
 
 # Run all tests (requires Linux)
 cargo test --workspace
@@ -88,27 +92,28 @@ cargo bench -p minibox-lib          # protocol codec encode/decode
 - Existing integration: 8 tests (Linux+root)
 - Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`
 
-**macOS quality gates** (`miniboxd` has `compile_error!()` — `--workspace` clippy/test fails):
+**macOS quality gates** (`miniboxd` compiles via `macbox::start()` dispatch — `cargo check --workspace` works):
 
 ```bash
-cargo test -p minibox-lib
-cargo test -p minibox-cli
-cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
 cargo fmt --all --check
+cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo xtask test-unit
 ```
 
 ## Architecture Overview
 
 ### Workspace Structure
 
-Six crates in cargo workspace:
+Eight crates in cargo workspace:
 
 1. **minibox-lib** (library): Core container primitives, image management, shared protocol types
 2. **minibox-macros** (proc-macro): Derive macros used by minibox-lib
 3. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
-4. **miniboxd** (binary): Async daemon entry point (Linux-only; `compile_error!()` on macOS)
-5. **minibox-cli** (binary): CLI client sending commands to daemon
-6. **minibox-bench** (binary): Benchmark harness
+4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
+5. **macbox** (library): macOS daemon implementation (Colima adapter suite)
+6. **winbox** (library): Windows daemon implementation (stub)
+7. **minibox-cli** (binary): CLI client sending commands to daemon
+8. **minibox-bench** (binary): Benchmark harness
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 

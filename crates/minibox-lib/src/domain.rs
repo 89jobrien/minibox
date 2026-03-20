@@ -465,6 +465,33 @@ pub struct SpawnResult {
     pub output_reader: Option<std::convert::Infallible>,
 }
 
+/// A single host-side lifecycle hook command.
+///
+/// Hooks run on the **host** with `CONTAINER_ID` and `CONTAINER_ROOTFS`
+/// set in the environment. Post-exit hooks additionally receive `EXIT_CODE`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct HookSpec {
+    /// Host executable to run (e.g., `"/usr/local/bin/notify.sh"`).
+    pub command: String,
+    /// Arguments passed to the command.
+    pub args: Vec<String>,
+    /// Timeout in seconds before the hook is abandoned. Defaults to 30s.
+    pub timeout_secs: Option<u64>,
+}
+
+/// Pre/post-execution hooks for the container lifecycle.
+///
+/// All hooks run on the **host** — not inside the container.
+/// `pre_exec` hooks run before the container process is cloned;
+/// `post_exit` hooks run after the container process has exited.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ContainerHooks {
+    /// Commands to run on the host before the container process starts.
+    pub pre_exec: Vec<HookSpec>,
+    /// Commands to run on the host after the container process exits.
+    pub post_exit: Vec<HookSpec>,
+}
+
 /// Configuration for spawning a containerized process.
 #[derive(Debug, Clone)]
 pub struct ContainerSpawnConfig {
@@ -483,6 +510,8 @@ pub struct ContainerSpawnConfig {
     /// When `true`, container stdout+stderr are captured to a pipe.
     /// The read end is returned in [`SpawnResult::output_reader`].
     pub capture_output: bool,
+    /// Optional host-side lifecycle hooks.
+    pub hooks: ContainerHooks,
 }
 
 // ---------------------------------------------------------------------------

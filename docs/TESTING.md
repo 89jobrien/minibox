@@ -11,11 +11,11 @@ This document describes the testing strategy for the minibox container runtime.
                  └─────────────┘
             ┌─────────────────────┐
             │ Integration Tests   │  (Real infrastructure)
-            │  ~28 tests          │
+            │  ~24 tests          │
             └─────────────────────┘
        ┌──────────────────────────────┐
        │     Unit + Conformance       │  (Mocks, any platform)
-       │        ~52 tests             │
+       │       ~134 tests             │
        └──────────────────────────────┘
 ```
 
@@ -46,27 +46,27 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 
 ## Test Layers
 
-### 1. Unit + Conformance Tests (~52 tests)
+### 1. Unit + Conformance Tests (~134 tests)
 
 **Requirements:** None (run anywhere)
 
 **Files:**
 
-- `crates/miniboxd/tests/handler_tests.rs` — handler logic with mock adapters
-- `crates/miniboxd/tests/conformance_tests.rs` — trait contract verification with mocks
-- `crates/minibox-lib/src/protocol.rs` — protocol serialization
-- `crates/minibox-lib/src/preflight.rs` — kernel version parsing
+- `crates/daemonbox/tests/handler_tests.rs` — handler logic with mock adapters (12 tests)
+- `crates/daemonbox/tests/conformance_tests.rs` — trait contract verification with mocks (16 tests)
+- `crates/minibox-lib/src/**` — ~95 unit tests (protocol, image, adapters, preflight)
+- `crates/minibox-cli/src/**` — 11 unit tests
 
 **Run:** `just test-unit`
 
-### 2. Integration Tests (~28 tests)
+### 2. Integration Tests (~24 tests)
 
 **Requirements:** Linux kernel 5.0+, root, cgroups v2, Docker Hub access
 
 **Files:**
 
-- `crates/miniboxd/tests/cgroup_tests.rs` — ResourceLimiter trait against real cgroupfs
-- `crates/miniboxd/tests/integration_tests.rs` — handler-level tests with real infrastructure
+- `crates/miniboxd/tests/cgroup_tests.rs` — ResourceLimiter trait against real cgroupfs (16 tests)
+- `crates/miniboxd/tests/integration_tests.rs` — handler-level tests with real infrastructure (8 tests)
 
 **Run:** `just test-integration`
 
@@ -84,7 +84,7 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 
 **Files:**
 
-- `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
+- `crates/daemonbox/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
 
 **Run:** `just test-e2e-suite`
 

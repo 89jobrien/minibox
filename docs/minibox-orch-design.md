@@ -1,3 +1,8 @@
+---
+status: future
+note: Design for minibox-orch crate (self-evolving agent orchestrator). Not started. Prerequisite: exec/logs/named-container gaps in minibox must be closed first (see docs/plans/maestro-minibox.md).
+---
+
 # minibox-orch Design
 
 A new Rust binary crate that treats `miniboxd` as a substrate and layers self-evolving agents on top.
@@ -23,15 +28,15 @@ Hexagonal (ports and adapters), matching the patterns established in `minibox-li
             |                                    |
     +-------v---------+              +-----------v-----------+
     |  Domain Layer   |              |  Infrastructure       |
-    |                 |              |     Adapters           |
+    |                 |              |     Adapters          |
     |  Traits (Ports) |              |                       |
-    |  - DaemonClient-+------+-------+-> SocketDaemonClient  |
+    |  - DaemonClient -+------+-------+-> SocketDaemonClient |
     |  - ModelClient  -+-----+-------+-> AnthropicModel      |
-    |  - ProfileStore -+-----+-------+-> OpenAiModel          |
+    |  - ProfileStore -+-----+-------+-> OpenAiModel         |
     |  - TelemetryStr -+-----+-------+-> TomlProfileStore    |
     |  - ApprovalGate -+-----+-------+-> SqliteTelemetry     |
     |                 |      |       |   TerminalApproval    |
-    |  Domain Types   |      |       +------------------------+
+    |  Domain Types   |      |       +-----------------------+
     |  Domain Errors  |      |
     |  SafetyPolicy   |      +-- Mocks (for testing)
     +-----------------+
@@ -519,14 +524,14 @@ pub enum EvolutionOutcome {
 
 ## Adapters
 
-| Adapter | Trait | Backend |
-|---|---|---|
-| `SocketDaemonClient` | `DaemonClient` | Unix socket, reuses `minibox-lib::protocol` |
-| `AnthropicModelClient` | `ModelClient` | `reqwest` to `api.anthropic.com/v1/messages` |
-| `OpenAiModelClient` | `ModelClient` | `reqwest` to configurable base URL |
-| `TomlProfileStore` | `ProfileStore` | TOML files in `profiles/<id>.toml` |
-| `SqliteTelemetryStore` | `TelemetryStore` | `rusqlite` with `job_runs` table |
-| `TerminalApprovalGate` | `ApprovalGate` | stdin/stdout prompts |
+| Adapter                | Trait            | Backend                                      |
+| ---------------------- | ---------------- | -------------------------------------------- |
+| `SocketDaemonClient`   | `DaemonClient`   | Unix socket, reuses `minibox-lib::protocol`  |
+| `AnthropicModelClient` | `ModelClient`    | `reqwest` to `api.anthropic.com/v1/messages` |
+| `OpenAiModelClient`    | `ModelClient`    | `reqwest` to configurable base URL           |
+| `TomlProfileStore`     | `ProfileStore`   | TOML files in `profiles/<id>.toml`           |
+| `SqliteTelemetryStore` | `TelemetryStore` | `rusqlite` with `job_runs` table             |
+| `TerminalApprovalGate` | `ApprovalGate`   | stdin/stdout prompts                         |
 
 ### SocketDaemonClient
 

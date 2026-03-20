@@ -122,6 +122,7 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
             cgroup_path: config.cgroup_path.clone(),
             hostname: config.hostname.clone(),
             capture_output,
+            pre_exec_hooks: config.hooks.pre_exec.clone(),
         };
 
         // IMPORTANT: spawn_container_process uses blocking syscalls (clone/fork)

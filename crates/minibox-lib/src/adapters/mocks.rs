@@ -373,6 +373,7 @@ adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::ContainerHooks;
 
     #[tokio::test]
     async fn test_mock_registry_cached_image() {
@@ -438,6 +439,7 @@ mod tests {
             hostname: "mock-host".to_string(),
             cgroup_path: PathBuf::from("/mock/cgroup"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         let result = runtime.spawn_process(&config).await;

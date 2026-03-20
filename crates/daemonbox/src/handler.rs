@@ -13,8 +13,8 @@
 use anyhow::Result;
 use chrono::Utc;
 use minibox_lib::domain::{
-    ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
-    DynImageRegistry, DynResourceLimiter, ResourceConfig,
+    ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
+    DynImageRegistry, DynResourceLimiter, HookSpec, ResourceConfig,
 };
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
@@ -324,6 +324,7 @@ async fn run_inner_capture(
         pid: None,
         rootfs_path: merged_dir.clone(),
         cgroup_path: cgroup_dir.clone(),
+        post_exit_hooks: vec![],
     };
     state.add_container(record).await;
 
@@ -343,6 +344,7 @@ async fn run_inner_capture(
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: true,
+        hooks: ContainerHooks::default(),
     };
 
     let _spawn_permit = state
@@ -475,6 +477,7 @@ async fn run_inner(
         pid: None,
         rootfs_path: merged_dir_from_overlay.clone(),
         cgroup_path: cgroup_dir.clone(),
+        post_exit_hooks: vec![],
     };
     state.add_container(record).await;
 
@@ -495,6 +498,7 @@ async fn run_inner(
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: false,
+        hooks: ContainerHooks::default(),
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -527,8 +531,10 @@ async fn run_inner(
                 // Wait for the process to exit in a background task.
                 let state_wait = Arc::clone(&state_clone);
                 let id_wait = id_clone.clone();
+                let rootfs_wait = spawn_config.rootfs.clone();
+                let hooks_wait = spawn_config.hooks.post_exit.clone();
                 tokio::task::spawn_blocking(move || {
-                    daemon_wait_for_exit(pid, &id_wait, state_wait);
+                    daemon_wait_for_exit(pid, &id_wait, state_wait, rootfs_wait, hooks_wait);
                 });
             }
             Err(e) => {
@@ -543,24 +549,42 @@ async fn run_inner(
     Ok(id)
 }
 
-/// Block until the container PID exits, then update its state in the daemon.
+/// Block until the container PID exits, run post-exit hooks, then update state.
 #[cfg(unix)]
-fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
+fn daemon_wait_for_exit(
+    pid: u32,
+    id: &str,
+    state: Arc<DaemonState>,
+    _rootfs: std::path::PathBuf,
+    _post_exit_hooks: Vec<HookSpec>,
+) {
     use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::Pid;
     let nix_pid = Pid::from_raw(pid as i32);
-    match waitpid(nix_pid, None) {
+    let _exit_code = match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
             info!("container {id} exited with code {code}");
+            code
         }
         Ok(WaitStatus::Signaled(_, sig, _)) => {
             info!("container {id} killed by signal {sig}");
+            -(sig as i32)
         }
         Ok(other) => {
             info!("container {id} wait status: {other:?}");
+            -1
         }
         Err(e) => {
             warn!("waitpid for container {id} error: {e}");
+            -1
+        }
+    };
+
+    #[cfg(target_os = "linux")]
+    if !_post_exit_hooks.is_empty() {
+        use minibox_lib::container::process::run_hooks;
+        if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(_exit_code)) {
+            warn!("container {id} post-exit hooks error: {e:#}");
         }
     }
 
@@ -580,12 +604,24 @@ fn daemon_wait_for_exit(pid: u32, id: &str, state: Arc<DaemonState>) {
 }
 
 #[cfg(windows)]
-fn daemon_wait_for_exit(_pid: u32, _id: &str, _state: Arc<DaemonState>) {
+fn daemon_wait_for_exit(
+    _pid: u32,
+    _id: &str,
+    _state: Arc<DaemonState>,
+    _rootfs: std::path::PathBuf,
+    _post_exit_hooks: Vec<HookSpec>,
+) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
 
 #[cfg(not(any(unix, windows)))]
-fn daemon_wait_for_exit(_pid: u32, _id: &str, _state: Arc<DaemonState>) {
+fn daemon_wait_for_exit(
+    _pid: u32,
+    _id: &str,
+    _state: Arc<DaemonState>,
+    _rootfs: std::path::PathBuf,
+    _post_exit_hooks: Vec<HookSpec>,
+) {
     // No-op on this platform.
 }
 

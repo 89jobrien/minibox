@@ -628,7 +628,7 @@ mod tests {
     /// silently drops all arguments.
     #[tokio::test]
     async fn spawn_process_includes_args_in_script() {
-        use crate::domain::ContainerSpawnConfig;
+        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
         use std::sync::{Arc, Mutex};
 
         let captured = Arc::new(Mutex::new(String::new()));
@@ -652,6 +652,7 @@ mod tests {
             hostname: "test-container".to_string(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         let result = runtime.spawn_process(&config).await.unwrap();

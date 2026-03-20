@@ -1,3 +1,10 @@
+> **Note (2026-03-20):** This analysis is from 2026-03-17 and is partially stale.
+> Several critical issues have been resolved since: handler/conformance tests now compile
+> (daemonbox crate, `handler_tests.rs` + `conformance_tests.rs` moved there), structured
+> logging/tracing contract finalized (CLAUDE.md), and setuid stripping was audited.
+> The security findings in VULN-001 through VULN-011 remain the authoritative vulnerability list
+> but some may have been addressed — verify against current code before acting on them.
+
 # Minibox Codebase Analysis Report
 
 **Date**: 2026-03-17

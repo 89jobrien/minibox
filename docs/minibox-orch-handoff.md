@@ -1,3 +1,7 @@
+---
+status: future
+note: Implementation spec for minibox-orch. Not started. See minibox-orch-design.md for full type definitions and architecture.
+---
 # minibox-orch Implementation Handoff
 
 ## What This Is

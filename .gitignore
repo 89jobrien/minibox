@@ -2,21 +2,25 @@
 *.md
 !README.md
 !CLAUDE.md
-!docs/TESTING.md
+!HANDOFF.md
 !CHANGELOG.md
+!docs/TESTING.md
 !docs/SECURITY.md
-!docs/TEST_RESULTS.md
-!docs/ZOMBIENET_PATTERNS.md
-!docs/USAGE.md
+!docs/PRERELEASE_CHANGELOG.md
 !docs/CODEBASE_ANALYSIS.md
 !docs/vps-usage.md
 !docs/cgroup-findings.md
+!docs/minibox-orch-design.md
+!docs/minibox-orch-handoff.md
+!docs/handoff-*.md
 !docs/plans/*.md
 !docs/plans/
 !docs/superpowers/**/*.md
 !docs/superpowers/
-!docs/minibox-orch-design.md
-!docs/minibox-orch-handoff.md
+!docs/diagrams/*.md
+!docs/diagrams/
+!docs/archive/*.md
+!docs/archive/
 
 # Claude Code local configuration
 .claude/
@@ -35,6 +39,13 @@ Cargo.lock is committed for binary projects
 # Runtime directories (daemon creates these)
 /var/lib/minibox/
 /run/minibox/
+
+# Generated artifacts / recipes
+/recipe.json
+/recipe.json.gz
+/profile.json
+/profile.json.gz
+/artifacts/
 
 # Benchmark output
 /bench/results/
@@ -69,3 +80,4 @@ Thumbs.db
 # Backup files
 *.bak
 *.orig
+.envrc

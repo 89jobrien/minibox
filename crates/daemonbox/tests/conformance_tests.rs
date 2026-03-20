@@ -10,8 +10,8 @@ use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
 use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_lib::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ResourceConfig,
-    ResourceLimiter,
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
+    ResourceConfig, ResourceLimiter,
 };
 use minibox_lib::protocol::DaemonResponse;
 use std::path::PathBuf;
@@ -213,6 +213,7 @@ mod conformance {
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -233,6 +234,7 @@ mod conformance {
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         let pid1 = runtime.spawn_process(&config).await.unwrap().pid;

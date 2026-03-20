@@ -6,7 +6,7 @@
 
 use crate::container::filesystem::pivot_root_to;
 use crate::container::namespace::{NamespaceConfig, clone_with_namespaces};
-use crate::domain::SpawnResult;
+use crate::domain::{HookSpec, SpawnResult};
 use crate::error::ProcessError;
 use anyhow::Context;
 use nix::sys::wait::{WaitStatus, waitpid};
@@ -14,7 +14,8 @@ use nix::unistd::execvp;
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
-use tracing::{debug, error, info};
+use std::time::Duration;
+use tracing::{debug, error, info, warn};
 
 /// All information required to launch a containerised process.
 #[derive(Debug, Clone)]
@@ -35,6 +36,8 @@ pub struct ContainerConfig {
     pub hostname: String,
     /// When `true`, container stdout+stderr are captured via a pipe.
     pub capture_output: bool,
+    /// Host-side commands to run before the container process is cloned.
+    pub pre_exec_hooks: Vec<HookSpec>,
 }
 
 /// Spawn the container init process.
@@ -53,6 +56,10 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
     info!(command = %config.command, rootfs = ?config.rootfs, "container: spawning process");
+
+    // Run pre-exec hooks on the host before cloning.
+    run_hooks(&config.pre_exec_hooks, &config.rootfs, None)
+        .with_context(|| "pre-exec hooks failed")?;
 
     // Create output pipe before cloning so both parent and child inherit it.
     let (read_fd_raw, write_fd_raw): (RawFd, RawFd) = if config.capture_output {
@@ -124,6 +131,64 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 #[cfg(not(target_os = "linux"))]
 pub fn spawn_container_process(_config: ContainerConfig) -> anyhow::Result<SpawnResult> {
     anyhow::bail!("spawn_container_process is only supported on Linux")
+}
+
+/// Run a list of host-side lifecycle hooks.
+///
+/// Each hook is executed with `CONTAINER_ROOTFS` set. If `exit_code` is
+/// provided (post-exit context), `EXIT_CODE` is also set.
+///
+/// Hooks that exceed their timeout are abandoned with a warning rather than
+/// killing the overall operation.
+pub fn run_hooks(
+    hooks: &[HookSpec],
+    rootfs: &std::path::Path,
+    exit_code: Option<i32>,
+) -> anyhow::Result<()> {
+    for hook in hooks {
+        let timeout = Duration::from_secs(hook.timeout_secs.unwrap_or(30));
+        debug!(command = %hook.command, "running lifecycle hook");
+
+        let mut cmd = std::process::Command::new(&hook.command);
+        cmd.args(&hook.args).env("CONTAINER_ROOTFS", rootfs);
+        if let Some(code) = exit_code {
+            cmd.env("EXIT_CODE", code.to_string());
+        }
+
+        let mut child = cmd
+            .spawn()
+            .with_context(|| format!("lifecycle hook '{}' failed to start", hook.command))?;
+
+        // Poll for completion up to the timeout.
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    if !status.success() {
+                        warn!(
+                            command = %hook.command,
+                            code = ?status.code(),
+                            "lifecycle hook exited with non-zero status"
+                        );
+                    }
+                    break;
+                }
+                Ok(None) => {
+                    if std::time::Instant::now() >= deadline {
+                        warn!(command = %hook.command, "lifecycle hook timed out, abandoning");
+                        let _ = child.kill();
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => {
+                    warn!(command = %hook.command, error = %e, "lifecycle hook wait error");
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Logic executed inside the cloned child process.

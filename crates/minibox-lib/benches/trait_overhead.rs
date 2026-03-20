@@ -9,8 +9,8 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_lib::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry, ResourceConfig,
-    ResourceLimiter,
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
+    ResourceConfig, ResourceLimiter,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -89,6 +89,7 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
@@ -107,6 +108,7 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
             hostname: "test".to_string(),
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
+            hooks: ContainerHooks::default(),
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));

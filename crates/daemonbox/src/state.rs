@@ -8,6 +8,7 @@
 //! State is persisted to a JSON file after every mutation so that
 //! container records survive daemon restarts.
 
+use minibox_lib::domain::HookSpec;
 use minibox_lib::image::ImageStore;
 use minibox_lib::protocol::ContainerInfo;
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,9 @@ pub struct ContainerRecord {
     pub rootfs_path: PathBuf,
     /// Path to the container's cgroup directory.
     pub cgroup_path: PathBuf,
+    /// Host-side commands to run after the container process exits.
+    #[serde(default)]
+    pub post_exit_hooks: Vec<HookSpec>,
 }
 
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
