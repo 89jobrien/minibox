@@ -71,22 +71,22 @@ sudo /usr/local/bin/minibox ps
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Hexagonal Architecture                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
+┌────────────────────────────────────────────────────────────┐
+│                    Hexagonal Architecture                  │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
 │  ┌─────────────┐   JSON/Unix    ┌──────────────────────┐   │
 │  │   minibox   │ ─────────────▶ │      miniboxd        │   │
 │  │   (CLI)     │                │                      │   │
 │  └─────────────┘                │  ┌────────────────┐  │   │
 │                                 │  │    Handlers    │  │   │
 │                                 │  └───────┬────────┘  │   │
-│                                 │          │            │   │
+│                                 │          │           │   │
 │                                 │  ┌───────▼────────┐  │   │
 │                                 │  │  Domain Traits │  │   │
 │                                 │  │   (Ports)      │  │   │
 │                                 │  └───────┬────────┘  │   │
-│                                 │          │            │   │
+│                                 │          │           │   │
 │                                 │  ┌───────▼────────┐  │   │
 │                                 │  │   Adapters     │  │   │
 │                                 │  │ DockerHub      │  │   │
@@ -96,7 +96,7 @@ sudo /usr/local/bin/minibox ps
 │                                 │  │ ProotRuntime   │  │   │
 │                                 │  └────────────────┘  │   │
 │                                 └──────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 The domain layer has zero infrastructure dependencies. Adapters are swapped at daemon startup via `MINIBOX_ADAPTER`. Tests use `MockRegistry`, `MockFilesystem`, `MockLimiter`, `MockRuntime` from `adapters/mocks.rs`.
