@@ -40,7 +40,7 @@ fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings"
+        "cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
     )
     .run()
     .context("lint failed")?;

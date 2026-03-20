@@ -48,6 +48,7 @@ use tracing::{debug, warn};
 #[derive(Debug, Clone, Copy)]
 pub struct NoopLimiter;
 
+#[allow(dead_code)]
 impl NoopLimiter {
     pub fn new() -> Self {
         Self
@@ -83,6 +84,7 @@ impl ResourceLimiter for NoopLimiter {
 #[derive(Debug, Clone, Copy)]
 pub struct CopyFilesystem;
 
+#[allow(dead_code)]
 impl CopyFilesystem {
     pub fn new() -> Self {
         Self
@@ -132,6 +134,7 @@ impl FilesystemProvider for CopyFilesystem {
 
 /// Recursively copy the contents of `src` into `dst`, preserving permissions
 /// and symlinks. Skips device nodes, named pipes, and sockets.
+#[allow(dead_code)]
 fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
     use walkdir::WalkDir;
 
