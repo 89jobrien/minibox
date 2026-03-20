@@ -11,14 +11,23 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # fmt/clippy/unit tests are covered by local xtask pre-commit/prepush hooks.
-  # This job runs on the self-hosted jobrien-vm (Linux) for miniboxd-specific
-  # tests that require Linux — no toolchain installation or compilation setup
-  # needed since the runner has Rust pre-installed.
-  linux:
-    name: Linux (miniboxd)
-    runs-on: [self-hosted, minibox]
+  # macOS job: fmt + clippy + unit tests on GitHub-hosted runner.
+  # miniboxd now compiles on macOS (dispatches to macbox::start()),
+  # so we include macbox and miniboxd in the clippy sweep.
+  macos:
+    name: macOS
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: xtask unit tests
-        run: ~/.local/bin/mise exec -- cargo xtask test-unit
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt check
+        run: cargo fmt --all --check
+      - name: clippy
+        run: >
+          cargo clippy
+          -p minibox-lib -p minibox-macros -p minibox-cli
+          -p daemonbox -p macbox -p miniboxd
+          -- -D warnings
+      - name: unit tests
+        run: cargo xtask test-unit
