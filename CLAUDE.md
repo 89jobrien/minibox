@@ -67,13 +67,22 @@ just test-integration   # cgroup tests, Linux+root
 just test-e2e           # daemon+CLI tests, Linux+root
 just doctor             # preflight capability check
 
+# xtask (used directly by CI and just targets)
+cargo xtask pre-commit      # fmt-check + lint + release build (macOS-safe)
+cargo xtask prepush         # nextest + llvm-cov coverage
+cargo xtask test-unit       # all unit + conformance tests
+cargo xtask test-e2e-suite  # daemon+CLI e2e tests (Linux, root)
+cargo xtask nuke-test-state # kill orphans, unmount overlays, clean cgroups/tmp
+cargo xtask clean-artifacts # remove non-critical build outputs
+cargo xtask bench           # run benchmark binary
+
 # Run benchmarks (minibox-lib only)
 cargo bench -p minibox-lib          # protocol codec encode/decode
 ```
 
 **Test Status:**
 
-- Unit + conformance: ~81 lib tests + 9 cli tests + 12 handler + 10 conformance passing
+- Unit + conformance: ~95 lib tests + 11 cli tests + 12 handler + 16 conformance passing
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
@@ -84,7 +93,7 @@ cargo bench -p minibox-lib          # protocol codec encode/decode
 ```bash
 cargo test -p minibox-lib
 cargo test -p minibox-cli
-cargo clippy -p minibox-lib -p minibox-macros -- -D warnings
+cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -92,11 +101,16 @@ cargo fmt --all --check
 
 ### Workspace Structure
 
-Three crates in cargo workspace:
+Six crates in cargo workspace:
 
 1. **minibox-lib** (library): Core container primitives, image management, shared protocol types
-2. **miniboxd** (binary): Async daemon managing containers via Unix socket API
-3. **minibox-cli** (binary): CLI client sending commands to daemon
+2. **minibox-macros** (proc-macro): Derive macros used by minibox-lib
+3. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
+4. **miniboxd** (binary): Async daemon entry point (Linux-only; `compile_error!()` on macOS)
+5. **minibox-cli** (binary): CLI client sending commands to daemon
+6. **minibox-bench** (binary): Benchmark harness
+
+(`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
 ### Critical Design Patterns
 
@@ -110,7 +124,7 @@ Three crates in cargo workspace:
 
 **State Management**: In-memory HashMap in `miniboxd/src/state.rs` tracks containers. Not persisted - daemon restart loses all records. Container state machine: Created → Running → Stopped.
 
-**CLI returns immediately** — `minibox run` prints the container ID as soon as the daemon creates it, *before* the container process has exec'd. Actual execution success/failure is only visible in `journalctl -u miniboxd`. A fast `time minibox run ...` does not confirm the container ran.
+**CLI streaming** — `minibox run` uses `ephemeral: true` and streams stdout/stderr back to the terminal in real time via `ContainerOutput`/`ContainerStopped` protocol messages. The CLI exits with the container's exit code. Non-ephemeral runs (daemon-direct) still return immediately with a container ID.
 
 **Image Storage**: Layers stored as extracted directories in `/var/lib/minibox/images/{image}/{digest}/`. Overlay filesystem stacks layers (read-only lower dirs) + container-specific upper/work dirs.
 
@@ -147,14 +161,20 @@ Three crates in cargo workspace:
 
 **minibox-lib/src/image/**:
 
+- `reference.rs`: `ImageRef` — parse `[REGISTRY/]NAMESPACE/NAME[:TAG]`; routes to correct registry adapter
 - `registry.rs`: Docker Hub v2 API client (token auth, manifest/blob fetch)
 - `manifest.rs`: OCI manifest parsing
 - `layer.rs`: Tar extraction with security validation
 
-**miniboxd/src/**:
+**minibox-lib/src/adapters/**:
 
-- `server.rs`: Unix socket listener with SO_PEERCRED auth
-- `handler.rs`: Request routing (run, ps, stop, rm, pull)
+- `registry.rs`: `DockerHubRegistry` adapter
+- `ghcr.rs`: `GhcrRegistry` — ghcr.io OCI adapter with WWW-Authenticate auth flow
+
+**daemonbox/src/** (handler/state/server extracted from miniboxd; macOS-safe):
+
+- `server.rs`: Unix socket listener with SO_PEERCRED auth; channel-based streaming dispatch
+- `handler.rs`: Request routing; `handle_run_streaming` for ephemeral containers (Linux)
 - `state.rs`: In-memory container tracking
 
 ## Security Considerations
@@ -231,9 +251,7 @@ Understanding these helps prioritize feature development:
 - **No networking setup**: Containers get isolated network namespace but no bridge/veth configuration
 - **No user namespace remapping**: Runs as root inside containers (no rootless support)
 - **No persistent state**: Daemon restart loses all container records
-- **No TTY support**: stdout/stderr not piped back to CLI
 - **No exec command**: Cannot run commands in existing containers
-- **No logs capture**: Container output not stored
 - **No Dockerfile support**: Image-only workflow
 - **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
 
@@ -287,6 +305,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
+- **Pipe fds across `clone()`** — both parent and child get copies of any `OwnedFd` after clone. Use `std::mem::forget` on fds before the clone call, then manage raw fds manually. Child: `dup2` write end into stdout/stderr slots, then `close(write_fd_raw)` and `close(read_fd_raw)`. Parent: `drop(write_fd)` after clone returns, keep read end for output streaming.
 - **`pivot_root` requires `MS_PRIVATE` first** — after `CLONE_NEWNS` the child inherits shared mount propagation from the parent; `pivot_root` fails EINVAL unless you call `mount("", "/", MS_REC|MS_PRIVATE)` inside the child before the bind-mount.
 - **`close_extra_fds` must collect before closing** — iterating `/proc/self/fd` and calling `close()` inside the loop closes the `ReadDir`'s own FD, causing a panic. Collect all FD numbers into a `Vec` first, then close.
 - **Absolute symlink rewrite in `layer.rs`** — `strip_prefix("/")` gives a path relative to the container root, not the symlink's directory. Use `relative_path(entry_dir, abs_target)` (defined in `layer.rs`) to get the correct relative target; otherwise busybox applet symlinks resolve to non-existent paths (e.g. `/bin/bin/busybox`).
@@ -347,7 +366,7 @@ When extending minibox:
 
 Override runtime paths (useful for testing and non-standard deployments):
 
-- `MINIBOX_DATA_DIR` — image/container storage (default: `/var/lib/minibox`)
+- `MINIBOX_DATA_DIR` — image/container storage. UID-aware default: `~/.mbx/cache/` for non-root, `/var/lib/minibox` for root. Explicit env var overrides both.
 - `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
@@ -357,9 +376,6 @@ Override runtime paths (useful for testing and non-standard deployments):
 
 Global minibox skills available across all projects:
 
-- `minibox:build-test`: Build automation and testing workflows
-- `minibox:runtime`: Container debugging and daemon operations
-- `minibox:setup`: Environment configuration and kernel feature verification
-- `minibox:architecture`: Codebase navigation and component details
+- `mbx:minibox-ci`: CI operations — self-hosted runner management, GHA diagnostics, xtask gates
 
-Invoke with `/` prefix, e.g., `/minibox:setup` or `/minibox:runtime`.
+Invoke with `/` prefix, e.g., `/mbx:minibox-ci`.

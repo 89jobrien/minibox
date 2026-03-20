@@ -24,14 +24,14 @@ Phase 3  GHA runner                     Self-hosted Linux GHA jobs run in minibo
 
 ### Phase Dependency Matrix
 
-| Phase | Requires                                                                         |
-| ----- | -------------------------------------------------------------------------------- |
-| 0     | local-store-ghcr-adapter spec (GhcrRegistry + ImageRef + local store)            |
+| Phase | Requires                                                                                                        |
+| ----- | --------------------------------------------------------------------------------------------------------------- |
+| 0     | local-store-ghcr-adapter spec (GhcrRegistry + ImageRef + local store)                                           |
 | 1     | Phase 0 + stdout/stderr streaming + exit code propagation (protocol streaming spec in local-store-ghcr-adapter) |
-| 2     | Phase 1 working + bind mount protocol support (`RunContainer.mounts` + `MS_BIND` in `filesystem.rs`) |
-| 3     | Phase 2 working + self-hosted runner host provisioned with `miniboxd`            |
+| 2     | Phase 1 working + bind mount protocol support (`RunContainer.mounts` + `MS_BIND` in `filesystem.rs`)            |
+| 3     | Phase 2 working + self-hosted runner host provisioned with `miniboxd`                                           |
 
-Each phase ships only after its prerequisite minibox gaps are *implemented and tested*, not just designed.
+Each phase ships only after its prerequisite minibox gaps are _implemented and tested_, not just designed.
 
 ---
 
@@ -216,14 +216,14 @@ A provisioning script `scripts/provision-runner.sh` will be created as part of P
 
 ## Protocol Changes Required (Minibox Gaps)
 
-| Gap                               | Phase needed | Minibox change                                                                                            |
-| --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
-| stdout/stderr pipe                | 1            | `process.rs`: pipe child stdout/stderr; protocol: `ContainerOutput` stream messages (defined in local-store-ghcr-adapter spec) |
-| Exit code propagation             | 1            | Protocol: `ContainerStopped { exit_code: i32 }` (defined in local-store-ghcr-adapter spec)               |
-| Ephemeral flag                    | 1            | Protocol: `RunContainer` gains `ephemeral: bool`; daemon auto-removes on exit when true                   |
-| Bind mount support                | 2            | Protocol: `RunContainer` gains `mounts: Vec<Mount>`; `filesystem.rs`: `MS_BIND` before `pivot_root`      |
-| Read-only mount                   | 2            | `Mount` struct gains `readonly: bool`; `MS_BIND | MS_RDONLY` in `filesystem.rs`                          |
-| Interactive TTY (-it)             | Future       | Allocate PTY, attach to socket; not required for any Phase 0-3 deliverable                                |
+| Gap                   | Phase needed | Minibox change                                                                                                                 |
+| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| stdout/stderr pipe    | 1            | `process.rs`: pipe child stdout/stderr; protocol: `ContainerOutput` stream messages (defined in local-store-ghcr-adapter spec) |
+| Exit code propagation | 1            | Protocol: `ContainerStopped { exit_code: i32 }` (defined in local-store-ghcr-adapter spec)                                     |
+| Ephemeral flag        | 1            | Protocol: `RunContainer` gains `ephemeral: bool`; daemon auto-removes on exit when true                                        |
+| Bind mount support    | 2            | Protocol: `RunContainer` gains `mounts: Vec<Mount>`; `filesystem.rs`: `MS_BIND` before `pivot_root`                            |
+| Read-only mount       | 2            | `Mount` struct gains `readonly: bool`; `MS_BIND                                                                                | MS_RDONLY`in`filesystem.rs` |
+| Interactive TTY (-it) | Future       | Allocate PTY, attach to socket; not required for any Phase 0-3 deliverable                                                     |
 
 ---
 
@@ -252,18 +252,22 @@ The xtask implementation progressively replaces native commands with containeriz
 ## Files Created/Modified Per Phase
 
 **Phase 0:**
+
 - `xtask/src/main.rs` — `pull-ci-image` target
 - `Justfile` — add `pull-ci-image: cargo xtask pull-ci-image`
 
 **Phase 1:** (smoke test)
+
 - `xtask/src/main.rs` — `ci-smoke` target
 - `Justfile` — add `ci-smoke: cargo xtask ci-smoke`
 
 **Phase 2:**
+
 - `xtask/src/main.rs` — update `pre-commit`, `prepush` to containerized; add `run-ci`, `ci-shell`
 - `Justfile` — no change (already delegates to xtask)
 
 **Phase 3:**
+
 - `.github/workflows/ci.yml` — `test-linux` switches to `[self-hosted, linux, minibox]`
 - `scripts/provision-runner.sh` — new file
 
@@ -276,12 +280,14 @@ The xtask implementation progressively replaces native commands with containeriz
 **Phase 1:** `just ci-smoke` prints `rustc X.Y.Z` to terminal and exits 0; exit 1 from a failing command propagates to the hook
 
 **Phase 2:**
+
 - `just pre-commit` runs fmt/clippy/build inside a minibox container against the live workspace
 - Output visible in terminal as it streams
 - `minibox ps` shows no residual containers after completion
 - Cargo registry cache in `~/.mbx/cache/cargo-registry` persists across invocations
 
 **Phase 3:**
+
 - `test-linux` GHA job runs inside minibox container on self-hosted runner
 - Failure output visible in GHA logs
 - Container removed after job step completes

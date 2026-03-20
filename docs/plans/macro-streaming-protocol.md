@@ -1,3 +1,7 @@
+---
+status: archived
+note: Never built; channel-based streaming shipped instead
+---
 # Macro: Streaming Response Protocol
 
 **Date:** 2026-03-17

@@ -1,6 +1,0 @@
-{
-  "timestamp": "2026-03-17T05-57-13Z",
-  "git_sha": "78c28ee6a7de89be30893dfe9c55067eab350210",
-  "branch": "metrics-dashboard",
-  "error": "cargo test failed"
-}

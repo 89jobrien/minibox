@@ -1,3 +1,7 @@
+---
+status: archived
+note: Never built; manual match/wrap is the pattern
+---
 # Macro: Handler Response Wrapping
 
 **Date:** 2026-03-17

@@ -1,3 +1,9 @@
+---
+status: archived
+completed: "2026-03-18"
+superseded_by: 2026-03-19-cross-platform-daemon.md
+note: Superseded by cross-platform plan; winbox implemented
+---
 # winboxd — WSL2 Named Pipe Proxy Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.

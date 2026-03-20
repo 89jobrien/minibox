@@ -1,3 +1,7 @@
+---
+status: future
+note: Phase 1 (exec, logs, named containers) not started
+---
 # Maestro-Minibox Integration Opportunities
 
 1. Minibox as a ContainerProvider in maestro-cli (Most Natural)

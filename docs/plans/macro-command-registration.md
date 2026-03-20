@@ -1,3 +1,7 @@
+---
+status: archived
+note: Never built; hand-written dispatch in daemonbox/handler.rs is the real approach
+---
 # Macro: Command Registration (Protocol + Dispatch)
 
 **Date:** 2026-03-17

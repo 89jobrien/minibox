@@ -1,3 +1,9 @@
+---
+status: archived
+completed: "2026-03-17"
+superseded_by: 2026-03-19-cross-platform-daemon.md
+note: Superseded by broader cross-platform plan
+---
 # macbox + daemonbox + winbox Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
