@@ -108,6 +108,8 @@ mod tests {
             system: None,
             max_tokens: 100,
             schema: None,
+            timeout: None,
+            max_retries: None,
         }
     }
 

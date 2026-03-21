@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
@@ -6,6 +7,21 @@ pub struct CompletionRequest {
     pub system: Option<String>,
     pub max_tokens: u32,
     pub schema: Option<JsonSchema>,
+    pub timeout: Option<Duration>,
+    pub max_retries: Option<u32>,
+}
+
+impl Default for CompletionRequest {
+    fn default() -> Self {
+        Self {
+            prompt: String::new(),
+            system: None,
+            max_tokens: 1024,
+            schema: None,
+            timeout: None,
+            max_retries: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
