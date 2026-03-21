@@ -1,0 +1,25 @@
+name: CI environment setup
+description: Ensure cargo-deny and cargo-audit are installed; prune stale cargo cache.
+
+runs:
+  using: composite
+  steps:
+    - name: install cargo-deny
+      shell: bash
+      run: |
+        command -v cargo-deny >/dev/null 2>&1 \
+          || ~/.local/bin/mise exec -- cargo install cargo-deny --locked
+
+    - name: install cargo-audit
+      shell: bash
+      run: |
+        command -v cargo-audit >/dev/null 2>&1 \
+          || ~/.local/bin/mise exec -- cargo install cargo-audit --locked
+
+    - name: disk hygiene
+      shell: bash
+      run: |
+        # src/ is extracted-on-demand from .crate files — safe to remove
+        rm -rf ~/.cargo/registry/src
+        # drop .crate files not accessed in 60 days
+        find ~/.cargo/registry/cache -name "*.crate" -atime +60 -delete 2>/dev/null || true

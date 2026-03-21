@@ -10,6 +10,10 @@ cargo --version
 echo "=== Installing just ==="
 cargo install just
 
+echo "=== Installing CI tools ==="
+cargo install cargo-deny --locked
+cargo install cargo-audit --locked
+
 echo "=== Installing build deps ==="
 sudo apt-get update -qq
 sudo apt-get install -y -qq pkg-config libssl-dev

@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/ci-setup
       - name: deny
         run: ~/.local/bin/mise exec -- cargo deny check
       - name: audit
