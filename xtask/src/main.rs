@@ -107,7 +107,13 @@ fn test_property(sh: &Shell) -> Result<()> {
         "cargo test --release -p minibox-lib --test proptest_suite"
     )
     .run()
-    .context("property tests failed")?;
+    .context("minibox-lib property tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p daemonbox --test proptest_suite"
+    )
+    .run()
+    .context("daemonbox property tests failed")?;
     Ok(())
 }
 
