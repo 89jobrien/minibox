@@ -1117,7 +1117,6 @@ dependencies = [
  "base64",
  "clap",
  "minibox-lib",
- "serde",
  "serde_json",
  "tokio",
  "tracing",
