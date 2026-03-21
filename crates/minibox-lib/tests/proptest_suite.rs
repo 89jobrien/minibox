@@ -117,3 +117,51 @@ proptest! {
         prop_assert_eq!(encoded, re_encoded);
     }
 }
+
+// ── CgroupConfig boundary validation (Linux + root only) ─────────────────────
+
+#[cfg(target_os = "linux")]
+mod cgroup_props {
+    use minibox_lib::container::cgroups::{CgroupConfig, CgroupManager};
+    use proptest::prelude::*;
+
+    // NOTE: On unprivileged Linux (no root / no cgroup2 mount), `create_dir_all` will
+    // fail with EACCES before the bounds check runs. The `prop_assert!(is_err())` still
+    // passes, but for the wrong reason. These tests only exercise validation logic
+    // correctly under `just test-integration` where `MINIBOX_CGROUP_ROOT` points to
+    // a writable cgroup2 path with root privileges.
+    proptest! {
+        #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+        #[test]
+        fn memory_below_4096_always_rejected(
+            mem in 0_u64..4096_u64,
+            id in "[a-z]{8,16}",
+        ) {
+            let config = CgroupConfig {
+                memory_limit_bytes: Some(mem),
+                ..Default::default()
+            };
+            let mgr = CgroupManager::new(&id, config);
+            prop_assert!(
+                mgr.create().is_err(),
+                "expected Err for memory={mem}, got Ok"
+            );
+        }
+
+        #[test]
+        fn cpu_weight_out_of_range_rejected(
+            weight in prop_oneof![Just(0_u64), (10_001_u64..=u64::MAX)],
+            id in "[a-z]{8,16}",
+        ) {
+            let config = CgroupConfig {
+                cpu_weight: Some(weight),
+                ..Default::default()
+            };
+            let mgr = CgroupManager::new(&id, config);
+            prop_assert!(
+                mgr.create().is_err(),
+                "expected Err for cpu_weight={weight}, got Ok"
+            );
+        }
+    }
+}

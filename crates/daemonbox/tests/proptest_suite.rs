@@ -15,6 +15,9 @@ fn make_rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("tokio runtime")
 }
 
+// Mock adapters always succeed. containers_base/run_containers_base are never
+// created or accessed in "unknown ID" tests because handlers return early on
+// ContainerNotFound before touching the filesystem.
 fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
