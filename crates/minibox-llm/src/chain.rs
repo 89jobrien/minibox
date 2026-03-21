@@ -37,6 +37,36 @@ impl FallbackChain {
     }
 }
 
+impl FallbackChain {
+    pub fn from_env() -> Self {
+        let mut providers: Vec<Box<dyn LlmProvider>> = Vec::new();
+
+        #[cfg(feature = "anthropic")]
+        if let Some(p) = crate::anthropic::AnthropicProvider::from_env() {
+            tracing::info!(provider = p.name(), "llm: provider available");
+            providers.push(Box::new(p));
+        }
+
+        #[cfg(feature = "openai")]
+        if let Some(p) = crate::openai::OpenAiProvider::from_env() {
+            tracing::info!(provider = p.name(), "llm: provider available");
+            providers.push(Box::new(p));
+        }
+
+        #[cfg(feature = "gemini")]
+        if let Some(p) = crate::gemini::GeminiProvider::from_env() {
+            tracing::info!(provider = p.name(), "llm: provider available");
+            providers.push(Box::new(p));
+        }
+
+        if providers.is_empty() {
+            tracing::warn!("llm: no providers available — all API keys missing");
+        }
+
+        Self { providers }
+    }
+}
+
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 impl FallbackChain {
@@ -61,6 +91,9 @@ impl FallbackChain {
 mod tests {
     use super::*;
     use crate::types::CompletionRequest;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     fn request(prompt: &str) -> CompletionRequest {
         CompletionRequest {
@@ -152,5 +185,19 @@ mod tests {
         })]);
         let result = chain.complete_sync(&request("test")).unwrap();
         assert_eq!(result.text, "sync");
+    }
+
+    #[test]
+    fn from_env_with_no_keys_creates_empty_chain() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // unsafe: Rust 2024 requires unsafe for env mutation. Mutex serializes access.
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("GEMINI_API_KEY");
+        }
+        let chain = FallbackChain::from_env();
+        let result = chain.complete_sync(&request("test"));
+        assert!(matches!(result, Err(LlmError::AllProvidersFailed(_))));
     }
 }
