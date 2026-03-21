@@ -386,6 +386,7 @@ dependencies = [
  "chrono",
  "minibox-lib",
  "nix",
+ "proptest",
  "serde",
  "serde_json",
  "tempfile",
@@ -1102,8 +1103,10 @@ name = "minibox-bench"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "minibox-lib",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2787,6 +2790,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde_json",
  "xshell",
 ]
 

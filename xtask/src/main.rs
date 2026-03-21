@@ -257,10 +257,49 @@ fn nuke_test_state(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Run benchmark binary (local, requires Linux + miniboxd running)
+/// Run benchmark binary (local, requires Linux + miniboxd running) and save results.
 fn bench(sh: &Shell) -> Result<()> {
-    cmd!(sh, "./target/release/minibox-bench --dry-run").run()?;
-    cmd!(sh, "./target/release/minibox-bench").run()?;
+    let out_dir = "bench/results";
+    fs::create_dir_all(out_dir).context("create bench/results")?;
+    cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}").run()?;
+
+    // Find the JSON file written by the binary (most recent in out_dir).
+    let json_path = fs::read_dir(out_dir)
+        .context("read bench/results")?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false))
+        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
+        .map(|e| e.path())
+        .ok_or_else(|| anyhow::anyhow!("no JSON result found in {out_dir}"))?;
+
+    save_bench_results(sh, &json_path.to_string_lossy())
+}
+
+/// Patch git_sha, append to bench.jsonl, and update latest.json.
+fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
+    let content = fs::read_to_string(json_path).context("read bench JSON")?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&content).context("invalid bench JSON")?;
+    if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
+        let sha = sha.trim();
+        if !sha.is_empty() {
+            json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
+        }
+    }
+    let line = serde_json::to_string(&json).context("re-serialise failed")?;
+    let jsonl_path = "bench/results/bench.jsonl";
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(jsonl_path)
+        .context("open bench.jsonl")?;
+    use std::io::Write as _;
+    writeln!(file, "{line}").context("append to bench.jsonl")?;
+    eprintln!("✓ bench/results/bench.jsonl appended");
+
+    let pretty = serde_json::to_string_pretty(&json).context("pretty-print failed")?;
+    fs::write("bench/results/latest.json", pretty).context("write latest.json")?;
+    eprintln!("✓ bench/results/latest.json updated");
     Ok(())
 }
 
@@ -379,49 +418,24 @@ rm -rf "$OUT_DIR"
         .context("scp failed")?
         .success();
     if scp_ok {
-        if let Ok(content) = fs::read_to_string(&tmp_path) {
-            // Compact to a single line for JSONL; patch git_sha with local HEAD.
-            let mut json: serde_json::Value =
-                serde_json::from_str(&content).context("invalid JSON from VPS")?;
-            if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
-                let sha = sha.trim();
-                if !sha.is_empty() {
-                    json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
-                }
-            }
-            let line = serde_json::to_string(&json).context("re-serialise failed")?;
-            let jsonl_path = "bench/results/bench.jsonl";
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(jsonl_path)
-                .context("open bench.jsonl")?;
-            use std::io::Write as _;
-            writeln!(file, "{line}").context("append to bench.jsonl")?;
-            eprintln!("✓ bench/results/bench.jsonl appended");
-
-            // Keep latest.json in sync as the canonical current snapshot for devloop.
-            let pretty = serde_json::to_string_pretty(&json).context("pretty-print failed")?;
-            fs::write("bench/results/latest.json", pretty).context("write latest.json")?;
-            eprintln!("✓ bench/results/latest.json updated");
-
-            // Commit and push bench results
-            let sha_short = cmd!(sh, "git rev-parse --short HEAD")
-                .read()
-                .unwrap_or_default();
-            let sha_short = sha_short.trim();
-            cmd!(
-                sh,
-                "git add bench/results/bench.jsonl bench/results/latest.json"
-            )
-            .ignore_status()
-            .run()?;
-            let msg = format!("bench: vps results @ {sha_short}");
-            cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
-            cmd!(sh, "git push").run().context("git push failed")?;
-            eprintln!("✓ bench results committed and pushed");
-        }
+        save_bench_results(sh, &tmp_path)?;
         let _ = fs::remove_file(&tmp_path);
+
+        // Commit and push bench results
+        let sha_short = cmd!(sh, "git rev-parse --short HEAD")
+            .read()
+            .unwrap_or_default();
+        let sha_short = sha_short.trim();
+        cmd!(
+            sh,
+            "git add bench/results/bench.jsonl bench/results/latest.json"
+        )
+        .ignore_status()
+        .run()?;
+        let msg = format!("bench: vps results @ {sha_short}");
+        cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
+        cmd!(sh, "git push").run().context("git push failed")?;
+        eprintln!("✓ bench results committed and pushed");
     } else {
         eprintln!("warning: scp failed — JSON not saved locally");
     }

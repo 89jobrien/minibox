@@ -1,4 +1,16 @@
+use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::domain::{
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
+    ResourceConfig, ResourceLimiter,
+};
+use minibox_lib::protocol::{
+    ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
+    encode_response,
+};
 use serde::Serialize;
+use std::hint::black_box;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Serialize, Default)]
 struct BenchReport {
@@ -34,6 +46,8 @@ struct TestResult {
     iterations: usize,
     durations_micros: Vec<u64>,
     stats: Option<Stats>,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    unit: String,
 }
 
 fn write_json(report: &BenchReport, path: &str) -> std::io::Result<()> {
@@ -45,21 +59,33 @@ fn write_table(report: &BenchReport, path: &str) -> std::io::Result<()> {
     let mut out = String::new();
     out.push_str("minibox benchmark results\n\n");
     out.push_str(&format!("suites: {}\n\n", report.suites.len()));
-    out.push_str("suite\ttest\titers\tmin(ms)\tavg(ms)\tp95(ms)\n");
+    out.push_str("suite\ttest\titers\tunit\tmin\tavg\tp95\n");
     for suite in &report.suites {
         for test in &suite.tests {
-            let stats = test.stats.as_ref();
-            let (min, avg, p95) = match stats {
+            let is_nanos = test.unit == "nanos";
+            let (unit_label, min, avg, p95) = match test.stats.as_ref() {
+                Some(s) if is_nanos => (
+                    "ns",
+                    format!("{}", s.min),
+                    format!("{}", s.avg),
+                    format!("{}", s.p95),
+                ),
                 Some(s) => (
+                    "ms",
                     format!("{:.3}", s.min as f64 / 1000.0),
                     format!("{:.3}", s.avg as f64 / 1000.0),
                     format!("{:.3}", s.p95 as f64 / 1000.0),
                 ),
-                None => ("n/a".to_string(), "n/a".to_string(), "n/a".to_string()),
+                None => (
+                    "n/a",
+                    "n/a".to_string(),
+                    "n/a".to_string(),
+                    "n/a".to_string(),
+                ),
             };
             out.push_str(&format!(
-                "{}\t{}\t{}\t{}\t{}\t{}\n",
-                suite.name, test.name, test.iterations, min, avg, p95
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                suite.name, test.name, test.iterations, unit_label, min, avg, p95
             ));
         }
     }
@@ -210,13 +236,15 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     match name {
         "pull" | "e2e" => cfg.cold,
         "run" | "exec" => cfg.warm,
+        // codec and adapter only run when explicitly requested via --suite
+        "codec" | "adapter" => false,
         _ => true,
     }
 }
 
 fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     let mut suites = Vec::new();
-    for name in ["pull", "run", "exec", "e2e"] {
+    for name in ["pull", "run", "exec", "e2e", "codec", "adapter"] {
         if suite_enabled(cfg, name) {
             suites.push(name.to_string());
         }
@@ -353,6 +381,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
                 stats: stats_for(&durations),
+                ..Default::default()
             });
         }
         suites.push(pull_suite);
@@ -378,6 +407,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             iterations: durations.len(),
             durations_micros: durations.clone(),
             stats: stats_for(&durations),
+            ..Default::default()
         });
         suites.push(run_suite);
     }
@@ -402,6 +432,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             iterations: durations.len(),
             durations_micros: durations.clone(),
             stats: stats_for(&durations),
+            ..Default::default()
         });
         suites.push(exec_suite);
     }
@@ -418,6 +449,7 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
                 stats: stats_for(&durations),
+                ..Default::default()
             });
         }
         if let Some(run) = run_cmd_record(
@@ -431,9 +463,18 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
                 iterations: durations.len(),
                 durations_micros: durations.clone(),
                 stats: stats_for(&durations),
+                ..Default::default()
             });
         }
         suites.push(e2e_suite);
+    }
+
+    if suite_enabled(cfg, "codec") {
+        suites.push(bench_codec_suite(cfg));
+    }
+
+    if suite_enabled(cfg, "adapter") {
+        suites.push(bench_adapter_suite(cfg));
     }
 
     Ok(BenchReport {
@@ -443,9 +484,329 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
     })
 }
 
+// ── Microbenchmark suites (no daemon required) ───────────────────────────────
+
+fn measure_nanos<F: FnMut()>(iters: usize, mut f: F) -> Vec<u64> {
+    (0..iters)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            f();
+            start.elapsed().as_nanos() as u64
+        })
+        .collect()
+}
+
+fn nano_test(name: &str, iters: usize, f: impl FnMut()) -> TestResult {
+    let durations = measure_nanos(iters, f);
+    let stats = stats_for(&durations);
+    TestResult {
+        name: name.to_string(),
+        iterations: durations.len(),
+        durations_micros: durations,
+        stats,
+        unit: "nanos".to_string(),
+    }
+}
+
+fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
+    let iters = cfg.iters.max(100);
+
+    // ── requests ─────────────────────────────────────────────────────────────
+    let small_run = DaemonRequest::Run {
+        image: "alpine".to_string(),
+        tag: None,
+        command: vec!["/bin/sh".to_string()],
+        memory_limit_bytes: None,
+        cpu_weight: None,
+        ephemeral: false,
+    };
+    let large_run = DaemonRequest::Run {
+        image: "library/some-really-long-image-name-for-benchmarking".to_string(),
+        tag: Some("2026.03.16-benchmarks".to_string()),
+        command: (0..24)
+            .map(|i| format!("arg-{}-{}", i, "x".repeat(16)))
+            .collect(),
+        memory_limit_bytes: Some(512 * 1024 * 1024),
+        cpu_weight: Some(7500),
+        ephemeral: false,
+    };
+    let small_pull = DaemonRequest::Pull {
+        image: "alpine".to_string(),
+        tag: None,
+    };
+    let large_pull = DaemonRequest::Pull {
+        image: "library/some-really-long-image-name-for-benchmarking".to_string(),
+        tag: Some("2026.03.16-benchmarks".to_string()),
+    };
+    let small_stop = DaemonRequest::Stop {
+        id: "deadbeefdeadbeef".to_string(),
+    };
+    let large_stop = DaemonRequest::Stop {
+        id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+    };
+    let small_remove = DaemonRequest::Remove {
+        id: "deadbeefdeadbeef".to_string(),
+    };
+    let large_remove = DaemonRequest::Remove {
+        id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+    };
+    let list_req = DaemonRequest::List;
+
+    // ── responses ────────────────────────────────────────────────────────────
+    fn make_container_info(i: usize) -> ContainerInfo {
+        ContainerInfo {
+            id: format!("{:016x}", i),
+            image: format!("library/image-{}", i),
+            command: format!("echo hello {}", i),
+            state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),
+            created_at: format!("2026-03-16T12:{:02}:00Z", i % 60),
+            pid: Some(1000 + i as u32),
+        }
+    }
+    let small_created = DaemonResponse::ContainerCreated {
+        id: "deadbeefdeadbeef".to_string(),
+    };
+    let large_created = DaemonResponse::ContainerCreated {
+        id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+    };
+    let small_success = DaemonResponse::Success {
+        message: "ok".to_string(),
+    };
+    let large_success = DaemonResponse::Success {
+        message: "operation completed successfully with additional context".to_string(),
+    };
+    let small_error = DaemonResponse::Error {
+        message: "error".to_string(),
+    };
+    let large_error = DaemonResponse::Error {
+        message: "error: failed to perform operation due to invalid state".to_string(),
+    };
+    let small_list = DaemonResponse::ContainerList {
+        containers: vec![make_container_info(0)],
+    };
+    let large_list = DaemonResponse::ContainerList {
+        containers: (0..100).map(make_container_info).collect(),
+    };
+
+    // Pre-encode for decode benchmarks.
+    let enc_small_run = encode_request(&small_run).unwrap();
+    let enc_large_run = encode_request(&large_run).unwrap();
+    let enc_small_pull = encode_request(&small_pull).unwrap();
+    let enc_large_pull = encode_request(&large_pull).unwrap();
+    let enc_small_stop = encode_request(&small_stop).unwrap();
+    let enc_large_stop = encode_request(&large_stop).unwrap();
+    let enc_small_remove = encode_request(&small_remove).unwrap();
+    let enc_large_remove = encode_request(&large_remove).unwrap();
+    let enc_list = encode_request(&list_req).unwrap();
+    let enc_small_created = encode_response(&small_created).unwrap();
+    let enc_large_created = encode_response(&large_created).unwrap();
+    let enc_small_success = encode_response(&small_success).unwrap();
+    let enc_large_success = encode_response(&large_success).unwrap();
+    let enc_small_error = encode_response(&small_error).unwrap();
+    let enc_large_error = encode_response(&large_error).unwrap();
+    let enc_small_list = encode_response(&small_list).unwrap();
+    let enc_large_list = encode_response(&large_list).unwrap();
+
+    let mut tests = vec![
+        nano_test("encode_run_small", iters, || {
+            black_box(encode_request(black_box(&small_run)).unwrap());
+        }),
+        nano_test("decode_run_small", iters, || {
+            black_box(decode_request(black_box(&enc_small_run)).unwrap());
+        }),
+        nano_test("encode_run_large", iters, || {
+            black_box(encode_request(black_box(&large_run)).unwrap());
+        }),
+        nano_test("decode_run_large", iters, || {
+            black_box(decode_request(black_box(&enc_large_run)).unwrap());
+        }),
+        nano_test("encode_pull_small", iters, || {
+            black_box(encode_request(black_box(&small_pull)).unwrap());
+        }),
+        nano_test("decode_pull_small", iters, || {
+            black_box(decode_request(black_box(&enc_small_pull)).unwrap());
+        }),
+        nano_test("encode_pull_large", iters, || {
+            black_box(encode_request(black_box(&large_pull)).unwrap());
+        }),
+        nano_test("decode_pull_large", iters, || {
+            black_box(decode_request(black_box(&enc_large_pull)).unwrap());
+        }),
+        nano_test("encode_stop_small", iters, || {
+            black_box(encode_request(black_box(&small_stop)).unwrap());
+        }),
+        nano_test("decode_stop_small", iters, || {
+            black_box(decode_request(black_box(&enc_small_stop)).unwrap());
+        }),
+        nano_test("encode_stop_large", iters, || {
+            black_box(encode_request(black_box(&large_stop)).unwrap());
+        }),
+        nano_test("decode_stop_large", iters, || {
+            black_box(decode_request(black_box(&enc_large_stop)).unwrap());
+        }),
+        nano_test("encode_remove_small", iters, || {
+            black_box(encode_request(black_box(&small_remove)).unwrap());
+        }),
+        nano_test("decode_remove_small", iters, || {
+            black_box(decode_request(black_box(&enc_small_remove)).unwrap());
+        }),
+        nano_test("encode_remove_large", iters, || {
+            black_box(encode_request(black_box(&large_remove)).unwrap());
+        }),
+        nano_test("decode_remove_large", iters, || {
+            black_box(decode_request(black_box(&enc_large_remove)).unwrap());
+        }),
+        nano_test("encode_list", iters, || {
+            black_box(encode_request(black_box(&list_req)).unwrap());
+        }),
+        nano_test("decode_list", iters, || {
+            black_box(decode_request(black_box(&enc_list)).unwrap());
+        }),
+        nano_test("encode_container_created_small", iters, || {
+            black_box(encode_response(black_box(&small_created)).unwrap());
+        }),
+        nano_test("decode_container_created_small", iters, || {
+            black_box(decode_response(black_box(&enc_small_created)).unwrap());
+        }),
+        nano_test("encode_container_created_large", iters, || {
+            black_box(encode_response(black_box(&large_created)).unwrap());
+        }),
+        nano_test("decode_container_created_large", iters, || {
+            black_box(decode_response(black_box(&enc_large_created)).unwrap());
+        }),
+        nano_test("encode_success_small", iters, || {
+            black_box(encode_response(black_box(&small_success)).unwrap());
+        }),
+        nano_test("decode_success_small", iters, || {
+            black_box(decode_response(black_box(&enc_small_success)).unwrap());
+        }),
+        nano_test("encode_success_large", iters, || {
+            black_box(encode_response(black_box(&large_success)).unwrap());
+        }),
+        nano_test("decode_success_large", iters, || {
+            black_box(decode_response(black_box(&enc_large_success)).unwrap());
+        }),
+        nano_test("encode_error_small", iters, || {
+            black_box(encode_response(black_box(&small_error)).unwrap());
+        }),
+        nano_test("decode_error_small", iters, || {
+            black_box(decode_response(black_box(&enc_small_error)).unwrap());
+        }),
+        nano_test("encode_error_large", iters, || {
+            black_box(encode_response(black_box(&large_error)).unwrap());
+        }),
+        nano_test("decode_error_large", iters, || {
+            black_box(decode_response(black_box(&enc_large_error)).unwrap());
+        }),
+        nano_test("encode_container_list_small", iters, || {
+            black_box(encode_response(black_box(&small_list)).unwrap());
+        }),
+        nano_test("decode_container_list_small", iters, || {
+            black_box(decode_response(black_box(&enc_small_list)).unwrap());
+        }),
+        nano_test("encode_container_list_large", iters, || {
+            black_box(encode_response(black_box(&large_list)).unwrap());
+        }),
+        nano_test("decode_container_list_large", iters, || {
+            black_box(decode_response(black_box(&enc_large_list)).unwrap());
+        }),
+    ];
+
+    let invalid_req: &[u8] = b"{not-json\n";
+    let invalid_resp: &[u8] = br#"{"type":"Unknown"}\n"#;
+    tests.push(nano_test("decode_invalid_request", iters, || {
+        black_box(decode_request(black_box(invalid_req)).is_err());
+    }));
+    tests.push(nano_test("decode_invalid_response", iters, || {
+        black_box(decode_response(black_box(invalid_resp)).is_err());
+    }));
+
+    SuiteResult {
+        name: "codec".to_string(),
+        tests,
+    }
+}
+
+fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
+    let iters = cfg.iters.max(100);
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+
+    let layers = vec![PathBuf::from("/layer1")];
+    let container_dir = PathBuf::from("/container");
+    let resource_cfg = ResourceConfig::default();
+    let spawn_cfg = ContainerSpawnConfig {
+        rootfs: PathBuf::from("/rootfs"),
+        command: "/bin/sh".to_string(),
+        args: vec![],
+        env: vec![],
+        hostname: "test".to_string(),
+        cgroup_path: PathBuf::from("/cgroup"),
+        capture_output: false,
+        hooks: ContainerHooks::default(),
+    };
+
+    let registry_concrete = MockRegistry::new().with_cached_image("alpine", "latest");
+    let registry_trait: Arc<dyn ImageRegistry> =
+        Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
+    let fs_concrete = MockFilesystem::new();
+    let fs_trait: Arc<dyn FilesystemProvider> = Arc::new(MockFilesystem::new());
+    let limiter_concrete = MockLimiter::new();
+    let limiter_trait: Arc<dyn ResourceLimiter> = Arc::new(MockLimiter::new());
+    let runtime_concrete = MockRuntime::new();
+    let runtime_trait: Arc<dyn ContainerRuntime> = Arc::new(MockRuntime::new());
+    let arc_for_clone: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
+    let arc_for_downcast: Arc<dyn ImageRegistry> = Arc::new(MockRegistry::new());
+
+    let tests = vec![
+        nano_test("registry_direct_has_image", iters, || {
+            rt.block_on(async {
+                black_box(registry_concrete.has_image("alpine", "latest")).await;
+            });
+        }),
+        nano_test("registry_trait_object_has_image", iters, || {
+            rt.block_on(async {
+                black_box(registry_trait.has_image("alpine", "latest")).await;
+            });
+        }),
+        nano_test("filesystem_direct_setup", iters, || {
+            black_box(fs_concrete.setup_rootfs(&layers, &container_dir)).ok();
+        }),
+        nano_test("filesystem_trait_object_setup", iters, || {
+            black_box(fs_trait.setup_rootfs(&layers, &container_dir)).ok();
+        }),
+        nano_test("limiter_direct_create", iters, || {
+            black_box(limiter_concrete.create("container-123", &resource_cfg)).ok();
+        }),
+        nano_test("limiter_trait_object_create", iters, || {
+            black_box(limiter_trait.create("container-123", &resource_cfg)).ok();
+        }),
+        nano_test("runtime_direct_spawn", iters, || {
+            rt.block_on(async {
+                black_box(runtime_concrete.spawn_process(&spawn_cfg).await).ok();
+            });
+        }),
+        nano_test("runtime_trait_object_spawn", iters, || {
+            rt.block_on(async {
+                black_box(runtime_trait.spawn_process(&spawn_cfg).await).ok();
+            });
+        }),
+        nano_test("arc_clone", iters, || {
+            black_box(Arc::clone(&arc_for_clone));
+        }),
+        nano_test("downcast_to_concrete", iters, || {
+            black_box(arc_for_downcast.as_any().downcast_ref::<MockRegistry>());
+        }),
+    ];
+
+    SuiteResult {
+        name: "adapter".to_string(),
+        tests,
+    }
+}
+
 fn print_help() {
     println!(
-        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>\n  --out-dir <path>"
+        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>  (pull|run|exec|e2e|codec|adapter)\n  --out-dir <path>"
     );
 }
 

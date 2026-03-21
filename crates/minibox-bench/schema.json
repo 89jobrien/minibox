@@ -30,7 +30,8 @@
                 "durations_micros": {
                   "type": "array",
                   "items": {"type": "integer", "minimum": 0}
-                }
+                },
+                "unit": {"type": "string", "description": "Unit of durations_micros values: 'micros' (default) or 'nanos'"}
               }
             }
           }
