@@ -56,6 +56,8 @@ def ask_with_fallback(prompt: str) -> tuple[str, str]:
 | OpenAI | `gpt-4.1` | $2.00 | $8.00 |
 | Google | `gemini-2.5-flash` | $0.15 | $0.60 |
 
+> **Note:** The existing `ci_agent.py` used `claude-opus-4-6`. This spec intentionally switches to `claude-sonnet-4-6` — same capability tier for CI log diagnosis at the same price point, and consistent with the rest of the codebase. Opus is reserved for the most demanding reasoning tasks.
+
 **Environment variables (all optional — missing key skips provider):**
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
@@ -70,16 +72,17 @@ def ask_with_fallback(prompt: str) -> tuple[str, str]:
 
 ### issues.py
 
-**Responsibility:** Gitea issue lifecycle — create, deduplicate, comment. Failures are non-fatal: log a warning, don't propagate (diagnosis is already in the job log regardless).
+**Responsibility:** Gitea issue lifecycle — create, deduplicate, comment — and commit status posting. Failures are non-fatal: log a warning, don't propagate (diagnosis is already in the job log regardless).
 
-**Deduplication strategy:** Each created issue embeds `<!-- sha: {full_commit_sha} -->` as a hidden HTML comment in the body. To find an existing issue: search open issues with label `ci-failure`, scan results for the SHA marker. This avoids a separate index and survives Gitea restarts.
+**Deduplication strategy:** Each created issue embeds `<!-- sha: {full_commit_sha} -->` as a hidden HTML comment in the body. To find an existing issue: use Gitea's search API with `q=<!-- sha: {sha}` to pre-filter by the marker text (Gitea searches issue bodies), then confirm by scanning the returned `body` field. Must paginate exhaustively — Gitea defaults to `limit=10`; use `page=1,2,...` until results are empty or a match is found. This avoids a separate index and survives Gitea restarts.
 
 ```python
 def ensure_label_exists(repo: str, headers: dict) -> None:
     """Create 'ci-failure' label (color #e11d48) if absent. Idempotent."""
 
 def find_issue_for_commit(repo: str, sha: str, headers: dict) -> int | None:
-    """Return open issue number for this commit SHA, or None."""
+    """Return open issue number for this commit SHA, or None.
+    Paginates through all open ci-failure issues until match or exhausted."""
 
 def create_issue(
     repo: str, sha: str, diagnosis: str,
@@ -92,6 +95,11 @@ def add_comment(
     provider: str, headers: dict,
 ) -> None:
     """Append re-run diagnosis as a comment."""
+
+def set_commit_status(
+    repo: str, sha: str, state: str, description: str, headers: dict,
+) -> None:
+    """Post ci/agent-diagnosis commit status. Non-fatal on failure."""
 ```
 
 **Issue title format:** `CI failure: {sha[:8]} — {', '.join(failed_job_names)}`
@@ -179,7 +187,7 @@ Add two new secrets to the `diagnose` job in `.gitea/workflows/ci.yml`:
 | OpenAI API | Write | Fallback only |
 | Google Gemini API | Write | Fallback only |
 
-**Data boundaries:** Only failed job log tails (30KB per job) are sent to LLM providers. No source code, secrets, or environment variables from the failing jobs are included in prompts.
+**Data boundaries:** Only failed job log tails (30KB per job) are sent to LLM providers. No source code, environment variables, or secrets are deliberately included in prompts. However, if a CI step echoes a secret or env var to stdout (e.g. a misconfigured step printing `env`), that content will appear in the raw log and flow to the LLM — this cannot be filtered at the agent level. Ensure CI steps do not log sensitive values.
 
 ---
 
@@ -202,6 +210,7 @@ Add two new secrets to the `diagnose` job in `.gitea/workflows/ci.yml`:
 | Action | File |
 |--------|------|
 | Delete | `scripts/ci_agent.py` |
+| Create | `scripts/__init__.py` (empty, makes `scripts/` a package) |
 | Create | `scripts/ci_agent/__main__.py` |
 | Create | `scripts/ci_agent/providers.py` |
 | Create | `scripts/ci_agent/issues.py` |
