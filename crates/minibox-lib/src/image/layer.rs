@@ -688,4 +688,40 @@ mod tests {
                 || err.to_string().to_lowercase().contains("digest")
         );
     }
+
+    #[cfg(test)]
+    mod proptest_tests {
+        use super::*;
+        use proptest::prelude::*;
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        // Any path containing a `..` component must always be rejected.
+        proptest! {
+            #[test]
+            fn dotdot_paths_always_rejected(
+                prefix in "[a-z]{1,8}",
+                suffix in "[a-z]{1,8}",
+            ) {
+                let dir = TempDir::new().unwrap();
+                let dest = dir.path();
+                let evil = PathBuf::from(format!("{prefix}/../../{suffix}"));
+                let result = validate_tar_entry_path(&evil, dest);
+                prop_assert!(result.is_err(), "expected rejection for path {:?}", evil);
+            }
+
+            // Valid relative paths (no `..`, no absolute) must never panic —
+            // they may succeed or return a clean error, never panic.
+            #[test]
+            fn safe_relative_paths_do_not_panic(
+                component in "[a-zA-Z0-9_-]{1,16}",
+            ) {
+                let dir = TempDir::new().unwrap();
+                let dest = dir.path();
+                let path = PathBuf::from(&component);
+                // Must not panic — result can be Ok or Err
+                let _ = validate_tar_entry_path(&path, dest);
+            }
+        }
+    }
 }
