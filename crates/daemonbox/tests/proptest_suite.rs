@@ -3,14 +3,27 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use daemonbox::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox_lib::{image::ImageStore, protocol::ContainerInfo};
+use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn make_rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("tokio runtime")
+}
+
+fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
+    Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        containers_base: tmp.join("containers"),
+        run_containers_base: tmp.join("run"),
+    })
 }
 
 // DaemonState::save_to_disk fires on every add/remove — each proptest
@@ -128,5 +141,64 @@ proptest! {
 
         let list = rt.block_on(state.list_containers());
         prop_assert_eq!(list.len(), adds.len() - removed);
+    }
+}
+
+// ── Handler input safety ──────────────────────────────────────────────────────
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_stop_unknown_id_is_error(id in arb_container_id()) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let state = make_state(tmp.path());
+        let rt = make_rt();
+
+        let resp = rt.block_on(handle_stop(id.clone(), state));
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
+        );
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_remove_unknown_id_is_error(id in arb_container_id()) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let state = make_state(tmp.path());
+        let deps = make_deps(tmp.path());
+        let rt = make_rt();
+
+        let resp = rt.block_on(handle_remove(id.clone(), state, deps));
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
+        );
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_list_always_returns_container_list(
+        ids in proptest::collection::hash_set(arb_container_id(), 0..=5)
+    ) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let state = make_state(tmp.path());
+        let rt = make_rt();
+
+        for id in &ids {
+            rt.block_on(state.add_container(make_record(id)));
+        }
+        let resp = rt.block_on(handle_list(state));
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::ContainerList { .. }),
+            "expected ContainerList, got {resp:?}"
+        );
     }
 }
