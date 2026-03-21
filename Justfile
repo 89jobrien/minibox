@@ -46,6 +46,11 @@ ci:
 test-unit:
     cargo xtask test-unit
 
+# Adapter isolation tests (any platform)
+test-adapters:
+    cargo test -p minibox-lib --test adapter_colima_tests
+    cargo test -p daemonbox --test handler_adapter_swap_tests
+
 # Fast parallel test runner via nextest
 nextest:
     cargo nextest run --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
