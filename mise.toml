@@ -167,10 +167,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
+BODY=$(python3 -c "import json, sys; print(json.dumps({'data': sys.argv[1]}))" "$SECRET_VALUE")
+
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   -H "Authorization: token $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"data\": \"$SECRET_VALUE\"}" \
+  -d "$BODY" \
   "$GITEA_URL/api/v1/repos/$REPO/actions/secrets/$SECRET_NAME")
 
 [[ "$STATUS" == "201" || "$STATUS" == "204" ]] \

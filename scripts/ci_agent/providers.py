@@ -68,12 +68,12 @@ def _ask_gemini(prompt: str) -> str:
         "contents": [{"parts": [{"text": prompt}]}]
     }).encode()
     url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={key}"
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.5-flash:generateContent"
     )
     req = urllib.request.Request(
         url, data=body,
-        headers={"content-type": "application/json"},
+        headers={"content-type": "application/json", "x-goog-api-key": key},
         method="POST",
     )
     with urllib.request.urlopen(req) as r:
