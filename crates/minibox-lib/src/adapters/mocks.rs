@@ -32,6 +32,7 @@ use crate::domain::{
 use anyhow::Result;
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 // ---------------------------------------------------------------------------
@@ -394,6 +395,74 @@ impl ContainerRuntime for MockRuntime {
 
 adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 
+// ---------------------------------------------------------------------------
+// FailableFilesystemMock
+// ---------------------------------------------------------------------------
+
+/// Filesystem mock with runtime-controllable failure injection via atomics.
+///
+/// Unlike `MockFilesystem` (whose failure mode is fixed at construction),
+/// this mock lets tests toggle failures between calls.
+pub struct FailableFilesystemMock {
+    should_fail_setup: AtomicBool,
+    should_fail_cleanup: AtomicBool,
+    setup_count: AtomicUsize,
+    cleanup_count: AtomicUsize,
+}
+
+impl FailableFilesystemMock {
+    pub fn new() -> Self {
+        Self {
+            should_fail_setup: AtomicBool::new(false),
+            should_fail_cleanup: AtomicBool::new(false),
+            setup_count: AtomicUsize::new(0),
+            cleanup_count: AtomicUsize::new(0),
+        }
+    }
+
+    /// Toggle whether `setup_rootfs` returns an error.
+    pub fn set_fail_setup(&self, fail: bool) {
+        self.should_fail_setup.store(fail, Ordering::SeqCst);
+    }
+
+    /// Toggle whether `cleanup` returns an error.
+    pub fn set_fail_cleanup(&self, fail: bool) {
+        self.should_fail_cleanup.store(fail, Ordering::SeqCst);
+    }
+
+    pub fn setup_count(&self) -> usize {
+        self.setup_count.load(Ordering::SeqCst)
+    }
+
+    pub fn cleanup_count(&self) -> usize {
+        self.cleanup_count.load(Ordering::SeqCst)
+    }
+}
+
+impl FilesystemProvider for FailableFilesystemMock {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+        self.setup_count.fetch_add(1, Ordering::SeqCst);
+        if self.should_fail_setup.load(Ordering::SeqCst) {
+            anyhow::bail!("injected setup failure");
+        }
+        Ok(container_dir.join("merged"))
+    }
+
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn cleanup(&self, _container_dir: &Path) -> Result<()> {
+        self.cleanup_count.fetch_add(1, Ordering::SeqCst);
+        if self.should_fail_cleanup.load(Ordering::SeqCst) {
+            anyhow::bail!("injected cleanup failure");
+        }
+        Ok(())
+    }
+}
+
+adapt!(FailableFilesystemMock);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,6 +568,35 @@ mod tests {
         // Second spawn should give different PID
         let result2 = runtime.spawn_process(&config).await.unwrap();
         assert_eq!(result2.pid, 10001);
+    }
+
+    #[test]
+    fn test_failable_mock_toggles_setup_failure() {
+        let mock = FailableFilesystemMock::new();
+
+        // Default: success
+        assert!(mock.setup_rootfs(&[], Path::new("/test")).is_ok());
+        assert_eq!(mock.setup_count(), 1);
+
+        // Toggle on
+        mock.set_fail_setup(true);
+        assert!(mock.setup_rootfs(&[], Path::new("/test")).is_err());
+        assert_eq!(mock.setup_count(), 2);
+
+        // Toggle off
+        mock.set_fail_setup(false);
+        assert!(mock.setup_rootfs(&[], Path::new("/test")).is_ok());
+        assert_eq!(mock.setup_count(), 3);
+    }
+
+    #[test]
+    fn test_failable_mock_toggles_cleanup_failure() {
+        let mock = FailableFilesystemMock::new();
+
+        assert!(mock.cleanup(Path::new("/test")).is_ok());
+        mock.set_fail_cleanup(true);
+        assert!(mock.cleanup(Path::new("/test")).is_err());
+        assert_eq!(mock.cleanup_count(), 2);
     }
 }
 
