@@ -344,18 +344,23 @@ fn ssh_sudo_script(sudo_pass: &str, script: &str) -> Result<String> {
         bail!("failed to write script to remote");
     }
 
-    // Step 2: run as root; clean up regardless of exit code
-    let run_cmd = format!(
-        "echo '{}' | sudo -S bash '{tmpfile}'; RC=$?; rm -f '{tmpfile}'; exit $RC",
-        sudo_pass.replace('\'', "'\\''"),
-    );
-    let out = Command::new("ssh")
+    // Step 2: run as root; pass sudo password via stdin so it never appears in ps output
+    let run_cmd = format!("sudo -S bash '{tmpfile}'; RC=$?; rm -f '{tmpfile}'; exit $RC");
+    let mut run = Command::new("ssh")
         .arg(VPS_HOST)
         .arg(&run_cmd)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .output()
+        .spawn()
         .context("ssh sudo run failed")?;
+    // Write password then close stdin so sudo reads exactly one line
+    if let Some(mut stdin) = run.stdin.take() {
+        writeln!(stdin, "{sudo_pass}").context("write sudo password to ssh stdin")?;
+    }
+    let out = run
+        .wait_with_output()
+        .context("ssh sudo wait_with_output failed")?;
     if !out.status.success() {
         bail!("remote script exited with status {}", out.status);
     }
