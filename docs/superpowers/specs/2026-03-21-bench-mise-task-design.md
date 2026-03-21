@@ -40,7 +40,7 @@ Both use the same SSH pattern as the existing `mise run ci` task:
 1. Fetch VPS password from 1Password
 2. SSH in as `dev@100.105.75.7`
 3. Clone `http://100.105.75.7:3000/joe/minibox` to `~/minibox` if absent; `git pull` if present
-4. Run `~/.local/bin/mise exec -- cargo build --release -p minibox-bench` from `~/minibox`
+4. From `~/minibox`, run `~/.local/bin/mise exec -- cargo build --release -p minibox-bench`
 5. Confirm `~/minibox/target/release/minibox-bench` exists and print confirmation
 
 **Expected runtime:** Several minutes (first run). Subsequent runs after `git pull` are incremental.
@@ -56,7 +56,8 @@ Both use the same SSH pattern as the existing `mise run ci` task:
 ```
 1. Fetch VPS password from 1Password
 2. Generate short-lived Gitea token
-3. SSH in — single bash session:
+3. SSH in — single bash session, stdout captured via command substitution
+   (same pattern as `mise run ci`: `BENCH_OUT=$(sshpass ... ssh ... 'bash -s' <<'ENDSSH' ... ENDSSH)`):
    a. Pre-flight checks (fail fast with clear message):
       - ~/minibox/target/release/minibox-bench exists
         → else: "minibox-bench not found — run: mise run bench:setup"
@@ -64,9 +65,12 @@ Both use the same SSH pattern as the existing `mise run ci` task:
         → else: "minibox not installed on VPS"
       - /run/minibox/miniboxd.sock exists
         → else: "miniboxd not running — start the daemon first"
-   b. Run: minibox-bench --iters 5 --out-dir /tmp/bench-out-$$
-   c. Find and cat the .txt result file
-   d. Clean up /tmp/bench-out-$$
+   b. Remove any stale output dir: rm -rf /tmp/bench-out-$$
+   c. Run: minibox-bench --iters 5 --out-dir /tmp/bench-out-$$
+      (5 is intentional — pull/e2e are single-shot; run/exec at 5 iters
+      takes ~30–60 s on the VPS vs ~4 min at the default 20)
+   d. Find the .txt result: ls -t /tmp/bench-out-$$/*.txt | head -1, then cat it
+   e. Clean up /tmp/bench-out-$$
 4. Capture txt output locally
 5. Get commit SHA: git rev-parse HEAD (local)
 6. POST comment to Gitea commits/{sha}/comments
