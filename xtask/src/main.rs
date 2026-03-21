@@ -400,6 +400,11 @@ rm -rf "$OUT_DIR"
             writeln!(file, "{line}").context("append to bench.jsonl")?;
             eprintln!("✓ bench/results/bench.jsonl appended");
 
+            // Keep latest.json in sync as the canonical current snapshot for devloop.
+            let pretty = serde_json::to_string_pretty(&json).context("pretty-print failed")?;
+            fs::write("bench/results/latest.json", pretty).context("write latest.json")?;
+            eprintln!("✓ bench/results/latest.json updated");
+
             // Commit and push bench results
             let sha_short = cmd!(sh, "git rev-parse --short HEAD")
                 .read()
