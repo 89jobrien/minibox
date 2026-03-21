@@ -77,27 +77,27 @@ def ask_with_fallback(prompt: str) -> tuple[str, str]:
 **Deduplication strategy:** Each created issue embeds `<!-- sha: {full_commit_sha} -->` as a hidden HTML comment in the body. To find an existing issue: use Gitea's search API with `q=<!-- sha: {sha}` to pre-filter by the marker text (Gitea searches issue bodies), then confirm by scanning the returned `body` field. Must paginate exhaustively — Gitea defaults to `limit=10`; use `page=1,2,...` until results are empty or a match is found. This avoids a separate index and survives Gitea restarts.
 
 ```python
-def ensure_label_exists(repo: str, headers: dict) -> None:
+def ensure_label_exists(gitea_url: str, repo: str, headers: dict) -> None:
     """Create 'ci-failure' label (color #e11d48) if absent. Idempotent."""
 
-def find_issue_for_commit(repo: str, sha: str, headers: dict) -> int | None:
+def find_issue_for_commit(gitea_url: str, repo: str, sha: str, headers: dict) -> int | None:
     """Return open issue number for this commit SHA, or None.
     Paginates through all open ci-failure issues until match or exhausted."""
 
 def create_issue(
-    repo: str, sha: str, diagnosis: str,
-    provider: str, failed_jobs: list[str], headers: dict,
+    gitea_url: str, repo: str, sha: str, diagnosis: str,
+    provider: str, failed_jobs: list[str], run_id: str, headers: dict,
 ) -> int:
-    """Open new issue. Returns issue number."""
+    """Open new issue. Returns issue number. run_id used to construct run URL in body."""
 
 def add_comment(
-    repo: str, issue_number: int, diagnosis: str,
-    provider: str, headers: dict,
+    gitea_url: str, repo: str, issue_number: int,
+    diagnosis: str, provider: str, headers: dict,
 ) -> None:
     """Append re-run diagnosis as a comment."""
 
 def set_commit_status(
-    repo: str, sha: str, state: str, description: str, headers: dict,
+    gitea_url: str, repo: str, sha: str, state: str, description: str, headers: dict,
 ) -> None:
     """Post ci/agent-diagnosis commit status. Non-fatal on failure."""
 ```
