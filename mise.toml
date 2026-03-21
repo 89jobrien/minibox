@@ -12,11 +12,10 @@ set -euo pipefail
 GITEA_URL="http://100.105.75.7:3000"
 REPO="joe/minibox"
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
-SSH_OPTS="-o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password -o StrictHostKeyChecking=no"
 TOKEN_NAME="ci-snap-$$"
 
 # Generate a short-lived API token via the VPS
-TOKEN=$(sshpass -p "$VPS_PASS" ssh $SSH_OPTS dev@100.105.75.7 \
+TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
@@ -84,45 +83,11 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
-SSH_OPTS="-o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password -o StrictHostKeyChecking=no"
-
-sshpass -p "$VPS_PASS" ssh $SSH_OPTS dev@100.105.75.7 'bash -s' <<'ENDSSH'
-set -euo pipefail
-
-REPO_DIR=~/minibox
-
-if [ -d "$REPO_DIR/.git" ]; then
-  echo "Pulling latest..."
-  git -C "$REPO_DIR" pull
-else
-  echo "Cloning repo..."
-  git clone http://100.105.75.7:3000/joe/minibox "$REPO_DIR"
-fi
-
-echo "Building minibox-bench..."
-cd "$REPO_DIR"
-~/.local/bin/mise exec -- cargo build --release -p minibox-bench
-
-echo "✓ minibox-bench ready at $REPO_DIR/target/release/minibox-bench"
-ENDSSH
-"""
-
-[tasks.bench]
-description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-
 GITEA_URL="http://100.105.75.7:3000"
-REPO="joe/minibox"
-COMMIT_SHA=$(git rev-parse HEAD)
-
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
-SSH_OPTS="-o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password -o StrictHostKeyChecking=no"
-TOKEN_NAME="bench-$$"
+TOKEN_NAME="bench-setup-$$"
 
-TOKEN=$(sshpass -p "$VPS_PASS" ssh $SSH_OPTS dev@100.105.75.7 \
+TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
@@ -135,61 +100,37 @@ cleanup() {
 }
 trap cleanup EXIT
 
-BENCH_OUT=$(sshpass -p "$VPS_PASS" ssh $SSH_OPTS dev@100.105.75.7 'bash -s' <<'ENDSSH'
+sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
+  "GITEA_TOKEN=$TOKEN bash -s" <<'ENDSSH'
 set -euo pipefail
 
-BENCH_BIN=~/minibox/target/release/minibox-bench
+REPO_DIR=~/minibox
+CLONE_URL="http://joe:${GITEA_TOKEN}@100.105.75.7:3000/joe/minibox"
 
-if [ ! -f "$BENCH_BIN" ]; then
-  echo "error: minibox-bench not found — run: mise run bench:setup" >&2; exit 1
+if [ -d "$REPO_DIR/.git" ]; then
+  echo "Pulling latest..."
+  git -C "$REPO_DIR" remote set-url origin "$CLONE_URL"
+  git -C "$REPO_DIR" pull
+else
+  echo "Cloning repo..."
+  git clone "$CLONE_URL" "$REPO_DIR"
 fi
 
-if ! command -v minibox &>/dev/null; then
-  echo "error: minibox not installed on VPS" >&2; exit 1
-fi
+# Strip credentials from remote URL after clone
+git -C "$REPO_DIR" remote set-url origin "http://100.105.75.7:3000/joe/minibox"
 
-if [ ! -S /run/minibox/miniboxd.sock ]; then
-  echo "error: miniboxd not running — start the daemon first" >&2; exit 1
-fi
+echo "Building minibox-bench..."
+cd "$REPO_DIR"
+~/.local/bin/mise trust
+~/.local/bin/mise exec -- cargo build --release -p minibox-bench
 
-OUT_DIR="/tmp/bench-out-$$"
-rm -rf "$OUT_DIR"
-"$BENCH_BIN" --iters 5 --out-dir "$OUT_DIR"
-JSON_FILE=$(ls -t "$OUT_DIR"/*.json | head -1)
-cp "$JSON_FILE" /tmp/bench-latest.json
-ls -t "$OUT_DIR"/*.txt | head -1 | xargs cat
-rm -rf "$OUT_DIR"
+echo "✓ minibox-bench ready at $REPO_DIR/target/release/minibox-bench"
 ENDSSH
-)
-
-echo "$BENCH_OUT"
-
-# SCP JSON result back for devloop ingestion
-mkdir -p bench/results
-sshpass -p "$VPS_PASS" scp $SSH_OPTS \
-  dev@100.105.75.7:/tmp/bench-latest.json bench/results/latest.json \
-  && echo "✓ bench/results/latest.json written" \
-  || echo "warning: could not SCP JSON result (results still printed above)" >&2
-
-COMMENT_BODY=$(python3 -c "
-import json, sys
-sha = sys.argv[1]
-out = sys.argv[2]
-bt = chr(96) * 3
-body = '## Benchmark Results\n\n**Host:** jobrien-vm | **Commit:** ' + sha[:8] + '\n\n' + bt + '\n' + out + '\n' + bt
-print(json.dumps({'body': body}))
-" "$COMMIT_SHA" "$BENCH_OUT")
-
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: token $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$COMMENT_BODY" \
-  "$GITEA_URL/api/v1/repos/$REPO/commits/$COMMIT_SHA/comments")
-
-[[ "$STATUS" == "201" ]] \
-  && echo "✓ Results posted: $GITEA_URL/$REPO/commit/$COMMIT_SHA" \
-  || echo "warning: HTTP $STATUS posting comment (results printed above)" >&2
 """
+
+[tasks.bench]
+description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
+run = "cargo xtask bench-vps"
 
 [tasks."ci:set-secret"]
 description = "Set a Gitea Actions secret (usage: mise run ci:set-secret -- NAME value)"
@@ -203,10 +144,9 @@ SECRET_NAME="${1:?usage: mise run ci:set-secret -- NAME value}"
 SECRET_VALUE="${2:?usage: mise run ci:set-secret -- NAME value}"
 
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
-SSH_OPTS="-o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password -o StrictHostKeyChecking=no"
 TOKEN_NAME="ci-secret-$$"
 
-TOKEN=$(sshpass -p "$VPS_PASS" ssh $SSH_OPTS dev@100.105.75.7 \
+TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
@@ -229,3 +169,4 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
   && echo "✓ $SECRET_NAME set (HTTP $STATUS)" \
   || { echo "error: HTTP $STATUS setting $SECRET_NAME" >&2; exit 1; }
 """
+

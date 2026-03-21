@@ -47,8 +47,10 @@ Cargo.lock is committed for binary projects
 /profile.json.gz
 /artifacts/
 
-# Benchmark output
-/bench/results/
+# Benchmark output — track only the latest snapshot for devloop
+/bench/results/*.json
+/bench/results/*.txt
+!/bench/results/latest.json
 
 # Testing
 *.profraw

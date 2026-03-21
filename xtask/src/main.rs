@@ -1,5 +1,10 @@
 use anyhow::{Context, Result, bail};
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    io::Write,
+    path::Path,
+    process::{Command, Stdio},
+};
 use xshell::{Shell, cmd};
 
 fn main() -> Result<()> {
@@ -20,6 +25,7 @@ fn main() -> Result<()> {
         Some("clean-artifacts") => clean_artifacts(&sh),
         Some("nuke-test-state") => nuke_test_state(&sh),
         Some("bench") => bench(&sh),
+        Some("bench-vps") => bench_vps(&sh),
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -31,7 +37,8 @@ fn main() -> Result<()> {
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
-            eprintln!("  bench            run benchmark binary");
+            eprintln!("  bench            run benchmark binary (local, dry-run safe)");
+            eprintln!("  bench-vps        run benchmark on VPS, save bench/results/latest.json");
             Ok(())
         }
     }
@@ -242,9 +249,131 @@ fn nuke_test_state(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Run benchmark binary
+/// Run benchmark binary (local, requires Linux + miniboxd running)
 fn bench(sh: &Shell) -> Result<()> {
     cmd!(sh, "./target/release/minibox-bench --dry-run").run()?;
     cmd!(sh, "./target/release/minibox-bench").run()?;
+    Ok(())
+}
+
+// ── VPS bench helpers ────────────────────────────────────────────────────────
+
+const VPS_HOST: &str = "dev@100.105.75.7";
+const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
+
+/// SSH options that bypass all key auth and force password-only.
+/// Passed as individual args to avoid any shell quoting or template issues.
+fn ssh_opts() -> Vec<&'static str> {
+    vec![
+        "-o",
+        "IdentitiesOnly=yes",
+        "-o",
+        "IdentityAgent=none",
+        "-o",
+        "PubkeyAuthentication=no",
+        "-o",
+        "PreferredAuthentications=password",
+        "-o",
+        "StrictHostKeyChecking=no",
+    ]
+}
+
+/// Run a script on the remote as root. Two SSH calls:
+/// 1. Upload script to a temp file (script on stdin, no sudo password conflict).
+/// 2. Execute with `sudo -S bash <tmpfile>` (password on stdin, script from file).
+fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
+    let tmpfile = format!("/tmp/xtask-bench-{}.sh", std::process::id());
+
+    // Step 1: upload script
+    let write_cmd = format!("cat > '{tmpfile}' && chmod 700 '{tmpfile}'");
+    let mut upload = Command::new("sshpass")
+        .arg("-p")
+        .arg(pass)
+        .arg("ssh")
+        .args(ssh_opts())
+        .arg(VPS_HOST)
+        .arg(&write_cmd)
+        .stdin(Stdio::piped())
+        .spawn()
+        .context("failed to spawn sshpass for script upload")?;
+    upload
+        .stdin
+        .take()
+        .context("no stdin")?
+        .write_all(script.as_bytes())
+        .context("failed to write script")?;
+    if !upload.wait().context("script upload wait")?.success() {
+        bail!("failed to write script to remote");
+    }
+
+    // Step 2: run as root; clean up regardless of exit code
+    let run_cmd = format!(
+        "echo '{}' | sudo -S bash '{tmpfile}'; RC=$?; rm -f '{tmpfile}'; exit $RC",
+        pass.replace('\'', "'\\''"),
+    );
+    let out = Command::new("sshpass")
+        .arg("-p")
+        .arg(pass)
+        .arg("ssh")
+        .args(ssh_opts())
+        .arg(VPS_HOST)
+        .arg(&run_cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .output()
+        .context("ssh sudo run failed")?;
+    if !out.status.success() {
+        bail!("remote script exited with status {}", out.status);
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Run minibox-bench on the VPS as root and save results to bench/results/latest.json.
+fn bench_vps(sh: &Shell) -> Result<()> {
+    let vps_pass = cmd!(
+        sh,
+        "op item get jobrien-vm --account=my.1password.com --fields password --reveal"
+    )
+    .read()
+    .context("op credential fetch failed")?;
+    let vps_pass = vps_pass.trim().to_string();
+
+    eprintln!("running bench on VPS (this takes ~1 min)...");
+    let bench_script = format!(
+        r#"set -euo pipefail
+BENCH_BIN="{BENCH_BIN}"
+[ -f "$BENCH_BIN" ] || {{ echo "error: minibox-bench not found — run: mise run bench:setup" >&2; exit 1; }}
+command -v minibox >/dev/null 2>&1 || {{ echo "error: minibox not in PATH" >&2; exit 1; }}
+[ -S /run/minibox/miniboxd.sock ] || {{ echo "error: miniboxd not running" >&2; exit 1; }}
+OUT_DIR="/tmp/bench-out-$$"
+rm -rf "$OUT_DIR"
+"$BENCH_BIN" --iters 5 --out-dir "$OUT_DIR"
+JSON_FILE=$(ls -t "$OUT_DIR"/*.json | head -1)
+cp "$JSON_FILE" /tmp/bench-latest.json
+ls -t "$OUT_DIR"/*.txt | head -1 | xargs cat
+rm -rf "$OUT_DIR"
+"#
+    );
+    let bench_txt = ssh_sudo_script(&vps_pass, &bench_script)?;
+    println!("{bench_txt}");
+
+    eprintln!("fetching JSON result...");
+    fs::create_dir_all("bench/results").context("failed to create bench/results")?;
+    let scp_ok = Command::new("sshpass")
+        .arg("-p")
+        .arg(&vps_pass)
+        .arg("scp")
+        .args(ssh_opts())
+        .arg(format!("{VPS_HOST}:/tmp/bench-latest.json"))
+        .arg("bench/results/latest.json")
+        .status()
+        .context("scp failed")?
+        .success();
+    if scp_ok {
+        eprintln!("✓ bench/results/latest.json written");
+    } else {
+        eprintln!("warning: scp failed — JSON not saved locally");
+    }
+
     Ok(())
 }

@@ -1,0 +1,99 @@
+{
+  "metadata": {
+    "timestamp": "2026-03-21T07:56:43.239565718+00:00",
+    "hostname": "jobrien",
+    "git_sha": "unknown",
+    "minibox_version": "minibox 0.1.0"
+  },
+  "suites": [
+    {
+      "name": "pull",
+      "tests": [
+        {
+          "name": "pull_alpine",
+          "iterations": 1,
+          "durations_micros": [
+            275372
+          ],
+          "stats": {
+            "min": 275372,
+            "avg": 275372,
+            "p95": 275372
+          }
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "tests": [
+        {
+          "name": "run_true",
+          "iterations": 5,
+          "durations_micros": [
+            14775,
+            13372,
+            8767,
+            14008,
+            25825
+          ],
+          "stats": {
+            "min": 8767,
+            "avg": 15349,
+            "p95": 25825
+          }
+        }
+      ]
+    },
+    {
+      "name": "exec",
+      "tests": [
+        {
+          "name": "exec_echo",
+          "iterations": 5,
+          "durations_micros": [
+            12378,
+            23576,
+            28252,
+            11634,
+            11059
+          ],
+          "stats": {
+            "min": 11059,
+            "avg": 17379,
+            "p95": 28252
+          }
+        }
+      ]
+    },
+    {
+      "name": "e2e",
+      "tests": [
+        {
+          "name": "pull_alpine",
+          "iterations": 1,
+          "durations_micros": [
+            200995
+          ],
+          "stats": {
+            "min": 200995,
+            "avg": 200995,
+            "p95": 200995
+          }
+        },
+        {
+          "name": "run_true",
+          "iterations": 1,
+          "durations_micros": [
+            8592
+          ],
+          "stats": {
+            "min": 8592,
+            "avg": 8592,
+            "p95": 8592
+          }
+        }
+      ]
+    }
+  ],
+  "errors": []
+}
