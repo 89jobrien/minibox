@@ -74,7 +74,7 @@ We use CVSS 3.1 scoring:
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │              External Zone (Internet)                  │  │
 │  │  - Docker Hub registry (HTTPS-only, TLS 1.2+)         │  │
-│  │  - Size limits enforced (10 GB/layer, 10 MB manifest) │  │
+│  │  - Size limits enforced (1 GB/layer, 10 MB manifest) │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -136,7 +136,7 @@ We use CVSS 3.1 scoring:
 **Mitigations:**
 
 - HTTPS-only connections with TLS 1.2+
-- 10 GB per-layer size limit
+- 1 GB per-layer size limit
 - 10 MB manifest size limit
 - Tar entry validation (no .., symlinks, device nodes)
 - Setuid/setgid bit stripping
@@ -233,7 +233,7 @@ We use CVSS 3.1 scoring:
 **Layer 1: Input Validation**
 
 - Request size limits (1 MB)
-- Image size limits (10 GB/layer)
+- Image size limits (1 GB/layer)
 - Path canonicalization
 - Tar entry validation
 - Range validation for cgroup values
@@ -341,7 +341,7 @@ fn authenticate_client(stream: &UnixStream) -> Result<(u32, u32)>
 - Authentication bypass attempts
 - Concurrent spawn limits
 
-**Current Status:** 11 integration tests implemented, security tests pending
+**Current Status:** 24+ integration tests implemented (cgroup + handler), security tests pending
 
 ### Security Tests
 

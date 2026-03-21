@@ -13,21 +13,22 @@ bound if no backend is available.
 ```
 miniboxd starts
       │
-      ├─── Linux ─────────────────────────────────────────────┐
+      ├─── Linux ──────────────────────────────────────────────┐
       │      │                                                 │
       │    MINIBOX_ADAPTER?                                    │
-      │      ├── native (default) → namespaces + cgroups v2   │
+      │      ├── native (default) → namespaces + cgroups v2    │
+      │      ├── docker                                        │
       │      ├── gke              → proot + copy FS            │
       │      └── colima           → Colima/limactl delegate    │
       │                                                        │
-      ├─── macOS ──────────────────────────────────────────── ┤
+      ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
       │    macbox::preflight()                                 │
-      │      ├── MINIBOX_ADAPTER=vf  OR  VF available  ──────►│ Virtualization.framework
+      │      ├── MINIBOX_ADAPTER=vf  OR  VF available  ───────►│ Virtualization.framework
       │      ├── MINIBOX_ADAPTER=colima  OR  Colima running ──►│ Colima delegate
       │      └── neither ──────────────────────────────────── ►│ FATAL: no backend
       │                                                        │
-      └─── Windows ────────────────────────────────────────── ┘
+      └─── Windows ─────────────────────────────────────────── ┘
              │
            winbox::preflight()
              ├── MINIBOX_ADAPTER=hcs   OR  HCS available  ───► HCS (Windows Containers)

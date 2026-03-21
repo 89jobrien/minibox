@@ -14,8 +14,8 @@ This document describes the testing strategy for the minibox container runtime.
             │  ~24 tests          │
             └─────────────────────┘
        ┌──────────────────────────────┐
-       │     Unit + Conformance       │  (Mocks, any platform)
-       │       ~134 tests             │
+       │  Unit + Conformance + Prop   │  (Mocks, any platform)
+       │       ~221 tests             │
        └──────────────────────────────┘
 ```
 
@@ -46,16 +46,16 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 
 ## Test Layers
 
-### 1. Unit + Conformance Tests (~134 tests)
+### 1. Unit + Conformance + Property Tests (~221 tests)
 
 **Requirements:** None (run anywhere)
 
 **Files:**
 
-- `crates/daemonbox/tests/handler_tests.rs` — handler logic with mock adapters (12 tests)
-- `crates/daemonbox/tests/conformance_tests.rs` — trait contract verification with mocks (16 tests)
-- `crates/minibox-lib/src/**` — ~95 unit tests (protocol, image, adapters, preflight)
-- `crates/minibox-cli/src/**` — 11 unit tests
+- `crates/minibox-lib/src/**` + `tests/` — 155 tests (unit, adapter, property)
+- `crates/daemonbox/src/**` + `tests/` — 55 tests (handler, conformance, proptest, recovery)
+- `crates/minibox-cli/src/**` — 11 tests
+- `crates/minibox-llm/src/**` — 13 tests (provider unit tests)
 
 **Run:** `just test-unit`
 

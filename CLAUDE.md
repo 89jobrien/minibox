@@ -95,8 +95,8 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 
 **Test Status:**
 
-- Unit + conformance: ~95 lib tests + 11 cli tests + 12 handler + 16 conformance passing (147 total via nextest)
-- Property-based: 7 daemonbox proptest properties + existing minibox-lib suite (`cargo xtask test-property`)
+- Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm passing (221 total via nextest, 4 skipped on macOS)
+- Property-based: 8 daemonbox proptest properties + 25 minibox-lib property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
@@ -114,7 +114,7 @@ cargo xtask test-unit
 
 ### Workspace Structure
 
-Eight crates in cargo workspace:
+Nine crates in cargo workspace:
 
 1. **minibox-lib** (library): Core container primitives, image management, shared protocol types
 2. **minibox-macros** (proc-macro): Derive macros used by minibox-lib
@@ -123,7 +123,8 @@ Eight crates in cargo workspace:
 5. **macbox** (library): macOS daemon implementation (Colima adapter suite)
 6. **winbox** (library): Windows daemon implementation (stub)
 7. **minibox-cli** (binary): CLI client sending commands to daemon
-8. **minibox-bench** (binary): Benchmark harness
+8. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
+9. **minibox-bench** (binary): Benchmark harness
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
@@ -131,7 +132,7 @@ Eight crates in cargo workspace:
 
 **Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `minibox-lib/src/domain.rs` are implemented by adapters in `minibox-lib/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
 
-**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root) and `gke` (proot, copy FS, no-op limiter, unprivileged). Wired in `miniboxd/src/main.rs`.
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and `colima` (macOS via limactl/nerdctl). Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
@@ -184,7 +185,10 @@ Eight crates in cargo workspace:
 **minibox-lib/src/adapters/**:
 
 - `registry.rs`: `DockerHubRegistry` adapter
-- `ghcr.rs`: `GhcrRegistry` — ghcr.io OCI adapter with WWW-Authenticate auth flow
+- `colima.rs`: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter`
+- `vf.rs`: `VfRegistry` (Virtualization.framework)
+- `hcs.rs`: `HcsRegistry` (Windows HCS)
+- `wsl2.rs`: WSL2 adapter
 
 **daemonbox/src/** (handler/state/server extracted from miniboxd; macOS-safe):
 
@@ -268,7 +272,7 @@ Understanding these helps prioritize feature development:
 - **No persistent state**: Daemon restart loses all container records
 - **No exec command**: Cannot run commands in existing containers
 - **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop` and `wsl` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; `docker_desktop` and `wsl` are library-only.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl`, `vf`, and `hcs` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; the rest are library-only.
 
 ## Tracing Contract
 
@@ -392,7 +396,7 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
-- `MINIBOX_ADAPTER` — adapter suite: `native` (default) or `gke`
+- `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
 
 ## Gitea CI
 

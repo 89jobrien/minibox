@@ -6,7 +6,7 @@
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
-**Status:** Development — security hardened, 172+ tests passing, GKE unprivileged deployment supported.
+**Status:** Development — security hardened, 221+ tests passing, GKE unprivileged deployment supported.
 
 ---
 
@@ -55,9 +55,13 @@ sudo /usr/local/bin/minibox ps
 | ---------------- | ------- | ------------------------------------------------------ |
 | `minibox-lib`    | Library | Domain layer, adapters, image management, protocol     |
 | `minibox-macros` | Library | `adapt!`, `as_any!`, `default_new!` boilerplate macros |
-| `miniboxd`       | Binary  | Async daemon — Unix socket listener, request handlers  |
+| `daemonbox`      | Library | Handler, state, Unix socket server (extracted from miniboxd) |
+| `miniboxd`       | Binary  | Async daemon — Unix socket listener, platform dispatch |
+| `macbox`         | Library | macOS daemon implementation (Colima adapter suite)     |
+| `winbox`         | Library | Windows daemon implementation (stub)                   |
 | `minibox-cli`    | Binary  | CLI client                                             |
-| `minibox-bench`  | Binary  | Criterion benchmark suite                              |
+| `minibox-llm`   | Library | Multi-provider LLM client with structured output       |
+| `minibox-bench`  | Binary  | Benchmark harness                                      |
 
 **Key modules in `minibox-lib`:**
 
@@ -117,7 +121,7 @@ The domain layer has zero infrastructure dependencies. Adapters are swapped at d
 | -------------------- | ------------------ | ----------------- | ------------ |
 | Native Linux         | `native` (default) | ✅ Yes            | Production   |
 | GKE unprivileged     | `gke`              | ✅ Yes            | Production   |
-| macOS Colima         | `colima`           | ⚙️ In progress    | Library only |
+| macOS Colima         | `colima`           | ✅ Yes            | Production   |
 | macOS Docker Desktop | `docker-desktop`   | ❌ No             | Library only |
 | Windows WSL2         | `wsl`              | ❌ No             | Library only |
 
@@ -159,7 +163,7 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
 
 ### macOS (Colima) — Library only
 
-`ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter` are implemented and tested. Daemon wiring in progress.
+`ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter` are implemented, tested, and wired into the daemon.
 
 **Requirements (when wired):** `brew install colima`, `colima start`.
 
@@ -235,7 +239,7 @@ cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
 cargo bench -p minibox-lib         # Criterion HTML reports (local only)
 ```
 
-**Current counts:** ~134 unit + conformance (any platform), 24 integration (Linux+root), 14 E2E (Linux+root).
+**Current counts:** 221 unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
 
 See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile guards.
 
@@ -268,7 +272,6 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 ## Current Limitations
 
 - **No networking** — containers get an isolated netns but no bridge/veth configuration
-- **No TTY** — stdout/stderr not piped back to CLI
 - **No exec** — cannot run commands in existing containers
 - **No log capture** — container output not stored
 - **No persistent state** — daemon restart loses all container records
@@ -325,8 +328,3 @@ cargo deny check
 
 See `CLAUDE.md` for full development guide, debugging tips, and architecture details.
 
----
-
-## License
-
-MIT

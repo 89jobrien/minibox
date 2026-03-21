@@ -67,24 +67,26 @@ sudo ./target/release/miniboxd
 sudo ./target/release/minibox ps
 ```
 
-**macOS (Colima / Docker Desktop)**
+**macOS (Colima)**
 
-The Colima and Docker Desktop adapters exist in `minibox-lib` but are not yet
-wired into `miniboxd`. The daemon currently only accepts `MINIBOX_ADAPTER=native`
-(default) or `MINIBOX_ADAPTER=gke`. macOS development requires a Linux VM
-(Colima, Lima, Docker Desktop) and running the daemon inside it.
+```bash
+# Requires Colima running on the host
+MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
+```
+
+The Docker Desktop adapter exists in `minibox-lib` but is not yet wired into
+`miniboxd`. Use `MINIBOX_ADAPTER=colima` for macOS.
 
 **Integration Notes**
 The CLI communicates with the daemon over a Unix socket at `/run/minibox/miniboxd.sock` on Linux. If `minibox ps` fails with “No such file or directory,” the daemon is not running or the socket has not been created yet. Ensure the daemon is started and healthy (`systemctl status miniboxd` or `journalctl -u miniboxd -f`).
 
 ## Benchmark
 
-Build and run the benchmark CLI:
-
+```bash
+cargo xtask bench                        # run locally, save to bench/results/
+cargo xtask bench-vps                    # run on VPS, fetch results
+./target/release/minibox-bench --suite codec    # protocol benchmarks
+./target/release/minibox-bench --suite adapter  # adapter overhead benchmarks
 ```
-cargo build -p minibox-bench
-./target/debug/minibox-bench --dry-run
-./target/debug/minibox-bench
-```
 
-Results are written to `bench/results/<timestamp>.json` and `bench/results/<timestamp>.txt`.
+Results are written to `bench/results/bench.jsonl` (append-only history) and `bench/results/latest.json`.
