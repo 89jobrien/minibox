@@ -2,6 +2,8 @@
 pub mod anthropic;
 pub mod chain;
 pub mod error;
+#[cfg(feature = "gemini")]
+pub mod gemini;
 #[cfg(feature = "openai")]
 pub mod openai;
 pub mod provider;
