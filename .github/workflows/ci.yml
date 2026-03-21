@@ -8,23 +8,16 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
-  macos:
-    name: macOS
-    runs-on: macos-latest
+  audit:
+    name: deny + audit
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: fmt check
-        run: cargo fmt --all --check
-      - name: clippy
-        run: >
-          cargo clippy
-          -p minibox-lib -p minibox-macros -p minibox-cli
-          -p daemonbox -p macbox -p miniboxd
-          -- -D warnings
-      - name: unit tests
-        run: cargo xtask test-unit
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+      - name: cargo audit
+        run: cargo audit
