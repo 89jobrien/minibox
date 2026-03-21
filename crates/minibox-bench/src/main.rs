@@ -765,9 +765,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
 
     let tests = vec![
         nano_test("registry_direct_has_image", iters, || {
-            rt.block_on(async {
-                black_box(registry_concrete.has_image("alpine", "latest")).await;
-            });
+            black_box(registry_concrete.has_image_sync("alpine", "latest"));
         }),
         nano_test("registry_trait_object_has_image", iters, || {
             rt.block_on(async {
@@ -787,9 +785,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
             black_box(limiter_trait.create("container-123", &resource_cfg)).ok();
         }),
         nano_test("runtime_direct_spawn", iters, || {
-            rt.block_on(async {
-                black_box(runtime_concrete.spawn_process(&spawn_cfg).await).ok();
-            });
+            black_box(runtime_concrete.spawn_process_sync(&spawn_cfg)).ok();
         }),
         nano_test("runtime_trait_object_spawn", iters, || {
             rt.block_on(async {
