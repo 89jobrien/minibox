@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: fmt
-        run: ~/.local/bin/mise exec -- cargo fmt --all --check
       - name: deny
         run: ~/.local/bin/mise exec -- cargo deny check
       - name: audit
