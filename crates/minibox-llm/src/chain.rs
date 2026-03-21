@@ -39,6 +39,7 @@ impl FallbackChain {
 
 impl FallbackChain {
     pub fn from_env() -> Self {
+        #[allow(unused_mut)]
         let mut providers: Vec<Box<dyn LlmProvider>> = Vec::new();
 
         #[cfg(feature = "anthropic")]

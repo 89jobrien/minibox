@@ -106,7 +106,7 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
 cargo xtask test-unit
 ```
 
