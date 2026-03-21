@@ -6,7 +6,7 @@
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
-**Status:** Development — security hardened, 70 tests passing, GKE unprivileged deployment supported.
+**Status:** Development — security hardened, 172+ tests passing, GKE unprivileged deployment supported.
 
 ---
 
@@ -229,11 +229,13 @@ just test-e2e
 # Preflight check
 just doctor
 
-# Benchmarks
-cargo bench -p minibox-lib
+# Benchmarks (any platform, no daemon needed)
+cargo xtask bench --suite codec    # 36 protocol encode/decode benchmarks
+cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
+cargo bench -p minibox-lib         # Criterion HTML reports (local only)
 ```
 
-**Current counts:** 70 lib tests (unit + protocol + conformance), 16 cgroup integration, 14 E2E.
+**Current counts:** ~134 unit + conformance (any platform), 24 integration (Linux+root), 14 E2E (Linux+root).
 
 See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile guards.
 

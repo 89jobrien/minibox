@@ -1,25 +1,67 @@
 # Bench
 
-This directory contains benchmarking utilities for minibox.
+Benchmarking for minibox. Results are stored in `bench/results/` and committed after VPS runs.
 
-## Build
+## Suites
 
-```
-cargo build -p minibox-bench
-```
+| Suite     | Tests | Requires daemon | Platform     |
+| --------- | ----- | --------------- | ------------ |
+| `codec`   | 36    | No              | Any          |
+| `adapter` | 10    | No              | Any          |
+| `lifecycle` | 6   | Yes (Linux+root)| Linux        |
 
-## Run (Dry)
+## Run via xtask (saves results)
 
-```
+```bash
+# Run all suites (lifecycle skipped unless daemon available)
+cargo xtask bench
+
+# Run specific suites
+cargo xtask bench --suite codec
+cargo xtask bench --suite adapter
+cargo xtask bench --suite codec,adapter
+
+# Dry run (no timing, just schema/structure check)
 ./target/debug/minibox-bench --dry-run
 ```
 
-## Run (Full)
+Results are appended to `bench/results/bench.jsonl` and written to `bench/results/latest.json`.
 
+## Criterion HTML reports (local only)
+
+```bash
+cargo bench -p minibox-lib
+# Opens target/criterion/report/index.html
 ```
-./target/debug/minibox-bench
+
+These use the same logic as the `codec` and `adapter` xtask suites but produce HTML flamegraph reports. Results are not saved to bench.jsonl.
+
+## VPS runs
+
+```bash
+cargo xtask bench-vps
 ```
 
-## Output
+Runs on the remote VPS via SSH, saves results, and commits + pushes `bench/results/`.
 
-Results are written to `bench/results/<timestamp>.json` and `bench/results/<timestamp>.txt`.
+## Results format
+
+`bench.jsonl` — one JSON object per run (append-only history):
+
+```json
+{
+  "git_sha": "abc1234",
+  "timestamp": "2026-03-21T10:00:00Z",
+  "host": "vps",
+  "suites": [
+    {
+      "name": "codec",
+      "tests": [
+        { "name": "encode_run_container", "median_us": 0.42, "p99_us": 0.61, "unit": "nanos" }
+      ]
+    }
+  ]
+}
+```
+
+`latest.json` — same format, always the most recent run (used by devloop).
