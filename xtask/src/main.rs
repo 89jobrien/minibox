@@ -77,24 +77,30 @@ fn prepush(sh: &Shell) -> Result<()> {
 fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --lib"
+        "cargo test --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --lib"
     )
     .run()
     .context("lib tests failed")?;
-    cmd!(sh, "cargo test -p daemonbox --test handler_tests")
+    cmd!(sh, "cargo test --release -p daemonbox --test handler_tests")
         .run()
         .context("handler_tests failed")?;
-    cmd!(sh, "cargo test -p daemonbox --test conformance_tests")
-        .run()
-        .context("conformance_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p daemonbox --test conformance_tests"
+    )
+    .run()
+    .context("conformance_tests failed")?;
     Ok(())
 }
 
 /// Property-based tests (proptest)
 fn test_property(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo test -p minibox-lib --test proptest_suite")
-        .run()
-        .context("property tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox-lib --test proptest_suite"
+    )
+    .run()
+    .context("property tests failed")?;
     Ok(())
 }
 
@@ -102,13 +108,13 @@ fn test_property(sh: &Shell) -> Result<()> {
 fn test_integration(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture"
+        "cargo test --release -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture"
     )
     .run()
     .context("cgroup tests failed")?;
     cmd!(
         sh,
-        "cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture"
+        "cargo test --release -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture"
     )
     .run()
     .context("integration tests failed")?;
