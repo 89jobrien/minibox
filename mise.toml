@@ -119,12 +119,20 @@ fi
 # Strip credentials from remote URL after clone
 git -C "$REPO_DIR" remote set-url origin "http://100.105.75.7:3000/joe/minibox"
 
-echo "Building minibox-bench..."
-cd "$REPO_DIR"
-~/.local/bin/mise trust
-~/.local/bin/mise exec -- cargo build --release -p minibox-bench
+CURRENT_SHA=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "")
+BUILT_SHA=$(cat "$REPO_DIR/.bench-built-sha" 2>/dev/null || echo "")
+BENCH_BIN="$REPO_DIR/target/release/minibox-bench"
 
-echo "✓ minibox-bench ready at $REPO_DIR/target/release/minibox-bench"
+if [ "$CURRENT_SHA" = "$BUILT_SHA" ] && [ -f "$BENCH_BIN" ]; then
+  echo "✓ minibox-bench up to date (${CURRENT_SHA:0:8}), skipping build"
+else
+  echo "Building minibox-bench (${CURRENT_SHA:0:8})..."
+  cd "$REPO_DIR"
+  ~/.local/bin/mise trust
+  ~/.local/bin/mise exec -- cargo build --release -p minibox-bench
+  echo "$CURRENT_SHA" > "$REPO_DIR/.bench-built-sha"
+  echo "✓ minibox-bench built"
+fi
 ENDSSH
 """
 

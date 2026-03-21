@@ -370,6 +370,21 @@ rm -rf "$OUT_DIR"
         .context("scp failed")?
         .success();
     if scp_ok {
+        // Patch the git_sha field with the local HEAD so devloop can correlate results with commits.
+        // minibox-bench runs on the VPS where `git rev-parse HEAD` resolves the VPS repo HEAD
+        // (often "unknown" if run as root outside the repo). Override with the local SHA instead.
+        if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
+            let sha = sha.trim();
+            if !sha.is_empty() {
+                if let Ok(content) = fs::read_to_string("bench/results/latest.json") {
+                    let patched = content.replace(
+                        "\"git_sha\": \"unknown\"",
+                        &format!("\"git_sha\": \"{sha}\""),
+                    );
+                    let _ = fs::write("bench/results/latest.json", patched);
+                }
+            }
+        }
         eprintln!("✓ bench/results/latest.json written");
     } else {
         eprintln!("warning: scp failed — JSON not saved locally");
