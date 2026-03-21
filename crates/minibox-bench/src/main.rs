@@ -44,7 +44,10 @@ struct SuiteResult {
 struct TestResult {
     name: String,
     iterations: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     durations_micros: Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    durations_nanos: Vec<u64>,
     stats: Option<Stats>,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     unit: String,
@@ -502,9 +505,10 @@ fn nano_test(name: &str, iters: usize, f: impl FnMut()) -> TestResult {
     TestResult {
         name: name.to_string(),
         iterations: durations.len(),
-        durations_micros: durations,
+        durations_nanos: durations,
         stats,
         unit: "nanos".to_string(),
+        ..Default::default()
     }
 }
 
@@ -866,5 +870,21 @@ mod tests {
         };
         let report = run_benchmark(&cfg).unwrap();
         assert!(!report.suites.is_empty());
+    }
+
+    #[test]
+    fn nano_test_uses_durations_nanos_not_micros() {
+        let result = nano_test("test", 5, || {
+            std::hint::black_box(1 + 1);
+        });
+        assert!(
+            !result.durations_nanos.is_empty(),
+            "durations_nanos must be populated"
+        );
+        assert!(
+            result.durations_micros.is_empty(),
+            "durations_micros must be empty for nano tests"
+        );
+        assert_eq!(result.unit, "nanos");
     }
 }
