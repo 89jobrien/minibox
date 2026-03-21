@@ -377,6 +377,15 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default) or `gke`
 
+## Gitea CI
+
+CI runs on self-hosted Gitea Actions (jobrien-vm). Pipeline: `cargo deny check` + `cargo audit` only — no compilation (VPS has 2 CPUs, no swap; Rust builds saturate it).
+
+- `deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
+- Gitea context vars are `gitea.repository`, `gitea.run_id`, `gitea.sha` — not `github.*`
+- `GITEA_` prefix is reserved for secrets; use other names (e.g. `CI_AGENT_TOKEN`)
+- Check CI status: `mise run ci`
+
 ## Skills Available
 
 Global minibox skills available across all projects:
