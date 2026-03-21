@@ -32,4 +32,6 @@ jobs:
           RUN_ID: ${{ gitea.run_id }}
           COMMIT_SHA: ${{ gitea.sha }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python3 scripts/ci_agent.py
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python3 -m scripts.ci_agent
