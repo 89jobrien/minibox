@@ -337,6 +337,8 @@ fn main() {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
+    // Print JSON path to stdout so callers (e.g. xtask) can capture it without scanning the dir.
+    println!("{json_path}");
     if let Err(e) = write_table(&report, &table_path) {
         eprintln!("error: {e}");
         std::process::exit(1);
