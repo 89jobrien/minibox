@@ -61,10 +61,10 @@ impl std::error::Error for HttpStatusError {}
 
 ### `CompletionRequest` additions
 
-`CompletionRequest` derives `Default` to enable struct update syntax in the macros:
+`CompletionRequest` implements `Default` with a sensible `max_tokens` default (1024), enabling struct update syntax in the macros:
 
 ```rust
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub prompt: String,
     pub system: Option<String>,
@@ -73,9 +73,22 @@ pub struct CompletionRequest {
     pub timeout: Option<Duration>,     // overrides provider's request_timeout
     pub max_retries: Option<u32>,      // overrides RetryConfig max_retries
 }
+
+impl Default for CompletionRequest {
+    fn default() -> Self {
+        Self {
+            prompt: String::new(),
+            system: None,
+            max_tokens: 1024,
+            schema: None,
+            timeout: None,
+            max_retries: None,
+        }
+    }
+}
 ```
 
-`Default` gives `max_tokens: 0` — the macros override this to `1024`. Direct struct construction is unchanged. Both new fields are `Option` — callers that don't care about overrides change nothing.
+The macros rely on this default — they only set `prompt` and caller-specified overrides, with `..Default::default()` filling the rest. Both new fields are `Option` — callers that don't care about overrides change nothing.
 
 ## Transient Error Classification
 
@@ -362,7 +375,6 @@ macro_rules! ainvoke {
     ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
         let request = $crate::CompletionRequest {
             prompt: $prompt.into(),
-            max_tokens: 1024,
             $( $key: $crate::ainvoke!(@wrap $key $val), )*
             ..$crate::CompletionRequest::default()
         };
