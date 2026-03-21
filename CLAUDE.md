@@ -75,22 +75,29 @@ just doctor             # preflight capability check
 cargo xtask pre-commit      # fmt-check + lint + release build (macOS-safe)
 cargo xtask prepush         # nextest + llvm-cov coverage
 cargo xtask test-unit       # all unit + conformance tests
+cargo xtask test-property   # property-based tests (proptest, any platform)
 cargo xtask test-e2e-suite  # daemon+CLI e2e tests (Linux, root)
 cargo xtask nuke-test-state # kill orphans, unmount overlays, clean cgroups/tmp
 cargo xtask clean-artifacts # remove non-critical build outputs
-cargo xtask bench           # run benchmark binary
+cargo xtask bench           # run benchmark binary locally, saves to bench/results/bench.jsonl + latest.json
 
-# Run benchmarks (minibox-lib only)
-cargo bench -p minibox-lib          # protocol codec encode/decode
+# Run microbenchmarks (no daemon, any platform)
+./target/release/minibox-bench --suite codec    # protocol encode/decode (nanosecond, 36 cases)
+./target/release/minibox-bench --suite adapter  # trait-object overhead (nanosecond, 10 cases)
+cargo bench -p minibox-lib          # criterion benches (local HTML reports only, not saved)
+
+# Bench result pipeline: bench.jsonl is append-only history; latest.json is canonical current
+# snapshot for devloop — both must stay in sync (see save_bench_results in xtask/src/main.rs)
 ```
 
 **Test Status:**
 
-- Unit + conformance: ~95 lib tests + 11 cli tests + 12 handler + 16 conformance passing
+- Unit + conformance: ~95 lib tests + 11 cli tests + 12 handler + 16 conformance passing (147 total via nextest)
+- Property-based: 7 daemonbox proptest properties + existing minibox-lib suite (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
-- Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`
+- Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` — check `git log` to see if a plan was already executed before treating it as pending
 
 **macOS quality gates** (`miniboxd` compiles via `macbox::start()` dispatch — `cargo check --workspace` works):
 
@@ -302,6 +309,13 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 ### Testing gotchas
 
 - **`std::env::set_var`/`remove_var` are `unsafe` in Rust 2024** — wrap in `unsafe {}` and serialise with a `static Mutex<()>` guard to prevent parallel test races (see `commands/mod.rs` tests for the pattern).
+
+### Proptest gotchas
+
+- **`FileFailurePersistence` warning in integration tests** — proptest can't find `lib.rs` from the `tests/` context; suppress with `#![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]` inside each `proptest!` block.
+- **Async methods in proptest** — use `tokio::runtime::Runtime::new().unwrap().block_on(...)` to drive `DaemonState` / handler calls synchronously inside proptest closures. Each closure must create its own `Runtime`.
+- **`DaemonState` fixture** — requires `ImageStore::new(tmp.join("images"))` + a `data_dir` path; calls `save_to_disk` on every `add_container`/`remove_container` (256 proptest iterations = ~256 JSON writes to tmp). Use a named `TempDir` so it stays alive for the closure.
+- **`CgroupManager::create()` runs `create_dir_all` before bounds checks** — proptest cgroup bound tests require a real cgroup2 mount and root to reach validation logic; a plain `TempDir` is insufficient. Gate with `#[cfg(target_os = "linux")]` and run under `just test-integration`.
 
 ### Macro and doctest gotchas
 

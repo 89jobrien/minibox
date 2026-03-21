@@ -94,6 +94,66 @@ fix-socket:
 smoke:
     @bash -lc 'set -euo pipefail; sudo ./target/release/miniboxd & pid=$!; sleep 1; sudo ./target/release/minibox ps; sudo kill $pid; wait $pid || true'
 
+# ── Dogfood ──────────────────────────────────────────────────────────────────
+
+# Spin up a container, validate runtime isolation, then run the unit test suite
+dogfood:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    C='\033[36m'; B='\033[1m'; G='\033[32m'; Y='\033[33m'; BL='\033[34m'; R='\033[0m'
+    hdr() { printf "\n${B}${C}  ╭─────────────────────────────────────────╮\n  │  %-39s  │\n  ╰─────────────────────────────────────────╯${R}\n\n" "$1"; }
+    step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+    ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+    fail() { printf "  ${Y}✗${R}  %s\n" "$1"; exit 1; }
+    spin() {
+        local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+        while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+    }
+
+    if [[ "$(uname)" != "Linux" ]]; then
+        printf "  ${C}dogfood requires Linux + root (container runtime) — run on VPS or CI${R}\n"; exit 1
+    fi
+
+    hdr "minibox · dogfood"
+
+    step "building"
+    cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+    ok "binaries ready"; echo ""
+
+    step "starting daemon"
+    sudo ./target/release/miniboxd &>/dev/null &
+    DAEMON_PID=$!
+    trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+    spin "waiting for daemon..." & SPIN=$!
+    until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+    kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+    printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+
+    step "pulling alpine"
+    sudo ./target/release/minibox pull alpine 2>&1 | tail -1
+    ok "image ready"; echo ""
+
+    step "validating runtime isolation"
+    CONTAINER_OS=$(sudo ./target/release/minibox run alpine -- /bin/sh -c \
+        'printf "os=%s pid1=%s user=%s\n" "$(cat /etc/alpine-release)" "$(cat /proc/1/comm)" "$(id -u)"' 2>/dev/null)
+    if [[ "$CONTAINER_OS" == os=* ]]; then
+        ok "container reports: $CONTAINER_OS"
+    else
+        fail "container did not produce expected output"
+    fi
+    echo ""
+
+    step "stopping daemon"
+    sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true
+    trap - EXIT
+    ok "daemon stopped"; echo ""
+
+    step "running unit test suite (host)"
+    cargo xtask test-unit
+    echo ""
+    ok "all dogfood checks passed"
+    echo ""
+
 # ── Demo ─────────────────────────────────────────────────────────────────────
 
 # Pull an OCI image from Docker Hub — any platform, no daemon required
@@ -270,3 +330,12 @@ nuke-test-state:
 
 metrics-report:
     uv run python scripts/collect_metrics.py --reports-dir artifacts/reports
+
+# ── Ops ───────────────────────────────────────────────────────────────────────
+
+# SSH into jobrien-vm (primary Linux test VPS)
+ssh-vps:
+    #!/usr/bin/env bash
+    sshpass -p "$(op item get jobrien-vm --account=my.1password.com --fields password --reveal)" \
+        ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password \
+        dev@100.105.75.7
