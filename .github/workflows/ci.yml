@@ -25,3 +25,43 @@ jobs:
           tool: cargo-audit
       - name: cargo audit
         run: cargo audit
+
+  lint:
+    name: typos + machete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: typos
+        uses: crate-ci/typos@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-machete
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - name: cargo machete
+        run: cargo machete
+
+  coverage:
+    name: coverage → codecov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+      - name: coverage
+        run: >
+          cargo llvm-cov nextest
+          -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
+          --lcov --output-path lcov.info
+      - name: upload to codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: false

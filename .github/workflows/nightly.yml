@@ -1,0 +1,22 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  geiger:
+    name: unsafe audit (geiger)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-geiger
+        run: cargo install cargo-geiger --locked
+      - name: cargo geiger
+        run: cargo geiger -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
