@@ -39,27 +39,6 @@ impl Default for ProviderConfig {
 }
 ```
 
-### `RetryConfig`
-
-Retry behavior for the `RetryingProvider` wrapper.
-
-```rust
-#[derive(Debug, Clone)]
-pub struct RetryConfig {
-    pub max_retries: u32,        // default: 2
-    pub backoff_base: Duration,  // default: 1s (exponential: 1s, 2s)
-}
-
-impl Default for RetryConfig {
-    fn default() -> Self {
-        Self {
-            max_retries: 2,
-            backoff_base: Duration::from_secs(1),
-        }
-    }
-}
-```
-
 ### `HttpStatusError`
 
 Typed error for HTTP status codes, enabling `is_transient()` classification via downcasting.
@@ -82,7 +61,10 @@ impl std::error::Error for HttpStatusError {}
 
 ### `CompletionRequest` additions
 
+`CompletionRequest` derives `Default` to enable struct update syntax in the macros:
+
 ```rust
+#[derive(Debug, Clone, Default)]
 pub struct CompletionRequest {
     pub prompt: String,
     pub system: Option<String>,
@@ -93,7 +75,7 @@ pub struct CompletionRequest {
 }
 ```
 
-Both fields are `Option` — callers that don't care about overrides change nothing.
+`Default` gives `max_tokens: 0` — the macros override this to `1024`. Direct struct construction is unchanged. Both new fields are `Option` — callers that don't care about overrides change nothing.
 
 ## Transient Error Classification
 
@@ -127,24 +109,26 @@ impl LlmError {
 
 ### `provide!` macro
 
-Replaces hand-written `from_env()` / `from_env_with_key()` across all three providers:
+Replaces hand-written `from_env()` / `from_env_with_key()` across all three providers. The macro fully encapsulates the env var name — callers never repeat it:
 
 ```rust
 macro_rules! provide {
     ($provider:ty, $env_var:expr, $default_model:expr) => {
         impl $provider {
             pub fn from_env() -> Option<Self> {
-                Self::from_env_with_config(
-                    std::env::var($env_var).ok(),
-                    &ProviderConfig::default(),
-                )
+                Self::from_env_with_config(&ProviderConfig::default())
             }
 
-            pub fn from_env_with_config(
-                key: Option<String>,
-                config: &ProviderConfig,
-            ) -> Option<Self> {
-                key.map(|k| Self::with_config(k, $default_model.to_string(), config))
+            pub fn from_env_with_config(config: &ProviderConfig) -> Option<Self> {
+                std::env::var($env_var)
+                    .ok()
+                    .map(|k| Self::with_config(k, $default_model.to_string(), config))
+            }
+
+            /// Test helper — inject a key without reading the environment.
+            #[cfg(test)]
+            pub(crate) fn from_key(key: String) -> Self {
+                Self::new(key, $default_model.to_string())
             }
         }
     };
@@ -154,6 +138,8 @@ provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
 provide!(OpenAiProvider, "OPENAI_API_KEY", "gpt-4.1");
 provide!(GeminiProvider, "GEMINI_API_KEY", "gemini-2.5-flash");
 ```
+
+`from_env_with_config` reads the env var internally — the chain wiring just calls `Provider::from_env_with_config(&provider_config)` without knowing the env var name. `from_key` replaces the old `from_env_with_key` for tests.
 
 ### Constructor changes
 
@@ -196,17 +182,22 @@ if let Some(t) = request.timeout {
 
 ### Explicit HTTP status checking
 
-Providers replace `error_for_status()` with explicit status checking to produce typed `HttpStatusError`:
+Providers replace `error_for_status()` with explicit status checking to produce typed `HttpStatusError`. Providers preserve structured error message parsing from the JSON body (e.g., `error.message`) for human-readable `Display` output, while storing the status code for `is_transient()` classification:
 
 ```rust
 let status = response.status();
 if !status.is_success() {
     let body = response.text().await.unwrap_or_default();
+    // Extract structured error message if available, fall back to raw body
+    let message = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v["error"]["message"].as_str().map(String::from))
+        .unwrap_or_else(|| body.clone());
     return Err(LlmError::ProviderError {
         provider: self.name().to_string(),
         source: Box::new(HttpStatusError {
             status: status.as_u16(),
-            body,
+            body: message,
         }),
     });
 }
@@ -214,9 +205,24 @@ if !status.is_success() {
 
 ## `RetryingProvider` Wrapper
 
-New file: `retry.rs`
+New file: `retry.rs`. Contains both `RetryConfig` (co-located with its consumer) and the wrapper.
 
 ```rust
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    pub max_retries: u32,        // default: 2
+    pub backoff_base: Duration,  // default: 1s (exponential: 1s, 2s)
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 2,
+            backoff_base: Duration::from_secs(1),
+        }
+    }
+}
+
 pub struct RetryingProvider<P: LlmProvider> {
     inner: P,
     config: RetryConfig,
@@ -283,10 +289,7 @@ impl FallbackChain {
         let mut providers: Vec<Box<dyn LlmProvider>> = Vec::new();
 
         #[cfg(feature = "anthropic")]
-        if let Some(p) = AnthropicProvider::from_env_with_config(
-            std::env::var("ANTHROPIC_API_KEY").ok(),
-            &provider_config,
-        ) {
+        if let Some(p) = AnthropicProvider::from_env_with_config(&provider_config) {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(RetryingProvider::new(p, retry_config.clone())));
         } else {
@@ -294,10 +297,7 @@ impl FallbackChain {
         }
 
         #[cfg(feature = "openai")]
-        if let Some(p) = OpenAiProvider::from_env_with_config(
-            std::env::var("OPENAI_API_KEY").ok(),
-            &provider_config,
-        ) {
+        if let Some(p) = OpenAiProvider::from_env_with_config(&provider_config) {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(RetryingProvider::new(p, retry_config.clone())));
         } else {
@@ -305,10 +305,7 @@ impl FallbackChain {
         }
 
         #[cfg(feature = "gemini")]
-        if let Some(p) = GeminiProvider::from_env_with_config(
-            std::env::var("GEMINI_API_KEY").ok(),
-            &provider_config,
-        ) {
+        if let Some(p) = GeminiProvider::from_env_with_config(&provider_config) {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(RetryingProvider::new(p, retry_config.clone())));
         } else {
@@ -357,31 +354,49 @@ let resp = invoke!(chain, "What is this?",
 
 ### Macro expansion
 
-Both macros expand to `CompletionRequest` construction with defaults for omitted fields:
+Both macros use struct update syntax (`..Default::default()`) so caller-specified fields override defaults without duplication:
 
 ```rust
+#[macro_export]
 macro_rules! ainvoke {
     ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
         let request = $crate::CompletionRequest {
             prompt: $prompt.into(),
-            system: None,
             max_tokens: 1024,
-            schema: None,
-            timeout: None,
-            max_retries: None,
-            $( $key: ainvoke!(@field $key $val), )*
+            $( $key: $crate::ainvoke!(@wrap $key $val), )*
+            ..$crate::CompletionRequest::default()
         };
         $chain.complete(&request)
     }};
-    (@field system $val:expr) => { Some($val.into()) };
-    (@field schema $val:expr) => { Some($val) };
-    (@field timeout $val:expr) => { Some($val) };
-    (@field max_retries $val:expr) => { Some($val) };
-    (@field max_tokens $val:expr) => { $val };
+    (@wrap system $val:expr) => { Some($val.into()) };
+    (@wrap schema $val:expr) => { Some($val) };
+    (@wrap timeout $val:expr) => { Some($val) };
+    (@wrap max_retries $val:expr) => { Some($val) };
+    (@wrap max_tokens $val:expr) => { $val };
+}
+
+#[macro_export]
+macro_rules! invoke {
+    ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
+        let request = $crate::CompletionRequest {
+            prompt: $prompt.into(),
+            max_tokens: 1024,
+            $( $key: $crate::invoke!(@wrap $key $val), )*
+            ..$crate::CompletionRequest::default()
+        };
+        $chain.complete_sync(&request)
+    }};
+    (@wrap system $val:expr) => { Some($val.into()) };
+    (@wrap schema $val:expr) => { Some($val) };
+    (@wrap timeout $val:expr) => { Some($val) };
+    (@wrap max_retries $val:expr) => { Some($val) };
+    (@wrap max_tokens $val:expr) => { $val };
 }
 ```
 
-`invoke!` is identical but calls `$chain.complete_sync(&request)` instead.
+Struct update syntax means only explicitly named fields appear in the literal — all others come from `Default`. No duplicate field issue. `#[macro_export]` makes both macros available to downstream crates.
+
+Note: `invoke!` only works with `FallbackChain` (which has `complete_sync`), not bare providers. This is intentional — sync dispatch requires a runtime, and only the chain manages one.
 
 ### Defaults when omitted
 
@@ -399,13 +414,13 @@ macro_rules! ainvoke {
 |------|--------|
 | `types.rs` | Add `timeout: Option<Duration>`, `max_retries: Option<u32>` to `CompletionRequest` |
 | `error.rs` | Add `HttpStatusError` struct, `is_transient()` method on `LlmError` |
-| `provider.rs` | Add `ProviderConfig`, `RetryConfig` types with `Default` impls |
-| `retry.rs` (new) | `RetryingProvider<P>` wrapper implementing `LlmProvider` |
+| `provider.rs` | Add `ProviderConfig` type with `Default` impl |
+| `retry.rs` (new) | `RetryingProvider<P>` wrapper implementing `LlmProvider`, `RetryConfig` type |
 | `anthropic.rs` | `with_config()` constructor, explicit status checking, per-request timeout |
 | `openai.rs` | Same pattern |
 | `gemini.rs` | Same pattern |
 | `chain.rs` | `from_env_with_config()`, wraps providers in `RetryingProvider` |
-| `lib.rs` | `provide!`, `invoke!`, `ainvoke!` macro definitions, export new public types, declare `retry` module |
+| `lib.rs` | `provide!` macro definition (crate-internal), `invoke!`/`ainvoke!` via `#[macro_export]`, `pub use` for `ProviderConfig`, `RetryConfig`, `HttpStatusError`, `RetryingProvider`, declare `retry` module |
 
 ## Worst-Case Latency
 
@@ -415,6 +430,12 @@ With defaults (60s timeout, 2 retries per provider, 3 providers):
 - Full chain: ~549s (~9 min) if every attempt on every provider times out
 
 This is by design — callers opting into 3 providers with retries accept the tail latency. Per-request `timeout` and `max_retries` overrides allow callers to bound this for latency-sensitive paths.
+
+## Known Limitations
+
+- **No `Retry-After` header support** — rate-limited responses (429) often include `Retry-After` headers with provider-recommended wait times. The current design uses fixed exponential backoff. Respecting `Retry-After` is a future enhancement.
+- **No jitter on backoff** — concurrent callers hitting the same rate limit retry at identical intervals. Adding randomized jitter would require a `rand` dependency. Acceptable for now given low expected concurrency.
+- **`invoke!` requires `FallbackChain`** — sync dispatch needs a Tokio runtime, which only the chain manages via `complete_sync`. Bare providers cannot be used with `invoke!`.
 
 ## Testing Strategy
 
