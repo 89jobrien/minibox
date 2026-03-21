@@ -115,6 +115,7 @@ impl FallbackChain {
 mod tests {
     use super::*;
     use crate::types::CompletionRequest;
+    use crate::{ainvoke, invoke};
     use std::sync::Mutex;
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
@@ -277,5 +278,37 @@ mod tests {
         let chain = FallbackChain::from_env();
         let result = chain.complete_sync(&request("test"));
         assert!(matches!(result, Err(LlmError::AllProvidersFailed(_))));
+    }
+
+    #[tokio::test]
+    async fn ainvoke_macro_minimal() {
+        let chain = FallbackChain::new(vec![Box::new(MockProvider {
+            response: Ok("macro works".to_string()),
+        })]);
+        let resp = ainvoke!(chain, "test prompt").await.unwrap();
+        assert_eq!(resp.text, "macro works");
+    }
+
+    #[tokio::test]
+    async fn ainvoke_macro_with_options() {
+        let chain = FallbackChain::new(vec![Box::new(MockProvider {
+            response: Ok("with opts".to_string()),
+        })]);
+        let resp = ainvoke!(chain, "test",
+            system: "be helpful",
+            max_tokens: 2048,
+        )
+        .await
+        .unwrap();
+        assert_eq!(resp.text, "with opts");
+    }
+
+    #[test]
+    fn invoke_macro_sync() {
+        let chain = FallbackChain::new(vec![Box::new(MockProvider {
+            response: Ok("sync macro".to_string()),
+        })]);
+        let resp = invoke!(chain, "test prompt").unwrap();
+        assert_eq!(resp.text, "sync macro");
     }
 }
