@@ -38,7 +38,9 @@ fn main() -> Result<()> {
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
             eprintln!("  bench            run benchmark binary (local, dry-run safe)");
-            eprintln!("  bench-vps        run benchmark on VPS, save bench/results/latest.json");
+            eprintln!(
+                "  bench-vps        run benchmark on VPS, append to bench/results/bench.jsonl"
+            );
             Ok(())
         }
     }
@@ -334,7 +336,7 @@ fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Run minibox-bench on the VPS as root and save results to bench/results/latest.json.
+/// Run minibox-bench on the VPS as root and append results to bench/results/bench.jsonl.
 fn bench_vps(sh: &Shell) -> Result<()> {
     let vps_pass = cmd!(
         sh,
@@ -365,33 +367,56 @@ rm -rf "$OUT_DIR"
 
     eprintln!("fetching JSON result...");
     fs::create_dir_all("bench/results").context("failed to create bench/results")?;
+    let tmp_path = format!("/tmp/bench-latest-{}.json", std::process::id());
     let scp_ok = Command::new("sshpass")
         .arg("-p")
         .arg(&vps_pass)
         .arg("scp")
         .args(ssh_opts())
         .arg(format!("{VPS_HOST}:/tmp/bench-latest.json"))
-        .arg("bench/results/latest.json")
+        .arg(&tmp_path)
         .status()
         .context("scp failed")?
         .success();
     if scp_ok {
-        // Patch the git_sha field with the local HEAD so devloop can correlate results with commits.
-        // minibox-bench runs on the VPS where `git rev-parse HEAD` resolves the VPS repo HEAD
-        // (often "unknown" if run as root outside the repo). Override with the local SHA instead.
-        if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
-            let sha = sha.trim();
-            if !sha.is_empty() {
-                if let Ok(content) = fs::read_to_string("bench/results/latest.json") {
-                    let patched = content.replace(
-                        "\"git_sha\": \"unknown\"",
-                        &format!("\"git_sha\": \"{sha}\""),
-                    );
-                    let _ = fs::write("bench/results/latest.json", patched);
+        if let Ok(content) = fs::read_to_string(&tmp_path) {
+            // Compact to a single line for JSONL; patch git_sha with local HEAD.
+            let mut json: serde_json::Value =
+                serde_json::from_str(&content).context("invalid JSON from VPS")?;
+            if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
+                let sha = sha.trim();
+                if !sha.is_empty() {
+                    json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
                 }
             }
+            let line = serde_json::to_string(&json).context("re-serialise failed")?;
+            let jsonl_path = "bench/results/bench.jsonl";
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(jsonl_path)
+                .context("open bench.jsonl")?;
+            use std::io::Write as _;
+            writeln!(file, "{line}").context("append to bench.jsonl")?;
+            eprintln!("✓ bench/results/bench.jsonl appended");
+
+            // Commit and push bench results
+            let sha_short = cmd!(sh, "git rev-parse --short HEAD")
+                .read()
+                .unwrap_or_default();
+            let sha_short = sha_short.trim();
+            cmd!(
+                sh,
+                "git add bench/results/bench.jsonl bench/results/latest.json"
+            )
+            .ignore_status()
+            .run()?;
+            let msg = format!("bench: vps results @ {sha_short}");
+            cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
+            cmd!(sh, "git push").run().context("git push failed")?;
+            eprintln!("✓ bench results committed and pushed");
         }
-        eprintln!("✓ bench/results/latest.json written");
+        let _ = fs::remove_file(&tmp_path);
     } else {
         eprintln!("warning: scp failed — JSON not saved locally");
     }
