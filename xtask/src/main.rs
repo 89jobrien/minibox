@@ -7,6 +7,9 @@ use std::{
 };
 use xshell::{Shell, cmd};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 fn main() -> Result<()> {
     let task = env::args().nth(1);
     let sh = Shell::new()?;
@@ -316,6 +319,22 @@ fn parse_bench_vps_flags(args: &[String]) -> (bool, bool) {
     (commit, push)
 }
 
+/// Write password to a 0600 tempfile. Returns (path, NamedTempFile guard).
+/// The guard keeps the file alive; it auto-deletes on drop.
+fn write_pass_tmpfile(
+    password: &str,
+) -> anyhow::Result<(std::path::PathBuf, tempfile::NamedTempFile)> {
+    let mut f = tempfile::NamedTempFile::new().context("create password tempfile")?;
+    #[cfg(unix)]
+    std::fs::set_permissions(f.path(), std::fs::Permissions::from_mode(0o600))
+        .context("chmod 0600 password tempfile")?;
+    use std::io::Write as IoWrite;
+    writeln!(f, "{password}").context("write password to tempfile")?;
+    f.flush().context("flush password tempfile")?;
+    let path = f.path().to_path_buf();
+    Ok((path, f))
+}
+
 const VPS_HOST: &str = "dev@100.105.75.7";
 const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
 
@@ -342,11 +361,13 @@ fn ssh_opts() -> Vec<&'static str> {
 fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
     let tmpfile = format!("/tmp/xtask-bench-{}.sh", std::process::id());
 
+    let (pass_path, _pass_guard) = write_pass_tmpfile(pass)?;
+
     // Step 1: upload script
     let write_cmd = format!("cat > '{tmpfile}' && chmod 700 '{tmpfile}'");
     let mut upload = Command::new("sshpass")
-        .arg("-p")
-        .arg(pass)
+        .arg("-f")
+        .arg(&pass_path)
         .arg("ssh")
         .args(ssh_opts())
         .arg(VPS_HOST)
@@ -370,8 +391,8 @@ fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
         pass.replace('\'', "'\\''"),
     );
     let out = Command::new("sshpass")
-        .arg("-p")
-        .arg(pass)
+        .arg("-f")
+        .arg(&pass_path)
         .arg("ssh")
         .args(ssh_opts())
         .arg(VPS_HOST)
@@ -418,9 +439,10 @@ rm -rf "$OUT_DIR"
     eprintln!("fetching JSON result...");
     fs::create_dir_all("bench/results").context("failed to create bench/results")?;
     let tmp_path = format!("/tmp/bench-latest-{}.json", std::process::id());
+    let (pass_path_scp, _pass_guard_scp) = write_pass_tmpfile(&vps_pass)?;
     let scp_ok = Command::new("sshpass")
-        .arg("-p")
-        .arg(&vps_pass)
+        .arg("-f")
+        .arg(&pass_path_scp)
         .arg("scp")
         .args(ssh_opts())
         .arg(format!("{VPS_HOST}:/tmp/bench-latest.json"))
@@ -459,6 +481,30 @@ rm -rf "$OUT_DIR"
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod sshpass_file_tests {
+    use super::write_pass_tmpfile;
+
+    #[test]
+    fn write_pass_file_creates_readable_file() {
+        let (path, _guard) = write_pass_tmpfile("hunter2").unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(contents.trim(), "hunter2");
+    }
+
+    #[test]
+    fn write_pass_file_has_restricted_permissions() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let (path, _guard) = write_pass_tmpfile("secret").unwrap();
+            let meta = std::fs::metadata(&path).unwrap();
+            let mode = meta.permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "tempfile must be 0600, got {:o}", mode);
+        }
+    }
 }
 
 #[cfg(test)]
