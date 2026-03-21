@@ -152,14 +152,16 @@ impl Container {
             namespace_config: NamespaceConfig::all(),
             cgroup_path: cgroup_manager.cgroup_path.clone(),
             hostname: format!("minibox-{}", &self.id[..8]),
+            capture_output: false,
+            pre_exec_hooks: vec![],
         };
 
-        let pid = spawn_container_process(process_config)
+        let spawn = spawn_container_process(process_config)
             .with_context(|| format!("failed to spawn container process for {}", self.id))?;
 
-        self.pid = Some(pid);
+        self.pid = Some(spawn.pid);
         self.state = ContainerState::Running;
-        info!("container {} running with PID={}", self.id, pid);
+        info!("container {} running with PID={}", self.id, spawn.pid);
         Ok(())
     }
 
