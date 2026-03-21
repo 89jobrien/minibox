@@ -392,7 +392,6 @@ macro_rules! invoke {
     ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
         let request = $crate::CompletionRequest {
             prompt: $prompt.into(),
-            max_tokens: 1024,
             $( $key: $crate::invoke!(@wrap $key $val), )*
             ..$crate::CompletionRequest::default()
         };
