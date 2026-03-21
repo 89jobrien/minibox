@@ -80,6 +80,9 @@ cargo xtask test-e2e-suite  # daemon+CLI e2e tests (Linux, root)
 cargo xtask nuke-test-state # kill orphans, unmount overlays, clean cgroups/tmp
 cargo xtask clean-artifacts # remove non-critical build outputs
 cargo xtask bench           # run benchmark binary locally, saves to bench/results/bench.jsonl + latest.json
+cargo xtask bench-vps               # run bench on VPS, fetch results (no git side-effects)
+cargo xtask bench-vps --commit      # ... and commit results locally
+cargo xtask bench-vps --commit --push  # ... and push to remote
 
 # Run microbenchmarks (no daemon, any platform)
 ./target/release/minibox-bench --suite codec    # protocol encode/decode (nanosecond, 36 cases)
