@@ -261,18 +261,19 @@ fn nuke_test_state(sh: &Shell) -> Result<()> {
 fn bench(sh: &Shell) -> Result<()> {
     let out_dir = "bench/results";
     fs::create_dir_all(out_dir).context("create bench/results")?;
-    cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}").run()?;
 
-    // Find the JSON file written by the binary (most recent in out_dir).
-    let json_path = fs::read_dir(out_dir)
-        .context("read bench/results")?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false))
-        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
-        .map(|e| e.path())
-        .ok_or_else(|| anyhow::anyhow!("no JSON result found in {out_dir}"))?;
+    // Capture stdout — the binary prints the JSON path as its last line.
+    let output = cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}")
+        .read()
+        .context("bench binary failed")?;
 
-    save_bench_results(sh, &json_path.to_string_lossy())
+    let json_path = output
+        .lines()
+        .last()
+        .filter(|l| l.ends_with(".json"))
+        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?;
+
+    save_bench_results(sh, json_path)
 }
 
 /// Patch git_sha, append to bench.jsonl, and update latest.json.
