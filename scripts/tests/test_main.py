@@ -67,3 +67,23 @@ class TestMainFlow(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             main()
         self.assertEqual(cm.exception.code, 1)
+
+    @patch("ci_agent.__main__.find_issue_for_commit", return_value=None)
+    @patch("ci_agent.__main__.create_issue", return_value=7)
+    @patch("ci_agent.__main__.ensure_label_exists")
+    @patch("ci_agent.__main__.set_commit_status")
+    @patch("ci_agent.__main__.ask_with_fallback",
+           side_effect=__import__("ci_agent.providers", fromlist=["DiagnosisUnavailable"]).DiagnosisUnavailable("all providers failed"))
+    @patch("ci_agent.__main__.fetch_job_log", return_value="log output")
+    @patch("ci_agent.__main__.gitea_get",
+           return_value={"jobs": [{"id": 1, "name": "lint", "conclusion": "failure"}]})
+    @patch.dict(os.environ, _env(), clear=False)
+    def test_fallback_creates_issue_with_no_provider(
+        self, mock_get, mock_log, mock_ask, mock_status,
+        mock_label, mock_create, mock_find,
+    ):
+        from ci_agent.__main__ import main
+        main()
+        mock_create.assert_called_once()
+        args, _kwargs = mock_create.call_args
+        self.assertEqual(args[4], "none")

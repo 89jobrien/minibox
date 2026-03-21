@@ -121,7 +121,7 @@ def main() -> None:
             )
             print(f"Opened issue #{number}")
     except Exception as e:
-        print(f"Warning: could not create/update Gitea issue: {e}")
+        print(f"Warning: could not create/update Gitea issue: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
