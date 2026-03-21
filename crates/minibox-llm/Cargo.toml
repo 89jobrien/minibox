@@ -1,0 +1,21 @@
+[package]
+name = "minibox-llm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["anthropic", "openai", "gemini"]
+anthropic = ["dep:reqwest"]
+openai = ["dep:reqwest"]
+gemini = ["dep:reqwest"]
+
+[dependencies]
+async-trait = { workspace = true }
+reqwest = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

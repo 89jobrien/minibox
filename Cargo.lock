@@ -1153,6 +1153,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-llm"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "minibox-macros"
 version = "0.1.0"
 

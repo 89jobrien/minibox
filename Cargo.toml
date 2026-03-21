@@ -9,6 +9,7 @@ members = [
     "crates/daemonbox",
     "crates/macbox",
     "crates/winbox",
+    "crates/minibox-llm",
     "xtask",
 ]
 
