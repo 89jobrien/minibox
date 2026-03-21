@@ -105,6 +105,12 @@ impl LlmProvider for OpenAiProvider {
             .unwrap_or("")
             .to_string();
 
+        if request.schema.is_some() && text.is_empty() {
+            return Err(LlmError::SchemaParseError(
+                "empty content in structured output response".to_string(),
+            ));
+        }
+
         let usage = resp_body["usage"].as_object().map(|u| Usage {
             input_tokens: u["prompt_tokens"].as_u64().unwrap_or(0) as u32,
             output_tokens: u["completion_tokens"].as_u64().unwrap_or(0) as u32,

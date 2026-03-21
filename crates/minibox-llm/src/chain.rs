@@ -46,18 +46,24 @@ impl FallbackChain {
         if let Some(p) = crate::anthropic::AnthropicProvider::from_env() {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(p));
+        } else {
+            tracing::warn!(provider = "anthropic", "llm: provider skipped (no key)");
         }
 
         #[cfg(feature = "openai")]
         if let Some(p) = crate::openai::OpenAiProvider::from_env() {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(p));
+        } else {
+            tracing::warn!(provider = "openai", "llm: provider skipped (no key)");
         }
 
         #[cfg(feature = "gemini")]
         if let Some(p) = crate::gemini::GeminiProvider::from_env() {
             tracing::info!(provider = p.name(), "llm: provider available");
             providers.push(Box::new(p));
+        } else {
+            tracing::warn!(provider = "gemini", "llm: provider skipped (no key)");
         }
 
         if providers.is_empty() {

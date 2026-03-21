@@ -141,6 +141,12 @@ impl LlmProvider for GeminiProvider {
             .unwrap_or("")
             .to_string();
 
+        if request.schema.is_some() && text.is_empty() {
+            return Err(LlmError::SchemaParseError(
+                "empty content in structured output response".to_string(),
+            ));
+        }
+
         let usage = resp_body["usageMetadata"].as_object().map(|u| Usage {
             input_tokens: u["promptTokenCount"].as_u64().unwrap_or(0) as u32,
             output_tokens: u["candidatesTokenCount"].as_u64().unwrap_or(0) as u32,
