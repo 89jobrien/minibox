@@ -305,44 +305,24 @@ fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
 
 // ── VPS bench helpers ────────────────────────────────────────────────────────
 
-const VPS_HOST: &str = "dev@100.105.75.7";
+const VPS_HOST: &str = "jobrien-vm";
 const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
 
-/// SSH options that bypass all key auth and force password-only.
-/// Passed as individual args to avoid any shell quoting or template issues.
-fn ssh_opts() -> Vec<&'static str> {
-    vec![
-        "-o",
-        "IdentitiesOnly=yes",
-        "-o",
-        "IdentityAgent=none",
-        "-o",
-        "PubkeyAuthentication=no",
-        "-o",
-        "PreferredAuthentications=password",
-        "-o",
-        "StrictHostKeyChecking=no",
-    ]
-}
-
-/// Run a script on the remote as root. Two SSH calls:
-/// 1. Upload script to a temp file (script on stdin, no sudo password conflict).
-/// 2. Execute with `sudo -S bash <tmpfile>` (password on stdin, script from file).
-fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
+/// Run a script on the remote as root via key-based SSH auth.
+/// Two SSH calls:
+/// 1. Upload script to a temp file (stdin pipe).
+/// 2. Execute with `sudo -S bash <tmpfile>` (sudo password on stdin).
+fn ssh_sudo_script(sudo_pass: &str, script: &str) -> Result<String> {
     let tmpfile = format!("/tmp/xtask-bench-{}.sh", std::process::id());
 
     // Step 1: upload script
     let write_cmd = format!("cat > '{tmpfile}' && chmod 700 '{tmpfile}'");
-    let mut upload = Command::new("sshpass")
-        .arg("-p")
-        .arg(pass)
-        .arg("ssh")
-        .args(ssh_opts())
+    let mut upload = Command::new("ssh")
         .arg(VPS_HOST)
         .arg(&write_cmd)
         .stdin(Stdio::piped())
         .spawn()
-        .context("failed to spawn sshpass for script upload")?;
+        .context("failed to spawn ssh for script upload")?;
     upload
         .stdin
         .take()
@@ -356,13 +336,9 @@ fn ssh_sudo_script(pass: &str, script: &str) -> Result<String> {
     // Step 2: run as root; clean up regardless of exit code
     let run_cmd = format!(
         "echo '{}' | sudo -S bash '{tmpfile}'; RC=$?; rm -f '{tmpfile}'; exit $RC",
-        pass.replace('\'', "'\\''"),
+        sudo_pass.replace('\'', "'\\''"),
     );
-    let out = Command::new("sshpass")
-        .arg("-p")
-        .arg(pass)
-        .arg("ssh")
-        .args(ssh_opts())
+    let out = Command::new("ssh")
         .arg(VPS_HOST)
         .arg(&run_cmd)
         .stdout(Stdio::piped())
@@ -407,11 +383,7 @@ rm -rf "$OUT_DIR"
     eprintln!("fetching JSON result...");
     fs::create_dir_all("bench/results").context("failed to create bench/results")?;
     let tmp_path = format!("/tmp/bench-latest-{}.json", std::process::id());
-    let scp_ok = Command::new("sshpass")
-        .arg("-p")
-        .arg(&vps_pass)
-        .arg("scp")
-        .args(ssh_opts())
+    let scp_ok = Command::new("scp")
         .arg(format!("{VPS_HOST}:/tmp/bench-latest.json"))
         .arg(&tmp_path)
         .status()

@@ -15,7 +15,7 @@ VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password -
 TOKEN_NAME="ci-snap-$$"
 
 # Generate a short-lived API token via the VPS
-TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
+TOKEN=$(ssh jobrien-vm \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
@@ -87,7 +87,7 @@ GITEA_URL="http://100.105.75.7:3000"
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
 TOKEN_NAME="bench-setup-$$"
 
-TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
+TOKEN=$(ssh jobrien-vm \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
@@ -100,8 +100,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
-  "GITEA_TOKEN=$TOKEN bash -s" <<'ENDSSH'
+ssh jobrien-vm "GITEA_TOKEN=$TOKEN bash -s" <<'ENDSSH'
 set -euo pipefail
 
 REPO_DIR=~/minibox
@@ -140,6 +139,10 @@ ENDSSH
 description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
 run = "cargo xtask bench-vps"
 
+[tasks."ssh-vps"]
+description = "SSH into jobrien-vm (key auth via 1Password agent)"
+run = "ssh jobrien-vm"
+
 [tasks."ci:set-secret"]
 description = "Set a Gitea Actions secret (usage: mise run ci:set-secret -- NAME value)"
 run = """
@@ -154,7 +157,7 @@ SECRET_VALUE="${2:?usage: mise run ci:set-secret -- NAME value}"
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
 TOKEN_NAME="ci-secret-$$"
 
-TOKEN=$(sshpass -p "$VPS_PASS" ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PubkeyAuthentication=no -o PreferredAuthentications=password -o StrictHostKeyChecking=no dev@100.105.75.7 \
+TOKEN=$(ssh jobrien-vm \
   "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")

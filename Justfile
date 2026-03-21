@@ -333,9 +333,6 @@ metrics-report:
 
 # ── Ops ───────────────────────────────────────────────────────────────────────
 
-# SSH into jobrien-vm (primary Linux test VPS)
+# SSH into jobrien-vm (key auth via 1Password agent)
 ssh-vps:
-    #!/usr/bin/env bash
-    sshpass -p "$(op item get jobrien-vm --account=my.1password.com --fields password --reveal)" \
-        ssh -o IdentitiesOnly=yes -o IdentityAgent=none -o PreferredAuthentications=password \
-        dev@100.105.75.7
+    ssh jobrien-vm
