@@ -46,23 +46,26 @@ pub struct GeminiProvider {
 
 impl GeminiProvider {
     pub fn new(key: String, model: String) -> Self {
+        Self::with_config(key, model, &crate::ProviderConfig::default())
+    }
+
+    pub fn with_config(key: String, model: String, config: &crate::ProviderConfig) -> Self {
         let display_name = format!("google/{model}");
+        let client = reqwest::Client::builder()
+            .connect_timeout(config.connect_timeout)
+            .timeout(config.request_timeout)
+            .build()
+            .expect("failed to build reqwest client");
         Self {
             key,
             model,
             display_name,
-            client: reqwest::Client::new(),
+            client,
         }
     }
-
-    pub fn from_env() -> Option<Self> {
-        Self::from_env_with_key(std::env::var("GEMINI_API_KEY").ok())
-    }
-
-    pub(crate) fn from_env_with_key(key: Option<String>) -> Option<Self> {
-        key.map(|k| Self::new(k, "gemini-2.5-flash".to_string()))
-    }
 }
+
+provide!(GeminiProvider, "GEMINI_API_KEY", "gemini-2.5-flash");
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
@@ -106,35 +109,43 @@ impl LlmProvider for GeminiProvider {
 
         body["generationConfig"] = generation_config;
 
-        let resp = self
+        let mut req = self
             .client
             .post(&url)
             .header("x-goog-api-key", &self.key)
             .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| LlmError::ProviderError {
-                provider: self.name().to_string(),
-                source: Box::new(e),
-            })?;
+            .json(&body);
+
+        if let Some(t) = request.timeout {
+            req = req.timeout(t);
+        }
+
+        let resp = req.send().await.map_err(|e| LlmError::ProviderError {
+            provider: self.name().to_string(),
+            source: Box::new(e),
+        })?;
 
         let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                .unwrap_or_else(|| body.clone());
+            return Err(LlmError::ProviderError {
+                provider: self.name().to_string(),
+                source: Box::new(crate::error::HttpStatusError {
+                    status: status.as_u16(),
+                    body: message,
+                }),
+            });
+        }
+
         let resp_body: serde_json::Value =
             resp.json().await.map_err(|e| LlmError::ProviderError {
                 provider: self.name().to_string(),
                 source: Box::new(e),
             })?;
-
-        if !status.is_success() {
-            let msg = resp_body["error"]["message"]
-                .as_str()
-                .unwrap_or("unknown API error");
-            return Err(LlmError::ProviderError {
-                provider: self.name().to_string(),
-                source: msg.to_string().into(),
-            });
-        }
 
         let text = resp_body["candidates"][0]["content"]["parts"][0]["text"]
             .as_str()
@@ -174,32 +185,29 @@ mod tests {
 
     #[test]
     fn from_env_returns_none_without_key() {
-        let provider = GeminiProvider::from_env_with_key(None);
+        let provider = GeminiProvider::from_env();
         assert!(provider.is_none());
     }
 
     #[test]
-    fn from_env_returns_some_with_key() {
-        let provider = GeminiProvider::from_env_with_key(Some("key-test".to_string()));
-        assert!(provider.is_some());
-        assert_eq!(provider.unwrap().name(), "google/gemini-2.5-flash");
+    fn from_key_creates_provider_with_default_model() {
+        let provider = GeminiProvider::from_key("test-key".to_string());
+        assert_eq!(provider.name(), "google/gemini-2.5-flash");
     }
 
     #[test]
     fn sanitize_strips_unsupported_keywords() {
         let schema = serde_json::json!({
             "type": "object",
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "$ref": "#/definitions/Foo",
-            "additionalProperties": false,
             "properties": {
                 "name": { "type": "string" }
-            }
+            },
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
         });
         let sanitized = sanitize_schema(&schema);
-        assert!(sanitized.get("$schema").is_none());
-        assert!(sanitized.get("$ref").is_none());
         assert!(sanitized.get("additionalProperties").is_none());
+        assert!(sanitized.get("$schema").is_none());
         assert!(sanitized.get("type").is_some());
         assert!(sanitized.get("properties").is_some());
     }

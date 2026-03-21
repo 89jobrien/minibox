@@ -13,23 +13,26 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new(key: String, model: String) -> Self {
+        Self::with_config(key, model, &crate::ProviderConfig::default())
+    }
+
+    pub fn with_config(key: String, model: String, config: &crate::ProviderConfig) -> Self {
         let display_name = format!("anthropic/{model}");
+        let client = reqwest::Client::builder()
+            .connect_timeout(config.connect_timeout)
+            .timeout(config.request_timeout)
+            .build()
+            .expect("failed to build reqwest client");
         Self {
             key,
             model,
             display_name,
-            client: reqwest::Client::new(),
+            client,
         }
     }
-
-    pub fn from_env() -> Option<Self> {
-        Self::from_env_with_key(std::env::var("ANTHROPIC_API_KEY").ok())
-    }
-
-    pub(crate) fn from_env_with_key(key: Option<String>) -> Option<Self> {
-        key.map(|k| Self::new(k, "claude-sonnet-4-6".to_string()))
-    }
 }
+
+provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
 
 #[async_trait]
 impl LlmProvider for AnthropicProvider {
@@ -69,36 +72,44 @@ impl LlmProvider for AnthropicProvider {
             });
         }
 
-        let resp = self
+        let mut req = self
             .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| LlmError::ProviderError {
-                provider: self.name().to_string(),
-                source: Box::new(e),
-            })?;
+            .json(&body);
+
+        if let Some(t) = request.timeout {
+            req = req.timeout(t);
+        }
+
+        let resp = req.send().await.map_err(|e| LlmError::ProviderError {
+            provider: self.name().to_string(),
+            source: Box::new(e),
+        })?;
 
         let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            let message = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                .unwrap_or_else(|| body.clone());
+            return Err(LlmError::ProviderError {
+                provider: self.name().to_string(),
+                source: Box::new(crate::error::HttpStatusError {
+                    status: status.as_u16(),
+                    body: message,
+                }),
+            });
+        }
+
         let resp_body: serde_json::Value =
             resp.json().await.map_err(|e| LlmError::ProviderError {
                 provider: self.name().to_string(),
                 source: Box::new(e),
             })?;
-
-        if !status.is_success() {
-            let msg = resp_body["error"]["message"]
-                .as_str()
-                .unwrap_or("unknown API error");
-            return Err(LlmError::ProviderError {
-                provider: self.name().to_string(),
-                source: msg.to_string().into(),
-            });
-        }
 
         let text = if request.schema.is_some() {
             resp_body["content"]
@@ -141,17 +152,25 @@ impl LlmProvider for AnthropicProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn from_env_returns_none_without_key() {
-        let provider = AnthropicProvider::from_env_with_key(None);
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev = std::env::var("ANTHROPIC_API_KEY").ok();
+        unsafe { std::env::remove_var("ANTHROPIC_API_KEY") };
+        let provider = AnthropicProvider::from_env();
+        if let Some(k) = prev {
+            unsafe { std::env::set_var("ANTHROPIC_API_KEY", k) };
+        }
         assert!(provider.is_none());
     }
 
     #[test]
-    fn from_env_returns_some_with_key() {
-        let provider = AnthropicProvider::from_env_with_key(Some("sk-test".to_string()));
-        assert!(provider.is_some());
-        assert_eq!(provider.unwrap().name(), "anthropic/claude-sonnet-4-6");
+    fn from_key_creates_provider_with_default_model() {
+        let provider = AnthropicProvider::from_key("sk-test".to_string());
+        assert_eq!(provider.name(), "anthropic/claude-sonnet-4-6");
     }
 }
