@@ -13,6 +13,9 @@ fn make_rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("tokio runtime")
 }
 
+// DaemonState::save_to_disk fires on every add/remove — each proptest
+// case performs disk I/O to the TempDir. This is expected and fast
+// because TempDir is on a local filesystem.
 fn make_state(tmp: &Path) -> Arc<DaemonState> {
     let image_store = ImageStore::new(tmp.join("images")).expect("ImageStore::new");
     Arc::new(DaemonState::new(image_store, tmp))
@@ -44,6 +47,8 @@ fn arb_container_id() -> impl Strategy<Value = String> {
 // ── DaemonState invariants ────────────────────────────────────────────────────
 
 proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
     #[test]
     fn state_add_then_get_finds_record(id in arb_container_id()) {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -60,6 +65,8 @@ proptest! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
     #[test]
     fn state_remove_after_add_returns_none(id in arb_container_id()) {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -75,6 +82,8 @@ proptest! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
     #[test]
     fn state_list_count_matches_adds(
         ids in proptest::collection::hash_set(arb_container_id(), 1..=8)
@@ -93,8 +102,10 @@ proptest! {
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
     #[test]
-    fn state_arbitrary_sequence_no_panic(
+    fn state_add_remove_sequence_list_count_is_consistent(
         adds in proptest::collection::hash_set(arb_container_id(), 1..=8),
         remove_count in 0_usize..=8_usize,
     ) {
