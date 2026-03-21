@@ -37,12 +37,58 @@ def _ask_anthropic(prompt: str) -> str:
     return next(b["text"] for b in resp["content"] if b["type"] == "text")
 
 
+def _ask_openai(prompt: str) -> str:
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise ValueError("no key")
+    body = json.dumps({
+        "model": "gpt-4.1",
+        "max_tokens": MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as r:
+        resp = json.loads(r.read())
+    return resp["choices"][0]["message"]["content"]
+
+
+def _ask_gemini(prompt: str) -> str:
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise ValueError("no key")
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}]
+    }).encode()
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={key}"
+    )
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as r:
+        resp = json.loads(r.read())
+    return resp["candidates"][0]["content"]["parts"][0]["text"]
+
+
 def ask_with_fallback(prompt: str) -> tuple[str, str]:
     """Try Anthropic → OpenAI → Gemini.
     Returns (diagnosis_text, provider_name_used).
     Raises DiagnosisUnavailable if all providers fail or no keys are set."""
     providers = [
         ("anthropic/claude-sonnet-4-6", _ask_anthropic),
+        ("openai/gpt-4.1", _ask_openai),
+        ("google/gemini-2.5-flash", _ask_gemini),
     ]
     errors = []
     for name, fn in providers:
