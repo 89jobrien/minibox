@@ -96,6 +96,10 @@ mod wsl2;
 // Test doubles (always available for testing)
 pub mod mocks;
 
+// Shared test fixtures (test mode only)
+#[cfg(test)]
+pub mod test_fixtures;
+
 // Linux-native exports (only on Linux)
 #[cfg(target_os = "linux")]
 pub use filesystem::OverlayFilesystem;
