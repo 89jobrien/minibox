@@ -89,6 +89,15 @@ impl MockRegistry {
     pub fn pull_count(&self) -> usize {
         self.state.lock().unwrap().pull_count
     }
+
+    /// Sync test helper — bypasses async machinery for benchmarks.
+    pub fn has_image_sync(&self, image: &str, tag: &str) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .cached_images
+            .contains(&(image.to_string(), tag.to_string()))
+    }
 }
 
 #[async_trait]
@@ -337,6 +346,21 @@ impl MockRuntime {
     pub fn spawn_count(&self) -> usize {
         self.state.lock().unwrap().spawn_count
     }
+
+    /// Sync test helper — bypasses async machinery for benchmarks.
+    pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnResult> {
+        let mut state = self.state.lock().unwrap();
+        state.spawn_count += 1;
+        if !state.spawn_should_succeed {
+            anyhow::bail!("mock spawn failure");
+        }
+        let pid = state.next_pid;
+        state.next_pid += 1;
+        Ok(SpawnResult {
+            pid,
+            output_reader: None,
+        })
+    }
 }
 
 #[async_trait]
@@ -374,6 +398,32 @@ adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 mod tests {
     use super::*;
     use crate::domain::ContainerHooks;
+
+    #[test]
+    fn mock_registry_has_image_sync_cached() {
+        let reg = MockRegistry::new().with_cached_image("alpine", "latest");
+        assert!(reg.has_image_sync("alpine", "latest"));
+        assert!(!reg.has_image_sync("alpine", "missing"));
+    }
+
+    #[test]
+    fn mock_runtime_spawn_process_sync_increments_count() {
+        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
+        let runtime = MockRuntime::new();
+        let cfg = ContainerSpawnConfig {
+            rootfs: std::path::PathBuf::from("/mock/rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            hostname: "mock".to_string(),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            capture_output: false,
+            hooks: ContainerHooks::default(),
+        };
+        let result = runtime.spawn_process_sync(&cfg).unwrap();
+        assert_eq!(result.pid, 10000);
+        assert_eq!(runtime.spawn_count(), 1);
+    }
 
     #[tokio::test]
     async fn test_mock_registry_cached_image() {

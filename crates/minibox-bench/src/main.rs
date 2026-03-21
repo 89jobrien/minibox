@@ -44,7 +44,10 @@ struct SuiteResult {
 struct TestResult {
     name: String,
     iterations: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     durations_micros: Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    durations_nanos: Vec<u64>,
     stats: Option<Stats>,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     unit: String,
@@ -334,6 +337,8 @@ fn main() {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
+    // Print JSON path to stdout so callers (e.g. xtask) can capture it without scanning the dir.
+    println!("{json_path}");
     if let Err(e) = write_table(&report, &table_path) {
         eprintln!("error: {e}");
         std::process::exit(1);
@@ -502,9 +507,10 @@ fn nano_test(name: &str, iters: usize, f: impl FnMut()) -> TestResult {
     TestResult {
         name: name.to_string(),
         iterations: durations.len(),
-        durations_micros: durations,
+        durations_nanos: durations,
         stats,
         unit: "nanos".to_string(),
+        ..Default::default()
     }
 }
 
@@ -558,7 +564,12 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
             id: format!("{:016x}", i),
             image: format!("library/image-{}", i),
             command: format!("echo hello {}", i),
-            state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),
+            state: if i.is_multiple_of(2) {
+                "running"
+            } else {
+                "stopped"
+            }
+            .to_string(),
             created_at: format!("2026-03-16T12:{:02}:00Z", i % 60),
             pid: Some(1000 + i as u32),
         }
@@ -759,9 +770,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
 
     let tests = vec![
         nano_test("registry_direct_has_image", iters, || {
-            rt.block_on(async {
-                black_box(registry_concrete.has_image("alpine", "latest")).await;
-            });
+            black_box(registry_concrete.has_image_sync("alpine", "latest"));
         }),
         nano_test("registry_trait_object_has_image", iters, || {
             rt.block_on(async {
@@ -781,9 +790,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
             black_box(limiter_trait.create("container-123", &resource_cfg)).ok();
         }),
         nano_test("runtime_direct_spawn", iters, || {
-            rt.block_on(async {
-                black_box(runtime_concrete.spawn_process(&spawn_cfg).await).ok();
-            });
+            black_box(runtime_concrete.spawn_process_sync(&spawn_cfg)).ok();
         }),
         nano_test("runtime_trait_object_spawn", iters, || {
             rt.block_on(async {
@@ -839,7 +846,12 @@ mod tests {
 
     #[test]
     fn command_runner_captures_exit_status() {
-        let result = run_cmd("/bin/true", &[]).unwrap();
+        let true_cmd = if cfg!(target_os = "macos") {
+            "/usr/bin/true"
+        } else {
+            "/bin/true"
+        };
+        let result = run_cmd(true_cmd, &[]).unwrap();
         assert!(result.success);
     }
 
@@ -866,5 +878,21 @@ mod tests {
         };
         let report = run_benchmark(&cfg).unwrap();
         assert!(!report.suites.is_empty());
+    }
+
+    #[test]
+    fn nano_test_uses_durations_nanos_not_micros() {
+        let result = nano_test("test", 5, || {
+            std::hint::black_box(1 + 1);
+        });
+        assert!(
+            !result.durations_nanos.is_empty(),
+            "durations_nanos must be populated"
+        );
+        assert!(
+            result.durations_micros.is_empty(),
+            "durations_micros must be empty for nano tests"
+        );
+        assert_eq!(result.unit, "nanos");
     }
 }

@@ -1,7 +1,7 @@
 //! Property-based tests for daemonbox state invariants and handler input safety.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use daemonbox::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use daemonbox::state::{ContainerRecord, DaemonState};
@@ -9,10 +9,24 @@ use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, Mo
 use minibox_lib::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
+// ── Runtime ───────────────────────────────────────────────────────────────────
+
+static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn runtime() -> &'static tokio::runtime::Runtime {
+    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("tokio runtime"))
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn make_rt() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().expect("tokio runtime")
+#[test]
+fn runtime_is_shared_not_per_call() {
+    let rt1 = runtime();
+    let rt2 = runtime();
+    assert!(
+        std::ptr::eq(rt1, rt2),
+        "runtime() must return the same instance"
+    );
 }
 
 // Mock adapters always succeed. containers_base/run_containers_base are never
@@ -69,11 +83,10 @@ proptest! {
     fn state_add_then_get_finds_record(id in arb_container_id()) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
         let record = make_record(&id);
 
-        rt.block_on(state.add_container(record));
-        let found = rt.block_on(state.get_container(&id));
+        runtime().block_on(state.add_container(record));
+        let found = runtime().block_on(state.get_container(&id));
 
         prop_assert!(found.is_some(), "get after add returned None for id={id}");
         prop_assert_eq!(found.unwrap().info.id, id);
@@ -87,11 +100,10 @@ proptest! {
     fn state_remove_after_add_returns_none(id in arb_container_id()) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
 
-        rt.block_on(state.add_container(make_record(&id)));
-        rt.block_on(state.remove_container(&id));
-        let found = rt.block_on(state.get_container(&id));
+        runtime().block_on(state.add_container(make_record(&id)));
+        runtime().block_on(state.remove_container(&id));
+        let found = runtime().block_on(state.get_container(&id));
 
         prop_assert!(found.is_none(), "get after add+remove returned Some for id={id}");
     }
@@ -106,12 +118,11 @@ proptest! {
     ) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
 
         for id in &ids {
-            rt.block_on(state.add_container(make_record(id)));
+            runtime().block_on(state.add_container(make_record(id)));
         }
-        let list = rt.block_on(state.list_containers());
+        let list = runtime().block_on(state.list_containers());
 
         prop_assert_eq!(list.len(), ids.len(), "list count mismatch");
     }
@@ -127,22 +138,21 @@ proptest! {
     ) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
 
         for id in &adds {
-            rt.block_on(state.add_container(make_record(id)));
+            runtime().block_on(state.add_container(make_record(id)));
         }
 
         let ids_vec: Vec<_> = adds.iter().collect();
         let to_remove = &ids_vec[..remove_count.min(ids_vec.len())];
         let mut removed = 0;
         for id in to_remove {
-            if rt.block_on(state.remove_container(id)).is_some() {
+            if runtime().block_on(state.remove_container(id)).is_some() {
                 removed += 1;
             }
         }
 
-        let list = rt.block_on(state.list_containers());
+        let list = runtime().block_on(state.list_containers());
         prop_assert_eq!(list.len(), adds.len() - removed);
     }
 }
@@ -155,9 +165,8 @@ proptest! {
     fn handle_stop_unknown_id_is_error(id in arb_container_id()) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
 
-        let resp = rt.block_on(handle_stop(id.clone(), state));
+        let resp = runtime().block_on(handle_stop(id.clone(), state));
 
         prop_assert!(
             matches!(resp, DaemonResponse::Error { .. }),
@@ -173,9 +182,8 @@ proptest! {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
         let deps = make_deps(tmp.path());
-        let rt = make_rt();
 
-        let resp = rt.block_on(handle_remove(id.clone(), state, deps));
+        let resp = runtime().block_on(handle_remove(id.clone(), state, deps));
 
         prop_assert!(
             matches!(resp, DaemonResponse::Error { .. }),
@@ -192,12 +200,11 @@ proptest! {
     ) {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
-        let rt = make_rt();
 
         for id in &ids {
-            rt.block_on(state.add_container(make_record(id)));
+            runtime().block_on(state.add_container(make_record(id)));
         }
-        let resp = rt.block_on(handle_list(state));
+        let resp = runtime().block_on(handle_list(state));
 
         prop_assert!(
             matches!(resp, DaemonResponse::ContainerList { .. }),

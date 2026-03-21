@@ -25,7 +25,10 @@ fn main() -> Result<()> {
         Some("clean-artifacts") => clean_artifacts(&sh),
         Some("nuke-test-state") => nuke_test_state(&sh),
         Some("bench") => bench(&sh),
-        Some("bench-vps") => bench_vps(&sh),
+        Some("bench-vps") => {
+            let extra: Vec<String> = env::args().skip(2).collect();
+            bench_vps(&sh, &extra)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -173,7 +176,7 @@ fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> 
             let name = e.file_name();
             let name = name.to_string_lossy();
             // Match `prefix-<hash>` pattern, no extension (i.e. not .d files)
-            let is_file = e.file_type().map_or(false, |t| t.is_file());
+            let is_file = e.file_type().is_ok_and(|t| t.is_file());
             name.starts_with(prefix) && !name.ends_with(".d") && is_file
         })
         .collect();
@@ -188,7 +191,7 @@ fn clean_artifacts(sh: &Shell) -> Result<()> {
         let p = Path::new(dir);
         if p.exists() {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
-                if entry.file_type().ok().map_or(false, |t| t.is_file()) {
+                if entry.file_type().ok().is_some_and(|t| t.is_file()) {
                     fs::remove_file(entry.path()).ok();
                 }
             }
@@ -200,8 +203,8 @@ fn clean_artifacts(sh: &Shell) -> Result<()> {
         if p.exists() {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
                 let path = entry.path();
-                let keep = path.extension().map_or(false, |e| e == "d");
-                if !keep && entry.file_type().ok().map_or(false, |t| t.is_file()) {
+                let keep = path.extension().is_some_and(|e| e == "d");
+                if !keep && entry.file_type().ok().is_some_and(|t| t.is_file()) {
                     fs::remove_file(&path).ok();
                 }
             }
@@ -261,18 +264,19 @@ fn nuke_test_state(sh: &Shell) -> Result<()> {
 fn bench(sh: &Shell) -> Result<()> {
     let out_dir = "bench/results";
     fs::create_dir_all(out_dir).context("create bench/results")?;
-    cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}").run()?;
 
-    // Find the JSON file written by the binary (most recent in out_dir).
-    let json_path = fs::read_dir(out_dir)
-        .context("read bench/results")?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false))
-        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
-        .map(|e| e.path())
-        .ok_or_else(|| anyhow::anyhow!("no JSON result found in {out_dir}"))?;
+    // Capture stdout — the binary prints the JSON path as its last line.
+    let output = cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}")
+        .read()
+        .context("bench binary failed")?;
 
-    save_bench_results(sh, &json_path.to_string_lossy())
+    let json_path = output
+        .lines()
+        .last()
+        .filter(|l| l.ends_with(".json"))
+        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?;
+
+    save_bench_results(sh, json_path)
 }
 
 /// Patch git_sha, append to bench.jsonl, and update latest.json.
@@ -304,6 +308,13 @@ fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
 }
 
 // ── VPS bench helpers ────────────────────────────────────────────────────────
+
+/// Parse --commit / --push flags from extra args. Returns (commit, push).
+fn parse_bench_vps_flags(args: &[String]) -> (bool, bool) {
+    let commit = args.iter().any(|a| a == "--commit");
+    let push = args.iter().any(|a| a == "--push");
+    (commit, push)
+}
 
 const VPS_HOST: &str = "jobrien-vm";
 const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
@@ -352,7 +363,7 @@ fn ssh_sudo_script(sudo_pass: &str, script: &str) -> Result<String> {
 }
 
 /// Run minibox-bench on the VPS as root and append results to bench/results/bench.jsonl.
-fn bench_vps(sh: &Shell) -> Result<()> {
+fn bench_vps(sh: &Shell, extra_args: &[String]) -> Result<()> {
     let vps_pass = cmd!(
         sh,
         "op item get jobrien-vm --account=my.1password.com --fields password --reveal"
@@ -393,24 +404,60 @@ rm -rf "$OUT_DIR"
         save_bench_results(sh, &tmp_path)?;
         let _ = fs::remove_file(&tmp_path);
 
-        // Commit and push bench results
-        let sha_short = cmd!(sh, "git rev-parse --short HEAD")
-            .read()
-            .unwrap_or_default();
-        let sha_short = sha_short.trim();
-        cmd!(
-            sh,
-            "git add bench/results/bench.jsonl bench/results/latest.json"
-        )
-        .ignore_status()
-        .run()?;
-        let msg = format!("bench: vps results @ {sha_short}");
-        cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
-        cmd!(sh, "git push").run().context("git push failed")?;
-        eprintln!("✓ bench results committed and pushed");
+        let (do_commit, do_push) = parse_bench_vps_flags(extra_args);
+
+        if do_commit || do_push {
+            let sha_short = cmd!(sh, "git rev-parse --short HEAD")
+                .read()
+                .unwrap_or_default();
+            let sha_short = sha_short.trim();
+            cmd!(
+                sh,
+                "git add bench/results/bench.jsonl bench/results/latest.json"
+            )
+            .ignore_status()
+            .run()?;
+            let msg = format!("bench: vps results @ {sha_short}");
+            cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
+            eprintln!("✓ bench results committed");
+        }
+
+        if do_push {
+            cmd!(sh, "git push").run().context("git push failed")?;
+            eprintln!("✓ bench results pushed");
+        }
     } else {
         eprintln!("warning: scp failed — JSON not saved locally");
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod bench_vps_args_tests {
+    use super::parse_bench_vps_flags;
+
+    #[test]
+    fn bench_vps_args_default_no_commit_no_push() {
+        let args: Vec<String> = vec![];
+        let (commit, push) = parse_bench_vps_flags(&args);
+        assert!(!commit);
+        assert!(!push);
+    }
+
+    #[test]
+    fn bench_vps_args_explicit_flags() {
+        let args = vec!["--commit".to_string(), "--push".to_string()];
+        let (commit, push) = parse_bench_vps_flags(&args);
+        assert!(commit);
+        assert!(push);
+    }
+
+    #[test]
+    fn bench_vps_args_commit_only() {
+        let args = vec!["--commit".to_string()];
+        let (commit, push) = parse_bench_vps_flags(&args);
+        assert!(commit);
+        assert!(!push);
+    }
 }
