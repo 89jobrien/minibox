@@ -19,5 +19,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo deny
         uses: EmbarkStudios/cargo-deny-action@v2
+      - name: install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
       - name: cargo audit
         run: cargo audit
