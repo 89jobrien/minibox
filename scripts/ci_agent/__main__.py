@@ -104,7 +104,7 @@ def main() -> None:
     print("=" * 60)
 
     first_line = diagnosis.split("\n")[0][:120]
-    state = "failure" if provider != "none" else "error"
+    state = "error" if provider == "none" else "failure"
     set_commit_status(gitea_url, repo, sha, state, f"Diagnosed: {first_line}", headers)
 
     failed_job_names = [j.get("name", f"job-{j['id']}") for j in failed]
