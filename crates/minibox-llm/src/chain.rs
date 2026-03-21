@@ -1,5 +1,6 @@
 use crate::error::LlmError;
-use crate::provider::LlmProvider;
+use crate::provider::{LlmProvider, ProviderConfig};
+use crate::retry::RetryConfig;
 use crate::types::{CompletionRequest, CompletionResponse};
 use std::sync::OnceLock;
 
@@ -39,29 +40,45 @@ impl FallbackChain {
 
 impl FallbackChain {
     pub fn from_env() -> Self {
-        #[allow(unused_mut)]
+        Self::from_env_with_config(ProviderConfig::default(), RetryConfig::default())
+    }
+
+    pub fn from_env_with_config(
+        provider_config: ProviderConfig,
+        retry_config: RetryConfig,
+    ) -> Self {
         let mut providers: Vec<Box<dyn LlmProvider>> = Vec::new();
 
         #[cfg(feature = "anthropic")]
-        if let Some(p) = crate::anthropic::AnthropicProvider::from_env() {
+        if let Some(p) = crate::anthropic::AnthropicProvider::from_env_with_config(&provider_config)
+        {
             tracing::info!(provider = p.name(), "llm: provider available");
-            providers.push(Box::new(p));
+            providers.push(Box::new(crate::retry::RetryingProvider::new(
+                p,
+                retry_config.clone(),
+            )));
         } else {
             tracing::warn!(provider = "anthropic", "llm: provider skipped (no key)");
         }
 
         #[cfg(feature = "openai")]
-        if let Some(p) = crate::openai::OpenAiProvider::from_env() {
+        if let Some(p) = crate::openai::OpenAiProvider::from_env_with_config(&provider_config) {
             tracing::info!(provider = p.name(), "llm: provider available");
-            providers.push(Box::new(p));
+            providers.push(Box::new(crate::retry::RetryingProvider::new(
+                p,
+                retry_config.clone(),
+            )));
         } else {
             tracing::warn!(provider = "openai", "llm: provider skipped (no key)");
         }
 
         #[cfg(feature = "gemini")]
-        if let Some(p) = crate::gemini::GeminiProvider::from_env() {
+        if let Some(p) = crate::gemini::GeminiProvider::from_env_with_config(&provider_config) {
             tracing::info!(provider = p.name(), "llm: provider available");
-            providers.push(Box::new(p));
+            providers.push(Box::new(crate::retry::RetryingProvider::new(
+                p,
+                retry_config.clone(),
+            )));
         } else {
             tracing::warn!(provider = "gemini", "llm: provider skipped (no key)");
         }
@@ -194,6 +211,58 @@ mod tests {
         })]);
         let result = chain.complete_sync(&request("test")).unwrap();
         assert_eq!(result.text, "sync");
+    }
+
+    #[tokio::test]
+    async fn retrying_chain_retries_transient_then_succeeds() {
+        use crate::error::HttpStatusError;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct TransientThenOk {
+            calls: AtomicU32,
+        }
+
+        #[async_trait::async_trait]
+        impl LlmProvider for TransientThenOk {
+            fn name(&self) -> &str {
+                "transient-ok"
+            }
+            async fn complete(
+                &self,
+                _r: &CompletionRequest,
+            ) -> Result<CompletionResponse, LlmError> {
+                let n = self.calls.fetch_add(1, Ordering::SeqCst);
+                if n == 0 {
+                    Err(LlmError::ProviderError {
+                        provider: "transient-ok".to_string(),
+                        source: Box::new(HttpStatusError {
+                            status: 503,
+                            body: "down".to_string(),
+                        }),
+                    })
+                } else {
+                    Ok(CompletionResponse {
+                        text: "recovered".to_string(),
+                        provider: "transient-ok".to_string(),
+                        usage: None,
+                    })
+                }
+            }
+        }
+
+        let provider = TransientThenOk {
+            calls: AtomicU32::new(0),
+        };
+        let retrying = crate::RetryingProvider::new(
+            provider,
+            crate::RetryConfig {
+                max_retries: 2,
+                backoff_base: std::time::Duration::from_millis(1),
+            },
+        );
+        let chain = FallbackChain::new(vec![Box::new(retrying)]);
+        let resp = chain.complete(&request("test")).await.unwrap();
+        assert_eq!(resp.text, "recovered");
     }
 
     #[test]
