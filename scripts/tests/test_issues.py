@@ -55,3 +55,70 @@ class TestEnsureLabelExists(unittest.TestCase):
         ensure_label_exists(GITEA, REPO, HEADERS)
         # Only the GET — no POST
         mock_urlopen.assert_called_once()
+
+
+from ci_agent.issues import add_comment, create_issue, find_issue_for_commit
+
+SHA = "abc123def456abc123def456abc123def456abc123"
+
+
+class TestFindIssueForCommit(unittest.TestCase):
+    @patch("urllib.request.urlopen")
+    def test_returns_none_when_no_issues(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_ok([])
+        result = find_issue_for_commit(GITEA, REPO, SHA, HEADERS)
+        self.assertIsNone(result)
+
+    @patch("urllib.request.urlopen")
+    def test_finds_issue_by_sha_marker(self, mock_urlopen):
+        issues = [{"number": 42, "body": f"some text\n<!-- sha: {SHA} -->"}]
+        mock_urlopen.return_value = _mock_ok(issues)
+        result = find_issue_for_commit(GITEA, REPO, SHA, HEADERS)
+        self.assertEqual(result, 42)
+
+    @patch("urllib.request.urlopen")
+    def test_paginates_until_empty(self, mock_urlopen):
+        # Page 1: issue with wrong SHA; page 2: empty
+        page1 = [{"number": 10, "body": "<!-- sha: deadbeef -->"}]
+        mock_urlopen.side_effect = [_mock_ok(page1), _mock_ok([])]
+        result = find_issue_for_commit(GITEA, REPO, SHA, HEADERS)
+        self.assertIsNone(result)
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+
+class TestCreateIssue(unittest.TestCase):
+    @patch("urllib.request.urlopen")
+    def test_creates_issue_and_returns_number(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_ok({"number": 7})
+        number = create_issue(
+            GITEA, REPO, SHA, "Root cause: bad dep",
+            "anthropic/claude-sonnet-4-6", ["lint"], "99", HEADERS,
+        )
+        self.assertEqual(number, 7)
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data)
+        self.assertIn(SHA[:8], body["title"])
+        self.assertIn(f"<!-- sha: {SHA} -->", body["body"])
+        self.assertIn("ci-failure", body["labels"])
+
+    @patch("urllib.request.urlopen")
+    def test_body_contains_run_link(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_ok({"number": 8})
+        create_issue(
+            GITEA, REPO, SHA, "diagnosis",
+            "anthropic/claude-sonnet-4-6", ["lint"], "42", HEADERS,
+        )
+        body = json.loads(mock_urlopen.call_args[0][0].data)
+        self.assertIn("42", body["body"])  # run ID in body
+
+
+class TestAddComment(unittest.TestCase):
+    @patch("urllib.request.urlopen")
+    def test_posts_comment(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_ok({"id": 1})
+        add_comment(GITEA, REPO, 42, "Re-run diagnosis", "openai/gpt-4.1", HEADERS)
+        req = mock_urlopen.call_args[0][0]
+        self.assertIn("/issues/42/comments", req.full_url)
+        body = json.loads(req.data)
+        self.assertIn("Re-run diagnosis", body["body"])
+        self.assertIn("openai/gpt-4.1", body["body"])
