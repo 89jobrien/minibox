@@ -11,9 +11,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # macOS job: fmt + clippy + unit tests on GitHub-hosted runner.
-  # miniboxd now compiles on macOS (dispatches to macbox::start()),
-  # so we include macbox and miniboxd in the clippy sweep.
   macos:
     name: macOS
     runs-on: macos-latest
