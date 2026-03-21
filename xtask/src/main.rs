@@ -14,6 +14,8 @@ fn main() -> Result<()> {
         Some("pre-commit") => pre_commit(&sh),
         Some("prepush") => prepush(&sh),
         Some("test-unit") => test_unit(&sh),
+        Some("test-property") => test_property(&sh),
+        Some("test-integration") => test_integration(&sh),
         Some("test-e2e-suite") => test_e2e_suite(&sh),
         Some("clean-artifacts") => clean_artifacts(&sh),
         Some("nuke-test-state") => nuke_test_state(&sh),
@@ -24,6 +26,8 @@ fn main() -> Result<()> {
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
+            eprintln!("  test-property    property-based tests (proptest)");
+            eprintln!("  test-integration cgroup + integration tests (Linux, root)");
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
@@ -83,6 +87,31 @@ fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test -p daemonbox --test conformance_tests")
         .run()
         .context("conformance_tests failed")?;
+    Ok(())
+}
+
+/// Property-based tests (proptest)
+fn test_property(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo test -p minibox-lib --test proptest_suite")
+        .run()
+        .context("property tests failed")?;
+    Ok(())
+}
+
+/// Cgroup + integration tests (Linux, root required)
+fn test_integration(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture"
+    )
+    .run()
+    .context("cgroup tests failed")?;
+    cmd!(
+        sh,
+        "cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture"
+    )
+    .run()
+    .context("integration tests failed")?;
     Ok(())
 }
 
