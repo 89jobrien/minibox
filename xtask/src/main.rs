@@ -179,7 +179,7 @@ fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> 
             let name = e.file_name();
             let name = name.to_string_lossy();
             // Match `prefix-<hash>` pattern, no extension (i.e. not .d files)
-            let is_file = e.file_type().map_or(false, |t| t.is_file());
+            let is_file = e.file_type().is_ok_and(|t| t.is_file());
             name.starts_with(prefix) && !name.ends_with(".d") && is_file
         })
         .collect();
@@ -194,7 +194,7 @@ fn clean_artifacts(sh: &Shell) -> Result<()> {
         let p = Path::new(dir);
         if p.exists() {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
-                if entry.file_type().ok().map_or(false, |t| t.is_file()) {
+                if entry.file_type().ok().is_some_and(|t| t.is_file()) {
                     fs::remove_file(entry.path()).ok();
                 }
             }
@@ -206,8 +206,8 @@ fn clean_artifacts(sh: &Shell) -> Result<()> {
         if p.exists() {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
                 let path = entry.path();
-                let keep = path.extension().map_or(false, |e| e == "d");
-                if !keep && entry.file_type().ok().map_or(false, |t| t.is_file()) {
+                let keep = path.extension().is_some_and(|e| e == "d");
+                if !keep && entry.file_type().ok().is_some_and(|t| t.is_file()) {
                     fs::remove_file(&path).ok();
                 }
             }

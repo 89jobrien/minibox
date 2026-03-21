@@ -564,7 +564,12 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
             id: format!("{:016x}", i),
             image: format!("library/image-{}", i),
             command: format!("echo hello {}", i),
-            state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),
+            state: if i.is_multiple_of(2) {
+                "running"
+            } else {
+                "stopped"
+            }
+            .to_string(),
             created_at: format!("2026-03-16T12:{:02}:00Z", i % 60),
             pid: Some(1000 + i as u32),
         }
@@ -841,7 +846,12 @@ mod tests {
 
     #[test]
     fn command_runner_captures_exit_status() {
-        let result = run_cmd("/bin/true", &[]).unwrap();
+        let true_cmd = if cfg!(target_os = "macos") {
+            "/usr/bin/true"
+        } else {
+            "/bin/true"
+        };
+        let result = run_cmd(true_cmd, &[]).unwrap();
         assert!(result.success);
     }
 
