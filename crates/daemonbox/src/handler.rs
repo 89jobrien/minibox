@@ -179,6 +179,7 @@ async fn handle_run_streaming(
     let reader_raw = output_reader.into_raw_fd();
     let drain_handle = tokio::task::spawn_blocking(move || {
         use std::io::Read;
+        use std::os::fd::FromRawFd;
 
         // SAFETY: we own this fd from the pipe created in spawn_container_process.
         let mut file = unsafe { std::fs::File::from_raw_fd(reader_raw) };
