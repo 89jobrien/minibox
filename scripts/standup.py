@@ -24,7 +24,7 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 _LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 _DEFAULT_REPOS_DIR = Path.home() / "dev"
 _DEFAULT_VAULT = Path.home() / "Documents" / "Obsidian Vault" / "Reports"
-_TIMELINE_FILE = "docs/TIMELINE.md"
+_TIMELINE_FILE = "docs/STANDUP.md"
 
 
 def find_repo_root() -> Path | None:
