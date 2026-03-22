@@ -324,6 +324,14 @@ commit msg:
     git add -A
     git commit -m "{{msg}}"
 
+# Multi-role council analysis of current branch (core: 3 roles, extensive: 5 roles)
+council base="main" mode="core":
+    uv run scripts/council.py --base {{ quote(base) }} --mode {{ quote(mode) }}
+
+# Automated standup from git activity + Claude session logs
+standup hours="24":
+    uv run scripts/standup.py --hours {{ quote(hours) }}
+
 # Agent run history and metrics dashboard
 dashboard:
     uv run scripts/dashboard.py
