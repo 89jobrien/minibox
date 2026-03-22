@@ -349,8 +349,13 @@ diagnose *args:
     #!/usr/bin/env bash
     uv run scripts/diagnose.py "$@"
 
-# Push + clean non-critical artifacts on success
+# Fetch, check sync vs origin/main, auto-resolve obvious conflicts (prompts if unsure)
+sync-check:
+    uv run scripts/sync-check.py
+
+# Push with pre-push sync check
 push *args:
+    uv run scripts/sync-check.py
     git push {{args}}
     cargo xtask clean-artifacts
 
