@@ -1,9 +1,11 @@
-use std::{process::Command, sync::Arc};
+use std::{process::Command, sync::Arc, time::Duration};
 
 use crate::domain::{
     CacheHint, CredentialError, CredentialProvider, CredentialRef, CredentialScheme,
     FetchedCredential, FetchedCredentialInner, build_credential,
 };
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Fetches credentials via the `op` CLI (1Password).
 ///
@@ -11,7 +13,27 @@ use crate::domain::{
 ///
 /// Requires `op` to be installed and a session to be active (biometric unlock or
 /// `op signin`). The crate does not manage the 1Password session.
-pub struct OnePasswordProvider;
+pub struct OnePasswordProvider {
+    timeout: Duration,
+}
+
+impl OnePasswordProvider {
+    pub fn new() -> Self {
+        Self {
+            timeout: DEFAULT_TIMEOUT,
+        }
+    }
+
+    pub fn with_timeout(timeout: Duration) -> Self {
+        Self { timeout }
+    }
+}
+
+impl Default for OnePasswordProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait::async_trait]
 impl CredentialProvider for OnePasswordProvider {
@@ -23,14 +45,23 @@ impl CredentialProvider for OnePasswordProvider {
             )));
         }
 
-        // Reconstruct the full op:// URI for the CLI
         let op_ref = format!("op://{}", r.path);
         let kind = r.kind;
+        let timeout = self.timeout;
 
-        let output = tokio::task::spawn_blocking(move || {
-            Command::new("op").args(["read", &op_ref]).output()
-        })
+        let output = tokio::time::timeout(
+            timeout,
+            tokio::task::spawn_blocking(move || {
+                Command::new("op").args(["read", &op_ref]).output()
+            }),
+        )
         .await
+        .map_err(|_| {
+            CredentialError::ProviderUnavailable(format!(
+                "op timed out after {}s",
+                timeout.as_secs()
+            ))
+        })?
         .map_err(|e| CredentialError::ProviderUnavailable(e.to_string()))?
         .map_err(|e| {
             CredentialError::ProviderUnavailable(format!("`op` not found or not executable: {e}"))

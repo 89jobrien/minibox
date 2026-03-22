@@ -1,9 +1,11 @@
-use std::{process::Command, sync::Arc};
+use std::{process::Command, sync::Arc, time::Duration};
 
 use crate::domain::{
     CacheHint, CredentialError, CredentialProvider, CredentialRef, CredentialScheme,
     FetchedCredential, FetchedCredentialInner, build_credential,
 };
+
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Fetches credentials via the `bw` CLI (Bitwarden).
 ///
@@ -15,7 +17,27 @@ use crate::domain::{
 /// Field resolution order:
 /// 1. `fields` array — find the entry where `name == field`, use `.value`
 /// 2. `login.password` — fallback when no matching custom field found
-pub struct BitwardenProvider;
+pub struct BitwardenProvider {
+    timeout: Duration,
+}
+
+impl BitwardenProvider {
+    pub fn new() -> Self {
+        Self {
+            timeout: DEFAULT_TIMEOUT,
+        }
+    }
+
+    pub fn with_timeout(timeout: Duration) -> Self {
+        Self { timeout }
+    }
+}
+
+impl Default for BitwardenProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait::async_trait]
 impl CredentialProvider for BitwardenProvider {
@@ -38,13 +60,23 @@ impl CredentialProvider for BitwardenProvider {
         let item_name = item_name.to_string();
         let field_name = field_name.to_string();
         let kind = r.kind;
+        let timeout = self.timeout;
 
-        let output = tokio::task::spawn_blocking(move || {
-            Command::new("bw")
-                .args(["get", "item", &item_name])
-                .output()
-        })
+        let output = tokio::time::timeout(
+            timeout,
+            tokio::task::spawn_blocking(move || {
+                Command::new("bw")
+                    .args(["get", "item", &item_name])
+                    .output()
+            }),
+        )
         .await
+        .map_err(|_| {
+            CredentialError::ProviderUnavailable(format!(
+                "bw timed out after {}s",
+                timeout.as_secs()
+            ))
+        })?
         .map_err(|e| CredentialError::ProviderUnavailable(e.to_string()))?
         .map_err(|e| {
             CredentialError::ProviderUnavailable(format!("`bw` not found or not executable: {e}"))
@@ -57,7 +89,9 @@ impl CredentialProvider for BitwardenProvider {
                     "Bitwarden: vault is locked or not logged in".into(),
                 ))
             } else {
-                Err(CredentialError::NotFound(item_name))
+                Err(CredentialError::NotFound(
+                    r.path.split('/').next().unwrap_or(&r.path).to_string(),
+                ))
             };
         }
 

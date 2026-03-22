@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tracing::warn;
 
 use crate::domain::{
@@ -24,17 +24,31 @@ fn validate_credential(c: &Credential) -> Result<(), ValidationError> {
 /// - `Never` — always bypasses cache and re-fetches.
 /// - `Session` — cached for the lifetime of the process.
 /// - `Until(t)` — cached until `t`; evicted and re-fetched after expiry.
+///
+/// Use `clear()` or `invalidate()` to drop cached credentials on demand (e.g. after
+/// credential rotation or session logout).
 pub struct CredentialProviderChain {
     providers: Vec<Box<dyn CredentialProvider>>,
-    cache: Mutex<HashMap<String, FetchedCredential>>,
+    /// RwLock: many concurrent cache hits don't block each other.
+    cache: RwLock<HashMap<String, FetchedCredential>>,
 }
 
 impl CredentialProviderChain {
     pub fn new(providers: Vec<Box<dyn CredentialProvider>>) -> Self {
         Self {
             providers,
-            cache: Mutex::new(HashMap::new()),
+            cache: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Evict all cached credentials.
+    pub async fn clear(&self) {
+        self.cache.write().await.clear();
+    }
+
+    /// Evict a single cached credential by ref string.
+    pub async fn invalidate(&self, ref_str: &str) {
+        self.cache.write().await.remove(ref_str);
     }
 }
 
@@ -43,9 +57,9 @@ impl CredentialProvider for CredentialProviderChain {
     async fn get(&self, r: &CredentialRef) -> Result<FetchedCredential, CredentialError> {
         let key = r.as_str().to_string();
 
-        // Cache check — skip entirely for Never
+        // Cache read — RwLock allows concurrent hits without blocking
         {
-            let mut guard = self.cache.lock().await;
+            let guard = self.cache.read().await;
             if let Some(cached) = guard.get(&key) {
                 match &cached.cache {
                     CacheHint::Never => {}
@@ -54,7 +68,9 @@ impl CredentialProvider for CredentialProviderChain {
                         if Utc::now() < *t {
                             return Ok(cached.clone());
                         }
-                        guard.remove(&key);
+                        // Expired — drop read lock and fall through to evict + re-fetch
+                        drop(guard);
+                        self.cache.write().await.remove(&key);
                     }
                 }
             }
@@ -67,7 +83,6 @@ impl CredentialProvider for CredentialProviderChain {
         for provider in &self.providers {
             match provider.get(r).await {
                 Ok(fetched) => {
-                    // Validate before accepting
                     if let Err(ve) = validate_credential(&fetched.credential) {
                         warn!(
                             ref_key = key,
@@ -78,9 +93,8 @@ impl CredentialProvider for CredentialProviderChain {
                         continue;
                     }
 
-                    // Cache if not Never
                     if !matches!(fetched.cache, CacheHint::Never) {
-                        self.cache.lock().await.insert(key, fetched.clone());
+                        self.cache.write().await.insert(key, fetched.clone());
                     }
 
                     return Ok(fetched);
@@ -193,7 +207,6 @@ mod tests {
         let first = chain.get(&r).await.unwrap();
         let second = chain.get(&r).await.unwrap();
 
-        // Both should return the same Arc
         assert!(Arc::ptr_eq(&first, &second));
     }
 
@@ -201,7 +214,6 @@ mod tests {
     async fn never_hint_bypasses_cache() {
         let r = ref_for("env:SOME_VAR:api_key");
 
-        // Use InMemoryProvider with CacheHint::Never
         let fetched = Arc::new(FetchedCredentialInner {
             credential: Credential::ApiKey(ApiKey::new("sk-envval123")),
             cache: CacheHint::Never,
@@ -213,8 +225,39 @@ mod tests {
         let chain = CredentialProviderChain::new(vec![Box::new(p)]);
         let _ = chain.get(&r).await.unwrap();
 
-        // Cache should be empty
-        let guard = chain.cache.lock().await;
-        assert!(guard.is_empty());
+        assert!(chain.cache.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn invalidate_removes_entry() {
+        let r = ref_for("inmemory:my-key:api_key");
+
+        let mut p = InMemoryProvider::new();
+        p.insert(r.as_str(), make_api_key_fetched("sk-cached1234"));
+
+        let chain = CredentialProviderChain::new(vec![Box::new(p)]);
+        let _ = chain.get(&r).await.unwrap();
+
+        assert!(!chain.cache.read().await.is_empty());
+        chain.invalidate(r.as_str()).await;
+        assert!(chain.cache.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn clear_removes_all_entries() {
+        let r1 = ref_for("inmemory:key-one:api_key");
+        let r2 = ref_for("inmemory:key-two:api_key");
+
+        let mut p = InMemoryProvider::new();
+        p.insert(r1.as_str(), make_api_key_fetched("sk-first1234"));
+        p.insert(r2.as_str(), make_api_key_fetched("sk-second123"));
+
+        let chain = CredentialProviderChain::new(vec![Box::new(p)]);
+        let _ = chain.get(&r1).await.unwrap();
+        let _ = chain.get(&r2).await.unwrap();
+
+        assert_eq!(chain.cache.read().await.len(), 2);
+        chain.clear().await;
+        assert!(chain.cache.read().await.is_empty());
     }
 }
