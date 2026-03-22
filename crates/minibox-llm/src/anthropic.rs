@@ -4,18 +4,37 @@ use crate::error::LlmError;
 use crate::provider::LlmProvider;
 use crate::types::{CompletionRequest, CompletionResponse, Usage};
 
+/// LLM provider backed by the Anthropic Messages API.
+///
+/// Enabled by the `anthropic` feature flag. Uses the
+/// `https://api.anthropic.com/v1/messages` endpoint with
+/// `anthropic-version: 2023-06-01`.
+///
+/// Default model: `claude-sonnet-4-6`. Construct via [`from_env`](AnthropicProvider::from_env)
+/// (reads `ANTHROPIC_API_KEY`) or [`new`](AnthropicProvider::new) / [`with_config`](AnthropicProvider::with_config)
+/// when the key is already available.
+///
+/// Structured output is implemented via Anthropic's tool-use mechanism: the
+/// schema is registered as a tool and `tool_choice` forces the model to call it,
+/// yielding the `input` field of the resulting `tool_use` block as the response text.
 pub struct AnthropicProvider {
     key: String,
     model: String,
+    /// Display name returned by [`name`](AnthropicProvider::name), e.g. `"anthropic/claude-sonnet-4-6"`.
     display_name: String,
     client: reqwest::Client,
 }
 
 impl AnthropicProvider {
+    /// Construct with default HTTP timeouts (10s connect, 60s request).
     pub fn new(key: String, model: String) -> Self {
         Self::with_config(key, model, &crate::ProviderConfig::default())
     }
 
+    /// Construct with explicit HTTP timeout configuration.
+    ///
+    /// The `reqwest::Client` is built once here and reused for every request
+    /// made by this provider instance.
     pub fn with_config(key: String, model: String, config: &crate::ProviderConfig) -> Self {
         let display_name = format!("anthropic/{model}");
         let client = reqwest::Client::builder()
@@ -32,14 +51,29 @@ impl AnthropicProvider {
     }
 }
 
+// Generates from_env(), from_env_with_config(), and from_key() (test-only).
+// Reads ANTHROPIC_API_KEY; default model is claude-sonnet-4-6.
 provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
 
 #[async_trait]
 impl LlmProvider for AnthropicProvider {
+    /// Returns the display name, e.g. `"anthropic/claude-sonnet-4-6"`.
     fn name(&self) -> &str {
         &self.display_name
     }
 
+    /// Send a completion request to the Anthropic Messages API.
+    ///
+    /// When [`CompletionRequest::schema`] is set, the schema is sent as an
+    /// Anthropic tool definition and `tool_choice` forces the model to call it.
+    /// The returned text is the JSON-serialised `input` field of the
+    /// `tool_use` response block.
+    ///
+    /// When [`CompletionRequest::timeout`] is set, it overrides the client-level
+    /// request timeout for this call only.
+    ///
+    /// Non-2xx responses are wrapped in [`HttpStatusError`](crate::HttpStatusError)
+    /// with the `error.message` JSON field extracted when possible.
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         let start = std::time::Instant::now();
         tracing::debug!(
@@ -61,6 +95,7 @@ impl LlmProvider for AnthropicProvider {
         }
 
         if let Some(schema) = &request.schema {
+            // Use tool-use to force structured JSON output.
             body["tools"] = serde_json::json!([{
                 "name": &schema.name,
                 "description": "Respond with structured output",
@@ -112,6 +147,7 @@ impl LlmProvider for AnthropicProvider {
             })?;
 
         let text = if request.schema.is_some() {
+            // Extract the tool_use block's input as JSON text.
             resp_body["content"]
                 .as_array()
                 .and_then(|blocks| blocks.iter().find(|b| b["type"] == "tool_use"))
@@ -154,6 +190,9 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
+    /// Serialises environment-variable mutations across parallel tests.
+    // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. The Mutex
+    // ensures only one test modifies the environment at a time.
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]

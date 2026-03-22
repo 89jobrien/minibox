@@ -1,7 +1,17 @@
 //! cgroups v2 resource management for containers.
 //!
-//! Each container gets its own cgroup under `/sys/fs/cgroup/minibox/{id}/`.
-//! We only write to the unified v2 hierarchy - cgroupv1 is not supported.
+//! Each container gets its own cgroup under the minibox slice, typically at
+//! `/sys/fs/cgroup/minibox.slice/miniboxd.service/{id}/` when running under
+//! systemd, or at `$MINIBOX_CGROUP_ROOT/{id}/` when overridden via the
+//! environment variable. Only the unified cgroup v2 hierarchy is supported;
+//! cgroup v1 is not.
+//!
+//! # cgroup v2 "no internal process" rule
+//!
+//! A cgroup cannot simultaneously hold processes **and** child cgroups. Tests
+//! that need to write to cgroup limit files must therefore run in a dedicated
+//! leaf cgroup (e.g. via `scripts/run-cgroup-tests.sh`) rather than directly
+//! in the service's own cgroup.
 
 use crate::error::CgroupError;
 use anyhow::Context;
@@ -26,7 +36,10 @@ pub struct CgroupConfig {
 
 /// Manages a single container cgroup under the minibox slice.
 ///
-/// The cgroup path is `/sys/fs/cgroup/minibox/{container_id}/`.
+/// The cgroup path is `$MINIBOX_CGROUP_ROOT/{container_id}/`, which defaults
+/// to `/sys/fs/cgroup/minibox/{container_id}/` when the environment variable
+/// is not set. Under a standard systemd deployment the variable is set to
+/// `/sys/fs/cgroup/minibox.slice/miniboxd.service`.
 #[derive(Debug)]
 pub struct CgroupManager {
     /// Absolute path to this container's cgroup directory.
@@ -37,6 +50,10 @@ pub struct CgroupManager {
 /// Default root of the minibox cgroup slice inside the cgroupfs mount point.
 const DEFAULT_MINIBOX_CGROUP_ROOT: &str = "/sys/fs/cgroup/minibox";
 
+/// Return the cgroup root directory.
+///
+/// Reads `MINIBOX_CGROUP_ROOT` from the environment, falling back to
+/// [`DEFAULT_MINIBOX_CGROUP_ROOT`] when the variable is absent.
 fn cgroup_root() -> PathBuf {
     if let Ok(root) = std::env::var("MINIBOX_CGROUP_ROOT") {
         PathBuf::from(root)
@@ -62,7 +79,7 @@ impl CgroupManager {
     ///
     /// Idempotent: if the directory already exists the limits are (re-)written.
     pub fn create(&self) -> anyhow::Result<()> {
-        debug!("creating cgroup at {:?}", self.cgroup_path);
+        debug!(cgroup_path = %self.cgroup_path.display(), "cgroup: creating directory");
 
         fs::create_dir_all(&self.cgroup_path).map_err(|source| CgroupError::CreateFailed {
             path: self.cgroup_path.display().to_string(),
@@ -82,7 +99,7 @@ impl CgroupManager {
                 anyhow::bail!("memory limit must be >= 4096 bytes, got {}", mem);
             }
             self.write_file("memory.max", &mem.to_string())?;
-            debug!("set memory.max={}", mem);
+            debug!(memory_max = mem, "cgroup: set memory.max");
         }
 
         // CPU weight
@@ -92,13 +109,13 @@ impl CgroupManager {
                 anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
-            debug!("set cpu.weight={}", cpu);
+            debug!(cpu_weight = cpu, "cgroup: set cpu.weight");
         }
 
         // SECURITY: PID limit to prevent fork bombs
         let pids_limit = self.config.pids_max.unwrap_or(1024);
         self.write_file("pids.max", &pids_limit.to_string())?;
-        debug!("set pids.max={}", pids_limit);
+        debug!(pids_max = pids_limit, "cgroup: set pids.max");
 
         // SECURITY: I/O throttling to prevent disk DoS
         if let Some(io_limit) = self.config.io_max_bytes_per_sec {
@@ -109,15 +126,15 @@ impl CgroupManager {
                 Some(dev) => {
                     let io_max_line = format!("{} rbps={} wbps={}", dev, io_limit, io_limit);
                     self.write_file("io.max", &io_max_line)?;
-                    debug!("set io.max={} bytes/sec on device {}", io_limit, dev);
+                    debug!(io_max_bytes_per_sec = io_limit, device = %dev, "cgroup: set io.max");
                 }
                 None => {
-                    warn!("no block device found in /sys/block, skipping io.max configuration");
+                    warn!("cgroup: no block device found in /sys/block, skipping io.max");
                 }
             }
         }
 
-        info!("cgroup created at {:?}", self.cgroup_path);
+        info!(cgroup_path = %self.cgroup_path.display(), "cgroup: created");
         Ok(())
     }
 
@@ -125,16 +142,19 @@ impl CgroupManager {
     /// `cgroup.procs`.
     pub fn add_process(&self, pid: u32) -> anyhow::Result<()> {
         if pid == 0 {
+            // PID 0 is silently accepted by some kernel versions but is never
+            // valid as an explicit process ID. The child uses the write-"0"
+            // convention in add_self_to_cgroup instead.
             anyhow::bail!("PID 0 is not a valid process ID");
         }
-        debug!("adding PID {} to cgroup {:?}", pid, self.cgroup_path);
+        debug!(pid = pid, cgroup_path = %self.cgroup_path.display(), "cgroup: adding process");
         let path = self.cgroup_path.join("cgroup.procs");
         fs::write(&path, format!("{}\n", pid)).map_err(|source| CgroupError::AddProcessFailed {
             pid,
             path: path.display().to_string(),
             source,
         })?;
-        info!("added PID {} to cgroup", pid);
+        info!(pid = pid, "cgroup: process added");
         Ok(())
     }
 
@@ -143,11 +163,11 @@ impl CgroupManager {
     /// All processes must have exited (or been migrated) before this is called;
     /// the kernel will refuse to remove a cgroup that still contains tasks.
     pub fn cleanup(&self) -> anyhow::Result<()> {
-        debug!("removing cgroup {:?}", self.cgroup_path);
+        debug!(cgroup_path = %self.cgroup_path.display(), "cgroup: removing directory");
         if !self.cgroup_path.exists() {
             warn!(
-                "cgroup {:?} already gone, skipping cleanup",
-                self.cgroup_path
+                cgroup_path = %self.cgroup_path.display(),
+                "cgroup: directory already gone, skipping cleanup"
             );
             return Ok(());
         }
@@ -155,7 +175,7 @@ impl CgroupManager {
             path: self.cgroup_path.display().to_string(),
             source,
         })?;
-        info!("cgroup removed");
+        info!(cgroup_path = %self.cgroup_path.display(), "cgroup: removed");
         Ok(())
     }
 
@@ -163,6 +183,11 @@ impl CgroupManager {
     // Helpers
     // -----------------------------------------------------------------------
 
+    /// Write `value` to `{cgroup_path}/{filename}`.
+    ///
+    /// Returns a [`CgroupError::WriteFailed`] if the write fails, which
+    /// typically indicates the controller is not enabled or the kernel rejected
+    /// the value.
     fn write_file(&self, filename: &str, value: &str) -> anyhow::Result<()> {
         let path = self.cgroup_path.join(filename);
         fs::write(&path, value)
@@ -208,12 +233,14 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
     for controller in &["pids", "memory", "cpu", "io"] {
         if !current.split_whitespace().any(|c| c == *controller) {
             let value = format!("+{controller}");
-            debug!("enabling controller {value} in {:?}", subtree_control);
+            debug!(controller = controller, subtree_control = %subtree_control.display(), "cgroup: enabling controller");
             if let Err(e) = fs::write(&subtree_control, &value) {
                 // Non-fatal: the controller may not be available on this host.
                 warn!(
-                    "could not enable {controller} in {}: {e}",
-                    subtree_control.display()
+                    controller = controller,
+                    subtree_control = %subtree_control.display(),
+                    error = %e,
+                    "cgroup: could not enable controller"
                 );
             }
         }
@@ -223,7 +250,9 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
 
 /// Build the cgroup path for a container without constructing a full manager.
 ///
-/// Useful when only the *path* is needed (e.g., stored in [`Container`]).
+/// Useful when only the path is needed (e.g., to pass to `ContainerConfig`
+/// without creating a [`CgroupManager`]). Applies the same `MINIBOX_CGROUP_ROOT`
+/// override logic as [`CgroupManager::new`].
 pub fn cgroup_path_for(container_id: &str) -> PathBuf {
     cgroup_root().join(container_id)
 }

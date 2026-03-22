@@ -88,8 +88,11 @@ pub type DynContainerRuntime = Arc<dyn ContainerRuntime>;
 
 /// Trait to enable downcasting trait objects back to concrete types.
 ///
-/// This allows tests to access adapter-specific methods.
+/// This allows tests to retrieve the concrete adapter behind a `Dyn*` trait
+/// object (e.g. to call adapter-specific helpers in integration tests).
+/// Production code should use the trait interface exclusively.
 pub trait AsAny: Send + Sync {
+    /// Return `self` as `&dyn Any` so callers can use `downcast_ref::<T>()`.
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -371,10 +374,6 @@ pub struct ResourceConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Container Runtime Port
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Runtime Capabilities
 // ---------------------------------------------------------------------------
 
@@ -625,7 +624,11 @@ pub enum ContainerState {
 }
 
 impl ContainerState {
-    /// Convert state to string representation for protocol/display.
+    /// Return the canonical string representation of this state.
+    ///
+    /// The returned strings (`"Created"`, `"Running"`, `"Stopped"`, `"Failed"`)
+    /// are used directly in [`crate::protocol::ContainerInfo::state`] list
+    /// responses sent to the CLI.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",

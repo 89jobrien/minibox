@@ -1,3 +1,30 @@
+//! minibox-bench — benchmark harness for the minibox container runtime.
+//!
+//! # Suites
+//!
+//! * **codec** — protocol encode/decode (nanosecond-scale, 36 cases).  Runs
+//!   `encode_request`, `decode_request`, `encode_response`, `decode_response`
+//!   for every [`DaemonRequest`] / [`DaemonResponse`] variant in both small
+//!   and large payload configurations.  Requires no daemon.
+//!
+//! * **adapter** — trait-object dispatch overhead (nanosecond-scale, 10
+//!   cases).  Compares direct method calls on concrete mock types against the
+//!   same calls through `Arc<dyn Trait>` pointers.  Requires no daemon.
+//!
+//! * **pull** / **run** / **exec** / **e2e** — end-to-end suites that invoke
+//!   the `minibox` CLI binary.  Require a running `miniboxd` daemon.
+//!
+//! # Output
+//!
+//! Results are saved to `bench/results/` (or `--out-dir`):
+//!
+//! * `bench.jsonl` — append-only history managed by `cargo xtask bench`.
+//! * `latest.json` — canonical snapshot of the most recent run.
+//! * A timestamped JSON + plain-text table pair produced by each invocation.
+//!
+//! The path of the timestamped JSON is printed to stdout so callers such as
+//! `xtask` can capture it without scanning the output directory.
+
 use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_lib::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
@@ -12,6 +39,10 @@ use std::hint::black_box;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Top-level benchmark report serialised to JSON.
+///
+/// Contains run metadata, one [`SuiteResult`] per executed suite, and a
+/// de-duplicated list of errors collected during the run.
 #[derive(Serialize, Default)]
 struct BenchReport {
     metadata: Metadata,
@@ -20,17 +51,29 @@ struct BenchReport {
 }
 
 impl BenchReport {
+    /// Construct an empty report with default metadata.  Used in tests.
     #[allow(dead_code)]
     fn empty() -> Self {
         Self::default()
     }
 }
+
+/// A single error message together with the number of times it occurred.
+///
+/// Repeated identical errors are folded into one entry by [`dedup_errors`] to
+/// keep the JSON report compact.
 #[derive(Serialize, Clone)]
 struct ErrorCount {
+    /// Human-readable error description.
     message: String,
+    /// Number of times this exact message was recorded.
     count: usize,
 }
 
+/// Fold a flat list of error strings into de-duplicated [`ErrorCount`] entries.
+///
+/// Preserves insertion order of first occurrence; later duplicates increment
+/// the count of the existing entry.
 fn dedup_errors(raw: Vec<String>) -> Vec<ErrorCount> {
     let mut seen: Vec<(String, usize)> = Vec::new();
     for msg in raw {
@@ -45,38 +88,67 @@ fn dedup_errors(raw: Vec<String>) -> Vec<ErrorCount> {
         .collect()
 }
 
+/// Run-level metadata embedded in every [`BenchReport`].
 #[derive(Serialize, Default)]
 struct Metadata {
+    /// RFC 3339 timestamp of when the benchmark run started.
     timestamp: String,
+    /// Hostname of the machine that produced this report.
     hostname: String,
+    /// Full `git rev-parse HEAD` SHA of the minibox tree being benchmarked.
     git_sha: String,
+    /// Output of `minibox --version` for the binary under test.
     minibox_version: String,
 }
 
+/// Results for a single named benchmark suite (e.g. `"codec"`, `"adapter"`).
 #[derive(Serialize, Default)]
 struct SuiteResult {
+    /// Suite identifier (e.g. `"codec"`, `"adapter"`, `"pull"`).
     name: String,
+    /// Individual test cases within this suite.
     tests: Vec<TestResult>,
 }
 
+/// Timing data and summary statistics for a single benchmark case.
+///
+/// Exactly one of `durations_micros` and `durations_nanos` will be populated
+/// depending on the resolution needed by the suite.  The `unit` field
+/// discriminates which: `"nanos"` for nanosecond-resolution micro-benchmarks
+/// and `"micros"` (omitted, i.e. the default) for end-to-end CLI timings.
 #[derive(Serialize, Default)]
 struct TestResult {
+    /// Unique name for this test case within its suite.
     name: String,
+    /// Number of iterations actually executed.
     iterations: usize,
+    /// Per-iteration wall-clock durations in microseconds.  Populated for
+    /// end-to-end CLI suites (`pull`, `run`, `exec`, `e2e`).
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     durations_micros: Vec<u64>,
+    /// Per-iteration wall-clock durations in nanoseconds.  Populated for
+    /// nanosecond-resolution micro-benchmark suites (`codec`, `adapter`).
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     durations_nanos: Vec<u64>,
+    /// Aggregate statistics computed from whichever duration vector is
+    /// populated.  `None` if no iterations completed successfully.
     stats: Option<Stats>,
+    /// Duration unit used for display: `"nanos"` for nanosecond suites;
+    /// empty string (omitted from JSON) for microsecond suites.
     #[serde(skip_serializing_if = "String::is_empty", default)]
     unit: String,
 }
 
+/// Serialise `report` to pretty-printed JSON and write it to `path`.
 fn write_json(report: &BenchReport, path: &str) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(report).unwrap();
     std::fs::write(path, json)
 }
 
+/// Format `report` as a tab-separated plain-text table and write it to `path`.
+///
+/// Nanosecond-resolution results are displayed as integer nanoseconds; all
+/// other results are displayed in milliseconds with three decimal places.
 fn write_table(report: &BenchReport, path: &str) -> std::io::Result<()> {
     let mut out = String::new();
     out.push_str("minibox benchmark results\n\n");
@@ -114,14 +186,20 @@ fn write_table(report: &BenchReport, path: &str) -> std::io::Result<()> {
     std::fs::write(path, out)
 }
 
+/// Output and timing captured from a single external command invocation.
 #[derive(Debug)]
 struct CmdResult {
+    /// Whether the command exited with a zero status code.
     success: bool,
+    /// Contents of the command's stdout, decoded as lossy UTF-8.
     stdout: String,
+    /// Contents of the command's stderr, decoded as lossy UTF-8.
     stderr: String,
+    /// Wall-clock duration of the invocation in microseconds.
     duration_micros: u64,
 }
 
+/// Run an external command and return its output and wall-clock duration.
 fn run_cmd(path: &str, args: &[&str]) -> std::io::Result<CmdResult> {
     let start = std::time::Instant::now();
     let output = std::process::Command::new(path).args(args).output()?;
@@ -134,18 +212,32 @@ fn run_cmd(path: &str, args: &[&str]) -> std::io::Result<CmdResult> {
     })
 }
 
+/// Parsed command-line configuration controlling which suites run and how.
 #[derive(Debug, Clone, PartialEq)]
 struct BenchConfig {
+    /// Number of iterations per test case (default: 20; micro-benchmark suites
+    /// use at least 100 regardless).
     iters: usize,
+    /// Whether to run "cold" suites (`pull`, `e2e`).
     cold: bool,
+    /// Whether to run "warm" suites (`run`, `exec`).
     warm: bool,
+    /// Skip actual execution and produce an empty report (for smoke-testing).
     dry_run: bool,
+    /// Explicit list of suite names from `--suite`; if non-empty, overrides
+    /// the `cold`/`warm` defaults.
     suites: Vec<String>,
+    /// Directory where timestamped JSON and text results are written.
     out_dir: String,
+    /// Whether to attach `perf record` (Linux) for each suite.
     profile: bool,
 }
 
 impl BenchConfig {
+    /// Parse `BenchConfig` from `std::env::args()`.
+    ///
+    /// Returns an error string describing the first unrecognised argument or
+    /// missing value.
     fn from_args(args: Vec<String>) -> Result<Self, String> {
         let mut iters = 20usize;
         let mut cold = true;
@@ -205,6 +297,8 @@ impl BenchConfig {
         })
     }
 
+    /// Return the default configuration.  Used in tests that do not want to
+    /// go through argument parsing.
     #[allow(dead_code)]
     fn default() -> Self {
         Self {
@@ -219,14 +313,25 @@ impl BenchConfig {
     }
 }
 
+/// Aggregate statistics computed from a sample vector of durations.
+///
+/// All values are in the same unit as the input samples (nanoseconds or
+/// microseconds depending on the suite).
 #[derive(Debug, PartialEq, Serialize)]
 struct Stats {
+    /// Minimum observed duration.
     min: u64,
+    /// Arithmetic mean of all samples.
     avg: u64,
+    /// 95th-percentile duration (sorted index `ceil(0.95 * (n-1))`).
     p95: u64,
 }
 
 impl Stats {
+    /// Compute min, average, and p95 from `samples`.
+    ///
+    /// Sorts a copy of the slice internally; the original is not modified.
+    /// Returns zeroes for all fields if `samples` is empty.
     fn from_samples(samples: &[u64]) -> Self {
         let mut sorted = samples.to_vec();
         sorted.sort_unstable();
@@ -247,6 +352,7 @@ impl Stats {
     }
 }
 
+/// Return `Some(Stats)` for a non-empty slice, or `None` if the slice is empty.
 fn stats_for(samples: &[u64]) -> Option<Stats> {
     if samples.is_empty() {
         None
@@ -257,16 +363,24 @@ fn stats_for(samples: &[u64]) -> Option<Stats> {
 
 // ── Profiler trait and implementations ────────────────────────────────────────
 
+/// Path to a pprof-format profile file produced by a [`Profiler`].
 #[derive(Debug, Clone)]
 pub struct ProfilePath {
+    /// Path to the `.pprof` file (may or may not exist if conversion failed).
     pub pprof_path: PathBuf,
 }
 
+/// Errors that can occur while starting or stopping a profiler.
 #[derive(Debug)]
 pub enum ProfileError {
+    /// The current platform does not support the requested profiler.
     PlatformNotSupported,
+    /// The `perf` binary could not be found in `$PATH`.
     PerfBinaryNotFound,
+    /// `perf` was found but returned a non-zero exit status or could not be
+    /// spawned.
     PerfFailed(String),
+    /// A filesystem I/O error occurred while managing profiler output files.
     IoError(String),
 }
 
@@ -283,18 +397,41 @@ impl std::fmt::Display for ProfileError {
     }
 }
 
+/// Trait for platform-specific CPU profilers.
+///
+/// Implementations bracket a benchmark suite with `start` and `stop` calls.
+/// Non-fatal issues (e.g. `perf` not installed) are logged as warnings and
+/// the benchmarks continue; only hard errors are propagated.
 pub trait Profiler: Send {
+    /// Begin profiling the named suite.
     fn start(&mut self, suite: &str) -> Result<(), ProfileError>;
+    /// Stop profiling the named suite and return the path to the profile file.
     fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError>;
 }
 
+/// Linux `perf record` profiler.
+///
+/// Spawns `perf record -p <bench_pid>` for each suite and kills it on
+/// [`stop`](Profiler::stop).  If `pprof` is also available the raw
+/// `perf.data` is converted to pprof format.
+///
+/// Instantiated only on Linux; see [`create_profiler`].
 pub struct LinuxPerfProfiler {
+    /// Directory where `<suite>.perf.data` and `<suite>.pprof` files are written.
     results_dir: PathBuf,
+    /// RFC 3339 timestamp passed in at construction.  Reserved for future use
+    /// in perf output filenames; currently not read after construction.
+    #[allow(dead_code)] // reserved for future perf profiling output filename disambiguation
     timestamp: String,
+    /// Map from suite name to the live `perf record` child process.
     perf_pids: std::collections::HashMap<String, std::process::Child>,
 }
 
 impl LinuxPerfProfiler {
+    /// Create a new profiler that writes profile data under `results_dir`.
+    ///
+    /// `timestamp` is accepted for future use in disambiguating output file
+    /// names but is not currently read after construction.
     pub fn new(results_dir: PathBuf, timestamp: String) -> Self {
         Self {
             results_dir,
@@ -303,6 +440,7 @@ impl LinuxPerfProfiler {
         }
     }
 
+    /// Return `true` if `perf` is present in `$PATH`.
     fn check_perf_available() -> bool {
         std::process::Command::new("which")
             .arg("perf")
@@ -313,6 +451,10 @@ impl LinuxPerfProfiler {
 }
 
 impl Profiler for LinuxPerfProfiler {
+    /// Attach `perf record` to the current process for the named suite.
+    ///
+    /// If `perf` is not in `$PATH` the call succeeds with a warning printed to
+    /// stderr and no child process is spawned.
     fn start(&mut self, suite: &str) -> Result<(), ProfileError> {
         if !Self::check_perf_available() {
             eprintln!(
@@ -340,6 +482,11 @@ impl Profiler for LinuxPerfProfiler {
         Ok(())
     }
 
+    /// Kill the `perf record` child for `suite`, wait for it to exit, and
+    /// optionally convert the raw `perf.data` to pprof format.
+    ///
+    /// If no child was recorded for `suite` (e.g. `perf` was absent) the call
+    /// succeeds and returns a path that may not exist on disk.
     fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError> {
         if let Some(mut child) = self.perf_pids.remove(suite) {
             child
@@ -374,9 +521,12 @@ impl Profiler for LinuxPerfProfiler {
     }
 }
 
+/// No-op profiler used on macOS (and any platform where Linux `perf` is
+/// unavailable).  All calls succeed immediately with a warning.
 pub struct MacOSProfiler;
 
 impl Profiler for MacOSProfiler {
+    /// No-op on macOS; emits a warning and returns `Ok(())`.
     fn start(&mut self, suite: &str) -> Result<(), ProfileError> {
         eprintln!(
             "warn: profiling not supported on macOS; skipping profile for suite '{}'",
@@ -385,6 +535,7 @@ impl Profiler for MacOSProfiler {
         Ok(())
     }
 
+    /// No-op on macOS; returns a placeholder path with the `.pprof` extension.
     fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError> {
         Ok(ProfilePath {
             pprof_path: PathBuf::from(format!("{}.pprof", suite)),
@@ -392,6 +543,10 @@ impl Profiler for MacOSProfiler {
     }
 }
 
+/// Construct the appropriate [`Profiler`] for the current platform.
+///
+/// On Linux returns a [`LinuxPerfProfiler`]; on all other platforms returns a
+/// [`MacOSProfiler`] (no-op).
 pub fn create_profiler(results_dir: PathBuf, timestamp: String) -> Box<dyn Profiler> {
     if cfg!(target_os = "linux") {
         Box::new(LinuxPerfProfiler::new(results_dir, timestamp))
@@ -400,6 +555,12 @@ pub fn create_profiler(results_dir: PathBuf, timestamp: String) -> Box<dyn Profi
     }
 }
 
+/// Return `true` if the named suite should run given `cfg`.
+///
+/// If `cfg.suites` is non-empty only the explicitly named suites run.
+/// Otherwise `"pull"` and `"e2e"` run when `cfg.cold` is set; `"run"` and
+/// `"exec"` run when `cfg.warm` is set.  `"codec"` and `"adapter"` only run
+/// when explicitly listed in `--suite`.
 fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     if !cfg.suites.is_empty() {
         return cfg.suites.iter().any(|suite| suite == name);
@@ -414,6 +575,7 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     }
 }
 
+/// Return the ordered list of suite names that will run for `cfg`.
 fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     let mut suites = Vec::new();
     for name in ["pull", "run", "exec", "e2e", "codec", "adapter"] {
@@ -424,6 +586,9 @@ fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     suites
 }
 
+/// Run a command, capture stdout/stderr, trim whitespace, and return the first
+/// non-empty result.  Returns `None` if the command fails or produces no
+/// output.
 fn read_cmd_trim(path: &str, args: &[&str]) -> Option<String> {
     let output = std::process::Command::new(path).args(args).output().ok()?;
     if !output.status.success() {
@@ -441,6 +606,8 @@ fn read_cmd_trim(path: &str, args: &[&str]) -> Option<String> {
     }
 }
 
+/// Gather run metadata: current timestamp, hostname, git SHA, and the version
+/// string reported by `minibox_bin --version`.
 fn build_metadata(minibox_bin: &str) -> Metadata {
     Metadata {
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -452,6 +619,9 @@ fn build_metadata(minibox_bin: &str) -> Metadata {
     }
 }
 
+/// Run an external command, appending a descriptive message to `errors` on
+/// failure.  Returns `Some(CmdResult)` on success or `None` if the command
+/// failed or could not be spawned.
 fn run_cmd_record(path: &str, args: &[&str], errors: &mut Vec<String>) -> Option<CmdResult> {
     match run_cmd(path, args) {
         Ok(result) => {
@@ -514,21 +684,29 @@ fn main() {
     }
 }
 
+/// Resolve the results directory and timestamp, then delegate to [`run_suites`].
 fn run_benchmark(cfg: &BenchConfig) -> Result<BenchReport, String> {
     let results_dir = PathBuf::from(&cfg.out_dir);
     let timestamp = chrono::Utc::now().to_rfc3339();
     run_suites(cfg, cfg.dry_run, &results_dir, &timestamp)
 }
 
+/// Sidecar metadata written alongside profile data when `--profile` is active.
 #[derive(Serialize)]
 struct ProfileMetadata {
+    /// RFC 3339 timestamp of the profiling run.
     timestamp: String,
+    /// Full git SHA of the tree that was profiled.
     git_sha: String,
+    /// Names of suites for which profiling was attempted.
     suites_profiled: Vec<String>,
+    /// Platform string (`"linux"`, `"macos"`, or `"unknown"`).
     platform: String,
+    /// Whether `perf` was found in `$PATH` on this run.
     perf_available: bool,
 }
 
+/// Write `metadata.json` alongside profile output in `results_dir`.
 fn save_profile_metadata(
     results_dir: &PathBuf,
     timestamp: &str,
@@ -573,6 +751,10 @@ fn save_profile_metadata(
     Ok(())
 }
 
+/// Execute all enabled suites and return the combined [`BenchReport`].
+///
+/// If `dry_run` is `true` the suites are enumerated in the report but no
+/// commands are executed and no timings are recorded.
 fn run_suites(
     cfg: &BenchConfig,
     dry_run: bool,
@@ -865,6 +1047,8 @@ fn run_suites(
 
 // ── Microbenchmark suites (no daemon required) ───────────────────────────────
 
+/// Run `f` exactly `iters` times, recording the wall-clock duration of each
+/// call in nanoseconds.  Returns one sample per iteration.
 fn measure_nanos<F: FnMut()>(iters: usize, mut f: F) -> Vec<u64> {
     (0..iters)
         .map(|_| {
@@ -875,6 +1059,9 @@ fn measure_nanos<F: FnMut()>(iters: usize, mut f: F) -> Vec<u64> {
         .collect()
 }
 
+/// Build a [`TestResult`] for a nanosecond-resolution micro-benchmark.
+///
+/// Populates `durations_nanos` and sets `unit = "nanos"`.
 fn nano_test(name: &str, iters: usize, f: impl FnMut()) -> TestResult {
     let durations = measure_nanos(iters, f);
     let stats = stats_for(&durations);
@@ -888,6 +1075,12 @@ fn nano_test(name: &str, iters: usize, f: impl FnMut()) -> TestResult {
     }
 }
 
+/// Run the `codec` micro-benchmark suite.
+///
+/// Measures [`encode_request`], [`decode_request`], [`encode_response`], and
+/// [`decode_response`] for every [`DaemonRequest`] / [`DaemonResponse`] variant
+/// in both small and large payload configurations.  36 cases total.  No daemon
+/// required.
 fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
     let iters = cfg.iters.max(100);
 
@@ -1112,6 +1305,11 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
     }
 }
 
+/// Run the `adapter` micro-benchmark suite.
+///
+/// Compares direct method calls on concrete mock adapter types against the same
+/// calls dispatched through `Arc<dyn Trait>` pointers, plus `Arc::clone` and
+/// `downcast_ref` overhead.  10 cases total.  No daemon required.
 fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
     let iters = cfg.iters.max(100);
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1185,6 +1383,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
     }
 }
 
+/// Print usage information to stdout and return.
 fn print_help() {
     println!(
         "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|exec|e2e|codec|adapter)\n  --out-dir <path>"

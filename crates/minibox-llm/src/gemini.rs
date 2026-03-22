@@ -4,6 +4,10 @@ use crate::error::LlmError;
 use crate::provider::LlmProvider;
 use crate::types::{CompletionRequest, CompletionResponse, Usage};
 
+/// JSON Schema keywords that the Gemini `responseSchema` field does not support.
+///
+/// These are stripped by [`sanitize_schema`] before the schema is sent to the API.
+/// Sending unsupported keywords causes Gemini to reject the request with a 400 error.
 const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "$schema",
     "$ref",
@@ -20,6 +24,14 @@ const UNSUPPORTED_KEYWORDS: &[&str] = &[
     "not",
 ];
 
+/// Recursively remove JSON Schema keywords that Gemini's `responseSchema` does not support.
+///
+/// Walks the value tree and drops any object key listed in [`UNSUPPORTED_KEYWORDS`].
+/// Arrays are traversed element-by-element. Scalar values pass through unchanged.
+///
+/// This is called automatically by [`GeminiProvider::complete`] when a
+/// [`JsonSchema`](crate::JsonSchema) is present on the request, so callers do
+/// not need to pre-sanitize their schemas.
 pub(crate) fn sanitize_schema(schema: &serde_json::Value) -> serde_json::Value {
     match schema {
         serde_json::Value::Object(map) => {
@@ -37,18 +49,37 @@ pub(crate) fn sanitize_schema(schema: &serde_json::Value) -> serde_json::Value {
     }
 }
 
+/// LLM provider backed by the Google Gemini `generateContent` API.
+///
+/// Enabled by the `gemini` feature flag. Uses the
+/// `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
+/// endpoint, authenticated via the `x-goog-api-key` header.
+///
+/// Default model: `gemini-2.5-flash`. Construct via [`from_env`](GeminiProvider::from_env)
+/// (reads `GEMINI_API_KEY`) or [`new`](GeminiProvider::new) / [`with_config`](GeminiProvider::with_config)
+/// when the key is already available.
+///
+/// Structured output is implemented via `generationConfig.responseMimeType: application/json`
+/// and `generationConfig.responseSchema`. Unsupported JSON Schema keywords are
+/// stripped automatically by [`sanitize_schema`] before the schema is sent.
 pub struct GeminiProvider {
     key: String,
     model: String,
+    /// Display name returned by [`name`](GeminiProvider::name), e.g. `"google/gemini-2.5-flash"`.
     display_name: String,
     client: reqwest::Client,
 }
 
 impl GeminiProvider {
+    /// Construct with default HTTP timeouts (10s connect, 60s request).
     pub fn new(key: String, model: String) -> Self {
         Self::with_config(key, model, &crate::ProviderConfig::default())
     }
 
+    /// Construct with explicit HTTP timeout configuration.
+    ///
+    /// The `reqwest::Client` is built once here and reused for every request
+    /// made by this provider instance.
     pub fn with_config(key: String, model: String, config: &crate::ProviderConfig) -> Self {
         let display_name = format!("google/{model}");
         let client = reqwest::Client::builder()
@@ -65,14 +96,35 @@ impl GeminiProvider {
     }
 }
 
+// Generates from_env(), from_env_with_config(), and from_key() (test-only).
+// Reads GEMINI_API_KEY; default model is gemini-2.5-flash.
 provide!(GeminiProvider, "GEMINI_API_KEY", "gemini-2.5-flash");
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
+    /// Returns the display name, e.g. `"google/gemini-2.5-flash"`.
     fn name(&self) -> &str {
         &self.display_name
     }
 
+    /// Send a completion request to the Gemini `generateContent` API.
+    ///
+    /// When [`CompletionRequest::system`] is set, it is sent as a
+    /// `systemInstruction` field (Gemini's equivalent of a system prompt).
+    ///
+    /// When [`CompletionRequest::schema`] is set, `generationConfig` is
+    /// populated with `responseMimeType: application/json` and `responseSchema`
+    /// after running the schema through [`sanitize_schema`] to strip unsupported
+    /// keywords.
+    ///
+    /// When [`CompletionRequest::timeout`] is set, it overrides the client-level
+    /// request timeout for this call only.
+    ///
+    /// Non-2xx responses are wrapped in [`HttpStatusError`](crate::HttpStatusError)
+    /// with the `error.message` JSON field extracted when possible.
+    ///
+    /// Token usage is read from `usageMetadata.promptTokenCount` and
+    /// `usageMetadata.candidatesTokenCount`.
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         let start = std::time::Instant::now();
         tracing::debug!(
@@ -103,6 +155,7 @@ impl LlmProvider for GeminiProvider {
         });
 
         if let Some(schema) = &request.schema {
+            // Strip unsupported JSON Schema keywords before sending to Gemini.
             generation_config["responseMimeType"] = "application/json".into();
             generation_config["responseSchema"] = sanitize_schema(&schema.schema);
         }
@@ -152,12 +205,16 @@ impl LlmProvider for GeminiProvider {
             .unwrap_or("")
             .to_string();
 
+        // Structured output mode: an empty text string means the model did not
+        // return the expected JSON — treat as a parse failure.
         if request.schema.is_some() && text.is_empty() {
             return Err(LlmError::SchemaParseError(
                 "empty content in structured output response".to_string(),
             ));
         }
 
+        // Gemini reports usage under usageMetadata with different field names
+        // than Anthropic/OpenAI.
         let usage = resp_body["usageMetadata"].as_object().map(|u| Usage {
             input_tokens: u["promptTokenCount"].as_u64().unwrap_or(0) as u32,
             output_tokens: u["candidatesTokenCount"].as_u64().unwrap_or(0) as u32,

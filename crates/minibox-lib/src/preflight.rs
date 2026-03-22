@@ -53,7 +53,10 @@ pub fn probe() -> HostCapabilities {
     }
 }
 
-/// Format a human-readable report of host capabilities.
+/// Format a human-readable capability report suitable for `just doctor` output.
+///
+/// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
+/// whether it meets the requirement for running minibox containers.
 pub fn format_report(caps: &HostCapabilities) -> String {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());
@@ -107,12 +110,19 @@ pub fn format_report(caps: &HostCapabilities) -> String {
     lines.join("\n")
 }
 
-/// Skip-friendly macro for tests. Usage:
+/// Skip a test gracefully when a required host capability is absent.
+///
+/// If `$caps.$field` is `false`, prints a `SKIPPED: $reason` message to stderr
+/// and returns from the calling function early. This avoids failing tests on
+/// hosts that legitimately lack the capability (e.g. macOS CI, non-root runs).
+///
+/// # Usage
 ///
 /// ```rust,ignore
 /// let caps = minibox_lib::preflight::probe();
 /// minibox_lib::require_capability!(caps, is_root, "requires root");
 /// minibox_lib::require_capability!(caps, cgroups_v2, "requires cgroups v2");
+/// // ... test body runs only when both capabilities are present
 /// ```
 #[macro_export]
 macro_rules! require_capability {
@@ -128,9 +138,13 @@ macro_rules! require_capability {
 // Probe helpers
 // ---------------------------------------------------------------------------
 
+/// Check whether the current process is running as UID 0 (root).
+///
+/// Returns `false` on non-Unix platforms.
 fn probe_root() -> bool {
     #[cfg(unix)]
     {
+        // SAFETY: geteuid() has no preconditions and is always safe to call.
         unsafe { libc::geteuid() == 0 }
     }
     #[cfg(not(unix))]
@@ -139,6 +153,9 @@ fn probe_root() -> bool {
     }
 }
 
+/// Read and parse the running kernel version from `/proc/version`.
+///
+/// Returns `(0, 0, 0)` if the file is unreadable or the format is unexpected.
 fn probe_kernel_version() -> (u32, u32, u32) {
     let content = match std::fs::read_to_string("/proc/version") {
         Ok(s) => s,
@@ -149,11 +166,15 @@ fn probe_kernel_version() -> (u32, u32, u32) {
     parse_kernel_version(version_str)
 }
 
+/// Parse a kernel version string like `"6.1.0-18-amd64"` into `(major, minor, patch)`.
+///
+/// Any non-numeric suffix after the patch component (e.g. `-18-amd64`) is ignored.
+/// Individual components that fail to parse are treated as `0`.
 fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     let parts: Vec<&str> = s.split('.').collect();
     let major = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
     let minor = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
-    // Patch may have suffix like "0-18-amd64"
+    // Patch may have suffix like "0-18-amd64"; take only the numeric prefix.
     let patch = parts
         .get(2)
         .and_then(|p| p.split('-').next())
@@ -162,28 +183,49 @@ fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     (major, minor, patch)
 }
 
+/// Check whether a cgroup v2 unified hierarchy is mounted by scanning `/proc/mounts`.
+///
+/// A `cgroup2` entry in `/proc/mounts` means the unified hierarchy is active.
+/// Missing or unreadable file returns `false`.
 fn probe_cgroups_v2() -> bool {
     std::fs::read_to_string("/proc/mounts")
         .map(|s| s.contains("cgroup2"))
         .unwrap_or(false)
 }
 
+/// Read the list of available cgroup v2 controllers from
+/// `/sys/fs/cgroup/cgroup.controllers`.
+///
+/// Returns an empty `Vec` if the file is absent (cgroup v1 or non-Linux host).
+/// Typical controllers are `cpu`, `memory`, `io`, `pids`.
 fn probe_cgroup_controllers() -> Vec<String> {
     std::fs::read_to_string("/sys/fs/cgroup/cgroup.controllers")
         .map(|s| s.split_whitespace().map(String::from).collect())
         .unwrap_or_default()
 }
 
+/// Check whether `/sys/fs/cgroup/cgroup.subtree_control` exists.
+///
+/// Presence of this file indicates that the cgroup v2 root supports subtree
+/// controller delegation, which minibox requires to create per-container
+/// cgroups and assign controllers to them.
 fn probe_subtree_delegatable() -> bool {
     Path::new("/sys/fs/cgroup/cgroup.subtree_control").exists()
 }
 
+/// Check whether the `overlay` filesystem type is registered with the kernel
+/// by scanning `/proc/filesystems`.
+///
+/// Returns `false` if overlay is not compiled in or not loaded as a module.
 fn probe_overlay_fs() -> bool {
     std::fs::read_to_string("/proc/filesystems")
         .map(|s| s.contains("overlay"))
         .unwrap_or(false)
 }
 
+/// Check whether `systemctl --version` succeeds, indicating systemd is running.
+///
+/// Returns `false` if `systemctl` is not in `$PATH` or exits with a non-zero status.
 fn probe_systemd_available() -> bool {
     Command::new("systemctl")
         .arg("--version")
@@ -192,6 +234,10 @@ fn probe_systemd_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Parse the systemd version number from `systemctl --version`.
+///
+/// Expects output starting with a line like `"systemd 252 (252.22-1~deb12u1)"`.
+/// Returns `None` if the command fails or the version cannot be parsed.
 fn probe_systemd_version() -> Option<u32> {
     let output = Command::new("systemctl").arg("--version").output().ok()?;
     if !output.status.success() {
@@ -208,6 +254,10 @@ fn probe_systemd_version() -> Option<u32> {
         .ok()
 }
 
+/// Check whether `minibox.slice` is active in systemd.
+///
+/// Uses `systemctl is-active minibox.slice`; returns `false` if systemd is
+/// absent or the slice has not been created.
 fn probe_minibox_slice() -> bool {
     Command::new("systemctl")
         .args(["is-active", "minibox.slice"])

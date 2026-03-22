@@ -3,6 +3,14 @@
 //! This module provides [`NamespaceConfig`] for declaring which Linux namespaces
 //! a new container process should be placed into, and [`clone_with_namespaces`]
 //! for actually forking that process.
+//!
+//! # Safety contract
+//!
+//! `clone_with_namespaces` uses `libc::clone` internally. Any `OwnedFd` values
+//! that must be accessible in the child must have their raw FDs extracted and
+//! their `OwnedFd` dropped (via [`std::mem::forget`]) **before** calling this
+//! function; otherwise both parent and child will attempt to close the same FD
+//! when the `OwnedFd` is dropped, causing a double-close.
 
 use crate::error::NamespaceError;
 use anyhow::Context;
@@ -63,12 +71,16 @@ impl NamespaceConfig {
 }
 
 impl Default for NamespaceConfig {
+    /// Returns `all()` — all supported namespaces enabled.
     fn default() -> Self {
         Self::all()
     }
 }
 
 /// Stack size allocated for the cloned child process (8 MiB).
+///
+/// The buffer is zero-initialised to avoid undefined behaviour if the child
+/// touches guard pages before the stack frame is properly set up.
 const CHILD_STACK_SIZE: usize = 8 * 1024 * 1024;
 
 /// Fork a child process into the namespaces described by `config`.
@@ -100,7 +112,7 @@ where
     let flags_raw = clone_flags.bits() | libc::SIGCHLD;
 
     debug!(
-        clone_flags = flags_raw,
+        clone_flags = flags_raw, // raw i32 bitmask (CloneFlags bits | SIGCHLD)
         "namespace: cloning container child"
     );
 

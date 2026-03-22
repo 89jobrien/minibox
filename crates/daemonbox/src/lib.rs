@@ -1,7 +1,7 @@
 //! Shared daemon application layer.
 //!
 //! Contains the request handlers, in-memory state, and Unix socket server
-//! used by both `miniboxd` (Linux) and `macboxd` (macOS).
+//! used by both `miniboxd` (Linux/Windows) and `macbox` (macOS).
 
 pub mod handler;
 pub mod server;

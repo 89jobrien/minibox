@@ -1,7 +1,14 @@
 //! minibox — CLI client for the miniboxd container runtime.
 //!
 //! Connects to the daemon over `/run/minibox/miniboxd.sock` and issues
-//! JSON requests, printing human-readable output.
+//! JSON-over-newline requests, printing human-readable output.
+//!
+//! Each subcommand serialises a [`minibox_lib::protocol::DaemonRequest`] as a
+//! single JSON line, writes it to the Unix socket, then reads one or more
+//! [`minibox_lib::protocol::DaemonResponse`] lines back.  The `run` subcommand
+//! is special: it uses `ephemeral: true` and loops, streaming
+//! `ContainerOutput` chunks to the terminal until a `ContainerStopped` message
+//! is received, at which point the CLI exits with the container's exit code.
 //!
 //! # Usage
 //! ```text
@@ -17,6 +24,8 @@ mod commands;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+/// Top-level CLI argument parser.  Delegates to [`Commands`] for subcommand
+/// dispatch.
 #[derive(Parser)]
 #[command(
     name = "minibox",
@@ -29,9 +38,17 @@ struct Cli {
     command: Commands,
 }
 
+/// Available minibox subcommands.
+///
+/// Each variant maps directly to a [`minibox_lib::protocol::DaemonRequest`]
+/// variant sent over the Unix socket.
 #[derive(Subcommand)]
 enum Commands {
-    /// Run a container from an image
+    /// Run a container from an image.
+    ///
+    /// Sends an ephemeral `RunContainer` request to the daemon, then streams
+    /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped` is
+    /// received.  The process exits with the container's exit code.
     Run {
         /// Image name (e.g., alpine, ubuntu, library/nginx)
         image: String,
@@ -40,11 +57,11 @@ enum Commands {
         #[arg(last = true)]
         command: Vec<String>,
 
-        /// Memory limit in bytes
+        /// Memory limit in bytes (passed to cgroups v2 `memory.max`)
         #[arg(long)]
         memory: Option<u64>,
 
-        /// CPU weight (1–10000)
+        /// CPU weight in the range 1–10000 (passed to cgroups v2 `cpu.weight`)
         #[arg(long)]
         cpu_weight: Option<u64>,
 
@@ -79,6 +96,8 @@ enum Commands {
     },
 }
 
+/// Entry point.  Parses arguments, dispatches to the appropriate command
+/// module, and propagates any errors as a non-zero exit code.
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()

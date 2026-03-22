@@ -1,4 +1,10 @@
 //! CLI command modules.
+//!
+//! Each module implements a single subcommand.  Most commands send one
+//! [`DaemonRequest`] over the Unix socket and read a single [`DaemonResponse`]
+//! back via the shared [`send_request`] helper.  The `run` module is the
+//! exception: it opens its own streaming connection to receive a sequence of
+//! `ContainerOutput` / `ContainerStopped` messages until the container exits.
 
 pub mod ps;
 pub mod pull;

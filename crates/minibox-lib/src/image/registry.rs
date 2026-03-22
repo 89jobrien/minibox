@@ -38,9 +38,12 @@ use tracing::{Instrument, debug, info, instrument};
 const AUTH_URL: &str = "https://auth.docker.io/token";
 const REGISTRY_BASE: &str = "https://registry-1.docker.io/v2";
 
-// SECURITY: Resource limits to prevent DoS attacks
-const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
-const MAX_LAYER_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GB
+// SECURITY: Resource limits to prevent DoS attacks.
+// MAX_MANIFEST_SIZE: manifests are small JSON blobs; 10 MB is a generous ceiling.
+// MAX_LAYER_SIZE: individual compressed layer blobs; 10 GB allows large images while
+// bounding memory consumption during streaming download.
+const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MiB
+const MAX_LAYER_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
 
 // ---------------------------------------------------------------------------
 // Auth token response
@@ -430,6 +433,11 @@ impl RegistryClient {
 }
 
 impl Default for RegistryClient {
+    /// Create a default [`RegistryClient`].
+    ///
+    /// Panics if the underlying TLS stack cannot be initialised (extremely
+    /// unlikely in practice). Prefer [`RegistryClient::new`] where you need
+    /// proper error propagation.
     fn default() -> Self {
         Self::new().expect("failed to build RegistryClient")
     }

@@ -1,8 +1,8 @@
 //! Daemon <-> CLI communication protocol.
 //!
 //! Messages are newline-delimited JSON sent over a Unix domain socket at
-//! `/run/minibox/miniboxd.sock`. Each message is a single JSON object
-//! terminated by `\n`.
+//! `/run/minibox/miniboxd.sock` ([`DAEMON_SOCKET_PATH`]). Each message is a
+//! single JSON object terminated by `\n`.
 //!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
 //! (`"type"`) appear explicitly in the JSON, e.g.:
@@ -10,6 +10,32 @@
 //! ```json
 //! {"type":"Run","image":"ubuntu","tag":"22.04","command":["bash"]}
 //! ```
+//!
+//! # Message flow
+//!
+//! **Non-ephemeral (fire-and-forget) run:**
+//! ```text
+//! CLI  ──Run{ephemeral:false}──►  Daemon
+//! CLI  ◄──ContainerCreated{id}──  Daemon
+//! ```
+//! The CLI exits immediately after receiving `ContainerCreated`. The container
+//! continues running in the background and appears in `List` responses.
+//!
+//! **Ephemeral (streaming) run** (`minibox run` default):
+//! ```text
+//! CLI  ──Run{ephemeral:true}──►  Daemon
+//! CLI  ◄──ContainerCreated{id}── Daemon   (container ID assigned)
+//! CLI  ◄──ContainerOutput{..}──  Daemon   (zero or more stdout/stderr chunks)
+//! CLI  ◄──ContainerStopped{..}── Daemon   (exactly once; carries exit code)
+//! ```
+//! The CLI prints each `ContainerOutput` chunk to the terminal in real time and
+//! exits with the container's exit code from `ContainerStopped`.
+//!
+//! # Framing
+//!
+//! Use [`encode_request`] / [`decode_request`] and [`encode_response`] /
+//! [`decode_response`] to serialize and deserialize messages. These helpers
+//! append (or strip) the trailing `\n` framing byte.
 
 use serde::{Deserialize, Serialize};
 
@@ -69,10 +95,15 @@ pub enum DaemonRequest {
 // ---------------------------------------------------------------------------
 
 /// Which output stream a [`DaemonResponse::ContainerOutput`] chunk came from.
+///
+/// Serialized as lowercase strings (`"stdout"` / `"stderr"`) via
+/// `#[serde(rename_all = "lowercase")]`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputStreamKind {
+    /// Data came from the container's standard output (file descriptor 1).
     Stdout,
+    /// Data came from the container's standard error (file descriptor 2).
     Stderr,
 }
 

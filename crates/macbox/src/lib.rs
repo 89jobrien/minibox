@@ -1,9 +1,19 @@
-//! macbox — macOS orchestration for miniboxd.
+//! macOS orchestration for miniboxd via the Colima adapter suite.
 //!
-//! Provides:
-//! - `start()`: entry point called from `miniboxd` on macOS
-//! - `paths`: macOS-specific default paths
-//! - `preflight`: Colima/backend detection
+//! On macOS, Linux container primitives (namespaces, cgroups, overlayfs) are
+//! unavailable. This crate bridges that gap by delegating container operations
+//! to [Colima](https://github.com/abiosoft/colima) — a lightweight Linux VM
+//! that exposes a `nerdctl`-compatible interface on top of `limactl`.
+//!
+//! `miniboxd` selects this code path when compiled for macOS (see the
+//! `#[cfg(target_os = "macos")]` dispatch in `miniboxd/src/main.rs`).
+//! The `MINIBOX_ADAPTER=colima` environment variable does **not** need to be
+//! set explicitly on macOS — the platform dispatch happens at compile time.
+//!
+//! # Modules
+//!
+//! - [`paths`] — macOS-specific default directories and socket path
+//! - [`preflight`] — Colima/backend detection via `colima status`
 
 pub mod paths;
 pub mod preflight;
@@ -18,13 +28,23 @@ use std::sync::Arc;
 use tokio::net::UnixListener;
 use tracing::{info, warn};
 
+/// Errors that can be returned by the macOS daemon entry point.
 #[derive(thiserror::Error, Debug)]
 pub enum MacboxError {
+    /// Colima is not installed or not reachable. The user must install and
+    /// start Colima before running miniboxd on macOS.
     #[error("no container backend — install Colima (`brew install colima && colima start`)")]
     NoBackendAvailable,
 }
 
-/// Unix socket listener for macOS.
+/// Newtype wrapper around [`tokio::net::UnixListener`] that implements
+/// [`daemonbox::server::ServerListener`] for the macOS daemon.
+///
+/// On macOS, `SO_PEERCRED` is not available through the `nix` crate, so
+/// peer credential checking is skipped (the `accept` implementation returns
+/// `None` for `PeerCreds`). This means the UID-based root-auth guard is
+/// disabled on macOS — container operations are delegated to the Colima VM
+/// anyway, so the attack surface is limited to whoever can reach the socket.
 struct MacUnixListener(UnixListener);
 
 impl daemonbox::server::ServerListener for MacUnixListener {
@@ -37,10 +57,22 @@ impl daemonbox::server::ServerListener for MacUnixListener {
     }
 }
 
-/// Start the macOS daemon.
+/// Start the macOS daemon using the Colima adapter suite.
 ///
-/// Called from `miniboxd`'s macOS `main()`. Sets up the Colima adapter suite,
-/// binds a Unix socket, and runs the accept loop.
+/// Called from `miniboxd`'s macOS `main()`. Performs the following steps:
+///
+/// 1. Initialises `tracing_subscriber` from `RUST_LOG`.
+/// 2. Resolves runtime directories from environment variables
+///    (`MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MINIBOX_SOCKET_PATH`) with
+///    macOS-specific defaults from [`paths`] as fallbacks.
+/// 3. Creates missing directories for images, containers, and the socket.
+/// 4. Loads persisted container state from disk.
+/// 5. Wires up the full Colima adapter suite:
+///    [`ColimaRegistry`], [`ColimaFilesystem`], [`ColimaLimiter`],
+///    [`ColimaRuntime`].
+/// 6. Removes any stale socket file, binds a new Unix socket, and runs the
+///    [`daemonbox::server::run_server`] accept loop with root-auth disabled.
+/// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())

@@ -67,7 +67,12 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
         // Extract raw FDs before moving into the closure (OwnedFd is not Clone).
         let r_raw = r.as_raw_fd();
         let w_raw = w.as_raw_fd();
-        // Forget OwnedFds — we manage lifetimes manually across fork.
+        // SAFETY: After clone(2) both parent and child share the underlying
+        // fd-table entries. Dropping an OwnedFd in the parent would close the
+        // fd for both processes. We therefore forget the OwnedFds here and
+        // take full manual control of the fd lifetimes: the child closes both
+        // ends explicitly, and the parent closes the write end after clone
+        // returns and wraps the read end in a new OwnedFd.
         std::mem::forget(r);
         std::mem::forget(w);
         (r_raw, w_raw)
@@ -85,20 +90,25 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
         // Redirect stdout and stderr to the write end of the pipe.
         if capture_output && write_fd_raw >= 0 {
+            // SAFETY: write_fd_raw and read_fd_raw are valid open file
+            // descriptors inherited across clone(2). Their OwnedFds were
+            // forgotten before the clone call so no other owner will close
+            // them. dup2 and close are async-signal-safe syscalls.
             unsafe {
                 libc::dup2(write_fd_raw, libc::STDOUT_FILENO);
                 libc::dup2(write_fd_raw, libc::STDERR_FILENO);
-                // Close the original write_fd slot (now dup'd into 1 and 2).
-                // O_CLOEXEC on the original means exec would close it anyway,
-                // but we close explicitly to be tidy.
+                // Close the original write_fd slot (now dup'd into fds 1 and 2).
+                // O_CLOEXEC on the original would close it at exec anyway,
+                // but we close explicitly to release the slot now.
                 libc::close(write_fd_raw);
-                // Close the read end — child must not hold it.
+                // Close the read end — the child must not hold it open or the
+                // parent's read end will never see EOF.
                 libc::close(read_fd_raw);
             }
         }
 
         if let Err(e) = child_init(config) {
-            error!("container init failed: {:#}", e);
+            error!(error = %e, "container: child init failed");
             unsafe { libc::_exit(127) };
         }
         // exec replaces the process image, so we never reach here.
@@ -191,10 +201,25 @@ pub fn run_hooks(
     Ok(())
 }
 
-/// Logic executed inside the cloned child process.
+/// Initialise the container environment inside the cloned child process.
+///
+/// Called immediately after `clone(2)` returns in the child. Performs all
+/// setup steps before `execvp` replaces the process image:
+///
+/// 1. Set the UTS hostname (requires `CLONE_NEWUTS`).
+/// 2. Add the child to its cgroup by writing `"0"` to `cgroup.procs` (the
+///    kernel interprets PID 0 as the calling process).
+/// 3. Call [`pivot_root_to`] to switch the root filesystem to the overlay
+///    merged directory.
+/// 4. Call [`close_extra_fds`] to release any file descriptors > 2 that
+///    leaked from the parent across the clone boundary.
+/// 5. Build the `argv` vector and call `execvp` to exec the user command.
+///
+/// On any error the caller is expected to call `libc::_exit(127)` so the
+/// process terminates without running Rust destructors.
 fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     // 1. Set hostname (requires UTS namespace).
-    debug!("setting hostname to {:?}", config.hostname);
+    debug!(hostname = %config.hostname, "container: setting hostname");
     nix::unistd::sethostname(&config.hostname).map_err(|e| {
         crate::error::NamespaceError::SetHostnameFailed(format!(
             "sethostname({:?}) failed: {e}",
@@ -228,7 +253,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         );
     }
 
-    debug!("execvp {:?} {:?}", cmd, argv);
+    debug!(command = %config.command, "container: execvp");
 
     execvp(&cmd, &argv).map_err(|source| ProcessError::ExecFailed {
         cmd: config.command.clone(),
@@ -239,7 +264,12 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     unreachable!()
 }
 
-/// Write `0` to `{cgroup_path}/cgroup.procs` to add the calling process.
+/// Add the calling process to the cgroup at `cgroup_path`.
+///
+/// Writes `"0\n"` to `cgroup.procs`; the kernel interprets PID 0 as the
+/// calling process. This is the correct mechanism to use from inside the
+/// child after `clone(2)`, because the child's PID inside its new PID
+/// namespace may differ from the PID visible to the parent.
 fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
     let procs_file = cgroup_path.join("cgroup.procs");
     std::fs::write(&procs_file, "0\n").map_err(|source| {
@@ -252,24 +282,27 @@ fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Close file descriptors > 2.
+/// Close all file descriptors with index >= 3 (i.e., everything except
+/// stdin, stdout, and stderr).
 ///
 /// Uses a two-tier strategy inspired by QEMU's `qemu_close_all_open_fd`:
 ///
-/// 1. **`close_range(2)` syscall** (kernel 5.9+) — single syscall, no
-///    allocation, no `/proc` dependency.
+/// 1. **`close_range(3, MAX, 0)` syscall** (kernel 5.9+) — single syscall,
+///    no allocation, no `/proc` dependency.
 /// 2. **`/proc/self/fd` scan** — fallback for older kernels. Entries are
-///    collected into a Vec before any `close()` calls to avoid closing the
-///    directory iterator's own FD mid-iteration.
+///    collected into a `Vec` **before** any `close()` calls to avoid closing
+///    the `ReadDir` iterator's own FD mid-iteration.
 ///
-/// Failures are silently ignored — we are about to exec anyway.
+/// Failures from individual `close()` calls are silently ignored — the process
+/// is about to `exec` and any remaining FDs will be closed by the kernel
+/// (for those with `O_CLOEXEC`) or will be safe to leave open temporarily.
 fn close_extra_fds() {
     // Fast path: close_range(3, u32::MAX, 0) — available since Linux 5.9.
     // SAFETY: close_range is a pure fd-table operation with no memory side
     // effects; the worst outcome is ENOSYS on older kernels.
     let ret = unsafe { libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32) };
     if ret == 0 {
-        debug!("closed extra file descriptors via close_range(2)");
+        debug!("container: closed extra file descriptors via close_range");
         return;
     }
 
@@ -287,7 +320,7 @@ fn close_extra_fds() {
         }
         debug!(
             fds_closed = count,
-            "closed extra file descriptors via /proc/self/fd scan"
+            "container: closed extra file descriptors via /proc/self/fd scan"
         );
     }
 }
@@ -302,19 +335,19 @@ fn close_extra_fds() {
 /// `tokio::task::spawn_blocking` context.
 pub fn wait_for_exit(pid: u32) -> anyhow::Result<i32> {
     let nix_pid = nix::unistd::Pid::from_raw(pid as i32);
-    debug!("waiting for PID {}", pid);
+    debug!(pid = pid, "container: waiting for process exit");
 
     match waitpid(nix_pid, None).map_err(|source| ProcessError::WaitFailed { pid, source })? {
         WaitStatus::Exited(_, code) => {
-            info!("PID {} exited with code {}", pid, code);
+            info!(pid = pid, exit_code = code, "container: process exited");
             Ok(code)
         }
         WaitStatus::Signaled(_, sig, _) => {
-            info!("PID {} killed by signal {:?}", pid, sig);
+            info!(pid = pid, signal = ?sig, "container: process killed by signal");
             Ok(-(sig as i32))
         }
         other => {
-            debug!("unexpected wait status for PID {}: {:?}", pid, other);
+            debug!(pid = pid, wait_status = ?other, "container: unexpected wait status");
             Ok(-1)
         }
     }

@@ -12,7 +12,10 @@ use std::path::Path;
 use tar::{Archive, EntryType};
 use tracing::{debug, info, instrument, warn};
 
-// Helper to check for parent directory components
+/// Returns `true` if `path` contains any `..` (parent directory) component.
+///
+/// Used as a fast pre-check before canonicalization to reject obvious path
+/// traversal attempts in tar entries and symlink targets.
 fn has_parent_dir_component(path: &Path) -> bool {
     path.components()
         .any(|c| matches!(c, std::path::Component::ParentDir))
@@ -70,16 +73,27 @@ fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
 ///
 /// # Security
 ///
-/// This function validates each tar entry to prevent:
-/// - Path traversal attacks (Zip Slip vulnerability)
-/// - Symlink attacks pointing to host filesystem
-/// - Setuid/setgid binary preservation
-/// - Device node extraction
+/// Each tar entry is validated to prevent:
+///
+/// - **Zip Slip / path traversal** — entries with `..` components or absolute
+///   paths are rejected by [`validate_tar_entry_path`].
+/// - **Absolute symlink host leakage** — absolute symlink targets are rewritten
+///   to paths relative to the symlink's own directory via [`relative_path`],
+///   so they resolve correctly after `pivot_root` without pointing into the host
+///   filesystem during extraction. Targets that still contain `..` after
+///   stripping the leading `/` are rejected.
+/// - **Device node extraction** — block and character device entries are
+///   rejected outright ([`ImageError::DeviceNodeRejected`]).
+/// - **Setuid/setgid stripping** — special permission bits (04000, 02000,
+///   01000) are stripped from regular file modes before extraction.
+/// - **Tar root entry skip** — `"."` and `"./"` entries (the archive root
+///   marker) are silently skipped; extracting them would confuse the
+///   path-escape check.
 ///
 /// # Arguments
 ///
-/// * `tar_gz_data` -- Raw bytes of the `.tar.gz` blob.
-/// * `dest` -- Directory to extract into.
+/// * `tar_gz_data` — Raw bytes of the `.tar.gz` blob.
+/// * `dest` — Directory to extract into (must already exist).
 #[instrument(skip(tar_gz_data, dest), fields(bytes = tar_gz_data.len(), dest = %dest.display()))]
 pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
     debug!(
@@ -242,14 +256,20 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Validate that a tar entry path is safe to extract.
+/// Validate that a tar entry path is safe to extract into `dest`.
+///
+/// Called for every entry in [`extract_layer`] before touching the filesystem.
 ///
 /// # Security
 ///
 /// Rejects paths that:
+/// - Are absolute (start with `/`)
 /// - Contain `..` components (path traversal)
-/// - Are absolute paths
-/// - Would escape the destination directory
+/// - Resolve outside `dest` after canonicalizing the parent directory
+///
+/// Note: because the entry file may not yet exist, only the *parent* directory
+/// is canonicalized. A pre-pass with [`has_parent_dir_component`] catches `..`
+/// before any filesystem access.
 fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()> {
     // Reject absolute paths
     if entry_path.is_absolute() {

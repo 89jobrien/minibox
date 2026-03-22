@@ -224,14 +224,19 @@ impl ImageStore {
         Ok(result)
     }
 
+    /// Return the path to the stored `manifest.json` for `name:tag`.
     fn manifest_path(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
         Ok(self.image_dir(name, tag)?.join("manifest.json"))
     }
 
+    /// Return the path to the `layers/` subdirectory for `name:tag`.
     fn layers_dir(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
         Ok(self.image_dir(name, tag)?.join("layers"))
     }
 
+    /// Read and deserialize the stored manifest for `name:tag`.
+    ///
+    /// Returns [`ImageError::NotFound`] if the manifest file does not exist.
     fn load_manifest(&self, name: &str, tag: &str) -> anyhow::Result<OciManifest> {
         let path = self.manifest_path(name, tag)?;
         if !path.exists() {

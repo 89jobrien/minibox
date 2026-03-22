@@ -19,7 +19,10 @@ use nix::mount::{MntFlags, MsFlags, mount, umount2};
 #[cfg(not(target_os = "linux"))]
 compile_error!("minibox only supports Linux");
 
-// Path validation utilities
+/// Return `true` if `path` contains any `..` (parent directory) component.
+///
+/// Used as a fast pre-check before canonicalization so that clearly malicious
+/// paths are rejected without touching the filesystem.
 fn has_parent_dir_component(path: &Path) -> bool {
     path.components()
         .any(|c| matches!(c, std::path::Component::ParentDir))
@@ -29,14 +32,21 @@ fn has_parent_dir_component(path: &Path) -> bool {
 // Path validation (security)
 // ---------------------------------------------------------------------------
 
-/// Validate that a layer path is safe and within the allowed directory.
+/// Validate that a layer path is safe and falls within `base_dir`.
 ///
 /// # Security
 ///
-/// Prevents path traversal attacks by:
-/// 1. Rejecting paths with `..` components
-/// 2. Canonicalizing paths and verifying they're under base_dir
-/// 3. Ensuring paths don't escape via symlinks
+/// Prevents path traversal attacks by applying two independent checks:
+///
+/// 1. **Component scan** — rejects paths that contain any `..` (ParentDir)
+///    component before any filesystem access occurs.
+/// 2. **Canonicalization** — resolves symlinks and verifies that the resulting
+///    absolute path has `base_dir` (also canonicalized) as a prefix, catching
+///    traversal via intermediate symlinks.
+///
+/// Both checks must pass for the path to be considered safe. The function
+/// returns an error whose message includes `"path traversal"` so callers and
+/// tests can match on it reliably.
 fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
     // Reject paths with parent directory components
     if has_parent_dir_component(path) {
@@ -69,7 +79,7 @@ fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
         );
     }
 
-    debug!("validated layer path: {:?}", canonical_path);
+    debug!(canonical_path = %canonical_path.display(), "filesystem: layer path validated");
     Ok(())
 }
 
@@ -137,7 +147,7 @@ pub fn setup_overlay_with_base(
         work = work.display(),
     );
 
-    debug!("mounting overlay with options: {}", options);
+    debug!(overlay_options = %options, "filesystem: mounting overlay");
 
     // SECURITY: Mount with nosuid and nodev to prevent privilege escalation
     mount(
@@ -152,7 +162,7 @@ pub fn setup_overlay_with_base(
     })
     .with_context(|| "overlay mount failed")?;
 
-    info!("overlay mounted at {:?}", merged);
+    info!(merged = %merged.display(), "filesystem: overlay mounted");
     Ok(merged)
 }
 
@@ -165,11 +175,23 @@ pub fn setup_overlay_with_base(
 /// This must be called **inside the cloned child process** after the overlay
 /// has been set up. It performs the following steps:
 ///
-/// 1. Bind-mount `new_root` onto itself (required by `pivot_root`).
-/// 2. Create `{new_root}/.put_old/` as the destination for the old root.
+/// 1. **`MS_REC | MS_PRIVATE`** — remount `/` as private so that mount events
+///    are no longer propagated to the parent namespace. This is required before
+///    `pivot_root(2)`: after `CLONE_NEWNS` the child inherits the parent's
+///    shared mount propagation, and `pivot_root` fails with `EINVAL` unless the
+///    new root resides on a mount point that is not shared with any peer.
+/// 2. Bind-mount `new_root` onto itself to make it a discrete mount point.
 /// 3. Mount `proc`, `sysfs`, and `devtmpfs` inside `new_root`.
-/// 4. Call `pivot_root(new_root, put_old)`.
-/// 5. `chdir("/")` and unmount + remove `.put_old/`.
+/// 4. Create `{new_root}/.put_old/` as the landing directory for the old root.
+/// 5. Call `pivot_root(new_root, put_old)`.
+/// 6. `chdir("/")`, then lazy-unmount and remove `/.put_old/`.
+///
+/// # Security
+///
+/// `sysfs` is mounted read-only (`MS_RDONLY`) to prevent cgroup escape via
+/// the kernel's sysfs interface. `proc`, `sysfs`, and `devtmpfs` are all
+/// mounted with `MS_NOSUID | MS_NODEV | MS_NOEXEC` where applicable to prevent
+/// privilege escalation.
 pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
     debug!(new_root = ?new_root, "pivot_root: starting");
 
@@ -296,9 +318,13 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 pub fn cleanup_mounts(container_dir: &Path) -> anyhow::Result<()> {
     let merged = container_dir.join("merged");
     if merged.exists() {
-        debug!("unmounting overlay at {:?}", merged);
+        debug!(merged = %merged.display(), "filesystem: unmounting overlay");
         if let Err(e) = umount2(&merged, MntFlags::MNT_DETACH) {
-            warn!("failed to unmount overlay at {:?}: {}", merged, e);
+            warn!(
+                merged = %merged.display(),
+                error = %e,
+                "filesystem: failed to unmount overlay"
+            );
         }
     }
 
@@ -310,7 +336,7 @@ pub fn cleanup_mounts(container_dir: &Path) -> anyhow::Result<()> {
         })?;
     }
 
-    info!("container mounts cleaned up for {:?}", container_dir);
+    info!(container_dir = %container_dir.display(), "filesystem: container mounts cleaned up");
     Ok(())
 }
 

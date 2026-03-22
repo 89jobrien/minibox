@@ -46,13 +46,23 @@ pub trait ServerListener: Send + 'static {
 
 /// Run the daemon accept loop until `shutdown` resolves.
 ///
+/// For each accepted connection the following happens:
+/// 1. [`ServerListener::accept`] returns a stream and optional [`PeerCreds`].
+/// 2. If `require_root_auth` is `true`, the peer UID (from `SO_PEERCRED`) is
+///    checked; non-root connections are dropped with a warning.
+/// 3. A Tokio task is spawned to handle the connection via
+///    [`handle_connection`].
+///
 /// # Arguments
 ///
 /// * `listener` — platform-specific listener implementing [`ServerListener`]
 /// * `state` — shared daemon state
 /// * `deps` — handler dependencies (adapters)
 /// * `require_root_auth` — when `true`, rejects connections from non-root UIDs
-/// * `shutdown` — future that resolves when the daemon should stop
+///   via `SO_PEERCRED`; set to `false` for adapter suites that do not require
+///   root (e.g. `gke`, `colima`)
+/// * `shutdown` — future that resolves when the daemon should stop accepting
+///   new connections (e.g. on SIGTERM/SIGINT)
 pub async fn run_server<L, F>(
     listener: L,
     state: Arc<DaemonState>,
@@ -208,8 +218,12 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
     !matches!(r, DaemonResponse::ContainerOutput { .. })
 }
 
-/// Route a parsed `DaemonRequest` to the appropriate handler, sending
+/// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
 /// responses through `tx`.
+///
+/// Each variant maps 1-to-1 to a handler function in [`crate::handler`].
+/// The `Run` variant is the only one that may produce multiple responses
+/// (streaming output chunks); all others produce exactly one response.
 async fn dispatch(
     request: DaemonRequest,
     state: Arc<DaemonState>,

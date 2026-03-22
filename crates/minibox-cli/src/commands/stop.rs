@@ -7,8 +7,9 @@ use crate::commands::send_request;
 
 /// Execute the `stop` subcommand.
 ///
-/// Sends `SIGTERM` to the container process; the daemon escalates to
-/// `SIGKILL` after 10 seconds if the process does not exit.
+/// Sends a `Stop` request to the daemon, which is responsible for signalling
+/// the container process.  Prints the daemon's confirmation message on success
+/// or an error description on failure.
 pub async fn execute(id: String) -> Result<()> {
     let request = DaemonRequest::Stop { id: id.clone() };
 

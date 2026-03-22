@@ -1,8 +1,13 @@
 //! Mock adapters for testing.
 //!
-//! This module provides mock implementations of all domain traits, allowing
-//! business logic to be tested without real infrastructure dependencies
-//! (no Docker Hub, no cgroups, no Linux syscalls).
+//! This module provides in-process mock implementations of all four domain
+//! traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
+//! [`ContainerRuntime`]), allowing business logic to be tested without real
+//! infrastructure dependencies — no network, no cgroups, no Linux syscalls.
+//!
+//! Each mock tracks call counts and can be configured to fail on demand via
+//! builder methods. All state is shared behind an `Arc<Mutex<…>>` so mocks
+//! can be cloned and observed from the test after being injected.
 //!
 //! # Usage
 //!
@@ -39,10 +44,13 @@ use std::sync::{Arc, Mutex};
 // MockRegistry
 // ---------------------------------------------------------------------------
 
-/// Mock image registry for testing.
+/// Mock implementation of [`ImageRegistry`] for testing.
 ///
-/// Simulates an image registry without network calls. Configure behavior
-/// using builder methods.
+/// Simulates an image registry without making network requests. Configure
+/// pre-cached images and failure behaviour via builder methods before use.
+///
+/// All state is stored in a shared `Arc<Mutex<…>>` so the mock can be cloned
+/// and observed from the test after injection.
 #[derive(Debug, Clone)]
 pub struct MockRegistry {
     state: Arc<Mutex<MockRegistryState>>,
@@ -50,16 +58,16 @@ pub struct MockRegistry {
 
 #[derive(Debug)]
 struct MockRegistryState {
-    /// Images that are "cached" locally.
+    /// Images that are already "cached" locally (checked by `has_image`).
     cached_images: Vec<(String, String)>, // (name, tag)
-    /// Whether pull operations should succeed.
+    /// Whether `pull_image` calls should succeed (`true`) or fail (`false`).
     pull_should_succeed: bool,
-    /// Number of times pull_image was called.
+    /// Running count of `pull_image` invocations.
     pull_count: usize,
 }
 
 impl MockRegistry {
-    /// Create a new mock registry with default settings.
+    /// Create a new mock registry with no cached images and pull success enabled.
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRegistryState {
@@ -70,7 +78,9 @@ impl MockRegistry {
         }
     }
 
-    /// Configure the registry to report an image as cached.
+    /// Configure the registry to report `name:tag` as already cached locally.
+    ///
+    /// May be called multiple times to seed multiple images.
     pub fn with_cached_image(self, name: &str, tag: &str) -> Self {
         self.state
             .lock()
@@ -80,18 +90,21 @@ impl MockRegistry {
         self
     }
 
-    /// Configure pull operations to fail.
+    /// Configure all subsequent `pull_image` calls to return an error.
     pub fn with_pull_failure(self) -> Self {
         self.state.lock().unwrap().pull_should_succeed = false;
         self
     }
 
-    /// Get the number of times pull_image was called.
+    /// Return the number of times `pull_image` has been called.
     pub fn pull_count(&self) -> usize {
         self.state.lock().unwrap().pull_count
     }
 
-    /// Sync test helper — bypasses async machinery for benchmarks.
+    /// Synchronous variant of `has_image` — bypasses async machinery.
+    ///
+    /// Useful in benchmarks and synchronous test helpers where an async
+    /// executor is not available.
     pub fn has_image_sync(&self, image: &str, tag: &str) -> bool {
         self.state
             .lock()
@@ -103,6 +116,7 @@ impl MockRegistry {
 
 #[async_trait]
 impl ImageRegistry for MockRegistry {
+    /// Return `true` if the image was seeded via [`with_cached_image`] or pulled successfully.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
         self.state
             .lock()
@@ -111,6 +125,12 @@ impl ImageRegistry for MockRegistry {
             .contains(&(name.to_string(), tag.to_string()))
     }
 
+    /// Simulate an image pull.
+    ///
+    /// Increments the pull counter. On success adds the image to the local
+    /// cache and returns [`ImageMetadata`] with two fixed mock layers. On
+    /// failure (configured via [`with_pull_failure`]) returns an error
+    /// without modifying the cache.
     async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
         let mut state = self.state.lock().unwrap();
         state.pull_count += 1;
@@ -119,7 +139,7 @@ impl ImageRegistry for MockRegistry {
             anyhow::bail!("mock pull failure");
         }
 
-        // Simulate successful pull by adding to cached images
+        // Simulate a successful pull by adding the image to the local cache.
         state
             .cached_images
             .push((name.to_string(), tag.to_string()));
@@ -140,6 +160,7 @@ impl ImageRegistry for MockRegistry {
         })
     }
 
+    /// Return two fixed mock layer paths regardless of the image name or tag.
     fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
         Ok(vec![
             PathBuf::from("/mock/layer1"),
@@ -152,9 +173,11 @@ impl ImageRegistry for MockRegistry {
 // MockFilesystem
 // ---------------------------------------------------------------------------
 
-/// Mock filesystem provider for testing.
+/// Mock implementation of [`FilesystemProvider`] for testing.
 ///
-/// Simulates filesystem operations without actual mounts or syscalls.
+/// Simulates filesystem operations without any actual mounts or syscalls.
+/// Tracks `setup_rootfs` and `cleanup` call counts and can be configured to
+/// fail on demand.
 #[derive(Debug, Clone)]
 pub struct MockFilesystem {
     state: Arc<Mutex<MockFilesystemState>>,
@@ -162,14 +185,20 @@ pub struct MockFilesystem {
 
 #[derive(Debug)]
 struct MockFilesystemState {
+    /// Whether `setup_rootfs` should succeed.
     setup_should_succeed: bool,
+    /// Whether `pivot_root` should succeed.
     pivot_should_succeed: bool,
+    /// Whether `cleanup` should succeed.
     cleanup_should_succeed: bool,
+    /// Running count of `setup_rootfs` invocations.
     setup_count: usize,
+    /// Running count of `cleanup` invocations.
     cleanup_count: usize,
 }
 
 impl MockFilesystem {
+    /// Create a new mock filesystem with all operations succeeding by default.
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockFilesystemState {
@@ -182,21 +211,28 @@ impl MockFilesystem {
         }
     }
 
+    /// Configure `setup_rootfs` to return an error on the next call.
     pub fn with_setup_failure(self) -> Self {
         self.state.lock().unwrap().setup_should_succeed = false;
         self
     }
 
+    /// Return the number of times `setup_rootfs` has been called.
     pub fn setup_count(&self) -> usize {
         self.state.lock().unwrap().setup_count
     }
 
+    /// Return the number of times `cleanup` has been called.
     pub fn cleanup_count(&self) -> usize {
         self.state.lock().unwrap().cleanup_count
     }
 }
 
 impl FilesystemProvider for MockFilesystem {
+    /// Simulate rootfs setup by returning `container_dir/merged`.
+    ///
+    /// Increments the setup counter. Returns an error if configured via
+    /// [`with_setup_failure`].
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         let mut state = self.state.lock().unwrap();
         state.setup_count += 1;
@@ -208,6 +244,7 @@ impl FilesystemProvider for MockFilesystem {
         Ok(container_dir.join("merged"))
     }
 
+    /// Simulate `pivot_root` — succeeds unless configured to fail.
     fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         let state = self.state.lock().unwrap();
         if !state.pivot_should_succeed {
@@ -216,6 +253,10 @@ impl FilesystemProvider for MockFilesystem {
         Ok(())
     }
 
+    /// Simulate filesystem cleanup.
+    ///
+    /// Increments the cleanup counter. Returns an error if the mock is
+    /// configured to fail cleanup.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
         let mut state = self.state.lock().unwrap();
         state.cleanup_count += 1;
@@ -231,9 +272,10 @@ impl FilesystemProvider for MockFilesystem {
 // MockLimiter
 // ---------------------------------------------------------------------------
 
-/// Mock resource limiter for testing.
+/// Mock implementation of [`ResourceLimiter`] for testing.
 ///
-/// Simulates cgroup operations without actual kernel interaction.
+/// Simulates cgroup operations without any kernel interaction. Returns a fake
+/// cgroup path on success and tracks call counts.
 #[derive(Debug, Clone)]
 pub struct MockLimiter {
     state: Arc<Mutex<MockLimiterState>>,
@@ -241,15 +283,22 @@ pub struct MockLimiter {
 
 #[derive(Debug)]
 struct MockLimiterState {
+    /// Whether `create` should succeed.
     create_should_succeed: bool,
+    /// Whether `add_process` should succeed.
     add_process_should_succeed: bool,
+    /// Whether `cleanup` should succeed.
     cleanup_should_succeed: bool,
+    /// Running count of `create` invocations.
     create_count: usize,
+    /// Running count of `cleanup` invocations.
     cleanup_count: usize,
-    created_cgroups: Vec<String>, // container IDs
+    /// Container IDs for which a cgroup was successfully created.
+    created_cgroups: Vec<String>,
 }
 
 impl MockLimiter {
+    /// Create a new mock resource limiter with all operations succeeding by default.
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockLimiterState {
@@ -263,21 +312,28 @@ impl MockLimiter {
         }
     }
 
+    /// Configure `create` to return an error.
     pub fn with_create_failure(self) -> Self {
         self.state.lock().unwrap().create_should_succeed = false;
         self
     }
 
+    /// Return the number of times `create` has been called.
     pub fn create_count(&self) -> usize {
         self.state.lock().unwrap().create_count
     }
 
+    /// Return the number of times `cleanup` has been called.
     pub fn cleanup_count(&self) -> usize {
         self.state.lock().unwrap().cleanup_count
     }
 }
 
 impl ResourceLimiter for MockLimiter {
+    /// Simulate cgroup creation and return a fake cgroup path.
+    ///
+    /// Increments the create counter and records the container ID. Returns
+    /// `/mock/cgroup/<container_id>` on success.
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
         let mut state = self.state.lock().unwrap();
         state.create_count += 1;
@@ -290,6 +346,7 @@ impl ResourceLimiter for MockLimiter {
         Ok(format!("/mock/cgroup/{container_id}"))
     }
 
+    /// Simulate adding a process to a cgroup — succeeds unless configured to fail.
     fn add_process(&self, _container_id: &str, _pid: u32) -> Result<()> {
         let state = self.state.lock().unwrap();
         if !state.add_process_should_succeed {
@@ -298,6 +355,10 @@ impl ResourceLimiter for MockLimiter {
         Ok(())
     }
 
+    /// Simulate cgroup cleanup.
+    ///
+    /// Increments the cleanup counter. Returns an error if the mock is
+    /// configured to fail cleanup.
     fn cleanup(&self, _container_id: &str) -> Result<()> {
         let mut state = self.state.lock().unwrap();
         state.cleanup_count += 1;
@@ -313,9 +374,10 @@ impl ResourceLimiter for MockLimiter {
 // MockRuntime
 // ---------------------------------------------------------------------------
 
-/// Mock container runtime for testing.
+/// Mock implementation of [`ContainerRuntime`] for testing.
 ///
-/// Simulates container process spawning without actual syscalls.
+/// Simulates container process spawning without any syscalls. Returns
+/// monotonically increasing fake PIDs starting from 10000.
 #[derive(Debug, Clone)]
 pub struct MockRuntime {
     state: Arc<Mutex<MockRuntimeState>>,
@@ -323,12 +385,16 @@ pub struct MockRuntime {
 
 #[derive(Debug)]
 struct MockRuntimeState {
+    /// Whether `spawn_process` calls should succeed.
     spawn_should_succeed: bool,
+    /// The PID to hand out on the next successful spawn; incremented after each use.
     next_pid: u32,
+    /// Running count of `spawn_process` invocations (both sync and async).
     spawn_count: usize,
 }
 
 impl MockRuntime {
+    /// Create a new mock runtime with spawn succeeding and PIDs starting at 10000.
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRuntimeState {
@@ -339,16 +405,21 @@ impl MockRuntime {
         }
     }
 
+    /// Configure all subsequent `spawn_process` calls to return an error.
     pub fn with_spawn_failure(self) -> Self {
         self.state.lock().unwrap().spawn_should_succeed = false;
         self
     }
 
+    /// Return the total number of spawn attempts (successful and failed).
     pub fn spawn_count(&self) -> usize {
         self.state.lock().unwrap().spawn_count
     }
 
-    /// Sync test helper — bypasses async machinery for benchmarks.
+    /// Synchronous variant of `spawn_process` — bypasses async machinery.
+    ///
+    /// Useful in benchmarks and synchronous test helpers where an async
+    /// executor is not available. Shares state with the async variant.
     pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut state = self.state.lock().unwrap();
         state.spawn_count += 1;
@@ -366,6 +437,7 @@ impl MockRuntime {
 
 #[async_trait]
 impl ContainerRuntime for MockRuntime {
+    /// Return minimal capabilities — the mock does not support any Linux-specific features.
     fn capabilities(&self) -> RuntimeCapabilities {
         RuntimeCapabilities {
             supports_user_namespaces: false,
@@ -376,6 +448,10 @@ impl ContainerRuntime for MockRuntime {
         }
     }
 
+    /// Simulate spawning a container process and return a fake PID.
+    ///
+    /// Increments the spawn counter and the internal PID counter on success.
+    /// The `output_reader` field is always `None`.
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut state = self.state.lock().unwrap();
         state.spawn_count += 1;
@@ -393,24 +469,35 @@ impl ContainerRuntime for MockRuntime {
     }
 }
 
+// Register the four primary mock types with the adapt! macro so they satisfy
+// the AsAny + Default bounds required by the daemon's adapter registry.
 adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
 
 // ---------------------------------------------------------------------------
 // FailableFilesystemMock
 // ---------------------------------------------------------------------------
 
-/// Filesystem mock with runtime-controllable failure injection via atomics.
+/// Filesystem mock with runtime-toggleable failure injection via atomics.
 ///
-/// Unlike `MockFilesystem` (whose failure mode is fixed at construction),
-/// this mock lets tests toggle failures between calls.
+/// Unlike [`MockFilesystem`] whose failure modes are fixed at construction
+/// time via builder methods, this mock lets tests flip failures on and off
+/// between individual calls using atomic stores. This is useful for testing
+/// error-recovery paths such as cleanup-after-setup-failure.
+///
+/// Uses `SeqCst` ordering throughout to avoid races in parallel test scenarios.
 pub struct FailableFilesystemMock {
+    /// Whether the next `setup_rootfs` call should return an error.
     should_fail_setup: AtomicBool,
+    /// Whether the next `cleanup` call should return an error.
     should_fail_cleanup: AtomicBool,
+    /// Running count of `setup_rootfs` invocations.
     setup_count: AtomicUsize,
+    /// Running count of `cleanup` invocations.
     cleanup_count: AtomicUsize,
 }
 
 impl FailableFilesystemMock {
+    /// Create a new mock with both operations succeeding by default.
     pub fn new() -> Self {
         Self {
             should_fail_setup: AtomicBool::new(false),
@@ -420,26 +507,33 @@ impl FailableFilesystemMock {
         }
     }
 
-    /// Toggle whether `setup_rootfs` returns an error.
+    /// Toggle whether `setup_rootfs` returns an error on the next call.
+    ///
+    /// Pass `true` to inject a failure; `false` to restore success.
     pub fn set_fail_setup(&self, fail: bool) {
         self.should_fail_setup.store(fail, Ordering::SeqCst);
     }
 
-    /// Toggle whether `cleanup` returns an error.
+    /// Toggle whether `cleanup` returns an error on the next call.
+    ///
+    /// Pass `true` to inject a failure; `false` to restore success.
     pub fn set_fail_cleanup(&self, fail: bool) {
         self.should_fail_cleanup.store(fail, Ordering::SeqCst);
     }
 
+    /// Return the number of times `setup_rootfs` has been called.
     pub fn setup_count(&self) -> usize {
         self.setup_count.load(Ordering::SeqCst)
     }
 
+    /// Return the number of times `cleanup` has been called.
     pub fn cleanup_count(&self) -> usize {
         self.cleanup_count.load(Ordering::SeqCst)
     }
 }
 
 impl FilesystemProvider for FailableFilesystemMock {
+    /// Simulate rootfs setup, honouring the current failure toggle.
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
         self.setup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_setup.load(Ordering::SeqCst) {
@@ -448,10 +542,12 @@ impl FilesystemProvider for FailableFilesystemMock {
         Ok(container_dir.join("merged"))
     }
 
+    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
     fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         Ok(())
     }
 
+    /// Simulate filesystem cleanup, honouring the current failure toggle.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
         self.cleanup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_cleanup.load(Ordering::SeqCst) {
@@ -461,6 +557,8 @@ impl FilesystemProvider for FailableFilesystemMock {
     }
 }
 
+// Register FailableFilesystemMock separately — it only implements
+// FilesystemProvider, not the full four-trait set.
 adapt!(FailableFilesystemMock);
 
 #[cfg(test)]

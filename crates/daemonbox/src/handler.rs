@@ -224,8 +224,18 @@ async fn handle_run_streaming(
         .await;
 }
 
-/// Like `run_inner` but returns `(container_id, pid, output_reader)` with
-/// `capture_output = true` in the spawn config.
+/// Variant of `run_inner` that enables output capture for ephemeral containers.
+///
+/// Sets `capture_output = true` in the spawn config so the runtime creates a
+/// pipe between the container process and the daemon.  Returns the container ID,
+/// the child PID, and the read end of the output pipe as an [`OwnedFd`].
+///
+/// The caller is responsible for draining the pipe (to avoid blocking the child
+/// on a full pipe buffer) and for calling `wait_for_exit` to reap the process.
+///
+/// Container state transitions: `"Created"` → `"Running"` (via
+/// `set_container_pid`).  The `"Stopped"` transition is handled by the caller
+/// (`handle_run_streaming`) after the process exits.
 ///
 /// Only compiled on Linux because the output pipe requires Linux primitives.
 #[cfg(target_os = "linux")]
@@ -369,6 +379,22 @@ async fn run_inner_capture(
     Ok((id, pid, output_reader))
 }
 
+/// Pull the image if needed, set up the overlay rootfs and cgroup, register the
+/// container in `"Created"` state, then spawn the container process.
+///
+/// Returns the new container ID immediately after the spawn task is dispatched.
+/// The container transitions from `"Created"` to `"Running"` asynchronously
+/// once the runtime reports the child PID.  A background reaper task
+/// (`daemon_wait_for_exit`) drives the final `"Stopped"` transition.
+///
+/// # Async / sync boundary
+///
+/// The runtime's `spawn_process` is async (it may perform IPC with an external
+/// runtime such as Colima).  The actual fork/clone/exec for the native Linux
+/// adapter happens inside `spawn_process` via `tokio::task::spawn_blocking` in
+/// the runtime implementation, keeping blocking syscalls off the Tokio worker
+/// threads.  The reaper is also dispatched via `spawn_blocking` because
+/// `waitpid` is a blocking syscall.
 async fn run_inner(
     image: String,
     tag: Option<String>,
@@ -550,7 +576,18 @@ async fn run_inner(
     Ok(id)
 }
 
-/// Block until the container PID exits, run post-exit hooks, then update state.
+/// Block the calling thread until the container process exits.
+///
+/// This function must be called from a `tokio::task::spawn_blocking` context
+/// because `waitpid(2)` is a blocking syscall that cannot run on a Tokio
+/// worker thread.
+///
+/// After the process exits:
+/// 1. Any post-exit hooks registered on the container are executed
+///    (Linux only, via `minibox_lib::container::process::run_hooks`).
+/// 2. The container state is updated to `"Stopped"` in `DaemonState`.
+///    Because this runs in a blocking thread, the state update bridges back
+///    to the async runtime via `Handle::try_current` or a one-shot runtime.
 #[cfg(unix)]
 fn daemon_wait_for_exit(
     pid: u32,
@@ -604,6 +641,10 @@ fn daemon_wait_for_exit(
     }
 }
 
+/// Windows stub: no-op because HCS/WSL2 lifecycle is managed externally.
+///
+/// Containers on Windows remain in `"Running"` state until an explicit
+/// `stop` or `remove` command is issued.
 #[cfg(windows)]
 fn daemon_wait_for_exit(
     _pid: u32,
@@ -615,6 +656,7 @@ fn daemon_wait_for_exit(
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
 
+/// Fallback stub for platforms other than Unix or Windows.
 #[cfg(not(any(unix, windows)))]
 fn daemon_wait_for_exit(
     _pid: u32,
@@ -643,6 +685,9 @@ pub async fn handle_stop(id: String, state: Arc<DaemonState>) -> DaemonResponse 
     }
 }
 
+/// Unix implementation: send SIGTERM, poll for exit for up to 10 s, then
+/// SIGKILL if the process is still alive.  Updates state to `"Stopped"` on
+/// completion regardless of how the process exited.
 #[cfg(unix)]
 async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
     use nix::sys::signal::{Signal, kill};
@@ -681,6 +726,10 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
     Ok(())
 }
 
+/// Windows stub: stop is not yet implemented.
+///
+/// Container stop must go through the HCS or WSL2 adapter stop path.
+/// This stub ensures the binary compiles on Windows and returns a clear error.
 #[cfg(windows)]
 async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
     anyhow::bail!(
@@ -689,6 +738,7 @@ async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
     )
 }
 
+/// Fallback stub for platforms other than Unix or Windows.
 #[cfg(not(any(unix, windows)))]
 async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
     anyhow::bail!("handle_stop not supported on this platform for container {id}")
@@ -715,6 +765,12 @@ pub async fn handle_remove(
     }
 }
 
+/// Core remove logic: unmount overlay, delete runtime state dir, clean up
+/// cgroup, and deregister the container from the daemon state.
+///
+/// Returns an error if the container does not exist or is still `"Running"`.
+/// Cleanup steps (overlay unmount, cgroup removal) are best-effort: failures
+/// are logged as warnings but do not abort the removal.
 async fn remove_inner(
     id: &str,
     state: &Arc<DaemonState>,

@@ -118,7 +118,13 @@ impl DaemonState {
         debug!("loaded {} container records from disk", count);
     }
 
-    /// Persist the current state to disk (atomic write via temp file + rename).
+    /// Persist the current state to disk using an atomic write.
+    ///
+    /// Serialises the container map to pretty-printed JSON, writes it to a
+    /// `.json.tmp` sibling file, then renames it over the target path.  The
+    /// rename is atomic on POSIX filesystems, so readers never see a partially
+    /// written file.  Failures are logged as warnings but do not propagate —
+    /// state writes are best-effort and must not crash the daemon.
     async fn save_to_disk(&self) {
         let map = self.containers.read().await;
         let json = match serde_json::to_string_pretty(&*map) {
@@ -145,7 +151,11 @@ impl DaemonState {
         }
     }
 
-    /// Register a new container record.
+    /// Register a new container record and persist state to disk.
+    ///
+    /// The caller is expected to create the record in `"Created"` state before
+    /// the container process is forked. Use [`set_container_pid`] to transition
+    /// the record to `"Running"` once the PID is known.
     pub async fn add_container(&self, record: ContainerRecord) {
         debug!("adding container {}", record.info.id);
         let mut map = self.containers.write().await;
@@ -154,7 +164,12 @@ impl DaemonState {
         self.save_to_disk().await;
     }
 
-    /// Remove and return a container record.
+    /// Remove a container record from the in-memory map and persist the updated
+    /// state to disk.
+    ///
+    /// Returns the removed record, or `None` if no container with `id` exists.
+    /// Callers should ensure the container is in `"Stopped"` state before
+    /// removing it; no state check is performed here.
     pub async fn remove_container(&self, id: &str) -> Option<ContainerRecord> {
         debug!("removing container {}", id);
         let mut map = self.containers.write().await;
@@ -164,19 +179,33 @@ impl DaemonState {
         removed
     }
 
-    /// Look up a container by its short ID.
+    /// Look up a container by its ID and return a cloned snapshot.
+    ///
+    /// Returns `None` if no container with that ID is tracked. Because the
+    /// return value is a clone, callers see the state at the moment of the call;
+    /// concurrent mutations are not visible after the lock is released.
     pub async fn get_container(&self, id: &str) -> Option<ContainerRecord> {
         let map = self.containers.read().await;
         map.get(id).cloned()
     }
 
-    /// Return `ContainerInfo` snapshots for every container.
+    /// Return `ContainerInfo` snapshots for every tracked container.
+    ///
+    /// The returned vec is a point-in-time snapshot; order is unspecified
+    /// (HashMap iteration order).
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
         map.values().map(|r| r.info.clone()).collect()
     }
 
-    /// Change the `state` field of a container (e.g. "Running" → "Stopped").
+    /// Change the `state` field of a container.
+    ///
+    /// Valid state transitions follow the container lifecycle:
+    /// `"Created"` → `"Running"` → `"Stopped"` (or `"Failed"`).
+    ///
+    /// When `new_state` is `"Stopped"`, both the host PID and the
+    /// `ContainerInfo.pid` field are cleared because the process is no longer
+    /// alive.
     pub async fn update_container_state(&self, id: &str, new_state: &str) {
         let mut map = self.containers.write().await;
         if let Some(record) = map.get_mut(id) {
@@ -194,8 +223,11 @@ impl DaemonState {
         self.save_to_disk().await;
     }
 
-    /// Set the PID for a container (called after the container process is
-    /// successfully forked).
+    /// Record the host-namespace PID after the container process is successfully
+    /// forked and advance the container state from `"Created"` to `"Running"`.
+    ///
+    /// Both the `ContainerRecord.pid` field (used for signal delivery) and the
+    /// `ContainerInfo.pid` field (returned to the CLI via `List`) are updated.
     pub async fn set_container_pid(&self, id: &str, pid: u32) {
         let mut map = self.containers.write().await;
         if let Some(record) = map.get_mut(id) {

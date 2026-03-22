@@ -93,6 +93,10 @@ enum AdapterSuite {
 
 #[cfg(target_os = "linux")]
 impl AdapterSuite {
+    /// Parse the `MINIBOX_ADAPTER` environment variable into an [`AdapterSuite`].
+    ///
+    /// Accepted values: `"native"` (default when the variable is absent),
+    /// `"gke"`, `"colima"`.  Returns an error for any other value.
     fn from_env() -> Result<Self> {
         match std::env::var("MINIBOX_ADAPTER").as_deref() {
             Ok("gke") => Ok(Self::Gke),
@@ -106,7 +110,20 @@ impl AdapterSuite {
     }
 }
 
-/// Move the current process into a `supervisor` leaf cgroup.
+/// Move the current daemon process into a `supervisor` leaf cgroup.
+///
+/// cgroups v2 enforces the "no internal process" rule: a cgroup that has child
+/// cgroups cannot also contain processes directly.  When miniboxd runs as a
+/// systemd service under `minibox.slice/miniboxd.service`, it starts in that
+/// cgroup.  Creating per-container child cgroups underneath it would violate
+/// the rule.
+///
+/// This function reads `/proc/self/cgroup` to find the current v2 cgroup path,
+/// creates a `supervisor/` subdirectory within it, and writes the daemon PID to
+/// `cgroup.procs` to migrate it into the leaf.  Container cgroups are created
+/// as siblings of `supervisor/`, not children of it.
+///
+/// Failures are logged as warnings and do not abort startup.
 #[cfg(target_os = "linux")]
 fn migrate_to_supervisor_cgroup() {
     use std::fs;
@@ -160,6 +177,12 @@ fn migrate_to_supervisor_cgroup() {
 
 // ── UnixServerListener ────────────────────────────────────────────────────
 
+/// Wraps a Tokio [`UnixListener`] and implements [`daemonbox::server::ServerListener`].
+///
+/// On `accept()`, peer credentials are read via `SO_PEERCRED` (using the `nix`
+/// crate's `PeerCredentials` socket option) and returned alongside the stream.
+/// The UID and PID are used by `run_server` to enforce root-only access when
+/// `require_root_auth` is `true`.
 #[cfg(target_os = "linux")]
 struct UnixServerListener(UnixListener);
 
@@ -185,6 +208,17 @@ impl daemonbox::server::ServerListener for UnixServerListener {
 
 // ── Linux main ────────────────────────────────────────────────────────────
 
+/// Linux daemon entry point.
+///
+/// Performs the full startup sequence documented in the crate-level `//!` doc:
+/// tracing init → adapter selection → privilege check → cgroup self-migration →
+/// path resolution → directory creation → state load → dependency injection →
+/// socket bind → signal handler setup → accept loop.
+///
+/// Cleans up the socket file on exit.  Individual container cleanup (overlay
+/// unmount, cgroup removal) is not performed on daemon shutdown; a subsequent
+/// `minibox rm` or `cargo xtask nuke-test-state` is needed to reclaim resources
+/// from containers that were running when the daemon exited.
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> Result<()> {

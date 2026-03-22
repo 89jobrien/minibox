@@ -1,17 +1,29 @@
-//! Colima adapter for macOS support via Lima VMs.
+//! Colima adapter suite for macOS support via Lima VMs.
 //!
-//! This adapter delegates container operations to a Colima (Lima) VM, enabling
-//! minibox to run on macOS by executing Linux-specific operations inside the VM.
+//! This module provides four adapters that together implement the full set of
+//! domain traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
+//! [`ContainerRuntime`]) by delegating operations into a Colima (Lima) Linux VM
+//! running on the macOS host.
 //!
-//! Architecture:
-//! - Uses `limactl` command to interact with Lima VM
-//! - SSH into Colima VM to execute container operations
-//! - Path translation between macOS host and Lima VM
-//! - Direct containerd/cgroup access inside VM (no helper container needed)
+//! # How it works
 //!
-//! Requirements:
+//! Each adapter runs commands inside the Lima VM using `limactl shell <instance>
+//! <command>`. Lima mounts the macOS `/Users` and `/tmp` trees into the VM, so
+//! paths under those prefixes are visible from both sides. Paths outside those
+//! prefixes (e.g. `/var/lib/minibox`) exist only inside the VM and cannot be
+//! accessed directly from the host.
+//!
+//! # Adapter selection
+//!
+//! Selected by `MINIBOX_ADAPTER=colima`. These adapters are compiled on all
+//! platforms but are only wired into `miniboxd` on macOS. They are **not** yet
+//! listed in the daemon's `MINIBOX_ADAPTER` switch; they are library-only for now.
+//!
+//! # Requirements
+//!
 //! - Colima installed (`brew install colima`)
-//! - Colima VM running (`colima start`)
+//! - A running Colima VM (`colima start`)
+//! - `nerdctl` and `jq` available inside the VM
 
 use crate::adapt;
 use crate::domain::{
@@ -25,30 +37,33 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-/// Injectable executor for Lima VM commands.
+/// Callable that runs a command inside the Lima VM and returns its stdout.
 ///
-/// Accepts a slice of arguments (as passed to `limactl shell <instance>`)
-/// and returns stdout as a String.  The default implementation invokes a
-/// real `limactl` subprocess; tests inject a fake closure instead.
+/// The default implementation invokes `limactl shell <instance> <args…>`.
+/// Tests inject a fake closure via [`ColimaRegistry::with_executor`] /
+/// [`ColimaRuntime::with_executor`] to avoid real `limactl` calls.
 type LimaExecutor = Arc<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 
 // ============================================================================
 // Colima Image Registry Adapter
 // ============================================================================
 
-/// Colima adapter for ImageRegistry trait.
+/// Colima implementation of [`ImageRegistry`].
 ///
-/// Delegates image pulling to containerd inside the Colima VM using `nerdctl pull`.
+/// Pulls images and inspects layer metadata via `nerdctl` running inside the
+/// Colima Lima VM. Returned layer paths are under `/tmp/minibox-layers/…` so
+/// they are accessible from the macOS host via Lima's shared `/tmp` mount.
 pub struct ColimaRegistry {
-    /// Lima instance name (usually "colima")
+    /// Lima instance name (the argument passed to `limactl shell`; usually `"colima"`).
     instance: String,
-    /// Path to limactl binary
+    /// Path to the `limactl` binary on the macOS host.
     limactl_path: String,
-    /// Optional injected executor (used in tests to avoid real limactl calls).
+    /// Optional injected executor used in tests to avoid real `limactl` calls.
     executor: Option<LimaExecutor>,
 }
 
 impl ColimaRegistry {
+    /// Create a new registry adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
             instance: "colima".to_string(),
@@ -57,16 +72,27 @@ impl ColimaRegistry {
         }
     }
 
+    /// Override the Lima instance name (default: `"colima"`).
+    ///
+    /// Useful when multiple Lima instances are running (e.g. `colima-arm`).
     pub fn with_instance(mut self, instance: String) -> Self {
         self.instance = instance;
         self
     }
 
+    /// Inject a custom executor for testing.
+    ///
+    /// The closure receives the argument slice that would be passed to
+    /// `limactl shell <instance>` and must return the command's stdout.
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
         self.executor = Some(executor);
         self
     }
 
+    /// Run a command inside the Lima VM and return its stdout as a `String`.
+    ///
+    /// If an injected executor is present it is used instead of a real
+    /// `limactl` subprocess — this is the test seam.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
@@ -88,19 +114,21 @@ impl ColimaRegistry {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
-    /// Convert macOS path to Lima VM path
+    /// Translate a macOS host path to the equivalent path visible inside the Lima VM.
+    ///
+    /// Lima mounts the macOS `/Users` and `/tmp` trees at the same paths inside
+    /// the VM. Paths outside those prefixes are not accessible from the host and
+    /// this function returns an error for them.
     #[allow(dead_code)]
     fn macos_to_lima_path(&self, macos_path: &Path) -> Result<String> {
-        // Colima mounts host filesystem at /Users, /tmp, etc.
         let path_str = macos_path
             .to_str()
             .ok_or_else(|| anyhow!("Invalid path encoding".to_string()))?;
 
-        // Lima VM typically mirrors common macOS paths
+        // Lima VM mirrors /Users and /tmp from the macOS host.
         if path_str.starts_with("/Users/") || path_str.starts_with("/tmp/") {
             Ok(path_str.to_string())
         } else {
-            // For other paths, they might not be mounted
             Err(anyhow!(
                 "Path not mounted in Lima VM: {path_str}. Only /Users and /tmp are typically mounted."
             ))
@@ -110,19 +138,33 @@ impl ColimaRegistry {
 
 #[async_trait]
 impl ImageRegistry for ColimaRegistry {
+    /// Return `true` if the image is present in the containerd image store inside the VM.
+    ///
+    /// Runs `nerdctl image inspect <name>:<tag>` and treats a non-zero exit code as absent.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
         let full_name = format!("{name}:{tag}");
         let result = self.lima_exec(&["nerdctl", "image", "inspect", &full_name]);
         result.is_ok()
     }
 
+    /// Pull the image via `nerdctl` inside the VM and return its metadata.
+    ///
+    /// Layer sizes in the returned [`ImageMetadata`] are approximate: the total
+    /// image size reported by `nerdctl image inspect` is divided equally among
+    /// the layers because the per-layer compressed size is not surfaced by the
+    /// inspect output.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `nerdctl pull` or `nerdctl image inspect` fail inside
+    /// the VM, or if the inspect JSON cannot be parsed.
     async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
         let full_name = format!("{name}:{tag}");
 
-        // Pull image using nerdctl inside Colima VM
+        // Pull image using nerdctl inside the Colima VM.
         self.lima_exec(&["nerdctl", "pull", &full_name])?;
 
-        // Get image metadata
+        // Retrieve layer information from the containerd image store.
         let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
             .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
@@ -131,7 +173,8 @@ impl ImageRegistry for ColimaRegistry {
             .first()
             .ok_or_else(|| anyhow!("No image data returned".to_string()))?;
 
-        // Extract layer information
+        // Build LayerInfo list from the RootFS layer digest list.
+        // Size is approximated as (total image size / layer count).
         let layers = image_data
             .root_fs
             .as_ref()
@@ -153,10 +196,21 @@ impl ImageRegistry for ColimaRegistry {
         })
     }
 
+    /// Export the image from containerd and return host-accessible layer paths.
+    ///
+    /// Uses `nerdctl save` to export the image as a Docker-format tar, then
+    /// extracts each layer into `/tmp/minibox-layers/<name>/<tag>/<short-digest>/rootfs/`.
+    /// The `/tmp` prefix is chosen because Lima mounts it into the VM, making
+    /// the paths accessible from the macOS host.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image is not present in the containerd store or
+    /// if the extraction commands fail inside the VM.
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
         let full_name = format!("{name}:{tag}");
-        // Use a path under /tmp — Lima mounts /tmp into the VM, so these
-        // paths are accessible from both the macOS host and the Lima VM.
+        // Use /tmp — Lima mounts /tmp into the VM, so these paths are
+        // accessible from both the macOS host and inside the Lima VM.
         let safe_name = name.replace('/', "-");
         let export_base = format!("/tmp/minibox-layers/{safe_name}/{tag}");
 
@@ -178,10 +232,10 @@ impl ImageRegistry for ColimaRegistry {
             return Ok(Vec::new());
         }
 
-        // Export the image to the shared /tmp location and unpack it.
-        // `nerdctl save` produces a Docker-format tar: each layer is a
-        // directory containing layer.tar.  We extract the outer tar and
-        // then extract each layer.tar into a rootfs/ subdirectory.
+        // Export the image to the shared /tmp location and unpack the outer tar.
+        // `nerdctl save` produces a Docker-format tar where each layer is a
+        // directory containing `layer.tar`. We extract the outer tar and then
+        // extract each `layer.tar` into a `rootfs/` subdirectory.
         let tar_path = format!("{export_base}.tar");
         self.lima_exec(&[
             "sh",
@@ -195,14 +249,15 @@ impl ImageRegistry for ColimaRegistry {
         let layer_paths = layer_ids
             .iter()
             .map(|layer_id| {
-                // Use the first 12 hex chars of the digest as the directory name.
+                // Use the first 12 hex chars of the digest as the directory name,
+                // matching the directory layout produced by `nerdctl save`.
                 let short_id = layer_id
                     .trim_start_matches("sha256:")
                     .chars()
                     .take(12)
                     .collect::<String>();
                 let layer_dir = format!("{export_base}/{short_id}");
-                // Extract the layer tar into a rootfs/ subdirectory inside the VM.
+                // Extract layer.tar into rootfs/ inside the VM.
                 let _ = self.lima_exec(&[
                     "sh",
                     "-c",
@@ -220,16 +275,23 @@ impl ImageRegistry for ColimaRegistry {
 // Colima Filesystem Adapter
 // ============================================================================
 
-/// Colima adapter for FilesystemProvider trait.
+/// Colima implementation of [`FilesystemProvider`].
 ///
-/// Delegates overlay filesystem operations to Lima VM.
+/// Sets up and tears down overlay mounts inside the Lima VM by running
+/// `mount`/`umount` commands via `limactl shell`. The container directory
+/// must be under `/tmp` or `/Users` so it is visible from both the host and
+/// the VM.
 pub struct ColimaFilesystem {
+    /// Lima instance name.
     instance: String,
+    /// Path to the `limactl` binary on the macOS host.
     limactl_path: String,
+    /// Optional injected executor used in tests.
     executor: Option<LimaExecutor>,
 }
 
 impl ColimaFilesystem {
+    /// Create a new filesystem adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
             instance: "colima".to_string(),
@@ -238,6 +300,7 @@ impl ColimaFilesystem {
         }
     }
 
+    /// Run a command inside the Lima VM and return its stdout as a `String`.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
@@ -261,8 +324,18 @@ impl ColimaFilesystem {
 }
 
 impl FilesystemProvider for ColimaFilesystem {
+    /// Create an overlay mount inside the Lima VM and return the merged directory path.
+    ///
+    /// Creates `upper/`, `work/`, and `merged/` subdirectories under
+    /// `container_dir`, then mounts an overlay filesystem with the provided
+    /// layer paths as the read-only lower directories.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any `mkdir -p` or `mount -t overlay` command fails
+    /// inside the VM (e.g. insufficient privileges or kernel module not loaded).
     fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
-        // Build overlay mount command
+        // Concatenate all layer paths as colon-separated lowerdir value.
         let lower_dirs = layers
             .iter()
             .map(|p| p.to_string_lossy().to_string())
@@ -273,12 +346,12 @@ impl FilesystemProvider for ColimaFilesystem {
         let work_dir = container_dir.join("work");
         let merged_dir = container_dir.join("merged");
 
-        // Create directories in Lima VM
+        // Create the overlay support directories inside the VM.
         self.lima_exec(&["mkdir", "-p", &upper_dir.to_string_lossy()])?;
         self.lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
         self.lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
 
-        // Mount overlay filesystem
+        // Mount the overlay filesystem inside the VM.
         let mount_cmd = format!(
             "mount -t overlay overlay -o lowerdir={},upperdir={},workdir={} {}",
             lower_dirs,
@@ -292,20 +365,26 @@ impl FilesystemProvider for ColimaFilesystem {
         Ok(merged_dir)
     }
 
+    /// No-op: `pivot_root` is handled by the container runtime inside the VM.
+    ///
+    /// In the Colima adapter the actual `pivot_root(2)` call is performed by
+    /// the `unshare`/`chroot` invocation in [`ColimaRuntime::spawn_process`],
+    /// not by the filesystem provider layer.
     fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        // pivot_root is handled by the container runtime inside the VM
-        // This is a no-op for the adapter layer
-        let _ = new_root; // Suppress unused warning
+        let _ = new_root;
         Ok(())
     }
 
+    /// Unmount the overlay and remove the container directory inside the VM.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `umount` or `rm -rf` fail inside the VM.
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
         let merged_dir = container_dir.join("merged");
 
-        // Unmount overlay
+        // Unmount the overlay before removing the directory tree.
         self.lima_exec(&["umount", &merged_dir.to_string_lossy()])?;
-
-        // Remove directories
         self.lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
 
         Ok(())
@@ -316,16 +395,28 @@ impl FilesystemProvider for ColimaFilesystem {
 // Colima Resource Limiter Adapter
 // ============================================================================
 
-/// Colima adapter for ResourceLimiter trait.
+/// Colima implementation of [`ResourceLimiter`].
 ///
-/// Delegates cgroup operations to Lima VM.
+/// Creates and tears down cgroups v2 directories inside the Lima VM by
+/// writing directly to `/sys/fs/cgroup/minibox/<container_id>/` via shell
+/// commands. The VM's Linux kernel manages the actual resource accounting.
+///
+/// Note: the I/O limit (`io.max`) uses a hardcoded device number of `8:0`
+/// (the conventional major:minor for the first SCSI disk). Colima VMs backed
+/// by virtio block devices (`vda` = `253:0`) will have the write silently
+/// ignored by the kernel. A future improvement would detect the correct device
+/// by reading `/sys/block/*/dev` inside the VM.
 pub struct ColimaLimiter {
+    /// Lima instance name.
     instance: String,
+    /// Path to the `limactl` binary on the macOS host.
     limactl_path: String,
+    /// Optional injected executor used in tests.
     executor: Option<LimaExecutor>,
 }
 
 impl ColimaLimiter {
+    /// Create a new resource limiter adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
             instance: "colima".to_string(),
@@ -334,6 +425,7 @@ impl ColimaLimiter {
         }
     }
 
+    /// Run a command inside the Lima VM and return its stdout as a `String`.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
@@ -357,34 +449,44 @@ impl ColimaLimiter {
 }
 
 impl ResourceLimiter for ColimaLimiter {
+    /// Create a cgroup for `container_id` and apply the requested resource limits.
+    ///
+    /// Creates `/sys/fs/cgroup/minibox/<container_id>/` inside the VM and
+    /// writes to the relevant cgroup v2 control files:
+    /// - `memory.max` if `config.memory_limit_bytes` is set
+    /// - `cpu.weight` if `config.cpu_weight` is set
+    /// - `pids.max` if `config.pids_max` is set
+    /// - `io.max` if `config.io_max_bytes_per_sec` is set (uses device `8:0`)
+    ///
+    /// Returns the cgroup path string (`/sys/fs/cgroup/minibox/<container_id>`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `mkdir` or any cgroup control-file write fails inside the VM.
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
-        // Create cgroup directory
         self.lima_exec(&["mkdir", "-p", &cgroup_path])?;
 
-        // Set memory limit
         if let Some(memory_bytes) = config.memory_limit_bytes {
             let memory_file = format!("{cgroup_path}/memory.max");
             self.lima_exec(&["sh", "-c", &format!("echo {memory_bytes} > {memory_file}")])?;
         }
 
-        // Set CPU weight
         if let Some(cpu_weight) = config.cpu_weight {
             let cpu_file = format!("{cgroup_path}/cpu.weight");
             self.lima_exec(&["sh", "-c", &format!("echo {cpu_weight} > {cpu_file}")])?;
         }
 
-        // Set PID limit
         if let Some(pids_max) = config.pids_max {
             let pids_file = format!("{cgroup_path}/pids.max");
             self.lima_exec(&["sh", "-c", &format!("echo {pids_max} > {pids_file}")])?;
         }
 
-        // Set I/O limit
         if let Some(io_max) = config.io_max_bytes_per_sec {
-            // Format: "major:minor rbps=X wbps=X"
-            // This is simplified - production would need device major:minor detection
+            // Uses hardcoded device 8:0 (conventional SCSI disk major:minor).
+            // Colima VMs typically use virtio (253:0), so this write may be
+            // silently ignored — see the struct-level doc comment.
             let io_file = format!("{cgroup_path}/io.max");
             self.lima_exec(&[
                 "sh",
@@ -396,6 +498,13 @@ impl ResourceLimiter for ColimaLimiter {
         Ok(cgroup_path)
     }
 
+    /// Add `pid` to the cgroup associated with `container_id`.
+    ///
+    /// Writes the PID to `cgroup.procs` inside the VM.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the write fails (e.g. the cgroup does not exist yet).
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
         let procs_file = format!("{cgroup_path}/cgroup.procs");
@@ -405,10 +514,18 @@ impl ResourceLimiter for ColimaLimiter {
         Ok(())
     }
 
+    /// Remove the cgroup directory for `container_id` inside the VM.
+    ///
+    /// Uses `rmdir` rather than `rm -rf` because the kernel rejects removal of
+    /// a cgroup that still has attached processes, surfacing the error to the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `rmdir` fails inside the VM.
     fn cleanup(&self, container_id: &str) -> Result<()> {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
-        // Remove cgroup directory
+        // rmdir (not rm -rf): the kernel rejects removal of a non-empty cgroup.
         self.lima_exec(&["rmdir", &cgroup_path])?;
 
         Ok(())
@@ -419,16 +536,22 @@ impl ResourceLimiter for ColimaLimiter {
 // Colima Container Runtime Adapter
 // ============================================================================
 
-/// Colima adapter for ContainerRuntime trait.
+/// Colima implementation of [`ContainerRuntime`].
 ///
-/// Delegates container spawning to Lima VM using containerd/runc.
+/// Spawns container processes inside the Lima VM using `unshare` + `chroot`.
+/// The spawn script is executed via `limactl shell` and the VM PID is returned
+/// to the host for tracking and reaping.
 pub struct ColimaRuntime {
+    /// Lima instance name.
     instance: String,
+    /// Path to the `limactl` binary on the macOS host.
     limactl_path: String,
+    /// Optional injected executor used in tests.
     executor: Option<LimaExecutor>,
 }
 
 impl ColimaRuntime {
+    /// Create a new runtime adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
             instance: "colima".to_string(),
@@ -437,11 +560,16 @@ impl ColimaRuntime {
         }
     }
 
+    /// Inject a custom executor for testing.
+    ///
+    /// The closure receives the argument slice that would be passed to
+    /// `limactl shell <instance>` and must return the command's stdout.
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
         self.executor = Some(executor);
         self
     }
 
+    /// Run a command inside the Lima VM and return its stdout as a `String`.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
@@ -466,8 +594,12 @@ impl ColimaRuntime {
 
 #[async_trait]
 impl ContainerRuntime for ColimaRuntime {
+    /// Return the runtime capabilities advertised by this adapter.
+    ///
+    /// Colima runs a full Linux kernel inside the Lima VM, so all namespace
+    /// and cgroup features are available. These values reflect the VM's
+    /// capabilities, not those of the macOS host.
     fn capabilities(&self) -> RuntimeCapabilities {
-        // Colima runs a Lima VM with a full Linux kernel — all features available
         RuntimeCapabilities {
             supports_user_namespaces: true,
             supports_cgroups_v2: true,
@@ -477,8 +609,23 @@ impl ContainerRuntime for ColimaRuntime {
         }
     }
 
+    /// Spawn a container process inside the Lima VM and return its PID.
+    ///
+    /// Serialises the spawn configuration to JSON, embeds it in a shell script
+    /// executed via `limactl shell`, and parses the PID printed to stdout by
+    /// the backgrounded `unshare`/`chroot` invocation.
+    ///
+    /// The `output_reader` field of the returned [`SpawnResult`] is always
+    /// `None` — output streaming from Lima-hosted containers is not yet
+    /// implemented.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `limactl shell` command fails or if the PID
+    /// printed to stdout cannot be parsed as a `u32`.
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        // Serialize spawn config to JSON for passing to Lima VM
+        // Serialise the spawn config so it can be passed into the shell script
+        // as a single JSON string, avoiding shell quoting problems.
         let config_json = serde_json::to_string(&SpawnRequest {
             rootfs: config.rootfs.to_string_lossy().to_string(),
             command: config.command.clone(),
@@ -489,8 +636,9 @@ impl ContainerRuntime for ColimaRuntime {
         })
         .map_err(|e| anyhow!("Failed to serialize config: {e}"))?;
 
-        // Execute container spawn script inside Lima VM.
-        // Args are serialised in the JSON config and extracted via jq.
+        // Shell script executed inside the Lima VM.
+        // Uses `jq` to extract fields from the JSON config, then runs
+        // `unshare` with Linux namespace flags to isolate the container.
         let spawn_script = format!(
             r#"
             CONFIG='{config_json}'
@@ -528,6 +676,7 @@ impl ContainerRuntime for ColimaRuntime {
 // Helper Types
 // ============================================================================
 
+/// JSON payload passed to the Lima VM's spawn shell script.
 #[derive(Debug, Serialize, Deserialize)]
 struct SpawnRequest {
     rootfs: String,
@@ -538,20 +687,27 @@ struct SpawnRequest {
     cgroup_path: String,
 }
 
+/// Deserialised subset of `nerdctl image inspect` output.
 #[derive(Debug, Deserialize)]
 struct NerdctlImageInspect {
+    /// Total compressed image size in bytes as reported by nerdctl.
     #[serde(rename = "Size")]
     size: Option<i64>,
+    /// Layer digest list embedded in the RootFS section.
     #[serde(rename = "RootFS")]
     root_fs: Option<RootFs>,
 }
 
+/// The `RootFS` section of `nerdctl image inspect` output.
 #[derive(Debug, Deserialize)]
 struct RootFs {
+    /// Ordered list of layer content digests (e.g. `"sha256:abc123…"`).
     #[serde(rename = "Layers")]
     layers: Vec<String>,
 }
 
+// Register all four Colima adapters with the adapt! macro so they satisfy
+// the AsAny + Default bounds required by the daemon's adapter registry.
 adapt!(
     ColimaRegistry,
     ColimaFilesystem,
@@ -587,7 +743,7 @@ mod tests {
         );
         assert!(registry.macos_to_lima_path(Path::new("/tmp/test")).is_ok());
 
-        // Invalid paths (not mounted)
+        // Invalid paths (not mounted in Lima VM)
         assert!(
             registry
                 .macos_to_lima_path(Path::new("/var/lib/minibox"))

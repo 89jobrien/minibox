@@ -1,4 +1,24 @@
 //! `minibox run` — create and start a container.
+//!
+//! Unlike the other command modules, this module manages its own socket
+//! connection rather than using the shared [`super::send_request`] helper.
+//! It sets `ephemeral: true` on the request so the daemon streams output back
+//! instead of returning immediately with a container ID.
+//!
+//! # Streaming protocol
+//!
+//! After the `Run` request is sent the daemon emits a sequence of messages:
+//!
+//! * [`DaemonResponse::ContainerOutput`] — a base64-encoded chunk of bytes
+//!   from the container's stdout or stderr; forwarded verbatim to the
+//!   corresponding local stream.
+//! * [`DaemonResponse::ContainerStopped`] — signals that the container has
+//!   exited; the CLI exits with the container's exit code.
+//! * [`DaemonResponse::ContainerCreated`] — only sent by older daemon builds
+//!   that do not support streaming; the CLI prints the container ID and exits
+//!   with code 0.
+//! * [`DaemonResponse::Error`] — a fatal error from the daemon; printed to
+//!   stderr and the CLI exits with code 1.
 
 use anyhow::{Context, Result};
 use base64::Engine;
@@ -96,6 +116,7 @@ mod tests {
     use super::*;
     use minibox_lib::protocol::{DaemonResponse, OutputStreamKind};
 
+    /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]
     fn decode_output_chunk() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(b"hello world\n");
@@ -113,6 +134,8 @@ mod tests {
         }
     }
 
+    /// Verify that a base64-encoded stderr chunk round-trips and retains the
+    /// correct stream kind discriminant.
     #[test]
     fn decode_stderr_chunk() {
         let encoded =

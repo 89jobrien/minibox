@@ -40,10 +40,16 @@ pub struct Descriptor {
 // ---------------------------------------------------------------------------
 
 /// Platform annotation on a manifest list entry.
+///
+/// Matches Docker Hub / OCI platform identifiers (e.g. `os = "linux"`,
+/// `architecture = "amd64"`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
+    /// CPU architecture (e.g. `"amd64"`, `"arm64"`).
     pub architecture: String,
+    /// Operating system (e.g. `"linux"`, `"windows"`).
     pub os: String,
+    /// Architecture variant for ARM (e.g. `"v7"`, `"v8"`). `None` for amd64.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
 }
@@ -75,14 +81,18 @@ pub struct OciManifest {
 
 /// An OCI image index or Docker manifest list.
 ///
-/// Used for multi-arch images; each entry points to a single-arch manifest.
+/// Used for multi-arch images; each entry in `manifests` points to a
+/// single-arch [`OciManifest`] identified by digest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManifestList {
+    /// Must be `2` for OCI / Docker v2 manifest lists.
     #[serde(rename = "schemaVersion")]
     pub schema_version: u32,
+    /// Media type of this manifest list (e.g. [`MEDIA_TYPE_OCI_INDEX`] or
+    /// [`MEDIA_TYPE_DOCKER_MANIFEST_LIST`]).
     #[serde(rename = "mediaType", default)]
     pub media_type: String,
-    /// List of platform-specific manifest descriptors.
+    /// Platform-specific manifest descriptors (one per supported platform).
     pub manifests: Vec<Descriptor>,
 }
 
@@ -103,16 +113,32 @@ impl ManifestList {
 // Unified response type
 // ---------------------------------------------------------------------------
 
-/// The result of fetching a manifest endpoint -- either a single-arch manifest
+/// The result of fetching a manifest endpoint — either a single-arch manifest
 /// or a multi-arch manifest list.
+///
+/// Construct via [`ManifestResponse::parse`] which inspects the `Content-Type`
+/// header to decide which variant to deserialize.
 #[derive(Debug, Clone)]
 pub enum ManifestResponse {
+    /// A single-architecture image manifest.
     Single(OciManifest),
+    /// A multi-architecture manifest list / OCI image index.
     List(ManifestList),
 }
 
 impl ManifestResponse {
-    /// Deserialize from raw JSON bytes given a `Content-Type` / media type header.
+    /// Deserialize a manifest response from raw JSON bytes.
+    ///
+    /// `media_type` is the value of the HTTP `Content-Type` header returned by
+    /// the registry. The function dispatches on substrings:
+    ///
+    /// - Contains `"manifest.list"` → [`ManifestResponse::List`] (Docker manifest list)
+    /// - Contains `"image.index"` → [`ManifestResponse::List`] (OCI image index)
+    /// - Anything else → [`ManifestResponse::Single`] (single-arch manifest)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `body` is not valid JSON for the inferred variant.
     pub fn parse(body: &[u8], media_type: &str) -> anyhow::Result<Self> {
         if media_type.contains("manifest.list") || media_type.contains("image.index") {
             let list: ManifestList = serde_json::from_slice(body)?;

@@ -6,10 +6,23 @@ use crate::error::LlmError;
 use crate::provider::LlmProvider;
 use crate::types::{CompletionRequest, CompletionResponse};
 
-/// Retry configuration for transient error handling.
+/// Retry policy for transient LLM errors.
+///
+/// The retry delay follows an exponential backoff formula capped at 30 seconds:
+///
+/// ```text
+/// delay(attempt) = min(backoff_base * 2^attempt, 30s)
+/// ```
+///
+/// Where `attempt` is zero-indexed (the first retry uses `backoff_base * 2^0 = backoff_base`).
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
+    /// Maximum number of retry attempts after the initial failure. A value of
+    /// `2` means at most 3 total calls (1 initial + 2 retries). Defaults to `2`.
     pub max_retries: u32,
+
+    /// Starting delay for exponential backoff. Each subsequent retry doubles
+    /// this value, capped at 30 seconds. Defaults to `1s`.
     pub backoff_base: Duration,
 }
 
@@ -22,13 +35,32 @@ impl Default for RetryConfig {
     }
 }
 
-/// Wraps any `LlmProvider` with retry logic for transient errors.
+/// Wraps any [`LlmProvider`] with exponential-backoff retry logic for transient errors.
+///
+/// Only errors for which [`LlmError::is_transient`] returns `true` are retried
+/// (HTTP 429, 5xx, and network-level timeouts/connection failures). Permanent
+/// errors (4xx, schema parse failures) are returned immediately without retry.
+///
+/// The retry limit can be overridden on a per-request basis via
+/// [`CompletionRequest::max_retries`], which takes precedence over the
+/// [`RetryConfig`] supplied at construction time.
+///
+/// # Backoff formula
+///
+/// ```text
+/// delay(attempt) = min(backoff_base * 2^attempt, 30s)
+/// ```
+///
+/// The first retry waits `backoff_base`, the second `backoff_base * 2`, and so on.
 pub struct RetryingProvider<P: LlmProvider> {
+    /// The wrapped inner provider. Exposed as `pub(crate)` for test inspection.
     pub(crate) inner: P,
+    /// Retry policy applied when the inner provider returns a transient error.
     config: RetryConfig,
 }
 
 impl<P: LlmProvider> RetryingProvider<P> {
+    /// Wrap `inner` with the given retry policy.
     pub fn new(inner: P, config: RetryConfig) -> Self {
         Self { inner, config }
     }
@@ -36,10 +68,16 @@ impl<P: LlmProvider> RetryingProvider<P> {
 
 #[async_trait]
 impl<P: LlmProvider> LlmProvider for RetryingProvider<P> {
+    /// Delegates to the inner provider's name.
     fn name(&self) -> &str {
         self.inner.name()
     }
 
+    /// Attempt the completion, retrying on transient errors up to `max_retries` times.
+    ///
+    /// The effective retry limit is `request.max_retries.unwrap_or(config.max_retries)`.
+    /// Between attempts the task sleeps for the exponential-backoff delay, which is
+    /// computed as `min(backoff_base * 2^attempt, 30s)`.
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         let max = request.max_retries.unwrap_or(self.config.max_retries);
         let backoff_cap = Duration::from_secs(30);
@@ -72,9 +110,12 @@ mod tests {
     use crate::error::HttpStatusError;
     use std::sync::atomic::{AtomicU32, Ordering};
 
+    /// A test provider that fails a configurable number of times before succeeding.
     struct CountingProvider {
         call_count: AtomicU32,
+        /// Number of leading calls that return an error.
         fail_times: u32,
+        /// Whether failing calls use a transient (503) or permanent (401) status.
         transient: bool,
     }
 
@@ -87,6 +128,7 @@ mod tests {
             }
         }
 
+        /// Return the total number of times `complete` has been called.
         fn calls(&self) -> u32 {
             self.call_count.load(Ordering::SeqCst)
         }
