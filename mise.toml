@@ -3,7 +3,9 @@ rust = "1.91.1"
 
 [tasks]
 
-[tasks.ci]
+# ── All Platforms ─────────────────────────────────────────────────────────────
+
+[tasks."all:ci"]
 description = "Snapshot current Gitea CI status for minibox"
 run = """
 #!/usr/bin/env bash
@@ -77,7 +79,62 @@ for r in runs:
 PYEOF
 """
 
-[tasks."bench:setup"]
+[tasks."all:ci:set-secret"]
+description = "Set a Gitea Actions secret (usage: mise run all:ci:set-secret -- NAME value)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+GITEA_URL="http://100.105.75.7:3000"
+REPO="joe/minibox"
+SECRET_NAME="${1:?usage: mise run all:ci:set-secret -- NAME value}"
+SECRET_VALUE="${2:?usage: mise run all:ci:set-secret -- NAME value}"
+
+VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
+TOKEN_NAME="ci-secret-$$"
+
+TOKEN=$(ssh jobrien-vm \
+  "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
+    --username joe --token-name $TOKEN_NAME --raw \
+    --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
+
+[[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
+
+cleanup() {
+  curl -sf -X DELETE -H "Authorization: token $TOKEN" \
+    "$GITEA_URL/api/v1/users/joe/tokens/$TOKEN_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+BODY=$(python3 -c "import json, sys; print(json.dumps({'data': sys.argv[1]}))" "$SECRET_VALUE")
+
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+  -H "Authorization: token $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$BODY" \
+  "$GITEA_URL/api/v1/repos/$REPO/actions/secrets/$SECRET_NAME")
+
+[[ "$STATUS" == "201" || "$STATUS" == "204" ]] \
+  && echo "✓ $SECRET_NAME set (HTTP $STATUS)" \
+  || { echo "error: HTTP $STATUS setting $SECRET_NAME" >&2; exit 1; }
+"""
+
+[tasks."all:ci-setup"]
+description = "One-time setup: install cargo-deny + cargo-audit, prune stale cargo cache"
+run = """
+#!/usr/bin/env bash
+set -e
+echo "Installing cargo-deny..."
+command -v cargo-deny >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-deny --locked
+echo "Installing cargo-audit..."
+command -v cargo-audit >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-audit --locked
+echo "Running disk hygiene..."
+rm -rf ~/.cargo/registry/src || true
+find ~/.cargo/registry/cache -name "*.crate" -atime +60 -delete 2>/dev/null || true
+echo "✓ CI setup complete"
+"""
+
+[tasks."all:bench:setup"]
 description = "One-time setup: clone minibox repo on VPS and compile minibox-bench"
 run = """
 #!/usr/bin/env bash
@@ -135,60 +192,26 @@ fi
 ENDSSH
 """
 
-[tasks.bench]
+[tasks."all:bench"]
 description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
 run = "cargo xtask bench-vps"
 
-[tasks."ssh-vps"]
+[tasks."all:ssh-vps"]
 description = "SSH into jobrien-vm (key auth via 1Password agent)"
 run = "ssh jobrien-vm"
 
-# ── Human / Interactive Commands ─────────────────────────────────────────────
-
-[tasks."ci-setup"]
-description = "One-time setup: install cargo-deny + cargo-audit, prune stale cargo cache"
+[tasks."all:commit"]
+description = "Stage all + commit (triggers pre-commit hook). Usage: mise run all:commit -- 'message'"
 run = """
 #!/usr/bin/env bash
 set -e
-echo "Installing cargo-deny..."
-command -v cargo-deny >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-deny --locked
-echo "Installing cargo-audit..."
-command -v cargo-audit >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-audit --locked
-echo "Running disk hygiene..."
-rm -rf ~/.cargo/registry/src || true
-find ~/.cargo/registry/cache -name "*.crate" -atime +60 -delete 2>/dev/null || true
-echo "✓ CI setup complete"
-"""
-
-[tasks.flamegraph]
-description = "Record flamegraph with samply (interactive)"
-run = "samply record ./target/release/minibox-bench"
-
-[tasks."fix-socket"]
-description = "Build miniboxd and fix Unix socket permissions (Linux, root)"
-run = """
-#!/usr/bin/env bash
-set -e
-cargo build --release -p miniboxd
-bash ops/fix-minibox-socket.sh
-"""
-
-[tasks.smoke]
-description = "Quick daemon smoke test — start, list containers, stop (Linux, root)"
-run = "bash -lc 'set -euo pipefail; sudo ./target/release/miniboxd & pid=$!; sleep 1; sudo ./target/release/minibox ps; sudo kill $pid; wait $pid || true'"
-
-[tasks.commit]
-description = "Stage all + commit (triggers pre-commit hook). Usage: mise run commit -- 'message'"
-run = """
-#!/usr/bin/env bash
-set -e
-MSG="${1:?usage: mise run commit -- 'message'}"
+MSG="${1:?usage: mise run all:commit -- 'message'}"
 git add -A
 git commit -m "$MSG"
 """
 
-[tasks.push]
-description = "Push with pre-push sync check then clean artifacts. Usage: mise run push -- [git-push-args]"
+[tasks."all:push"]
+description = "Push with pre-push sync check then clean artifacts. Usage: mise run all:push -- [git-push-args]"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
@@ -197,27 +220,82 @@ git push "$@"
 cargo xtask clean-artifacts
 """
 
-[tasks.standup]
-description = "Automated standup from git activity + Claude session logs. Usage: mise run standup -- [hours]"
+[tasks."all:standup"]
+description = "Automated standup from git activity + Claude session logs. Usage: mise run all:standup -- [hours]"
 run = """
 #!/usr/bin/env bash
 HOURS="${1:-24}"
 uv run scripts/standup.py --hours "$HOURS"
 """
 
-[tasks.dashboard]
+[tasks."all:dashboard"]
 description = "Agent run history and metrics dashboard"
 run = "uv run scripts/dashboard.py"
 
-[tasks."demo-pull"]
-description = "Pull an OCI image from Docker Hub — any platform, no daemon required. Usage: mise run demo-pull -- [image]"
+[tasks."all:demo-pull"]
+description = "Pull an OCI image from Docker Hub — any platform, no daemon required. Usage: mise run all:demo-pull -- [image]"
 run = """
 #!/usr/bin/env bash
 IMAGE="${1:-alpine}"
 cargo run --release --example pull -p minibox-lib -- "$IMAGE"
 """
 
-[tasks."demo-hello"]
+[tasks."all:demo-showcase"]
+description = "Pull 15 real images, run a probe in each, show timings + metrics, clean up"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+spin() {
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+}
+
+step "building"
+if [[ "$(uname)" == "Linux" ]]; then
+    cargo build --release -p minibox-lib -p minibox-cli -p miniboxd --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+else
+    cargo build --release -p minibox-lib --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+fi
+ok "binaries ready"; echo ""
+
+if [[ "$(uname)" == "Linux" ]]; then
+    step "starting daemon"
+    sudo ./target/release/miniboxd &>/dev/null &
+    DAEMON_PID=$!
+    trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+    spin "waiting for daemon..." & SPIN=$!
+    until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+    kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+    printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+    sudo MINIBOX_DATA_DIR=/var/lib/minibox \
+        ./target/release/examples/showcase \
+        --run ./target/release/minibox --sudo-run --cleanup
+else
+    ./target/release/examples/showcase --cleanup
+fi
+'''
+
+# ── Linux Only ────────────────────────────────────────────────────────────────
+
+[tasks."linux:fix-socket"]
+description = "Build miniboxd and fix Unix socket permissions (Linux, root)"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo build --release -p miniboxd
+bash ops/fix-minibox-socket.sh
+"""
+
+[tasks."linux:smoke"]
+description = "Quick daemon smoke test — start, list containers, stop (Linux, root)"
+run = "bash -lc 'set -euo pipefail; sudo ./target/release/miniboxd & pid=$!; sleep 1; sudo ./target/release/minibox ps; sudo kill $pid; wait $pid || true'"
+
+[tasks."linux:demo-hello"]
 description = "Hello World: build, start daemon, pull alpine, stream a greeting, stop daemon (Linux, root)"
 run = '''
 #!/usr/bin/env bash
@@ -232,7 +310,7 @@ spin() {
 }
 
 if [[ "$(uname)" != "Linux" ]]; then
-    printf "  ${C}demo-hello requires Linux + root — try: mise run demo-pull${R}\n"; exit 1
+    printf "  ${C}linux:demo-hello requires Linux + root — try: mise run all:demo-pull${R}\n"; exit 1
 fi
 
 hdr "minibox · hello world"
@@ -258,7 +336,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from Minibox!"
 echo ""; ok "done"; echo ""
 '''
 
-[tasks."demo-isolation"]
+[tasks."linux:demo-isolation"]
 description = "Namespace isolation demo: UTS + PID + mount isolation vs host (Linux, root)"
 run = '''
 #!/usr/bin/env bash
@@ -274,7 +352,7 @@ spin() {
 }
 
 if [[ "$(uname)" != "Linux" ]]; then
-    printf "  ${C}demo-isolation requires Linux + root — try: mise run demo-pull${R}\n"; exit 1
+    printf "  ${C}linux:demo-isolation requires Linux + root — try: mise run all:demo-pull${R}\n"; exit 1
 fi
 
 hdr "minibox · namespace isolation"
@@ -320,47 +398,7 @@ ok "done · three namespaces isolated, one shared kernel"
 echo ""
 '''
 
-[tasks."demo-showcase"]
-description = "Pull 15 real images, run a probe in each, show timings + metrics, clean up"
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
-step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
-ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
-spin() {
-    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
-    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
-}
-
-step "building"
-if [[ "$(uname)" == "Linux" ]]; then
-    cargo build --release -p minibox-lib -p minibox-cli -p miniboxd --example showcase \
-        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
-else
-    cargo build --release -p minibox-lib --example showcase \
-        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
-fi
-ok "binaries ready"; echo ""
-
-if [[ "$(uname)" == "Linux" ]]; then
-    step "starting daemon"
-    sudo ./target/release/miniboxd &>/dev/null &
-    DAEMON_PID=$!
-    trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
-    spin "waiting for daemon..." & SPIN=$!
-    until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
-    kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
-    printf "\r  ${G}✓${R}  daemon ready                        \n\n"
-    sudo MINIBOX_DATA_DIR=/var/lib/minibox \
-        ./target/release/examples/showcase \
-        --run ./target/release/minibox --sudo-run --cleanup
-else
-    ./target/release/examples/showcase --cleanup
-fi
-'''
-
-[tasks.dogfood]
+[tasks."linux:dogfood"]
 description = "Spin up a container, validate runtime isolation, then run the unit test suite (Linux, root)"
 run = '''
 #!/usr/bin/env bash
@@ -376,7 +414,7 @@ spin() {
 }
 
 if [[ "$(uname)" != "Linux" ]]; then
-    printf "  ${C}dogfood requires Linux + root (container runtime) — run on VPS or CI${R}\n"; exit 1
+    printf "  ${C}linux:dogfood requires Linux + root (container runtime) — run on VPS or CI${R}\n"; exit 1
 fi
 
 hdr "minibox · dogfood"
@@ -420,43 +458,59 @@ ok "all dogfood checks passed"
 echo ""
 '''
 
-[tasks."ci:set-secret"]
-description = "Set a Gitea Actions secret (usage: mise run ci:set-secret -- NAME value)"
-run = """
+# ── macOS Only ────────────────────────────────────────────────────────────────
+
+[tasks."macos:bench"]
+description = "Start macOS daemon (Colima), run all benchmark suites, append to bench.jsonl, open report"
+run = '''
 #!/usr/bin/env bash
 set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
 
-GITEA_URL="http://100.105.75.7:3000"
-REPO="joe/minibox"
-SECRET_NAME="${1:?usage: mise run ci:set-secret -- NAME value}"
-SECRET_VALUE="${2:?usage: mise run ci:set-secret -- NAME value}"
+if [[ "$(uname)" != "Darwin" ]]; then
+    printf "  ${C}macos:bench requires macOS — use all:bench for VPS runs${R}\n"; exit 1
+fi
 
-VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
-TOKEN_NAME="ci-secret-$$"
+if ! colima status &>/dev/null; then
+    printf "  ${C}Colima is not running — start it with: colima start${R}\n"; exit 1
+fi
 
-TOKEN=$(ssh jobrien-vm \
-  "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
-    --username joe --token-name $TOKEN_NAME --raw \
-    --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
+step "building"
+cargo build --release -p miniboxd -p minibox-cli 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+ok "binaries ready"; echo ""
 
-[[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
+step "starting daemon"
+./target/release/miniboxd &>/dev/null &
+DAEMON_PID=$!
+trap 'kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+until [ -S /tmp/minibox/miniboxd.sock ] 2>/dev/null; do sleep 0.05; done
+ok "daemon ready"; echo ""
 
-cleanup() {
-  curl -sf -X DELETE -H "Authorization: token $TOKEN" \
-    "$GITEA_URL/api/v1/users/joe/tokens/$TOKEN_NAME" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
+step "running benchmarks (all suites)"
+cargo xtask bench
+echo ""
 
-BODY=$(python3 -c "import json, sys; print(json.dumps({'data': sys.argv[1]}))" "$SECRET_VALUE")
+step "stopping daemon"
+kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true
+trap - EXIT
+ok "daemon stopped"; echo ""
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
-  -H "Authorization: token $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "$BODY" \
-  "$GITEA_URL/api/v1/repos/$REPO/actions/secrets/$SECRET_NAME")
+step "opening report"
+cargo xtask bench-report
+open bench/results/report.html
+'''
 
-[[ "$STATUS" == "201" || "$STATUS" == "204" ]] \
-  && echo "✓ $SECRET_NAME set (HTTP $STATUS)" \
-  || { echo "error: HTTP $STATUS setting $SECRET_NAME" >&2; exit 1; }
-"""
+[tasks."macos:bench-report"]
+description = "Regenerate bench/results/report.html from bench.jsonl and open it"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cargo xtask bench-report
+open bench/results/report.html
+'''
 
+[tasks."macos:flamegraph"]
+description = "Record flamegraph with samply (interactive, macOS)"
+run = "samply record ./target/release/minibox-bench"

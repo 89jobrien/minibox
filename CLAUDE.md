@@ -20,8 +20,8 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
 - `just sync-check` — fetch + rebase onto origin/main, auto-resolve obvious conflicts (wired into `just push`)
 - `just commit-msg [--all]` — AI-generated conventional commit message from staged diff + commit history
-- `mise run standup [-- --hours N]` — time-block standup from git activity across ~/dev/ repos
-- `mise run dashboard` — agent run history and metrics (reads ~/.mbx/agent-runs.jsonl)
+- `mise run all:standup [-- --hours N]` — time-block standup from git activity across ~/dev/ repos
+- `mise run all:dashboard` — agent run history and metrics (reads ~/.mbx/agent-runs.jsonl)
 
 ### mise.toml vs Justfile Convention
 
@@ -433,7 +433,7 @@ CI runs on self-hosted Gitea Actions (jobrien-vm). Pipeline: `cargo deny check` 
 - `deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
 - Gitea context vars are `gitea.repository`, `gitea.run_id`, `gitea.sha` — not `github.*`
 - `GITEA_` prefix is reserved for secrets; use other names (e.g. `CI_AGENT_TOKEN`)
-- Check CI status: `mise run ci`
+- Check CI status: `mise run all:ci`
 
 ## Skills Available
 
