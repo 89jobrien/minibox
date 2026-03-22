@@ -54,15 +54,24 @@ def find_active_repos(repos_dir: Path, hours: int) -> list[tuple[Path, dict]]:
     for candidate in sorted(repos_dir.iterdir()):
         if not (candidate / ".git").exists():
             continue
-        commits = git(["git", "log", f"--since={since}", "--oneline", "--all"], candidate)
-        if not commits:
+        # Timestamped commits: "ISO_DATETIME|SHORT_HASH|subject"
+        commit_log = git(
+            ["git", "log", f"--since={since}", "--all", "--format=%ai|%h|%s"],
+            candidate,
+        )
+        if not commit_log:
             continue
-        files = git(["git", "diff", f"--since={since}", "--name-only"], candidate)
+        # Files actually touched by commits in the window (not diff against working tree)
+        files_raw = git(
+            ["git", "log", f"--since={since}", "--all", "--name-only", "--format="],
+            candidate,
+        )
+        files = sorted(set(f for f in files_raw.splitlines() if f.strip()))
         branch = git(["git", "rev-parse", "--abbrev-ref", "HEAD"], candidate)
         status = git(["git", "status", "--short"], candidate)
         stash = git(["git", "stash", "list"], candidate)
         active.append((candidate, {
-            "commits": commits,
+            "commit_log": commit_log,   # timestamped, one per line
             "files": files,
             "branch": branch,
             "status": status,
@@ -116,18 +125,19 @@ def find_claude_sessions(hours: int) -> str:
 
 
 def build_repo_section(name: str, data: dict) -> str:
-    commit_lines = data["commits"].splitlines()
-    count = len(commit_lines)
-    files = [f for f in data["files"].splitlines() if f.strip()]
-    return (
-        f"## {name}\n\n"
-        f"{count} commit{'s' if count != 1 else ''} · {len(files)} file{'s' if len(files) != 1 else ''} touched\n\n"
-        + "\n".join(f"- `{line}`" for line in commit_lines[:10])
-        + (f"\n\n**Branch:** {data['branch']}" if data["branch"] else "")
-        + (f"\n\n**Hotspots:** {', '.join(f'`{f}`' for f in files[:5])}" if files else "")
-        + (f"\n\n**Uncommitted:** {data['status']}" if data["status"] else "")
-        + (f"\n\n**Stashes:** {data['stash']}" if data["stash"] else "")
-    )
+    commits = data["commit_log"].splitlines()
+    files = data["files"]
+    lines = [f"## {name}", f"{len(commits)} commit(s) · {len(files)} file(s) touched", ""]
+    lines.append("Commits (timestamp | hash | subject):")
+    for c in commits:
+        lines.append(f"  {c}")
+    if files:
+        lines.append(f"\nFiles: {', '.join(files[:20])}")
+    if data["status"]:
+        lines.append(f"\nUncommitted:\n{data['status']}")
+    if data["stash"]:
+        lines.append(f"\nStashes:\n{data['stash']}")
+    return "\n".join(lines)
 
 
 async def generate_standup(repo_context: str, session_context: str, hours: int) -> str:
@@ -135,18 +145,25 @@ async def generate_standup(repo_context: str, session_context: str, hours: int) 
     parts: list[str] = []
     async for message in query(
         prompt=(
-            f"Generate a concise engineering standup report for the last {hours}h.\n\n"
-            f"Format as three sections:\n\n"
-            f"## Completed\n"
-            f"Bullet points of finished work inferred from commit messages. Be specific "
-            f"(reference commit hashes or file names). No vague descriptions.\n\n"
-            f"## In Progress\n"
-            f"Current branch state, uncommitted work, open threads, anything mid-flight.\n\n"
+            f"Generate a standup report for the last {hours}h structured as time blocks.\n\n"
+            f"FORMAT — produce exactly these four sections:\n\n"
+            f"## State at start\n"
+            f"One short paragraph. Where were things at the beginning of this window — "
+            f"what was the last stable state before this batch of work began? "
+            f"Infer from the oldest commit in the window and the files touched.\n\n"
+            f"## Timeline\n"
+            f"Group commits into natural work blocks (cluster commits within ~30-60 min of each other).\n"
+            f"Each block on one line: `HH:MM  description of work  (files: x, y, z)`\n"
+            f"Most recent block first. Use the actual commit timestamps provided.\n"
+            f"If commits span multiple days, prefix blocks with the date (e.g. `yesterday  HH:MM`).\n"
+            f"Summarise what was accomplished in each block — not just the commit subject verbatim.\n\n"
+            f"## Current state + next\n"
+            f"Two to three sentences. What is the current state of the codebase/work, "
+            f"and what is the logical next step? Include any open stashes or in-flight threads.\n\n"
             f"## Concerns\n"
-            f"Risks, open questions, technical debt introduced, or things needing attention. "
-            f"If none, say 'None identified.'\n\n"
-            f"Rules: be brief (this is a standup), infer intent from commit messages, "
-            f"group related work across repos if appropriate.\n\n"
+            f"Risks, drift, technical debt, or open questions worth flagging. "
+            f"If none, say 'None.'\n\n"
+            f"Rules: be terse, cite short hashes where useful, infer intent from commit messages.\n\n"
             f"--- REPOSITORY ACTIVITY ---\n{repo_context}"
             f"{session_section}"
         ),
