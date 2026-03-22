@@ -37,8 +37,8 @@ def find_repo_root() -> Path | None:
     return None
 
 
-def append_to_timeline(standup_output: str, now: datetime) -> Path | None:
-    """Append this standup's output to docs/TIMELINE.md if it exists in the repo."""
+def append_to_timeline(standup_output: str, now: datetime) -> tuple[Path, Path] | None:
+    """Append this standup's output to docs/STANDUP.md if it exists in the repo."""
     root = find_repo_root()
     if root is None:
         return None
@@ -50,15 +50,9 @@ def append_to_timeline(standup_output: str, now: datetime) -> Path | None:
         f"{standup_output.strip()}\n\n"
         f"---\n"
     )
-    # Prepend after the header block (after the first ---)
-    content = timeline.read_text()
-    marker = "---\n"
-    idx = content.find(marker)
-    if idx != -1:
-        timeline.write_text(content[: idx + len(marker)] + entry + content[idx + len(marker) :])
-    else:
-        timeline.write_text(content + entry)
-    return timeline
+    with timeline.open("a") as f:
+        f.write(entry)
+    return timeline, root
 
 
 def _log_start(script: str, args: dict) -> str:
@@ -266,10 +260,11 @@ async def main() -> None:
 
     print(standup_output)
 
-    # Append to docs/TIMELINE.md if present in the repo
-    timeline_path = append_to_timeline(standup_output, now)
-    if timeline_path:
-        print(f"\nAppended to: {timeline_path.relative_to(Path.cwd())}")
+    # Append to docs/STANDUP.md if present in the repo
+    timeline_result = append_to_timeline(standup_output, now)
+    if timeline_result:
+        timeline_path, repo_root = timeline_result
+        print(f"\nAppended to: {timeline_path.relative_to(repo_root)}")
 
     # Optionally write to Obsidian vault
     vault_dir = args.vault

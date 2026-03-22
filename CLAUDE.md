@@ -20,7 +20,7 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
 - `just sync-check` — fetch + rebase onto origin/main, auto-resolve obvious conflicts (wired into `just push`)
 - `just commit-msg [--all]` — AI-generated conventional commit message from staged diff + commit history
-- `mise run all:standup [-- --hours N]` — time-block standup from git activity across ~/dev/ repos
+- `mise run all:standup [-- N]` — time-block standup from git activity across ~/dev/ repos (N = hours, default 24)
 - `mise run all:dashboard` — agent run history and metrics (reads ~/.mbx/agent-runs.jsonl)
 
 ### mise.toml vs Justfile Convention

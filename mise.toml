@@ -93,16 +93,23 @@ SECRET_VALUE="${2:?usage: mise run all:ci:set-secret -- NAME value}"
 VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
 TOKEN_NAME="ci-secret-$$"
 
-TOKEN=$(ssh jobrien-vm \
-  "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
+# Pass password via stdin to avoid it appearing on the remote command line
+TOKEN=$(printf '%s\n' "$VPS_PASS" | ssh jobrien-vm \
+  "sudo -Su git -S /usr/local/bin/gitea admin user generate-access-token \
     --username joe --token-name $TOKEN_NAME --raw \
     --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
 
 [[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
 
+# Fetch token ID so we can delete by ID (not name) per Gitea API spec
+TOKEN_ID=$(curl -sf -H "Authorization: token $TOKEN" \
+  "$GITEA_URL/api/v1/users/joe/tokens" \
+  | python3 -c "import json,sys; ts=json.load(sys.stdin); print(next((str(t['id']) for t in ts if t['name']=='$TOKEN_NAME'), ''))")
+
 cleanup() {
+  local target="${TOKEN_ID:-$TOKEN_NAME}"
   curl -sf -X DELETE -H "Authorization: token $TOKEN" \
-    "$GITEA_URL/api/v1/users/joe/tokens/$TOKEN_NAME" >/dev/null 2>&1 || true
+    "$GITEA_URL/api/v1/users/joe/tokens/$target" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 

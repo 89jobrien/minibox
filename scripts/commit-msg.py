@@ -23,6 +23,7 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 _LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
+_MAX_DIFF_BYTES = 64 * 1024  # 64 KB — fall back to stat summary above this
 
 
 def _log_start(script: str, args: dict) -> str:
@@ -49,8 +50,12 @@ def get_context(stage_all: bool) -> dict:
     if stage_all:
         subprocess.run(["git", "add", "-A"], check=True)
 
-    staged_diff = run(["git", "diff", "--cached"])
+    staged_diff_full = run(["git", "diff", "--cached"])
     staged_stat = run(["git", "diff", "--cached", "--stat"])
+    if len(staged_diff_full.encode()) > _MAX_DIFF_BYTES:
+        staged_diff = f"(diff too large — {len(staged_diff_full.encode()) // 1024} KB; using stat only)\n{staged_stat}"
+    else:
+        staged_diff = staged_diff_full
     unstaged_stat = run(["git", "diff", "--stat"])
     branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     recent_log = run(["git", "log", "-8", "--oneline"])
@@ -63,7 +68,7 @@ def get_context(stage_all: bool) -> dict:
         "unstaged_stat": unstaged_stat,
         "recent_log": recent_log,
         "status": status,
-        "has_staged": bool(staged_diff.strip()),
+        "has_staged": bool(staged_diff_full.strip()),
     }
 
 
