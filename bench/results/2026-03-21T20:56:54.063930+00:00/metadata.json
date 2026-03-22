@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-03-21T20:56:54.063930+00:00",
+  "git_sha": "d7e2b0933d6532af37b9075333845d84caf75fc1",
+  "suites_profiled": [
+    "codec"
+  ],
+  "platform": "macos",
+  "perf_available": false
+}

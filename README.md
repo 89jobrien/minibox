@@ -1,5 +1,22 @@
 # minibox
 
+> Terminal‑first tooling for sandboxed dev environments on macOS, Linux, and Windows.
+
+> Disclaimer: I primarily use the CLI and try to keep parity for the TUI but no promises.  
+> Designed to be a solid tool/command/skill target for AI agents.
+
+`minibox` is a workspace of Rust crates that provide a unified daemon (`miniboxd`), platform shims, and a shared core library for building sandboxed development workflows.
+
+## Features
+
+- **Unified binary (`miniboxd`)** – Single entrypoint that selects platform‑specific backends behind compile‑time cfg gates.
+- **Platform shims** – `macbox`, `winbox`, and `daemonbox` hide OS differences behind a stable interface.
+- **Core library (`minibox-lib`)** – Platform‑agnostic crate shared by the daemon, CLI, and benchmark tooling.
+- **JSON CLI (`minibox-cli`)** – Thin, platform‑agnostic client that speaks JSON over pipes/sockets.
+- **Bench tooling (`minibox-bench`)** – Focused crate for performance exploration and regression tracking.
+- **Proc‑macros (`minibox-macros`)** – Ergonomic proc‑macros used by `minibox-lib` for internal APIs.
+
+
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
 [![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)

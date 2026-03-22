@@ -24,6 +24,21 @@ build-release:
 build:
     cargo build --release
 
+# ── CI Setup ─────────────────────────────────────────────────────────────────
+
+# Install cargo-deny and cargo-audit, prune stale cargo cache (test composite action locally)
+ci-setup:
+    #!/usr/bin/env bash
+    set -e
+    echo "Installing cargo-deny..."
+    command -v cargo-deny >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-deny --locked
+    echo "Installing cargo-audit..."
+    command -v cargo-audit >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-audit --locked
+    echo "Running disk hygiene..."
+    rm -rf ~/.cargo/registry/src || true
+    find ~/.cargo/registry/cache -name "*.crate" -atime +60 -delete 2>/dev/null || true
+    echo "✓ CI setup complete"
+
 # ── Gates ────────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release

@@ -16,7 +16,7 @@ use std::sync::Arc;
 struct BenchReport {
     metadata: Metadata,
     suites: Vec<SuiteResult>,
-    errors: Vec<String>,
+    errors: Vec<ErrorCount>,
 }
 
 impl BenchReport {
@@ -24,6 +24,25 @@ impl BenchReport {
     fn empty() -> Self {
         Self::default()
     }
+}
+#[derive(Serialize, Clone)]
+struct ErrorCount {
+    message: String,
+    count: usize,
+}
+
+fn dedup_errors(raw: Vec<String>) -> Vec<ErrorCount> {
+    let mut seen: Vec<(String, usize)> = Vec::new();
+    for msg in raw {
+        if let Some(entry) = seen.iter_mut().find(|(m, _)| m == &msg) {
+            entry.1 += 1;
+        } else {
+            seen.push((msg, 1));
+        }
+    }
+    seen.into_iter()
+        .map(|(message, count)| ErrorCount { message, count })
+        .collect()
 }
 
 #[derive(Serialize, Default)]
@@ -123,6 +142,7 @@ struct BenchConfig {
     dry_run: bool,
     suites: Vec<String>,
     out_dir: String,
+    profile: bool,
 }
 
 impl BenchConfig {
@@ -133,6 +153,7 @@ impl BenchConfig {
         let mut dry_run = false;
         let mut suites = Vec::new();
         let mut out_dir = "bench/results".to_string();
+        let mut profile = false;
 
         let mut i = 1;
         while i < args.len() {
@@ -149,6 +170,7 @@ impl BenchConfig {
                 "--warm" => warm = true,
                 "--no-warm" => warm = false,
                 "--dry-run" => dry_run = true,
+                "--profile" => profile = true,
                 "--suite" => {
                     i += 1;
                     let val = args
@@ -179,6 +201,7 @@ impl BenchConfig {
             dry_run,
             suites,
             out_dir,
+            profile,
         })
     }
 
@@ -191,6 +214,7 @@ impl BenchConfig {
             dry_run: false,
             suites: Vec::new(),
             out_dir: "bench/results".to_string(),
+            profile: false,
         }
     }
 }
@@ -228,6 +252,151 @@ fn stats_for(samples: &[u64]) -> Option<Stats> {
         None
     } else {
         Some(Stats::from_samples(samples))
+    }
+}
+
+// ── Profiler trait and implementations ────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct ProfilePath {
+    pub pprof_path: PathBuf,
+}
+
+#[derive(Debug)]
+pub enum ProfileError {
+    PlatformNotSupported,
+    PerfBinaryNotFound,
+    PerfFailed(String),
+    IoError(String),
+}
+
+impl std::fmt::Display for ProfileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProfileError::PlatformNotSupported => {
+                write!(f, "profiling not supported on this platform")
+            }
+            ProfileError::PerfBinaryNotFound => write!(f, "perf binary not found"),
+            ProfileError::PerfFailed(msg) => write!(f, "perf failed: {}", msg),
+            ProfileError::IoError(msg) => write!(f, "io error: {}", msg),
+        }
+    }
+}
+
+pub trait Profiler: Send {
+    fn start(&mut self, suite: &str) -> Result<(), ProfileError>;
+    fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError>;
+}
+
+pub struct LinuxPerfProfiler {
+    results_dir: PathBuf,
+    timestamp: String,
+    perf_pids: std::collections::HashMap<String, std::process::Child>,
+}
+
+impl LinuxPerfProfiler {
+    pub fn new(results_dir: PathBuf, timestamp: String) -> Self {
+        Self {
+            results_dir,
+            timestamp,
+            perf_pids: std::collections::HashMap::new(),
+        }
+    }
+
+    fn check_perf_available() -> bool {
+        std::process::Command::new("which")
+            .arg("perf")
+            .output()
+            .map(|out| out.status.success())
+            .unwrap_or(false)
+    }
+}
+
+impl Profiler for LinuxPerfProfiler {
+    fn start(&mut self, suite: &str) -> Result<(), ProfileError> {
+        if !Self::check_perf_available() {
+            eprintln!(
+                "warn: perf binary not found, skipping profile for suite '{}'",
+                suite
+            );
+            return Ok(());
+        }
+
+        let perf_data_path = self.results_dir.join(format!("{}.perf.data", suite));
+        let bench_pid = std::process::id();
+
+        let perf_child = std::process::Command::new("perf")
+            .args(&[
+                "record",
+                "-p",
+                &bench_pid.to_string(),
+                "-o",
+                perf_data_path.to_str().unwrap_or(""),
+            ])
+            .spawn()
+            .map_err(|e| ProfileError::PerfFailed(format!("failed to spawn perf: {}", e)))?;
+
+        self.perf_pids.insert(suite.to_string(), perf_child);
+        Ok(())
+    }
+
+    fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError> {
+        if let Some(mut child) = self.perf_pids.remove(suite) {
+            child
+                .kill()
+                .map_err(|e| ProfileError::PerfFailed(format!("failed to kill perf: {}", e)))?;
+            child
+                .wait()
+                .map_err(|e| ProfileError::PerfFailed(format!("perf wait failed: {}", e)))?;
+
+            let perf_data = self.results_dir.join(format!("{}.perf.data", suite));
+            let pprof_path = self.results_dir.join(format!("{}.pprof", suite));
+
+            // Convert perf.data to pprof (optional - if pprof tool not available, just return path)
+            if std::process::Command::new("which")
+                .arg("pprof")
+                .output()
+                .map(|out| out.status.success())
+                .unwrap_or(false)
+            {
+                let _convert = std::process::Command::new("pprof")
+                    .args(&["-proto", perf_data.to_str().unwrap_or("")])
+                    .output()
+                    .ok();
+            }
+
+            Ok(ProfilePath { pprof_path })
+        } else {
+            Ok(ProfilePath {
+                pprof_path: self.results_dir.join(format!("{}.pprof", suite)),
+            })
+        }
+    }
+}
+
+pub struct MacOSProfiler;
+
+impl Profiler for MacOSProfiler {
+    fn start(&mut self, suite: &str) -> Result<(), ProfileError> {
+        eprintln!(
+            "warn: profiling not supported on macOS; skipping profile for suite '{}'",
+            suite
+        );
+        Ok(())
+    }
+
+    fn stop(&mut self, suite: &str) -> Result<ProfilePath, ProfileError> {
+        Ok(ProfilePath {
+            pprof_path: PathBuf::from(format!("{}.pprof", suite)),
+        })
+    }
+}
+
+pub fn create_profiler(results_dir: PathBuf, timestamp: String) -> Box<dyn Profiler> {
+    if cfg!(target_os = "linux") {
+        Box::new(LinuxPerfProfiler::new(results_dir, timestamp))
+    } else {
+        Box::new(MacOSProfiler)
     }
 }
 
@@ -346,15 +515,92 @@ fn main() {
 }
 
 fn run_benchmark(cfg: &BenchConfig) -> Result<BenchReport, String> {
-    run_suites(cfg, cfg.dry_run)
+    let results_dir = PathBuf::from(&cfg.out_dir);
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    run_suites(cfg, cfg.dry_run, &results_dir, &timestamp)
 }
 
-fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
+#[derive(Serialize)]
+struct ProfileMetadata {
+    timestamp: String,
+    git_sha: String,
+    suites_profiled: Vec<String>,
+    platform: String,
+    perf_available: bool,
+}
+
+fn save_profile_metadata(
+    results_dir: &PathBuf,
+    timestamp: &str,
+    suites: &[String],
+) -> Result<(), String> {
+    let git_sha =
+        read_cmd_trim("git", &["rev-parse", "HEAD"]).unwrap_or_else(|| "unknown".to_string());
+
+    let perf_available = if cfg!(target_os = "linux") {
+        std::process::Command::new("which")
+            .arg("perf")
+            .output()
+            .map(|out| out.status.success())
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let platform = if cfg!(target_os = "linux") {
+        "linux".to_string()
+    } else if cfg!(target_os = "macos") {
+        "macos".to_string()
+    } else {
+        "unknown".to_string()
+    };
+
+    let metadata = ProfileMetadata {
+        timestamp: timestamp.to_string(),
+        git_sha,
+        suites_profiled: suites.to_vec(),
+        platform,
+        perf_available,
+    };
+
+    let metadata_json = serde_json::to_string_pretty(&metadata)
+        .map_err(|e| format!("failed to serialize profile metadata: {}", e))?;
+
+    let metadata_path = results_dir.join("metadata.json");
+    std::fs::write(&metadata_path, metadata_json)
+        .map_err(|e| format!("failed to write metadata.json: {}", e))?;
+
+    Ok(())
+}
+
+fn run_suites(
+    cfg: &BenchConfig,
+    dry_run: bool,
+    results_dir: &PathBuf,
+    timestamp: &str,
+) -> Result<BenchReport, String> {
     let minibox_bin = std::env::var("MINIBOX_BIN").unwrap_or_else(|_| "minibox".to_string());
     let metadata = build_metadata(&minibox_bin);
     let selected_suites = planned_suites(cfg);
     let mut suites = Vec::new();
     let mut errors = Vec::new();
+
+    // Create timestamp subdirectory for profiles if profiling is enabled
+    let profile_dir = if cfg.profile {
+        let dir = results_dir.join(timestamp);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            eprintln!("warn: failed to create profile directory: {}", e);
+        }
+        Some(dir)
+    } else {
+        None
+    };
+
+    let mut profiler: Option<Box<dyn Profiler>> = if let Some(ref dir) = profile_dir {
+        Some(create_profiler(dir.clone(), timestamp.to_string()))
+    } else {
+        None
+    };
 
     if selected_suites.is_empty() {
         errors.push("no suites selected (use --suite or enable --cold/--warm)".to_string());
@@ -370,29 +616,61 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
         return Ok(BenchReport {
             metadata,
             suites,
-            errors,
+            errors: dedup_errors(errors),
         });
     }
 
     if suite_enabled(cfg, "pull") {
+        let suite_name = "pull";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
         let mut pull_suite = SuiteResult {
             name: "pull".to_string(),
             tests: Vec::new(),
         };
-        if let Some(pull) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
-            let durations = vec![pull.duration_micros];
-            pull_suite.tests.push(TestResult {
-                name: "pull_alpine".to_string(),
-                iterations: durations.len(),
-                durations_micros: durations.clone(),
-                stats: stats_for(&durations),
-                ..Default::default()
-            });
+        let mut pull_durations = Vec::with_capacity(5);
+        for _ in 0..5 {
+            if let Some(r) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
+                pull_durations.push(r.duration_micros);
+            }
+        }
+        pull_suite.tests.push(TestResult {
+            name: "pull_alpine".to_string(),
+            iterations: pull_durations.len(),
+            durations_micros: pull_durations.clone(),
+            stats: stats_for(&pull_durations),
+            ..Default::default()
+        });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
         }
         suites.push(pull_suite);
     }
 
     if suite_enabled(cfg, "run") {
+        let suite_name = "run";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
         let mut run_suite = SuiteResult {
             name: "run".to_string(),
             tests: Vec::new(),
@@ -414,10 +692,29 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             stats: stats_for(&durations),
             ..Default::default()
         });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
         suites.push(run_suite);
     }
 
     if suite_enabled(cfg, "exec") {
+        let suite_name = "exec";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
         let mut exec_suite = SuiteResult {
             name: "exec".to_string(),
             tests: Vec::new(),
@@ -439,54 +736,131 @@ fn run_suites(cfg: &BenchConfig, dry_run: bool) -> Result<BenchReport, String> {
             stats: stats_for(&durations),
             ..Default::default()
         });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
         suites.push(exec_suite);
     }
 
     if suite_enabled(cfg, "e2e") {
+        let suite_name = "e2e";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
         let mut e2e_suite = SuiteResult {
             name: "e2e".to_string(),
             tests: Vec::new(),
         };
-        if let Some(pull) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
-            let durations = vec![pull.duration_micros];
-            e2e_suite.tests.push(TestResult {
-                name: "pull_alpine".to_string(),
-                iterations: durations.len(),
-                durations_micros: durations.clone(),
-                stats: stats_for(&durations),
-                ..Default::default()
-            });
+        let mut e2e_pull_dur = Vec::with_capacity(5);
+        for _ in 0..5 {
+            if let Some(r) = run_cmd_record(&minibox_bin, &["pull", "alpine"], &mut errors) {
+                e2e_pull_dur.push(r.duration_micros);
+            }
         }
-        if let Some(run) = run_cmd_record(
-            &minibox_bin,
-            &["run", "alpine", "--", "/bin/true"],
-            &mut errors,
-        ) {
-            let durations = vec![run.duration_micros];
-            e2e_suite.tests.push(TestResult {
-                name: "run_true".to_string(),
-                iterations: durations.len(),
-                durations_micros: durations.clone(),
-                stats: stats_for(&durations),
-                ..Default::default()
-            });
+        e2e_suite.tests.push(TestResult {
+            name: "pull_alpine".to_string(),
+            iterations: e2e_pull_dur.len(),
+            durations_micros: e2e_pull_dur.clone(),
+            stats: stats_for(&e2e_pull_dur),
+            ..Default::default()
+        });
+        let mut e2e_run_dur = Vec::with_capacity(5);
+        for _ in 0..5 {
+            if let Some(r) = run_cmd_record(
+                &minibox_bin,
+                &["run", "alpine", "--", "/bin/true"],
+                &mut errors,
+            ) {
+                e2e_run_dur.push(r.duration_micros);
+            }
+        }
+        e2e_suite.tests.push(TestResult {
+            name: "run_true".to_string(),
+            iterations: e2e_run_dur.len(),
+            durations_micros: e2e_run_dur.clone(),
+            stats: stats_for(&e2e_run_dur),
+            ..Default::default()
+        });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
         }
         suites.push(e2e_suite);
     }
 
     if suite_enabled(cfg, "codec") {
-        suites.push(bench_codec_suite(cfg));
+        let suite_name = "codec";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        let codec_suite = bench_codec_suite(cfg);
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(codec_suite);
     }
 
     if suite_enabled(cfg, "adapter") {
-        suites.push(bench_adapter_suite(cfg));
+        let suite_name = "adapter";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        let adapter_suite = bench_adapter_suite(cfg);
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(adapter_suite);
     }
 
-    Ok(BenchReport {
+    let report = BenchReport {
         metadata,
         suites,
-        errors,
-    })
+        errors: dedup_errors(errors),
+    };
+
+    // Save profiling metadata if enabled
+    if let Some(ref dir) = profile_dir {
+        save_profile_metadata(dir, timestamp, &planned_suites(cfg))?;
+    }
+
+    Ok(report)
 }
 
 // ── Microbenchmark suites (no daemon required) ───────────────────────────────
@@ -813,7 +1187,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
 
 fn print_help() {
     println!(
-        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --suite <name>  (pull|run|exec|e2e|codec|adapter)\n  --out-dir <path>"
+        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|exec|e2e|codec|adapter)\n  --out-dir <path>"
     );
 }
 
@@ -858,7 +1232,9 @@ mod tests {
     #[test]
     fn suite_has_results() {
         let cfg = BenchConfig::default();
-        let report = run_suites(&cfg, true).unwrap();
+        let results_dir = PathBuf::from("/tmp");
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let report = run_suites(&cfg, true, &results_dir, &timestamp).unwrap();
         assert!(!report.suites.is_empty());
     }
 

@@ -24,11 +24,19 @@ fn main() -> Result<()> {
         Some("test-e2e-suite") => test_e2e_suite(&sh),
         Some("clean-artifacts") => clean_artifacts(&sh),
         Some("nuke-test-state") => nuke_test_state(&sh),
-        Some("bench") => bench(&sh),
+        Some("bench") => {
+            let extra: Vec<String> = env::args().skip(2).collect();
+            bench(&sh, &extra)
+        }
         Some("bench-vps") => {
             let extra: Vec<String> = env::args().skip(2).collect();
             bench_vps(&sh, &extra)
         }
+        Some("bench-diff") => {
+            let extra: Vec<String> = env::args().skip(2).collect();
+            bench_diff(&extra)
+        }
+        Some("bench-report") => bench_report(),
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -44,6 +52,8 @@ fn main() -> Result<()> {
             eprintln!(
                 "  bench-vps        run benchmark on VPS, append to bench/results/bench.jsonl"
             );
+            eprintln!("  bench-diff       diff two bench JSON files (default: HEAD vs previous)");
+            eprintln!("  bench-report     generate HTML report from bench/results/bench.jsonl");
             Ok(())
         }
     }
@@ -261,12 +271,23 @@ fn nuke_test_state(sh: &Shell) -> Result<()> {
 }
 
 /// Run benchmark binary (local, requires Linux + miniboxd running) and save results.
-fn bench(sh: &Shell) -> Result<()> {
+fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
     let out_dir = "bench/results";
     fs::create_dir_all(out_dir).context("create bench/results")?;
 
+    // Build the bench binary in release mode
+    cmd!(sh, "cargo build --release -p minibox-bench")
+        .run()
+        .context("build minibox-bench")?;
+
+    // Build argument list
+    let mut args: Vec<&str> = vec!["--out-dir", out_dir];
+    if extra_args.iter().any(|a| a == "--profile") {
+        args.push("--profile");
+    }
+
     // Capture stdout — the binary prints the JSON path as its last line.
-    let output = cmd!(sh, "./target/release/minibox-bench --out-dir {out_dir}")
+    let output = cmd!(sh, "./target/release/minibox-bench {args...}")
         .read()
         .context("bench binary failed")?;
 
@@ -380,6 +401,7 @@ fn bench_vps(sh: &Shell, extra_args: &[String]) -> Result<()> {
     eprintln!("running bench on VPS (this takes ~1 min)...");
     let bench_script = format!(
         r#"set -euo pipefail
+export PATH="/home/dev/.cargo/bin:/home/dev/.local/bin:$PATH"
 BENCH_BIN="{BENCH_BIN}"
 [ -f "$BENCH_BIN" ] || {{ echo "error: minibox-bench not found — run: mise run bench:setup" >&2; exit 1; }}
 command -v minibox >/dev/null 2>&1 || {{ echo "error: minibox not in PATH" >&2; exit 1; }}
@@ -435,6 +457,396 @@ rm -rf "$OUT_DIR"
         eprintln!("warning: scp failed — JSON not saved locally");
     }
 
+    Ok(())
+}
+
+// ── bench-diff ────────────────────────────────────────────────────────────────
+
+/// Compare two bench JSON files and print a delta table.
+/// Usage: cargo xtask bench-diff [file-a] [file-b]
+/// If only one arg, compares it against bench/results/latest.json.
+/// If no args, compares the last two entries in bench/results/bench.jsonl.
+fn bench_diff(args: &[String]) -> Result<()> {
+    let (path_a, path_b) = match args.len() {
+        0 => {
+            // Find the last two entries with actual test results
+            let jsonl =
+                fs::read_to_string("bench/results/bench.jsonl").context("read bench.jsonl")?;
+            let entries: Vec<serde_json::Value> = jsonl
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect();
+            let with_data: Vec<&serde_json::Value> = entries
+                .iter()
+                .filter(|e| {
+                    e["suites"].as_array().is_some_and(|s| {
+                        s.iter().any(|suite| {
+                            suite["tests"]
+                                .as_array()
+                                .is_some_and(|tests| tests.iter().any(|t| !t["stats"].is_null()))
+                        })
+                    })
+                })
+                .collect();
+            if with_data.len() < 2 {
+                bail!(
+                    "bench.jsonl has fewer than 2 entries with test results — run bench-vps at least twice"
+                );
+            }
+            let n = with_data.len();
+            print_diff(with_data[n - 2], with_data[n - 1]);
+            return Ok(());
+        }
+        1 => (args[0].as_str(), "bench/results/latest.json"),
+        _ => (args[0].as_str(), args[1].as_str()),
+    };
+
+    let a: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(path_a).with_context(|| format!("read {path_a}"))?,
+    )
+    .context("parse file-a")?;
+    let b: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(path_b).with_context(|| format!("read {path_b}"))?,
+    )
+    .context("parse file-b")?;
+
+    print_diff(&a, &b);
+    Ok(())
+}
+
+fn print_diff(a: &serde_json::Value, b: &serde_json::Value) {
+    let sha_a = a["metadata"]["git_sha"].as_str().unwrap_or("?");
+    let sha_b = b["metadata"]["git_sha"].as_str().unwrap_or("?");
+    let ts_a = a["metadata"]["timestamp"].as_str().unwrap_or("?");
+    let ts_b = b["metadata"]["timestamp"].as_str().unwrap_or("?");
+
+    println!("bench diff");
+    println!(
+        "  A  {} ({})",
+        &sha_a[..sha_a.len().min(12)],
+        &ts_a[..ts_a.len().min(19)]
+    );
+    println!(
+        "  B  {} ({})",
+        &sha_b[..sha_b.len().min(12)],
+        &ts_b[..ts_b.len().min(19)]
+    );
+    println!();
+
+    // Build lookup: (suite, test) -> Stats for each file
+    use std::collections::HashMap;
+    type Key = (String, String);
+    #[derive(Debug)]
+    struct S {
+        avg: f64,
+        p95: f64,
+        unit: String,
+    }
+
+    fn extract(v: &serde_json::Value) -> HashMap<Key, S> {
+        let mut m = HashMap::new();
+        for suite in v["suites"].as_array().unwrap_or(&vec![]) {
+            let sname = suite["name"].as_str().unwrap_or("").to_string();
+            for test in suite["tests"].as_array().unwrap_or(&vec![]) {
+                let tname = test["name"].as_str().unwrap_or("").to_string();
+                let stats = &test["stats"];
+                if stats.is_null() {
+                    continue;
+                }
+                let avg = stats["avg"].as_f64().unwrap_or(0.0);
+                let p95 = stats["p95"].as_f64().unwrap_or(0.0);
+                let unit = test["unit"].as_str().unwrap_or("").to_string();
+                m.insert((sname.clone(), tname), S { avg, p95, unit });
+            }
+        }
+        m
+    }
+
+    let ma = extract(a);
+    let mb = extract(b);
+
+    // Collect all keys in order they appear in B
+    let mut keys: Vec<Key> = Vec::new();
+    for suite in b["suites"].as_array().unwrap_or(&vec![]) {
+        let sname = suite["name"].as_str().unwrap_or("").to_string();
+        for test in suite["tests"].as_array().unwrap_or(&vec![]) {
+            let tname = test["name"].as_str().unwrap_or("").to_string();
+            keys.push((sname.clone(), tname));
+        }
+    }
+    // Also add any keys only in A
+    for k in ma.keys() {
+        if !keys.contains(k) {
+            keys.push(k.clone());
+        }
+    }
+
+    if keys.is_empty() {
+        println!("  (no test results to compare)");
+        return;
+    }
+
+    // Print header
+    println!(
+        "{:<40} {:>10} {:>10} {:>10} {:>10} {:>8} {:>8}",
+        "test", "avg-A", "avg-B", "p95-A", "p95-B", "Δavg%", "Δp95%"
+    );
+    println!("{}", "-".repeat(100));
+
+    let mut regressions = 0usize;
+    let mut improvements = 0usize;
+
+    for (suite, test) in &keys {
+        let sa = ma.get(&(suite.clone(), test.clone()));
+        let sb = mb.get(&(suite.clone(), test.clone()));
+        match (sa, sb) {
+            (Some(a), Some(b)) => {
+                let da = if a.avg > 0.0 {
+                    (b.avg - a.avg) / a.avg * 100.0
+                } else {
+                    0.0
+                };
+                let dp = if a.p95 > 0.0 {
+                    (b.p95 - a.p95) / a.p95 * 100.0
+                } else {
+                    0.0
+                };
+                let unit = if b.unit == "nanos" { "ns" } else { "µs" };
+                let da_str = format!("{:+.1}%", da);
+                let dp_str = format!("{:+.1}%", dp);
+                let da_marker = if da > 5.0 {
+                    regressions += 1;
+                    "⚠"
+                } else if da < -5.0 {
+                    improvements += 1;
+                    "✓"
+                } else {
+                    " "
+                };
+                println!(
+                    "{:<40} {:>10} {:>10} {:>10} {:>10} {:>7}{} {:>8}",
+                    format!("{}/{}", suite, test),
+                    format!("{:.0}{}", a.avg, unit),
+                    format!("{:.0}{}", b.avg, unit),
+                    format!("{:.0}{}", a.p95, unit),
+                    format!("{:.0}{}", b.p95, unit),
+                    da_str,
+                    da_marker,
+                    dp_str,
+                );
+            }
+            (None, Some(_)) => println!(
+                "{:<40} {:>10} {:>10} {:>10} {:>10}   (new)",
+                format!("{}/{}", suite, test),
+                "-",
+                "?",
+                "-",
+                "?"
+            ),
+            (Some(_), None) => println!(
+                "{:<40} {:>10} {:>10} {:>10} {:>10}   (removed)",
+                format!("{}/{}", suite, test),
+                "?",
+                "-",
+                "?",
+                "-"
+            ),
+            (None, None) => {}
+        }
+    }
+
+    println!();
+    println!(
+        "  ⚠ regressions (>+5%): {}   ✓ improvements (<-5%): {}",
+        regressions, improvements
+    );
+}
+
+// ── bench-report ──────────────────────────────────────────────────────────────
+
+/// Generate an HTML report from bench/results/bench.jsonl.
+/// Output: bench/results/report.html
+fn bench_report() -> Result<()> {
+    let jsonl = fs::read_to_string("bench/results/bench.jsonl")
+        .context("read bench/results/bench.jsonl")?;
+
+    #[derive(Debug)]
+    struct Row {
+        sha: String,
+        ts: String,
+        suite: String,
+        test: String,
+        avg: f64,
+        p95: f64,
+        unit: String,
+    }
+
+    let mut rows: Vec<Row> = Vec::new();
+    for line in jsonl.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let v: serde_json::Value = serde_json::from_str(line).context("parse bench.jsonl line")?;
+        let sha = v["metadata"]["git_sha"].as_str().unwrap_or("").to_string();
+        let ts = v["metadata"]["timestamp"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        for suite in v["suites"].as_array().unwrap_or(&vec![]) {
+            let sname = suite["name"].as_str().unwrap_or("").to_string();
+            for test in suite["tests"].as_array().unwrap_or(&vec![]) {
+                let tname = test["name"].as_str().unwrap_or("").to_string();
+                let stats = &test["stats"];
+                if stats.is_null() {
+                    continue;
+                }
+                let avg = stats["avg"].as_f64().unwrap_or(0.0);
+                let p95 = stats["p95"].as_f64().unwrap_or(0.0);
+                let unit = test["unit"].as_str().unwrap_or("").to_string();
+                rows.push(Row {
+                    sha: sha.clone(),
+                    ts: ts.clone(),
+                    suite: sname.clone(),
+                    test: tname,
+                    avg,
+                    p95,
+                    unit,
+                });
+            }
+        }
+    }
+
+    if rows.is_empty() {
+        bail!("no test results found in bench.jsonl — run codec/adapter benches first");
+    }
+
+    // Group by (suite, test)
+    use std::collections::BTreeMap;
+    let mut groups: BTreeMap<(String, String), Vec<&Row>> = BTreeMap::new();
+    for r in &rows {
+        groups
+            .entry((r.suite.clone(), r.test.clone()))
+            .or_default()
+            .push(r);
+    }
+
+    // Build chart datasets JSON
+    let mut charts_js = String::new();
+    let mut chart_ids = Vec::new();
+    for ((suite, test), entries) in &groups {
+        let id = format!("{}_{}", suite, test).replace(['-', '/'], "_");
+        chart_ids.push((id.clone(), suite.clone(), test.clone()));
+        let labels: Vec<String> = entries
+            .iter()
+            .map(|r| {
+                let short = &r.sha[..r.sha.len().min(8)];
+                format!("\"{}\"", short)
+            })
+            .collect();
+        let avgs: Vec<String> = entries.iter().map(|r| format!("{:.1}", r.avg)).collect();
+        let p95s: Vec<String> = entries.iter().map(|r| format!("{:.1}", r.p95)).collect();
+        let unit = entries
+            .last()
+            .map(|r| if r.unit == "nanos" { "ns" } else { "µs" })
+            .unwrap_or("µs");
+        charts_js.push_str(&format!(
+            r#"new Chart(document.getElementById('c_{id}'), {{
+  type:'line', options:{{responsive:true,plugins:{{legend:{{position:'top'}},title:{{display:true,text:'{suite}/{test} ({unit})'}}}},scales:{{y:{{beginAtZero:false}}}}}},
+  data:{{ labels:[{labels}], datasets:[
+    {{label:'avg',data:[{avgs}],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3}},
+    {{label:'p95',data:[{p95s}],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}}
+  ]}}
+}});
+"#,
+            id=id, suite=suite, test=test, unit=unit,
+            labels=labels.join(","), avgs=avgs.join(","), p95s=p95s.join(",")
+        ));
+    }
+
+    // Latest values table
+    let mut latest_table = String::new();
+    for ((suite, test), entries) in &groups {
+        if let Some(r) = entries.last() {
+            let unit = if r.unit == "nanos" { "ns" } else { "µs" };
+            latest_table.push_str(&format!(
+                "<tr><td>{suite}</td><td>{test}</td><td class='num'>{:.0}{unit}</td><td class='num'>{:.0}{unit}</td></tr>\n",
+                r.avg, r.p95
+            ));
+        }
+    }
+
+    let canvas_tags: String = chart_ids
+        .iter()
+        .map(|(id, _, _)| format!("<div class='chart-wrap'><canvas id='c_{id}'></canvas></div>"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let commit_count = rows
+        .iter()
+        .map(|r| r.sha.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    let ts_latest = rows.iter().map(|r| r.ts.as_str()).max().unwrap_or("");
+
+    let html = format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>minibox bench report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  body {{ font-family: ui-monospace, monospace; background: #0e1117; color: #cdd6f4; margin: 0; padding: 2rem; }}
+  h1 {{ color: #89b4fa; margin-bottom: .25rem; }}
+  .meta {{ color: #6c7086; font-size: .85rem; margin-bottom: 2rem; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 3rem; }}
+  th {{ text-align: left; padding: .4rem .8rem; border-bottom: 1px solid #313244; color: #89b4fa; }}
+  td {{ padding: .35rem .8rem; border-bottom: 1px solid #1e1e2e; }}
+  td.num {{ text-align: right; color: #a6e3a1; }}
+  .charts {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.5rem; }}
+  .chart-wrap {{ background: #1e1e2e; border-radius: 8px; padding: 1rem; }}
+</style>
+</head>
+<body>
+<h1>minibox bench report</h1>
+<p class="meta">{commit_count} commits · latest {ts_latest}</p>
+
+<h2 style="color:#cba6f7">Latest values</h2>
+<table>
+<thead><tr><th>suite</th><th>test</th><th>avg</th><th>p95</th></tr></thead>
+<tbody>
+{latest_table}
+</tbody>
+</table>
+
+<h2 style="color:#cba6f7">Trends</h2>
+<div class="charts">
+{canvas_tags}
+</div>
+
+<script>
+{charts_js}
+</script>
+</body>
+</html>
+"#,
+        commit_count = commit_count,
+        ts_latest = &ts_latest[..ts_latest.len().min(19)],
+        latest_table = latest_table,
+        canvas_tags = canvas_tags,
+        charts_js = charts_js,
+    );
+
+    let out = "bench/results/report.html";
+    fs::write(out, &html).with_context(|| format!("write {out}"))?;
+    eprintln!(
+        "✓ {out}  ({} charts, {} data points)",
+        chart_ids.len(),
+        rows.len()
+    );
     Ok(())
 }
 

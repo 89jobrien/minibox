@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-20
+**Last updated:** 2026-03-21
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -127,10 +127,23 @@ All items below are merged to `main`:
 - [x] `ServerListener` / `PeerCreds` in daemonbox
 - [x] Cross-platform `miniboxd` dispatch (Linux / macOS / Windows)
 - [x] macOS CI job
+- [x] `close_range(2)` fast path in `close_extra_fds()` (QEMU-inspired, 2026-03-21)
+- [x] `ci-setup` Justfile recipe made resilient (`rm || true`)
 
 ---
 
 ## Next up
+
+### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
+
+Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal architecture.
+
+| Item | Priority | Plan / Notes |
+|---|---|---|
+| Audit CLOEXEC on daemon listener socket | 1 | Quick security check — verify `daemonbox/src/server.rs` listener sets CLOEXEC. Rust's `UnixListener` does this by default on Linux but confirm. |
+| Race-safe PID file for miniboxd | 2 | open + fstat + fcntl(F_SETLK) + stat-verify-inode + ftruncate + write PID. Reference: QEMU `oslib-posix.c:qemu_write_pidfile()`. |
+| Systemd socket activation | 3 | Read `LISTEN_PID`/`LISTEN_FDS`, set CLOEXEC on passed FDs, clear env. ~30 lines. Reference: QEMU `systemd.c:check_socket_activation()`. |
+| Human-readable size parsing for CLI | 3 | Parse "512M", "2G", "1.5T" for `--memory` flags. Reference: QEMU `cutils.c:qemu_strtosz()`. |
 
 ### Ready to execute (no blockers)
 

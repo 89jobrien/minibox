@@ -233,6 +233,8 @@ Image pulls enforce limits to prevent DoS:
 - Max layer size: 1GB per layer
 - Total image size limit: 5GB
 
+- `.worktrees/` — git worktrees for in-progress feature branches (managed by `superpowers:using-git-worktrees` skill); ignore when searching codebase
+
 ## Directory Structure
 
 ### Runtime Paths
@@ -333,7 +335,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 - **Pipe fds across `clone()`** — both parent and child get copies of any `OwnedFd` after clone. Use `std::mem::forget` on fds before the clone call, then manage raw fds manually. Child: `dup2` write end into stdout/stderr slots, then `close(write_fd_raw)` and `close(read_fd_raw)`. Parent: `drop(write_fd)` after clone returns, keep read end for output streaming.
 - **`pivot_root` requires `MS_PRIVATE` first** — after `CLONE_NEWNS` the child inherits shared mount propagation from the parent; `pivot_root` fails EINVAL unless you call `mount("", "/", MS_REC|MS_PRIVATE)` inside the child before the bind-mount.
-- **`close_extra_fds` must collect before closing** — iterating `/proc/self/fd` and calling `close()` inside the loop closes the `ReadDir`'s own FD, causing a panic. Collect all FD numbers into a `Vec` first, then close.
+- **`close_extra_fds` uses `close_range(2)` fast path** — tries the syscall first (kernel 5.9+, QEMU-inspired). Falls back to `/proc/self/fd` iteration which must collect FD numbers into a `Vec` before closing (iterating and closing in the loop would close `ReadDir`'s own FD).
 - **Absolute symlink rewrite in `layer.rs`** — `strip_prefix("/")` gives a path relative to the container root, not the symlink's directory. Use `relative_path(entry_dir, abs_target)` (defined in `layer.rs`) to get the correct relative target; otherwise busybox applet symlinks resolve to non-existent paths (e.g. `/bin/bin/busybox`).
 - **Tar root entries** — `"."` and `"./"` entries in OCI layers must be skipped before path validation; `Path::join("./")` normalizes the CurDir component away, causing a false path-escape error.
 
@@ -397,6 +399,10 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
+
+## GitHub Actions CI
+
+`.github/workflows/ci.yml` — macOS job (`macos-latest`): `cargo fmt --all --check` + clippy (all crates) + `cargo xtask test-unit`. No Linux job yet (self-hosted runner planned).
 
 ## Gitea CI
 

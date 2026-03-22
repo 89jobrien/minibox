@@ -254,13 +254,26 @@ fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
 
 /// Close file descriptors > 2.
 ///
-/// We read `/proc/self/fd` to enumerate open FDs so we don't blindly iterate
-/// up to some large limit. Failures are silently ignored -- we are about to
-/// exec anyway.
+/// Uses a two-tier strategy inspired by QEMU's `qemu_close_all_open_fd`:
 ///
-/// Entries are collected into a Vec before any `close()` calls to avoid
-/// closing the directory iterator's own FD mid-iteration.
+/// 1. **`close_range(2)` syscall** (kernel 5.9+) — single syscall, no
+///    allocation, no `/proc` dependency.
+/// 2. **`/proc/self/fd` scan** — fallback for older kernels. Entries are
+///    collected into a Vec before any `close()` calls to avoid closing the
+///    directory iterator's own FD mid-iteration.
+///
+/// Failures are silently ignored — we are about to exec anyway.
 fn close_extra_fds() {
+    // Fast path: close_range(3, u32::MAX, 0) — available since Linux 5.9.
+    // SAFETY: close_range is a pure fd-table operation with no memory side
+    // effects; the worst outcome is ENOSYS on older kernels.
+    let ret = unsafe { libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32) };
+    if ret == 0 {
+        debug!("closed extra file descriptors via close_range(2)");
+        return;
+    }
+
+    // Fallback: enumerate /proc/self/fd.
     if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
         let fds: Vec<RawFd> = entries
             .flatten()
@@ -274,7 +287,7 @@ fn close_extra_fds() {
         }
         debug!(
             fds_closed = count,
-            "closed extra file descriptors before exec"
+            "closed extra file descriptors via /proc/self/fd scan"
         );
     }
 }
