@@ -132,6 +132,11 @@ async def main() -> None:
 
     if args.commit:
         if not args.yes:
+            if not sys.stdin.isatty():
+                print("\nNon-interactive session — use -y to commit without confirmation.")
+                _log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
+                              msg, time.monotonic() - start)
+                sys.exit(0)
             print("\nCommit with this message? [y/N] ", end="", flush=True)
             answer = input().strip().lower()
             if answer != "y":
