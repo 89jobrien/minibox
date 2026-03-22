@@ -324,6 +324,10 @@ commit msg:
     git add -A
     git commit -m "{{msg}}"
 
+# Agent run history and metrics dashboard
+dashboard:
+    uv run scripts/dashboard.py
+
 # AI code review vs main (security + correctness focused)
 ai-review base="main":
     uv run scripts/ai-review.py --base {{ quote(base) }}

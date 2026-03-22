@@ -9,8 +9,14 @@
 
 import argparse
 import asyncio
+import json
+import time
+from datetime import datetime
+from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
+
+_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 
 TRAIT_HINTS = {
     "BridgeNetworking": "crates/minibox-lib/src/adapters/",
@@ -21,14 +27,30 @@ TRAIT_HINTS = {
 }
 
 
+def _log_start(script: str, args: dict) -> str:
+    run_id = datetime.now().isoformat()
+    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with _LOG_FILE.open("a") as f:
+        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
+    return run_id
+
+
+def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
+    with _LOG_FILE.open("a") as f:
+        f.write(json.dumps({
+            "run_id": run_id,
+            "script": script,
+            "args": args,
+            "status": "complete",
+            "duration_s": round(duration_s, 2),
+            "output": output,
+        }) + "\n")
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trait", help="Domain trait to generate tests for (e.g. BridgeNetworking)")
-    parser.add_argument(
-        "--output",
-        help="Output file path (default: let Claude decide based on convention)",
-        default=None,
-    )
+    parser.add_argument("--output", help="Output file path (default: Claude decides)", default=None)
     args = parser.parse_args()
 
     output_hint = f"\nWrite the tests to: {args.output}" if args.output else ""
@@ -53,6 +75,10 @@ Do not invent trait methods — only implement what is defined in domain.rs."""
 
     print(f"Generating tests for {args.trait}...\n")
 
+    run_id = _log_start("gen-tests", {"trait": args.trait})
+    start = time.monotonic()
+    output_parts: list[str] = []
+
     async for message in query(
         prompt=prompt,
         options=ClaudeAgentOptions(
@@ -62,6 +88,9 @@ Do not invent trait methods — only implement what is defined in domain.rs."""
     ):
         if hasattr(message, "result"):
             print(message.result)
+            output_parts.append(message.result)
+
+    _log_complete(run_id, "gen-tests", {"trait": args.trait}, "\n".join(output_parts), time.monotonic() - start)
 
 
 if __name__ == "__main__":

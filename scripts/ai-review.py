@@ -9,29 +9,43 @@
 
 import argparse
 import asyncio
+import json
 import subprocess
 import sys
+import time
+from datetime import datetime
+from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
+
+
+def _log_start(script: str, args: dict) -> str:
+    run_id = datetime.now().isoformat()
+    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with _LOG_FILE.open("a") as f:
+        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
+    return run_id
+
+
+def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
+    with _LOG_FILE.open("a") as f:
+        f.write(json.dumps({
+            "run_id": run_id,
+            "script": script,
+            "args": args,
+            "status": "complete",
+            "duration_s": round(duration_s, 2),
+            "output": output,
+        }) + "\n")
+
 
 def get_diff(base: str) -> str:
-    # Try branch diff first (committed changes ahead of base)
-    result = subprocess.run(
-        ["git", "diff", f"{base}...HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    result = subprocess.run(["git", "diff", f"{base}...HEAD"], capture_output=True, text=True, check=True)
     if result.stdout.strip():
         return result.stdout
-    # Fall back to uncommitted changes (staged + unstaged vs HEAD)
-    result = subprocess.run(
-        ["git", "diff", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, check=True)
     return result.stdout
 
 
@@ -64,6 +78,10 @@ If no issues, say so clearly.
 
     print(f"Reviewing diff vs {args.base}...\n")
 
+    run_id = _log_start("ai-review", {"base": args.base})
+    start = time.monotonic()
+    output_parts: list[str] = []
+
     async for message in query(
         prompt=prompt,
         options=ClaudeAgentOptions(
@@ -73,6 +91,9 @@ If no issues, say so clearly.
     ):
         if hasattr(message, "result"):
             print(message.result)
+            output_parts.append(message.result)
+
+    _log_complete(run_id, "ai-review", {"base": args.base}, "\n".join(output_parts), time.monotonic() - start)
 
 
 if __name__ == "__main__":
