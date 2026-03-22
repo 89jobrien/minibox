@@ -130,6 +130,11 @@ commit msg:
     git add -A
     git commit -m "{{msg}}"
 
+# Generate a commit message from staged changes (use -a to stage all, -c to commit)
+commit-msg *args:
+    #!/usr/bin/env bash
+    uv run scripts/commit-msg.py "$@"
+
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 
 clean-artifacts:
