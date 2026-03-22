@@ -217,6 +217,15 @@ git add -A
 git commit -m "$MSG"
 """
 
+[tasks."all:meta-agent"]
+description = "Design + spawn parallel agents for any task. Usage: mise run all:meta-agent -- 'your task'"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+TASK="${1:?usage: mise run all:meta-agent -- 'your task description'}"
+uv run scripts/meta-agent.py "$TASK"
+"""
+
 [tasks."all:push"]
 description = "Push with pre-push sync check then clean artifacts, then ai-review. Usage: mise run all:push -- [git-push-args]"
 run = """

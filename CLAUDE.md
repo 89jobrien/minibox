@@ -14,6 +14,7 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 
 ### AI Agent Scripts (Claude Agent SDK)
 
+- `just meta-agent "task"` — design + spawn parallel agents for any task; fetches + caches SDK docs, discovers repo context
 - `just council [base] [mode]` — multi-role branch analysis (core: 3 roles, extensive: 5 roles) + synthesis
 - `just ai-review [base]` — security/correctness review of diff vs base branch
 - `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
@@ -25,7 +26,7 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 
 ### mise.toml vs Justfile Convention
 
-- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`council`, `ai-review`, `gen-tests`, `diagnose`, `sync-check`, `commit-msg`), cleanup
+- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`meta-agent`, `council`, `ai-review`, `gen-tests`, `diagnose`, `sync-check`, `commit-msg`), cleanup
 - **mise.toml** — Human commands: interactive demos, ops tasks (`ssh-vps`, `fix-socket`, `smoke`), git ops (`commit`, `push`), human reports (`standup`, `dashboard`)
 
 **mise.toml script gotcha:** Bash scripts with ANSI escape codes (e.g. `\033[36m`) **must** use `run = '''...'''` (TOML literal string) not `run = """..."""` — TOML interprets `\0` as an invalid escape in double-quoted strings.

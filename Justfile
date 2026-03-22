@@ -91,6 +91,10 @@ doctor:
 
 # ── AI Agents ────────────────────────────────────────────────────────────────
 
+# Meta-agent: designs + spawns parallel agents from user intent (e.g. just meta-agent "audit the overlay mount code")
+meta-agent task:
+    uv run scripts/meta-agent.py {{ quote(task) }}
+
 # Multi-role council analysis of current branch (core: 3 roles, extensive: 5 roles)
 council base="main" mode="core":
     uv run scripts/council.py --base {{ quote(base) }} --mode {{ quote(mode) }}
