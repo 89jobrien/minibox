@@ -8,6 +8,16 @@ Minibox is a Docker-like container runtime written in Rust featuring daemon/clie
 
 ## Build and Development Commands
 
+### Python Scripts
+
+All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. Run with `uv run scripts/foo.py` or directly if executable. Never use `python`/`python3` directly.
+
+### AI Agent Scripts (Claude Agent SDK)
+
+- `just ai-review [base]` — security/correctness review of diff vs base branch
+- `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
+- `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
+
 ### Justfile recipes
 
 Recipes using bash-specific features (arrays, `local`, `declare`, functions) require a `#!/usr/bin/env bash` shebang as the first line — Just defaults to `sh` otherwise.

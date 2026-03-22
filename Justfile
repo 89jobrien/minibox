@@ -324,6 +324,19 @@ commit msg:
     git add -A
     git commit -m "{{msg}}"
 
+# AI code review vs main (security + correctness focused)
+ai-review base="main":
+    uv run scripts/ai-review.py --base {{ quote(base) }}
+
+# Generate unit tests for a domain trait adapter (e.g. just gen-tests BridgeNetworking)
+gen-tests trait:
+    uv run scripts/gen-tests.py {{ quote(trait) }}
+
+# Diagnose latest container failure from logs + cgroup state
+diagnose *args:
+    #!/usr/bin/env bash
+    uv run scripts/diagnose.py "$@"
+
 # Push + clean non-critical artifacts on success
 push *args:
     git push {{args}}
