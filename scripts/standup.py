@@ -24,6 +24,41 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 _LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 _DEFAULT_REPOS_DIR = Path.home() / "dev"
 _DEFAULT_VAULT = Path.home() / "Documents" / "Obsidian Vault" / "Reports"
+_TIMELINE_FILE = "docs/TIMELINE.md"
+
+
+def find_repo_root() -> Path | None:
+    """Walk up from cwd to find the git repo root."""
+    p = Path.cwd()
+    while p != p.parent:
+        if (p / ".git").exists():
+            return p
+        p = p.parent
+    return None
+
+
+def append_to_timeline(standup_output: str, now: datetime) -> Path | None:
+    """Append this standup's output to docs/TIMELINE.md if it exists in the repo."""
+    root = find_repo_root()
+    if root is None:
+        return None
+    timeline = root / _TIMELINE_FILE
+    if not timeline.exists():
+        return None
+    entry = (
+        f"\n## {now.strftime('%Y-%m-%d %H:%M')}\n\n"
+        f"{standup_output.strip()}\n\n"
+        f"---\n"
+    )
+    # Prepend after the header block (after the first ---)
+    content = timeline.read_text()
+    marker = "---\n"
+    idx = content.find(marker)
+    if idx != -1:
+        timeline.write_text(content[: idx + len(marker)] + entry + content[idx + len(marker) :])
+    else:
+        timeline.write_text(content + entry)
+    return timeline
 
 
 def _log_start(script: str, args: dict) -> str:
@@ -230,6 +265,11 @@ async def main() -> None:
     full_report = frontmatter + header + standup_output + "\n\n---\n\n" + repo_context
 
     print(standup_output)
+
+    # Append to docs/TIMELINE.md if present in the repo
+    timeline_path = append_to_timeline(standup_output, now)
+    if timeline_path:
+        print(f"\nAppended to: {timeline_path.relative_to(Path.cwd())}")
 
     # Optionally write to Obsidian vault
     vault_dir = args.vault
