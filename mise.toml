@@ -226,8 +226,8 @@ uv run scripts/sync-check.py
 git push "$@"
 cargo xtask clean-artifacts
 echo ""
-echo "Running post-push AI review..."
-uv run scripts/ai-review.py --base origin/main
+echo "Running post-push council analysis..."
+uv run scripts/council.py --base origin/main --mode extensive
 """
 
 [tasks."all:standup"]

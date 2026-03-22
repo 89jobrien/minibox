@@ -77,7 +77,7 @@ fn pre_commit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-push gate: nextest + coverage
+/// Pre-push gate: nextest + coverage + ai-review
 fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -92,6 +92,10 @@ fn prepush(sh: &Shell) -> Result<()> {
     .run()
     .context("coverage failed")?;
     eprintln!("coverage: target/llvm-cov/html/index.html");
+    eprintln!("running ai-review...");
+    cmd!(sh, "uv run scripts/ai-review.py --base main")
+        .run()
+        .context("ai-review failed")?;
     Ok(())
 }
 
