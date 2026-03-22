@@ -10,6 +10,7 @@ members = [
     "crates/macbox",
     "crates/winbox",
     "crates/minibox-llm",
+    "crates/minibox-secrets",
     "xtask",
 ]
 
@@ -55,3 +56,8 @@ daemonbox = { path = "crates/daemonbox" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
 dirs = "5"
+secrecy = "0.10"
+keyring = "3"
+
+# Internal crates (secrets)
+minibox-secrets = { path = "crates/minibox-secrets" }
