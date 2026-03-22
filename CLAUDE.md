@@ -19,12 +19,13 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 - `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
 - `just sync-check` — fetch + rebase onto origin/main, auto-resolve obvious conflicts (wired into `just push`)
+- `just commit-msg [--all]` — AI-generated conventional commit message from staged diff + commit history
 - `mise run standup [-- --hours N]` — time-block standup from git activity across ~/dev/ repos
 - `mise run dashboard` — agent run history and metrics (reads ~/.mbx/agent-runs.jsonl)
 
 ### mise.toml vs Justfile Convention
 
-- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`council`, `ai-review`, `gen-tests`, `diagnose`, `sync-check`), cleanup
+- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`council`, `ai-review`, `gen-tests`, `diagnose`, `sync-check`, `commit-msg`), cleanup
 - **mise.toml** — Human commands: interactive demos, ops tasks (`ssh-vps`, `fix-socket`, `smoke`), git ops (`commit`, `push`), human reports (`standup`, `dashboard`)
 
 **mise.toml script gotcha:** Bash scripts with ANSI escape codes (e.g. `\033[36m`) **must** use `run = '''...'''` (TOML literal string) not `run = """..."""` — TOML interprets `\0` as an invalid escape in double-quoted strings.
