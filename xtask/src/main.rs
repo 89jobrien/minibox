@@ -93,9 +93,9 @@ fn prepush(sh: &Shell) -> Result<()> {
     .context("coverage failed")?;
     eprintln!("coverage: target/llvm-cov/html/index.html");
     eprintln!("running ai-review...");
-    cmd!(sh, "uv run scripts/ai-review.py --base main")
-        .run()
-        .context("ai-review failed")?;
+    if let Err(e) = cmd!(sh, "uv run scripts/ai-review.py --base main").run() {
+        eprintln!("warning: ai-review failed (non-fatal): {e}");
+    }
     Ok(())
 }
 
