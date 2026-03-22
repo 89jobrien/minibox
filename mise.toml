@@ -218,13 +218,16 @@ git commit -m "$MSG"
 """
 
 [tasks."all:push"]
-description = "Push with pre-push sync check then clean artifacts. Usage: mise run all:push -- [git-push-args]"
+description = "Push with pre-push sync check then clean artifacts, then ai-review. Usage: mise run all:push -- [git-push-args]"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 uv run scripts/sync-check.py
 git push "$@"
 cargo xtask clean-artifacts
+echo ""
+echo "Running post-push AI review..."
+uv run scripts/ai-review.py --base origin/main
 """
 
 [tasks."all:standup"]
