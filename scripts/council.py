@@ -16,16 +16,17 @@ dialectic tensions, and balanced recommendations.
 
 import argparse
 import asyncio
-import json
 import subprocess
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
+
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
 
 from claude_agent_sdk import ClaudeAgentOptions, query
-
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 
 ROLES: dict[str, tuple[str, str]] = {
     "strict-critic": (
@@ -93,22 +94,6 @@ ROLES: dict[str, tuple[str, str]] = {
 
 CORE_ROLES = ["strict-critic", "creative-explorer", "general-analyst"]
 EXTENSIVE_ROLES = CORE_ROLES + ["security-reviewer", "performance-analyst"]
-
-
-def _log_start(script: str, args: dict) -> str:
-    run_id = datetime.now().isoformat()
-    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
-    return run_id
-
-
-def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({
-            "run_id": run_id, "script": script, "args": args,
-            "status": "complete", "duration_s": round(duration_s, 2), "output": output,
-        }) + "\n")
 
 
 def run_git(cmd: list[str]) -> str:
@@ -207,11 +192,12 @@ async def main() -> None:
         print("No branch context — nothing to analyse.")
         sys.exit(0)
 
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     role_count = len(roles) + (0 if args.no_synthesis else 1)
-    print(f"\nCouncil analysis — {args.mode} mode · {len(roles)} roles + synthesis · vs {args.base}\n")
+    print(f"\nCouncil analysis — {args.mode} mode · {len(roles)} roles + synthesis · vs {args.base} @ {sha}\n")
     print(f"Running {role_count} agent calls...\n")
 
-    run_id = _log_start("council", {"base": args.base, "mode": args.mode})
+    run_id = agent_log.log_start("council", {"base": args.base, "mode": args.mode})
     start = time.monotonic()
     all_output: list[str] = []
 
@@ -236,8 +222,15 @@ async def main() -> None:
         print()
         all_output.append(f"## Synthesis\n{synthesis}")
 
-    _log_complete(run_id, "council", {"base": args.base, "mode": args.mode},
-                  "\n\n".join(all_output), time.monotonic() - start)
+    full_output = "\n\n".join(all_output)
+    agent_log.log_complete(run_id, "council", {"base": args.base, "mode": args.mode},
+                           full_output, time.monotonic() - start)
+    log_path = agent_log.save_commit_log(sha, f"council-{args.mode}", full_output, {
+        "base": args.base,
+        "mode": args.mode,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+    print(f"\nLogged to: {log_path}")
 
 
 if __name__ == "__main__":

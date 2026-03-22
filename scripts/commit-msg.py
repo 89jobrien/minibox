@@ -13,33 +13,20 @@ then proposes a conventional commit message. Optionally stages all and commits.
 
 import argparse
 import asyncio
-import json
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 _MAX_DIFF_BYTES = 64 * 1024  # 64 KB — fall back to stat summary above this
-
-
-def _log_start(script: str, args: dict) -> str:
-    run_id = datetime.now().isoformat()
-    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
-    return run_id
-
-
-def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({
-            "run_id": run_id, "script": script, "args": args,
-            "status": "complete", "duration_s": round(duration_s, 2), "output": output,
-        }) + "\n")
 
 
 def run(cmd: list[str]) -> str:
@@ -126,7 +113,7 @@ async def main() -> None:
 
     print(f"Generating commit message for {ctx['staged_stat']}...\n")
 
-    run_id = _log_start("commit-msg", {"stage": args.stage, "commit": args.commit})
+    run_id = agent_log.log_start("commit-msg", {"stage": args.stage, "commit": args.commit})
     start = time.monotonic()
 
     msg = await generate_message(ctx)
@@ -139,14 +126,14 @@ async def main() -> None:
         if not args.yes:
             if not sys.stdin.isatty():
                 print("\nNon-interactive session — use -y to commit without confirmation.")
-                _log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
+                agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
                               msg, time.monotonic() - start)
                 sys.exit(0)
             print("\nCommit with this message? [y/N] ", end="", flush=True)
             answer = input().strip().lower()
             if answer != "y":
                 print("Aborted.")
-                _log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
+                agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
                               msg, time.monotonic() - start)
                 sys.exit(0)
 
@@ -158,7 +145,7 @@ async def main() -> None:
             print("\nCommit failed — check git output above.")
             sys.exit(1)
 
-    _log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": args.commit},
+    agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": args.commit},
                   msg, time.monotonic() - start)
 
 

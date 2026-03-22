@@ -16,29 +16,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
+
 from claude_agent_sdk import ClaudeAgentOptions, query
-
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
-
-
-def _log_start(script: str, args: dict) -> str:
-    run_id = datetime.now().isoformat()
-    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
-    return run_id
-
-
-def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({
-            "run_id": run_id,
-            "script": script,
-            "args": args,
-            "status": "complete",
-            "duration_s": round(duration_s, 2),
-            "output": output,
-        }) + "\n")
 
 
 def get_diff(base: str) -> str:
@@ -76,9 +59,10 @@ If no issues, say so clearly.
 {diff}
 ```"""
 
-    print(f"Reviewing diff vs {args.base}...\n")
+    sha = agent_log.git_short_sha()
+    print(f"Reviewing diff vs {args.base} @ {sha}...\n")
 
-    run_id = _log_start("ai-review", {"base": args.base})
+    run_id = agent_log.log_start("ai-review", {"base": args.base})
     start = time.monotonic()
     output_parts: list[str] = []
 
@@ -93,7 +77,13 @@ If no issues, say so clearly.
             print(message.result)
             output_parts.append(message.result)
 
-    _log_complete(run_id, "ai-review", {"base": args.base}, "\n".join(output_parts), time.monotonic() - start)
+    full_output = "\n".join(output_parts)
+    agent_log.log_complete(run_id, "ai-review", {"base": args.base}, full_output, time.monotonic() - start)
+    log_path = agent_log.save_commit_log(sha, "ai-review", full_output, {
+        "base": args.base,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    })
+    print(f"\nLogged to: {log_path}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,11 @@
 """minibox agent dashboard — history and metrics from ~/.mbx/agent-runs.jsonl"""
 
 import json
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
+
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -18,18 +23,16 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 _SCRIPTS = ["ai-review", "gen-tests", "diagnose"]
 _PREVIEW_LEN = 40
 
 
 def load_runs() -> dict[str, dict]:
     """Read JSONL and return a dict of run_id → latest entry (complete wins over running)."""
-    if not _LOG_FILE.exists():
+    if not agent_log.LOG_FILE.exists():
         return {}
     runs: dict[str, dict] = {}
-    with _LOG_FILE.open() as f:
+    with agent_log.LOG_FILE.open() as f:
         for line in f:
             line = line.strip()
             if not line:

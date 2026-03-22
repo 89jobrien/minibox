@@ -13,15 +13,18 @@ and generates a standup report. Optionally writes to an Obsidian vault.
 
 import argparse
 import asyncio
-import json
 import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 _DEFAULT_REPOS_DIR = Path.home() / "dev"
 _DEFAULT_VAULT = Path.home() / "Documents" / "Obsidian Vault" / "Reports"
 _TIMELINE_FILE = "docs/STANDUP.md"
@@ -53,22 +56,6 @@ def append_to_timeline(standup_output: str, now: datetime) -> tuple[Path, Path] 
     with timeline.open("a") as f:
         f.write(entry)
     return timeline, root
-
-
-def _log_start(script: str, args: dict) -> str:
-    run_id = datetime.now().isoformat()
-    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
-    return run_id
-
-
-def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({
-            "run_id": run_id, "script": script, "args": args,
-            "status": "complete", "duration_s": round(duration_s, 2), "output": output,
-        }) + "\n")
 
 
 def git(cmd: list[str], cwd: Path) -> str:
@@ -240,7 +227,7 @@ async def main() -> None:
 
     session_context = "" if args.no_sessions else find_claude_sessions(args.hours)
 
-    run_id = _log_start("standup", {"hours": args.hours, "repos_dir": str(args.repos_dir)})
+    run_id = agent_log.log_start("standup", {"hours": args.hours, "repos_dir": str(args.repos_dir)})
     start = time.monotonic()
 
     standup_output = await generate_standup(repo_context, session_context, args.hours)
@@ -278,7 +265,7 @@ async def main() -> None:
         out_path.write_text(full_report)
         print(f"\nWritten to: {out_path}")
 
-    _log_complete(run_id, "standup", {"hours": args.hours},
+    agent_log.log_complete(run_id, "standup", {"hours": args.hours},
                   full_report, time.monotonic() - start)
 
 
