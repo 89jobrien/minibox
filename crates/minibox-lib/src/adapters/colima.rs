@@ -42,7 +42,17 @@ use std::sync::Arc;
 /// The default implementation invokes `limactl shell <instance> <args…>`.
 /// Tests inject a fake closure via [`ColimaRegistry::with_executor`] /
 /// [`ColimaRuntime::with_executor`] to avoid real `limactl` calls.
-type LimaExecutor = Arc<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
+pub type LimaExecutor = Arc<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
+
+/// Callable that starts a long-lived process inside the Lima VM,
+/// returning the [`Child`](std::process::Child) handle with piped stdout.
+///
+/// The default implementation invokes `limactl shell <instance> <args...>`
+/// with [`Stdio::piped`](std::process::Stdio::piped) stdout.
+/// Tests inject a fake closure via [`ColimaRuntime::with_spawner`] to
+/// avoid real `limactl` calls.
+#[allow(dead_code)]
+pub type LimaSpawner = Arc<dyn Fn(&[&str]) -> Result<std::process::Child> + Send + Sync>;
 
 // ============================================================================
 // Colima Image Registry Adapter
@@ -548,6 +558,7 @@ pub struct ColimaRuntime {
     limactl_path: String,
     /// Optional injected executor used in tests.
     executor: Option<LimaExecutor>,
+    spawner: Option<LimaSpawner>,
 }
 
 impl ColimaRuntime {
@@ -557,6 +568,7 @@ impl ColimaRuntime {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
             executor: None,
+            spawner: None,
         }
     }
 
@@ -566,6 +578,11 @@ impl ColimaRuntime {
     /// `limactl shell <instance>` and must return the command's stdout.
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
         self.executor = Some(executor);
+        self
+    }
+
+    pub fn with_spawner(mut self, spawner: LimaSpawner) -> Self {
+        self.spawner = Some(spawner);
         self
     }
 
@@ -589,6 +606,20 @@ impl ColimaRuntime {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    fn lima_spawn(&self, args: &[&str]) -> Result<std::process::Child> {
+        if let Some(spawner) = &self.spawner {
+            return spawner(args);
+        }
+        Command::new(&self.limactl_path)
+            .arg("shell")
+            .arg(&self.instance)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn limactl: {e}"))
     }
 }
 
@@ -635,6 +666,59 @@ impl ContainerRuntime for ColimaRuntime {
             cgroup_path: config.cgroup_path.to_string_lossy().to_string(),
         })
         .map_err(|e| anyhow!("Failed to serialize config: {e}"))?;
+
+        if self.spawner.is_some() && config.capture_output {
+            // Streaming path: foreground exec with piped stdout.
+            // Uses `exec unshare` so the spawned process replaces the shell,
+            // making child.id() the container init PID directly.
+            let spawn_script = format!(
+                r#"CONFIG='{config_json}'
+ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
+COMMAND=$(echo "$CONFIG" | jq -r '.command')
+HOSTNAME=$(echo "$CONFIG" | jq -r '.hostname')
+mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
+exec unshare --pid --mount --uts --ipc --net \
+    --fork --kill-child \
+    chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
+"#
+            );
+
+            let mut child = self.lima_spawn(&["sh", "-c", &spawn_script])?;
+            let pid = child.id();
+
+            // Take the stdout pipe as an OwnedFd before dropping child.
+            #[cfg(unix)]
+            let output_reader = {
+                let stdout = child
+                    .stdout
+                    .take()
+                    .ok_or_else(|| anyhow!("child stdout pipe missing"))?;
+                std::os::fd::OwnedFd::from(stdout)
+            };
+
+            #[cfg(not(unix))]
+            let output_reader: Option<std::convert::Infallible> = None;
+
+            // INVARIANT: The daemon process is the direct parent of this Child
+            // (it called Command::spawn). waitpid(pid) in the reaper will succeed.
+            // On Unix, Child::drop does NOT kill the process — it only closes
+            // remaining stdio handles (all None after take).
+            drop(child);
+
+            tracing::info!(
+                pid = pid,
+                rootfs = %config.rootfs.display(),
+                "colima: spawned foreground container process with piped output"
+            );
+
+            return Ok(SpawnResult {
+                pid,
+                #[cfg(unix)]
+                output_reader: Some(output_reader),
+                #[cfg(not(unix))]
+                output_reader,
+            });
+        }
 
         // Shell script executed inside the Lima VM.
         // Uses `jq` to extract fields from the JSON config, then runs
@@ -823,6 +907,53 @@ mod tests {
         assert!(
             script.contains("world"),
             "spawn script missing arg 'world': {script}"
+        );
+    }
+
+    #[tokio::test]
+    async fn spawn_process_returns_piped_output() {
+        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
+        use std::io::Read;
+
+        let runtime = ColimaRuntime::new().with_spawner(Arc::new(|_args: &[&str]| {
+            std::process::Command::new("echo")
+                .arg("hello from container")
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow::anyhow!("spawn failed: {e}"))
+        }));
+
+        let config = ContainerSpawnConfig {
+            rootfs: PathBuf::from("/tmp/rootfs"),
+            command: "/bin/echo".to_string(),
+            args: vec!["hello".to_string()],
+            env: vec![],
+            hostname: "test".to_string(),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            capture_output: true,
+            skip_network_namespace: false,
+            hooks: ContainerHooks::default(),
+        };
+
+        let result = runtime
+            .spawn_process(&config)
+            .await
+            .expect("spawn should succeed");
+        assert!(result.pid > 0, "PID must be positive");
+        assert!(
+            result.output_reader.is_some(),
+            "output_reader must be Some when spawner is set"
+        );
+
+        let fd = result.output_reader.expect("output_reader should be Some");
+        let mut file = std::fs::File::from(fd);
+        let mut output = String::new();
+        file.read_to_string(&mut output)
+            .expect("should read output");
+        assert!(
+            output.contains("hello from container"),
+            "output was: {output}"
         );
     }
 }
