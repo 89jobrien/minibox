@@ -92,7 +92,7 @@ pub async fn handle_run(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     if ephemeral {
         handle_run_streaming(
             image,
@@ -137,8 +137,8 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
-#[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
 async fn handle_run_streaming(
     image: String,
     tag: Option<String>,
@@ -213,8 +213,7 @@ async fn handle_run_streaming(
     });
 
     // Wait for the child process to exit.
-    use minibox_lib::container::process::wait_for_exit;
-    let exit_code = tokio::task::spawn_blocking(move || wait_for_exit(pid))
+    let exit_code = tokio::task::spawn_blocking(move || handler_wait_for_exit(pid))
         .await
         .unwrap_or(Ok(-1))
         .unwrap_or(-1);
@@ -251,9 +250,10 @@ async fn handle_run_streaming(
 /// `set_container_pid`).  The `"Stopped"` transition is handled by the caller
 /// (`handle_run_streaming`) after the process exits.
 ///
-/// Only compiled on Linux because the output pipe requires Linux primitives.
-#[cfg(target_os = "linux")]
+/// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
+/// and `waitpid` — both available on any Unix via the `nix` crate.
 #[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
 async fn run_inner_capture(
     image: String,
     tag: Option<String>,
@@ -640,6 +640,32 @@ async fn run_inner(
     });
 
     Ok(id)
+}
+
+/// Wait for a process to exit and return its exit code.
+///
+/// Thin wrapper around `waitpid` usable on any Unix platform.
+/// The `minibox_lib::container::process::wait_for_exit` variant is only
+/// available on Linux (the `container` module is gated
+/// `#[cfg(target_os = "linux")]`). This local version provides the same
+/// functionality for the macOS streaming path.
+#[cfg(unix)]
+fn handler_wait_for_exit(pid: u32) -> Result<i32> {
+    use nix::sys::wait::{WaitStatus, waitpid};
+    use nix::unistd::Pid;
+    let nix_pid = Pid::from_raw(pid as i32);
+    match waitpid(nix_pid, None) {
+        Ok(WaitStatus::Exited(_, code)) => Ok(code),
+        Ok(WaitStatus::Signaled(_, sig, _)) => Ok(-(sig as i32)),
+        Ok(other) => {
+            info!(pid = pid, wait_status = ?other, "handler_wait_for_exit: unexpected status");
+            Ok(-1)
+        }
+        Err(e) => {
+            warn!(pid = pid, error = %e, "handler_wait_for_exit: waitpid error");
+            Ok(-1)
+        }
+    }
 }
 
 /// Block the calling thread until the container process exits.
