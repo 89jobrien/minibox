@@ -461,7 +461,9 @@ impl ColimaLimiter {
             }
         });
         if self.block_device.is_none() {
-            tracing::warn!("colima: no block device detected — io.max writes will be skipped");
+            tracing::warn!(
+                "colima: no block device detected in VM — io.max writes will be skipped"
+            );
         }
         self.executor = Some(executor);
         self
