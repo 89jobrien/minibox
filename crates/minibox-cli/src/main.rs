@@ -68,6 +68,10 @@ enum Commands {
         /// Image tag (default: latest)
         #[arg(short, long, default_value = "latest")]
         tag: String,
+
+        /// Network mode: none (default), bridge, host, tailnet
+        #[arg(long, default_value = "none")]
+        network: String,
     },
 
     /// List all containers
@@ -113,7 +117,8 @@ async fn main() -> Result<()> {
             memory,
             cpu_weight,
             tag,
-        } => commands::run::execute(image, tag, command, memory, cpu_weight).await,
+            network,
+        } => commands::run::execute(image, tag, command, memory, cpu_weight, network).await,
 
         Commands::Ps => commands::ps::execute().await,
 
@@ -122,5 +127,48 @@ async fn main() -> Result<()> {
         Commands::Rm { id } => commands::rm::execute(id).await,
 
         Commands::Pull { image, tag } => commands::pull::execute(image, tag).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn cli_parses_network_none() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "--network",
+            "none",
+            "alpine",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok());
+    }
+
+    #[test]
+    fn cli_parses_network_host() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "--network",
+            "host",
+            "alpine",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok());
+    }
+
+    #[test]
+    fn cli_default_network_is_none() {
+        let cli = Cli::try_parse_from(["minibox", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        match cli.command {
+            Commands::Run { network, .. } => assert_eq!(network, "none"),
+            _ => panic!("expected Run"),
+        }
     }
 }

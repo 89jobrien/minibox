@@ -22,6 +22,7 @@
 
 use anyhow::{Context, Result};
 use base64::Engine;
+use minibox_lib::domain::NetworkMode;
 use minibox_lib::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -38,7 +39,18 @@ pub async fn execute(
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
+    network: String,
 ) -> Result<()> {
+    let network_mode = match network.as_str() {
+        "none" => NetworkMode::None,
+        "bridge" => NetworkMode::Bridge,
+        "host" => NetworkMode::Host,
+        "tailnet" => NetworkMode::Tailnet,
+        other => {
+            anyhow::bail!("unknown network mode: {other} (expected: none, bridge, host, tailnet)")
+        }
+    };
+
     let request = DaemonRequest::Run {
         image,
         tag: Some(tag),
@@ -46,7 +58,7 @@ pub async fn execute(
         memory_limit_bytes,
         cpu_weight,
         ephemeral: true,
-        network: None,
+        network: Some(network_mode),
     };
 
     // Connect to daemon socket.
