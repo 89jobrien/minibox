@@ -93,6 +93,9 @@ mod hcs;
 mod vf;
 mod wsl2;
 
+// Network adapters (always available — no platform restrictions)
+pub mod network;
+
 // Test doubles (always available for testing)
 pub mod mocks;
 
@@ -117,5 +120,6 @@ pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 pub use colima::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
+pub use network::{HostNetwork, NoopNetwork};
 pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
 pub use wsl2::{Wsl2Filesystem, Wsl2Limiter, Wsl2Runtime};
