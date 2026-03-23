@@ -569,8 +569,8 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     match name {
         "pull" | "e2e" => cfg.cold,
         "run" | "exec" => cfg.warm,
-        // codec and adapter only run when explicitly requested via --suite
-        "codec" | "adapter" => false,
+        // codec, adapter, colima only run when explicitly requested via --suite
+        "codec" | "adapter" | "colima" => false,
         _ => true,
     }
 }
@@ -578,7 +578,7 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
 /// Return the ordered list of suite names that will run for `cfg`.
 fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     let mut suites = Vec::new();
-    for name in ["pull", "run", "exec", "e2e", "codec", "adapter"] {
+    for name in ["pull", "run", "exec", "e2e", "codec", "adapter", "colima"] {
         if suite_enabled(cfg, name) {
             suites.push(name.to_string());
         }
@@ -1031,6 +1031,10 @@ fn run_suites(
         suites.push(adapter_suite);
     }
 
+    if suite_enabled(cfg, "colima") {
+        suites.push(bench_colima_suite(cfg, &minibox_bin, &mut errors));
+    }
+
     let report = BenchReport {
         metadata,
         suites,
@@ -1043,6 +1047,109 @@ fn run_suites(
     }
 
     Ok(report)
+}
+
+// ── Colima suite (macOS + Colima running) ────────────────────────────────────
+
+/// Check if Colima is installed and running (macOS only).
+fn colima_available() -> bool {
+    cfg!(target_os = "macos")
+        && std::process::Command::new("colima")
+            .arg("status")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+}
+
+fn bench_colima_suite(
+    cfg: &BenchConfig,
+    minibox_bin: &str,
+    errors: &mut Vec<String>,
+) -> SuiteResult {
+    let iters = cfg.iters.max(3);
+    let mut tests = Vec::new();
+
+    if !colima_available() {
+        eprintln!("warn: colima suite skipped — Colima not running or not on macOS");
+        return SuiteResult {
+            name: "colima".to_string(),
+            tests: vec![],
+        };
+    }
+
+    // 1. Limactl round-trip baseline
+    {
+        let mut durations = Vec::with_capacity(iters);
+        for _ in 0..iters {
+            let start = std::time::Instant::now();
+            let _ = std::process::Command::new("limactl")
+                .args(["shell", "colima", "echo", "ok"])
+                .output();
+            durations.push(start.elapsed().as_micros() as u64);
+        }
+        tests.push(TestResult {
+            name: "limactl-roundtrip".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+    }
+
+    // 2. Spawn-to-first-byte (requires running miniboxd)
+    {
+        let mut durations = Vec::with_capacity(iters);
+        for _ in 0..iters {
+            if let Some(r) = run_cmd_record(
+                minibox_bin,
+                &["run", "alpine", "--", "/bin/echo", "bench-marker"],
+                errors,
+            ) {
+                if r.success && r.stdout.contains("bench-marker") {
+                    durations.push(r.duration_micros);
+                }
+            }
+        }
+        tests.push(TestResult {
+            name: "spawn-to-first-byte".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+    }
+
+    // 3. Stop latency (start a long-running container, then stop it)
+    {
+        let mut durations = Vec::with_capacity(iters);
+        for _ in 0..iters {
+            // Start a background container (non-ephemeral returns container ID)
+            if let Ok(run_result) = run_cmd(minibox_bin, &["run", "alpine", "--", "sleep", "300"]) {
+                if run_result.success {
+                    let container_id = run_result.stdout.trim().to_string();
+                    if !container_id.is_empty() {
+                        let start = std::time::Instant::now();
+                        let _ = run_cmd(minibox_bin, &["stop", &container_id]);
+                        durations.push(start.elapsed().as_micros() as u64);
+                        // Clean up
+                        let _ = run_cmd(minibox_bin, &["rm", &container_id]);
+                    }
+                }
+            }
+        }
+        tests.push(TestResult {
+            name: "stop-latency".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+    }
+
+    SuiteResult {
+        name: "colima".to_string(),
+        tests,
+    }
 }
 
 // ── Microbenchmark suites (no daemon required) ───────────────────────────────
@@ -1389,7 +1496,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
 /// Print usage information to stdout and return.
 fn print_help() {
     println!(
-        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|exec|e2e|codec|adapter)\n  --out-dir <path>"
+        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|exec|e2e|codec|adapter|colima)\n  --out-dir <path>"
     );
 }
 
