@@ -255,7 +255,7 @@ async fn dispatch(
             .await;
         }
         DaemonRequest::Stop { id } => {
-            let response = handler::handle_stop(id, state).await;
+            let response = handler::handle_stop(id, state, deps).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {

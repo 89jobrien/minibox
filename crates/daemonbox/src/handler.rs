@@ -15,7 +15,7 @@ use chrono::Utc;
 use minibox_lib::domain::NetworkMode;
 use minibox_lib::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
-    DynImageRegistry, DynResourceLimiter, HookSpec, ResourceConfig,
+    DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec, ResourceConfig,
 };
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
@@ -64,6 +64,8 @@ pub struct HandlerDependencies {
     pub resource_limiter: DynResourceLimiter,
     /// Container runtime for spawning isolated processes.
     pub runtime: DynContainerRuntime,
+    /// Network provider for container network setup/teardown.
+    pub network_provider: DynNetworkProvider,
     /// Base directory for persistent container data (overlay dirs).
     pub containers_base: PathBuf,
     /// Base directory for runtime container state (PID files).
@@ -223,6 +225,11 @@ async fn handle_run_streaming(
         warn!(pid = pid, "pipe drain task panicked: {:?}", e);
     }
 
+    // ── Network cleanup (ephemeral) ────────────────────────────────────
+    if let Err(e) = deps.network_provider.cleanup(&container_id).await {
+        warn!(container_id = %container_id, error = %e, "network: cleanup failed");
+    }
+
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
 
@@ -253,10 +260,13 @@ async fn run_inner_capture(
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
-    _network: Option<NetworkMode>,
+    network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
+    use anyhow::Context;
+    use minibox_lib::domain::NetworkConfig;
+
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
     let full_image = if image.contains('/') {
@@ -330,6 +340,20 @@ async fn run_inner_capture(
     let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
+    // ── Network setup ──────────────────────────────────────────────────
+    let net_mode = network.unwrap_or(NetworkMode::None);
+    let network_config = NetworkConfig {
+        mode: net_mode,
+        ..NetworkConfig::default()
+    };
+    let _net_ns = deps
+        .network_provider
+        .setup(&id, &network_config)
+        .await
+        .context("network setup")?;
+
+    let skip_net_ns = net_mode == NetworkMode::Host;
+
     let image_label = format!("{image}:{tag}");
     let command_str = command.join(" ");
     let record = ContainerRecord {
@@ -365,6 +389,7 @@ async fn run_inner_capture(
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: true,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: skip_net_ns,
     };
 
     let _spawn_permit = state
@@ -379,6 +404,12 @@ async fn run_inner_capture(
     let output_reader = spawn_result.output_reader.ok_or_else(|| {
         anyhow::anyhow!("capture_output=true but runtime returned no output_reader")
     })?;
+
+    // ── Network attach ─────────────────────────────────────────────────
+    deps.network_provider
+        .attach(&id, pid)
+        .await
+        .context("network attach")?;
 
     // Write PID file and update state.
     let pid_file = deps.run_containers_base.join(&id).join("pid");
@@ -411,10 +442,13 @@ async fn run_inner(
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
-    _network: Option<NetworkMode>,
+    network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
+    use anyhow::Context;
+    use minibox_lib::domain::NetworkConfig;
+
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
     // Normalise image name: bare "alpine" → "library/alpine"
@@ -499,6 +533,20 @@ async fn run_inner(
     let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
+    // ── Network setup ──────────────────────────────────────────────────
+    let net_mode = network.unwrap_or(NetworkMode::None);
+    let network_config = NetworkConfig {
+        mode: net_mode,
+        ..NetworkConfig::default()
+    };
+    let _net_ns = deps
+        .network_provider
+        .setup(&id, &network_config)
+        .await
+        .context("network setup")?;
+
+    let skip_net_ns = net_mode == NetworkMode::Host;
+
     // Build ContainerRecord in Created state; updated to Running once the
     // child PID is known.
     let image_label = format!("{image}:{tag}");
@@ -537,6 +585,7 @@ async fn run_inner(
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: skip_net_ns,
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -551,6 +600,7 @@ async fn run_inner(
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
     let runtime_clone = Arc::clone(&deps.runtime);
+    let network_provider_clone = Arc::clone(&deps.network_provider);
     let run_containers_base_clone = deps.run_containers_base.clone();
 
     tokio::task::spawn(async move {
@@ -559,6 +609,11 @@ async fn run_inner(
             Ok(spawn_result) => {
                 let pid = spawn_result.pid;
                 info!("container {id_clone} started with PID {pid}");
+
+                // ── Network attach ─────────────────────────────────────
+                if let Err(e) = network_provider_clone.attach(&id_clone, pid).await {
+                    warn!(container_id = %id_clone, error = %e, "network: attach failed");
+                }
 
                 // Write PID file.
                 let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
@@ -682,7 +737,16 @@ fn daemon_wait_for_exit(
 // ─── Stop ───────────────────────────────────────────────────────────────────
 
 /// Send SIGTERM to a container, then SIGKILL after 10 seconds if needed.
-pub async fn handle_stop(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+pub async fn handle_stop(
+    id: String,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    // ── Network cleanup ────────────────────────────────────────────────
+    if let Err(e) = deps.network_provider.cleanup(&id).await {
+        warn!(container_id = %id, error = %e, "network: cleanup failed");
+    }
+
     match stop_inner(&id, &state).await {
         Ok(()) => DaemonResponse::Success {
             message: format!("container {id} stopped"),
@@ -813,6 +877,11 @@ async fn remove_inner(
     // Cleanup cgroup (using injected resource limiter trait).
     if let Err(e) = deps.resource_limiter.cleanup(id) {
         warn!("cleanup cgroup for {id}: {e}");
+    }
+
+    // ── Network cleanup ────────────────────────────────────────────────
+    if let Err(e) = deps.network_provider.cleanup(id).await {
+        warn!(container_id = %id, error = %e, "network: cleanup failed");
     }
 
     state.remove_container(id).await;

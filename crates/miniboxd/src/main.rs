@@ -58,7 +58,7 @@ use minibox_lib::adapters::{
 #[cfg(target_os = "linux")]
 use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
+use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox_lib::image::ImageStore;
 #[cfg(target_os = "linux")]
@@ -282,6 +282,7 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(OverlayFilesystem::new()),
                 resource_limiter: Arc::new(CgroupV2Limiter::new()),
                 runtime: Arc::new(LinuxNamespaceRuntime::new()),
+                network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: PathBuf::from(&containers_dir),
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
@@ -298,6 +299,7 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(CopyFilesystem::new()),
                 resource_limiter: Arc::new(NoopLimiter::new()),
                 runtime: Arc::new(proot_runtime),
+                network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: PathBuf::from(&containers_dir),
                 run_containers_base: PathBuf::from(&run_containers_dir),
             })
@@ -307,6 +309,7 @@ async fn main() -> Result<()> {
             filesystem: Arc::new(ColimaFilesystem::new()),
             resource_limiter: Arc::new(ColimaLimiter::new()),
             runtime: Arc::new(ColimaRuntime::new()),
+            network_provider: Arc::new(NoopNetwork::new()),
             containers_base: PathBuf::from(&containers_dir),
             run_containers_base: PathBuf::from(&run_containers_dir),
         }),

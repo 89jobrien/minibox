@@ -21,7 +21,9 @@ pub mod preflight;
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use minibox_lib::adapters::{
+    ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, NoopNetwork,
+};
 use minibox_lib::image::ImageStore;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -112,6 +114,7 @@ pub async fn start() -> Result<()> {
         filesystem: Arc::new(ColimaFilesystem::new()),
         resource_limiter: Arc::new(ColimaLimiter::new()),
         runtime: Arc::new(ColimaRuntime::new()),
+        network_provider: Arc::new(NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
     });

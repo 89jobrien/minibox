@@ -8,7 +8,9 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_lib::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -58,6 +60,7 @@ fn make_deps(
         filesystem: Arc::new(filesystem),
         resource_limiter: Arc::new(resource_limiter),
         runtime: Arc::new(runtime),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: tmp.path().join("containers"),
         run_containers_base: tmp.path().join("run"),
     })
@@ -272,7 +275,14 @@ async fn test_stop_unknown_container_returns_error() {
     let tmp = TempDir::new().unwrap();
     let state = make_state(&tmp);
 
-    let response = handler::handle_stop("does_not_exist_abc123".to_string(), state).await;
+    let deps = make_deps(
+        MockRegistry::new(),
+        MockFilesystem::new(),
+        MockLimiter::new(),
+        MockRuntime::new(),
+        &tmp,
+    );
+    let response = handler::handle_stop("does_not_exist_abc123".to_string(), state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {

@@ -1328,6 +1328,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
         cgroup_path: PathBuf::from("/cgroup"),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: false,
     };
 
     let registry_concrete = MockRegistry::new().with_cached_image("alpine", "latest");

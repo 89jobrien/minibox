@@ -513,6 +513,8 @@ pub struct ContainerSpawnConfig {
     pub capture_output: bool,
     /// Optional host-side lifecycle hooks.
     pub hooks: ContainerHooks,
+    /// If true, skip CLONE_NEWNET — container shares host network namespace.
+    pub skip_network_namespace: bool,
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,9 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_lib::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter,
@@ -58,6 +60,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     })
@@ -215,6 +218,7 @@ mod conformance {
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -236,6 +240,7 @@ mod conformance {
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         let pid1 = runtime.spawn_process(&config).await.unwrap().pid;

@@ -809,6 +809,7 @@ mod tests {
             cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         let result = runtime.spawn_process(&config).await.unwrap();

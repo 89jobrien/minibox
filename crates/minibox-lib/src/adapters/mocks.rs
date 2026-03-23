@@ -683,6 +683,7 @@ mod tests {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
         let result = runtime.spawn_process_sync(&cfg).unwrap();
         assert_eq!(result.pid, 10000);
@@ -754,6 +755,7 @@ mod tests {
             cgroup_path: PathBuf::from("/mock/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         let result = runtime.spawn_process(&config).await;

@@ -90,6 +90,7 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
@@ -109,6 +110,7 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
             cgroup_path: PathBuf::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));

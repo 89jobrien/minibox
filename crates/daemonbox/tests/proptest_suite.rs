@@ -5,7 +5,9 @@ use std::sync::{Arc, OnceLock};
 
 use daemonbox::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_lib::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
@@ -38,6 +40,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: tmp.join("containers"),
         run_containers_base: tmp.join("run"),
     })
@@ -166,7 +169,8 @@ proptest! {
         let tmp = tempfile::TempDir::new().unwrap();
         let state = make_state(tmp.path());
 
-        let resp = runtime().block_on(handle_stop(id.clone(), state));
+        let deps = make_deps(tmp.path());
+        let resp = runtime().block_on(handle_stop(id.clone(), state, deps));
 
         prop_assert!(
             matches!(resp, DaemonResponse::Error { .. }),

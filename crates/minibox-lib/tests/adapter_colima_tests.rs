@@ -211,6 +211,7 @@ async fn runtime_spawn_process_extracts_pid_from_executor_output() {
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: false,
     };
 
     let result = runtime
@@ -236,6 +237,7 @@ async fn runtime_spawn_process_errors_on_invalid_pid() {
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: false,
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -258,6 +260,7 @@ async fn runtime_spawn_process_propagates_executor_error() {
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: false,
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -291,6 +294,7 @@ async fn runtime_spawn_script_embeds_args() {
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
         capture_output: false,
         hooks: ContainerHooks::default(),
+        skip_network_namespace: false,
     };
 
     let result = runtime.spawn_process(&config).await.unwrap();

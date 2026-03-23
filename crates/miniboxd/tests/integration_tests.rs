@@ -21,7 +21,7 @@
 #![cfg(target_os = "linux")]
 
 use minibox_lib::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NoopNetwork, OverlayFilesystem,
 };
 use minibox_lib::image::ImageStore;
 use minibox_lib::protocol::DaemonResponse;
@@ -46,6 +46,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
+        network_provider: Arc::new(NoopNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });

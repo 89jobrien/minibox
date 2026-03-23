@@ -5,7 +5,9 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_lib::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -49,6 +51,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     })
@@ -120,6 +123,7 @@ async fn test_handle_pull_failure() {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });
@@ -147,6 +151,7 @@ async fn test_handle_run_with_cached_image() {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });
@@ -228,6 +233,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });
@@ -261,6 +267,7 @@ async fn test_handle_run_resource_limiter_failure() {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });
@@ -294,6 +301,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     });

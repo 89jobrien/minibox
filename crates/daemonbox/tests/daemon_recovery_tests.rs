@@ -5,7 +5,9 @@
 
 use daemonbox::handler;
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox_lib::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,6 +28,7 @@ fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies>
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     })
@@ -192,7 +195,8 @@ async fn test_handle_stop_empty_id_returns_error() {
     let temp_dir = TempDir::new().unwrap();
     let state = make_state(&temp_dir);
 
-    let response = handler::handle_stop("".to_string(), state).await;
+    let deps = make_deps(&temp_dir);
+    let response = handler::handle_stop("".to_string(), state, deps).await;
 
     match response {
         DaemonResponse::Error { .. } => {} // expected
