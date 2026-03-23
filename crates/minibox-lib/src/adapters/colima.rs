@@ -423,6 +423,9 @@ pub struct ColimaLimiter {
     limactl_path: String,
     /// Optional injected executor used in tests.
     executor: Option<LimaExecutor>,
+    /// Block device major:minor detected from the VM (e.g. "253:0" for virtio).
+    /// Probed once in `with_executor`; used for io.max writes.
+    block_device: Option<String>,
 }
 
 impl ColimaLimiter {
@@ -432,7 +435,36 @@ impl ColimaLimiter {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
             executor: None,
+            block_device: None,
         }
+    }
+
+    /// Inject a custom executor and probe the VM's block device for io.max.
+    ///
+    /// Block device detection is best-effort: if the probe fails or returns an
+    /// unexpected format, `block_device` stays `None` and io.max writes are
+    /// silently skipped (matching GkeLimiter's best-effort behavior).
+    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
+        // Probe block device — best-effort, io.max is optional.
+        self.block_device = executor(&[
+            "sh",
+            "-c",
+            "cat $(ls /sys/block/*/dev | head -1) 2>/dev/null",
+        ])
+        .ok()
+        .and_then(|s| {
+            let trimmed = s.trim().to_string();
+            if trimmed.contains(':') {
+                Some(trimmed)
+            } else {
+                None
+            }
+        });
+        if self.block_device.is_none() {
+            tracing::warn!("colima: no block device detected — io.max writes will be skipped");
+        }
+        self.executor = Some(executor);
+        self
     }
 
     /// Run a command inside the Lima VM and return its stdout as a `String`.
@@ -493,15 +525,16 @@ impl ResourceLimiter for ColimaLimiter {
             self.lima_exec(&["sh", "-c", &format!("echo {pids_max} > {pids_file}")])?;
         }
 
-        if let Some(io_max) = config.io_max_bytes_per_sec {
-            // Uses hardcoded device 8:0 (conventional SCSI disk major:minor).
-            // Colima VMs typically use virtio (253:0), so this write may be
-            // silently ignored — see the struct-level doc comment.
+        // Set I/O limit — requires a detected block device major:minor.
+        // If no device was detected at construction time, skip silently.
+        if let Some(io_max) = config.io_max_bytes_per_sec
+            && let Some(device) = self.block_device.as_deref()
+        {
             let io_file = format!("{cgroup_path}/io.max");
             self.lima_exec(&[
                 "sh",
                 "-c",
-                &format!("echo '8:0 rbps={io_max} wbps={io_max}' > {io_file}"),
+                &format!("echo '{device} rbps={io_max} wbps={io_max}' > {io_file}"),
             ])?;
         }
 
@@ -907,6 +940,53 @@ mod tests {
         assert!(
             script.contains("world"),
             "spawn script missing arg 'world': {script}"
+        );
+    }
+
+    #[test]
+    fn limiter_detects_block_device() {
+        let limiter = ColimaLimiter::new().with_executor(Arc::new(|args: &[&str]| {
+            let joined = args.join(" ");
+            if joined.contains("/sys/block") {
+                Ok("253:0\n".to_string())
+            } else {
+                Ok(String::new())
+            }
+        }));
+        assert_eq!(limiter.block_device.as_deref(), Some("253:0"));
+    }
+
+    #[test]
+    fn limiter_io_max_uses_detected_device() {
+        let commands = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let cmds = commands.clone();
+        let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
+            cmds.lock().expect("lock").push(args.join(" "));
+            if args.join(" ").contains("/sys/block") {
+                Ok("253:0\n".to_string())
+            } else {
+                Ok(String::new())
+            }
+        }));
+
+        let config = crate::domain::ResourceConfig {
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            pids_max: None,
+            io_max_bytes_per_sec: Some(1048576),
+        };
+        limiter
+            .create("test-container", &config)
+            .expect("create should succeed");
+
+        let all = commands.lock().expect("lock");
+        let io_cmd = all
+            .iter()
+            .find(|c| c.contains("io.max"))
+            .expect("should write io.max");
+        assert!(
+            io_cmd.contains("253:0"),
+            "should use detected device, got: {io_cmd}"
         );
     }
 
