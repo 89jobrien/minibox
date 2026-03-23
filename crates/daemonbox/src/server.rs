@@ -238,6 +238,7 @@ async fn dispatch(
             memory_limit_bytes,
             cpu_weight,
             ephemeral,
+            network,
         } => {
             handler::handle_run(
                 image,
@@ -246,6 +247,7 @@ async fn dispatch(
                 memory_limit_bytes,
                 cpu_weight,
                 ephemeral,
+                network,
                 state,
                 deps,
                 tx,

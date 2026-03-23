@@ -78,6 +78,7 @@ proptest! {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: false,
+            network: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -95,6 +96,7 @@ proptest! {
             memory_limit_bytes: Some(u64::MAX),
             cpu_weight: Some(u64::MAX),
             ephemeral: false,
+            network: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

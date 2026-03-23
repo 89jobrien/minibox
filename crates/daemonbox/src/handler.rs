@@ -12,6 +12,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
+use minibox_lib::domain::NetworkMode;
 use minibox_lib::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
     DynImageRegistry, DynResourceLimiter, HookSpec, ResourceConfig,
@@ -84,6 +85,7 @@ pub async fn handle_run(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     #[allow(unused_variables)] ephemeral: bool,
+    #[allow(unused_variables)] network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -96,6 +98,7 @@ pub async fn handle_run(
             command,
             memory_limit_bytes,
             cpu_weight,
+            network,
             state,
             deps,
             tx,
@@ -111,6 +114,7 @@ pub async fn handle_run(
         command,
         memory_limit_bytes,
         cpu_weight,
+        network,
         state,
         deps,
     )
@@ -132,12 +136,14 @@ pub async fn handle_run(
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
 #[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
 async fn handle_run_streaming(
     image: String,
     tag: Option<String>,
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
+    _network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -153,6 +159,7 @@ async fn handle_run_streaming(
         command,
         memory_limit_bytes,
         cpu_weight,
+        _network,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -239,12 +246,14 @@ async fn handle_run_streaming(
 ///
 /// Only compiled on Linux because the output pipe requires Linux primitives.
 #[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
 async fn run_inner_capture(
     image: String,
     tag: Option<String>,
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
+    _network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
@@ -395,12 +404,14 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
+#[allow(clippy::too_many_arguments)]
 async fn run_inner(
     image: String,
     tag: Option<String>,
     command: Vec<String>,
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
+    _network: Option<NetworkMode>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {

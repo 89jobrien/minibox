@@ -1092,6 +1092,7 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         memory_limit_bytes: None,
         cpu_weight: None,
         ephemeral: false,
+        network: None,
     };
     let large_run = DaemonRequest::Run {
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
@@ -1102,6 +1103,7 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         memory_limit_bytes: Some(512 * 1024 * 1024),
         cpu_weight: Some(7500),
         ephemeral: false,
+        network: None,
     };
     let small_pull = DaemonRequest::Pull {
         image: "alpine".to_string(),

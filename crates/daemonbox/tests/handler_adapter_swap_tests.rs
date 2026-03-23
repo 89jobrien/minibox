@@ -37,6 +37,7 @@ async fn handle_run_once(
         memory_limit_bytes,
         cpu_weight,
         ephemeral,
+        None,
         state,
         deps,
         tx,

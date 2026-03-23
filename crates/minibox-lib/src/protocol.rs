@@ -37,6 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
+use crate::domain::NetworkMode;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,10 @@ pub enum DaemonRequest {
         /// (fire-and-forget behaviour) for backwards compatibility.
         #[serde(default)]
         ephemeral: bool,
+        /// Network mode for the container. Defaults to `None` (loopback only)
+        /// when absent for backwards compatibility.
+        #[serde(default)]
+        network: Option<NetworkMode>,
     },
 
     /// Stop a running container by ID.
@@ -239,6 +244,7 @@ mod tests {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: false,
+            network: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -276,6 +282,7 @@ mod tests {
             memory_limit_bytes: Some(536870912), // 512MB
             cpu_weight: Some(500),
             ephemeral: false,
+            network: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -473,6 +480,7 @@ mod tests {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: false,
+            network: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -554,6 +562,7 @@ mod tests {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: false,
+            network: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -576,6 +585,7 @@ mod tests {
             memory_limit_bytes: Some(u64::MAX),
             cpu_weight: None,
             ephemeral: false,
+            network: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -684,5 +694,39 @@ mod tests {
         let stderr = serde_json::to_string(&OutputStreamKind::Stderr).unwrap();
         assert_eq!(stdout, r#""stdout""#);
         assert_eq!(stderr, r#""stderr""#);
+    }
+
+    // -----------------------------------------------------------------------
+    // Network mode protocol tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn run_request_with_network_mode_roundtrip() {
+        use crate::domain::NetworkMode;
+        let req = DaemonRequest::Run {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: Some(NetworkMode::Host),
+        };
+        let encoded = encode_request(&req).expect("encode");
+        let decoded = decode_request(&encoded).expect("decode");
+        match decoded {
+            DaemonRequest::Run { network, .. } => assert_eq!(network, Some(NetworkMode::Host)),
+            _ => panic!("wrong request type"),
+        }
+    }
+
+    #[test]
+    fn run_request_without_network_defaults_to_none_option() {
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Run { network, .. } => assert_eq!(network, None),
+            _ => panic!("expected Run"),
+        }
     }
 }

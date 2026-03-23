@@ -12,6 +12,7 @@ fn small_run_request() -> DaemonRequest {
         memory_limit_bytes: None,
         cpu_weight: None,
         ephemeral: false,
+        network: None,
     }
 }
 
@@ -26,6 +27,7 @@ fn large_run_request() -> DaemonRequest {
         memory_limit_bytes: Some(512 * 1024 * 1024),
         cpu_weight: Some(7500),
         ephemeral: false,
+        network: None,
     }
 }
 

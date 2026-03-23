@@ -46,6 +46,7 @@ pub async fn execute(
         memory_limit_bytes,
         cpu_weight,
         ephemeral: true,
+        network: None,
     };
 
     // Connect to daemon socket.

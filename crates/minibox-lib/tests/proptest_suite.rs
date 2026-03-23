@@ -39,6 +39,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         memory_limit_bytes,
                         cpu_weight,
                         ephemeral,
+                        network: None,
                     }
                 }
             ),
