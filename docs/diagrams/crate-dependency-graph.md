@@ -1,6 +1,6 @@
 # Crate dependency graph
 
-Shows the workspace crate relationships. Platform‑specific dependencies are gated at compile time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and `minibox-lib` are platform‑agnostic and compiled everywhere. `minibox-cli` is also platform‑agnostic (it only speaks JSON over a socket/pipe).
+Shows the workspace crate relationships. Platform‑specific dependencies are gated at compile time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and `linuxbox` are platform‑agnostic and compiled everywhere. `minibox-cli` is also platform‑agnostic (it only speaks JSON over a socket/pipe).
 
 ## Mermaid
 
@@ -15,28 +15,28 @@ flowchart LR
     winbox["winbox\n[cfg(target_os = \"windows\")]"]
     daemonbox["daemonbox\n(platform-agnostic)"]
 
-    minibox_lib["minibox-lib\n(platform-agnostic core)"]
+    linuxbox["linuxbox\n(platform-agnostic core)"]
     minibox_macros["minibox-macros\n(proc-macro)"]
     nix["nix\n[cfg(unix)]"]
 
     %% Edges (cfg shown as short labels)
-    miniboxd -->|"linux"| minibox_lib
+    miniboxd -->|"linux"| linuxbox
     miniboxd -->|"linux"| nix
     miniboxd -->|"macos"| macbox
     miniboxd -->|"windows"| winbox
 
     macbox --> daemonbox
-    macbox --> minibox_lib
+    macbox --> linuxbox
 
     winbox --> daemonbox
-    winbox --> minibox_lib
+    winbox --> linuxbox
 
-    daemonbox --> minibox_lib
+    daemonbox --> linuxbox
 
-    minibox_cli --> minibox_lib
-    minibox_bench --> minibox_lib
+    minibox_cli --> linuxbox
+    minibox_bench --> linuxbox
 
-    minibox_lib --> minibox_macros
+    linuxbox --> minibox_macros
 
     %% Soft edge style for macro
     linkStyle 9 stroke-dasharray: 4 2
@@ -54,7 +54,7 @@ flowchart LR
     class macbox shim_macos;
     class winbox shim_windows;
     class daemonbox shim_unix;
-    class minibox_lib core;
+    class linuxbox core;
     class minibox_macros macro;
     class nix external;
 ```
@@ -63,28 +63,28 @@ flowchart LR
 
 ```text
 ┌─────────────┐  [linux]  ┌───────────────┐
-│             ├──────────►│  minibox-lib  │
+│             ├──────────►│  linuxbox  │
 │             │  [linux]  └───────────────┘
 │             ├──────────►  nix
 │  miniboxd   │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
-│  (unified   │  [macos]  │    macbox     ├─►│ daemonbox  ├─►│  minibox-lib  │
+│  (unified   │  [macos]  │    macbox     ├─►│ daemonbox  ├─►│  linuxbox  │
 │   binary)   ├──────────►│               ├─►└────────────┘  └───────────────┘
 │             │           └───────────────┘
 │             │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
-│             │  [win]    │    winbox     ├─►│ daemonbox  ├─►│  minibox-lib  │
+│             │  [win]    │    winbox     ├─►│ daemonbox  ├─►│  linuxbox  │
 │             ├──────────►│               ├─►└────────────┘  └───────────────┘
 └─────────────┘           └───────────────┘
 
 ┌─────────────────┐
-│   minibox-cli   ├──────────────────────────────────────────►  minibox-lib
+│   minibox-cli   ├──────────────────────────────────────────►  linuxbox
 └─────────────────┘
 
 ┌──────────────────┐
-│   minibox-bench  ├─────────────────────────────────────────►  minibox-lib
+│   minibox-bench  ├─────────────────────────────────────────►  linuxbox
 └──────────────────┘
 
 ┌──────────────────┐
-│  minibox-macros  │  <--  used by minibox-lib
+│  minibox-macros  │  <--  used by linuxbox
 └──────────────────┘
 ```
 

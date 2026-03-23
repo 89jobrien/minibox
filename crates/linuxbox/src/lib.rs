@@ -1,4 +1,4 @@
-//! # minibox-lib
+//! # linuxbox
 //!
 //! Core library for the Minibox container runtime. This crate is the shared
 //! foundation used by both the daemon (`miniboxd`) and the CLI (`minibox`).

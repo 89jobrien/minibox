@@ -3,10 +3,10 @@
 //! Verifies error propagation and cleanup behavior when adapters
 //! fail at different points in the container lifecycle.
 
-use minibox_lib::adapters::mocks::{
+use linuxbox::adapters::mocks::{
     FailableFilesystemMock, MockFilesystem, MockLimiter, MockRegistry, MockRuntime,
 };
-use minibox_lib::domain::{
+use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter,
 };

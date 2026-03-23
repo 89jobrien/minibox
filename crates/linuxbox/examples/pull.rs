@@ -4,11 +4,11 @@
 //! `~/.mbx/cache/images` by default, or `$MINIBOX_DATA_DIR/images`.
 //!
 //! Usage:
-//!   cargo run --release --example pull -p minibox-lib
-//!   cargo run --release --example pull -p minibox-lib -- nginx:1.25
-//!   cargo run --release --example pull -p minibox-lib -- ubuntu:22.04
+//!   cargo run --release --example pull -p linuxbox
+//!   cargo run --release --example pull -p linuxbox -- nginx:1.25
+//!   cargo run --release --example pull -p linuxbox -- ubuntu:22.04
 
-use minibox_lib::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
+use linuxbox::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
 use std::{
     io::Write,
     path::PathBuf,

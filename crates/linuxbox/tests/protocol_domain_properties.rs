@@ -3,8 +3,8 @@
 //! Complements proptest_suite.rs (which covers basic roundtrip invariants)
 //! with targeted edge-case properties.
 
-use minibox_lib::domain::ContainerId;
-use minibox_lib::protocol::{
+use linuxbox::domain::ContainerId;
+use linuxbox::protocol::{
     DaemonRequest, DaemonResponse, OutputStreamKind, decode_request, decode_response,
     encode_request, encode_response,
 };

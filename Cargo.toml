@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/minibox-lib",
+    "crates/linuxbox",
     "crates/miniboxd",
     "crates/minibox-cli",
     "crates/minibox-bench",
@@ -50,7 +50,7 @@ base64 = "0.22"
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates
-minibox-lib = { path = "crates/minibox-lib" }
+linuxbox = { path = "crates/linuxbox" }
 minibox-macros = { path = "crates/minibox-macros" }
 daemonbox = { path = "crates/daemonbox" }
 macbox = { path = "crates/macbox" }

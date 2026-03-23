@@ -13,7 +13,7 @@ installation, following the proven LimaExecutor pattern from colima.rs.
 
 ## Scope
 
-`crates/minibox-lib/src/adapters/wsl2.rs` only. Docker Desktop adapter is out of scope.
+`crates/linuxbox/src/adapters/wsl2.rs` only. Docker Desktop adapter is out of scope.
 
 ## Structural Observation
 

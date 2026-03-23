@@ -84,7 +84,7 @@ jobs:
       - name: coverage
         run: >
           cargo llvm-cov nextest
-          -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
+          -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox
           --lcov --output-path lcov.info
       - name: upload to codecov
         uses: codecov/codecov-action@v5

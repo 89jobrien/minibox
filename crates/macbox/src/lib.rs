@@ -21,11 +21,11 @@ pub mod preflight;
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::{
+use linuxbox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
-use minibox_lib::image::ImageStore;
+use linuxbox::image::ImageStore;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;

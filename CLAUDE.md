@@ -51,7 +51,7 @@ Recipes using bash-specific features (arrays, `local`, `declare`, functions) req
 cargo build --release
 
 # Build specific crate
-cargo build -p minibox-lib
+cargo build -p linuxbox
 cargo build -p miniboxd
 cargo build -p minibox-cli
 
@@ -89,10 +89,10 @@ See `TESTING.md` for comprehensive testing strategy and guidelines.
 cargo test --workspace
 
 # Run tests for specific crate
-cargo test -p minibox-lib
+cargo test -p linuxbox
 
 # Run specific test module
-cargo test -p minibox-lib protocol::tests
+cargo test -p linuxbox protocol::tests
 
 # Run with output
 cargo test -- --nocapture
@@ -119,7 +119,7 @@ cargo xtask bench-vps --commit --push  # ... and push to remote
 # Run microbenchmarks (no daemon, any platform)
 ./target/release/minibox-bench --suite codec    # protocol encode/decode (nanosecond, 36 cases)
 ./target/release/minibox-bench --suite adapter  # trait-object overhead (nanosecond, 10 cases)
-cargo bench -p minibox-lib          # criterion benches (local HTML reports only, not saved)
+cargo bench -p linuxbox          # criterion benches (local HTML reports only, not saved)
 
 # Bench result pipeline: bench.jsonl is append-only history; latest.json is canonical current
 # snapshot for devloop — both must stay in sync (see save_bench_results in xtask/src/main.rs)
@@ -128,7 +128,7 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 **Test Status:**
 
 - Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (257 total via nextest, 4 skipped on macOS)
-- Property-based: 8 daemonbox proptest properties + 25 minibox-lib property tests (`cargo xtask test-property`)
+- Property-based: 8 daemonbox proptest properties + 25 linuxbox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
@@ -138,7 +138,7 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
+cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -148,8 +148,8 @@ cargo xtask test-unit
 
 Ten crates in cargo workspace:
 
-1. **minibox-lib** (library): Core container primitives, image management, shared protocol types
-2. **minibox-macros** (proc-macro): Derive macros used by minibox-lib
+1. **linuxbox** (library): Core container primitives, image management, shared protocol types
+2. **minibox-macros** (proc-macro): Derive macros used by linuxbox
 3. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
 4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
 5. **macbox** (library): macOS daemon implementation (Colima adapter suite)
@@ -163,13 +163,13 @@ Ten crates in cargo workspace:
 
 ### Critical Design Patterns
 
-**Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `minibox-lib/src/domain.rs` are implemented by adapters in `minibox-lib/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
+**Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `linuxbox/src/domain.rs` are implemented by adapters in `linuxbox/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
 
 **Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and `colima` (macOS via limactl/nerdctl). Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
-**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `minibox-lib/src/protocol.rs` using serde with `#[serde(tag = "type")]` for tagged enums.
+**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `linuxbox/src/protocol.rs` using serde with `#[serde(tag = "type")]` for tagged enums.
 
 **State Management**: In-memory HashMap in `miniboxd/src/state.rs` tracks containers. Not persisted - daemon restart loses all records. Container state machine: Created → Running → Stopped.
 
@@ -183,7 +183,7 @@ Ten crates in cargo workspace:
 2. Daemon checks image cache, pulls from Docker Hub if missing (anonymous auth)
 3. Creates overlay mount: `lowerdir=layer1:layer2:...`, `upperdir=container_rw`, `workdir=container_work`
 4. Forks child with `clone(CLONE_NEWPID|CLONE_NEWNS|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWNET)` via nix crate
-5. Child process (in `minibox-lib/src/container/process.rs`):
+5. Child process (in `linuxbox/src/container/process.rs`):
    - Creates cgroup at `/sys/fs/cgroup/minibox/{id}/`
    - Writes PID to `cgroup.procs`
    - Sets memory.max and cpu.weight if limits specified
@@ -196,26 +196,26 @@ Ten crates in cargo workspace:
 
 ### Key Modules
 
-**minibox-lib/src/**:
+**linuxbox/src/**:
 
 - `preflight.rs`: Host capability probing (cgroups v2, overlay, systemd, kernel version). Used by `just doctor` and test `require_capability!` macro.
 - `domain.rs`: Trait definitions (ports) for hexagonal architecture
 
-**minibox-lib/src/container/**:
+**linuxbox/src/container/**:
 
 - `namespace.rs`: Linux namespace setup using nix crate wrappers
 - `cgroups.rs`: cgroups v2 manipulation (memory, CPU weight)
 - `filesystem.rs`: overlay mount, pivot_root, path validation
 - `process.rs`: Container init process, fork/clone, exec
 
-**minibox-lib/src/image/**:
+**linuxbox/src/image/**:
 
 - `reference.rs`: `ImageRef` — parse `[REGISTRY/]NAMESPACE/NAME[:TAG]`; routes to correct registry adapter
 - `registry.rs`: Docker Hub v2 API client (token auth, manifest/blob fetch)
 - `manifest.rs`: OCI manifest parsing
 - `layer.rs`: Tar extraction with security validation
 
-**minibox-lib/src/adapters/**:
+**linuxbox/src/adapters/**:
 
 - `registry.rs`: `DockerHubRegistry` adapter
 - `colima.rs`: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter`
@@ -309,7 +309,7 @@ Understanding these helps prioritize feature development:
 - **No persistent state**: Daemon restart loses all container records
 - **No exec command**: Cannot run commands in existing containers
 - **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop`, `wsl`, `vf`, and `hcs` adapters exist in `minibox-lib/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; the rest are library-only.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl`, `vf`, and `hcs` adapters exist in `linuxbox/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; the rest are library-only.
 
 ## Tracing Contract
 
@@ -363,7 +363,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 ### Macro and doctest gotchas
 
-- **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (minibox-lib), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
+- **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (linuxbox), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
 - **Private fn doctests** — mark with ```` ```ignore ```` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
 
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
@@ -420,8 +420,8 @@ RUST_LOG=debug sudo ./target/release/miniboxd
 When extending minibox:
 
 1. **Protocol changes**: Update `protocol.rs` types first, then implement in `handler.rs`
-2. **Container primitives**: Add to `minibox-lib/src/container/`, use nix crate for syscalls
-3. **Image operations**: Extend `minibox-lib/src/image/` modules
+2. **Container primitives**: Add to `linuxbox/src/container/`, use nix crate for syscalls
+3. **Image operations**: Extend `linuxbox/src/image/` modules
 4. **State persistence**: Consider replacing HashMap in `state.rs` with serialized storage
 5. **Networking**: Implement in new `network.rs` module, add bridge/veth setup in container init
 

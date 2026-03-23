@@ -25,10 +25,10 @@ note: Platform dispatch, macbox/winbox, ServerListener all shipped
 | Modify | `crates/daemonbox/src/lib.rs` | Fix stale `macboxd` doc comment |
 | Modify | `crates/daemonbox/src/server.rs` | Add `ServerListener` + `PeerCreds`; `run_server<L, F>`; generic `handle_connection<S>` |
 | Modify | `crates/daemonbox/src/handler.rs` | Gate `nix` with `#[cfg(unix)]`; add `#[cfg(windows)]` stubs for `stop_inner` + `daemon_wait_for_exit` |
-| Rename | `crates/minibox-lib/src/adapters/wsl.rs` to `wsl2.rs` | Rename `Wsl*` types to `Wsl2*` |
-| Modify | `crates/minibox-lib/src/adapters/mod.rs` | Gate wsl2/docker_desktop by platform; add vf, hcs under cfg |
-| Create | `crates/minibox-lib/src/adapters/vf.rs` | `VfRuntime`, `VfFilesystem`, `VfRegistry` stubs (`cfg(macos)`) |
-| Create | `crates/minibox-lib/src/adapters/hcs.rs` | `HcsRuntime`, `HcsFilesystem`, `HcsRegistry`, `JobObjectLimiter` stubs (`cfg(windows)`) |
+| Rename | `crates/linuxbox/src/adapters/wsl.rs` to `wsl2.rs` | Rename `Wsl*` types to `Wsl2*` |
+| Modify | `crates/linuxbox/src/adapters/mod.rs` | Gate wsl2/docker_desktop by platform; add vf, hcs under cfg |
+| Create | `crates/linuxbox/src/adapters/vf.rs` | `VfRuntime`, `VfFilesystem`, `VfRegistry` stubs (`cfg(macos)`) |
+| Create | `crates/linuxbox/src/adapters/hcs.rs` | `HcsRuntime`, `HcsFilesystem`, `HcsRegistry`, `JobObjectLimiter` stubs (`cfg(windows)`) |
 | Create | `crates/macbox/Cargo.toml` | macOS-only crate manifest |
 | Create | `crates/macbox/src/lib.rs` | `start()`, `MacboxError`, `colima_deps()`, `UnixServerListener` |
 | Create | `crates/macbox/src/preflight.rs` | `MacboxStatus`, `preflight()`, `start_colima()`, injectable `Executor` |
@@ -119,7 +119,7 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
   //! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
 
   use anyhow::{Context, Result};
-  use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+  use linuxbox::protocol::{DaemonRequest, DaemonResponse};
   use std::future::Future;
   use std::sync::Arc;
   use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -393,7 +393,7 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
   ```toml
   [target.'cfg(target_os = "linux")'.dependencies]
-  minibox-lib = { workspace = true }
+  linuxbox = { workspace = true }
   nix = { workspace = true }
   ```
 
@@ -476,23 +476,23 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
 ---
 
-## Task 5: `minibox-lib` — adapter scaffolding
+## Task 5: `linuxbox` — adapter scaffolding
 
 **Files:** `wsl.rs`→`wsl2.rs`, `mod.rs`, new `vf.rs`, `hcs.rs`
 
 - [ ] **Step 1: Rename wsl.rs to wsl2.rs**
 
-  Run: `git mv crates/minibox-lib/src/adapters/wsl.rs crates/minibox-lib/src/adapters/wsl2.rs`
+  Run: `git mv crates/linuxbox/src/adapters/wsl.rs crates/linuxbox/src/adapters/wsl2.rs`
 
   In `wsl2.rs`, rename `WslRuntime`→`Wsl2Runtime`, `WslFilesystem`→`Wsl2Filesystem`, `WslLimiter`→`Wsl2Limiter` (struct names and impl blocks).
 
 - [ ] **Step 2: Create `vf.rs` macOS stubs**
 
-  Create `crates/minibox-lib/src/adapters/vf.rs`. Use `colima.rs` as a template for trait impl structure. Implement every method body as `Err(anyhow::anyhow!("VfRuntime: not yet implemented (Phase 2)"))`.
+  Create `crates/linuxbox/src/adapters/vf.rs`. Use `colima.rs` as a template for trait impl structure. Implement every method body as `Err(anyhow::anyhow!("VfRuntime: not yet implemented (Phase 2)"))`.
 
   Types to create: `VfRuntime` (impl `ContainerRuntime`), `VfFilesystem` (impl `FilesystemProvider`), `VfRegistry` (impl `ImageRegistry`).
 
-  Check exact trait method signatures in `crates/minibox-lib/src/domain.rs` before writing.
+  Check exact trait method signatures in `crates/linuxbox/src/domain.rs` before writing.
 
 - [ ] **Step 3: Create `hcs.rs` Windows stubs**
 
@@ -528,15 +528,15 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
 - [ ] **Step 5: Check and test**
 
-  Run: `cargo check -p minibox-lib && cargo test -p minibox-lib`
+  Run: `cargo check -p linuxbox && cargo test -p linuxbox`
 
   Fix any method signature mismatches by comparing against `domain.rs` and existing adapter impls.
 
 - [ ] **Step 6: Commit**
 
   ```
-  git add crates/minibox-lib/src/adapters/
-  git commit -m "feat(minibox-lib): vf/hcs stubs, wsl→wsl2 rename, platform-gate adapters"
+  git add crates/linuxbox/src/adapters/
+  git commit -m "feat(linuxbox): vf/hcs stubs, wsl→wsl2 rename, platform-gate adapters"
   ```
 
 ---
@@ -558,7 +558,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
 
   [dependencies]
   daemonbox = { workspace = true }
-  minibox-lib = { workspace = true }
+  linuxbox = { workspace = true }
   anyhow = { workspace = true }
   thiserror = { workspace = true }
   tokio = { workspace = true }
@@ -695,8 +695,8 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
   use anyhow::{Context, Result};
   use daemonbox::handler::HandlerDependencies;
   use daemonbox::server::{PeerCreds, ServerListener};
-  use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
-  use minibox_lib::image::ImageStore;
+  use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+  use linuxbox::image::ImageStore;
   use preflight::{MacboxStatus, default_executor};
   use std::path::PathBuf;
   use std::sync::Arc;
@@ -772,7 +772,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
           std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
       }
 
-      // Check ImageStore::new signature in minibox-lib/src/image/store.rs — adjust as needed.
+      // Check ImageStore::new signature in linuxbox/src/image/store.rs — adjust as needed.
       let image_store = Arc::new(ImageStore::new(&data_dir.join("images")).context("image store")?);
       // Check DaemonState::new signature in daemonbox/src/state.rs — adjust as needed.
       let state = Arc::new(daemonbox::state::DaemonState::new(Arc::clone(&image_store), &data_dir));
@@ -805,7 +805,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
   }
   ```
 
-  > **Before building:** check `ImageStore::new` in `minibox-lib/src/image/` and `DaemonState::new` in `daemonbox/src/state.rs` for exact signatures. Adjust the constructor calls in `start()` to match.
+  > **Before building:** check `ImageStore::new` in `linuxbox/src/image/` and `DaemonState::new` in `daemonbox/src/state.rs` for exact signatures. Adjust the constructor calls in `start()` to match.
 
 - [ ] **Step 11: Build (on macOS)**
 
@@ -839,7 +839,7 @@ Phase 1: all adapter wiring returns `Err`. Crate must compile on Windows.
 
   [dependencies]
   daemonbox = { workspace = true }
-  minibox-lib = { workspace = true }
+  linuxbox = { workspace = true }
   anyhow = { workspace = true }
   thiserror = { workspace = true }
   tokio = { workspace = true }

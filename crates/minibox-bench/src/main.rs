@@ -27,12 +27,12 @@
 //! The path of the timestamped JSON is printed to stdout so callers such as
 //! `xtask` can capture it without scanning the output directory.
 
-use minibox_lib::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use minibox_lib::domain::{
+use linuxbox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter,
 };
-use minibox_lib::protocol::{
+use linuxbox::protocol::{
     ContainerInfo, DAEMON_SOCKET_PATH, DaemonRequest, DaemonResponse, decode_request,
     decode_response, encode_request, encode_response,
 };

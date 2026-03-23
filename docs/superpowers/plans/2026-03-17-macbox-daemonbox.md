@@ -10,18 +10,18 @@ note: Superseded by broader cross-platform plan
 
 **Goal:** Extract shared daemon logic into `daemonbox`, create `macbox` (macOS orchestration lib), ship `macboxd` (macOS-native daemon binary wired to Colima adapters), and lay the groundwork for `winbox`/`winboxd` (Windows via WSL2).
 
-**Architecture:** `daemonbox` holds `handler.rs`, `state.rs`, `server.rs` (moved from `miniboxd`) — zero infrastructure knowledge, depends only on domain port traits from `minibox-lib`. `macbox` owns macOS-specific concerns: Colima preflight, VM lifecycle, path conventions, and adapter wiring. `macboxd` is a thin `main.rs` that sequences startup and delegates everything. `miniboxd/src/lib.rs` becomes a transparent re-export shim so existing tests require no changes. The same pattern then extends to Windows via `winbox`/`winboxd`.
+**Architecture:** `daemonbox` holds `handler.rs`, `state.rs`, `server.rs` (moved from `miniboxd`) — zero infrastructure knowledge, depends only on domain port traits from `linuxbox`. `macbox` owns macOS-specific concerns: Colima preflight, VM lifecycle, path conventions, and adapter wiring. `macboxd` is a thin `main.rs` that sequences startup and delegates everything. `miniboxd/src/lib.rs` becomes a transparent re-export shim so existing tests require no changes. The same pattern then extends to Windows via `winbox`/`winboxd`.
 
 **Platform dependency graph:**
 ```
-miniboxd  → daemonbox → minibox-lib   (Linux)
-macboxd   → daemonbox → minibox-lib   (macOS)
-macboxd   → macbox    → minibox-lib
-winboxd   → daemonbox → minibox-lib   (Windows)
-winboxd   → winbox    → minibox-lib
+miniboxd  → daemonbox → linuxbox   (Linux)
+macboxd   → daemonbox → linuxbox   (macOS)
+macboxd   → macbox    → linuxbox
+winboxd   → daemonbox → linuxbox   (Windows)
+winboxd   → winbox    → linuxbox
 ```
 
-**Tech Stack:** Rust workspace, `minibox-lib` (Colima/WSL2 adapters, domain traits), `nix` (POSIX signal/wait), `tokio` (async), `thiserror`/`anyhow`.
+**Tech Stack:** Rust workspace, `linuxbox` (Colima/WSL2 adapters, domain traits), `nix` (POSIX signal/wait), `tokio` (async), `thiserror`/`anyhow`.
 
 **Spec:** `docs/superpowers/specs/2026-03-17-macbox-daemonbox-design.md`
 
@@ -99,7 +99,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -112,7 +112,7 @@ libc = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-minibox-lib = { workspace = true, features = [] }
+linuxbox = { workspace = true, features = [] }
 ```
 
 - [ ] **Step 3: Copy `handler.rs`, `state.rs`, `server.rs` into `crates/daemonbox/src/`**
@@ -162,7 +162,7 @@ pub use daemonbox::state;
 - [ ] **Step 7: Verify the relevant crates compile**
 
 ```bash
-cargo check -p daemonbox -p miniboxd -p minibox-lib
+cargo check -p daemonbox -p miniboxd -p linuxbox
 ```
 
 Expected: `Finished` with no errors. If there are import errors, check that no file in `daemonbox/src/` still references `miniboxd::` — they should only use `crate::`.
@@ -180,7 +180,7 @@ rm crates/miniboxd/src/server.rs
 - [ ] **Step 9: Verify again**
 
 ```bash
-cargo check -p daemonbox -p miniboxd -p minibox-lib
+cargo check -p daemonbox -p miniboxd -p linuxbox
 ```
 
 Expected: `Finished` with no errors.
@@ -246,7 +246,7 @@ license.workspace = true
 
 [dependencies]
 daemonbox = { workspace = true }
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -450,7 +450,7 @@ pub mod preflight;
 pub use preflight::{ColimaStatus, MacboxError, ensure_vm_running, preflight};
 
 use daemonbox::handler::HandlerDependencies;
-use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -486,7 +486,7 @@ Expected: no fmt diff, no warnings, all tests pass.
 - [ ] **Step 10: Check workspace compiles on macOS**
 
 ```bash
-cargo check -p macbox -p daemonbox -p minibox-lib
+cargo check -p macbox -p daemonbox -p linuxbox
 ```
 
 Expected: `Finished` with no errors.
@@ -532,7 +532,7 @@ path = "src/main.rs"
 [dependencies]
 macbox = { workspace = true }
 daemonbox = { workspace = true }
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
@@ -545,7 +545,7 @@ tracing-subscriber = { workspace = true }
 //! macboxd — macOS container runtime daemon.
 //!
 //! Delegates all container operations to a Colima (Lima) VM via the
-//! Colima adapter suite from minibox-lib.
+//! Colima adapter suite from linuxbox.
 
 #[cfg(not(target_os = "macos"))]
 compile_error!("macboxd requires macOS");
@@ -553,7 +553,7 @@ compile_error!("macboxd requires macOS");
 use anyhow::{Context, Result};
 use daemonbox::state::DaemonState;
 use macbox::{colima_deps, ensure_vm_running, paths, preflight, ColimaStatus};
-use minibox_lib::image::ImageStore;
+use linuxbox::image::ImageStore;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;
@@ -715,7 +715,7 @@ git commit -m "feat: add macboxd — macOS-native daemon binary"
 
 ## Task 4: Create `winbox` library and `winboxd` binary
 
-> **Note:** This task targets Windows. Build and test on a Windows machine with WSL2 installed. The WSL2 adapter already exists in `minibox-lib/src/adapters/wsl.rs`.
+> **Note:** This task targets Windows. Build and test on a Windows machine with WSL2 installed. The WSL2 adapter already exists in `linuxbox/src/adapters/wsl.rs`.
 
 ### Architecture: Named Pipe proxy + WSL2 distro
 
@@ -779,7 +779,7 @@ license.workspace = true
 
 [dependencies]
 daemonbox = { workspace = true }
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -1037,7 +1037,7 @@ path = "src/main.rs"
 [dependencies]
 winbox = { workspace = true }
 daemonbox = { workspace = true }
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
@@ -1139,7 +1139,7 @@ git commit -m "feat: add winbox lib and winboxd — Windows-native daemon via WS
 - [ ] **Step 1: Full test suite (macOS)**
 
 ```bash
-cargo nextest run -p minibox-lib -p daemonbox -p macbox
+cargo nextest run -p linuxbox -p daemonbox -p macbox
 ```
 
 Expected: all tests pass.
@@ -1164,7 +1164,7 @@ Expected: no fmt diff, no warnings. Fix all warnings before proceeding.
 - [ ] **Step 4: Full check on macOS (per-crate, not --workspace)**
 
 ```bash
-cargo check -p daemonbox -p macbox -p macboxd -p minibox-lib -p minibox-cli
+cargo check -p daemonbox -p macbox -p macboxd -p linuxbox -p minibox-cli
 ```
 
 Note: always use per-crate `-p` flags. `miniboxd` has `compile_error!` on macOS; `macboxd` has `compile_error!` on Linux. `cargo check --workspace` will always fail on one platform.
@@ -1176,7 +1176,7 @@ Expected: `Finished` with no errors.
 Run in Colima VM or on a Linux machine:
 
 ```bash
-cargo check -p daemonbox -p miniboxd -p minibox-lib -p minibox-cli -p minibox-bench
+cargo check -p daemonbox -p miniboxd -p linuxbox -p minibox-cli -p minibox-bench
 ```
 
 Note: omit `macbox` and `macboxd` — `macbox` compiles anywhere but the Colima adapters it depends on should be tested on the platform where they're built. `macboxd` has `compile_error!` on non-macOS.

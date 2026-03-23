@@ -12,12 +12,12 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use minibox_lib::domain::NetworkMode;
-use minibox_lib::domain::{
+use linuxbox::domain::NetworkMode;
+use linuxbox::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
     DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec, ResourceConfig,
 };
-use minibox_lib::protocol::{ContainerInfo, DaemonResponse};
+use linuxbox::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,7 +43,7 @@ use crate::state::{ContainerRecord, DaemonState};
 /// Created once in the composition root (main.rs) and passed to all handlers:
 ///
 /// ```rust,ignore
-/// use minibox_lib::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+/// use linuxbox::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
 ///
 /// let deps = Arc::new(HandlerDependencies {
 ///     registry: Arc::new(DockerHubRegistry::new(store)?),
@@ -150,7 +150,7 @@ async fn handle_run_streaming(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    use minibox_lib::protocol::OutputStreamKind;
+    use linuxbox::protocol::OutputStreamKind;
     use std::os::fd::IntoRawFd;
 
     // Build the container ID and rootfs via the shared inner setup, but we need
@@ -265,7 +265,7 @@ async fn run_inner_capture(
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
     use anyhow::Context;
-    use minibox_lib::domain::NetworkConfig;
+    use linuxbox::domain::NetworkConfig;
 
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
@@ -447,7 +447,7 @@ async fn run_inner(
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
     use anyhow::Context;
-    use minibox_lib::domain::NetworkConfig;
+    use linuxbox::domain::NetworkConfig;
 
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
@@ -645,7 +645,7 @@ async fn run_inner(
 /// Wait for a process to exit and return its exit code.
 ///
 /// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `minibox_lib::container::process::wait_for_exit` variant is only
+/// The `linuxbox::container::process::wait_for_exit` variant is only
 /// available on Linux (the `container` module is gated
 /// `#[cfg(target_os = "linux")]`). This local version provides the same
 /// functionality for the macOS streaming path.
@@ -676,7 +676,7 @@ fn handler_wait_for_exit(pid: u32) -> Result<i32> {
 ///
 /// After the process exits:
 /// 1. Any post-exit hooks registered on the container are executed
-///    (Linux only, via `minibox_lib::container::process::run_hooks`).
+///    (Linux only, via `linuxbox::container::process::run_hooks`).
 /// 2. The container state is updated to `"Stopped"` in `DaemonState`.
 ///    Because this runs in a blocking thread, the state update bridges back
 ///    to the async runtime via `Handle::try_current` or a one-shot runtime.
@@ -712,7 +712,7 @@ fn daemon_wait_for_exit(
 
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
-        use minibox_lib::container::process::run_hooks;
+        use linuxbox::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(_exit_code)) {
             warn!("container {id} post-exit hooks error: {e:#}");
         }

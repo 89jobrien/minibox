@@ -8,14 +8,14 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::mocks::{
+use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use minibox_lib::domain::{
+use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter,
 };
-use minibox_lib::protocol::DaemonResponse;
+use linuxbox::protocol::DaemonResponse;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -67,7 +67,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
 }
 
 fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox_lib::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = linuxbox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 

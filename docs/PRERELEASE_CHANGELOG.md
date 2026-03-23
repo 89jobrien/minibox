@@ -28,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - `GhcrRegistry` adapter: ghcr.io OCI registry client with `WWW-Authenticate` challenge/response auth flow.
-- `ImageRef` type in `minibox-lib/src/image/reference.rs`: parses `[REGISTRY/]NAMESPACE/NAME[:TAG]`
+- `ImageRef` type in `linuxbox/src/image/reference.rs`: parses `[REGISTRY/]NAMESPACE/NAME[:TAG]`
   and routes to the correct registry adapter (Docker Hub or ghcr.io).
 - Local image store (`LocalStore`) for reading already-extracted layers without re-pulling.
 
@@ -132,7 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `minibox-lib/src/domain.rs`.
+- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `linuxbox/src/domain.rs`.
 - Infrastructure adapters implementing domain traits for native Linux (namespaces, overlay FS, cgroups v2) and cross-platform stubs (Windows/macOS).
 - Dependency injection wired into daemon handlers; mock adapter implementations for unit tests.
 - Comprehensive unit tests using mock adapters; integration tests against real Linux infrastructure.

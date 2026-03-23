@@ -8,10 +8,10 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use minibox_lib::adapters::mocks::{
+use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use minibox_lib::protocol::DaemonResponse;
+use linuxbox::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -67,7 +67,7 @@ fn make_deps(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox_lib::image::ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store = linuxbox::image::ImageStore::new(tmp.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 

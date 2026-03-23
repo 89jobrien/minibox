@@ -1,5 +1,5 @@
 [package]
-name = "minibox-lib"
+name = "linuxbox"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

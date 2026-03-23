@@ -8,7 +8,7 @@
 //! Streaming responses (`ContainerOutput`) continue until `ContainerStopped`.
 
 use anyhow::{Context, Result};
-use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+use linuxbox::protocol::{DaemonRequest, DaemonResponse};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};

@@ -275,7 +275,7 @@ git commit -m "docs: add CHANGELOG v0.0.4 (GKE adapter, DomainError)"
 
 ### Added
 
-- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `minibox-lib/src/domain.rs`.
+- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `linuxbox/src/domain.rs`.
 - Infrastructure adapters implementing domain traits for native Linux (namespaces, overlay FS, cgroups v2) and cross-platform stubs (Windows/macOS).
 - Dependency injection wired into daemon handlers; mock adapter implementations for unit tests.
 - Comprehensive unit tests using mock adapters; integration tests against real Linux infrastructure.

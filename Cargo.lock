@@ -384,7 +384,7 @@ dependencies = [
  "anyhow",
  "base64",
  "chrono",
- "minibox-lib",
+ "linuxbox",
  "nix",
  "proptest",
  "serde",
@@ -1044,6 +1044,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
+name = "linuxbox"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "criterion",
+ "flate2",
+ "futures",
+ "hex",
+ "libc",
+ "minibox-macros",
+ "nix",
+ "proptest",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,7 +1106,7 @@ dependencies = [
  "anyhow",
  "daemonbox",
  "dirs",
- "minibox-lib",
+ "linuxbox",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1113,7 +1142,7 @@ name = "minibox-bench"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "minibox-lib",
+ "linuxbox",
  "serde",
  "serde_json",
  "tokio",
@@ -1126,40 +1155,11 @@ dependencies = [
  "anyhow",
  "base64",
  "clap",
- "minibox-lib",
+ "linuxbox",
  "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "minibox-lib"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "criterion",
- "flate2",
- "futures",
- "hex",
- "libc",
- "minibox-macros",
- "nix",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
- "walkdir",
 ]
 
 [[package]]
@@ -1204,8 +1204,8 @@ dependencies = [
  "anyhow",
  "daemonbox",
  "libc",
+ "linuxbox",
  "macbox",
- "minibox-lib",
  "nix",
  "tempfile",
  "tokio",
@@ -2501,7 +2501,7 @@ dependencies = [
  "anyhow",
  "daemonbox",
  "dirs",
- "minibox-lib",
+ "linuxbox",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

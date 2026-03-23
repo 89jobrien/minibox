@@ -62,7 +62,7 @@ Enables TDD for all subsequent steps.
 - `crates/minibox-orch/src/adapters/mocks.rs` -- `MockDaemonClient`, `MockModelClient`,
   `MockProfileStore`, `MockTelemetryStore`, `MockApprovalGate`
 
-**Pattern to follow:** `crates/minibox-lib/src/adapters/mocks.rs`
+**Pattern to follow:** `crates/linuxbox/src/adapters/mocks.rs`
 
 - `Arc<Mutex<InternalState>>` for interior mutability
 - Builder methods for configuring behavior
@@ -147,7 +147,7 @@ pub struct HarnessEvolver {
 
 - `crates/minibox-orch/src/adapters/daemon_client.rs`
 
-**Reuse:** `minibox_lib::protocol::{DaemonRequest, DaemonResponse, ContainerInfo, encode_request,
+**Reuse:** `linuxbox::protocol::{DaemonRequest, DaemonResponse, ContainerInfo, encode_request,
 decode_response}` and the `send_request` pattern from `crates/minibox-cli/src/commands/mod.rs:28`.
 
 **Key behavior:** `wait_container` polls `list_containers` every 500 ms until state is
@@ -240,10 +240,10 @@ cargo build -p minibox-orch --release
 
 | Existing file | What to reuse |
 |---|---|
-| `crates/minibox-lib/src/protocol.rs` | `DaemonRequest`, `DaemonResponse`, `ContainerInfo`, encode/decode |
-| `crates/minibox-lib/src/domain.rs` | `ResourceConfig` (map to/from `ResourceHints`) |
+| `crates/linuxbox/src/protocol.rs` | `DaemonRequest`, `DaemonResponse`, `ContainerInfo`, encode/decode |
+| `crates/linuxbox/src/domain.rs` | `ResourceConfig` (map to/from `ResourceHints`) |
 | `crates/minibox-cli/src/commands/mod.rs:28` | `send_request()` Unix socket pattern |
-| `crates/minibox-lib/src/adapters/mocks.rs` | Mock adapter pattern (`Arc<Mutex<State>>`, builders) |
+| `crates/linuxbox/src/adapters/mocks.rs` | Mock adapter pattern (`Arc<Mutex<State>>`, builders) |
 | `crates/miniboxd/src/handler.rs` | `HandlerDependencies` pattern for DI structs |
 
 ## Conventions to Follow

@@ -5,10 +5,10 @@ use std::sync::{Arc, OnceLock};
 
 use daemonbox::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox_lib::adapters::mocks::{
+use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use minibox_lib::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
+use linuxbox::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
 // ── Runtime ───────────────────────────────────────────────────────────────────

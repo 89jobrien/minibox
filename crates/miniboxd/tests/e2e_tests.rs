@@ -12,8 +12,8 @@
 
 #![cfg(target_os = "linux")]
 
-use minibox_lib::preflight;
-use minibox_lib::require_capability;
+use linuxbox::preflight;
+use linuxbox::require_capability;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};

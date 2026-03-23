@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Crate:** minibox-lib (domain + adapters), daemonbox (handler wiring)
+**Crate:** linuxbox (domain + adapters), daemonbox (handler wiring)
 
 ## Problem
 
@@ -135,7 +135,7 @@ The existing trait methods (`setup`, `attach`, `cleanup`, `stats`) are sufficien
 ## Adapter Architecture
 
 ```
-minibox-lib/src/adapters/
+linuxbox/src/adapters/
 ├── network/
 │   ├── mod.rs          # NetworkMode dispatch
 │   ├── none.rs         # NoopNetwork (current behavior)

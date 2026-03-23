@@ -229,7 +229,7 @@ Gated behind macOS + Colima-running check. Results flow to `bench/results/bench.
 
 | File                                 | Change                                                                                                           |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `minibox-lib/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new`    |
+| `linuxbox/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new`    |
 | `daemonbox/src/handler.rs`           | Widen three `#[cfg(target_os = "linux")]` gates to `#[cfg(unix)]`                                                |
 | `macbox/src/lib.rs`                  | Update composition root: pass executor to `ColimaLimiter::new`, create and pass `LimaSpawner` to `ColimaRuntime` |
 | `minibox-bench/src/main.rs`          | Add `colima` suite with three measurements                                                                       |

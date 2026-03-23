@@ -19,11 +19,11 @@ import agent_log
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 TRAIT_HINTS = {
-    "BridgeNetworking": "crates/minibox-lib/src/adapters/",
-    "PseudoTerminal": "crates/minibox-lib/src/adapters/",
-    "ContainerExec": "crates/minibox-lib/src/adapters/",
-    "LogStore": "crates/minibox-lib/src/adapters/",
-    "StateStore": "crates/minibox-lib/src/adapters/",
+    "BridgeNetworking": "crates/linuxbox/src/adapters/",
+    "PseudoTerminal": "crates/linuxbox/src/adapters/",
+    "ContainerExec": "crates/linuxbox/src/adapters/",
+    "LogStore": "crates/linuxbox/src/adapters/",
+    "StateStore": "crates/linuxbox/src/adapters/",
 }
 
 
@@ -34,15 +34,15 @@ async def main() -> None:
     args = parser.parse_args()
 
     output_hint = f"\nWrite the tests to: {args.output}" if args.output else ""
-    adapter_dir = TRAIT_HINTS.get(args.trait, "crates/minibox-lib/src/adapters/")
+    adapter_dir = TRAIT_HINTS.get(args.trait, "crates/linuxbox/src/adapters/")
 
-    prompt = f"""Generate unit tests for a new `{args.trait}` adapter in minibox-lib.
+    prompt = f"""Generate unit tests for a new `{args.trait}` adapter in linuxbox.
 
 Steps:
-1. Read `crates/minibox-lib/src/domain.rs` to understand the `{args.trait}` trait definition
-2. Read `crates/minibox-lib/src/adapters/mocks.rs` to understand the mock adapter pattern
-3. Read 2-3 existing test modules (e.g. in `crates/minibox-lib/src/container/` or
-   `crates/minibox-lib/src/image/`) to match the project's test style
+1. Read `crates/linuxbox/src/domain.rs` to understand the `{args.trait}` trait definition
+2. Read `crates/linuxbox/src/adapters/mocks.rs` to understand the mock adapter pattern
+3. Read 2-3 existing test modules (e.g. in `crates/linuxbox/src/container/` or
+   `crates/linuxbox/src/image/`) to match the project's test style
 4. Generate a complete test module for a `Mock{args.trait}` adapter that:
    - Implements `{args.trait}` from domain.rs
    - Covers the happy path, error conditions, and edge cases

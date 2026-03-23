@@ -54,8 +54,8 @@ use tracing::debug;
 /// # Example
 ///
 /// ```rust,ignore
-/// use minibox_lib::adapters::LinuxNamespaceRuntime;
-/// use minibox_lib::domain::{ContainerRuntime, ContainerSpawnConfig};
+/// use linuxbox::adapters::LinuxNamespaceRuntime;
+/// use linuxbox::domain::{ContainerRuntime, ContainerSpawnConfig};
 /// use std::path::PathBuf;
 ///
 /// #[tokio::main]

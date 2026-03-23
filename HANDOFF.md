@@ -21,7 +21,7 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 
 ```
 crates/
-  minibox-lib/      — domain traits + adapters (compiles everywhere)
+  linuxbox/      — domain traits + adapters (compiles everywhere)
   minibox-macros/   — proc macros: as_any!, default_new!, adapt!
   daemonbox/        — handler/state/server (Unix-safe; macOS/Linux)
   miniboxd/         — unified daemon binary; dispatches by platform
@@ -31,18 +31,18 @@ crates/
   macbox/           — macOS daemon: Colima preflight, adapter wiring, start()
   winbox/           — Windows daemon stub: Named Pipe paths, start() stub
   minibox-cli/      — CLI client (platform-aware socket/pipe path)
-  minibox-bench/    — benchmark harness (minibox-lib only)
+  minibox-bench/    — benchmark harness (linuxbox only)
   xtask/            — dev tool: pre-commit, test-unit, e2e-suite, coverage
 ```
 
 **Dependency graph:**
 
 ```
-miniboxd  ──[linux]──► minibox-lib
-          ──[macos]──► macbox ──► daemonbox ──► minibox-lib
-          ──[win]────► winbox ──► daemonbox ──► minibox-lib
-minibox-cli ─────────────────────────────────► minibox-lib
-minibox-bench ───────────────────────────────► minibox-lib
+miniboxd  ──[linux]──► linuxbox
+          ──[macos]──► macbox ──► daemonbox ──► linuxbox
+          ──[win]────► winbox ──► daemonbox ──► linuxbox
+minibox-cli ─────────────────────────────────► linuxbox
+minibox-bench ───────────────────────────────► linuxbox
 ```
 
 ---
@@ -51,7 +51,7 @@ minibox-bench ──────────────────────
 
 | Suite | Count | Platform |
 |---|---|---|
-| minibox-lib unit | ~95 | any |
+| linuxbox unit | ~95 | any |
 | minibox-cli unit | 11 | any |
 | daemonbox handler tests | 12 | any |
 | daemonbox conformance tests | 16 (+3 ignored) | any |
@@ -69,7 +69,7 @@ Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 Single workflow: `.github/workflows/ci.yml`
 
 - **macOS job** (GitHub-hosted `macos-latest`): `cargo fmt --all --check` +
-  `cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings` +
+  `cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings` +
   `cargo xtask test-unit`
 
 No Linux CI job yet (self-hosted runner work tracked in `mbx:minibox-ci` skill).
@@ -81,7 +81,7 @@ No Linux CI job yet (self-hosted runner work tracked in `mbx:minibox-ci` skill).
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 
 # Full pre-commit gate:
@@ -181,7 +181,7 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 - No `exec` command — cannot run commands in existing containers
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
-- `docker_desktop` and `wsl2` adapters exist in `minibox-lib` but are **not wired** into `miniboxd`
+- `docker_desktop` and `wsl2` adapters exist in `linuxbox` but are **not wired** into `miniboxd`
 
 ---
 

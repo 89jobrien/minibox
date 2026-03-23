@@ -13,7 +13,7 @@ pub mod run;
 pub mod stop;
 
 use anyhow::{Context, Result};
-use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+use linuxbox::protocol::{DaemonRequest, DaemonResponse};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tracing::debug;

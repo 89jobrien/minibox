@@ -1,12 +1,12 @@
 //! Shared test fixtures for adapter and integration tests.
 //!
 //! This module provides builder utilities and temporary directory fixtures
-//! to simplify test setup across the minibox-lib test suite.
+//! to simplify test setup across the linuxbox test suite.
 //!
 //! # Usage
 //!
 //! ```rust,ignore
-//! use minibox_lib::adapters::test_fixtures::{MockAdapterBuilder, TempContainerFixture};
+//! use linuxbox::adapters::test_fixtures::{MockAdapterBuilder, TempContainerFixture};
 //!
 //! #[tokio::test]
 //! async fn test_something() {

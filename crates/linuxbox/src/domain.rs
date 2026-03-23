@@ -111,7 +111,7 @@ pub trait AsAny: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use minibox_lib::domain::ImageRegistry;
+/// use linuxbox::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,

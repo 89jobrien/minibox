@@ -21,21 +21,21 @@ note: ImageRef, GhcrRegistry, streaming protocol all shipped
 ### New files
 | File | Responsibility |
 |------|---------------|
-| `crates/minibox-lib/src/image/reference.rs` | `ImageRef` type — parse/validate/route image references |
-| `crates/minibox-lib/src/adapters/ghcr.rs` | `GhcrRegistry` — ghcr.io OCI adapter |
+| `crates/linuxbox/src/image/reference.rs` | `ImageRef` type — parse/validate/route image references |
+| `crates/linuxbox/src/adapters/ghcr.rs` | `GhcrRegistry` — ghcr.io OCI adapter |
 
 ### Modified files
 | File | Change |
 |------|--------|
 | `crates/minibox-macros/src/lib.rs` | Add `normalize_name!`, `normalize_digest!`, `normalize!`, `denormalize_digest!` (mirrors `as_any!`/`default_new!`/`adapt!` pattern) |
-| `crates/minibox-lib/src/image/mod.rs` | Add `pub mod reference;`; replace 3 inline `.replace` calls with `normalize_name!`/`normalize_digest!` |
-| `crates/minibox-lib/src/image/registry.rs` | Replace 2 inline `.replace` calls with `normalize_name!`/`normalize_digest!` |
-| `crates/minibox-lib/src/adapters/registry.rs` | Replace 1 inline `.replace('_', ":")` call with `denormalize_digest!` |
-| `crates/minibox-lib/src/lib.rs` | Re-export `ImageRef` at crate root |
-| `crates/minibox-lib/src/adapters/mod.rs` | Add `pub mod ghcr; pub use ghcr::GhcrRegistry;` |
-| `crates/minibox-lib/src/protocol.rs` | Add `ContainerOutput`, `ContainerStopped`, `OutputStreamKind`; add `ephemeral: bool` to `Run` |
-| `crates/minibox-lib/src/domain.rs` | Add `SpawnResult` type; add `capture_output: bool` and `stdout_fd: Option<OwnedFd>` to `ContainerSpawnConfig`; update `spawn_process` to return `SpawnResult` |
-| `crates/minibox-lib/src/container/process.rs` | Add pipe setup before clone; child dup2s; parent returns read end |
+| `crates/linuxbox/src/image/mod.rs` | Add `pub mod reference;`; replace 3 inline `.replace` calls with `normalize_name!`/`normalize_digest!` |
+| `crates/linuxbox/src/image/registry.rs` | Replace 2 inline `.replace` calls with `normalize_name!`/`normalize_digest!` |
+| `crates/linuxbox/src/adapters/registry.rs` | Replace 1 inline `.replace('_', ":")` call with `denormalize_digest!` |
+| `crates/linuxbox/src/lib.rs` | Re-export `ImageRef` at crate root |
+| `crates/linuxbox/src/adapters/mod.rs` | Add `pub mod ghcr; pub use ghcr::GhcrRegistry;` |
+| `crates/linuxbox/src/protocol.rs` | Add `ContainerOutput`, `ContainerStopped`, `OutputStreamKind`; add `ephemeral: bool` to `Run` |
+| `crates/linuxbox/src/domain.rs` | Add `SpawnResult` type; add `capture_output: bool` and `stdout_fd: Option<OwnedFd>` to `ContainerSpawnConfig`; update `spawn_process` to return `SpawnResult` |
+| `crates/linuxbox/src/container/process.rs` | Add pipe setup before clone; child dup2s; parent returns read end |
 | `crates/daemonbox/src/handler.rs` | Add `select_registry()`, update `handle_run`/`handle_pull` to use `ImageRef`, add streaming loop |
 | `crates/daemonbox/src/server.rs` | Support multi-message streaming responses via channel |
 | `crates/miniboxd/src/main.rs` | Add `GhcrRegistry` init, `resolve_data_dir()` with UID-aware default |
@@ -49,13 +49,13 @@ note: ImageRef, GhcrRegistry, streaming protocol all shipped
 ## Task 1: `ImageRef` — Image Reference Parsing
 
 **Files:**
-- Create: `crates/minibox-lib/src/image/reference.rs`
-- Modify: `crates/minibox-lib/src/image/mod.rs`
-- Modify: `crates/minibox-lib/src/lib.rs`
+- Create: `crates/linuxbox/src/image/reference.rs`
+- Modify: `crates/linuxbox/src/image/mod.rs`
+- Modify: `crates/linuxbox/src/lib.rs`
 
 - [ ] **Step 1.1: Write failing tests in `reference.rs`**
 
-Create `crates/minibox-lib/src/image/reference.rs` with tests only first:
+Create `crates/linuxbox/src/image/reference.rs` with tests only first:
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -220,7 +220,7 @@ mod tests {
 - [ ] **Step 1.2: Run tests — expect runtime panics (unimplemented)**
 
 ```bash
-cargo test -p minibox-lib image::reference -- --nocapture
+cargo test -p linuxbox image::reference -- --nocapture
 ```
 
 Expected: tests compile but panic with 'not yet implemented' (because `unimplemented!()` panics at runtime, not compile time).
@@ -396,7 +396,7 @@ macro_rules! denormalize_digest {
 
 Five call sites across two files get the macros. One reverse call gets `denormalize_digest!`.
 
-`crates/minibox-lib/src/image/mod.rs` — add at the top:
+`crates/linuxbox/src/image/mod.rs` — add at the top:
 ```rust
 use minibox_macros::{normalize_digest, normalize_name};
 ```
@@ -413,7 +413,7 @@ let digest_key = normalize_digest!(desc.digest);  // was: desc.digest.replace(':
 let digest_key = normalize_digest!(digest);       // was: digest.replace(':', "_")
 ```
 
-`crates/minibox-lib/src/image/registry.rs` — add at the top:
+`crates/linuxbox/src/image/registry.rs` — add at the top:
 ```rust
 use minibox_macros::{normalize_digest, normalize_name};
 ```
@@ -429,7 +429,7 @@ let layer_dir = store.base_dir
     .join(&digest_key);
 ```
 
-`crates/minibox-lib/src/adapters/registry.rs` — add at the top:
+`crates/linuxbox/src/adapters/registry.rs` — add at the top:
 ```rust
 use minibox_macros::denormalize_digest;
 ```
@@ -454,18 +454,18 @@ Run tests to confirm no regressions:
 
 ```bash
 cargo test -p minibox-macros -- --nocapture
-cargo test -p minibox-lib image -- --nocapture
-cargo test -p minibox-lib adapters -- --nocapture
+cargo test -p linuxbox image -- --nocapture
+cargo test -p linuxbox adapters -- --nocapture
 ```
 
 - [ ] **Step 1.5: Wire into `image/mod.rs` and `lib.rs`**
 
-In `crates/minibox-lib/src/image/mod.rs`, add:
+In `crates/linuxbox/src/image/mod.rs`, add:
 ```rust
 pub mod reference;
 ```
 
-In `crates/minibox-lib/src/lib.rs`, add a re-export (find the `pub use` block and add):
+In `crates/linuxbox/src/lib.rs`, add a re-export (find the `pub use` block and add):
 ```rust
 pub use image::reference::{ImageRef, ImageRefError};
 ```
@@ -473,13 +473,13 @@ pub use image::reference::{ImageRef, ImageRefError};
 - [ ] **Step 1.6: Run tests — expect all pass**
 
 ```bash
-cargo test -p minibox-lib image::reference -- --nocapture
-cargo test -p minibox-lib image -- --nocapture
+cargo test -p linuxbox image::reference -- --nocapture
+cargo test -p linuxbox image -- --nocapture
 ```
 
 Expected: all tests pass. Also run:
 ```bash
-cargo clippy -p minibox-lib -- -D warnings
+cargo clippy -p linuxbox -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -487,9 +487,9 @@ cargo fmt --all --check
 
 ```bash
 git add crates/minibox-macros/src/lib.rs \
-        crates/minibox-lib/src/image/reference.rs \
-        crates/minibox-lib/src/image/mod.rs \
-        crates/minibox-lib/src/lib.rs
+        crates/linuxbox/src/image/reference.rs \
+        crates/linuxbox/src/image/mod.rs \
+        crates/linuxbox/src/lib.rs
 git commit -m "feat: add ImageRef parsing; add normalize_name!/normalize_digest!/normalize! macros"
 ```
 
@@ -614,27 +614,27 @@ git commit -m "feat(miniboxd): resolve data dir to ~/.mbx/cache for non-root"
 ## Task 2b: Preflight Doctor Check for Data Dir
 
 **Files:**
-- Modify: `crates/minibox-lib/src/preflight.rs`
+- Modify: `crates/linuxbox/src/preflight.rs`
 
 Add a line to the preflight doctor report that prints the active data dir. This helps users and operators confirm which storage path is in use.
 
 - [ ] **Step 2b.1: Read `preflight.rs` before editing**
 
 ```bash
-cat crates/minibox-lib/src/preflight.rs
+cat crates/linuxbox/src/preflight.rs
 ```
 
 Find the `format_report` function (or equivalent) that builds the human-readable preflight output string.
 
 - [ ] **Step 2b.2: Add data dir line to the doctor report**
 
-In `crates/minibox-lib/src/preflight.rs`, find where the report string is formatted (look for the existing lines like `"cgroups v2: ..."`, `"overlay fs: ..."`, etc.) and add:
+In `crates/linuxbox/src/preflight.rs`, find where the report string is formatted (look for the existing lines like `"cgroups v2: ..."`, `"overlay fs: ..."`, etc.) and add:
 
 ```rust
 // At the top of the function or alongside other env resolution:
 let data_dir = {
     // Mirror the resolution logic from resolve_data_dir_for_uid in miniboxd.
-    // preflight.rs lives in minibox-lib so it cannot import miniboxd directly.
+    // preflight.rs lives in linuxbox so it cannot import miniboxd directly.
     // Inline the resolution here using nix::unistd::getuid():
     let uid = nix::unistd::getuid().as_raw();
     if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
@@ -663,7 +663,7 @@ data dir: /home/user/.mbx/cache    (when running as non-root)
 - [ ] **Step 2b.3: Verify existing test still passes**
 
 ```bash
-cargo test -p minibox-lib preflight -- --nocapture
+cargo test -p linuxbox preflight -- --nocapture
 ```
 
 The existing `test_format_report_does_not_panic` (or equivalent smoke test for the report formatter) must still pass — the new line does not change the test's pass/fail condition since it only checks that formatting does not panic.
@@ -671,7 +671,7 @@ The existing `test_format_report_does_not_panic` (or equivalent smoke test for t
 - [ ] **Step 2b.4: Commit**
 
 ```bash
-git add crates/minibox-lib/src/preflight.rs
+git add crates/linuxbox/src/preflight.rs
 git commit -m "feat(preflight): include active data dir in doctor report"
 ```
 
@@ -680,8 +680,8 @@ git commit -m "feat(preflight): include active data dir in doctor report"
 ## Task 3: `GhcrRegistry` Adapter
 
 **Files:**
-- Create: `crates/minibox-lib/src/adapters/ghcr.rs`
-- Modify: `crates/minibox-lib/src/adapters/mod.rs`
+- Create: `crates/linuxbox/src/adapters/ghcr.rs`
+- Modify: `crates/linuxbox/src/adapters/mod.rs`
 
 `GhcrRegistry` follows the same pattern as `DockerHubRegistry`. It wraps an `Arc<ImageStore>` and makes HTTPS calls to `ghcr.io` using the OCI Distribution Spec auth flow.
 
@@ -689,14 +689,14 @@ git commit -m "feat(preflight): include active data dir in doctor report"
 
 ```bash
 # Understand the DockerHubRegistry pattern you're following
-cat crates/minibox-lib/src/adapters/registry.rs
-cat crates/minibox-lib/src/image/registry.rs
-cat crates/minibox-lib/src/adapters/mod.rs
+cat crates/linuxbox/src/adapters/registry.rs
+cat crates/linuxbox/src/image/registry.rs
+cat crates/linuxbox/src/adapters/mod.rs
 ```
 
 - [ ] **Step 3.2: Write failing tests in `ghcr.rs`**
 
-Create `crates/minibox-lib/src/adapters/ghcr.rs` with the struct stub and tests:
+Create `crates/linuxbox/src/adapters/ghcr.rs` with the struct stub and tests:
 
 ```rust
 use crate::domain::{ImageMetadata, ImageRegistry, LayerInfo};
@@ -793,14 +793,14 @@ mod tests {
 - [ ] **Step 3.3: Run tests — expect compile errors or failures**
 
 ```bash
-cargo test -p minibox-lib adapters::ghcr -- --nocapture
+cargo test -p linuxbox adapters::ghcr -- --nocapture
 ```
 
 Expected: compile errors until wired up. Fix import issues as you go.
 
 - [ ] **Step 3.4: Wire `GhcrRegistry` into `adapters/mod.rs`**
 
-Open `crates/minibox-lib/src/adapters/mod.rs` and add:
+Open `crates/linuxbox/src/adapters/mod.rs` and add:
 ```rust
 pub mod ghcr;
 pub use ghcr::GhcrRegistry;
@@ -810,7 +810,7 @@ pub use ghcr::GhcrRegistry;
 
 - [ ] **Step 3.5: Implement `pull_image` for `GhcrRegistry`**
 
-Replace the `todo!()` with the full auth + pull flow. Read `crates/minibox-lib/src/image/registry.rs` (`RegistryClient`) first — `GhcrRegistry.pull_image` follows the same orchestration but with a different auth endpoint.
+Replace the `todo!()` with the full auth + pull flow. Read `crates/linuxbox/src/image/registry.rs` (`RegistryClient`) first — `GhcrRegistry.pull_image` follows the same orchestration but with a different auth endpoint.
 
 The auth flow for ghcr.io:
 
@@ -821,7 +821,7 @@ async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata> {
 
     let token = self.authenticate(name).await?;
 
-    // Get manifest (reuse OciManifest types from minibox-lib)
+    // Get manifest (reuse OciManifest types from linuxbox)
     let manifest = self.get_manifest(name, tag, &token).await?;
     // Note: get_manifest signature is (repo, tag_or_digest, token) — for manifest lists it
     // recursively calls self.get_manifest(repo, &desc.digest, token) to resolve to a single manifest.
@@ -1019,17 +1019,17 @@ async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> Result<byte
 - [ ] **Step 3.6: Run tests — expect all pass**
 
 ```bash
-cargo test -p minibox-lib adapters::ghcr -- --nocapture
-cargo clippy -p minibox-lib -- -D warnings
+cargo test -p linuxbox adapters::ghcr -- --nocapture
+cargo clippy -p linuxbox -- -D warnings
 cargo fmt --all --check
 ```
 
 - [ ] **Step 3.7: Commit**
 
 ```bash
-git add crates/minibox-lib/src/adapters/ghcr.rs \
-        crates/minibox-lib/src/adapters/mod.rs
-git commit -m "feat(minibox-lib): add GhcrRegistry adapter for ghcr.io"
+git add crates/linuxbox/src/adapters/ghcr.rs \
+        crates/linuxbox/src/adapters/mod.rs
+git commit -m "feat(linuxbox): add GhcrRegistry adapter for ghcr.io"
 ```
 
 ---
@@ -1056,10 +1056,10 @@ These tests must FAIL before `select_registry` is implemented. Add a stub with `
 ```rust
 // Temporary stub so tests compile (replace with real impl in Step 4.4):
 fn select_registry<'a>(
-    _image_ref: &minibox_lib::image::reference::ImageRef,
-    _docker: &'a dyn minibox_lib::domain::ImageRegistry,
-    _ghcr: &'a dyn minibox_lib::domain::ImageRegistry,
-) -> &'a dyn minibox_lib::domain::ImageRegistry {
+    _image_ref: &linuxbox::image::reference::ImageRef,
+    _docker: &'a dyn linuxbox::domain::ImageRegistry,
+    _ghcr: &'a dyn linuxbox::domain::ImageRegistry,
+) -> &'a dyn linuxbox::domain::ImageRegistry {
     unimplemented!()
 }
 ```
@@ -1073,45 +1073,45 @@ mod tests {
 
     #[test]
     fn select_registry_routes_ghcr() {
-        use minibox_lib::image::reference::ImageRef;
+        use linuxbox::image::reference::ImageRef;
         use std::sync::Arc;
 
         let temp = tempfile::TempDir::new().unwrap();
-        let store = Arc::new(minibox_lib::image::ImageStore::new(temp.path().join("images")).unwrap());
-        let docker: Arc<dyn minibox_lib::domain::ImageRegistry> =
-            Arc::new(minibox_lib::adapters::DockerHubRegistry::new(Arc::clone(&store)).unwrap());
-        let ghcr: Arc<dyn minibox_lib::domain::ImageRegistry> =
-            Arc::new(minibox_lib::adapters::GhcrRegistry::new(Arc::clone(&store)).unwrap());
+        let store = Arc::new(linuxbox::image::ImageStore::new(temp.path().join("images")).unwrap());
+        let docker: Arc<dyn linuxbox::domain::ImageRegistry> =
+            Arc::new(linuxbox::adapters::DockerHubRegistry::new(Arc::clone(&store)).unwrap());
+        let ghcr: Arc<dyn linuxbox::domain::ImageRegistry> =
+            Arc::new(linuxbox::adapters::GhcrRegistry::new(Arc::clone(&store)).unwrap());
 
         let ghcr_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
 
         // select_registry must return the ghcr registry (same object pointer)
         let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
         assert!(std::ptr::eq(
-            selected as *const dyn minibox_lib::domain::ImageRegistry as *const (),
-            ghcr.as_ref() as *const dyn minibox_lib::domain::ImageRegistry as *const ()
+            selected as *const dyn linuxbox::domain::ImageRegistry as *const (),
+            ghcr.as_ref() as *const dyn linuxbox::domain::ImageRegistry as *const ()
         ));
     }
 
     #[test]
     fn select_registry_routes_docker() {
-        use minibox_lib::image::reference::ImageRef;
+        use linuxbox::image::reference::ImageRef;
         use std::sync::Arc;
 
         let temp = tempfile::TempDir::new().unwrap();
-        let store = Arc::new(minibox_lib::image::ImageStore::new(temp.path().join("images")).unwrap());
-        let docker: Arc<dyn minibox_lib::domain::ImageRegistry> =
-            Arc::new(minibox_lib::adapters::DockerHubRegistry::new(Arc::clone(&store)).unwrap());
-        let ghcr: Arc<dyn minibox_lib::domain::ImageRegistry> =
-            Arc::new(minibox_lib::adapters::GhcrRegistry::new(Arc::clone(&store)).unwrap());
+        let store = Arc::new(linuxbox::image::ImageStore::new(temp.path().join("images")).unwrap());
+        let docker: Arc<dyn linuxbox::domain::ImageRegistry> =
+            Arc::new(linuxbox::adapters::DockerHubRegistry::new(Arc::clone(&store)).unwrap());
+        let ghcr: Arc<dyn linuxbox::domain::ImageRegistry> =
+            Arc::new(linuxbox::adapters::GhcrRegistry::new(Arc::clone(&store)).unwrap());
 
         let docker_ref = ImageRef::parse("alpine").unwrap();
 
         // select_registry must return the docker registry (same object pointer)
         let selected = select_registry(&docker_ref, docker.as_ref(), ghcr.as_ref());
         assert!(std::ptr::eq(
-            selected as *const dyn minibox_lib::domain::ImageRegistry as *const (),
-            docker.as_ref() as *const dyn minibox_lib::domain::ImageRegistry as *const ()
+            selected as *const dyn linuxbox::domain::ImageRegistry as *const (),
+            docker.as_ref() as *const dyn linuxbox::domain::ImageRegistry as *const ()
         ));
     }
 }
@@ -1141,13 +1141,13 @@ pub struct HandlerDependencies {
 The function takes the two registries directly (so the tests from Step 4.2 can call it without a full `HandlerDependencies`):
 
 ```rust
-use minibox_lib::image::reference::ImageRef;
+use linuxbox::image::reference::ImageRef;
 
 fn select_registry<'a>(
     image_ref: &ImageRef,
-    docker: &'a dyn minibox_lib::domain::ImageRegistry,
-    ghcr: &'a dyn minibox_lib::domain::ImageRegistry,
-) -> &'a dyn minibox_lib::domain::ImageRegistry {
+    docker: &'a dyn linuxbox::domain::ImageRegistry,
+    ghcr: &'a dyn linuxbox::domain::ImageRegistry,
+) -> &'a dyn linuxbox::domain::ImageRegistry {
     if image_ref.registry == "ghcr.io" {
         ghcr
     } else {
@@ -1236,7 +1236,7 @@ Then update the `has_image`, `pull_image`, and `get_image_layers` calls to use `
 Find where `DockerHubRegistry` is initialized and add `GhcrRegistry` alongside it:
 
 ```rust
-use minibox_lib::adapters::{DockerHubRegistry, GhcrRegistry};
+use linuxbox::adapters::{DockerHubRegistry, GhcrRegistry};
 
 // In main():
 let ghcr_registry = Arc::new(
@@ -1268,10 +1268,10 @@ let deps = Arc::new(HandlerDependencies {
 - [ ] **Step 4.9: Run all tests — expect pass (macOS-safe subset)**
 
 ```bash
-cargo test -p minibox-lib -p daemonbox --lib -- --nocapture
+cargo test -p linuxbox -p daemonbox --lib -- --nocapture
 cargo test -p daemonbox --test handler_tests -- --nocapture
 cargo test -p daemonbox --test conformance_tests -- --nocapture
-cargo clippy -p minibox-lib -p daemonbox -p miniboxd -- -D warnings
+cargo clippy -p linuxbox -p daemonbox -p miniboxd -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -1289,8 +1289,8 @@ git commit -m "feat(daemonbox): add GhcrRegistry, select_registry routing by ima
 ## Task 4b: Update `DockerHubRegistry` to Accept `ImageRef`
 
 **Files:**
-- Modify: `crates/minibox-lib/src/adapters/registry.rs`
-- Modify: `crates/minibox-lib/src/domain.rs` (trait signature)
+- Modify: `crates/linuxbox/src/adapters/registry.rs`
+- Modify: `crates/linuxbox/src/domain.rs` (trait signature)
 
 The `ImageRegistry` trait currently has `pull_image(name: &str, tag: &str)`. Since `handle_pull` now has an `ImageRef`, pass it directly to the registry so each registry can control how it maps ref to API path and storage key.
 
@@ -1311,7 +1311,7 @@ where `ImageRef` is imported from `crate::image::reference::ImageRef`.
 
 - [ ] **Step 4b.2: Update `DockerHubRegistry` in `registry.rs`**
 
-In `crates/minibox-lib/src/adapters/registry.rs`, update `pull_image` to accept `image_ref: &ImageRef`:
+In `crates/linuxbox/src/adapters/registry.rs`, update `pull_image` to accept `image_ref: &ImageRef`:
 
 ```rust
 async fn pull_image(&self, image_ref: &ImageRef) -> Result<ImageMetadata> {
@@ -1345,7 +1345,7 @@ async fn pull_image(&self, image_ref: &ImageRef) -> Result<ImageMetadata> {
 - [ ] **Step 4b.4: Update all other `impl ImageRegistry` blocks**
 
 The following also implement `ImageRegistry` and must be updated:
-- `MockImageRegistry` in `crates/minibox-lib/src/adapters/mocks.rs` — update signature; mock can ignore the ref or use `image_ref.cache_name()` as a key
+- `MockImageRegistry` in `crates/linuxbox/src/adapters/mocks.rs` — update signature; mock can ignore the ref or use `image_ref.cache_name()` as a key
 - Any other adapters found by `grep -r "impl ImageRegistry"` in the workspace
 
 - [ ] **Step 4b.5: Update all call sites in `handler.rs`**
@@ -1358,20 +1358,20 @@ registry.pull_image(&image_ref).await
 - [ ] **Step 4b.6: Run tests**
 
 ```bash
-cargo test -p minibox-lib -p daemonbox --lib -- --nocapture
-cargo clippy -p minibox-lib -p daemonbox -p miniboxd -- -D warnings
+cargo test -p linuxbox -p daemonbox --lib -- --nocapture
+cargo clippy -p linuxbox -p daemonbox -p miniboxd -- -D warnings
 cargo fmt --all --check
 ```
 
 - [ ] **Step 4b.7: Commit**
 
 ```bash
-git add crates/minibox-lib/src/adapters/registry.rs \
-        crates/minibox-lib/src/adapters/ghcr.rs \
-        crates/minibox-lib/src/adapters/mocks.rs \
-        crates/minibox-lib/src/domain.rs \
+git add crates/linuxbox/src/adapters/registry.rs \
+        crates/linuxbox/src/adapters/ghcr.rs \
+        crates/linuxbox/src/adapters/mocks.rs \
+        crates/linuxbox/src/domain.rs \
         crates/daemonbox/src/handler.rs
-git commit -m "refactor(minibox-lib): pull_image accepts ImageRef directly, enabling registry-specific routing"
+git commit -m "refactor(linuxbox): pull_image accepts ImageRef directly, enabling registry-specific routing"
 ```
 
 ---
@@ -1379,7 +1379,7 @@ git commit -m "refactor(minibox-lib): pull_image accepts ImageRef directly, enab
 ## Task 5: Protocol Streaming Types
 
 **Files:**
-- Modify: `crates/minibox-lib/src/protocol.rs`
+- Modify: `crates/linuxbox/src/protocol.rs`
 
 Add `ContainerOutput`, `ContainerStopped`, `OutputStreamKind`, and `ephemeral` to `DaemonRequest::Run`. All changes are additive — existing clients that don't send `ephemeral` get `false` via `#[serde(default)]`.
 
@@ -1452,7 +1452,7 @@ mod tests {
 - [ ] **Step 5.2: Run tests — expect compile errors**
 
 ```bash
-cargo test -p minibox-lib protocol -- --nocapture
+cargo test -p linuxbox protocol -- --nocapture
 ```
 
 - [ ] **Step 5.3: Add new types to `protocol.rs`**
@@ -1500,8 +1500,8 @@ ContainerStopped {
 - [ ] **Step 5.4: Run tests — expect all pass**
 
 ```bash
-cargo test -p minibox-lib protocol -- --nocapture
-cargo clippy -p minibox-lib -- -D warnings
+cargo test -p linuxbox protocol -- --nocapture
+cargo clippy -p linuxbox -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -1510,7 +1510,7 @@ Fix any match arms in the codebase that need updating for the new enum variants 
 - [ ] **Step 5.5: Commit**
 
 ```bash
-git add crates/minibox-lib/src/protocol.rs
+git add crates/linuxbox/src/protocol.rs
 git commit -m "feat(protocol): add ContainerOutput/ContainerStopped streaming types, ephemeral flag"
 ```
 
@@ -1519,8 +1519,8 @@ git commit -m "feat(protocol): add ContainerOutput/ContainerStopped streaming ty
 ## Task 6: Container Stdout Pipe + Daemon Streaming Loop
 
 **Files:**
-- Modify: `crates/minibox-lib/src/domain.rs`
-- Modify: `crates/minibox-lib/src/container/process.rs`
+- Modify: `crates/linuxbox/src/domain.rs`
+- Modify: `crates/linuxbox/src/container/process.rs`
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 
@@ -1529,15 +1529,15 @@ git commit -m "feat(protocol): add ContainerOutput/ContainerStopped streaming ty
 Before touching any code, read these files completely:
 
 ```bash
-cat crates/minibox-lib/src/container/process.rs
-cat crates/minibox-lib/src/domain.rs
+cat crates/linuxbox/src/container/process.rs
+cat crates/linuxbox/src/domain.rs
 cat crates/daemonbox/src/server.rs
 cat crates/daemonbox/src/handler.rs
 ```
 
 - [ ] **Step 6.1: Extend `ContainerRuntime::spawn_process` to return an output reader**
 
-In `crates/minibox-lib/src/domain.rs`, update the trait and the `ContainerSpawnConfig` struct (note: the existing type is named `ContainerSpawnConfig`, not `ContainerConfig` — do not rename it):
+In `crates/linuxbox/src/domain.rs`, update the trait and the `ContainerSpawnConfig` struct (note: the existing type is named `ContainerSpawnConfig`, not `ContainerConfig` — do not rename it):
 
 ```rust
 use std::os::fd::OwnedFd;
@@ -1569,16 +1569,16 @@ pub trait ContainerRuntime: AsAny + Send + Sync {
 ```
 
 Fix ALL `impl ContainerRuntime` blocks to match the new signature. The following adapters need updating:
-- `LinuxNamespaceRuntime` (in `crates/minibox-lib/src/container/process.rs`) — full pipe implementation (Step 6.2)
-- `ProotRuntime` (in `crates/minibox-lib/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
-- `ColimaRuntime` (in `crates/minibox-lib/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
-- `WslRuntime` (in `crates/minibox-lib/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
-- `DockerDesktopRuntime` (in `crates/minibox-lib/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
-- `MockContainerRuntime` (in `crates/minibox-lib/src/adapters/mocks.rs`) — return `SpawnResult { pid, output_reader: None }`
+- `LinuxNamespaceRuntime` (in `crates/linuxbox/src/container/process.rs`) — full pipe implementation (Step 6.2)
+- `ProotRuntime` (in `crates/linuxbox/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
+- `ColimaRuntime` (in `crates/linuxbox/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
+- `WslRuntime` (in `crates/linuxbox/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
+- `DockerDesktopRuntime` (in `crates/linuxbox/src/adapters/`) — return `SpawnResult { pid, output_reader: None }`
+- `MockContainerRuntime` (in `crates/linuxbox/src/adapters/mocks.rs`) — return `SpawnResult { pid, output_reader: None }`
 
 - [ ] **Step 6.2: Set up stdout/stderr pipe in `process.rs`**
 
-In `crates/minibox-lib/src/container/process.rs`, in the `spawn_process` implementation for `LinuxNamespaceRuntime`:
+In `crates/linuxbox/src/container/process.rs`, in the `spawn_process` implementation for `LinuxNamespaceRuntime`:
 
 ```rust
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -1814,8 +1814,8 @@ sudo cargo test -p miniboxd --test integration_tests ephemeral_run_streams_outpu
 - [ ] **Step 6.6: Commit**
 
 ```bash
-git add crates/minibox-lib/src/domain.rs \
-        crates/minibox-lib/src/container/process.rs \
+git add crates/linuxbox/src/domain.rs \
+        crates/linuxbox/src/container/process.rs \
         crates/daemonbox/src/handler.rs \
         crates/daemonbox/src/server.rs \
         crates/miniboxd/tests/
@@ -1847,7 +1847,7 @@ Add to `run.rs` or a test module:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_lib::protocol::{DaemonResponse, OutputStreamKind};
+    use linuxbox::protocol::{DaemonResponse, OutputStreamKind};
 
     #[test]
     fn decode_output_chunk() {
@@ -1871,7 +1871,7 @@ mod tests {
 - [ ] **Step 7.3: Update `run.rs` to stream responses**
 
 Find the current `execute()` function. It calls `send_request()` and expects a single `DaemonResponse`. Replace it with the corrected version that:
-1. Connects to the socket using `super::socket_path()` (already defined in `crates/minibox-cli/src/commands/mod.rs` — do NOT use `minibox_lib::get_socket_path()` which does not exist)
+1. Connects to the socket using `super::socket_path()` (already defined in `crates/minibox-cli/src/commands/mod.rs` — do NOT use `linuxbox::get_socket_path()` which does not exist)
 2. Sends the `RunContainer` request
 3. Reads one JSON line at a time in a loop
 4. Decodes and writes `ContainerOutput` chunks to stdout/stderr immediately (no buffering)
@@ -1886,7 +1886,7 @@ pub async fn execute(
     cpu_weight: Option<u64>,
 ) -> Result<()> {
     use base64::Engine;
-    use minibox_lib::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
+    use linuxbox::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
@@ -1987,8 +1987,8 @@ grep "base64" Cargo.toml
 - [ ] **Step 7.5: Run all macOS-safe tests**
 
 ```bash
-cargo test -p minibox-cli -p minibox-lib -p daemonbox --lib -- --nocapture
-cargo clippy -p minibox-cli -p minibox-lib -p daemonbox -p miniboxd -- -D warnings
+cargo test -p minibox-cli -p linuxbox -p daemonbox --lib -- --nocapture
+cargo clippy -p minibox-cli -p linuxbox -p daemonbox -p miniboxd -- -D warnings
 cargo fmt --all --check
 ```
 

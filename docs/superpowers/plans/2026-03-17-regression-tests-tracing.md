@@ -22,15 +22,15 @@ note: All regression tests shipped, tracing contract finalized
 
 | File                                       | Change                                       |
 | ------------------------------------------ | -------------------------------------------- |
-| `crates/minibox-lib/src/image/layer.rs`    | Add 7 tests to existing `#[cfg(test)]` block |
-| `crates/minibox-lib/src/adapters/mocks.rs` | Add 4 tests to existing `#[cfg(test)]` block |
-| `crates/minibox-lib/src/image/registry.rs` | Change 3 spans: `info_span!` → `debug_span!` |
+| `crates/linuxbox/src/image/layer.rs`    | Add 7 tests to existing `#[cfg(test)]` block |
+| `crates/linuxbox/src/adapters/mocks.rs` | Add 4 tests to existing `#[cfg(test)]` block |
+| `crates/linuxbox/src/image/registry.rs` | Change 3 spans: `info_span!` → `debug_span!` |
 
 ---
 
 ## Task 1: `relative_path` named unit tests
 
-**Files:** Modify `crates/minibox-lib/src/image/layer.rs`
+**Files:** Modify `crates/linuxbox/src/image/layer.rs`
 
 The `relative_path` function computes a relative path from a symlink's directory to an absolute target (after stripping the leading `/`). It has doctests but no named unit tests. Add three named tests directly after the existing `verify_digest` tests in the `tests` module.
 
@@ -72,7 +72,7 @@ fn relative_path_root_to_nested() {
 - [ ] **Run the tests:**
 
 ```bash
-cargo test -p minibox-lib image::layer::tests::relative_path -- --nocapture
+cargo test -p linuxbox image::layer::tests::relative_path -- --nocapture
 ```
 
 Expected: 3 tests pass.
@@ -80,7 +80,7 @@ Expected: 3 tests pass.
 - [ ] **Commit:**
 
 ```bash
-git add crates/minibox-lib/src/image/layer.rs
+git add crates/linuxbox/src/image/layer.rs
 git commit -m "test: add named unit tests for relative_path"
 ```
 
@@ -88,7 +88,7 @@ git commit -m "test: add named unit tests for relative_path"
 
 ## Task 2: Tar root-entry skip regression tests
 
-**Files:** Modify `crates/minibox-lib/src/image/layer.rs`
+**Files:** Modify `crates/linuxbox/src/image/layer.rs`
 
 The `extract_layer` function skips `"."` and `"./"` entries to avoid a false path-escape error. These two tests pin that behaviour.
 
@@ -121,7 +121,7 @@ fn root_dot_slash_entry_skipped() {
 - [ ] **Run the tests:**
 
 ```bash
-cargo test -p minibox-lib image::layer::tests::root_dot -- --nocapture
+cargo test -p linuxbox image::layer::tests::root_dot -- --nocapture
 ```
 
 Expected: 2 tests pass.
@@ -129,7 +129,7 @@ Expected: 2 tests pass.
 - [ ] **Commit:**
 
 ```bash
-git add crates/minibox-lib/src/image/layer.rs
+git add crates/linuxbox/src/image/layer.rs
 git commit -m "test: add regression tests for tar root-entry skip"
 ```
 
@@ -137,7 +137,7 @@ git commit -m "test: add regression tests for tar root-entry skip"
 
 ## Task 3: Absolute-symlink rewrite regression tests
 
-**Files:** Modify `crates/minibox-lib/src/image/layer.rs`
+**Files:** Modify `crates/linuxbox/src/image/layer.rs`
 
 These two tests cover the exact scenarios that were broken before the fix: busybox applet symlinks (same-directory target) and cross-directory symlinks.
 
@@ -191,7 +191,7 @@ fn cross_dir_absolute_symlink_rewritten() {
 - [ ] **Run the tests:**
 
 ```bash
-cargo test -p minibox-lib image::layer::tests -- --nocapture
+cargo test -p linuxbox image::layer::tests -- --nocapture
 ```
 
 Expected: all layer tests pass including the 2 new ones.
@@ -199,7 +199,7 @@ Expected: all layer tests pass including the 2 new ones.
 - [ ] **Commit:**
 
 ```bash
-git add crates/minibox-lib/src/image/layer.rs
+git add crates/linuxbox/src/image/layer.rs
 git commit -m "test: add regression tests for absolute symlink rewriting (busybox applet + cross-dir)"
 ```
 
@@ -207,7 +207,7 @@ git commit -m "test: add regression tests for absolute symlink rewriting (busybo
 
 ## Task 4: Macro contract tests
 
-**Files:** Modify `crates/minibox-lib/src/adapters/mocks.rs`
+**Files:** Modify `crates/linuxbox/src/adapters/mocks.rs`
 
 The mock types use `adapt!` which expands to `as_any!` + `default_new!`. These tests document that downcast via `as_any()` works for all four mock types, wrong-type downcasts return `None`, and `Default` is implemented.
 
@@ -262,7 +262,7 @@ mod macro_contract_tests {
 - [ ] **Run the tests:**
 
 ```bash
-cargo test -p minibox-lib adapters::mocks::macro_contract_tests -- --nocapture
+cargo test -p linuxbox adapters::mocks::macro_contract_tests -- --nocapture
 ```
 
 Expected: 4 tests pass.
@@ -270,7 +270,7 @@ Expected: 4 tests pass.
 - [ ] **Commit:**
 
 ```bash
-git add crates/minibox-lib/src/adapters/mocks.rs
+git add crates/linuxbox/src/adapters/mocks.rs
 git commit -m "test: add macro contract tests for as_any!/default_new!/adapt! downcast behaviour"
 ```
 
@@ -278,7 +278,7 @@ git commit -m "test: add macro contract tests for as_any!/default_new!/adapt! do
 
 ## Task 5: Downgrade inner tracing spans to DEBUG
 
-**Files:** Modify `crates/minibox-lib/src/image/registry.rs`
+**Files:** Modify `crates/linuxbox/src/image/registry.rs`
 
 Three spans inside `pull_image` are `info_span!` but represent sub-step detail that belongs at `DEBUG`. The `auth` and `manifest` phase spans stay at INFO. Make three one-word changes.
 
@@ -316,8 +316,8 @@ Three spans inside `pull_image` are `info_span!` but represent sub-step detail t
 - [ ] **Verify it compiles and all tests still pass:**
 
 ```bash
-cargo test -p minibox-lib
-cargo clippy -p minibox-lib -- -D warnings
+cargo test -p linuxbox
+cargo clippy -p linuxbox -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -326,7 +326,7 @@ Expected: all tests pass, no clippy warnings, no fmt diff.
 - [ ] **Commit:**
 
 ```bash
-git add crates/minibox-lib/src/image/registry.rs
+git add crates/linuxbox/src/image/registry.rs
 git commit -m "perf: downgrade inner pull spans from info_span to debug_span (verify_digest, extract, store_manifest)"
 ```
 
@@ -335,7 +335,7 @@ git commit -m "perf: downgrade inner pull spans from info_span to debug_span (ve
 ## Final check
 
 ```bash
-cargo test -p minibox-lib
+cargo test -p linuxbox
 cargo clippy --workspace -- -D warnings
 cargo fmt --all --check
 ```

@@ -22,8 +22,8 @@
 
 use anyhow::{Context, Result};
 use base64::Engine;
-use minibox_lib::domain::NetworkMode;
-use minibox_lib::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
+use linuxbox::domain::NetworkMode;
+use linuxbox::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -127,7 +127,7 @@ pub async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_lib::protocol::{DaemonResponse, OutputStreamKind};
+    use linuxbox::protocol::{DaemonResponse, OutputStreamKind};
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]

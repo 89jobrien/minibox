@@ -5,8 +5,8 @@
 //! domain trait interface, verifying that the adapter correctly translates trait
 //! calls into the expected Lima shell commands and handles responses properly.
 
-use minibox_lib::adapters::{ColimaRegistry, ColimaRuntime};
-use minibox_lib::domain::{
+use linuxbox::adapters::{ColimaRegistry, ColimaRuntime};
+use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceLimiter,
 };
@@ -321,7 +321,7 @@ async fn runtime_spawn_script_embeds_args() {
 // the adapters propagate infrastructure errors rather than silently succeeding.
 // ============================================================================
 
-use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter};
+use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter};
 
 /// setup_rootfs must fail when no Lima VM is available (limactl not found).
 #[test]
@@ -362,7 +362,7 @@ fn filesystem_cleanup_fails_without_vm() {
 /// ResourceLimiter::create must fail when no Lima VM is available.
 #[test]
 fn limiter_create_fails_without_vm() {
-    use minibox_lib::domain::ResourceConfig;
+    use linuxbox::domain::ResourceConfig;
 
     let limiter = ColimaLimiter::new();
     let config = ResourceConfig {

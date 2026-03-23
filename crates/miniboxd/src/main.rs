@@ -52,15 +52,15 @@ use daemonbox::handler::HandlerDependencies;
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
-use minibox_lib::adapters::{
+use linuxbox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use minibox_lib::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use minibox_lib::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
+use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
-use minibox_lib::image::ImageStore;
+use linuxbox::image::ImageStore;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]

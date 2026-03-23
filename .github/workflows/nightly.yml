@@ -19,4 +19,4 @@ jobs:
       - name: install cargo-geiger
         run: cargo install cargo-geiger --locked
       - name: cargo geiger
-        run: cargo geiger -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
+        run: cargo geiger -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true

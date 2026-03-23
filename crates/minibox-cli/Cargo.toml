@@ -9,7 +9,7 @@ name = "minibox"
 path = "src/main.rs"
 
 [dependencies]
-minibox-lib = { workspace = true }
+linuxbox = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }

@@ -8,9 +8,9 @@
 //! State is persisted to a JSON file after every mutation so that
 //! container records survive daemon restarts.
 
-use minibox_lib::domain::HookSpec;
-use minibox_lib::image::ImageStore;
-use minibox_lib::protocol::ContainerInfo;
+use linuxbox::domain::HookSpec;
+use linuxbox::image::ImageStore;
+use linuxbox::protocol::ContainerInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

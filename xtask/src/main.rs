@@ -66,12 +66,12 @@ fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
+        "cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
     )
     .run()
     .context("lint failed")?;
     cmd!(sh,
-        "cargo build --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
+        "cargo build --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
     ).run().context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
@@ -81,13 +81,13 @@ fn pre_commit(sh: &Shell) -> Result<()> {
 fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox"
+        "cargo nextest run --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox"
     )
     .run()
     .context("nextest failed")?;
     cmd!(
         sh,
-        "cargo llvm-cov nextest -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --html"
+        "cargo llvm-cov nextest -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox --html"
     )
     .run()
     .context("coverage failed")?;
@@ -103,7 +103,7 @@ fn prepush(sh: &Shell) -> Result<()> {
 fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --lib"
+        "cargo test --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox --lib"
     )
     .run()
     .context("lib tests failed")?;
@@ -121,12 +121,9 @@ fn test_unit(sh: &Shell) -> Result<()> {
 
 /// Property-based tests (proptest)
 fn test_property(sh: &Shell) -> Result<()> {
-    cmd!(
-        sh,
-        "cargo test --release -p minibox-lib --test proptest_suite"
-    )
-    .run()
-    .context("minibox-lib property tests failed")?;
+    cmd!(sh, "cargo test --release -p linuxbox --test proptest_suite")
+        .run()
+        .context("linuxbox property tests failed")?;
     cmd!(
         sh,
         "cargo test --release -p daemonbox --test proptest_suite"

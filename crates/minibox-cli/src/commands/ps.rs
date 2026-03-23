@@ -1,7 +1,7 @@
 //! `minibox ps` — list all containers.
 
 use anyhow::Result;
-use minibox_lib::protocol::{DaemonRequest, DaemonResponse};
+use linuxbox::protocol::{DaemonRequest, DaemonResponse};
 
 use crate::commands::send_request;
 

@@ -70,7 +70,7 @@ All jobs run on the `act_runner` system service on jobrien-vm. `mise` is at `~/.
 
 **property**
 ```yaml
-- run: ~/.local/bin/mise exec -- cargo test -p minibox-lib --test proptest_suite
+- run: ~/.local/bin/mise exec -- cargo test -p linuxbox --test proptest_suite
 ```
 
 **integration** (needs: [unit, property])
@@ -101,9 +101,9 @@ bench binary runs as root to avoid permission issues with perf counters:
 
 ## Property-Based Tests
 
-New file: `crates/minibox-lib/tests/proptest_suite.rs`
+New file: `crates/linuxbox/tests/proptest_suite.rs`
 
-`proptest` is added as a crate-local dev-dependency in `crates/minibox-lib/Cargo.toml` only — not hoisted to workspace `[workspace.dependencies]` since no other crate uses it.
+`proptest` is added as a crate-local dev-dependency in `crates/linuxbox/Cargo.toml` only — not hoisted to workspace `[workspace.dependencies]` since no other crate uses it.
 
 ### Targets
 
@@ -127,8 +127,8 @@ New file: `crates/minibox-lib/tests/proptest_suite.rs`
 1. Rename git remotes locally: `gitea` → `origin`, `origin` → `github`
 2. Configure Gitea push mirror to GitHub in repo Settings → Mirror → Push Mirror
 3. Remove `linux` job from `.github/workflows/ci.yml`
-4. Add `proptest` to `crates/minibox-lib/Cargo.toml` under `[dev-dependencies]`
-5. Write `crates/minibox-lib/tests/proptest_suite.rs` with four test targets
+4. Add `proptest` to `crates/linuxbox/Cargo.toml` under `[dev-dependencies]`
+5. Write `crates/linuxbox/tests/proptest_suite.rs` with four test targets
 6. Create `.gitea/workflows/ci.yml` with the five-job pipeline
 7. Push to new `origin` (Gitea) and verify workflow triggers
 8. Verify GitHub mirror receives the push

@@ -30,7 +30,7 @@ Results are appended to `bench/results/bench.jsonl` and written to `bench/result
 ## Criterion HTML reports (local only)
 
 ```bash
-cargo bench -p minibox-lib
+cargo bench -p linuxbox
 # Opens target/criterion/report/index.html
 ```
 

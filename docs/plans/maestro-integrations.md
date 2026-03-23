@@ -48,7 +48,7 @@ Blockers: Same TTY/network gaps, plus minibox daemon would need to run inside th
 
 3. Shared OCI image-pulling library (Low-hanging fruit)
 
-Minibox has a clean Docker Hub v2 client in minibox-lib/src/image/registry.rs. Maestro currently delegates image pulls to Docker daemon. On a minibox provider path, you'd reuse minibox's registry client directly.
+Minibox has a clean Docker Hub v2 client in linuxbox/src/image/registry.rs. Maestro currently delegates image pulls to Docker daemon. On a minibox provider path, you'd reuse minibox's registry client directly.
 
 - This is the most immediately shippable piece — it's just a library dependency.
 
