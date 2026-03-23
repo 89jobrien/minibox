@@ -52,7 +52,7 @@ impl OpenAiProvider {
 
 // Generates from_env(), from_env_with_config(), and from_key() (test-only).
 // Reads OPENAI_API_KEY; default model is gpt-4.1.
-provide!(OpenAiProvider, "OPENAI_API_KEY", "gpt-4.1");
+minibox_macros::provide!(OpenAiProvider, "OPENAI_API_KEY", "gpt-4.1");
 
 #[async_trait]
 impl LlmProvider for OpenAiProvider {

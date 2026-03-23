@@ -14,19 +14,20 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|---------------|
+| File                                        | Action | Responsibility                                                                                                                 |
+| ------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `crates/minibox-lib/src/adapters/colima.rs` | Modify | Add `LimaSpawner` type, `with_spawner()` builder, rewrite `spawn_process`, add `block_device` field + probe to `ColimaLimiter` |
-| `crates/daemonbox/src/handler.rs` | Modify | Widen 3 cfg gates, add local `wait_for_exit` helper, conditionally import `wait_for_exit` |
-| `crates/macbox/src/lib.rs` | Modify | Wire `LimaSpawner` closure and executor into adapter constructors |
-| `crates/minibox-bench/src/main.rs` | Modify | Add `colima` benchmark suite |
-| `.github/workflows/ci.yml` | Modify | Add `macos-colima` smoke test job |
+| `crates/daemonbox/src/handler.rs`           | Modify | Widen 3 cfg gates, add local `wait_for_exit` helper, conditionally import `wait_for_exit`                                      |
+| `crates/macbox/src/lib.rs`                  | Modify | Wire `LimaSpawner` closure and executor into adapter constructors                                                              |
+| `crates/minibox-bench/src/main.rs`          | Modify | Add `colima` benchmark suite                                                                                                   |
+| `.github/workflows/ci.yml`                  | Modify | Add `macos-colima` smoke test job                                                                                              |
 
 ---
 
 ## Task 1: Add `LimaSpawner` Type and Builder to `ColimaRuntime`
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/adapters/colima.rs:38-45` (type alias area)
 - Modify: `crates/minibox-lib/src/adapters/colima.rs:544-570` (ColimaRuntime struct + impl)
 - Test: `crates/minibox-lib/src/adapters/colima.rs` (existing test module)
@@ -255,6 +256,7 @@ git commit -m "feat(colima): add LimaSpawner for streaming output from container
 ## Task 2: Fix io.max Device Detection in `ColimaLimiter`
 
 **Files:**
+
 - Modify: `crates/minibox-lib/src/adapters/colima.rs:409-533` (ColimaLimiter)
 - Test: `crates/minibox-lib/src/adapters/colima.rs` (test module)
 
@@ -368,10 +370,12 @@ git commit -m "fix(colima): detect VM block device for io.max instead of hardcod
 ## Task 3: Widen Handler cfg Gates for macOS Streaming
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs:91,134,241`
 - Test: compile check on macOS
 
 This is the most delicate task. Three issues to solve:
+
 1. Three `#[cfg(target_os = "linux")]` gates must become `#[cfg(unix)]`
 2. `use minibox_lib::container::process::wait_for_exit` — the `container` module is gated `#[cfg(target_os = "linux")]` in `minibox-lib/src/lib.rs:32`, so this import fails on macOS
 3. Solution: add a local `handler_wait_for_exit` helper
@@ -411,18 +415,21 @@ fn handler_wait_for_exit(pid: u32) -> Result<i32> {
 - [ ] **Step 2: Widen the three cfg gates and update the wait_for_exit call**
 
 Change line ~91 in `handle_run`:
+
 ```rust
 // Before:  #[cfg(target_os = "linux")]
 // After:   #[cfg(unix)]
 ```
 
 Change line ~134 on `handle_run_streaming`:
+
 ```rust
 // Before:  #[cfg(target_os = "linux")]
 // After:   #[cfg(unix)]
 ```
 
 Change line ~241 on `run_inner_capture` (update doc comment too):
+
 ```rust
 // Before:
 /// Only compiled on Linux because the output pipe requires Linux primitives.
@@ -435,6 +442,7 @@ Change line ~241 on `run_inner_capture` (update doc comment too):
 ```
 
 Inside `handle_run_streaming`, replace the `wait_for_exit` call (lines ~207-211):
+
 ```rust
 // Before:
 use minibox_lib::container::process::wait_for_exit;
@@ -481,6 +489,7 @@ Linux-gated container::process module."
 ## Task 4: Wire Spawner into macOS Composition Root
 
 **Files:**
+
 - Modify: `crates/macbox/src/lib.rs:109-117`
 - Modify: `crates/minibox-lib/src/adapters/colima.rs` (make types public, may already be done in Task 1)
 - Test: compile check + `cargo test -p macbox`
@@ -579,6 +588,7 @@ Makes LimaExecutor and LimaSpawner public for use from macbox."
 **Depends on:** Tasks 1-4 (streaming must work for spawn-to-first-byte and stop-latency measurements)
 
 **Files:**
+
 - Modify: `crates/minibox-bench/src/main.rs`
 - Test: `--suite colima --dry-run`
 
@@ -739,6 +749,7 @@ git commit -m "feat(bench): add colima suite — limactl-roundtrip, spawn-to-fir
 ## Task 6: Add CI Colima Smoke Test Job
 
 **Files:**
+
 - Modify: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Add `macos-colima` job**
@@ -746,33 +757,33 @@ git commit -m "feat(bench): add colima suite — limactl-roundtrip, spawn-to-fir
 Append after the existing `coverage` job:
 
 ```yaml
-  macos-colima:
-    name: macOS Colima smoke
-    runs-on: macos-latest
-    needs: [lint]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install Colima + Lima
-        run: brew install colima lima
-      - name: Start Colima VM
-        run: |
-          colima start --vm-type vz --cpu 2 --memory 2
-          colima status
-      - name: Build daemon and CLI
-        run: cargo build -p miniboxd -p minibox-cli --release
-      - name: Smoke test
-        run: |
-          ./target/release/miniboxd &
-          DAEMON_PID=$!
-          sleep 3
-          ./target/release/minibox pull alpine
-          OUTPUT=$(./target/release/minibox run alpine -- /bin/echo "hello from minibox")
-          echo "Output: $OUTPUT"
-          echo "$OUTPUT" | grep -q "hello from minibox"
-          kill $DAEMON_PID
-          echo "Smoke test passed"
+macos-colima:
+  name: macOS Colima smoke
+  runs-on: macos-latest
+  needs: [lint]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install Colima + Lima
+      run: brew install colima lima
+    - name: Start Colima VM
+      run: |
+        colima start --vm-type vz --cpu 2 --memory 2
+        colima status
+    - name: Build daemon and CLI
+      run: cargo build -p miniboxd -p minibox-cli --release
+    - name: Smoke test
+      run: |
+        ./target/release/miniboxd &
+        DAEMON_PID=$!
+        sleep 3
+        ./target/release/minibox pull alpine
+        OUTPUT=$(./target/release/minibox run alpine -- /bin/echo "hello from minibox")
+        echo "Output: $OUTPUT"
+        echo "$OUTPUT" | grep -q "hello from minibox"
+        kill $DAEMON_PID
+        echo "Smoke test passed"
 ```
 
 - [ ] **Step 2: Verify YAML syntax**

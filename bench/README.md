@@ -8,7 +8,7 @@ Benchmarking for minibox. Results are stored in `bench/results/` and committed a
 | ----------- | ----- | ---------------- | -------- |
 | `codec`     | 36    | No               | Any      |
 | `adapter`   | 10    | No               | Any      |
-| `lifecycle` | 6     | Yes (Linux+root) | Linux    |
+| `cli`       | Multiple command cases (`pull`, `run`, `ps`, `stop`, `rm`, `exec`, `e2e`) | Yes (Linux+root) | Linux    |
 
 ## Run via xtask (saves results)
 

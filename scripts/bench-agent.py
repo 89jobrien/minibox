@@ -66,7 +66,8 @@ Key facts:
   expected to have "No such file or directory" errors (no daemon on macOS)
 - Suites: codec (protocol encode/decode, ns-scale), adapter (trait dispatch, ns-scale), \
   pull/run/exec/e2e (CLI lifecycle, us/ms-scale, require daemon)
-- Regressions >10% on VPS runs are significant
+- Regressions are detected conservatively: latest avg must exceed the worst \
+  prior VPS avg by more than the threshold
 - bench/results/ also contains timestamped .json + .txt pairs per run
 
 Be concise. Use tables when comparing. Cite specific numbers."""
@@ -120,7 +121,7 @@ async def cmd_regress(args: argparse.Namespace) -> None:
         for r in regressions:
             lines.append(
                 f"  {r.suite}/{r.test}: {bench_data.format_pct(r.pct_change)} "
-                f"({bench_data.format_duration(r.prev_avg_us)} -> {bench_data.format_duration(r.curr_avg_us)})"
+                f"(worst prior {bench_data.format_duration(r.prev_avg_us)} -> {bench_data.format_duration(r.curr_avg_us)})"
             )
         reg_summary = "\n".join(lines)
 

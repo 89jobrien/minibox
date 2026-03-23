@@ -93,49 +93,6 @@
 //! response body and is classified as transient for 429 / 5xx and permanent for
 //! other 4xx.
 
-/// Generates `from_env()`, `from_env_with_config()`, and test-only `from_key()`
-/// constructors for a provider struct.
-///
-/// The generated methods read the given environment variable to obtain the API
-/// key. `from_env()` uses a default [`ProviderConfig`]; `from_env_with_config()`
-/// accepts an explicit config. Both return `None` when the variable is unset.
-///
-/// `from_key()` is compiled only in `#[cfg(test)]` and bypasses the environment,
-/// making it easy to construct providers in unit tests without real keys.
-///
-/// # Usage (inside provider modules)
-///
-/// ```ignore
-/// provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
-/// ```
-macro_rules! provide {
-    ($provider:ty, $env_var:expr, $default_model:expr) => {
-        impl $provider {
-            /// Construct this provider from the environment using default HTTP timeouts.
-            ///
-            /// Returns `None` if the required API key environment variable is not set.
-            pub fn from_env() -> Option<Self> {
-                Self::from_env_with_config(&$crate::ProviderConfig::default())
-            }
-
-            /// Construct this provider from the environment with explicit HTTP configuration.
-            ///
-            /// Returns `None` if the required API key environment variable is not set.
-            pub fn from_env_with_config(config: &$crate::ProviderConfig) -> Option<Self> {
-                std::env::var($env_var)
-                    .ok()
-                    .map(|k| Self::with_config(k, $default_model.to_string(), config))
-            }
-
-            /// Test helper — inject a key without reading the environment.
-            #[cfg(test)]
-            pub(crate) fn from_key(key: String) -> Self {
-                Self::new(key, $default_model.to_string())
-            }
-        }
-    };
-}
-
 #[cfg(feature = "anthropic")]
 pub mod anthropic;
 pub mod chain;

@@ -92,6 +92,7 @@ class Regression:
     test: str
     prev_avg_us: float
     curr_avg_us: float
+    baseline_kind: str = "prev"
 
     @property
     def pct_change(self) -> float:
@@ -176,6 +177,7 @@ def compare_runs(prev: BenchRun, curr: BenchRun) -> list[Regression]:
                     test=test.name,
                     prev_avg_us=prev_test.avg_us,
                     curr_avg_us=test.avg_us,
+                    baseline_kind="prev",
                 ))
     return diffs
 
@@ -184,8 +186,39 @@ def detect_regressions(threshold_pct: float = 10.0) -> list[Regression]:
     runs = valid_vps_runs()
     if len(runs) < 2:
         return []
-    prev, curr = runs[-2], runs[-1]
-    return [d for d in compare_runs(prev, curr) if d.pct_change > threshold_pct]
+    curr = runs[-1]
+    prior_runs = runs[:-1]
+    regressions = []
+
+    for suite in curr.suites:
+        for test in suite.tests:
+            if not test.avg_us:
+                continue
+
+            prior_avgs = []
+            for run in prior_runs:
+                prior_test = run.test_by_name(suite.name, test.name)
+                if prior_test and prior_test.avg_us:
+                    prior_avgs.append(prior_test.avg_us)
+
+            if not prior_avgs:
+                continue
+
+            # Small-sample history is noisy. Treat a regression as "worse than
+            # the worst prior VPS sample by the threshold", not merely worse
+            # than the immediately previous run.
+            worst_prior_avg = max(prior_avgs)
+            regression = Regression(
+                suite=suite.name,
+                test=test.name,
+                prev_avg_us=worst_prior_avg,
+                curr_avg_us=test.avg_us,
+                baseline_kind="worst_prior",
+            )
+            if regression.pct_change > threshold_pct:
+                regressions.append(regression)
+
+    return regressions
 
 
 def format_duration(us: float | None) -> str:
@@ -232,7 +265,7 @@ def summary_text() -> str:
 
     regressions = detect_regressions()
     if regressions:
-        lines.append(f"\nRegressions ({len(regressions)}):")
+        lines.append(f"\nRegressions ({len(regressions)}, vs worst prior VPS run):")
         for r in regressions:
             lines.append(f"  {r.suite}/{r.test}: {format_duration(r.prev_avg_us)} -> {format_duration(r.curr_avg_us)} ({format_pct(r.pct_change)})")
 

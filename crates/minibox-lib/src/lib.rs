@@ -38,7 +38,7 @@ pub mod preflight;
 pub mod protocol;
 
 pub use error::MiniboxError;
-pub use minibox_macros::{adapt, as_any, default_new};
+pub use minibox_macros::{adapt, as_any, default_new, require_capability};
 
 /// Convenience re-export of the [`anyhow::Result`] type used throughout this crate.
 pub type Result<T> = anyhow::Result<T>;

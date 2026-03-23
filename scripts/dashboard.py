@@ -127,7 +127,7 @@ def build_bench_table() -> Table | None:
     t.add_column("P95", justify="right", style="white", min_width=8)
     t.add_column("Min", justify="right", style="dim white", min_width=8)
     t.add_column("Iter", justify="right", style="dim white", min_width=4)
-    t.add_column("Delta", justify="right", min_width=8)
+    t.add_column("Δ prev", justify="right", min_width=8)
 
     # Get previous run for delta column
     history = bench_data.valid_vps_runs()
@@ -173,7 +173,7 @@ def build_bench_header(latest: bench_data.BenchRun) -> Text:
         (f"{fmt_ts(latest.timestamp)}", "dim white"),
     ]
     if regressions:
-        parts.extend([("  ", ""), (f"{len(regressions)} regression(s)", "bold red")])
+        parts.extend([("  ", ""), (f"{len(regressions)} regression(s) vs worst prior", "bold red")])
     parts.extend([("  ", ""), (f"{len(history)} VPS runs", "dim")])
 
     return Text.assemble(*parts)

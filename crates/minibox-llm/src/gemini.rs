@@ -98,7 +98,7 @@ impl GeminiProvider {
 
 // Generates from_env(), from_env_with_config(), and from_key() (test-only).
 // Reads GEMINI_API_KEY; default model is gemini-2.5-flash.
-provide!(GeminiProvider, "GEMINI_API_KEY", "gemini-2.5-flash");
+minibox_macros::provide!(GeminiProvider, "GEMINI_API_KEY", "gemini-2.5-flash");
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {

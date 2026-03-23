@@ -11,8 +11,10 @@
 //!   cases).  Compares direct method calls on concrete mock types against the
 //!   same calls through `Arc<dyn Trait>` pointers.  Requires no daemon.
 //!
-//! * **pull** / **run** / **exec** / **e2e** — end-to-end suites that invoke
-//!   the `minibox` CLI binary.  Require a running `miniboxd` daemon.
+//! * **pull** / **run** / **ps** / **stop** / **rm** / **exec** / **e2e** —
+//!   end-to-end suites that invoke the `minibox` CLI binary. `exec` is kept as
+//!   a `run`-with-output variant to measure stdout capture overhead. These
+//!   suites require a running `miniboxd` daemon.
 //!
 //! # Output
 //!
@@ -31,8 +33,8 @@ use minibox_lib::domain::{
     ResourceConfig, ResourceLimiter,
 };
 use minibox_lib::protocol::{
-    ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
-    encode_response,
+    ContainerInfo, DAEMON_SOCKET_PATH, DaemonRequest, DaemonResponse, decode_request,
+    decode_response, encode_request, encode_response,
 };
 use serde::Serialize;
 use std::hint::black_box;
@@ -559,8 +561,9 @@ pub fn create_profiler(results_dir: PathBuf, timestamp: String) -> Box<dyn Profi
 ///
 /// If `cfg.suites` is non-empty only the explicitly named suites run.
 /// Otherwise `"pull"` and `"e2e"` run when `cfg.cold` is set; `"run"` and
-/// `"exec"` run when `cfg.warm` is set.  `"codec"` and `"adapter"` only run
-/// when explicitly listed in `--suite`.
+/// the command-oriented warm suites (`"ps"`, `"stop"`, `"rm"`, `"exec"`) run
+/// when `cfg.warm` is set. `"codec"` and `"adapter"` only run when explicitly
+/// listed in `--suite`.
 fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
     if !cfg.suites.is_empty() {
         return cfg.suites.iter().any(|suite| suite == name);
@@ -568,7 +571,7 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
 
     match name {
         "pull" | "e2e" => cfg.cold,
-        "run" | "exec" => cfg.warm,
+        "run" | "ps" | "stop" | "rm" | "exec" => cfg.warm,
         // codec, adapter, colima only run when explicitly requested via --suite
         "codec" | "adapter" | "colima" => false,
         _ => true,
@@ -578,7 +581,9 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
 /// Return the ordered list of suite names that will run for `cfg`.
 fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     let mut suites = Vec::new();
-    for name in ["pull", "run", "exec", "e2e", "codec", "adapter", "colima"] {
+    for name in [
+        "pull", "run", "ps", "stop", "rm", "exec", "e2e", "codec", "adapter", "colima",
+    ] {
         if suite_enabled(cfg, name) {
             suites.push(name.to_string());
         }
@@ -617,6 +622,166 @@ fn build_metadata(minibox_bin: &str) -> Metadata {
         minibox_version: read_cmd_trim(minibox_bin, &["--version"])
             .unwrap_or_else(|| "unknown".to_string()),
     }
+}
+
+#[cfg(unix)]
+fn daemon_socket_path() -> String {
+    std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| {
+        if cfg!(target_os = "macos") {
+            "/tmp/minibox/miniboxd.sock".to_string()
+        } else {
+            DAEMON_SOCKET_PATH.to_string()
+        }
+    })
+}
+
+#[cfg(not(unix))]
+fn daemon_socket_path() -> String {
+    std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| DAEMON_SOCKET_PATH.to_string())
+}
+
+#[cfg(unix)]
+fn send_daemon_request_sync(request: &DaemonRequest) -> Result<DaemonResponse, String> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::UnixStream;
+
+    let path = daemon_socket_path();
+    let mut stream =
+        UnixStream::connect(&path).map_err(|e| format!("connecting to daemon at {path}: {e}"))?;
+    let payload = encode_request(request).map_err(|e| format!("encoding request: {e}"))?;
+    stream
+        .write_all(&payload)
+        .map_err(|e| format!("writing request to daemon: {e}"))?;
+    stream
+        .flush()
+        .map_err(|e| format!("flushing request to daemon: {e}"))?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = Vec::new();
+    reader
+        .read_until(b'\n', &mut line)
+        .map_err(|e| format!("reading response from daemon: {e}"))?;
+    if line.is_empty() {
+        return Err("daemon closed connection without sending a response".to_string());
+    }
+    decode_response(&line).map_err(|e| format!("decoding daemon response: {e}"))
+}
+
+#[cfg(not(unix))]
+fn send_daemon_request_sync(_request: &DaemonRequest) -> Result<DaemonResponse, String> {
+    Err("daemon fixture setup only supports Unix sockets".to_string())
+}
+
+fn list_containers_sync() -> Result<Vec<ContainerInfo>, String> {
+    match send_daemon_request_sync(&DaemonRequest::List)? {
+        DaemonResponse::ContainerList { containers } => Ok(containers),
+        DaemonResponse::Error { message } => Err(format!("daemon list request failed: {message}")),
+        other => Err(format!("unexpected list response: {other:?}")),
+    }
+}
+
+fn wait_for_container_presence(id: &str, should_exist: bool) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        let present = list_containers_sync()?
+            .iter()
+            .any(|container| container.id == id);
+        if present == should_exist {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            let expectation = if should_exist {
+                "appear in"
+            } else {
+                "disappear from"
+            };
+            return Err(format!(
+                "container {id} did not {expectation} daemon state in time"
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+fn create_background_container() -> Result<String, String> {
+    let request = DaemonRequest::Run {
+        image: "alpine".to_string(),
+        tag: Some("latest".to_string()),
+        command: vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "sleep 60".to_string(),
+        ],
+        memory_limit_bytes: None,
+        cpu_weight: None,
+        ephemeral: false,
+        network: None,
+    };
+
+    match send_daemon_request_sync(&request)? {
+        DaemonResponse::ContainerCreated { id } => {
+            wait_for_container_presence(&id, true)?;
+            Ok(id)
+        }
+        DaemonResponse::Error { message } => {
+            Err(format!("daemon background run failed: {message}"))
+        }
+        other => Err(format!("unexpected background run response: {other:?}")),
+    }
+}
+
+fn stop_container_direct(id: &str) -> Result<(), String> {
+    match send_daemon_request_sync(&DaemonRequest::Stop { id: id.to_string() })? {
+        DaemonResponse::Success { .. } => Ok(()),
+        DaemonResponse::Error { message } => Err(format!("daemon stop failed for {id}: {message}")),
+        other => Err(format!("unexpected stop response for {id}: {other:?}")),
+    }
+}
+
+fn remove_container_direct(id: &str) -> Result<(), String> {
+    match send_daemon_request_sync(&DaemonRequest::Remove { id: id.to_string() })? {
+        DaemonResponse::Success { .. } => {
+            wait_for_container_presence(id, false)?;
+            Ok(())
+        }
+        DaemonResponse::Error { message } => Err(format!("daemon rm failed for {id}: {message}")),
+        other => Err(format!("unexpected remove response for {id}: {other:?}")),
+    }
+}
+
+fn cleanup_background_container(id: &str, errors: &mut Vec<String>) {
+    let containers = match list_containers_sync() {
+        Ok(containers) => containers,
+        Err(err) => {
+            errors.push(format!(
+                "fixture cleanup: failed to list containers for {id}: {err}"
+            ));
+            return;
+        }
+    };
+
+    let Some(container) = containers.into_iter().find(|container| container.id == id) else {
+        return;
+    };
+
+    if container.state == "Running"
+        && let Err(err) = stop_container_direct(id)
+    {
+        errors.push(format!("fixture cleanup: failed to stop {id}: {err}"));
+    }
+
+    if let Err(err) = remove_container_direct(id) {
+        errors.push(format!("fixture cleanup: failed to remove {id}: {err}"));
+    }
+}
+
+fn run_cmd_record_owned(
+    path: &str,
+    args: &[String],
+    errors: &mut Vec<String>,
+) -> Option<CmdResult> {
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_cmd_record(path, &arg_refs, errors)
 }
 
 /// Run an external command, appending a descriptive message to `errors` on
@@ -884,6 +1049,171 @@ fn run_suites(
             }
         }
         suites.push(run_suite);
+    }
+
+    if suite_enabled(cfg, "ps") {
+        let suite_name = "ps";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
+        let mut ps_suite = SuiteResult {
+            name: "ps".to_string(),
+            tests: Vec::new(),
+        };
+        let mut durations = Vec::with_capacity(cfg.iters);
+        match create_background_container() {
+            Ok(id) => {
+                for _ in 0..cfg.iters {
+                    if let Some(result) = run_cmd_record(&minibox_bin, &["ps"], &mut errors) {
+                        if result.stdout.contains(&id) {
+                            durations.push(result.duration_micros);
+                        } else {
+                            errors.push(format!(
+                                "command failed: {minibox_bin} [\"ps\"]\nstdout did not include fixture container id {id}"
+                            ));
+                        }
+                    }
+                }
+                cleanup_background_container(&id, &mut errors);
+            }
+            Err(err) => errors.push(format!("ps fixture setup failed: {err}")),
+        }
+        ps_suite.tests.push(TestResult {
+            name: "ps_one_running".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(ps_suite);
+    }
+
+    if suite_enabled(cfg, "stop") {
+        let suite_name = "stop";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
+        let mut stop_suite = SuiteResult {
+            name: "stop".to_string(),
+            tests: Vec::new(),
+        };
+        let mut durations = Vec::with_capacity(cfg.iters);
+        for _ in 0..cfg.iters {
+            match create_background_container() {
+                Ok(id) => {
+                    let args = vec!["stop".to_string(), id.clone()];
+                    if let Some(result) = run_cmd_record_owned(&minibox_bin, &args, &mut errors) {
+                        if result.stdout.contains(&id) {
+                            durations.push(result.duration_micros);
+                        } else {
+                            errors.push(format!(
+                                "command failed: {minibox_bin} {:?}\nstdout did not include stopped container id {id}",
+                                args
+                            ));
+                        }
+                    }
+                    cleanup_background_container(&id, &mut errors);
+                }
+                Err(err) => errors.push(format!("stop fixture setup failed: {err}")),
+            }
+        }
+        stop_suite.tests.push(TestResult {
+            name: "stop_sleep".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(stop_suite);
+    }
+
+    if suite_enabled(cfg, "rm") {
+        let suite_name = "rm";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
+        let mut rm_suite = SuiteResult {
+            name: "rm".to_string(),
+            tests: Vec::new(),
+        };
+        let mut durations = Vec::with_capacity(cfg.iters);
+        for _ in 0..cfg.iters {
+            match create_background_container() {
+                Ok(id) => {
+                    if let Err(err) = stop_container_direct(&id) {
+                        errors.push(format!("rm fixture stop failed for {id}: {err}"));
+                        cleanup_background_container(&id, &mut errors);
+                        continue;
+                    }
+                    let args = vec!["rm".to_string(), id.clone()];
+                    if let Some(result) = run_cmd_record_owned(&minibox_bin, &args, &mut errors) {
+                        if result.stdout.contains(&id) {
+                            durations.push(result.duration_micros);
+                        } else {
+                            errors.push(format!(
+                                "command failed: {minibox_bin} {:?}\nstdout did not include removed container id {id}",
+                                args
+                            ));
+                        }
+                    }
+                    cleanup_background_container(&id, &mut errors);
+                }
+                Err(err) => errors.push(format!("rm fixture setup failed: {err}")),
+            }
+        }
+        rm_suite.tests.push(TestResult {
+            name: "rm_stopped".to_string(),
+            iterations: durations.len(),
+            durations_micros: durations.clone(),
+            stats: stats_for(&durations),
+            ..Default::default()
+        });
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(rm_suite);
     }
 
     if suite_enabled(cfg, "exec") {
@@ -1496,7 +1826,7 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
 /// Print usage information to stdout and return.
 fn print_help() {
     println!(
-        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|exec|e2e|codec|adapter|colima)\n  --out-dir <path>"
+        "minibox-bench\n\nFlags:\n  --iters <N>\n  --cold/--no-cold\n  --warm/--no-warm\n  --dry-run\n  --profile\n  --suite <name>  (pull|run|ps|stop|rm|exec|e2e|codec|adapter|colima)\n  --out-dir <path>"
     );
 }
 
@@ -1563,6 +1893,17 @@ mod tests {
         };
         let report = run_benchmark(&cfg).unwrap();
         assert!(!report.suites.is_empty());
+    }
+
+    #[test]
+    fn planned_suites_default_covers_cli_commands() {
+        let suites = planned_suites(&BenchConfig::default());
+        for name in ["pull", "run", "ps", "stop", "rm", "exec", "e2e"] {
+            assert!(
+                suites.iter().any(|suite| suite == name),
+                "expected {name} in planned suites"
+            );
+        }
     }
 
     #[test]

@@ -110,30 +110,6 @@ pub fn format_report(caps: &HostCapabilities) -> String {
     lines.join("\n")
 }
 
-/// Skip a test gracefully when a required host capability is absent.
-///
-/// If `$caps.$field` is `false`, prints a `SKIPPED: $reason` message to stderr
-/// and returns from the calling function early. This avoids failing tests on
-/// hosts that legitimately lack the capability (e.g. macOS CI, non-root runs).
-///
-/// # Usage
-///
-/// ```rust,ignore
-/// let caps = minibox_lib::preflight::probe();
-/// minibox_lib::require_capability!(caps, is_root, "requires root");
-/// minibox_lib::require_capability!(caps, cgroups_v2, "requires cgroups v2");
-/// // ... test body runs only when both capabilities are present
-/// ```
-#[macro_export]
-macro_rules! require_capability {
-    ($caps:expr, $field:ident, $reason:expr) => {
-        if !$caps.$field {
-            eprintln!("SKIPPED: {}", $reason);
-            return;
-        }
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Probe helpers
 // ---------------------------------------------------------------------------
@@ -144,8 +120,7 @@ macro_rules! require_capability {
 fn probe_root() -> bool {
     #[cfg(unix)]
     {
-        // SAFETY: geteuid() has no preconditions and is always safe to call.
-        unsafe { libc::geteuid() == 0 }
+        nix::unistd::geteuid().is_root()
     }
     #[cfg(not(unix))]
     {

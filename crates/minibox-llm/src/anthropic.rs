@@ -53,7 +53,7 @@ impl AnthropicProvider {
 
 // Generates from_env(), from_env_with_config(), and from_key() (test-only).
 // Reads ANTHROPIC_API_KEY; default model is claude-sonnet-4-6.
-provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
+minibox_macros::provide!(AnthropicProvider, "ANTHROPIC_API_KEY", "claude-sonnet-4-6");
 
 #[async_trait]
 impl LlmProvider for AnthropicProvider {

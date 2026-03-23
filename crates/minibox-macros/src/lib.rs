@@ -10,6 +10,8 @@
 //! - [`as_any!`] — implement `AsAny` for one or more types
 //! - [`default_new!`] — implement `Default` via `Self::new()` for one or more types
 //! - [`adapt!`] — implement both `AsAny` and `Default` for one or more types
+//! - [`provide!`] — generate provider constructors in `minibox-llm`
+//! - [`require_capability!`] — skip tests when a probed host capability is absent
 //!
 //! # Call-site resolution note
 //!
@@ -88,5 +90,66 @@ macro_rules! adapt {
     ($($t:ty),+ $(,)?) => {
         $crate::as_any!($($t),+);
         $crate::default_new!($($t),+);
+    };
+}
+
+/// Generate `from_env()`, `from_env_with_config()`, and test-only `from_key()`
+/// constructors for an LLM provider type.
+///
+/// This macro is intended for use inside `minibox-llm` provider modules. It
+/// intentionally references `crate::ProviderConfig` at the call site, so it
+/// expands against `minibox_llm`, not `minibox_macros`.
+///
+/// # Example
+/// ```rust,ignore
+/// minibox_macros::provide!(OpenAiProvider, "OPENAI_API_KEY", "gpt-4.1");
+/// ```
+#[allow(clippy::crate_in_macro_def)]
+#[macro_export]
+macro_rules! provide {
+    ($provider:ty, $env_var:expr, $default_model:expr) => {
+        impl $provider {
+            /// Construct this provider from the environment using default HTTP timeouts.
+            ///
+            /// Returns `None` if the required API key environment variable is not set.
+            pub fn from_env() -> Option<Self> {
+                Self::from_env_with_config(&crate::ProviderConfig::default())
+            }
+
+            /// Construct this provider from the environment with explicit HTTP configuration.
+            ///
+            /// Returns `None` if the required API key environment variable is not set.
+            pub fn from_env_with_config(config: &crate::ProviderConfig) -> Option<Self> {
+                ::std::env::var($env_var)
+                    .ok()
+                    .map(|k| Self::with_config(k, $default_model.to_string(), config))
+            }
+
+            /// Test helper — inject a key without reading the environment.
+            #[cfg(test)]
+            pub(crate) fn from_key(key: String) -> Self {
+                Self::new(key, $default_model.to_string())
+            }
+        }
+    };
+}
+
+/// Skip a test gracefully when a required host capability is absent.
+///
+/// If `$caps.$field` is `false`, prints a `SKIPPED: $reason` message to stderr
+/// and returns from the calling function early. Intended for integration tests
+/// that probe host state before executing privileged setup.
+///
+/// # Example
+/// ```rust,ignore
+/// minibox_macros::require_capability!(caps, is_root, "requires root");
+/// ```
+#[macro_export]
+macro_rules! require_capability {
+    ($caps:expr, $field:ident, $reason:expr) => {
+        if !$caps.$field {
+            ::std::eprintln!("SKIPPED: {}", $reason);
+            return;
+        }
     };
 }

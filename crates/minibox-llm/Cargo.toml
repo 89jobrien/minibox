@@ -13,6 +13,7 @@ gemini = ["dep:reqwest"]
 
 [dependencies]
 async-trait = { workspace = true }
+minibox-macros = { workspace = true }
 reqwest = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
