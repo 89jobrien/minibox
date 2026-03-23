@@ -40,6 +40,34 @@ jobs:
       - name: cargo machete
         run: cargo machete
 
+  macos-colima:
+    name: macOS Colima smoke
+    runs-on: macos-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Colima + Lima
+        run: brew install colima lima
+      - name: Start Colima VM
+        run: |
+          colima start --vm-type vz --cpu 2 --memory 2
+          colima status
+      - name: Build daemon and CLI
+        run: cargo build -p miniboxd -p minibox-cli --release
+      - name: Smoke test
+        run: |
+          ./target/release/miniboxd &
+          DAEMON_PID=$!
+          sleep 3
+          ./target/release/minibox pull alpine
+          OUTPUT=$(./target/release/minibox run alpine -- /bin/echo "hello from minibox")
+          echo "Output: $OUTPUT"
+          echo "$OUTPUT" | grep -q "hello from minibox"
+          kill $DAEMON_PID
+          echo "Smoke test passed"
+
   coverage:
     name: coverage → codecov
     runs-on: ubuntu-latest
