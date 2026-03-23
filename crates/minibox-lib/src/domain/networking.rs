@@ -8,6 +8,20 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+/// Selects which networking adapter handles container network setup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum NetworkMode {
+    /// No networking — container gets an isolated network namespace with no connectivity.
+    #[default]
+    None,
+    /// Bridge networking — veth pair attached to a Linux bridge (e.g., `minibox0`).
+    Bridge,
+    /// Host networking — container shares the host network namespace.
+    Host,
+    /// Tailnet networking — container is connected via Tailscale/tsnet.
+    Tailnet,
+}
+
 /// Abstraction for container networking operations.
 ///
 /// Implementations might include Linux bridge networking, CNI plugins,
@@ -79,6 +93,9 @@ pub trait NetworkProvider: AsAny + Send + Sync {
 /// Network configuration for a container.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
+    /// Networking mode — selects which adapter handles this container.
+    pub mode: NetworkMode,
+
     /// Bridge name (e.g., "minibox0", "docker0")
     pub bridge_name: String,
 
@@ -101,6 +118,7 @@ pub struct NetworkConfig {
 impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
+            mode: NetworkMode::None,
             bridge_name: "minibox0".to_string(),
             subnet: "172.18.0.0/16".to_string(),
             container_ip: None,
@@ -174,4 +192,34 @@ pub struct NetworkStats {
 
     /// Transmit drops
     pub tx_dropped: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_mode_serde_roundtrip() {
+        for mode in [
+            NetworkMode::None,
+            NetworkMode::Bridge,
+            NetworkMode::Host,
+            NetworkMode::Tailnet,
+        ] {
+            let json = serde_json::to_string(&mode).expect("serialize");
+            let back: NetworkMode = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(mode, back);
+        }
+    }
+
+    #[test]
+    fn network_mode_default_is_none() {
+        assert_eq!(NetworkMode::default(), NetworkMode::None);
+    }
+
+    #[test]
+    fn network_config_default_has_none_mode() {
+        let config = NetworkConfig::default();
+        assert_eq!(config.mode, NetworkMode::None);
+    }
 }
