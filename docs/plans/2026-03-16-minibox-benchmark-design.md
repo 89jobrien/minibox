@@ -4,6 +4,7 @@ completed: "2026-03-16"
 superseded_by: 2026-03-16-minibox-benchmark.md
 note: Design doc; superseded by implementation plan
 ---
+
 # Minibox Benchmark Design
 
 Date: 2026-03-16

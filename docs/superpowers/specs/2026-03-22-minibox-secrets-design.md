@@ -265,13 +265,13 @@ pub enum CredentialError {
 
 ## Validation Rules
 
-| Type          | Rules                                                                               |
-|---------------|-------------------------------------------------------------------------------------|
-| `ApiKey`      | Non-empty, ≥ 8 chars, no ASCII whitespace                                          |
-| `Token`       | Non-empty; if `expires_at` is set and in the past → `ValidationError::Expired`    |
-| `DatabaseUrl` | Parses as URL; scheme ∈ `{postgres, postgresql, mysql, sqlite, redis}`             |
-| `SshKey`      | Starts with `-----BEGIN`, contains `PRIVATE KEY` (encrypted keys are accepted;     |
-|               | decryption is the caller's responsibility)                                         |
+| Type          | Rules                                                                          |
+| ------------- | ------------------------------------------------------------------------------ |
+| `ApiKey`      | Non-empty, ≥ 8 chars, no ASCII whitespace                                      |
+| `Token`       | Non-empty; if `expires_at` is set and in the past → `ValidationError::Expired` |
+| `DatabaseUrl` | Parses as URL; scheme ∈ `{postgres, postgresql, mysql, sqlite, redis}`         |
+| `SshKey`      | Starts with `-----BEGIN`, contains `PRIVATE KEY` (encrypted keys are accepted; |
+|               | decryption is the caller's responsibility)                                     |
 
 Validation is called by the chain after each successful `get()`. A credential that fails
 validation causes the chain to try the next provider.

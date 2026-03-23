@@ -4,11 +4,11 @@ Benchmarking for minibox. Results are stored in `bench/results/` and committed a
 
 ## Suites
 
-| Suite     | Tests | Requires daemon | Platform     |
-| --------- | ----- | --------------- | ------------ |
-| `codec`   | 36    | No              | Any          |
-| `adapter` | 10    | No              | Any          |
-| `lifecycle` | 6   | Yes (Linux+root)| Linux        |
+| Suite       | Tests | Requires daemon  | Platform |
+| ----------- | ----- | ---------------- | -------- |
+| `codec`     | 36    | No               | Any      |
+| `adapter`   | 10    | No               | Any      |
+| `lifecycle` | 6     | Yes (Linux+root) | Linux    |
 
 ## Run via xtask (saves results)
 
@@ -57,7 +57,12 @@ Runs on the remote VPS via SSH, saves results, and commits + pushes `bench/resul
     {
       "name": "codec",
       "tests": [
-        { "name": "encode_run_container", "median_us": 0.42, "p99_us": 0.61, "unit": "nanos" }
+        {
+          "name": "encode_run_container",
+          "median_us": 0.42,
+          "p99_us": 0.61,
+          "unit": "nanos"
+        }
       ]
     }
   ]

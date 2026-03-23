@@ -204,8 +204,8 @@ description = "Run minibox-bench on VPS and post results as a Gitea commit comme
 run = "cargo xtask bench-vps"
 
 [tasks."all:ssh-vps"]
-description = "SSH into jobrien-vm (key auth via 1Password agent)"
-run = "ssh jobrien-vm"
+description = "SSH into jobrien-vm and cd into ~/minibox (key auth via 1Password agent)"
+run = "ssh -t jobrien-vm 'cd ~/minibox && exec $SHELL -l'"
 
 [tasks."all:commit"]
 description = "Stage all + commit (triggers pre-commit hook). Usage: mise run all:commit -- 'message'"
@@ -227,16 +227,13 @@ uv run scripts/meta-agent.py "$TASK"
 """
 
 [tasks."all:push"]
-description = "Push with pre-push sync check then clean artifacts, then ai-review. Usage: mise run all:push -- [git-push-args]"
+description = "Push with pre-push sync check then clean artifacts. Usage: mise run all:push -- [git-push-args]"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 uv run scripts/sync-check.py
 git push "$@"
 cargo xtask clean-artifacts
-echo ""
-echo "Running post-push council analysis..."
-uv run scripts/council.py --base origin/main --mode extensive
 """
 
 [tasks."all:standup"]

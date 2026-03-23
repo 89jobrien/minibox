@@ -81,6 +81,11 @@ test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-s
 bench:
     cargo xtask bench
 
+# AI bench analysis (subcommands: report, compare, regress, cleanup, trigger)
+bench-agent *args:
+    #!/usr/bin/env bash
+    uv run scripts/bench-agent.py "$@"
+
 # ── Daemon ───────────────────────────────────────────────────────────────────
 
 doctor:

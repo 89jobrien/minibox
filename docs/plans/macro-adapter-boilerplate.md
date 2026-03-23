@@ -3,6 +3,7 @@ status: archived
 completed: "2026-03-17"
 note: adapt!/as_any! shipped in minibox-macros; design predates actual structure
 ---
+
 # Macro: Adapter Boilerplate Elimination
 
 **Date:** 2026-03-17
@@ -51,7 +52,7 @@ Two `macro_rules!` macros in `minibox-lib/src/adapters/mod.rs`, exported from th
 
 ### Macro 1: `as_any!`
 
-```rust
+````rust
 /// Implement `AsAny` for one or more types.
 ///
 /// # Example
@@ -70,13 +71,13 @@ macro_rules! as_any {
         )+
     };
 }
-```
+````
 
 Accepts a comma-separated list so all structs in one adapter file can be covered in one call.
 
 ### Macro 2: `default_new!`
 
-```rust
+````rust
 /// Implement `Default` by delegating to `Self::new()`.
 ///
 /// Only valid for types whose `new()` takes no arguments.
@@ -97,7 +98,7 @@ macro_rules! default_new {
         )+
     };
 }
-```
+````
 
 ### Combined convenience macro
 
@@ -138,15 +139,15 @@ confirms the direction of keeping simple patterns in declarative macros.
 
 ## Impact
 
-| File | Instances removed | Lines saved |
-|------|------------------|-------------|
-| `mocks.rs` | 8 | ~32 |
-| `colima.rs` | 8 | ~32 |
-| `gke.rs` | 6 | ~24 |
-| `wsl.rs` | 6 | ~24 |
-| `docker_desktop.rs` | 6 | ~24 |
-| `limiter.rs`, `filesystem.rs`, `runtime.rs`, `registry.rs` | 8 | ~32 |
-| **Total** | **42** | **~168** |
+| File                                                       | Instances removed | Lines saved |
+| ---------------------------------------------------------- | ----------------- | ----------- |
+| `mocks.rs`                                                 | 8                 | ~32         |
+| `colima.rs`                                                | 8                 | ~32         |
+| `gke.rs`                                                   | 6                 | ~24         |
+| `wsl.rs`                                                   | 6                 | ~24         |
+| `docker_desktop.rs`                                        | 6                 | ~24         |
+| `limiter.rs`, `filesystem.rs`, `runtime.rs`, `registry.rs` | 8                 | ~32         |
+| **Total**                                                  | **42**            | **~168**    |
 
 Future adapters: zero boilerplate to write.
 

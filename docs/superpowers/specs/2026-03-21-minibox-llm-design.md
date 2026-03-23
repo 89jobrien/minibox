@@ -49,11 +49,11 @@ pub struct JsonSchema {
 
 Three built-in providers, each behind a feature flag:
 
-| Feature | Provider | Model | Auth | Structured output |
-|---------|----------|-------|------|-------------------|
-| `anthropic` | Anthropic | Claude Sonnet 4.6 | `x-api-key` header | tool_use with schema |
-| `openai` | OpenAI | GPT-4.1 | `Bearer` auth | `response_format` with json_schema |
-| `gemini` | Google | Gemini 2.5 Flash | `x-goog-api-key` header | `response_mime_type` + schema |
+| Feature     | Provider  | Model             | Auth                    | Structured output                  |
+| ----------- | --------- | ----------------- | ----------------------- | ---------------------------------- |
+| `anthropic` | Anthropic | Claude Sonnet 4.6 | `x-api-key` header      | tool_use with schema               |
+| `openai`    | OpenAI    | GPT-4.1           | `Bearer` auth           | `response_format` with json_schema |
+| `gemini`    | Google    | Gemini 2.5 Flash  | `x-goog-api-key` header | `response_mime_type` + schema      |
 
 Each provider reads its API key from an environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`). Constructors return `None` if the key is not set — this is how the fallback chain knows which providers are available.
 
@@ -188,11 +188,11 @@ Feature flags gate compilation of provider modules. `reqwest` is behind a `provi
 
 Follows minibox tracing conventions:
 
-| Level | Event |
-|-------|-------|
-| `info!` | Provider selected, completion succeeded (provider name, token usage) |
-| `warn!` | Provider skipped (no key), provider failed (error), falling back |
-| `debug!` | Request details (model, max_tokens, schema name), response timing |
+| Level    | Event                                                                |
+| -------- | -------------------------------------------------------------------- |
+| `info!`  | Provider selected, completion succeeded (provider name, token usage) |
+| `warn!`  | Provider skipped (no key), provider failed (error), falling back     |
+| `debug!` | Request details (model, max_tokens, schema name), response timing    |
 
 Fields: `provider`, `model`, `input_tokens`, `output_tokens`, `elapsed_ms`, `error`.
 

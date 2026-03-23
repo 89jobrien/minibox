@@ -28,6 +28,7 @@ tempfile = "3"
 ### Fixture Construction
 
 `DaemonState::new(image_store, data_dir)` requires:
+
 1. An `ImageStore` instance — constructed via `ImageStore::new(tmp.path())` which calls `create_dir_all` immediately.
 2. A `data_dir` path — `DaemonState` writes `state.json` there on every `add_container` / `remove_container` call via `save_to_disk`.
 
@@ -85,11 +86,11 @@ Gated with `#[cfg(target_os = "linux")]`. Skipped by `cargo xtask test-unit` on 
 
 ## Platform Matrix
 
-| Test group | macOS | Linux (no root) | Linux (root, cgroup2) |
-|---|---|---|---|
-| DaemonState invariants | ✓ | ✓ | ✓ |
-| Handler input safety | ✓ | ✓ | ✓ |
-| CgroupConfig bounds | skipped | skipped | ✓ |
+| Test group             | macOS   | Linux (no root) | Linux (root, cgroup2) |
+| ---------------------- | ------- | --------------- | --------------------- |
+| DaemonState invariants | ✓       | ✓               | ✓                     |
+| Handler input safety   | ✓       | ✓               | ✓                     |
+| CgroupConfig bounds    | skipped | skipped         | ✓                     |
 
 ## Success Criteria
 

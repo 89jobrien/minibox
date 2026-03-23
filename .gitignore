@@ -84,3 +84,11 @@ Thumbs.db
 *.bak
 *.orig
 .envrc
+
+# Python*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.venv/
+*.pytest_cache/
+.firecrawl/

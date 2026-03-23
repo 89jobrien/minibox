@@ -9,14 +9,14 @@
 
 import argparse
 import asyncio
-import json
 import time
-from datetime import datetime
-from pathlib import Path
+
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+import agent_log
 
 from claude_agent_sdk import ClaudeAgentOptions, query
-
-_LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"
 
 TRAIT_HINTS = {
     "BridgeNetworking": "crates/minibox-lib/src/adapters/",
@@ -25,26 +25,6 @@ TRAIT_HINTS = {
     "LogStore": "crates/minibox-lib/src/adapters/",
     "StateStore": "crates/minibox-lib/src/adapters/",
 }
-
-
-def _log_start(script: str, args: dict) -> str:
-    run_id = datetime.now().isoformat()
-    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({"run_id": run_id, "script": script, "args": args, "status": "running"}) + "\n")
-    return run_id
-
-
-def _log_complete(run_id: str, script: str, args: dict, output: str, duration_s: float) -> None:
-    with _LOG_FILE.open("a") as f:
-        f.write(json.dumps({
-            "run_id": run_id,
-            "script": script,
-            "args": args,
-            "status": "complete",
-            "duration_s": round(duration_s, 2),
-            "output": output,
-        }) + "\n")
 
 
 async def main() -> None:
@@ -75,7 +55,7 @@ Do not invent trait methods — only implement what is defined in domain.rs."""
 
     print(f"Generating tests for {args.trait}...\n")
 
-    run_id = _log_start("gen-tests", {"trait": args.trait})
+    run_id = agent_log.log_start("gen-tests", {"trait": args.trait})
     start = time.monotonic()
     output_parts: list[str] = []
 
@@ -90,7 +70,7 @@ Do not invent trait methods — only implement what is defined in domain.rs."""
             print(message.result)
             output_parts.append(message.result)
 
-    _log_complete(run_id, "gen-tests", {"trait": args.trait}, "\n".join(output_parts), time.monotonic() - start)
+    agent_log.log_complete(run_id, "gen-tests", {"trait": args.trait}, "\n".join(output_parts), time.monotonic() - start)
 
 
 if __name__ == "__main__":

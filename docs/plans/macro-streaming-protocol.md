@@ -2,6 +2,7 @@
 status: archived
 note: Never built; channel-based streaming shipped instead
 ---
+
 # Macro: Streaming Response Protocol
 
 **Date:** 2026-03-17
@@ -46,14 +47,14 @@ length prefix + type byte + payload.
 
 Frame types:
 
-| Type | Name | Direction | Meaning |
-|------|------|-----------|---------|
+| Type | Name     | Direction       | Meaning                                  |
+| ---- | -------- | --------------- | ---------------------------------------- |
 | 0x01 | `Stdout` | daemon → client | stdout bytes from container/exec process |
-| 0x02 | `Stderr` | daemon → client | stderr bytes |
-| 0x03 | `Stdin` | client → daemon | stdin bytes to forward |
-| 0x04 | `Resize` | client → daemon | PTY resize (`[u16 rows][u16 cols]`) |
-| 0x05 | `Exit` | daemon → client | process exited (`[i32 exit_code]`) |
-| 0x06 | `Error` | daemon → client | error before exit |
+| 0x02 | `Stderr` | daemon → client | stderr bytes                             |
+| 0x03 | `Stdin`  | client → daemon | stdin bytes to forward                   |
+| 0x04 | `Resize` | client → daemon | PTY resize (`[u16 rows][u16 cols]`)      |
+| 0x05 | `Exit`   | daemon → client | process exited (`[i32 exit_code]`)       |
+| 0x06 | `Error`  | daemon → client | error before exit                        |
 
 Mode switch: the daemon sends a special JSON response `{"type":"StreamBegin","stream_id":"..."}`,
 after which both sides switch to framed mode for that stream.
@@ -68,6 +69,7 @@ The client accumulates and returns when it receives `Exit`.
 ### Goal
 
 The macro handles the repetitive scaffolding of a streaming handler:
+
 - open the streaming channel
 - select! loop over: process output, client input, timeout, shutdown signal
 - send frames to client
@@ -75,7 +77,7 @@ The macro handles the repetitive scaffolding of a streaming handler:
 
 ### `stream!`
 
-```rust
+````rust
 /// Generate a streaming command handler.
 ///
 /// The macro wires together:
@@ -149,9 +151,10 @@ macro_rules! stream {
         }
     };
 }
-```
+````
 
 The macro's primary value is enforcing that every streaming handler:
+
 1. Has a timeout (forgetting it is a resource-leak bug)
 2. Sends a terminal `Exit` or `Error` frame (the client blocks until one arrives)
 3. Uses the same frame encoding function (`send_frame`)

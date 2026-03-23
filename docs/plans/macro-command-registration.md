@@ -2,6 +2,7 @@
 status: archived
 note: Never built; hand-written dispatch in daemonbox/handler.rs is the real approach
 ---
+
 # Macro: Command Registration (Protocol + Dispatch)
 
 **Date:** 2026-03-17
@@ -20,6 +21,7 @@ Adding a new daemon command today requires touching **four locations**:
 4. `handler.rs` — write `handle_X()` and `X_inner()` functions
 
 Each maestro Phase 1 gap adds one command:
+
 - `Architecture` — query host arch
 - `Exec` — run command in container, return output
 - `Logs` — return captured stdout/stderr
@@ -76,6 +78,7 @@ macro_rules! route {
 ```
 
 **Usage:**
+
 ```rust
 async fn dispatch(request: DaemonRequest, state: Arc<DaemonState>, deps: Arc<HandlerDependencies>) -> DaemonResponse {
     route!(request, state, deps;
@@ -98,6 +101,7 @@ The macro ensures the dispatch table and the enum stay synchronized at compile t
 ### Option B: Proc macro `#[command]` derive
 
 A proc macro attribute on the enum that generates dispatch boilerplate:
+
 ```rust
 #[command(handler = "handler::handle_run")]
 Run { image: String, tag: Option<String>, ... }

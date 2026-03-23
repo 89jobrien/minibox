@@ -96,6 +96,7 @@ exec unshare --pid --mount --uts --ipc --net \
 ```
 
 Key changes from current:
+
 - Removed `&` (no backgrounding)
 - Removed `echo $!` (PID comes from host-side `child.id()`)
 - Added `exec` so the shell is replaced by unshare (no extra process layer)
@@ -131,11 +132,11 @@ async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResu
 
 Three gates in `daemonbox/src/handler.rs` must change from `#[cfg(target_os = "linux")]` to `#[cfg(unix)]`:
 
-| Line | Current | New | Function |
-|------|---------|-----|----------|
-| ~91 | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | Ephemeral streaming dispatch in `handle_run` |
-| ~134 | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | `handle_run_streaming` function |
-| ~241 | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | `run_inner_capture` function |
+| Line | Current                       | New            | Function                                     |
+| ---- | ----------------------------- | -------------- | -------------------------------------------- |
+| ~91  | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | Ephemeral streaming dispatch in `handle_run` |
+| ~134 | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | `handle_run_streaming` function              |
+| ~241 | `#[cfg(target_os = "linux")]` | `#[cfg(unix)]` | `run_inner_capture` function                 |
 
 These functions use `OwnedFd`, `waitpid`, and pipe operations — all available on any Unix platform via the `nix` crate. The Linux-specific gate was overly restrictive.
 
@@ -171,6 +172,7 @@ If no block device is found, io.max writes are skipped (best-effort, same as `Gk
 - `ColimaRuntime::new().with_executor(executor.clone()).with_spawner(spawner)` — spawner enables streaming subprocess creation
 
 This is consistent with the existing wiring:
+
 ```rust
 // Current pattern (ColimaRegistry, ColimaRuntime use with_executor):
 let registry = ColimaRegistry::new().with_executor(executor.clone());
@@ -187,8 +189,8 @@ New job in `.github/workflows/ci.yml`:
 
 ```yaml
 macos-colima:
-  runs-on: macos-latest  # macOS 14+ required for --vm-type vz
-  needs: [lint]  # run after existing lint job passes
+  runs-on: macos-latest # macOS 14+ required for --vm-type vz
+  needs: [lint] # run after existing lint job passes
   steps:
     - uses: actions/checkout@v4
     - name: Install Colima
@@ -213,11 +215,11 @@ macos-colima:
 
 New `--suite colima` in `minibox-bench`:
 
-| Measurement | What it captures |
-|-------------|-----------------|
-| `colima/limactl-roundtrip` | Baseline: `limactl shell minibox -- echo ok` latency |
+| Measurement                  | What it captures                                                     |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `colima/limactl-roundtrip`   | Baseline: `limactl shell minibox -- echo ok` latency                 |
 | `colima/spawn-to-first-byte` | Time from `spawn_process()` call to first byte read from output pipe |
-| `colima/stop-latency` | Time from host PID kill to `waitpid` return |
+| `colima/stop-latency`        | Time from host PID kill to `waitpid` return                          |
 
 Gated behind macOS + Colima-running check. Results flow to `bench/results/bench.jsonl` and `bench/results/latest.json` via the existing pipeline.
 
@@ -225,13 +227,13 @@ Gated behind macOS + Colima-running check. Results flow to `bench/results/bench.
 
 ## Changes Summary
 
-| File | Change |
-|------|--------|
-| `minibox-lib/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new` |
-| `daemonbox/src/handler.rs` | Widen three `#[cfg(target_os = "linux")]` gates to `#[cfg(unix)]` |
-| `macbox/src/lib.rs` | Update composition root: pass executor to `ColimaLimiter::new`, create and pass `LimaSpawner` to `ColimaRuntime` |
-| `minibox-bench/src/main.rs` | Add `colima` suite with three measurements |
-| `.github/workflows/ci.yml` | New `macos-colima` job |
+| File                                 | Change                                                                                                           |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `minibox-lib/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new`    |
+| `daemonbox/src/handler.rs`           | Widen three `#[cfg(target_os = "linux")]` gates to `#[cfg(unix)]`                                                |
+| `macbox/src/lib.rs`                  | Update composition root: pass executor to `ColimaLimiter::new`, create and pass `LimaSpawner` to `ColimaRuntime` |
+| `minibox-bench/src/main.rs`          | Add `colima` suite with three measurements                                                                       |
+| `.github/workflows/ci.yml`           | New `macos-colima` job                                                                                           |
 
 **Not changed:** `domain.rs` (`SpawnResult` unchanged), `state.rs` (`DaemonState` unchanged), `server.rs`, `minibox-cli`, protocol types.
 
@@ -265,6 +267,7 @@ This means containers do not get a chance to handle SIGTERM gracefully (flush bu
 The design assumes `limactl shell` faithfully pipes VM stdout to the host process's stdout when invoked with `Stdio::piped()`. This is the foundational assumption for Goal #1 (streaming output). `limactl shell` is a user-facing tool — its stdio behavior as a subprocess is not part of a documented stable API.
 
 **Mitigation:** Validate empirically before implementation:
+
 ```bash
 # Run on macOS with Colima running:
 echo 'echo hello world' | limactl shell minibox

@@ -4,6 +4,7 @@ completed: "2026-03-16"
 branch: main
 note: minibox-bench crate fully shipped
 ---
+
 # Minibox Benchmark Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

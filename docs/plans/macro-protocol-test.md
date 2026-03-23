@@ -2,6 +2,7 @@
 status: archived
 note: Never built; manual protocol tests used instead
 ---
+
 # Macro: Protocol Test Utilities
 
 **Date:** 2026-03-17
@@ -55,7 +56,7 @@ Two macros, both `macro_rules!`, both `#[cfg(test)]`-gated.
 
 ### Macro 1: `roundtrip!` (request)
 
-```rust
+````rust
 /// Generate a `#[test]` that encodes a `DaemonRequest`, decodes it, pattern-matches
 /// the result, and runs assertions on the destructured fields.
 ///
@@ -89,7 +90,7 @@ macro_rules! roundtrip {
         }
     };
 }
-```
+````
 
 **Response variant** (same pattern, different encode/decode functions):
 
@@ -112,6 +113,7 @@ macro_rules! roundtrip_resp {
 ```
 
 **Before (current `test_encode_decode_stop_request`):**
+
 ```rust
 #[test]
 fn test_encode_decode_stop_request() {
@@ -126,6 +128,7 @@ fn test_encode_decode_stop_request() {
 ```
 
 **After:**
+
 ```rust
 roundtrip!(
     test_encode_decode_stop,
@@ -160,7 +163,7 @@ roundtrip!(
 
 ### Macro 2: `mock!`
 
-```rust
+````rust
 /// Downcast a `Dyn*` trait object to a mock type and assert a method's return value.
 ///
 /// # Example
@@ -186,9 +189,10 @@ macro_rules! mock {
         );
     }};
 }
-```
+````
 
 **Before:**
+
 ```rust
 let mock_registry = deps.registry.as_any()
     .downcast_ref::<MockRegistry>()
@@ -197,6 +201,7 @@ assert_eq!(mock_registry.pull_count(), 1);
 ```
 
 **After:**
+
 ```rust
 mock!(deps.registry, MockRegistry, pull_count() == 1);
 ```

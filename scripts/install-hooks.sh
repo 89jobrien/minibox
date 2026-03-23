@@ -61,7 +61,7 @@ echo
 echo "Installed hooks:"
 echo "  - pre-commit: fmt-check + lint + test-unit"
 echo "  - pre-push:   nextest + coverage + flamegraph"
-echo "  - commit-msg: conventional commit format (warning only)"
+echo "  - commit-msg: conventional commit format (warning only - Used by Agent)"
 echo
 echo "To bypass hooks (not recommended):"
 echo "  git commit --no-verify"

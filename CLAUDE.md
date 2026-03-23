@@ -14,19 +14,28 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 
 ### AI Agent Scripts (Claude Agent SDK)
 
+All `scripts/*.py` SDK scripts (`council.py`, `ai-review.py`, `meta-agent.py`, etc.) require an interactive terminal — they fail with "Command failed with exit code 1" when run via `run_in_background`. Always run them foreground/interactively.
+
+### scripts/ conventions
+
+- **Shared libraries** (`agent_log.py`, `bench_data.py`): no shebang, no PEP 723 block — imported by agent scripts via `sys.path.insert(0, os.path.dirname(__file__))`. All agent scripts must use `agent_log` for telemetry (never duplicate logging inline).
+- **AI agent scripts** (`*-agent.py`, `council.py`, etc.): `#!/usr/bin/env -S uv run` + PEP 723 inline deps + `claude-agent-sdk` dependency. Always log via `agent_log.log_start`/`log_complete`.
+- **TUI scripts** (`dashboard.py`): same uv pattern but use `rich` instead of `claude-agent-sdk`. Dashboard reads both `~/.mbx/agent-runs.jsonl` (agents) and `bench/results/` (benchmarks).
+
 - `just meta-agent "task"` — design + spawn parallel agents for any task; fetches + caches SDK docs, discovers repo context
 - `just council [base] [mode]` — multi-role branch analysis (core: 3 roles, extensive: 5 roles) + synthesis
 - `just ai-review [base]` — security/correctness review of diff vs base branch
 - `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
+- `just bench-agent <subcmd>` — AI bench analysis: `report`, `compare [sha...]`, `regress`, `cleanup [--dry-run]`, `trigger [--vps]`
 - `just sync-check` — fetch + rebase onto origin/main, auto-resolve obvious conflicts (wired into `just push`)
 - `just commit-msg [--all]` — AI-generated conventional commit message from staged diff + commit history
 - `mise run all:standup [-- N]` — time-block standup from git activity across ~/dev/ repos (N = hours, default 24)
-- `mise run all:dashboard` — agent run history and metrics (reads ~/.mbx/agent-runs.jsonl)
+- `mise run all:dashboard` — agent + bench dashboard (reads ~/.mbx/agent-runs.jsonl + bench/results/)
 
 ### mise.toml vs Justfile Convention
 
-- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`meta-agent`, `council`, `ai-review`, `gen-tests`, `diagnose`, `sync-check`, `commit-msg`), cleanup
+- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`meta-agent`, `council`, `ai-review`, `gen-tests`, `diagnose`, `bench-agent`, `sync-check`, `commit-msg`), cleanup
 - **mise.toml** — Human commands: interactive demos, ops tasks (`ssh-vps`, `fix-socket`, `smoke`), git ops (`commit`, `push`), human reports (`standup`, `dashboard`)
 
 **mise.toml script gotcha:** Bash scripts with ANSI escape codes (e.g. `\033[36m`) **must** use `run = '''...'''` (TOML literal string) not `run = """..."""` — TOML interprets `\0` as an invalid escape in double-quoted strings.
@@ -118,7 +127,7 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 
 **Test Status:**
 
-- Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm passing (221 total via nextest, 4 skipped on macOS)
+- Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (257 total via nextest, 4 skipped on macOS)
 - Property-based: 8 daemonbox proptest properties + 25 minibox-lib property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
@@ -129,7 +138,7 @@ cargo bench -p minibox-lib          # criterion benches (local HTML reports only
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -137,7 +146,7 @@ cargo xtask test-unit
 
 ### Workspace Structure
 
-Nine crates in cargo workspace:
+Ten crates in cargo workspace:
 
 1. **minibox-lib** (library): Core container primitives, image management, shared protocol types
 2. **minibox-macros** (proc-macro): Derive macros used by minibox-lib
@@ -148,6 +157,7 @@ Nine crates in cargo workspace:
 7. **minibox-cli** (binary): CLI client sending commands to daemon
 8. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
 9. **minibox-bench** (binary): Benchmark harness
+10. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
@@ -256,8 +266,6 @@ Image pulls enforce limits to prevent DoS:
 - Max layer size: 1GB per layer
 - Total image size limit: 5GB
 
-- `.worktrees/` — git worktrees for in-progress feature branches (managed by `superpowers:using-git-worktrees` skill); ignore when searching codebase
-
 ## Directory Structure
 
 ### Runtime Paths
@@ -274,6 +282,10 @@ Image pulls enforce limits to prevent DoS:
 
 - `/sys/fs/cgroup/minibox.slice/miniboxd.service/{id}/`: Per-container cgroup (systemd-managed)
 - `/sys/fs/cgroup/minibox.slice/miniboxd.service/supervisor/`: Daemon's own leaf cgroup
+
+### Worktrees
+
+- `.worktrees/` — git worktrees for in-progress feature branches (managed by `superpowers:using-git-worktrees` skill); ignore when searching codebase
 
 ## System Requirements
 

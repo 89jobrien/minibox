@@ -411,27 +411,27 @@ Note: `invoke!` only works with `FallbackChain` (which has `complete_sync`), not
 
 ### Defaults when omitted
 
-| Field | Default |
-|-------|---------|
-| `system` | `None` |
-| `max_tokens` | `1024` |
-| `schema` | `None` |
-| `timeout` | `None` (use provider default) |
+| Field         | Default                           |
+| ------------- | --------------------------------- |
+| `system`      | `None`                            |
+| `max_tokens`  | `1024`                            |
+| `schema`      | `None`                            |
+| `timeout`     | `None` (use provider default)     |
 | `max_retries` | `None` (use retry config default) |
 
 ## File Change Summary
 
-| File | Change |
-|------|--------|
-| `types.rs` | Add `timeout: Option<Duration>`, `max_retries: Option<u32>` to `CompletionRequest` |
-| `error.rs` | Add `HttpStatusError` struct, `is_transient()` method on `LlmError` |
-| `provider.rs` | Add `ProviderConfig` type with `Default` impl |
-| `retry.rs` (new) | `RetryingProvider<P>` wrapper implementing `LlmProvider`, `RetryConfig` type |
-| `anthropic.rs` | `with_config()` constructor, explicit status checking, per-request timeout |
-| `openai.rs` | Same pattern |
-| `gemini.rs` | Same pattern |
-| `chain.rs` | `from_env_with_config()`, wraps providers in `RetryingProvider` |
-| `lib.rs` | `provide!` macro definition (crate-internal), `invoke!`/`ainvoke!` via `#[macro_export]`, `pub use` for `ProviderConfig`, `RetryConfig`, `HttpStatusError`, `RetryingProvider`, declare `retry` module |
+| File             | Change                                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `types.rs`       | Add `timeout: Option<Duration>`, `max_retries: Option<u32>` to `CompletionRequest`                                                                                                                     |
+| `error.rs`       | Add `HttpStatusError` struct, `is_transient()` method on `LlmError`                                                                                                                                    |
+| `provider.rs`    | Add `ProviderConfig` type with `Default` impl                                                                                                                                                          |
+| `retry.rs` (new) | `RetryingProvider<P>` wrapper implementing `LlmProvider`, `RetryConfig` type                                                                                                                           |
+| `anthropic.rs`   | `with_config()` constructor, explicit status checking, per-request timeout                                                                                                                             |
+| `openai.rs`      | Same pattern                                                                                                                                                                                           |
+| `gemini.rs`      | Same pattern                                                                                                                                                                                           |
+| `chain.rs`       | `from_env_with_config()`, wraps providers in `RetryingProvider`                                                                                                                                        |
+| `lib.rs`         | `provide!` macro definition (crate-internal), `invoke!`/`ainvoke!` via `#[macro_export]`, `pub use` for `ProviderConfig`, `RetryConfig`, `HttpStatusError`, `RetryingProvider`, declare `retry` module |
 
 ## Worst-Case Latency
 
