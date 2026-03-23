@@ -117,7 +117,9 @@ pub use runtime::LinuxNamespaceRuntime;
 pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 
 // Cross-platform exports (always available)
-pub use colima::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+pub use colima::{
+    ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
+};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};

@@ -22,7 +22,8 @@ use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
 use minibox_lib::adapters::{
-    ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, NoopNetwork,
+    ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
+    NoopNetwork,
 };
 use minibox_lib::image::ImageStore;
 use std::path::PathBuf;
@@ -109,11 +110,44 @@ pub async fn start() -> Result<()> {
     info!("state loaded from disk");
 
     // ── Dependency Injection — Colima adapter suite ──────────────────────
+    // Shared executor closure — runs fire-and-forget commands inside the Lima VM.
+    let executor: LimaExecutor = Arc::new(|args: &[&str]| {
+        let output = std::process::Command::new("limactl")
+            .arg("shell")
+            .arg("colima")
+            .args(args)
+            .output()
+            .map_err(|e| anyhow::anyhow!("limactl exec failed: {e}"))?;
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "limactl command failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    });
+
+    // Spawner closure — starts a long-lived process with piped stdout.
+    let spawner: LimaSpawner = Arc::new(|args: &[&str]| {
+        std::process::Command::new("limactl")
+            .arg("shell")
+            .arg("colima")
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("limactl spawn failed: {e}"))
+    });
+
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(ColimaRegistry::new()),
+        registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
         filesystem: Arc::new(ColimaFilesystem::new()),
-        resource_limiter: Arc::new(ColimaLimiter::new()),
-        runtime: Arc::new(ColimaRuntime::new()),
+        resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
+        runtime: Arc::new(
+            ColimaRuntime::new()
+                .with_executor(executor)
+                .with_spawner(spawner),
+        ),
         network_provider: Arc::new(NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
