@@ -146,9 +146,12 @@ cargo xtask test-unit
 
 ### Workspace Structure
 
+Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
+
 Ten crates in cargo workspace:
 
 1. **linuxbox** (library): Core container primitives, image management, shared protocol types
+   (formerly `minibox-lib` — renamed 2026-03-23; git history before this date uses the old name)
 2. **minibox-macros** (proc-macro): Derive macros used by linuxbox
 3. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
 4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
@@ -424,6 +427,14 @@ When extending minibox:
 3. **Image operations**: Extend `linuxbox/src/image/` modules
 4. **State persistence**: Consider replacing HashMap in `state.rs` with serialized storage
 5. **Networking**: Implement in new `network.rs` module, add bridge/veth setup in container init
+
+### Platform-specific dependencies
+
+Gate Linux-only deps with `[target.'cfg(target_os = "linux")'.dependencies]`, not unconditional. For Unix-wide code (e.g. `preflight.rs`), use `nix::unistd::geteuid().is_root()` instead of `libc::geteuid()`.
+
+### Crate renames
+
+`recipe.json` is a cargo-chef artifact that embeds crate names — update manually after any crate rename (or regenerate with `cargo chef prepare --recipe-path recipe.json`).
 
 ## Environment Variables
 
