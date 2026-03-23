@@ -32,7 +32,8 @@
 use crate::adapt;
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    LayerInfo, ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+    LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
+    RuntimeCapabilities, SpawnResult,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -469,9 +470,105 @@ impl ContainerRuntime for MockRuntime {
     }
 }
 
-// Register the four primary mock types with the adapt! macro so they satisfy
+// ---------------------------------------------------------------------------
+// MockNetwork
+// ---------------------------------------------------------------------------
+
+/// Mock implementation of [`NetworkProvider`] for testing.
+///
+/// Simulates network setup and cleanup without any real syscalls or namespace
+/// operations. Returns a fixed fake netns path on `setup` and tracks call
+/// counts for `setup` and `cleanup`.
+#[derive(Debug, Clone)]
+pub struct MockNetwork {
+    state: Arc<Mutex<MockNetworkState>>,
+}
+
+#[derive(Debug)]
+struct MockNetworkState {
+    /// Whether `setup` should succeed.
+    setup_should_succeed: bool,
+    /// Running count of `setup` invocations.
+    setup_count: usize,
+    /// Running count of `cleanup` invocations.
+    cleanup_count: usize,
+}
+
+impl MockNetwork {
+    /// Create a new mock network with all operations succeeding by default.
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockNetworkState {
+                setup_should_succeed: true,
+                setup_count: 0,
+                cleanup_count: 0,
+            })),
+        }
+    }
+
+    /// Configure `setup` to return an error.
+    pub fn with_setup_failure(self) -> Self {
+        self.state.lock().unwrap().setup_should_succeed = false;
+        self
+    }
+
+    /// Return the number of times `setup` has been called.
+    pub fn setup_count(&self) -> usize {
+        self.state.lock().unwrap().setup_count
+    }
+
+    /// Return the number of times `cleanup` has been called.
+    pub fn cleanup_count(&self) -> usize {
+        self.state.lock().unwrap().cleanup_count
+    }
+}
+
+#[async_trait]
+impl NetworkProvider for MockNetwork {
+    /// Simulate network namespace setup and return a fixed fake netns path.
+    ///
+    /// Increments the setup counter. Returns an error if configured via
+    /// [`with_setup_failure`].
+    async fn setup(&self, _container_id: &str, _config: &NetworkConfig) -> Result<String> {
+        let mut state = self.state.lock().unwrap();
+        state.setup_count += 1;
+
+        if !state.setup_should_succeed {
+            anyhow::bail!("mock network setup failure");
+        }
+
+        Ok("/mock/netns".to_string())
+    }
+
+    /// Simulate attaching a container to its network namespace — always succeeds.
+    async fn attach(&self, _container_id: &str, _pid: u32) -> Result<()> {
+        Ok(())
+    }
+
+    /// Simulate network cleanup.
+    ///
+    /// Increments the cleanup counter. Always succeeds.
+    async fn cleanup(&self, _container_id: &str) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        state.cleanup_count += 1;
+        Ok(())
+    }
+
+    /// Return default (all-zero) network statistics.
+    async fn stats(&self, _container_id: &str) -> Result<NetworkStats> {
+        Ok(NetworkStats::default())
+    }
+}
+
+// Register the five primary mock types with the adapt! macro so they satisfy
 // the AsAny + Default bounds required by the daemon's adapter registry.
-adapt!(MockRegistry, MockFilesystem, MockLimiter, MockRuntime);
+adapt!(
+    MockRegistry,
+    MockFilesystem,
+    MockLimiter,
+    MockRuntime,
+    MockNetwork
+);
 
 // ---------------------------------------------------------------------------
 // FailableFilesystemMock
@@ -695,6 +792,23 @@ mod tests {
         mock.set_fail_cleanup(true);
         assert!(mock.cleanup(Path::new("/test")).is_err());
         assert_eq!(mock.cleanup_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_mock_network_setup() {
+        let net = MockNetwork::new();
+        assert_eq!(net.setup_count(), 0);
+        let result = net.setup("container-1", &NetworkConfig::default()).await;
+        assert!(result.is_ok());
+        assert_eq!(net.setup_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_mock_network_cleanup() {
+        let net = MockNetwork::new();
+        let result = net.cleanup("container-1").await;
+        assert!(result.is_ok());
+        assert_eq!(net.cleanup_count(), 1);
     }
 }
 

@@ -81,6 +81,8 @@ pub type DynFilesystemProvider = Arc<dyn FilesystemProvider>;
 pub type DynResourceLimiter = Arc<dyn ResourceLimiter>;
 /// Type alias for a shared, dynamic [`ContainerRuntime`] implementation.
 pub type DynContainerRuntime = Arc<dyn ContainerRuntime>;
+/// Type alias for a shared, dynamic [`NetworkProvider`] implementation.
+pub type DynNetworkProvider = Arc<dyn NetworkProvider>;
 
 // ---------------------------------------------------------------------------
 // Downcasting support for testing
