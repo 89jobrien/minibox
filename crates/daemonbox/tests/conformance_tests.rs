@@ -13,7 +13,7 @@ use linuxbox::adapters::mocks::{
 };
 use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+    NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
 };
 use linuxbox::protocol::DaemonResponse;
 use std::path::PathBuf;
@@ -61,6 +61,21 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
         network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    })
+}
+
+fn mock_deps_with_network(
+    network: std::sync::Arc<MockNetwork>,
+    temp_dir: &TempDir,
+) -> Arc<HandlerDependencies> {
+    Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: network,
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
     })
@@ -301,6 +316,85 @@ mod conformance {
         );
     }
 
+    // -------------------------------------------------------------------------
+    // NetworkProvider Conformance
+    // -------------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn network_noop_must_succeed_for_none_mode() {
+        // NetworkMode::None is the default — setup must succeed and return a namespace path string.
+        let net = MockNetwork::new();
+        let config = NetworkConfig {
+            mode: NetworkMode::None,
+            ..NetworkConfig::default()
+        };
+        let result = net.setup("test-container-id", &config).await;
+        assert!(result.is_ok(), "setup with NetworkMode::None must succeed");
+    }
+
+    #[tokio::test]
+    async fn network_setup_must_return_namespace_path() {
+        // setup() must return a non-empty string (the namespace path).
+        let net = MockNetwork::new();
+        let config = NetworkConfig {
+            mode: NetworkMode::None,
+            ..NetworkConfig::default()
+        };
+        let ns_path = net
+            .setup("cid-abc", &config)
+            .await
+            .expect("setup must succeed");
+        assert!(
+            !ns_path.is_empty(),
+            "setup must return a non-empty namespace path"
+        );
+    }
+
+    #[tokio::test]
+    async fn network_cleanup_must_succeed_after_setup() {
+        // cleanup() must not return an error after a successful setup.
+        let net = MockNetwork::new();
+        let config = NetworkConfig {
+            mode: NetworkMode::None,
+            ..NetworkConfig::default()
+        };
+        net.setup("cid-xyz", &config)
+            .await
+            .expect("setup must succeed");
+        let cleanup_result = net.cleanup("cid-xyz").await;
+        assert!(cleanup_result.is_ok(), "cleanup must succeed after setup");
+    }
+
+    #[tokio::test]
+    async fn handler_run_must_invoke_network_setup() {
+        // Verifies that the handler wires NetworkProvider into the run path.
+        // NOTE: handler_tests::test_network_setup_called_on_run covers this at the unit level.
+        // This conformance test mirrors it using the conformance helper pattern to confirm
+        // the same invariant holds for any adapter passed through HandlerDependencies.
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let mock_network = std::sync::Arc::new(MockNetwork::new());
+        let deps = mock_deps_with_network(mock_network.clone(), &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state,
+            deps,
+        )
+        .await;
+
+        assert_eq!(
+            mock_network.setup_count(),
+            1,
+            "NetworkProvider::setup must be called exactly once per handle_run invocation"
+        );
+    }
+
     #[tokio::test]
     async fn handler_remove_must_work_with_any_filesystem_adapter() {
         let temp_dir = TempDir::new().unwrap();
@@ -421,6 +515,26 @@ mod performance_conformance {
         assert!(
             elapsed.as_millis() < 10,
             "Limiter create must complete under 10ms, took {elapsed:?}",
+        );
+    }
+
+    #[tokio::test]
+    async fn network_noop_setup_must_complete_under_1ms() {
+        // Performance: MockNetwork (no-op) setup must be near-instant.
+        use std::time::Instant;
+        let net = MockNetwork::new();
+        let config = NetworkConfig {
+            mode: NetworkMode::None,
+            ..NetworkConfig::default()
+        };
+        let start = Instant::now();
+        net.setup("perf-cid", &config)
+            .await
+            .expect("setup must succeed");
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed.as_millis() < 1,
+            "noop network setup must complete in under 1ms, took {elapsed:?}",
         );
     }
 }

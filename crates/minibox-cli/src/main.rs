@@ -69,7 +69,8 @@ enum Commands {
         #[arg(short, long, default_value = "latest")]
         tag: String,
 
-        /// Network mode: none (default), bridge, host, tailnet
+        /// Network mode: none (default), bridge, host, tailnet.
+        /// 'none' runs the container in an isolated namespace with no network connectivity.
         #[arg(long, default_value = "none")]
         network: String,
     },

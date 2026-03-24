@@ -11,14 +11,16 @@ use serde::{Deserialize, Serialize};
 /// Selects which networking adapter handles container network setup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NetworkMode {
-    /// No networking — container gets an isolated network namespace with no connectivity.
+    /// Container gets an isolated network namespace with no interfaces configured.
+    /// Cannot reach the host network or internet. **This is the default.**
     #[default]
     None,
-    /// Bridge networking — veth pair attached to a Linux bridge (e.g., `minibox0`).
+    /// veth pair attached to a Linux bridge (`minibox0` by default).
+    /// Container gets a private IP and can reach the host via the bridge.
     Bridge,
-    /// Host networking — container shares the host network namespace.
+    /// Container shares the host network namespace. All host ports are accessible.
     Host,
-    /// Tailnet networking — container is connected via Tailscale/tsnet.
+    /// Container connected via Tailscale/tsnet.
     Tailnet,
 }
 
@@ -91,6 +93,9 @@ pub trait NetworkProvider: AsAny + Send + Sync {
 }
 
 /// Network configuration for a container.
+///
+/// The `Default` implementation yields `NetworkMode::None` with sensible bridge/subnet
+/// defaults for when a real network mode is later selected.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
     /// Networking mode — selects which adapter handles this container.

@@ -25,6 +25,7 @@ use tokio::sync::mpsc;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::network_lifecycle::NetworkLifecycle;
 use crate::state::{ContainerRecord, DaemonState};
 
 // ---------------------------------------------------------------------------
@@ -225,9 +226,9 @@ async fn handle_run_streaming(
     }
 
     // ── Network cleanup (ephemeral) ────────────────────────────────────
-    if let Err(e) = deps.network_provider.cleanup(&container_id).await {
-        warn!(container_id = %container_id, error = %e, "network: cleanup failed");
-    }
+    NetworkLifecycle::new(deps.network_provider.clone())
+        .cleanup(&container_id)
+        .await;
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
@@ -346,8 +347,8 @@ async fn run_inner_capture(
         mode: net_mode,
         ..NetworkConfig::default()
     };
-    let _net_ns = deps
-        .network_provider
+    let net = NetworkLifecycle::new(deps.network_provider.clone());
+    let _net_ns = net
         .setup(&id, &network_config)
         .await
         .context("network setup")?;
@@ -406,10 +407,7 @@ async fn run_inner_capture(
     })?;
 
     // ── Network attach ─────────────────────────────────────────────────
-    deps.network_provider
-        .attach(&id, pid)
-        .await
-        .context("network attach")?;
+    net.attach(&id, pid).await.context("network attach")?;
 
     // Write PID file and update state.
     let pid_file = deps.run_containers_base.join(&id).join("pid");
@@ -539,8 +537,8 @@ async fn run_inner(
         mode: net_mode,
         ..NetworkConfig::default()
     };
-    let _net_ns = deps
-        .network_provider
+    let net = NetworkLifecycle::new(deps.network_provider.clone());
+    let _net_ns = net
         .setup(&id, &network_config)
         .await
         .context("network setup")?;
@@ -600,7 +598,7 @@ async fn run_inner(
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
     let runtime_clone = Arc::clone(&deps.runtime);
-    let network_provider_clone = Arc::clone(&deps.network_provider);
+    let net_clone = net.clone();
     let run_containers_base_clone = deps.run_containers_base.clone();
 
     tokio::task::spawn(async move {
@@ -611,9 +609,7 @@ async fn run_inner(
                 info!("container {id_clone} started with PID {pid}");
 
                 // ── Network attach ─────────────────────────────────────
-                if let Err(e) = network_provider_clone.attach(&id_clone, pid).await {
-                    warn!(container_id = %id_clone, error = %e, "network: attach failed");
-                }
+                net_clone.attach(&id_clone, pid).await.ok();
 
                 // Write PID file.
                 let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
@@ -769,9 +765,9 @@ pub async fn handle_stop(
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     // ── Network cleanup ────────────────────────────────────────────────
-    if let Err(e) = deps.network_provider.cleanup(&id).await {
-        warn!(container_id = %id, error = %e, "network: cleanup failed");
-    }
+    NetworkLifecycle::new(deps.network_provider.clone())
+        .cleanup(&id)
+        .await;
 
     match stop_inner(&id, &state).await {
         Ok(()) => DaemonResponse::Success {
@@ -906,9 +902,9 @@ async fn remove_inner(
     }
 
     // ── Network cleanup ────────────────────────────────────────────────
-    if let Err(e) = deps.network_provider.cleanup(id).await {
-        warn!(container_id = %id, error = %e, "network: cleanup failed");
-    }
+    NetworkLifecycle::new(deps.network_provider.clone())
+        .cleanup(id)
+        .await;
 
     state.remove_container(id).await;
     Ok(())

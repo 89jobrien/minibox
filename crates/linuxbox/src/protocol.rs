@@ -65,8 +65,10 @@ pub enum DaemonRequest {
         /// (fire-and-forget behaviour) for backwards compatibility.
         #[serde(default)]
         ephemeral: bool,
-        /// Network mode for the container. Defaults to `None` (loopback only)
-        /// when absent for backwards compatibility.
+        /// Network mode for the container.
+        ///
+        /// `None` maps to `NetworkConfig::default()`, which selects
+        /// `NetworkMode::None` (isolated namespace, no network connectivity).
         #[serde(default)]
         network: Option<NetworkMode>,
     },

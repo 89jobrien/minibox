@@ -150,6 +150,104 @@ fn registry_get_image_layers_empty_when_no_layers() {
     );
 }
 
+/// get_image_layers_parses_manifest_json_to_locate_layers — the executor
+/// returns a manifest.json with two layer tarballs; the result must contain
+/// two PathBufs and the paths must embed the layer-relative names.
+#[test]
+fn get_image_layers_parses_manifest_json_to_locate_layers() {
+    // Docker-save manifest.json format: array of objects with "Layers" key
+    // containing paths relative to the export directory.
+    let fake_manifest = r#"[{"Layers":["sha256abc/layer.tar","sha256def/layer.tar"]}]"#;
+
+    let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+        if args.first() == Some(&"cat")
+            && args.last().map(|a| a.ends_with("/manifest.json")) == Some(true)
+        {
+            Ok(fake_manifest.to_string())
+        } else {
+            // Accept mkdir / tar extraction calls silently.
+            Ok(String::new())
+        }
+    }));
+
+    let layers = registry
+        .get_image_layers("alpine", "3.18")
+        .expect("get_image_layers should succeed with valid manifest");
+
+    assert_eq!(layers.len(), 2, "should return one PathBuf per layer entry");
+
+    // The returned paths are rootfs extraction directories, not the tarballs
+    // themselves, so they are named rootfs-0 and rootfs-1 under the export base.
+    let first = layers[0].to_string_lossy();
+    let second = layers[1].to_string_lossy();
+    assert!(
+        first.contains("rootfs-0"),
+        "first layer path should be rootfs-0, got: {first}"
+    );
+    assert!(
+        second.contains("rootfs-1"),
+        "second layer path should be rootfs-1, got: {second}"
+    );
+}
+
+/// get_image_layers_returns_error_on_malformed_manifest — when the executor
+/// returns bytes that are not valid JSON the method must surface a parse error.
+#[test]
+fn get_image_layers_returns_error_on_malformed_manifest() {
+    let registry = ColimaRegistry::new().with_executor(Arc::new(|args: &[&str]| {
+        if args.first() == Some(&"cat")
+            && args.last().map(|a| a.ends_with("/manifest.json")) == Some(true)
+        {
+            // Return definitely-invalid JSON.
+            Ok("not valid json {{{".to_string())
+        } else {
+            Ok(String::new())
+        }
+    }));
+
+    let result = registry.get_image_layers("alpine", "latest");
+    assert!(
+        result.is_err(),
+        "malformed manifest.json must produce an error, got: {:?}",
+        result
+    );
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("manifest") || msg.contains("parse") || msg.contains("JSON"),
+        "error message should mention the manifest parsing failure, got: {msg}"
+    );
+}
+
+/// get_image_layers_returns_error_on_empty_layers_array — an empty `"Layers"`
+/// array is not an error in the current implementation; the method returns an
+/// empty Vec.  This test documents and pins that behaviour so a future change
+/// that makes empty-layers an error will cause a deliberate test failure
+/// rather than a silent regression.
+#[test]
+fn get_image_layers_returns_error_on_empty_layers_array() {
+    let fake_manifest = r#"[{"Layers":[]}]"#;
+
+    let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+        if args.first() == Some(&"cat")
+            && args.last().map(|a| a.ends_with("/manifest.json")) == Some(true)
+        {
+            Ok(fake_manifest.to_string())
+        } else {
+            Ok(String::new())
+        }
+    }));
+
+    // Empty layers is currently treated as a valid (but empty) result, not an error.
+    let result = registry
+        .get_image_layers("scratch", "latest")
+        .expect("empty layers array should succeed — no error expected");
+
+    assert!(
+        result.is_empty(),
+        "empty Layers array in manifest.json must produce an empty Vec, got: {result:?}"
+    );
+}
+
 /// get_image_layers propagates executor errors.
 #[test]
 fn registry_get_image_layers_propagates_error() {

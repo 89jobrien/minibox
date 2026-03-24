@@ -1046,6 +1046,132 @@ mod tests {
     }
 
     #[test]
+    fn colima_home_defaults_to_home_dot_colima() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev_colima = std::env::var("COLIMA_HOME").ok();
+        let prev_home = std::env::var("HOME").ok();
+
+        unsafe {
+            std::env::remove_var("COLIMA_HOME");
+            std::env::set_var("HOME", "/tmp/test-home");
+        }
+
+        let result = colima_home();
+
+        unsafe {
+            match prev_colima {
+                Some(v) => std::env::set_var("COLIMA_HOME", v),
+                None => std::env::remove_var("COLIMA_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+
+        assert_eq!(result, PathBuf::from("/tmp/test-home").join(".colima"));
+    }
+
+    #[test]
+    fn colima_home_respects_colima_home_env_var() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev = std::env::var("COLIMA_HOME").ok();
+
+        unsafe { std::env::set_var("COLIMA_HOME", "/custom/colima") };
+        let result = colima_home();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("COLIMA_HOME", v),
+                None => std::env::remove_var("COLIMA_HOME"),
+            }
+        }
+
+        assert_eq!(result, PathBuf::from("/custom/colima"));
+    }
+
+    #[test]
+    fn lima_home_defaults_to_colima_home_lima_subdir() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev_lima = std::env::var("LIMA_HOME").ok();
+        let prev_colima = std::env::var("COLIMA_HOME").ok();
+        let prev_home = std::env::var("HOME").ok();
+
+        unsafe {
+            std::env::remove_var("LIMA_HOME");
+            std::env::remove_var("COLIMA_HOME");
+            std::env::set_var("HOME", "/tmp/test-home");
+        }
+
+        let result = lima_home();
+
+        unsafe {
+            match prev_lima {
+                Some(v) => std::env::set_var("LIMA_HOME", v),
+                None => std::env::remove_var("LIMA_HOME"),
+            }
+            match prev_colima {
+                Some(v) => std::env::set_var("COLIMA_HOME", v),
+                None => std::env::remove_var("COLIMA_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+
+        assert_eq!(result, "/tmp/test-home/.colima/_lima");
+    }
+
+    #[test]
+    fn lima_home_respects_lima_home_env_var() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev = std::env::var("LIMA_HOME").ok();
+
+        unsafe { std::env::set_var("LIMA_HOME", "/custom/lima") };
+        let result = lima_home();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("LIMA_HOME", v),
+                None => std::env::remove_var("LIMA_HOME"),
+            }
+        }
+
+        assert_eq!(result, "/custom/lima");
+    }
+
+    #[test]
+    fn limactl_command_injects_lima_home_into_env() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev_lima = std::env::var("LIMA_HOME").ok();
+        let prev_colima = std::env::var("COLIMA_HOME").ok();
+
+        unsafe {
+            std::env::remove_var("LIMA_HOME");
+            std::env::remove_var("COLIMA_HOME");
+        }
+
+        let cmd = limactl_command("limactl");
+        let expected_lima_home = lima_home();
+
+        unsafe {
+            match prev_lima {
+                Some(v) => std::env::set_var("LIMA_HOME", v),
+                None => std::env::remove_var("LIMA_HOME"),
+            }
+            match prev_colima {
+                Some(v) => std::env::set_var("COLIMA_HOME", v),
+                None => std::env::remove_var("COLIMA_HOME"),
+            }
+        }
+
+        assert!(
+            !expected_lima_home.is_empty(),
+            "lima_home must return a non-empty path"
+        );
+        assert_eq!(cmd.get_program(), "limactl");
+    }
+
+    #[test]
     fn limiter_detects_block_device() {
         let limiter = ColimaLimiter::new().with_executor(Arc::new(|args: &[&str]| {
             let joined = args.join(" ");
