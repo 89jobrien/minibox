@@ -73,6 +73,10 @@ test-e2e:
 test-e2e-suite:
     cargo xtask test-e2e-suite
 
+# Sandbox contract tests (Linux, root, Docker Hub)
+test-sandbox:
+    cargo xtask test-sandbox
+
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
 

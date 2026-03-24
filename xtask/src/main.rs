@@ -22,6 +22,7 @@ fn main() -> Result<()> {
         Some("test-property") => test_property(&sh),
         Some("test-integration") => test_integration(&sh),
         Some("test-e2e-suite") => test_e2e_suite(&sh),
+        Some("test-sandbox") => test_sandbox(&sh),
         Some("clean-artifacts") => clean_artifacts(&sh),
         Some("nuke-test-state") => nuke_test_state(&sh),
         Some("bench") => {
@@ -46,6 +47,7 @@ fn main() -> Result<()> {
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
+            eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
             eprintln!("  bench            run benchmark binary (local, dry-run safe)");
@@ -174,6 +176,32 @@ fn test_e2e_suite(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("e2e tests failed")?;
+    Ok(())
+}
+
+/// Sandbox contract tests (Linux, root, Docker Hub required)
+fn test_sandbox(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo build --release")
+        .run()
+        .context("build failed")?;
+
+    cmd!(
+        sh,
+        "cargo test -p miniboxd --test sandbox_tests --release --no-run"
+    )
+    .run()
+    .context("failed to build sandbox test binary")?;
+
+    let binary = find_test_binary("target/release/deps", "sandbox_tests")
+        .context("could not locate sandbox test binary in target/release/deps")?;
+
+    let bin_dir = env::current_dir()?.join("target/release");
+    cmd!(
+        sh,
+        "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --ignored --nocapture"
+    )
+    .run()
+    .context("sandbox tests failed")?;
     Ok(())
 }
 
