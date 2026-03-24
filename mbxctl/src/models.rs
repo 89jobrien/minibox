@@ -28,6 +28,7 @@ pub struct JobStatus {
     pub completed_at: Option<String>,
 }
 
+#[allow(dead_code)] // reserved for future log retrieval API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub stream: String,

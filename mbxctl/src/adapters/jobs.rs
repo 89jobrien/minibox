@@ -3,6 +3,7 @@ use crate::error::ControllerError;
 use crate::models::CreateJobRequest;
 use linuxbox::protocol::{DaemonRequest, DaemonResponse};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub struct JobAdapter {
     client: Arc<DaemonClient>,
@@ -11,6 +12,12 @@ pub struct JobAdapter {
 impl JobAdapter {
     pub fn new(client: Arc<DaemonClient>) -> Self {
         Self { client }
+    }
+
+    /// Convenience accessor so handlers can open their own daemon connections
+    /// (e.g. for SSE streaming).
+    pub fn client(&self) -> &Arc<DaemonClient> {
+        &self.client
     }
 
     pub async fn create_and_run(
@@ -54,6 +61,20 @@ impl JobAdapter {
                 }
             }
         }
+    }
+
+    /// Run [`create_and_run`] with a timeout.
+    ///
+    /// Defaults to 3600 s (1 hour) when `timeout_seconds` is `None`.
+    pub async fn create_and_run_with_timeout(
+        &self,
+        req: CreateJobRequest,
+    ) -> Result<(String, String), ControllerError> {
+        let timeout_secs = req.timeout_seconds.unwrap_or(3600);
+
+        tokio::time::timeout(Duration::from_secs(timeout_secs), self.create_and_run(req))
+            .await
+            .map_err(|_| ControllerError::Timeout("job exceeded timeout".to_string()))?
     }
 
     pub async fn stop_container(&self, container_id: &str) -> Result<(), ControllerError> {

@@ -3,6 +3,7 @@ mod client;
 mod error;
 mod models;
 mod server;
+mod tracker;
 
 use clap::Parser;
 
