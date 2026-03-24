@@ -1,9 +1,8 @@
 //! `minibox ps` — list all containers.
 
-use anyhow::Result;
+use anyhow::Context;
 use linuxbox::protocol::{DaemonRequest, DaemonResponse};
-
-use crate::commands::send_request;
+use minibox_client::DaemonClient;
 
 /// Column widths for the table output.
 const COL_ID: usize = 14;
@@ -16,55 +15,27 @@ const COL_PID: usize = 8;
 /// Execute the `ps` subcommand.
 ///
 /// Prints a formatted table of all containers known to the daemon.
-pub async fn execute() -> Result<()> {
+pub async fn execute() -> anyhow::Result<()> {
     let request = DaemonRequest::List;
 
-    match send_request(&request).await? {
-        DaemonResponse::ContainerList { containers } => {
-            // Header
-            println!(
-                "{:<width_id$}  {:<width_image$}  {:<width_cmd$}  {:<width_state$}  {:<width_created$}  {:<width_pid$}",
-                "CONTAINER ID",
-                "IMAGE",
-                "COMMAND",
-                "STATE",
-                "CREATED",
-                "PID",
-                width_id = COL_ID,
-                width_image = COL_IMAGE,
-                width_cmd = COL_COMMAND,
-                width_state = COL_STATE,
-                width_created = COL_CREATED,
-                width_pid = COL_PID,
-            );
+    let client = DaemonClient::new().context("failed to create daemon client")?;
+    let mut stream = client
+        .call(request)
+        .await
+        .context("failed to call daemon")?;
 
-            // Separator
-            println!(
-                "{}",
-                "-".repeat(
-                    COL_ID + COL_IMAGE + COL_COMMAND + COL_STATE + COL_CREATED + COL_PID + 10
-                )
-            );
-
-            for c in &containers {
-                let pid_str = c
-                    .pid
-                    .map(|p| p.to_string())
-                    .unwrap_or_else(|| "-".to_string());
-
-                // Truncate long fields to keep the table tidy.
-                let image = truncate(&c.image, COL_IMAGE);
-                let command = truncate(&c.command, COL_COMMAND);
-                let created = truncate(&c.created_at, COL_CREATED);
-
+    if let Some(response) = stream.next().await.context("stream error")? {
+        match response {
+            DaemonResponse::ContainerList { containers } => {
+                // Header
                 println!(
                     "{:<width_id$}  {:<width_image$}  {:<width_cmd$}  {:<width_state$}  {:<width_created$}  {:<width_pid$}",
-                    c.id,
-                    image,
-                    command,
-                    c.state,
-                    created,
-                    pid_str,
+                    "CONTAINER ID",
+                    "IMAGE",
+                    "COMMAND",
+                    "STATE",
+                    "CREATED",
+                    "PID",
                     width_id = COL_ID,
                     width_image = COL_IMAGE,
                     width_cmd = COL_COMMAND,
@@ -72,22 +43,61 @@ pub async fn execute() -> Result<()> {
                     width_created = COL_CREATED,
                     width_pid = COL_PID,
                 );
-            }
 
-            if containers.is_empty() {
-                println!("(no containers)");
-            }
+                // Separator
+                println!(
+                    "{}",
+                    "-".repeat(
+                        COL_ID + COL_IMAGE + COL_COMMAND + COL_STATE + COL_CREATED + COL_PID + 10
+                    )
+                );
 
-            Ok(())
+                for c in &containers {
+                    let pid_str = c
+                        .pid
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "-".to_string());
+
+                    // Truncate long fields to keep the table tidy.
+                    let image = truncate(&c.image, COL_IMAGE);
+                    let command = truncate(&c.command, COL_COMMAND);
+                    let created = truncate(&c.created_at, COL_CREATED);
+
+                    println!(
+                        "{:<width_id$}  {:<width_image$}  {:<width_cmd$}  {:<width_state$}  {:<width_created$}  {:<width_pid$}",
+                        c.id,
+                        image,
+                        command,
+                        c.state,
+                        created,
+                        pid_str,
+                        width_id = COL_ID,
+                        width_image = COL_IMAGE,
+                        width_cmd = COL_COMMAND,
+                        width_state = COL_STATE,
+                        width_created = COL_CREATED,
+                        width_pid = COL_PID,
+                    );
+                }
+
+                if containers.is_empty() {
+                    println!("(no containers)");
+                }
+
+                Ok(())
+            }
+            DaemonResponse::Error { message } => {
+                eprintln!("error: {message}");
+                std::process::exit(1);
+            }
+            other => {
+                eprintln!("unexpected response: {other:?}");
+                std::process::exit(1);
+            }
         }
-        DaemonResponse::Error { message } => {
-            eprintln!("error: {message}");
-            std::process::exit(1);
-        }
-        other => {
-            eprintln!("unexpected response: {other:?}");
-            std::process::exit(1);
-        }
+    } else {
+        eprintln!("no response from daemon");
+        std::process::exit(1);
     }
 }
 

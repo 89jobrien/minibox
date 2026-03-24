@@ -1,9 +1,9 @@
 //! `minibox run` — create and start a container.
 //!
-//! Unlike the other command modules, this module manages its own socket
-//! connection rather than using the shared [`super::send_request`] helper.
-//! It sets `ephemeral: true` on the request so the daemon streams output back
-//! instead of returning immediately with a container ID.
+//! Unlike the other command modules, this module uses streaming responses
+//! via [`DaemonClient`] to handle output in real time. It sets `ephemeral: true`
+//! on the request so the daemon streams output back instead of returning
+//! immediately with a container ID.
 //!
 //! # Streaming protocol
 //!
@@ -24,9 +24,8 @@ use anyhow::{Context, Result};
 use base64::Engine;
 use linuxbox::domain::NetworkMode;
 use linuxbox::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
+use minibox_client::DaemonClient;
 use std::io::Write;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
 
 /// Execute the `run` subcommand.
 ///
@@ -61,31 +60,14 @@ pub async fn execute(
         network: Some(network_mode),
     };
 
-    // Connect to daemon socket.
-    let path = super::socket_path();
-    let stream = UnixStream::connect(&path)
+    let client = DaemonClient::new().context("failed to create daemon client")?;
+    let mut stream = client
+        .call(request)
         .await
-        .with_context(|| format!("connecting to daemon at {path}"))?;
-
-    let (read_half, mut writer) = stream.into_split();
-    let mut lines = BufReader::new(read_half).lines();
-
-    // Send request as a single JSON line.
-    let mut payload = serde_json::to_string(&request).context("serialising request")?;
-    payload.push('\n');
-    writer
-        .write_all(payload.as_bytes())
-        .await
-        .context("writing request")?;
-    writer.flush().await.context("flushing request")?;
+        .context("failed to call daemon")?;
 
     // Stream responses until ContainerStopped or an error.
-    while let Some(line) = lines.next_line().await.context("reading response")? {
-        if line.is_empty() {
-            continue;
-        }
-        let response: DaemonResponse =
-            serde_json::from_str(&line).context("parsing daemon response")?;
+    while let Some(response) = stream.next().await.context("stream error")? {
         match response {
             DaemonResponse::ContainerOutput { stream, data } => {
                 let bytes = base64::engine::general_purpose::STANDARD
