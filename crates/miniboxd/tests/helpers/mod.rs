@@ -1,5 +1,6 @@
 //! Shared test helpers for miniboxd integration and e2e tests.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -273,4 +274,109 @@ pub fn extract_container_id(output: &str) -> Option<String> {
         }
     }
     None
+}
+
+// ---------------------------------------------------------------------------
+// SandboxClient — agent-oriented wrapper around DaemonFixture
+// ---------------------------------------------------------------------------
+
+/// Structured result from a sandbox execution.
+pub struct ExecResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub duration: Duration,
+}
+
+/// Agent-oriented test client wrapping DaemonFixture.
+pub struct SandboxClient {
+    pub fixture: DaemonFixture,
+    pulled_images: HashSet<String>,
+}
+
+impl SandboxClient {
+    pub fn start() -> Self {
+        Self {
+            fixture: DaemonFixture::start(),
+            pulled_images: HashSet::new(),
+        }
+    }
+
+    fn parse_image_tag(image: &str) -> (&str, &str) {
+        match image.split_once(':') {
+            Some((img, tag)) => (img, tag),
+            None => (image, "latest"),
+        }
+    }
+
+    pub fn ensure_image(&mut self, image: &str) {
+        if self.pulled_images.contains(image) {
+            return;
+        }
+        let (img, tag) = Self::parse_image_tag(image);
+        let (ok, _stdout, stderr) = self.fixture.run_cli(&["pull", img, "--tag", tag]);
+        assert!(ok, "failed to pull {image}: {stderr}");
+        self.pulled_images.insert(image.to_string());
+    }
+
+    pub fn execute(&mut self, image: &str, cmd: &[&str]) -> ExecResult {
+        self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
+        let start = Instant::now();
+        let mut args = vec!["run", img, "--tag", tag, "--"];
+        args.extend_from_slice(cmd);
+        let (exit_code, stdout, stderr) = self.fixture.run_cli_with_exit_code(&args);
+        ExecResult {
+            stdout,
+            stderr,
+            exit_code,
+            duration: start.elapsed(),
+        }
+    }
+
+    pub fn execute_with_limits(
+        &mut self,
+        image: &str,
+        cmd: &[&str],
+        memory_bytes: u64,
+        cpu_weight: u64,
+    ) -> ExecResult {
+        self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
+        let mem_str = memory_bytes.to_string();
+        let cpu_str = cpu_weight.to_string();
+        let start = Instant::now();
+        let mut args = vec![
+            "run",
+            img,
+            "--tag",
+            tag,
+            "--memory",
+            &mem_str,
+            "--cpu-weight",
+            &cpu_str,
+            "--",
+        ];
+        args.extend_from_slice(cmd);
+        let (exit_code, stdout, stderr) = self.fixture.run_cli_with_exit_code(&args);
+        ExecResult {
+            stdout,
+            stderr,
+            exit_code,
+            duration: start.elapsed(),
+        }
+    }
+
+    pub fn spawn_container(&mut self, image: &str, cmd: &[&str]) -> Child {
+        self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
+        let mut args = vec!["run", img, "--tag", tag, "--"];
+        args.extend_from_slice(cmd);
+        self.fixture
+            .cli(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to spawn container")
+    }
 }
