@@ -259,3 +259,252 @@ impl ImageStore {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::manifest::Descriptor;
+    use flate2::Compression;
+    use flate2::write::GzEncoder;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    fn sample_manifest(layer_digests: &[&str]) -> OciManifest {
+        OciManifest {
+            schema_version: 2,
+            media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
+            config: Descriptor {
+                media_type: "application/vnd.oci.image.config.v1+json".to_string(),
+                size: 100,
+                digest: "sha256:config123".to_string(),
+                platform: None,
+            },
+            layers: layer_digests
+                .iter()
+                .map(|d| Descriptor {
+                    media_type: "application/vnd.oci.image.layer.v1.tar+gzip".to_string(),
+                    size: 1000,
+                    digest: d.to_string(),
+                    platform: None,
+                })
+                .collect(),
+        }
+    }
+
+    fn create_test_layer() -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let data = b"hello from layer";
+        let mut header = tar::Header::new_gnu();
+        header.set_path("test.txt").expect("set path");
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append(&header, &data[..]).expect("append");
+        let tar_bytes = builder.into_inner().expect("finish tar");
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&tar_bytes).expect("write gz");
+        encoder.finish().expect("finish gz")
+    }
+
+    #[test]
+    fn test_new_creates_directory() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store_path = tmp.path().join("images");
+        assert!(!store_path.exists());
+
+        let _store = ImageStore::new(&store_path).expect("ImageStore::new");
+        assert!(
+            store_path.exists(),
+            "base_dir should be created by ImageStore::new"
+        );
+    }
+
+    #[test]
+    fn test_has_image_false_when_empty() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+        assert!(!store.has_image("alpine", "latest"));
+    }
+
+    #[test]
+    fn test_store_and_has_manifest() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        assert!(!store.has_image("alpine", "latest"));
+
+        let manifest = sample_manifest(&["sha256:layer1"]);
+        store
+            .store_manifest("alpine", "latest", &manifest)
+            .expect("store_manifest");
+
+        assert!(store.has_image("alpine", "latest"));
+    }
+
+    #[test]
+    fn test_get_image_layers_returns_correct_paths() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let manifest = sample_manifest(&["sha256:aaa111", "sha256:bbb222"]);
+        store
+            .store_manifest("myimage", "v1", &manifest)
+            .expect("store_manifest");
+
+        let layers = store
+            .get_image_layers("myimage", "v1")
+            .expect("get_image_layers");
+        assert_eq!(layers.len(), 2);
+
+        // Digest colons are replaced with underscores in the path
+        assert!(
+            layers[0].to_string_lossy().contains("sha256_aaa111"),
+            "first layer path should contain sha256_aaa111, got: {:?}",
+            layers[0]
+        );
+        assert!(
+            layers[1].to_string_lossy().contains("sha256_bbb222"),
+            "second layer path should contain sha256_bbb222, got: {:?}",
+            layers[1]
+        );
+    }
+
+    #[test]
+    fn test_get_image_layers_not_found() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let result = store.get_image_layers("nonexistent", "latest");
+        assert!(result.is_err(), "expected error for missing image");
+    }
+
+    #[test]
+    fn test_store_layer_extracts_content() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let layer_data = create_test_layer();
+        let digest = "sha256:testlayer001";
+
+        let dest = store
+            .store_layer("alpine", "latest", digest, std::io::Cursor::new(layer_data))
+            .expect("store_layer");
+
+        assert!(dest.exists(), "layer dest directory should exist");
+        let extracted_file = dest.join("test.txt");
+        assert!(
+            extracted_file.exists(),
+            "test.txt should be extracted from tar layer"
+        );
+        let content = std::fs::read_to_string(&extracted_file).expect("read test.txt");
+        assert_eq!(content, "hello from layer");
+    }
+
+    #[test]
+    fn test_store_layer_skips_existing() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let layer_data = create_test_layer();
+        let digest = "sha256:deduplayer";
+
+        // First store
+        let dest1 = store
+            .store_layer(
+                "alpine",
+                "latest",
+                digest,
+                std::io::Cursor::new(layer_data.clone()),
+            )
+            .expect("first store_layer");
+
+        // Write a sentinel file to detect if re-extraction happened
+        let sentinel = dest1.join("sentinel.txt");
+        std::fs::write(&sentinel, "original").expect("write sentinel");
+
+        // Second store — should be a no-op
+        let dest2 = store
+            .store_layer("alpine", "latest", digest, std::io::Cursor::new(layer_data))
+            .expect("second store_layer");
+
+        assert_eq!(dest1, dest2, "both calls should return the same path");
+        let content = std::fs::read_to_string(&sentinel).expect("read sentinel");
+        assert_eq!(
+            content, "original",
+            "sentinel should not be overwritten on second store"
+        );
+    }
+
+    #[test]
+    fn test_image_dir_rejects_path_traversal() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let result = store.has_image("../evil", "latest");
+        assert!(!result, "has_image should return false for traversal name");
+
+        let result = store.store_manifest("../evil", "latest", &sample_manifest(&[]));
+        assert!(
+            result.is_err(),
+            "store_manifest should error on path traversal name"
+        );
+    }
+
+    #[test]
+    fn test_image_dir_rejects_empty_name() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let result = store.store_manifest("", "latest", &sample_manifest(&[]));
+        assert!(result.is_err(), "store_manifest should error on empty name");
+
+        let result = store.store_manifest("alpine", "", &sample_manifest(&[]));
+        assert!(result.is_err(), "store_manifest should error on empty tag");
+    }
+
+    #[test]
+    fn test_image_dir_rejects_null_bytes() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let result = store.store_manifest("alp\0ine", "latest", &sample_manifest(&[]));
+        assert!(
+            result.is_err(),
+            "store_manifest should error on null byte in name"
+        );
+    }
+
+    #[test]
+    fn test_image_dir_rejects_absolute_path() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let result = store.store_manifest("/etc/passwd", "latest", &sample_manifest(&[]));
+        assert!(
+            result.is_err(),
+            "store_manifest should error on absolute path name"
+        );
+    }
+
+    #[test]
+    fn test_image_dir_replaces_slashes() {
+        let tmp = TempDir::new().expect("tempdir");
+        let store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+
+        let manifest = sample_manifest(&[]);
+        store
+            .store_manifest("library/ubuntu", "20.04", &manifest)
+            .expect("store_manifest with slash in name");
+
+        // Verify the directory uses underscore, not a nested path component
+        let expected_dir = store.base_dir.join("library_ubuntu").join("20.04");
+        assert!(
+            expected_dir.exists(),
+            "expected directory library_ubuntu/20.04 to exist, got: {:?}",
+            expected_dir
+        );
+
+        assert!(store.has_image("library/ubuntu", "20.04"));
+    }
+}
