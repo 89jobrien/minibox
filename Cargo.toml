@@ -11,6 +11,7 @@ members = [
     "crates/winbox",
     "crates/minibox-llm",
     "crates/minibox-secrets",
+    "crates/minibox-client",
     "xtask",
 ]
 

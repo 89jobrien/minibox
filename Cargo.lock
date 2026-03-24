@@ -1163,6 +1163,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "futures",
+ "linuxbox",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "minibox-llm"
 version = "0.1.0"
 dependencies = [
