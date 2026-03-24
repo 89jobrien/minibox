@@ -12,6 +12,7 @@ members = [
     "crates/minibox-llm",
     "crates/minibox-secrets",
     "xtask",
+    "mbxctl",
 ]
 
 [workspace.package]
