@@ -694,3 +694,197 @@ impl AsRef<str> for ContainerId {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    // --- ContainerId tests ---
+
+    #[test]
+    fn test_container_id_valid() {
+        let id = ContainerId::new("abc123".to_string()).expect("valid alphanumeric id");
+        assert_eq!(id.as_str(), "abc123");
+    }
+
+    #[test]
+    fn test_container_id_empty() {
+        let result = ContainerId::new(String::new());
+        assert!(result.is_err(), "empty id should fail");
+    }
+
+    #[test]
+    fn test_container_id_too_long() {
+        let long = "a".repeat(65);
+        let result = ContainerId::new(long);
+        assert!(result.is_err(), "65-char id should fail");
+    }
+
+    #[test]
+    fn test_container_id_max_length() {
+        let id_str = "a".repeat(64);
+        let id = ContainerId::new(id_str.clone()).expect("64-char id should succeed");
+        assert_eq!(id.as_str(), id_str);
+    }
+
+    #[test]
+    fn test_container_id_special_chars() {
+        let result = ContainerId::new("abc-123".to_string());
+        assert!(result.is_err(), "hyphen should fail alphanumeric check");
+    }
+
+    #[test]
+    fn test_container_id_spaces() {
+        let result = ContainerId::new("abc 123".to_string());
+        assert!(result.is_err(), "space should fail alphanumeric check");
+    }
+
+    #[test]
+    fn test_container_id_as_str() {
+        let id = ContainerId::new("deadbeef".to_string()).expect("valid id");
+        assert_eq!(id.as_str(), "deadbeef");
+    }
+
+    #[test]
+    fn test_container_id_display() {
+        let id = ContainerId::new("abc123".to_string()).expect("valid id");
+        assert_eq!(format!("{id}"), "abc123");
+    }
+
+    #[test]
+    fn test_container_id_equality() {
+        let a = ContainerId::new("abc123".to_string()).expect("valid id");
+        let b = ContainerId::new("abc123".to_string()).expect("valid id");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_container_id_hash() {
+        let a = ContainerId::new("abc123".to_string()).expect("valid id");
+        let b = ContainerId::new("def456".to_string()).expect("valid id");
+        let mut set: HashSet<ContainerId> = HashSet::new();
+        set.insert(a.clone());
+        set.insert(b.clone());
+        assert!(set.contains(&a));
+        assert!(set.contains(&b));
+        assert_eq!(set.len(), 2);
+    }
+
+    // --- ContainerState tests ---
+
+    #[test]
+    fn test_container_state_as_str() {
+        assert_eq!(ContainerState::Created.as_str(), "Created");
+        assert_eq!(ContainerState::Running.as_str(), "Running");
+        assert_eq!(ContainerState::Stopped.as_str(), "Stopped");
+        assert_eq!(ContainerState::Failed.as_str(), "Failed");
+    }
+
+    #[test]
+    fn test_container_state_display() {
+        assert_eq!(format!("{}", ContainerState::Created), "Created");
+        assert_eq!(format!("{}", ContainerState::Running), "Running");
+        assert_eq!(format!("{}", ContainerState::Stopped), "Stopped");
+        assert_eq!(format!("{}", ContainerState::Failed), "Failed");
+    }
+
+    #[test]
+    fn test_container_state_clone_eq() {
+        let state = ContainerState::Running;
+        let cloned = state;
+        assert_eq!(state, cloned);
+        assert_ne!(state, ContainerState::Stopped);
+    }
+
+    // --- DomainError tests ---
+
+    #[test]
+    fn test_domain_error_display_image_not_found() {
+        let err = DomainError::ImageNotFound {
+            name: "library/ubuntu".to_string(),
+            tag: "22.04".to_string(),
+        };
+        assert_eq!(format!("{err}"), "image library/ubuntu:22.04 not found");
+    }
+
+    #[test]
+    fn test_domain_error_display_container_not_found() {
+        let err = DomainError::ContainerNotFound {
+            id: "abc123".to_string(),
+        };
+        assert_eq!(format!("{err}"), "container 'abc123' not found");
+    }
+
+    #[test]
+    fn test_domain_error_display_resource_limit_exceeded() {
+        let err = DomainError::ResourceLimitExceeded {
+            limit: "memory_bytes".to_string(),
+            value: 9999,
+            max: 1024,
+        };
+        let msg = format!("{err}");
+        assert!(msg.contains("memory_bytes"), "should contain limit name");
+        assert!(msg.contains("9999"), "should contain value");
+        assert!(msg.contains("1024"), "should contain max");
+    }
+
+    // --- ResourceConfig tests ---
+
+    #[test]
+    fn test_resource_config_default() {
+        let config = ResourceConfig::default();
+        assert!(config.memory_limit_bytes.is_none());
+        assert!(config.cpu_weight.is_none());
+        assert!(config.pids_max.is_none());
+        assert!(config.io_max_bytes_per_sec.is_none());
+    }
+
+    #[test]
+    fn test_resource_config_serde_roundtrip() {
+        let config = ResourceConfig {
+            memory_limit_bytes: Some(1024 * 1024 * 256),
+            cpu_weight: Some(500),
+            pids_max: Some(100),
+            io_max_bytes_per_sec: Some(1024 * 1024),
+        };
+        let json = serde_json::to_string(&config).expect("serialize");
+        let back: ResourceConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.memory_limit_bytes, config.memory_limit_bytes);
+        assert_eq!(back.cpu_weight, config.cpu_weight);
+        assert_eq!(back.pids_max, config.pids_max);
+        assert_eq!(back.io_max_bytes_per_sec, config.io_max_bytes_per_sec);
+    }
+
+    // --- HookSpec / ContainerHooks tests ---
+
+    #[test]
+    fn test_hook_spec_default() {
+        let hook = HookSpec::default();
+        assert_eq!(hook.command, "");
+        assert!(hook.args.is_empty());
+        assert!(hook.timeout_secs.is_none());
+    }
+
+    #[test]
+    fn test_container_hooks_default() {
+        let hooks = ContainerHooks::default();
+        assert!(hooks.pre_exec.is_empty());
+        assert!(hooks.post_exit.is_empty());
+    }
+
+    // --- RuntimeCapabilities tests ---
+
+    #[test]
+    fn test_runtime_capabilities_debug() {
+        let caps = RuntimeCapabilities {
+            supports_user_namespaces: true,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: true,
+            supports_network_isolation: false,
+            max_containers: Some(128),
+        };
+        let debug_str = format!("{caps:?}");
+        assert!(!debug_str.is_empty(), "Debug impl should produce output");
+    }
+}
