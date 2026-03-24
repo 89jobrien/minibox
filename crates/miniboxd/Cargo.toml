@@ -32,3 +32,4 @@ winbox = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 libc = { workspace = true }
+uuid = { workspace = true }
