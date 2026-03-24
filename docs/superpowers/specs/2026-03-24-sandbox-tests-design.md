@@ -59,22 +59,33 @@ impl SandboxClient {
         }
     }
 
+    /// Split "image:tag" into (image, tag). If no colon, tag defaults to "latest".
+    fn parse_image_tag(image: &str) -> (&str, &str) {
+        match image.split_once(':') {
+            Some((img, tag)) => (img, tag),
+            None => (image, "latest"),
+        }
+    }
+
     /// Pull an image if not already cached in this session.
     pub fn ensure_image(&mut self, image: &str) {
         if self.pulled_images.contains(image) {
             return;
         }
-        let (ok, _stdout, stderr) = self.fixture.run_cli(&["pull", image]);
+        let (img, tag) = Self::parse_image_tag(image);
+        let (ok, _stdout, stderr) = self.fixture.run_cli(&["pull", img, "--tag", tag]);
         assert!(ok, "failed to pull {image}: {stderr}");
         self.pulled_images.insert(image.to_string());
     }
 
     /// Execute a command in a fresh ephemeral container.
-    /// Calls `minibox run <image> -- <cmd...>` via the CLI.
+    /// Calls `minibox run <image> --tag <tag> -- <cmd...>` via the CLI.
+    /// Accepts "image:tag" syntax (e.g., "python:3.12-alpine").
     pub fn execute(&mut self, image: &str, cmd: &[&str]) -> ExecResult {
         self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
         let start = std::time::Instant::now();
-        let mut args = vec!["run", image, "--"];
+        let mut args = vec!["run", img, "--tag", tag, "--"];
         args.extend_from_slice(cmd);
         let (exit_code, stdout, stderr) = self.fixture.run_cli_with_exit_code(&args);
         ExecResult {
@@ -94,11 +105,12 @@ impl SandboxClient {
         cpu_weight: u64,
     ) -> ExecResult {
         self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
         let mem_str = memory_bytes.to_string();
         let cpu_str = cpu_weight.to_string();
         let start = std::time::Instant::now();
         let mut args = vec![
-            "run", image,
+            "run", img, "--tag", tag,
             "--memory", &mem_str,
             "--cpu-weight", &cpu_str,
             "--",
@@ -115,9 +127,31 @@ impl SandboxClient {
 }
 ```
 
+### `spawn_container` for non-blocking concurrent tests
+
+```rust
+    /// Spawn a container without blocking. Returns the child process handle.
+    /// Used by the concurrency test to run two containers simultaneously.
+    pub fn spawn_container(&mut self, image: &str, cmd: &[&str]) -> std::process::Child {
+        self.ensure_image(image);
+        let (img, tag) = Self::parse_image_tag(image);
+        let mut args = vec!["run", img, "--tag", tag, "--"];
+        args.extend_from_slice(cmd);
+        self.fixture.cli(&args)
+            .spawn()
+            .expect("failed to spawn container")
+    }
+```
+
 ### DaemonFixture changes
 
-`DaemonFixture` needs one new method: `run_cli_with_exit_code(&self, args) -> (i32, String, String)` that returns the raw exit code instead of a bool. The existing `run_cli` returns `(bool, String, String)` where the bool is `status.success()`. The new method returns `(status.code().unwrap_or(-1), stdout, stderr)`.
+`DaemonFixture` needs two additions:
+1. `run_cli_with_exit_code(&self, args) -> (i32, String, String)` — returns the raw exit code instead of a bool. The existing `run_cli` returns `(bool, String, String)` where the bool is `status.success()`. The new method returns `(status.code().unwrap_or(-1), stdout, stderr)`.
+2. `cli(&self, args) -> Command` — returns a pre-configured `Command` (binary path + socket env) without executing it, for use with `spawn()`.
+
+### Visibility note
+
+`DaemonFixture`, its methods, and the `find_binary()` / `extract_container_id()` free functions must become `pub` when extracted to `helpers/mod.rs`. Currently they are private within `e2e_tests.rs`.
 
 ---
 
@@ -175,7 +209,7 @@ Run 2: `execute("alpine", &["sh", "-c", "cat /tmp/state"])` — assert exit_code
 ```rust
 #[test] fn sandbox_concurrent_runs_isolated()
 ```
-Spawn two `execute` calls on separate threads, each writing a unique value to `/tmp/id`, then reading it back. Assert each container reads its own value, not the other's.
+Uses `Command::spawn()` (not `execute()`) to start two containers simultaneously within a single test function — no threading needed. Each container writes a unique value to `/tmp/id` then sleeps briefly. After both spawn, wait on each `Child` and capture stdout. Assert each container read its own value, not the other's. Requires a `spawn_container()` helper on `SandboxClient` that returns a `std::process::Child` instead of blocking on `output()`.
 
 ```rust
 #[test] fn sandbox_oom_kill()
@@ -261,7 +295,7 @@ fn sandbox() -> MutexGuard<'static, SandboxClient> {
 
 Tests acquire the lock, run their scenario, and release. `--test-threads=1` ensures sequential execution (required by cgroup and daemon constraints), so the mutex is uncontended in practice but provides safety.
 
-The concurrency test (`sandbox_concurrent_runs_isolated`) is the exception — it needs two containers running simultaneously. This test uses `sandbox().execute()` for both runs within a single test function, spawning one container in a background thread.
+The concurrency test (`sandbox_concurrent_runs_isolated`) is the exception — it needs two containers running simultaneously. This test acquires the lock, then uses `sandbox.spawn_container()` (which calls `Command::spawn()` instead of `Command::output()`) to start two non-blocking child processes. Both children run concurrently; the test then waits on each and asserts isolation. No threading is needed — just non-blocking spawns within a single test function.
 
 ---
 
