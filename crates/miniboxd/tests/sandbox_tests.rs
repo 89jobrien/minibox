@@ -128,3 +128,106 @@ fn sandbox_network_isolated() {
         result.stderr
     );
 }
+
+#[test]
+#[ignore]
+fn sandbox_filesystem_write_read() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute("alpine", &["sh", "-c", "echo data > /tmp/t && cat /tmp/t"]);
+    assert_eq!(result.exit_code, 0, "write+read should succeed");
+    assert_eq!(
+        result.stdout.trim(),
+        "data",
+        "should read back what was written"
+    );
+}
+
+#[test]
+#[ignore]
+fn sandbox_sequential_runs_isolated() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+
+    // Run 1: write a file
+    let r1 = sb.execute(
+        "alpine",
+        &["sh", "-c", "echo secret > /tmp/state && echo ok"],
+    );
+    assert_eq!(r1.exit_code, 0, "first run should succeed");
+    assert_eq!(r1.stdout.trim(), "ok");
+
+    // Run 2: try to read that file — should fail (fresh overlay)
+    let r2 = sb.execute("alpine", &["sh", "-c", "cat /tmp/state"]);
+    assert_ne!(
+        r2.exit_code, 0,
+        "second run should fail: /tmp/state should not exist in a fresh container"
+    );
+}
+
+#[test]
+#[ignore]
+fn sandbox_concurrent_runs_isolated() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+
+    // Spawn two containers that each write a unique value, sleep, then read it back
+    let mut child_a = sb.spawn_container(
+        "alpine",
+        &["sh", "-c", "echo AAA > /tmp/id && sleep 1 && cat /tmp/id"],
+    );
+    let mut child_b = sb.spawn_container(
+        "alpine",
+        &["sh", "-c", "echo BBB > /tmp/id && sleep 1 && cat /tmp/id"],
+    );
+
+    // Wait for both and capture output
+    let out_a = child_a.wait_with_output().expect("child_a wait failed");
+    let out_b = child_b.wait_with_output().expect("child_b wait failed");
+
+    let stdout_a = String::from_utf8_lossy(&out_a.stdout);
+    let stdout_b = String::from_utf8_lossy(&out_b.stdout);
+
+    // Each container should read its own value, not the other's
+    assert!(
+        stdout_a.contains("AAA"),
+        "container A should read AAA, got: {stdout_a}"
+    );
+    assert!(
+        stdout_b.contains("BBB"),
+        "container B should read BBB, got: {stdout_b}"
+    );
+    assert!(!stdout_a.contains("BBB"), "container A should NOT see BBB");
+    assert!(!stdout_b.contains("AAA"), "container B should NOT see AAA");
+}
+
+#[test]
+#[ignore]
+fn sandbox_oom_kill() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+
+    // 16 MB memory limit, try to allocate 64 MB via /dev/zero
+    let result = sb.execute_with_limits(
+        "alpine",
+        &[
+            "sh",
+            "-c",
+            "dd if=/dev/zero of=/dev/shm/fill bs=1M count=64 2>&1; echo done",
+        ],
+        16 * 1024 * 1024,
+        100,
+    );
+
+    // The process should either be OOM-killed (exit != 0) or dd should fail
+    // We check both: non-zero exit AND that dd didn't fully succeed
+    let succeeded_fully = result.stdout.contains("64+0 records out");
+    assert!(
+        result.exit_code != 0 || !succeeded_fully,
+        "container should be OOM-killed or dd should fail with 16 MB limit.\n\
+         exit_code: {}\nstdout: {:?}\nstderr: {:?}",
+        result.exit_code,
+        result.stdout,
+        result.stderr
+    );
+}
