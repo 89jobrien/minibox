@@ -73,12 +73,16 @@ Integrate dagu (workflow orchestration engine) with minibox (container runtime) 
 
 ### Components
 
-| Component | Language | Repository | Purpose |
-|-----------|----------|------------|---------|
-| **dagu:minibox** | Docker | ghcr.io | Container image with dagu + mbx-dagu plugin |
-| **minibox-client** | Rust | minibox/crates | Client library for Unix socket communication |
-| **mbxctl** | Rust | separate (mbxctl) | HTTP server wrapping minibox-client |
-| **mbx-dagu** | Go | separate (mbx-dagu) | Dagu executor plugin calling mbxctl |
+| Component | Language | Repository | Purpose | Release |
+|-----------|----------|------------|---------|---------|
+| **dagu:minibox** | Docker | ghcr.io | Container image with dagu + mbx-dagu plugin | Per mbx-dagu releases |
+| **minibox-client** | Rust | minibox/crates/minibox-client | Client library for Unix socket communication | With minibox releases |
+| **mbxctl** | Rust | separate repo (github.com/your-org/mbxctl) | HTTP server wrapping minibox-client | Independent |
+| **mbx-dagu** | Go | separate repo (github.com/dagu-org/mbx-dagu) | Dagu executor plugin calling mbxctl | Independent |
+
+**Rationale for split:**
+- `minibox-client` is a core library that minibox and its adapters depend on (lives in workspace)
+- `mbxctl` and `mbx-dagu` are independent integrations with their own release cycles and communities (separate repos)
 
 ---
 
@@ -127,13 +131,18 @@ executors:
 ### Usage
 
 ```bash
+# mbxctl must be running on the host (or colima VM)
+./mbxctl --listen localhost:9999 &
+
+# Then run dagu container
 minibox run dagu:minibox \
   -e MINIBOX_CONTROLLER=http://localhost:9999 \
-  -v /run/minibox/miniboxd.sock:/run/minibox/miniboxd.sock:ro \
   -- /dagu server
 
 # Dagu Web UI available at http://localhost:8080
 ```
+
+**Note:** The dagu container can reach `http://localhost:9999` naturally because it shares the same network namespace or loopback interface. No socket mount required.
 
 ### Delivery
 
@@ -190,12 +199,12 @@ impl futures::Stream for DaemonResponseStream {
 
 ### Socket Path Resolution
 
-The client reads from `MINIBOX_SOCKET` environment variable (useful for tests and non-standard deployments), falling back to the default `/run/minibox/miniboxd.sock`.
+The client reads from `MINIBOX_SOCKET_PATH` environment variable (consistent with minibox-cli convention, useful for tests and non-standard deployments), falling back to the default `/run/minibox/miniboxd.sock` or platform-specific socket path.
 
 ```rust
 impl DaemonClient {
     pub fn new() -> Result<Self> {
-        let socket_path = std::env::var("MINIBOX_SOCKET")
+        let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
             .unwrap_or_else(|_| DAEMON_SOCKET_PATH.to_string());
         Ok(Self {
             socket_path: PathBuf::from(socket_path),
@@ -203,6 +212,8 @@ impl DaemonClient {
     }
 }
 ```
+
+Note: On Windows, the implementation will handle named pipes via the same env var convention (inherited from minibox-cli's platform-specific socket logic).
 
 ### Error Handling
 
@@ -281,9 +292,12 @@ Content-Type: application/json
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "container_id": "abc123def456",
   "status": "created"
 }
 ```
+
+**Note:** `container_id` can be used to query miniboxd directly if the HTTP stream is interrupted. This allows clients to recover state without relying on mbxctl persistence.
 
 #### Get Job Status
 
@@ -398,6 +412,33 @@ pub struct LogEntry {
 }
 ```
 
+### Timeout Enforcement
+
+**Who enforces timeouts:** mbxctl layer (not delegated to miniboxd)
+
+**Implementation:**
+
+```rust
+// In mbxctl job adapter
+pub async fn create_and_run(
+    &self,
+    req: CreateJobRequest,
+) -> Result<JobId> {
+    let timeout = Duration::from_secs(
+        req.timeout_seconds.unwrap_or(3600)  // Default 1 hour
+    );
+
+    tokio::time::timeout(timeout, self.run_until_complete(req))
+        .await
+        .context("job timeout exceeded")?
+}
+```
+
+When timeout expires:
+1. mbxctl cancels the `tokio::time::timeout()` future
+2. Sends `Stop` request to miniboxd to kill the container
+3. Returns timeout error to client
+
 ### State Tracking
 
 **JobTracker** (in-memory, minimal):
@@ -405,6 +446,7 @@ pub struct LogEntry {
 - Tracks active job IDs and their status
 - Maps job_id → response receiver channel
 - No persistence (jobs lost on restart, acceptable for transient dagu runs)
+- Clients can use container_id to query miniboxd directly if needed
 - Cleaned up when job completes
 
 ### Error Handling
@@ -698,7 +740,6 @@ mbxctl --listen localhost:9999 &
 # Run dagu with a test workflow
 minibox run dagu:minibox \
   -e MINIBOX_CONTROLLER=http://localhost:9999 \
-  -v /run/minibox/miniboxd.sock:/run/minibox/miniboxd.sock:ro \
   -- /dagu dag run example-workflow.yaml
 
 # Assertions
@@ -706,6 +747,7 @@ minibox run dagu:minibox \
 # - Output is captured and visible
 # - Exit codes are correct
 # - Dependencies are respected
+# - Timeouts are enforced (if specified)
 ```
 
 ---
@@ -718,17 +760,18 @@ minibox run dagu:minibox \
 # Terminal 1: minibox daemon
 sudo ./target/release/miniboxd
 
-# Terminal 2: controller
+# Terminal 2: controller (reads MINIBOX_SOCKET_PATH by default)
 ./mbxctl --listen localhost:9999
 
 # Terminal 3: dagu in minibox
 minibox run dagu:minibox \
   -e MINIBOX_CONTROLLER=http://localhost:9999 \
-  -v /run/minibox/miniboxd.sock:/run/minibox/miniboxd.sock:ro \
   -- /dagu server
 
 # Web UI at http://localhost:8080
 ```
+
+**Note:** No socket volume mount required. The dagu container reaches mbxctl via `http://localhost:9999` (loopback interface).
 
 ### Production (Linux Server)
 
@@ -745,11 +788,12 @@ sudo systemctl start mbxctl
 # Run dagu container (can be long-lived or managed via systemd/k8s)
 minibox run dagu:minibox \
   -e MINIBOX_CONTROLLER=http://localhost:9999 \
-  -v /run/minibox/miniboxd.sock:/run/minibox/miniboxd.sock:ro \
   -- /dagu server
 
 # Access Web UI via reverse proxy (nginx, etc.)
 ```
+
+**Note:** On production, mbxctl listens on `0.0.0.0:9999` to accept connections from multiple containers. Use firewall rules to restrict access.
 
 ---
 
@@ -757,11 +801,13 @@ minibox run dagu:minibox \
 
 | Decision | Rationale | Alternative Considered |
 |----------|-----------|------------------------|
-| **Extract minibox-client library** | Reusable component, avoids duplication, follows DRY principle | Embed in each consumer |
+| **Extract minibox-client in workspace** | Reusable library for minibox ecosystem; both CLI and mbxctl use it | Embed in each consumer |
+| **Separate repos for mbxctl + mbx-dagu** | Independent release cycles, communities, and versioning | Monorepo (adds coupling, release coordination burden) |
 | **HTTP for controller API** | Language-agnostic, easy debugging (curl), standard (SSE for streaming) | gRPC (more complex, less debuggable for simple cases) |
-| **Transparent proxy (stateless)** | Simple, fast, dagu owns job history | Persistent store (adds complexity, potential SPOF) |
+| **HTTP localhost (not socket mount)** | Simpler, more portable; dagu container reaches `http://localhost:9999` naturally | Socket mount (adds complexity, doesn't work well across container boundaries) |
+| **Transparent proxy (stateless)** | Simple, fast, dagu owns job history; return container_id for recovery | Persistent store (adds complexity, potential SPOF) |
+| **Timeout at mbxctl layer** | Clean separation of concerns; standard `tokio::time::timeout()` pattern | Delegate to miniboxd (miniboxd has no timeout support) |
 | **Server-Sent Events (SSE)** | Standard for unidirectional streams, works in browsers | WebSocket (overkill), polling (inefficient) |
-| **Unix socket from container** | Reuses existing minibox protocol, secure, doesn't require special networking | TCP loopback (adds network setup overhead) |
 | **Go for dagu plugin** | Aligns with dagu's ecosystem, dagu maintainers familiar | Rust plugin (adds build complexity to minibox workspace) |
 | **Four separate phases** | Each phase is independently valuable and testable | Monolithic implementation (harder to debug) |
 
