@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Minibox is a Docker-like container runtime written in Rust featuring daemon/client architecture, OCI image pulling from Docker Hub, Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem support.
 
+## Rust Edition
+
+This workspace uses **Rust 2024 edition**. Watch for: match ergonomics changes, `unsafe` required for `set_var`/`remove_var`, `FromRawFd` scope differences. Always run `cargo clippy` and `cargo test` after generating code.
+
 ## Build and Development Commands
 
 ### Python Scripts

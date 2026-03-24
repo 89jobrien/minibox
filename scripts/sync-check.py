@@ -98,9 +98,12 @@ async def main() -> None:
         print(f"  Working tree: dirty")
     print()
 
-    # Fast-path: nothing to do
-    if behind == 0 and not status["dirty"]:
-        print("Clean — nothing behind, working tree clean. Safe to push.")
+    # Fast-path: no remote sync action needed
+    if behind == 0:
+        if status["dirty"]:
+            print("No remote updates to rebase. Working tree is dirty, but push is sync-safe.")
+        else:
+            print("Clean — nothing behind, working tree clean. Safe to push.")
         return
 
     if args.dry_run:
@@ -148,16 +151,30 @@ Rules:
     start = time.monotonic()
     output_parts: list[str] = []
 
-    async for message in query(
-        prompt=prompt,
-        options=ClaudeAgentOptions(
-            allowed_tools=["Bash", "Read", "Edit", "AskUserQuestion"],
-            permission_mode="acceptEdits",
-        ),
-    ):
-        if hasattr(message, "result"):
-            print(message.result)
-            output_parts.append(message.result)
+    try:
+        async for message in query(
+            prompt=prompt,
+            options=ClaudeAgentOptions(
+                allowed_tools=["Bash", "Read", "Edit", "AskUserQuestion"],
+                permission_mode="acceptEdits",
+            ),
+        ):
+            if hasattr(message, "result"):
+                print(message.result)
+                output_parts.append(message.result)
+    except Exception as exc:
+        err = str(exc)
+        print(f"Sync agent failed: {err}")
+        if "Invalid API key" in err:
+            print("Tip: set a valid external API key before running auto-resolve.")
+        _log_complete(
+            run_id,
+            "sync-check",
+            {"dry_run": args.dry_run, "base": args.base},
+            f"sync-agent-error: {err}",
+            time.monotonic() - start,
+        )
+        sys.exit(1)
 
     full_output = "\n".join(output_parts)
     _log_complete(run_id, "sync-check", {"dry_run": args.dry_run, "base": args.base},

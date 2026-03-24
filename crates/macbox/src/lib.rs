@@ -162,7 +162,7 @@ pub async fn start() -> Result<()> {
             .arg("colima")
             .args(args)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::inherit())
             .spawn()
             .map_err(|e| anyhow::anyhow!("limactl spawn failed: {e}"))
     });

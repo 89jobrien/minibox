@@ -372,11 +372,14 @@ async fn runtime_spawn_process_propagates_executor_error() {
 async fn runtime_spawn_script_embeds_args() {
     use std::sync::{Arc, Mutex};
 
+    let captured_argv = Arc::new(Mutex::new(Vec::<String>::new()));
+    let captured_argv_ref = captured_argv.clone();
     let captured_script = Arc::new(Mutex::new(String::new()));
     let cap = captured_script.clone();
 
     let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
-        if let Some(pos) = args.iter().position(|&a| a == "-c") {
+        *captured_argv_ref.lock().unwrap() = args.iter().map(|arg| arg.to_string()).collect();
+        if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc") {
             if let Some(script) = args.get(pos + 1) {
                 *cap.lock().unwrap() = script.to_string();
             }
@@ -399,7 +402,10 @@ async fn runtime_spawn_script_embeds_args() {
     let result = runtime.spawn_process(&config).await.unwrap();
     assert_eq!(result.pid, 99);
 
+    let argv = captured_argv.lock().unwrap().clone();
     let script = captured_script.lock().unwrap().clone();
+    assert_eq!(argv.first().map(String::as_str), Some("bash"));
+    assert_eq!(argv.get(1).map(String::as_str), Some("-lc"));
     assert!(
         script.contains("hello"),
         "spawn script must embed arg 'hello', got: {script}"

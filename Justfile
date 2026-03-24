@@ -13,13 +13,13 @@ fmt-check:
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+    cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
+    cargo build --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
 
 build:
     cargo build --release
@@ -37,7 +37,7 @@ prepush:
 # fmt-check + lint + test-unit
 ci:
     cargo fmt --all --check
-    cargo clippy -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+    cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
     just test-unit
 
 # ── Testing ──────────────────────────────────────────────────────────────────
@@ -48,16 +48,16 @@ test-unit:
 
 # Adapter isolation tests (any platform)
 test-adapters:
-    cargo test -p minibox-lib --test adapter_colima_tests
+    cargo test -p linuxbox --test adapter_colima_tests
     cargo test -p daemonbox --test handler_adapter_swap_tests
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox
+    cargo nextest run --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p minibox-lib -p minibox-macros -p minibox-cli -p daemonbox --html
+    cargo llvm-cov nextest -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # Cgroup integration tests (Linux, root)
@@ -89,10 +89,10 @@ bench-agent *args:
 # ── Daemon ───────────────────────────────────────────────────────────────────
 
 doctor:
-    @cargo test -p minibox-lib preflight::tests -- --nocapture 2>&1 || true
+    @cargo test -p linuxbox preflight::tests -- --nocapture 2>&1 || true
     @echo ""
     @echo "--- Host Capabilities Report ---"
-    @cargo test -p minibox-lib preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+    @cargo test -p linuxbox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
 
 # ── AI Agents ────────────────────────────────────────────────────────────────
 

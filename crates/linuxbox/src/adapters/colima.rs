@@ -32,7 +32,7 @@ use crate::domain::{
 };
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -64,6 +64,10 @@ fn limactl_command(path: &str) -> Command {
     let mut cmd = Command::new(path);
     cmd.env("LIMA_HOME", lima_home());
     cmd
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 /// Callable that runs a command inside the Lima VM and returns its stdout.
@@ -746,35 +750,30 @@ impl ContainerRuntime for ColimaRuntime {
     /// Returns an error if the `limactl shell` command fails or if the PID
     /// printed to stdout cannot be parsed as a `u32`.
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        // Serialise the spawn config so it can be passed into the shell script
-        // as a single JSON string, avoiding shell quoting problems.
-        let config_json = serde_json::to_string(&SpawnRequest {
-            rootfs: config.rootfs.to_string_lossy().to_string(),
-            command: config.command.clone(),
-            args: config.args.clone(),
-            env: config.env.clone(),
-            hostname: config.hostname.clone(),
-            cgroup_path: config.cgroup_path.to_string_lossy().to_string(),
-        })
-        .map_err(|e| anyhow!("Failed to serialize config: {e}"))?;
+        let rootfs = shell_single_quote(&config.rootfs.to_string_lossy());
+        let command = shell_single_quote(&config.command);
+        let args = config
+            .args
+            .iter()
+            .map(|arg| shell_single_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
 
         if self.spawner.is_some() && config.capture_output {
             // Streaming path: foreground exec with piped stdout.
             // Uses `exec unshare` so the spawned process replaces the shell,
             // making child.id() the container init PID directly.
             let spawn_script = format!(
-                r#"CONFIG='{config_json}'
-ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
-COMMAND=$(echo "$CONFIG" | jq -r '.command')
-HOSTNAME=$(echo "$CONFIG" | jq -r '.hostname')
-mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
+                r#"ROOTFS={rootfs}
+COMMAND={command}
+ARGS=({args})
 exec sudo unshare --pid --mount --uts --ipc --net \
     --fork --kill-child \
     chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
 "#
             );
 
-            let mut child = self.lima_spawn(&["sh", "-c", &spawn_script])?;
+            let mut child = self.lima_spawn(&["bash", "-lc", &spawn_script])?;
             let pid = child.id();
 
             // Take the stdout pipe as an OwnedFd before dropping child.
@@ -816,15 +815,9 @@ exec sudo unshare --pid --mount --uts --ipc --net \
         // `unshare` with Linux namespace flags to isolate the container.
         let spawn_script = format!(
             r#"
-            CONFIG='{config_json}'
-
-            ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
-            COMMAND=$(echo "$CONFIG" | jq -r '.command')
-            HOSTNAME=$(echo "$CONFIG" | jq -r '.hostname')
-            CGROUP=$(echo "$CONFIG" | jq -r '.cgroup_path')
-
-            # Build args array from JSON
-            mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
+            ROOTFS={rootfs}
+            COMMAND={command}
+            ARGS=({args})
 
             sudo unshare --pid --mount --uts --ipc --net \
                 --fork --kill-child \
@@ -834,7 +827,7 @@ exec sudo unshare --pid --mount --uts --ipc --net \
             "#
         );
 
-        let output = self.lima_exec(&["sh", "-c", &spawn_script])?;
+        let output = self.lima_exec(&["bash", "-lc", &spawn_script])?;
         let pid: u32 = output
             .trim()
             .parse()
@@ -845,21 +838,6 @@ exec sudo unshare --pid --mount --uts --ipc --net \
             output_reader: None,
         })
     }
-}
-
-// ============================================================================
-// Helper Types
-// ============================================================================
-
-/// JSON payload passed to the Lima VM's spawn shell script.
-#[derive(Debug, Serialize, Deserialize)]
-struct SpawnRequest {
-    rootfs: String,
-    command: String,
-    args: Vec<String>,
-    env: Vec<String>,
-    hostname: String,
-    cgroup_path: String,
 }
 
 /// Deserialised subset of `nerdctl image inspect` output.
@@ -1010,8 +988,7 @@ mod tests {
         let cap = captured.clone();
 
         let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
-            // Capture the sh -c script
-            if let Some(pos) = args.iter().position(|&a| a == "-c") {
+            if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc") {
                 if let Some(script) = args.get(pos + 1) {
                     *cap.lock().unwrap() = script.to_string();
                 }

@@ -12,7 +12,7 @@ Four improvements identified from devloop analysis of the container networking f
 3. Add `NetworkProvider` conformance tests
 4. Add Colima env var + manifest.json regression tests
 
-The `minibox-lib` → `linuxbox` rename audit was completed and found no issues.
+The `minibox-lib` → `linuxbox` rename has been completed and documented in CLAUDE.md.
 
 ---
 
