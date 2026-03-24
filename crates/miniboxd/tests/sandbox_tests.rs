@@ -231,3 +231,96 @@ fn sandbox_oom_kill() {
         result.stderr
     );
 }
+
+// ---------------------------------------------------------------------------
+// Python scenarios (python:3.12-alpine)
+// ---------------------------------------------------------------------------
+
+const PYTHON_IMAGE: &str = "python:3.12-alpine";
+
+#[test]
+#[ignore]
+fn python_sandbox_basic_script() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute(PYTHON_IMAGE, &["python3", "-c", "print(1+1)"]);
+    assert_eq!(result.exit_code, 0, "python should exit 0");
+    assert_eq!(result.stdout.trim(), "2", "print(1+1) should output '2'");
+}
+
+#[test]
+#[ignore]
+fn python_sandbox_exception_captured() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute(PYTHON_IMAGE, &["python3", "-c", "raise ValueError('oops')"]);
+    assert_ne!(
+        result.exit_code, 0,
+        "exception should produce non-zero exit"
+    );
+    assert!(
+        result.stderr.contains("ValueError"),
+        "stderr should contain 'ValueError', got: {:?}",
+        result.stderr
+    );
+}
+
+#[test]
+#[ignore]
+fn python_sandbox_json_output() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute(
+        PYTHON_IMAGE,
+        &["python3", "-c", "import json; print(json.dumps({'r': 42}))"],
+    );
+    assert_eq!(result.exit_code, 0, "json output should exit 0");
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(result.stdout.trim()).unwrap_or_else(|e| {
+            panic!(
+                "stdout should be valid JSON: {e}\nstdout: {:?}",
+                result.stdout
+            )
+        });
+    assert_eq!(parsed["r"], 42, "JSON should contain r=42, got: {parsed}");
+}
+
+#[test]
+#[ignore]
+fn python_sandbox_multiline_output() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute(
+        PYTHON_IMAGE,
+        &["python3", "-c", "for i in range(5): print(i)"],
+    );
+    assert_eq!(result.exit_code, 0, "multiline script should exit 0");
+    let lines: Vec<&str> = result.stdout.trim().lines().collect();
+    assert_eq!(lines, vec!["0", "1", "2", "3", "4"], "should print 0-4");
+}
+
+#[test]
+#[ignore]
+fn python_sandbox_network_blocked() {
+    require_sandbox_caps();
+    let mut sb = sandbox();
+    let result = sb.execute(
+        PYTHON_IMAGE,
+        &[
+            "python3",
+            "-c",
+            "import urllib.request; urllib.request.urlopen('http://1.1.1.1', timeout=2)",
+        ],
+    );
+    assert_ne!(
+        result.exit_code, 0,
+        "network access should fail in isolated container"
+    );
+    // Python should raise OSError or URLError
+    assert!(
+        result.stderr.contains("Error") || result.stderr.contains("error"),
+        "stderr should mention an error.\nstderr: {:?}",
+        result.stderr
+    );
+}
