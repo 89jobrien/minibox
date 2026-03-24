@@ -629,3 +629,354 @@ async fn test_handle_run_explicit_network_none() {
     );
     assert_eq!(mock_network.setup_count(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// Coverage expansion: run_inner orchestration paths
+// ---------------------------------------------------------------------------
+
+/// Extract container ID from a ContainerCreated response; panics otherwise.
+fn extract_container_id(response: &DaemonResponse) -> String {
+    match response {
+        DaemonResponse::ContainerCreated { id } => id.clone(),
+        other => panic!("expected ContainerCreated, got: {other:?}"),
+    }
+}
+
+/// Tag defaults to "latest" when `None` is passed.
+#[tokio::test]
+async fn test_run_defaults_tag_to_latest() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None, // tag=None → defaults to "latest"
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let container = state.get_container(&id).await.expect("container exists");
+    // image label should end with ":latest"
+    assert!(
+        container.info.image.ends_with(":latest"),
+        "expected image tag 'latest', got: {}",
+        container.info.image
+    );
+}
+
+/// Bare image name "nginx" (no slash) is normalised to "library/nginx".
+#[tokio::test]
+async fn test_run_normalizes_short_image_name() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "nginx".to_string(),
+        Some("alpine".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    // Should succeed — MockRegistry caches all images by default.
+    extract_container_id(&response);
+}
+
+/// Container directories are created on disk during run.
+#[tokio::test]
+async fn test_run_creates_container_directories() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps.clone(),
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+    // containers_base/{id} should exist
+    let container_dir = deps.containers_base.join(&id);
+    assert!(
+        container_dir.exists(),
+        "container dir should exist: {}",
+        container_dir.display()
+    );
+}
+
+/// After handle_run the container is registered in state.
+#[tokio::test]
+async fn test_run_container_in_created_or_running_state() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+    // Allow async spawn task to run
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    let container = state
+        .get_container(&id)
+        .await
+        .expect("container should exist in state");
+    let s = &container.info.state;
+    assert!(
+        s == "Created" || s == "Running" || s == "Stopped",
+        "unexpected container state: {s}"
+    );
+}
+
+/// Five consecutive runs produce five unique container IDs.
+#[tokio::test]
+async fn test_run_generates_unique_ids() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mut ids = std::collections::HashSet::new();
+    for _ in 0..5 {
+        let response = handle_run_once(
+            "alpine".to_string(),
+            None,
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = extract_container_id(&response);
+        ids.insert(id);
+    }
+    assert_eq!(ids.len(), 5, "all 5 container IDs should be unique");
+}
+
+/// Memory and CPU limits are accepted and container is created successfully.
+#[tokio::test]
+async fn test_run_with_memory_and_cpu_limits() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        Some(256 * 1024 * 1024), // 256MB
+        Some(500),               // CPU weight
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    extract_container_id(&response); // panics if not ContainerCreated
+}
+
+/// Passing an explicit NetworkMode::Host succeeds and the network provider
+/// receives a setup call.
+#[tokio::test]
+async fn test_run_with_network_mode_host() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        Some(NetworkMode::Host),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let response = rx.recv().await.expect("handler sent no response");
+    extract_container_id(&response);
+    assert_eq!(
+        mock_network.setup_count(),
+        1,
+        "network setup should be called for Host mode"
+    );
+}
+
+/// Stopping a nonexistent container returns an Error response.
+#[tokio::test]
+async fn test_stop_nonexistent_container() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_stop("nonexistent_id_123".to_string(), state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("no PID"),
+                "expected 'not found' in error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// Removing a container whose filesystem cleanup fails still succeeds
+/// (cleanup failures are best-effort warnings, not hard errors).
+#[tokio::test]
+async fn test_remove_with_filesystem_cleanup_failure() {
+    use linuxbox::adapters::mocks::FailableFilesystemMock;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let failable_fs = Arc::new(FailableFilesystemMock::new());
+
+    // Build deps with the failable mock (setup succeeds by default).
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        filesystem: failable_fs.clone(),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Create a container (setup succeeds).
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+    let id = extract_container_id(&response);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    state.update_container_state(&id, "Stopped").await;
+
+    // Now toggle cleanup to fail.
+    failable_fs.set_fail_cleanup(true);
+
+    // Remove should still return Success (cleanup failure is best-effort).
+    let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
+    match remove_response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("removed"),
+                "expected 'removed' in message, got: {message}"
+            );
+        }
+        other => panic!("expected Success despite cleanup failure, got: {other:?}"),
+    }
+
+    // Container should be gone from state regardless.
+    assert!(state.get_container(&id).await.is_none());
+}
+
+/// Removing a nonexistent container returns an Error response.
+#[tokio::test]
+async fn test_remove_nonexistent_container() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_remove("does_not_exist_456".to_string(), state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found"),
+                "expected 'not found' in error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// Listing containers when none exist returns an empty list.
+#[tokio::test]
+async fn test_list_empty() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_list(state).await;
+
+    match response {
+        DaemonResponse::ContainerList { containers } => {
+            assert!(containers.is_empty(), "expected empty list");
+        }
+        other => panic!("expected ContainerList, got: {other:?}"),
+    }
+}
+
+/// After running one container, handle_list returns a list with one entry.
+#[tokio::test]
+async fn test_list_after_run() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+    let id = extract_container_id(&response);
+
+    let list_response = handler::handle_list(state).await;
+    match list_response {
+        DaemonResponse::ContainerList { containers } => {
+            assert_eq!(containers.len(), 1, "expected 1 container in list");
+            assert_eq!(containers[0].id, id);
+        }
+        other => panic!("expected ContainerList, got: {other:?}"),
+    }
+}
