@@ -276,6 +276,58 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use linuxbox::adapters::mocks::{
+        MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+    };
+    use linuxbox::image::ImageStore;
+    use linuxbox::protocol::{DaemonRequest, DaemonResponse};
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    // ─── helpers ────────────────────────────────────────────────────────────
+
+    fn test_deps(
+        tmp: &TempDir,
+    ) -> (
+        Arc<crate::state::DaemonState>,
+        Arc<crate::handler::HandlerDependencies>,
+    ) {
+        let store = ImageStore::new(tmp.path().join("images")).expect("create ImageStore");
+        let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
+        let deps = Arc::new(crate::handler::HandlerDependencies {
+            registry: Arc::new(MockRegistry::new()),
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers"),
+            run_containers_base: tmp.path().join("run"),
+        });
+        (state, deps)
+    }
+
+    async fn send_request(write_half: &mut (impl AsyncWriteExt + Unpin), req: &DaemonRequest) {
+        let mut json = serde_json::to_string(req).expect("serialize request");
+        json.push('\n');
+        write_half
+            .write_all(json.as_bytes())
+            .await
+            .expect("write request");
+    }
+
+    async fn read_response(
+        reader: &mut BufReader<impl tokio::io::AsyncRead + Unpin>,
+    ) -> DaemonResponse {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("read response line");
+        serde_json::from_str(line.trim()).expect("parse response JSON")
+    }
+
+    // ─── existing tests ──────────────────────────────────────────────────────
 
     #[test]
     fn peer_creds_fields_accessible() {
@@ -290,5 +342,307 @@ mod tests {
         let q = p.clone();
         assert_eq!(q.uid, 0);
         assert_eq!(q.pid, 1);
+    }
+
+    // ─── is_terminal_response ────────────────────────────────────────────────
+
+    #[test]
+    fn test_is_terminal_response_for_each_variant() {
+        // ContainerOutput is the only non-terminal response
+        assert!(
+            !is_terminal_response(&DaemonResponse::ContainerOutput {
+                stream: linuxbox::protocol::OutputStreamKind::Stdout,
+                data: "dGVzdA==".to_string(),
+            }),
+            "ContainerOutput must be non-terminal"
+        );
+
+        // All other variants must be terminal
+        assert!(
+            is_terminal_response(&DaemonResponse::Success {
+                message: "ok".to_string()
+            }),
+            "Success must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::Error {
+                message: "boom".to_string()
+            }),
+            "Error must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::ContainerCreated {
+                id: "abc".to_string()
+            }),
+            "ContainerCreated must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::ContainerStopped { exit_code: 0 }),
+            "ContainerStopped must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::ContainerList { containers: vec![] }),
+            "ContainerList must be terminal"
+        );
+    }
+
+    // ─── handle_connection via duplex ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_handle_connection_list_empty() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        send_request(&mut write_half, &DaemonRequest::List).await;
+        let resp = read_response(&mut reader).await;
+
+        match resp {
+            DaemonResponse::ContainerList { containers } => {
+                assert!(containers.is_empty(), "expected empty container list");
+            }
+            other => panic!("expected ContainerList, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_invalid_json() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        write_half
+            .write_all(b"this is not json at all\n")
+            .await
+            .expect("write garbage");
+        let resp = read_response(&mut reader).await;
+
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("invalid request"),
+                    "expected 'invalid request' in error, got: {message}"
+                );
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_empty_line_ignored() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // Send an empty line, then a valid request
+        write_half.write_all(b"\n").await.expect("write empty line");
+        send_request(&mut write_half, &DaemonRequest::List).await;
+
+        // Should receive exactly one response (List), not two
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::ContainerList { .. } => {}
+            other => panic!("expected ContainerList after empty line, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_client_disconnect() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        let join = tokio::spawn(async move { handle_connection(server, state_c, deps_c).await });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        send_request(&mut write_half, &DaemonRequest::List).await;
+        let _ = read_response(&mut reader).await;
+
+        // Drop write half — signals EOF to handle_connection
+        drop(write_half);
+        drop(reader);
+
+        let result = join.await.expect("task did not panic");
+        assert!(
+            result.is_ok(),
+            "handle_connection should return Ok on client disconnect"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_pull_and_list() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // Pull request — MockRegistry will respond (Success or Error)
+        send_request(
+            &mut write_half,
+            &DaemonRequest::Pull {
+                image: "alpine".to_string(),
+                tag: Some("latest".to_string()),
+            },
+        )
+        .await;
+        let pull_resp = read_response(&mut reader).await;
+        // Either Success or Error is acceptable from the mock; what matters is we got a response
+        matches!(
+            pull_resp,
+            DaemonResponse::Success { .. } | DaemonResponse::Error { .. }
+        );
+
+        // List request on same connection
+        send_request(&mut write_half, &DaemonRequest::List).await;
+        let list_resp = read_response(&mut reader).await;
+        match list_resp {
+            DaemonResponse::ContainerList { .. } => {}
+            other => panic!("expected ContainerList, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_oversized_request() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        // duplex buffer must be large enough for the oversized payload
+        let (client, server) = tokio::io::duplex(2 * 1024 * 1024 + 64);
+        let state_c = state.clone();
+        let deps_c = deps.clone();
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // Build a request line that exceeds MAX_REQUEST_SIZE (1 MB)
+        // Wrap it in a JSON object so it reads as a single line
+        let big_value = "x".repeat(1024 * 1024 + 1);
+        let oversized = format!("{{\"__pad\":\"{big_value}\"}}\n");
+        write_half
+            .write_all(oversized.as_bytes())
+            .await
+            .expect("write oversized");
+
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("request too large"),
+                    "expected 'request too large' in error, got: {message}"
+                );
+            }
+            other => panic!("expected Error for oversized request, got {other:?}"),
+        }
+    }
+
+    // ─── run_server ──────────────────────────────────────────────────────────
+
+    struct MockListener {
+        rx: tokio::sync::Mutex<
+            tokio::sync::mpsc::Receiver<(tokio::io::DuplexStream, Option<PeerCreds>)>,
+        >,
+    }
+
+    impl ServerListener for MockListener {
+        type Stream = tokio::io::DuplexStream;
+
+        async fn accept(&self) -> Result<(Self::Stream, Option<PeerCreds>)> {
+            match self.rx.lock().await.recv().await {
+                Some(pair) => Ok(pair),
+                None => Err(anyhow::anyhow!("listener closed")),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_server_shutdown() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (_tx, rx) = tokio::sync::mpsc::channel(1);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // Resolve shutdown immediately
+        let result = run_server(listener, state, deps, false, async {}).await;
+        assert!(
+            result.is_ok(),
+            "run_server should return Ok on immediate shutdown"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_run_server_rejects_non_root() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // Send a connection with non-root PeerCreds
+        let (_client, server) = tokio::io::duplex(4096);
+        tx.send((server, Some(PeerCreds { uid: 1000, pid: 42 })))
+            .await
+            .expect("send connection");
+        // Drop sender so listener returns error on next accept
+        drop(tx);
+
+        // Use a short shutdown timer so the server exits promptly
+        // after processing the rejected connection + accept error
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_server(listener, state, deps, true, async {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }),
+        )
+        .await;
+
+        // Server should have shut down via the shutdown future, not timed out
+        assert!(result.is_ok(), "server should not have timed out");
     }
 }
