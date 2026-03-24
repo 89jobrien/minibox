@@ -442,3 +442,56 @@ impl Default for RegistryClient {
         Self::new().expect("failed to build RegistryClient")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify the size constants match the documented security limits.
+    #[test]
+    fn test_constants_manifest_size() {
+        assert_eq!(
+            MAX_MANIFEST_SIZE,
+            10 * 1024 * 1024,
+            "MAX_MANIFEST_SIZE should be 10 MiB"
+        );
+    }
+
+    #[test]
+    fn test_constants_layer_size() {
+        assert_eq!(
+            MAX_LAYER_SIZE,
+            10 * 1024 * 1024 * 1024,
+            "MAX_LAYER_SIZE should be 10 GiB"
+        );
+    }
+
+    /// `RegistryClient::new()` must succeed without network access — it only
+    /// builds an in-process TLS-capable HTTP client.
+    #[test]
+    fn test_registry_client_new() {
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient::new() should succeed");
+    }
+
+    /// `Default` must not panic.
+    #[test]
+    fn test_registry_client_default() {
+        let _client = RegistryClient::default();
+    }
+
+    /// `Clone` must produce an independent, usable client.
+    #[test]
+    fn test_registry_client_clone() {
+        let original = RegistryClient::new().expect("RegistryClient::new() failed");
+        let _cloned = original.clone();
+    }
+
+    /// `Debug` must be implemented and produce non-empty output.
+    #[test]
+    fn test_registry_client_debug() {
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
+        let debug_str = format!("{client:?}");
+        assert!(!debug_str.is_empty(), "Debug output should not be empty");
+    }
+}
