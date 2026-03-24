@@ -37,6 +37,35 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+fn colima_home() -> PathBuf {
+    if let Ok(path) = std::env::var("COLIMA_HOME")
+        && !path.is_empty()
+    {
+        return PathBuf::from(path);
+    }
+
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("~"))
+        .join(".colima")
+}
+
+fn lima_home() -> String {
+    if let Ok(path) = std::env::var("LIMA_HOME")
+        && !path.is_empty()
+    {
+        return path;
+    }
+
+    colima_home().join("_lima").to_string_lossy().to_string()
+}
+
+fn limactl_command(path: &str) -> Command {
+    let mut cmd = Command::new(path);
+    cmd.env("LIMA_HOME", lima_home());
+    cmd
+}
+
 /// Callable that runs a command inside the Lima VM and returns its stdout.
 ///
 /// The default implementation invokes `limactl shell <instance> <args…>`.
@@ -107,7 +136,7 @@ impl ColimaRegistry {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        let output = Command::new(&self.limactl_path)
+        let output = limactl_command(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
             .args(args)
@@ -224,28 +253,10 @@ impl ImageRegistry for ColimaRegistry {
         let safe_name = name.replace('/', "-");
         let export_base = format!("/tmp/minibox-layers/{safe_name}/{tag}");
 
-        let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
-        let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
-            .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
-
-        let image_data = inspect_data
-            .first()
-            .ok_or_else(|| anyhow!("No image data returned"))?;
-
-        let layer_ids = image_data
-            .root_fs
-            .as_ref()
-            .map(|fs| fs.layers.clone())
-            .unwrap_or_default();
-
-        if layer_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
         // Export the image to the shared /tmp location and unpack the outer tar.
         // `nerdctl save` produces a Docker-format tar where each layer is a
-        // directory containing `layer.tar`. We extract the outer tar and then
-        // extract each `layer.tar` into a `rootfs/` subdirectory.
+        // directory containing `layer.tar`. We parse `manifest.json` to locate
+        // those layer tarballs rather than guessing directory names.
         let tar_path = format!("{export_base}.tar");
         self.lima_exec(&[
             "sh",
@@ -255,25 +266,24 @@ impl ImageRegistry for ColimaRegistry {
             ),
         ])?;
 
-        // Build one host-accessible path per layer.
-        let layer_paths = layer_ids
-            .iter()
-            .map(|layer_id| {
-                // Use the first 12 hex chars of the digest as the directory name,
-                // matching the directory layout produced by `nerdctl save`.
-                let short_id = layer_id
-                    .trim_start_matches("sha256:")
-                    .chars()
-                    .take(12)
-                    .collect::<String>();
-                let layer_dir = format!("{export_base}/{short_id}");
-                // Extract layer.tar into rootfs/ inside the VM.
+        let manifest_output = self.lima_exec(&["cat", &format!("{export_base}/manifest.json")])?;
+        let manifest: Vec<DockerSaveManifestEntry> = serde_json::from_str(&manifest_output)
+            .map_err(|e| anyhow!("Failed to parse exported image manifest: {e}"))?;
+        let layer_paths = manifest
+            .first()
+            .map(|entry| entry.layers.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+            .map(|(index, layer_tar_rel)| {
+                let layer_tar = format!("{export_base}/{layer_tar_rel}");
+                let layer_rootfs = format!("{export_base}/rootfs-{index}");
                 let _ = self.lima_exec(&[
                     "sh",
                     "-c",
-                    &format!("mkdir -p {layer_dir}/rootfs && tar xf {layer_dir}/layer.tar -C {layer_dir}/rootfs 2>/dev/null || true"),
+                    &format!("mkdir -p {layer_rootfs} && tar xf {layer_tar} -C {layer_rootfs} 2>/dev/null || true"),
                 ]);
-                PathBuf::from(format!("{layer_dir}/rootfs"))
+                PathBuf::from(layer_rootfs)
             })
             .collect();
 
@@ -310,12 +320,21 @@ impl ColimaFilesystem {
         }
     }
 
+    /// Inject a custom executor for testing.
+    ///
+    /// The closure receives the argument slice that would be passed to
+    /// `limactl shell <instance>` and must return the command's stdout.
+    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
+        self.executor = Some(executor);
+        self
+    }
+
     /// Run a command inside the Lima VM and return its stdout as a `String`.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        let output = Command::new(&self.limactl_path)
+        let output = limactl_command(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
             .args(args)
@@ -348,6 +367,7 @@ impl FilesystemProvider for ColimaFilesystem {
         // Concatenate all layer paths as colon-separated lowerdir value.
         let lower_dirs = layers
             .iter()
+            .rev()
             .map(|p| p.to_string_lossy().to_string())
             .collect::<Vec<_>>()
             .join(":");
@@ -361,16 +381,26 @@ impl FilesystemProvider for ColimaFilesystem {
         self.lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
         self.lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
 
-        // Mount the overlay filesystem inside the VM.
-        let mount_cmd = format!(
-            "mount -t overlay overlay -o lowerdir={},upperdir={},workdir={} {}",
+        // Mount the overlay filesystem inside the VM. Pass argv directly so
+        // host paths such as "~/Library/Application Support/..." are handled
+        // safely without shell-quoting bugs.
+        let mount_opts = format!(
+            "lowerdir={},upperdir={},workdir={}",
             lower_dirs,
             upper_dir.to_string_lossy(),
             work_dir.to_string_lossy(),
-            merged_dir.to_string_lossy()
         );
 
-        self.lima_exec(&["sh", "-c", &mount_cmd])?;
+        self.lima_exec(&[
+            "sudo",
+            "mount",
+            "-t",
+            "overlay",
+            "overlay",
+            "-o",
+            &mount_opts,
+            &merged_dir.to_string_lossy(),
+        ])?;
 
         Ok(merged_dir)
     }
@@ -394,7 +424,7 @@ impl FilesystemProvider for ColimaFilesystem {
         let merged_dir = container_dir.join("merged");
 
         // Unmount the overlay before removing the directory tree.
-        self.lima_exec(&["umount", &merged_dir.to_string_lossy()])?;
+        self.lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
         self.lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
 
         Ok(())
@@ -474,7 +504,7 @@ impl ColimaLimiter {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        let output = Command::new(&self.limactl_path)
+        let output = limactl_command(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
             .args(args)
@@ -508,23 +538,46 @@ impl ResourceLimiter for ColimaLimiter {
     ///
     /// Returns an error if `mkdir` or any cgroup control-file write fails inside the VM.
     fn create(&self, container_id: &str, config: &ResourceConfig) -> Result<String> {
+        let parent_cgroup = "/sys/fs/cgroup/minibox";
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
-        self.lima_exec(&["mkdir", "-p", &cgroup_path])?;
+        self.lima_exec(&["sudo", "mkdir", "-p", parent_cgroup])?;
+        self.lima_exec(&[
+            "sudo",
+            "sh",
+            "-c",
+            &format!("echo +cpu +memory +pids +io > {parent_cgroup}/cgroup.subtree_control"),
+        ])?;
+        self.lima_exec(&["sudo", "mkdir", "-p", &cgroup_path])?;
 
         if let Some(memory_bytes) = config.memory_limit_bytes {
             let memory_file = format!("{cgroup_path}/memory.max");
-            self.lima_exec(&["sh", "-c", &format!("echo {memory_bytes} > {memory_file}")])?;
+            self.lima_exec(&[
+                "sudo",
+                "sh",
+                "-c",
+                &format!("echo {memory_bytes} > {memory_file}"),
+            ])?;
         }
 
         if let Some(cpu_weight) = config.cpu_weight {
             let cpu_file = format!("{cgroup_path}/cpu.weight");
-            self.lima_exec(&["sh", "-c", &format!("echo {cpu_weight} > {cpu_file}")])?;
+            self.lima_exec(&[
+                "sudo",
+                "sh",
+                "-c",
+                &format!("echo {cpu_weight} > {cpu_file}"),
+            ])?;
         }
 
         if let Some(pids_max) = config.pids_max {
             let pids_file = format!("{cgroup_path}/pids.max");
-            self.lima_exec(&["sh", "-c", &format!("echo {pids_max} > {pids_file}")])?;
+            self.lima_exec(&[
+                "sudo",
+                "sh",
+                "-c",
+                &format!("echo {pids_max} > {pids_file}"),
+            ])?;
         }
 
         // Set I/O limit — requires a detected block device major:minor.
@@ -534,6 +587,7 @@ impl ResourceLimiter for ColimaLimiter {
         {
             let io_file = format!("{cgroup_path}/io.max");
             self.lima_exec(&[
+                "sudo",
                 "sh",
                 "-c",
                 &format!("echo '{device} rbps={io_max} wbps={io_max}' > {io_file}"),
@@ -554,7 +608,7 @@ impl ResourceLimiter for ColimaLimiter {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
         let procs_file = format!("{cgroup_path}/cgroup.procs");
 
-        self.lima_exec(&["sh", "-c", &format!("echo {pid} > {procs_file}")])?;
+        self.lima_exec(&["sudo", "sh", "-c", &format!("echo {pid} > {procs_file}")])?;
 
         Ok(())
     }
@@ -571,7 +625,7 @@ impl ResourceLimiter for ColimaLimiter {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
         // rmdir (not rm -rf): the kernel rejects removal of a non-empty cgroup.
-        self.lima_exec(&["rmdir", &cgroup_path])?;
+        self.lima_exec(&["sudo", "rmdir", &cgroup_path])?;
 
         Ok(())
     }
@@ -626,7 +680,7 @@ impl ColimaRuntime {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        let output = Command::new(&self.limactl_path)
+        let output = limactl_command(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
             .args(args)
@@ -647,7 +701,7 @@ impl ColimaRuntime {
         if let Some(spawner) = &self.spawner {
             return spawner(args);
         }
-        Command::new(&self.limactl_path)
+        limactl_command(&self.limactl_path)
             .arg("shell")
             .arg(&self.instance)
             .args(args)
@@ -712,7 +766,7 @@ ROOTFS=$(echo "$CONFIG" | jq -r '.rootfs')
 COMMAND=$(echo "$CONFIG" | jq -r '.command')
 HOSTNAME=$(echo "$CONFIG" | jq -r '.hostname')
 mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
-exec unshare --pid --mount --uts --ipc --net \
+exec sudo unshare --pid --mount --uts --ipc --net \
     --fork --kill-child \
     chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
 "#
@@ -770,7 +824,7 @@ exec unshare --pid --mount --uts --ipc --net \
             # Build args array from JSON
             mapfile -t ARGS < <(echo "$CONFIG" | jq -r '.args[]')
 
-            unshare --pid --mount --uts --ipc --net \
+            sudo unshare --pid --mount --uts --ipc --net \
                 --fork --kill-child \
                 chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
 
@@ -825,6 +879,12 @@ struct RootFs {
     layers: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DockerSaveManifestEntry {
+    #[serde(rename = "Layers")]
+    layers: Vec<String>,
+}
+
 // Register all four Colima adapters with the adapt! macro so they satisfy
 // the AsAny + Default bounds required by the daemon's adapter registry.
 adapt!(
@@ -837,6 +897,12 @@ adapt!(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialises environment-variable mutations across parallel tests.
+    // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. The Mutex
+    // ensures only one test modifies the environment at a time.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_colima_registry_creation() {
@@ -848,6 +914,39 @@ mod tests {
     fn test_colima_with_custom_instance() {
         let registry = ColimaRegistry::new().with_instance("custom-lima".to_string());
         assert_eq!(registry.instance, "custom-lima");
+    }
+
+    #[test]
+    fn test_lima_home_defaults_to_colima_lima_dir() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev_lima = std::env::var("LIMA_HOME").ok();
+        let prev_colima = std::env::var("COLIMA_HOME").ok();
+        let prev_home = std::env::var("HOME").ok();
+
+        unsafe {
+            std::env::remove_var("LIMA_HOME");
+            std::env::remove_var("COLIMA_HOME");
+            std::env::set_var("HOME", "/tmp/minibox-colima-home");
+        }
+
+        let result = lima_home();
+
+        unsafe {
+            match prev_lima {
+                Some(v) => std::env::set_var("LIMA_HOME", v),
+                None => std::env::remove_var("LIMA_HOME"),
+            }
+            match prev_colima {
+                Some(v) => std::env::set_var("COLIMA_HOME", v),
+                None => std::env::remove_var("COLIMA_HOME"),
+            }
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+
+        assert_eq!(result, "/tmp/minibox-colima-home/.colima/_lima");
     }
 
     #[test]
@@ -875,12 +974,11 @@ mod tests {
     /// gives paths that only exist inside the VM.
     #[test]
     fn get_image_layers_returns_host_accessible_paths() {
-        let fake_inspect =
-            r#"[{"Size":1024,"RootFS":{"Layers":["sha256:abc123def456","sha256:def456abc789"]}}]"#;
+        let fake_manifest = r#"[{"Layers":["aaa/layer.tar","bbb/layer.tar"]}]"#;
 
         let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
-            if args.contains(&"inspect") {
-                Ok(fake_inspect.to_string())
+            if args.first() == Some(&"cat") && args[1].ends_with("/manifest.json") {
+                Ok(fake_manifest.to_string())
             } else {
                 Ok(String::new())
             }

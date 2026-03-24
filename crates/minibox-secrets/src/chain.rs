@@ -118,7 +118,7 @@ impl CredentialProvider for CredentialProviderChain {
         Err(if all_not_found {
             CredentialError::NotFound(key)
         } else {
-            last_err.unwrap_or_else(|| CredentialError::NotFound(key))
+            last_err.unwrap_or(CredentialError::NotFound(key))
         })
     }
 }

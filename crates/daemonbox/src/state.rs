@@ -141,6 +141,16 @@ impl DaemonState {
             warn!("failed to write state file {}: {}", tmp_path.display(), e);
             return;
         }
+        // SECURITY: Restrict state file to owner-only. Contains PIDs and
+        // rootfs paths that should not be world-readable.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
+                warn!("failed to set state file permissions: {}", e);
+            }
+        }
         if let Err(e) = std::fs::rename(&tmp_path, &self.state_file) {
             warn!(
                 "failed to rename {} → {}: {}",

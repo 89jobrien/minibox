@@ -8,6 +8,7 @@ use daemonbox::state::DaemonState;
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
+use linuxbox::domain::NetworkMode;
 use linuxbox::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -519,4 +520,112 @@ async fn test_full_container_lifecycle() {
 
     // 6. Verify removal
     assert!(state.get_container(&container_id).await.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Networking tests
+// ---------------------------------------------------------------------------
+
+/// Build deps with a specific `MockNetwork` instance so call counts can be
+/// inspected after the handler runs.
+fn create_test_deps_with_network(
+    temp_dir: &TempDir,
+    network: Arc<MockNetwork>,
+) -> Arc<HandlerDependencies> {
+    Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: network,
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    })
+}
+
+/// `network_provider.setup()` is called exactly once per non-ephemeral
+/// `handle_run` invocation.
+#[tokio::test]
+async fn test_network_setup_called_on_run() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert_eq!(
+        mock_network.setup_count(),
+        1,
+        "network setup should be called once"
+    );
+}
+
+/// A network setup failure propagates back as a `DaemonResponse::Error`.
+#[tokio::test]
+async fn test_network_setup_failure_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_network = Arc::new(MockNetwork::new().with_setup_failure());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::Error { .. }),
+        "network setup failure should produce Error response, got {response:?}"
+    );
+}
+
+/// `handle_run` with an explicit `NetworkMode::None` succeeds and calls
+/// `setup()` exactly once — `NoopNetwork.setup()` is always invoked regardless
+/// of mode; it simply returns an empty netns path.
+#[tokio::test]
+async fn test_handle_run_explicit_network_none() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        Some(NetworkMode::None),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let response = rx.recv().await.expect("handler sent no response");
+    assert!(
+        !matches!(response, DaemonResponse::Error { ref message } if message.contains("network")),
+        "NetworkMode::None should not produce a network error, got {response:?}"
+    );
+    assert_eq!(mock_network.setup_count(), 1);
 }

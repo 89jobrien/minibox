@@ -98,14 +98,12 @@ async fn registry_pull_image_parses_inspect_output() {
 /// i.e. they must live under /tmp/ or /Users/ — the Lima-shared mounts.
 #[test]
 fn registry_get_image_layers_returns_host_accessible_paths() {
-    let fake_inspect =
-        r#"[{"Size":1024,"RootFS":{"Layers":["sha256:abc123def456","sha256:def456abc789"]}}]"#;
+    let fake_manifest = r#"[{"Layers":["aaa/layer.tar","bbb/layer.tar"]}]"#;
 
     let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
-        if args.contains(&"inspect") {
-            Ok(fake_inspect.to_string())
+        if args.first() == Some(&"cat") && args[1].ends_with("/manifest.json") {
+            Ok(fake_manifest.to_string())
         } else {
-            // accept mkdir, nerdctl save, tar xf, etc.
             Ok(String::new())
         }
     }));
@@ -117,7 +115,7 @@ fn registry_get_image_layers_returns_host_accessible_paths() {
     assert_eq!(
         layers.len(),
         2,
-        "should return one PathBuf per layer digest"
+        "should return one PathBuf per saved layer tar"
     );
 
     for layer in &layers {
@@ -132,11 +130,11 @@ fn registry_get_image_layers_returns_host_accessible_paths() {
 /// get_image_layers returns an empty vec when the image has no layers.
 #[test]
 fn registry_get_image_layers_empty_when_no_layers() {
-    let fake_inspect = r#"[{"Size":0,"RootFS":{"Layers":[]}}]"#;
+    let fake_manifest = r#"[{"Layers":[]}]"#;
 
     let registry = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
-        if args.contains(&"inspect") {
-            Ok(fake_inspect.to_string())
+        if args.first() == Some(&"cat") && args[1].ends_with("/manifest.json") {
+            Ok(fake_manifest.to_string())
         } else {
             Ok(String::new())
         }
@@ -146,7 +144,10 @@ fn registry_get_image_layers_empty_when_no_layers() {
         .get_image_layers("scratch", "latest")
         .expect("get_image_layers should succeed");
 
-    assert!(layers.is_empty(), "no layers in inspect → empty result");
+    assert!(
+        layers.is_empty(),
+        "no layers in manifest.json → empty result"
+    );
 }
 
 /// get_image_layers propagates executor errors.
@@ -323,17 +324,49 @@ async fn runtime_spawn_script_embeds_args() {
 
 use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter};
 
-/// setup_rootfs must fail when no Lima VM is available (limactl not found).
+/// setup_rootfs must pass the overlay mount as argv so spaced macOS paths work.
 #[test]
-fn filesystem_setup_rootfs_fails_without_vm() {
-    let fs = ColimaFilesystem::new();
-    let result = fs.setup_rootfs(
-        &[PathBuf::from("/tmp/layer0")],
-        &PathBuf::from("/tmp/container-test"),
+fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
+    use std::sync::{Arc, Mutex};
+
+    let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let recorded = calls.clone();
+    let fs = ColimaFilesystem::new().with_executor(Arc::new(move |args: &[&str]| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
+        Ok(String::new())
+    }));
+
+    let merged = fs
+        .setup_rootfs(
+            &[PathBuf::from("/tmp/layer0")],
+            &PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test"),
+        )
+        .expect("setup_rootfs should succeed with injected executor");
+
+    assert_eq!(
+        merged,
+        PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
     );
+
+    let calls = calls.lock().unwrap();
+    let mount_call = calls
+        .iter()
+        .find(|call| {
+            call.first().map(String::as_str) == Some("sudo")
+                && call.get(1).map(String::as_str) == Some("mount")
+        })
+        .expect("expected sudo mount invocation");
     assert!(
-        result.is_err(),
-        "setup_rootfs must fail when limactl is not available"
+        mount_call[6].starts_with("lowerdir=/tmp/layer0,upperdir=/Users/joe/Library/Application Support/minibox/container-test/upper,"),
+        "mount options must preserve the spaced host path, got: {}",
+        mount_call[6]
+    );
+    assert_eq!(
+        mount_call[7],
+        "/Users/joe/Library/Application Support/minibox/container-test/merged"
     );
 }
 
@@ -348,54 +381,172 @@ fn filesystem_pivot_root_is_noop() {
     );
 }
 
-/// cleanup must fail when no Lima VM is available (limactl not found).
+/// cleanup must use sudo for the umount before removing the container dir.
 #[test]
-fn filesystem_cleanup_fails_without_vm() {
-    let fs = ColimaFilesystem::new();
-    let result = fs.cleanup(&PathBuf::from("/tmp/container-test"));
-    assert!(
-        result.is_err(),
-        "cleanup must fail when limactl is not available"
+fn filesystem_cleanup_uses_sudo_umount() {
+    use std::sync::{Arc, Mutex};
+
+    let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let recorded = calls.clone();
+    let fs = ColimaFilesystem::new().with_executor(Arc::new(move |args: &[&str]| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
+        Ok(String::new())
+    }));
+
+    fs.cleanup(&PathBuf::from("/tmp/container-test"))
+        .expect("cleanup should succeed with injected executor");
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(
+        calls[0],
+        vec![
+            "sudo".to_string(),
+            "umount".to_string(),
+            "/tmp/container-test/merged".to_string()
+        ]
+    );
+    assert_eq!(
+        calls[1],
+        vec![
+            "rm".to_string(),
+            "-rf".to_string(),
+            "/tmp/container-test".to_string()
+        ]
     );
 }
 
-/// ResourceLimiter::create must fail when no Lima VM is available.
+/// ResourceLimiter::create must use sudo for cgroup setup and writes.
 #[test]
-fn limiter_create_fails_without_vm() {
+fn limiter_create_uses_sudo_for_cgroup_operations() {
     use linuxbox::domain::ResourceConfig;
+    use std::sync::{Arc, Mutex};
 
-    let limiter = ColimaLimiter::new();
+    let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let recorded = calls.clone();
+    let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
+        Ok(String::new())
+    }));
     let config = ResourceConfig {
         memory_limit_bytes: Some(128 * 1024 * 1024),
         cpu_weight: Some(100),
         pids_max: None,
         io_max_bytes_per_sec: None,
     };
-    let result = limiter.create("test-container-id", &config);
-    assert!(
-        result.is_err(),
-        "create must fail when limactl is not available"
+    let path = limiter
+        .create("test-container-id", &config)
+        .expect("create should succeed with injected executor");
+
+    assert_eq!(path, "/sys/fs/cgroup/minibox/test-container-id");
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(
+        calls[1],
+        vec![
+            "sudo".to_string(),
+            "mkdir".to_string(),
+            "-p".to_string(),
+            "/sys/fs/cgroup/minibox".to_string()
+        ]
     );
+    assert_eq!(
+        calls[2],
+        vec![
+            "sudo".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo +cpu +memory +pids +io > /sys/fs/cgroup/minibox/cgroup.subtree_control"
+                .to_string(),
+        ]
+    );
+    assert_eq!(
+        calls[3],
+        vec![
+            "sudo".to_string(),
+            "mkdir".to_string(),
+            "-p".to_string(),
+            "/sys/fs/cgroup/minibox/test-container-id".to_string()
+        ]
+    );
+    assert!(calls.iter().any(|call| {
+        call == &vec![
+            "sudo".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo 134217728 > /sys/fs/cgroup/minibox/test-container-id/memory.max".to_string(),
+        ]
+    }));
+    assert!(calls.iter().any(|call| {
+        call == &vec![
+            "sudo".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo 100 > /sys/fs/cgroup/minibox/test-container-id/cpu.weight".to_string(),
+        ]
+    }));
 }
 
-/// ResourceLimiter::add_process must fail when no Lima VM is available.
+/// ResourceLimiter::add_process must use sudo for cgroup.procs writes.
 #[test]
-fn limiter_add_process_fails_without_vm() {
-    let limiter = ColimaLimiter::new();
-    let result = limiter.add_process("test-container-id", 1234);
-    assert!(
-        result.is_err(),
-        "add_process must fail when limactl is not available"
-    );
+fn limiter_add_process_uses_sudo() {
+    use std::sync::{Arc, Mutex};
+
+    let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let recorded = calls.clone();
+    let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
+        Ok(String::new())
+    }));
+
+    limiter
+        .add_process("test-container-id", 1234)
+        .expect("add_process should succeed with injected executor");
+
+    let calls = calls.lock().unwrap();
+    assert!(calls.iter().any(|call| {
+        call == &vec![
+            "sudo".to_string(),
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo 1234 > /sys/fs/cgroup/minibox/test-container-id/cgroup.procs".to_string(),
+        ]
+    }));
 }
 
-/// ResourceLimiter::cleanup must fail when no Lima VM is available.
+/// ResourceLimiter::cleanup must use sudo for cgroup removal.
 #[test]
-fn limiter_cleanup_fails_without_vm() {
-    let limiter = ColimaLimiter::new();
-    let result = limiter.cleanup("test-container-id");
-    assert!(
-        result.is_err(),
-        "cleanup must fail when limactl is not available"
-    );
+fn limiter_cleanup_uses_sudo_rmdir() {
+    use std::sync::{Arc, Mutex};
+
+    let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let recorded = calls.clone();
+    let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
+        recorded
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|arg| arg.to_string()).collect());
+        Ok(String::new())
+    }));
+
+    limiter
+        .cleanup("test-container-id")
+        .expect("cleanup should succeed with injected executor");
+
+    let calls = calls.lock().unwrap();
+    assert!(calls.iter().any(|call| {
+        call == &vec![
+            "sudo".to_string(),
+            "rmdir".to_string(),
+            "/sys/fs/cgroup/minibox/test-container-id".to_string(),
+        ]
+    }));
 }

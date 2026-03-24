@@ -44,8 +44,10 @@ pub enum CredentialKind {
     SshKey,
 }
 
-impl CredentialKind {
-    pub fn from_str(s: &str) -> Result<Self, CredentialError> {
+impl std::str::FromStr for CredentialKind {
+    type Err = CredentialError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "api_key" => Ok(Self::ApiKey),
             "token" => Ok(Self::Token),
@@ -105,7 +107,7 @@ impl CredentialRef {
             ))
         })?;
 
-        let kind = CredentialKind::from_str(kind_str)?;
+        let kind = kind_str.parse::<CredentialKind>()?;
 
         let (scheme, path) = if let Some(p) = prefix.strip_prefix("op://") {
             (CredentialScheme::OnePassword, p.to_string())
