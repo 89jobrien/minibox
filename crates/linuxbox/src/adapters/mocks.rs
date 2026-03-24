@@ -488,6 +488,8 @@ pub struct MockNetwork {
 struct MockNetworkState {
     /// Whether `setup` should succeed.
     setup_should_succeed: bool,
+    /// Whether `cleanup` should succeed.
+    cleanup_should_succeed: bool,
     /// Running count of `setup` invocations.
     setup_count: usize,
     /// Running count of `cleanup` invocations.
@@ -500,6 +502,7 @@ impl MockNetwork {
         Self {
             state: Arc::new(Mutex::new(MockNetworkState {
                 setup_should_succeed: true,
+                cleanup_should_succeed: true,
                 setup_count: 0,
                 cleanup_count: 0,
             })),
@@ -509,6 +512,12 @@ impl MockNetwork {
     /// Configure `setup` to return an error.
     pub fn with_setup_failure(self) -> Self {
         self.state.lock().unwrap().setup_should_succeed = false;
+        self
+    }
+
+    /// Configure `cleanup` to return an error.
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state.lock().unwrap().cleanup_should_succeed = false;
         self
     }
 
@@ -547,10 +556,14 @@ impl NetworkProvider for MockNetwork {
 
     /// Simulate network cleanup.
     ///
-    /// Increments the cleanup counter. Always succeeds.
+    /// Increments the cleanup counter. Returns an error if configured via
+    /// [`with_cleanup_failure`].
     async fn cleanup(&self, _container_id: &str) -> Result<()> {
         let mut state = self.state.lock().unwrap();
         state.cleanup_count += 1;
+        if !state.cleanup_should_succeed {
+            anyhow::bail!("mock network cleanup failure");
+        }
         Ok(())
     }
 
