@@ -461,7 +461,7 @@ fn limiter_create_uses_sudo_for_cgroup_operations() {
             "sudo".to_string(),
             "sh".to_string(),
             "-c".to_string(),
-            "echo +cpu +memory +pids +io > /sys/fs/cgroup/minibox/cgroup.subtree_control"
+            "echo +cpu +memory +pids +io > /sys/fs/cgroup/minibox/cgroup.subtree_control 2>/dev/null || true"
                 .to_string(),
         ]
     );

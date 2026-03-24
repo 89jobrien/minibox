@@ -278,11 +278,10 @@ impl ImageRegistry for ColimaRegistry {
             .map(|(index, layer_tar_rel)| {
                 let layer_tar = format!("{export_base}/{layer_tar_rel}");
                 let layer_rootfs = format!("{export_base}/rootfs-{index}");
-                let _ = self.lima_exec(&[
-                    "sh",
-                    "-c",
-                    &format!("mkdir -p {layer_rootfs} && tar xf {layer_tar} -C {layer_rootfs} 2>/dev/null || true"),
-                ]);
+                // Use two separate argv-style calls instead of sh -c to avoid
+                // command injection via shell metacharacters in manifest-provided paths.
+                let _ = self.lima_exec(&["mkdir", "-p", &layer_rootfs]);
+                let _ = self.lima_exec(&["tar", "xf", &layer_tar, "-C", &layer_rootfs]);
                 PathBuf::from(layer_rootfs)
             })
             .collect();
@@ -542,12 +541,15 @@ impl ResourceLimiter for ColimaLimiter {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
         self.lima_exec(&["sudo", "mkdir", "-p", parent_cgroup])?;
-        self.lima_exec(&[
+        // Writing to subtree_control fails with EBUSY on cgroup v2 once child
+        // cgroups already exist (kernel restriction). Ignore the error so that
+        // the second and subsequent container creations succeed.
+        let _ = self.lima_exec(&[
             "sudo",
             "sh",
             "-c",
-            &format!("echo +cpu +memory +pids +io > {parent_cgroup}/cgroup.subtree_control"),
-        ])?;
+            &format!("echo +cpu +memory +pids +io > {parent_cgroup}/cgroup.subtree_control 2>/dev/null || true"),
+        ]);
         self.lima_exec(&["sudo", "mkdir", "-p", &cgroup_path])?;
 
         if let Some(memory_bytes) = config.memory_limit_bytes {
