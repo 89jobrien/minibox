@@ -540,6 +540,7 @@ fn create_test_deps_with_network(
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -876,6 +877,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
     // Build deps with the failable mock (setup succeeds by default).
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: failable_fs.clone(),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),

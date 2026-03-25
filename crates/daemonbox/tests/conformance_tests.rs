@@ -73,6 +73,7 @@ fn mock_deps_with_network(
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
