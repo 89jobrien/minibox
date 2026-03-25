@@ -7,8 +7,8 @@
 //!   filesystem and mount essential pseudo-filesystems.
 //! - [`cleanup_mounts`] -- called after container exit to unmount and clean up.
 
+use crate::error::FilesystemError;
 use anyhow::Context;
-use minibox_core::error::FilesystemError;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
