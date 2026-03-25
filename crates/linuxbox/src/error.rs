@@ -161,6 +161,9 @@ pub enum RegistryError {
     #[error("no linux/amd64 manifest found in manifest list")]
     NoAmd64Manifest,
 
+    #[error("manifest list nesting too deep (max 2 levels)")]
+    ManifestNestingTooDeep,
+
     #[error("registry error: {0}")]
     Other(String),
 }

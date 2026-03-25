@@ -15,10 +15,10 @@ const COL_PID: usize = 8;
 /// Execute the `ps` subcommand.
 ///
 /// Prints a formatted table of all containers known to the daemon.
-pub async fn execute() -> anyhow::Result<()> {
+pub async fn execute(socket_path: &std::path::Path) -> anyhow::Result<()> {
     let request = DaemonRequest::List;
 
-    let client = DaemonClient::new().context("failed to create daemon client")?;
+    let client = DaemonClient::with_socket(socket_path);
     let mut stream = client
         .call(request)
         .await
@@ -116,6 +116,80 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use linuxbox::protocol::ContainerInfo;
+
+    /// Bind a Unix socket, accept one connection, read one request line,
+    /// respond with `response`, then close.  Returns the socket path.
+    #[cfg(unix)]
+    async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::UnixListener;
+
+        let listener = UnixListener::bind(socket_path).unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read_half, mut write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let mut resp = serde_json::to_string(&response).unwrap();
+        resp.push('\n');
+        write_half.write_all(resp.as_bytes()).await.unwrap();
+        write_half.flush().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn execute_prints_empty_list() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let socket_path = tmp.path().join("test.sock");
+
+        let sp = socket_path.clone();
+        tokio::spawn(async move {
+            serve_once(&sp, DaemonResponse::ContainerList { containers: vec![] }).await;
+        });
+
+        // Give server a moment to bind
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let result = execute(&socket_path).await;
+        assert!(
+            result.is_ok(),
+            "execute should succeed with empty list: {result:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn execute_prints_container_row() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let socket_path = tmp.path().join("test.sock");
+
+        let container = ContainerInfo {
+            id: "abc123456789".to_string(),
+            image: "alpine".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(42),
+        };
+
+        let sp = socket_path.clone();
+        tokio::spawn(async move {
+            serve_once(
+                &sp,
+                DaemonResponse::ContainerList {
+                    containers: vec![container],
+                },
+            )
+            .await;
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let result = execute(&socket_path).await;
+        assert!(
+            result.is_ok(),
+            "execute should succeed with one container: {result:?}"
+        );
+    }
 
     #[test]
     fn truncate_empty_string_unchanged() {

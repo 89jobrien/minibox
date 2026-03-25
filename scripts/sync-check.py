@@ -29,6 +29,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import os as _os
+_os.environ.pop("CLAUDECODE", None)
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 _LOG_FILE = Path.home() / ".mbx" / "agent-runs.jsonl"

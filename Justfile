@@ -60,6 +60,12 @@ coverage:
     cargo llvm-cov nextest -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
+# CLI subprocess integration tests (builds binary first, any platform)
+test-cli-subprocess:
+    cargo build -p minibox-cli
+    MINIBOX_TEST_BIN_DIR={{justfile_directory()}}/target/debug \
+        cargo test -p minibox-cli --features subprocess-tests --test cli_subprocess
+
 # Cgroup integration tests (Linux, root)
 test-integration:
     sudo -E cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture

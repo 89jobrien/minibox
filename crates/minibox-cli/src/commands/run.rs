@@ -39,6 +39,7 @@ pub async fn execute(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: String,
+    socket_path: &std::path::Path,
 ) -> Result<()> {
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
@@ -60,7 +61,7 @@ pub async fn execute(
         network: Some(network_mode),
     };
 
-    let client = DaemonClient::new().context("failed to create daemon client")?;
+    let client = DaemonClient::with_socket(socket_path);
     let mut stream = client
         .call(request)
         .await
@@ -110,6 +111,109 @@ pub async fn execute(
 mod tests {
     use super::*;
     use linuxbox::protocol::{DaemonResponse, OutputStreamKind};
+
+    #[cfg(unix)]
+    async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(socket_path).unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read_half, mut write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let mut resp = serde_json::to_string(&response).unwrap();
+        resp.push('\n');
+        write_half.write_all(resp.as_bytes()).await.unwrap();
+        write_half.flush().await.unwrap();
+    }
+
+    /// ContainerCreated is the non-streaming legacy path — returns Ok(()) without
+    /// calling process::exit, so it's the only execute() path testable in-process.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn execute_returns_ok_on_container_created() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let socket_path = tmp.path().join("test.sock");
+        let sp = socket_path.clone();
+        tokio::spawn(async move {
+            serve_once(
+                &sp,
+                DaemonResponse::ContainerCreated {
+                    id: "abc123".to_string(),
+                },
+            )
+            .await;
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let result = execute(
+            "alpine".to_string(),
+            "latest".to_string(),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            "none".to_string(),
+            &socket_path,
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "execute should return Ok on ContainerCreated: {result:?}"
+        );
+    }
+
+    fn network_mode_from_str(s: &str) -> Result<NetworkMode> {
+        match s {
+            "none" => Ok(NetworkMode::None),
+            "bridge" => Ok(NetworkMode::Bridge),
+            "host" => Ok(NetworkMode::Host),
+            "tailnet" => Ok(NetworkMode::Tailnet),
+            other => anyhow::bail!(
+                "unknown network mode: {other} (expected: none, bridge, host, tailnet)"
+            ),
+        }
+    }
+
+    #[test]
+    fn network_mode_none() {
+        assert!(matches!(
+            network_mode_from_str("none").unwrap(),
+            NetworkMode::None
+        ));
+    }
+
+    #[test]
+    fn network_mode_bridge() {
+        assert!(matches!(
+            network_mode_from_str("bridge").unwrap(),
+            NetworkMode::Bridge
+        ));
+    }
+
+    #[test]
+    fn network_mode_host() {
+        assert!(matches!(
+            network_mode_from_str("host").unwrap(),
+            NetworkMode::Host
+        ));
+    }
+
+    #[test]
+    fn network_mode_tailnet() {
+        assert!(matches!(
+            network_mode_from_str("tailnet").unwrap(),
+            NetworkMode::Tailnet
+        ));
+    }
+
+    #[test]
+    fn network_mode_unknown_errors() {
+        let err = network_mode_from_str("docker").unwrap_err();
+        assert!(
+            err.to_string().contains("unknown network mode"),
+            "unexpected error: {err}"
+        );
+    }
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]

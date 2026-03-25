@@ -23,6 +23,8 @@ import os as _os
 _sys.path.insert(0, _os.path.dirname(__file__))
 import agent_log
 
+_os.environ.pop("CLAUDECODE", None)
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 _DEFAULT_REPOS_DIR = Path.home() / "dev"

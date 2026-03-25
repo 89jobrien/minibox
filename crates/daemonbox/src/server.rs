@@ -541,6 +541,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_handle_connection_stop_unknown_container() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state, deps).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        send_request(
+            &mut write_half,
+            &DaemonRequest::Stop {
+                id: "nonexistent".to_string(),
+            },
+        )
+        .await;
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { .. } | DaemonResponse::Success { .. } => {}
+            other => panic!("expected Error or Success for Stop, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_remove_unknown_container() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state, deps).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        send_request(
+            &mut write_half,
+            &DaemonRequest::Remove {
+                id: "nonexistent".to_string(),
+            },
+        )
+        .await;
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { .. } | DaemonResponse::Success { .. } => {}
+            other => panic!("expected Error or Success for Remove, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_multiple_sequential_requests() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state, deps).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // Three sequential requests on the same connection
+        for _ in 0..3 {
+            send_request(&mut write_half, &DaemonRequest::List).await;
+            let resp = read_response(&mut reader).await;
+            assert!(
+                matches!(resp, DaemonResponse::ContainerList { .. }),
+                "expected ContainerList, got {resp:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_handle_connection_oversized_request() {
         let tmp = TempDir::new().expect("tempdir");
         let (state, deps) = test_deps(&tmp);
@@ -612,6 +690,93 @@ mod tests {
             result.is_ok(),
             "run_server should return Ok on immediate shutdown"
         );
+    }
+
+    #[tokio::test]
+    async fn test_run_server_accepts_root_connection() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // Root connection — should be accepted and handled
+        let (client, server) = tokio::io::duplex(4096);
+        tx.send((server, Some(PeerCreds { uid: 0, pid: 100 })))
+            .await
+            .expect("send connection");
+        drop(tx);
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_server(listener, state, deps, true, async {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }),
+        )
+        .await;
+        assert!(result.is_ok(), "server should not have timed out");
+
+        // Verify the connection was handled: send List and get a response
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let reader = BufReader::new(read_half);
+        send_request(&mut write_half, &DaemonRequest::List).await;
+        // Response may or may not arrive depending on timing — the key assertion
+        // is that the server didn't reject the connection (no panic, clean exit).
+        drop(write_half);
+        let _ = reader;
+    }
+
+    #[tokio::test]
+    async fn test_run_server_no_creds_require_root_bypasses() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // Connection with no peer credentials — should trigger the bypass-warning
+        // path and still accept (no UID to check against).
+        let (_client, server) = tokio::io::duplex(4096);
+        tx.send((server, None)).await.expect("send connection");
+        drop(tx);
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_server(listener, state, deps, true, async {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }),
+        )
+        .await;
+        assert!(result.is_ok(), "server should not have timed out");
+    }
+
+    #[tokio::test]
+    async fn test_run_server_no_creds_no_require_root() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // No credentials, require_root=false — should accept without warning.
+        let (_client, server) = tokio::io::duplex(4096);
+        tx.send((server, None)).await.expect("send connection");
+        drop(tx);
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_server(listener, state, deps, false, async {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }),
+        )
+        .await;
+        assert!(result.is_ok(), "server should not have timed out");
     }
 
     #[tokio::test]

@@ -37,6 +37,9 @@ import os as _os
 _sys.path.insert(0, _os.path.dirname(__file__))
 import agent_log
 
+# Allow spawning nested claude subprocesses when running inside a Claude Code session
+_os.environ.pop("CLAUDECODE", None)
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -195,7 +198,8 @@ async def design_agents(task: str, repo_ctx: str, sdk_docs: str) -> list[dict]:
             f"## Repo context\n{repo_ctx[:4000]}\n\n"
             f"## Claude Agent SDK docs (for designing agent prompts correctly)\n{sdk_docs[:6000]}"
         ),
-        options=ClaudeAgentOptions(allowed_tools=SAFE_TOOLS, permission_mode="default"),
+        options=ClaudeAgentOptions(allowed_tools=SAFE_TOOLS, permission_mode="default",
+                                   stderr=lambda line: print(f"[designer-stderr] {line}", flush=True)),
     ):
         if hasattr(message, "result"):
             parts.append(message.result)

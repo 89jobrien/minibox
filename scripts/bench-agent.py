@@ -28,6 +28,8 @@ _sys.path.insert(0, _os.path.dirname(__file__))
 import agent_log
 import bench_data
 
+_os.environ.pop("CLAUDECODE", None)
+
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 

@@ -32,6 +32,8 @@ libc = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 proptest = "1"
+wiremock = { workspace = true }
+serde_json = { workspace = true }
 
 [[bench]]
 name = "trait_overhead"

@@ -23,6 +23,7 @@ mod commands;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::path::Path;
 
 /// Top-level CLI argument parser.  Delegates to [`Commands`] for subcommand
 /// dispatch.
@@ -111,6 +112,9 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    let socket_path = minibox_client::default_socket_path();
+    let socket_path: &Path = &socket_path;
+
     match cli.command {
         Commands::Run {
             image,
@@ -119,15 +123,26 @@ async fn main() -> Result<()> {
             cpu_weight,
             tag,
             network,
-        } => commands::run::execute(image, tag, command, memory, cpu_weight, network).await,
+        } => {
+            commands::run::execute(
+                image,
+                tag,
+                command,
+                memory,
+                cpu_weight,
+                network,
+                socket_path,
+            )
+            .await
+        }
 
-        Commands::Ps => commands::ps::execute().await,
+        Commands::Ps => commands::ps::execute(socket_path).await,
 
-        Commands::Stop { id } => commands::stop::execute(id).await,
+        Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
-        Commands::Rm { id } => commands::rm::execute(id).await,
+        Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
 
-        Commands::Pull { image, tag } => commands::pull::execute(image, tag).await,
+        Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
     }
 }
 
