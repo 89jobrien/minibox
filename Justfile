@@ -175,3 +175,25 @@ nuke-test-state:
 
 metrics-report:
     uv run python scripts/collect_metrics.py --reports-dir artifacts/reports
+
+# ── Agentbox (Go) ─────────────────────────────────────────────────────
+
+# Build all agentbox binaries
+agentbox-build:
+    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/mbx-commit-msg/
+
+# Run agentbox tests
+agentbox-test:
+    cd agentbox && go test ./... -v
+
+# Run council analysis (Go)
+agentbox-council *ARGS:
+    cd agentbox && go run ./cmd/agentbox/ council {{ARGS}}
+
+# Run meta-agent (Go)
+agentbox-meta-agent *ARGS:
+    cd agentbox && go run ./cmd/agentbox/ meta-agent {{ARGS}}
+
+# Generate commit message (Go)
+agentbox-commit-msg *ARGS:
+    cd agentbox && go run ./cmd/mbx-commit-msg/ {{ARGS}}
