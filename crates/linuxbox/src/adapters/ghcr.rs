@@ -260,6 +260,37 @@ impl GhcrRegistry {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Allowlist enforcement
+// ---------------------------------------------------------------------------
+
+/// Check `repo` (e.g. `"org/image"`) against the `GHCR_ORG_ALLOWLIST` env var.
+///
+/// The variable is a comma-separated list of org or `org/repo` prefixes.
+/// If the variable is unset, all repositories are permitted.
+/// If it is set, the pull is rejected unless `repo` equals a listed prefix
+/// or starts with one followed by `/`.
+///
+/// Example: `GHCR_ORG_ALLOWLIST=myorg,myorg/private-image`
+fn check_ghcr_allowlist(repo: &str) -> Result<()> {
+    let Ok(list) = std::env::var("GHCR_ORG_ALLOWLIST") else {
+        return Ok(()); // no allowlist configured → allow all
+    };
+    let permitted = list
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")));
+    if permitted {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "ghcr: repository {repo:?} is not in GHCR_ORG_ALLOWLIST ({list:?}); \
+             set GHCR_ORG_ALLOWLIST to include this org/repo or unset it to allow all"
+        )
+    }
+}
+
 as_any!(GhcrRegistry);
 
 // ---------------------------------------------------------------------------
@@ -281,6 +312,9 @@ impl ImageRegistry for GhcrRegistry {
         let store_key = image_ref.cache_name(); // "ghcr.io/org/image"
         let repo = image_ref.repository(); // "org/image" (for ghcr.io API path)
         let tag = &image_ref.tag;
+
+        check_ghcr_allowlist(&repo).with_context(|| format!("ghcr: allowlist check for {repo}"))?;
+
         info!("ghcr: pulling {store_key}:{tag}");
 
         let token = self
@@ -448,6 +482,36 @@ mod tests {
         assert_eq!(realm, "");
         assert_eq!(service, "");
         assert_eq!(scope, "");
+    }
+
+    // Mutex to serialise GHCR_ORG_ALLOWLIST mutation across parallel tests.
+    static ALLOWLIST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn allowlist_permits_when_unset() {
+        let _g = ALLOWLIST_ENV_LOCK.lock().unwrap();
+        // SAFETY: single-threaded section guarded by ALLOWLIST_ENV_LOCK.
+        unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
+        assert!(check_ghcr_allowlist("org/image").is_ok());
+    }
+
+    #[test]
+    fn allowlist_permits_matching_org() {
+        let _g = ALLOWLIST_ENV_LOCK.lock().unwrap();
+        // SAFETY: single-threaded section guarded by ALLOWLIST_ENV_LOCK.
+        unsafe { std::env::set_var("GHCR_ORG_ALLOWLIST", "myorg,otherorg") };
+        assert!(check_ghcr_allowlist("myorg/image").is_ok());
+        assert!(check_ghcr_allowlist("otherorg/tool").is_ok());
+        unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
+    }
+
+    #[test]
+    fn allowlist_rejects_unlisted_org() {
+        let _g = ALLOWLIST_ENV_LOCK.lock().unwrap();
+        // SAFETY: single-threaded section guarded by ALLOWLIST_ENV_LOCK.
+        unsafe { std::env::set_var("GHCR_ORG_ALLOWLIST", "allowedorg") };
+        assert!(check_ghcr_allowlist("otherog/img").is_err());
+        unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
     }
 
     #[test]

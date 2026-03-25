@@ -278,14 +278,23 @@ async fn main() -> Result<()> {
         std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
 
     // ── Directories ──────────────────────────────────────────────────────
-    for dir in &[
-        images_dir.as_path(),
-        containers_dir.as_path(),
-        Path::new(&run_dir),
-        Path::new(&run_containers_dir),
-    ] {
-        std::fs::create_dir_all(dir)
-            .with_context(|| format!("creating directory {}", dir.display()))?;
+    // Explicit 0700 keeps extracted layer/rootfs contents private on shared
+    // hosts (matters for the per-user ~/.mbx/cache path; harmless for the
+    // root-owned /var/lib/minibox default).
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        for dir in &[
+            images_dir.as_path(),
+            containers_dir.as_path(),
+            Path::new(&run_dir),
+            Path::new(&run_containers_dir),
+        ] {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(dir)
+                .with_context(|| format!("creating directory {}", dir.display()))?;
+        }
     }
 
     // ── Shared state ─────────────────────────────────────────────────────
