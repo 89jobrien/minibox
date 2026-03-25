@@ -16,8 +16,9 @@ mod helpers;
 use helpers::{DaemonFixture, extract_container_id};
 
 use linuxbox::preflight;
-use linuxbox::require_capability;
-use std::time::Duration;
+use minibox_core::require_capability;
+use std::process::Command;
+use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
 // Image operation tests
