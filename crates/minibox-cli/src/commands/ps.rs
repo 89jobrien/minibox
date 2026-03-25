@@ -1,8 +1,8 @@
 //! `minibox ps` — list all containers.
 
 use anyhow::Context;
-use linuxbox::protocol::{DaemonRequest, DaemonResponse};
 use minibox_client::DaemonClient;
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Column widths for the table output.
 const COL_ID: usize = 14;
@@ -116,7 +116,7 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::protocol::ContainerInfo;
+    use minibox_core::protocol::ContainerInfo;
 
     /// Bind a Unix socket, accept one connection, read one request line,
     /// respond with `response`, then close.  Returns the socket path.

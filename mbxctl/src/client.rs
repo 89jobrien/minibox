@@ -5,7 +5,7 @@
 //! rather than depending on a separate `minibox-client` crate.
 
 use anyhow::{Context, Result};
-use linuxbox::protocol::{DaemonRequest, DaemonResponse};
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 

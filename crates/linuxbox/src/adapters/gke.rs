@@ -27,13 +27,13 @@
 //! Activated by setting `MINIBOX_ADAPTER=gke` at daemon startup. The same
 //! binary works in both native and GKE modes — no recompilation needed.
 
-use crate::domain::{
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig, ResourceLimiter,
     RuntimeCapabilities, SpawnResult,
 };
-use crate::{adapt, as_any};
-use anyhow::{Context, Result};
-use async_trait::async_trait;
+use minibox_core::{adapt, as_any};
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 

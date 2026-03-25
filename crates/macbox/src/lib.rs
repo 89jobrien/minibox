@@ -25,7 +25,7 @@ use linuxbox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
-use linuxbox::image::ImageStore;
+use minibox_core::image::ImageStore;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;

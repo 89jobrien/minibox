@@ -28,11 +28,11 @@
 //! `xtask` can capture it without scanning the output directory.
 
 use linuxbox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use linuxbox::domain::{
+use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter,
 };
-use linuxbox::protocol::{
+use minibox_core::protocol::{
     ContainerInfo, DAEMON_SOCKET_PATH, DaemonRequest, DaemonResponse, decode_request,
     decode_response, encode_request, encode_response,
 };

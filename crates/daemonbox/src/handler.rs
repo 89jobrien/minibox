@@ -12,12 +12,12 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use linuxbox::domain::NetworkMode;
-use linuxbox::domain::{
+use minibox_core::domain::NetworkMode;
+use minibox_core::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
     DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec, ResourceConfig,
 };
-use linuxbox::protocol::{ContainerInfo, DaemonResponse};
+use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -151,7 +151,7 @@ async fn handle_run_streaming(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    use linuxbox::protocol::OutputStreamKind;
+    use minibox_core::protocol::OutputStreamKind;
     use std::os::fd::IntoRawFd;
 
     // Build the container ID and rootfs via the shared inner setup, but we need
@@ -266,7 +266,7 @@ async fn run_inner_capture(
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
     use anyhow::Context;
-    use linuxbox::domain::NetworkConfig;
+    use minibox_core::domain::NetworkConfig;
 
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 
@@ -445,7 +445,7 @@ async fn run_inner(
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
     use anyhow::Context;
-    use linuxbox::domain::NetworkConfig;
+    use minibox_core::domain::NetworkConfig;
 
     let tag = tag.unwrap_or_else(|| "latest".to_string());
 

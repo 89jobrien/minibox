@@ -8,7 +8,7 @@
 //! Streaming responses (`ContainerOutput`) continue until `ContainerStopped`.
 
 use anyhow::{Context, Result};
-use linuxbox::protocol::{DaemonRequest, DaemonResponse};
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::future::Future;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -279,8 +279,8 @@ mod tests {
     use linuxbox::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
-    use linuxbox::image::ImageStore;
-    use linuxbox::protocol::{DaemonRequest, DaemonResponse};
+    use minibox_core::image::ImageStore;
+    use minibox_core::protocol::{DaemonRequest, DaemonResponse};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

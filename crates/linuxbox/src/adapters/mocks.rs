@@ -29,14 +29,14 @@
 //! }
 //! ```
 
-use crate::adapt;
-use crate::domain::{
+use anyhow::Result;
+use async_trait::async_trait;
+use minibox_core::adapt;
+use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
     LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
     RuntimeCapabilities, SpawnResult,
 };
-use anyhow::Result;
-use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -674,7 +674,7 @@ adapt!(FailableFilesystemMock);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ContainerHooks;
+    use minibox_core::domain::ContainerHooks;
 
     #[test]
     fn mock_registry_has_image_sync_cached() {
@@ -685,7 +685,7 @@ mod tests {
 
     #[test]
     fn mock_runtime_spawn_process_sync_increments_count() {
-        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
+        use minibox_core::domain::{ContainerHooks, ContainerSpawnConfig};
         let runtime = MockRuntime::new();
         let cfg = ContainerSpawnConfig {
             rootfs: std::path::PathBuf::from("/mock/rootfs"),
@@ -830,7 +830,9 @@ mod tests {
 #[cfg(test)]
 mod macro_contract_tests {
     use super::*;
-    use crate::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use minibox_core::domain::{
+        ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter,
+    };
     use std::sync::Arc;
 
     #[test]

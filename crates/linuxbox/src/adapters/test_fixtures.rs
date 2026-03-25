@@ -19,7 +19,7 @@
 //! }
 //! ```
 
-use crate::domain::{
+use minibox_core::domain::{
     DynContainerRuntime, DynFilesystemProvider, DynImageRegistry, DynResourceLimiter,
 };
 use std::path::PathBuf;
@@ -181,7 +181,7 @@ impl TempContainerFixture {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ResourceConfig;
+    use minibox_core::domain::ResourceConfig;
     use std::path::Path;
 
     #[test]

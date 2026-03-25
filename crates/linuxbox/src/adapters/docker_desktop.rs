@@ -57,15 +57,15 @@
 //! 3. Execute minibox operations inside Linux environment
 //! 4. Return results to macOS host
 
-use crate::{
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use minibox_core::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
         ResourceLimiter, RuntimeCapabilities, SpawnResult,
     },
 };
-use anyhow::{Context, Result};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;

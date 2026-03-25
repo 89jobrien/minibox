@@ -8,7 +8,7 @@ use daemonbox::state::{ContainerRecord, DaemonState};
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use linuxbox::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
+use minibox_core::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
 // ── Runtime ───────────────────────────────────────────────────────────────────
