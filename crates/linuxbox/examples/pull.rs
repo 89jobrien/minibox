@@ -159,13 +159,14 @@ async fn main() -> anyhow::Result<()> {
 
     let store = Arc::new(ImageStore::new(&images_dir)?);
     let registry = DockerHubRegistry::new(store.clone())?;
+    let image_ref = linuxbox::ImageRef::parse(&format!("{name}:{tag}"))?;
 
     if registry.has_image(&name, &tag).await {
         ok("already cached — skipping pull");
     } else {
         step("fetching manifest + layers");
         let spinner = Spinner::start("pulling from Docker Hub...");
-        registry.pull_image(&name, &tag).await?;
+        registry.pull_image(&image_ref).await?;
         spinner.finish("layers extracted");
     }
 

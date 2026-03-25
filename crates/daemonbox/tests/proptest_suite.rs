@@ -37,6 +37,7 @@ fn runtime_is_shared_not_per_call() {
 fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),

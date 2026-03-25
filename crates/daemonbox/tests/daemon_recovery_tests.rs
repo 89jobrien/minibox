@@ -25,6 +25,7 @@ fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
 fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies> {
     Arc::new(daemonbox::handler::HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),

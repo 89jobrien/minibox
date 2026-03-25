@@ -57,6 +57,7 @@ fn make_deps(
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(registry),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(filesystem),
         resource_limiter: Arc::new(resource_limiter),
         runtime: Arc::new(runtime),
