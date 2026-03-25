@@ -1347,7 +1347,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -1355,9 +1354,6 @@ dependencies = [
 name = "minibox-client"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "base64",
- "futures",
  "minibox-core",
  "serde_json",
  "thiserror 2.0.18",
@@ -1371,7 +1367,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
- "chrono",
  "flate2",
  "futures",
  "hex",
@@ -1387,8 +1382,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "uuid",
- "walkdir",
  "wiremock",
 ]
 
@@ -1414,7 +1407,6 @@ version = "0.1.0"
 name = "minibox-secrets"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "hex",

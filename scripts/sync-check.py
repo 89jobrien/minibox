@@ -31,6 +31,8 @@ from pathlib import Path
 
 import os as _os
 _os.environ.pop("CLAUDECODE", None)
+if _os.environ.get("ANTHROPIC_API_KEY", "").startswith("op://"):
+    _os.environ.pop("ANTHROPIC_API_KEY")
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 

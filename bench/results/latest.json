@@ -1,10 +1,10 @@
 {
   "errors": [],
   "metadata": {
-    "git_sha": "462faffd6fc7868928d8ec03bde9665feb9cc29d",
+    "git_sha": "5b89dc186eea44839af4666a581f2ed08251f2f3",
     "hostname": "jobrien",
     "minibox_version": "minibox 0.1.0",
-    "timestamp": "2026-03-23T15:01:48.942472005+00:00"
+    "timestamp": "2026-03-25T10:19:51.931429405+00:00"
   },
   "suites": [
     {
@@ -12,14 +12,18 @@
       "tests": [
         {
           "durations_micros": [
-            366989
+            248290,
+            243914,
+            203624,
+            213059,
+            219218
           ],
-          "iterations": 1,
+          "iterations": 5,
           "name": "pull_alpine",
           "stats": {
-            "avg": 366989,
-            "min": 366989,
-            "p95": 366989
+            "avg": 225621,
+            "min": 203624,
+            "p95": 248290
           }
         }
       ]
@@ -29,18 +33,18 @@
       "tests": [
         {
           "durations_micros": [
-            23858,
-            13837,
-            25816,
-            21965,
-            33286
+            13281,
+            17688,
+            16798,
+            10471,
+            15081
           ],
           "iterations": 5,
           "name": "run_true",
           "stats": {
-            "avg": 23752,
-            "min": 13837,
-            "p95": 33286
+            "avg": 14663,
+            "min": 10471,
+            "p95": 17688
           }
         }
       ]
@@ -50,18 +54,18 @@
       "tests": [
         {
           "durations_micros": [
-            15391,
-            16489,
-            16992,
-            17648,
-            23876
+            12841,
+            9644,
+            20102,
+            23390,
+            12998
           ],
           "iterations": 5,
           "name": "exec_echo",
           "stats": {
-            "avg": 18079,
-            "min": 15391,
-            "p95": 23876
+            "avg": 15795,
+            "min": 9644,
+            "p95": 23390
           }
         }
       ]
@@ -71,26 +75,34 @@
       "tests": [
         {
           "durations_micros": [
-            233890
+            212265,
+            387153,
+            212666,
+            196659,
+            212968
           ],
-          "iterations": 1,
+          "iterations": 5,
           "name": "pull_alpine",
           "stats": {
-            "avg": 233890,
-            "min": 233890,
-            "p95": 233890
+            "avg": 244342,
+            "min": 196659,
+            "p95": 387153
           }
         },
         {
           "durations_micros": [
-            7624
+            15888,
+            23546,
+            11552,
+            29062,
+            10369
           ],
-          "iterations": 1,
+          "iterations": 5,
           "name": "run_true",
           "stats": {
-            "avg": 7624,
-            "min": 7624,
-            "p95": 7624
+            "avg": 18083,
+            "min": 10369,
+            "p95": 29062
           }
         }
       ]

@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-21
+**Last updated:** 2026-03-25
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -51,13 +51,22 @@ minibox-bench ──────────────────────
 
 | Suite | Count | Platform |
 |---|---|---|
-| linuxbox unit | ~95 | any |
+| linuxbox unit | ~102 | any |
 | minibox-cli unit | 11 | any |
 | daemonbox handler tests | 12 | any |
 | daemonbox conformance tests | 16 (+3 ignored) | any |
 | cgroup integration | 16 | Linux + root |
 | e2e daemon+CLI | 14 | Linux + root |
 | existing integration | 8 | Linux + root |
+
+Coverage snapshot (2026-03-25, `cargo xtask prepush`):
+
+| File | fn% | line% | Notes |
+|---|---|---|---|
+| `daemonbox/src/handler.rs` | 67.5% | 55% | Biggest gap — error paths in run/pull/stop/rm |
+| `linuxbox/src/adapters/ghcr.rs` | 74.5% | 89.7% | New; 4 wiremock tests added this session |
+| `daemonbox/src/server.rs` | 100% | 90.6% | Healthy |
+| `linuxbox/src/adapters/registry.rs` | 89.5% | 85.8% | Good |
 
 Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 `crates/miniboxd/tests/` during daemonbox extraction, 2026-03-18).
@@ -129,10 +138,25 @@ All items below are merged to `main`:
 - [x] macOS CI job
 - [x] `close_range(2)` fast path in `close_extra_fds()` (QEMU-inspired, 2026-03-21)
 - [x] `ci-setup` Justfile recipe made resilient (`rm || true`)
+- [x] GHCR adapter hardening (2026-03-25, commit `5b89dc1`):
+  - P0: fix double-prefix cache key bug (`has_image`/`get_image_layers` now use caller-supplied fully-qualified name)
+  - P1: stream layer blobs via `SyncIoBridge` + `spawn_blocking`; no more full-blob buffering
+  - P2: `authenticate()` probes actual tag instead of hardcoded `latest`
+  - P2: 4 wiremock behavioural tests (cache hit/miss, versioned-tag auth, streaming storage)
+  - P3: `GHCR_ORG_ALLOWLIST` env var to restrict which org/repos a shared PAT can pull
+  - P3: data/runtime dirs created with `mode(0o700)` to protect layer contents on shared hosts
 
 ---
 
 ## Next up
+
+### handler.rs coverage gap (highest ROI next target)
+
+`daemonbox/src/handler.rs` is at 67.5% function / 55% line coverage — the biggest real
+gap in the codebase. The uncovered 13 functions are almost certainly error branches in
+`handle_run`, `handle_pull`, `handle_stop`, `handle_rm`: image-not-found, container-
+already-stopped, registry failure, spawn_blocking join errors, etc. Add unit tests in
+`crates/daemonbox/tests/handler_*.rs` using mock adapters from `minibox_core::adapters::mocks`.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
