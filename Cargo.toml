@@ -48,6 +48,7 @@ tempfile = "3"
 async-trait = "0.1"
 walkdir = "2"
 base64 = "0.22"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
 
 # Benchmarking
 criterion = { version = "0.5", features = ["async_tokio"] }

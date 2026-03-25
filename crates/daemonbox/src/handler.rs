@@ -87,7 +87,7 @@ fn select_registry<'a>(
     docker: &'a dyn minibox_core::domain::ImageRegistry,
     ghcr: &'a dyn minibox_core::domain::ImageRegistry,
 ) -> &'a dyn minibox_core::domain::ImageRegistry {
-    if image_ref.registry == "ghcr.io" {
+    if image_ref.registry.to_lowercase() == "ghcr.io" {
         ghcr
     } else {
         docker
@@ -1025,6 +1025,25 @@ mod select_registry_tests {
             Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
 
         let ghcr_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
+        let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
+
+        assert!(std::ptr::eq(
+            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
+            ghcr.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
+        ));
+    }
+
+    #[test]
+    fn select_registry_routes_ghcr_case_insensitive() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
+        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
+        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+
+        // GHCR.IO (uppercase) must still route to the ghcr adapter
+        let ghcr_ref = ImageRef::parse("GHCR.IO/org/image:tag").unwrap();
         let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
 
         assert!(std::ptr::eq(

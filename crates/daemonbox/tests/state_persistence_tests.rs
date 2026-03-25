@@ -343,3 +343,98 @@ async fn test_update_container_state_non_stopped_preserves_pid() {
         "info.pid must not be cleared for non-Stopped transition"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Concurrent saves — atomicity under contention
+// ---------------------------------------------------------------------------
+
+/// Spawn N tasks that concurrently add/remove containers and verify that
+/// the final state is consistent — no panics, no lost containers, and
+/// the on-disk JSON is valid.
+///
+/// Validates the temp-write-and-rename atomicity guarantee under contention.
+#[tokio::test]
+async fn test_concurrent_add_remove_is_consistent() {
+    use std::sync::Arc;
+
+    let tmp = TempDir::new().unwrap();
+    let state = Arc::new(make_state(&tmp));
+
+    let n = 20usize;
+    let mut handles = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let s = Arc::clone(&state);
+        handles.push(tokio::spawn(async move {
+            let id = format!("container-{i:04}");
+            let record = make_record(&id, "Created", None);
+            s.add_container(record).await;
+            s.set_container_pid(&id, (1000 + i) as u32).await;
+            s.update_container_state(&id, "Stopped").await;
+            s.remove_container(&id).await;
+        }));
+    }
+
+    for h in handles {
+        h.await.expect("task panicked");
+    }
+
+    // All containers were added then removed — list must be empty.
+    let containers = state.list_containers().await;
+    assert!(
+        containers.is_empty(),
+        "expected 0 containers after concurrent add/remove, got {}",
+        containers.len()
+    );
+
+    // state.json must be valid JSON (not a torn write).
+    let json = std::fs::read_to_string(tmp.path().join("state.json"))
+        .expect("state.json must exist after saves");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&json).expect("state.json must be valid JSON after concurrent saves");
+    assert!(parsed.is_object(), "state.json root must be an object");
+}
+
+/// Concurrent readers see a consistent snapshot even while writers are active.
+#[tokio::test]
+async fn test_concurrent_read_during_writes_does_not_panic() {
+    use std::sync::Arc;
+
+    let tmp = TempDir::new().unwrap();
+    let state = Arc::new(make_state(&tmp));
+
+    // Pre-seed a container so readers have something to find.
+    let seed = make_record("seed-container", "Running", Some(42));
+    state.add_container(seed).await;
+
+    let n = 10usize;
+    let mut handles = Vec::with_capacity(n * 2);
+
+    // Writers: add and immediately remove transient containers.
+    for i in 0..n {
+        let s = Arc::clone(&state);
+        handles.push(tokio::spawn(async move {
+            let id = format!("transient-{i}");
+            s.add_container(make_record(&id, "Created", None)).await;
+            s.remove_container(&id).await;
+        }));
+    }
+
+    // Readers: list containers concurrently with writes.
+    for _ in 0..n {
+        let s = Arc::clone(&state);
+        handles.push(tokio::spawn(async move {
+            let _ = s.list_containers().await;
+        }));
+    }
+
+    for h in handles {
+        h.await.expect("task panicked");
+    }
+
+    // Seed container must still be present.
+    assert!(
+        state.get_container("seed-container").await.is_some(),
+        "seed container must survive concurrent writes"
+    );
+}

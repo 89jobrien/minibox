@@ -6,14 +6,17 @@
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use bytes::Bytes;
+use futures::TryStreamExt;
 use minibox_core::as_any;
 use minibox_core::domain::{ImageMetadata, ImageRegistry, LayerInfo};
 use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::ManifestResponse;
 use serde::Deserialize;
+use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::runtime::Handle;
+use tokio_util::io::{StreamReader, SyncIoBridge};
 use tracing::info;
 
 // ---------------------------------------------------------------------------
@@ -56,6 +59,7 @@ pub struct GhcrRegistry {
     store: Arc<ImageStore>,
     token: Option<String>, // GHCR_TOKEN env var
     http: reqwest::Client,
+    base_url: String,
 }
 
 impl GhcrRegistry {
@@ -69,19 +73,41 @@ impl GhcrRegistry {
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .build()?;
-        Ok(Self { store, token, http })
+        Ok(Self {
+            store,
+            token,
+            http,
+            base_url: GHCR_BASE.to_owned(),
+        })
+    }
+
+    /// Create a test adapter pointed at a plain-HTTP mock server.
+    #[cfg(test)]
+    fn for_test(store: Arc<ImageStore>, base_url: &str, token: Option<&str>) -> Self {
+        let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build()
+            .expect("test reqwest client");
+        Self {
+            store,
+            token: token.map(str::to_owned),
+            http,
+            base_url: base_url.to_owned(),
+        }
     }
 
     // -----------------------------------------------------------------------
     // Authentication
     // -----------------------------------------------------------------------
 
-    /// Obtain a Bearer token for `repo` via the `WWW-Authenticate` challenge.
+    /// Obtain a Bearer token for `repo`/`tag` via the `WWW-Authenticate` challenge.
     ///
-    /// Returns an empty string for unauthenticated public images.
-    async fn authenticate(&self, repo: &str) -> Result<String> {
-        // Probe the registry — it will respond with 401 + WWW-Authenticate.
-        let url = format!("{GHCR_BASE}/{repo}/manifests/latest");
+    /// Probes the manifest for the actual requested tag so that repos without a
+    /// `latest` tag can still authenticate. Returns an empty string for public images.
+    async fn authenticate(&self, repo: &str, tag: &str) -> Result<String> {
+        // Probe with the real tag — repos that don't publish `latest` return 404
+        // without a WWW-Authenticate header, breaking token exchange.
+        let url = format!("{}/{repo}/manifests/{tag}", self.base_url);
         let resp = self.http.get(&url).send().await?;
 
         if resp.status() == reqwest::StatusCode::OK {
@@ -135,7 +161,7 @@ impl GhcrRegistry {
         tag_or_digest: &str,
         token: &str,
     ) -> Result<crate::image::manifest::OciManifest> {
-        let url = format!("{GHCR_BASE}/{repo}/manifests/{tag_or_digest}");
+        let url = format!("{}/{repo}/manifests/{tag_or_digest}", self.base_url);
         let mut req = self.http.get(&url).header("Accept", ACCEPT_MANIFESTS);
         if !token.is_empty() {
             req = req.bearer_auth(token);
@@ -199,9 +225,12 @@ impl GhcrRegistry {
     // Blob / layer pull
     // -----------------------------------------------------------------------
 
-    /// Download a single blob by `digest` and return its raw bytes.
-    async fn pull_layer(&self, repo: &str, digest: &str, token: &str) -> Result<Bytes> {
-        let url = format!("{GHCR_BASE}/{repo}/blobs/{digest}");
+    /// Fetch a single blob by `digest` and return the streaming response.
+    ///
+    /// The Content-Length is checked against `MAX_LAYER_SIZE` before returning.
+    /// The caller is responsible for streaming the body to disk.
+    async fn pull_layer(&self, repo: &str, digest: &str, token: &str) -> Result<reqwest::Response> {
+        let url = format!("{}/{repo}/blobs/{digest}", self.base_url);
         let mut req = self.http.get(&url);
         if !token.is_empty() {
             req = req.bearer_auth(token);
@@ -218,7 +247,7 @@ impl GhcrRegistry {
             resp.status(),
         );
 
-        // SECURITY: Check Content-Length before downloading.
+        // SECURITY: Reject oversized layers before streaming begins.
         if let Some(cl) = resp.headers().get("content-length")
             && let Ok(s) = cl.to_str()
             && let Ok(n) = s.parse::<u64>()
@@ -227,17 +256,7 @@ impl GhcrRegistry {
             anyhow::bail!("ghcr: layer too large: {n} bytes (max {MAX_LAYER_SIZE})");
         }
 
-        let bytes = resp
-            .bytes()
-            .await
-            .with_context(|| format!("ghcr: reading blob body for {digest}"))?;
-
-        anyhow::ensure!(
-            bytes.len() as u64 <= MAX_LAYER_SIZE,
-            "ghcr: layer {digest} exceeded size limit",
-        );
-
-        Ok(bytes)
+        Ok(resp)
     }
 }
 
@@ -250,9 +269,9 @@ as_any!(GhcrRegistry);
 #[async_trait]
 impl ImageRegistry for GhcrRegistry {
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        // GHCR images stored with "ghcr.io/" prefix to avoid collisions.
-        let store_key = format!("ghcr.io/{name}");
-        self.store.has_image(&store_key, tag)
+        // Callers pass image_ref.cache_name() which is already fully-qualified
+        // (e.g. "ghcr.io/org/image"), so use it directly.
+        self.store.has_image(name, tag)
     }
 
     async fn pull_image(
@@ -265,9 +284,9 @@ impl ImageRegistry for GhcrRegistry {
         info!("ghcr: pulling {store_key}:{tag}");
 
         let token = self
-            .authenticate(&repo)
+            .authenticate(&repo, tag)
             .await
-            .with_context(|| format!("ghcr: authenticate for {repo}"))?;
+            .with_context(|| format!("ghcr: authenticate for {repo}:{tag}"))?;
 
         let manifest = self
             .get_manifest(&repo, tag, &token)
@@ -277,14 +296,29 @@ impl ImageRegistry for GhcrRegistry {
         let mut layer_infos = Vec::new();
         for layer in &manifest.layers {
             let digest = &layer.digest;
-            let data = self
+            let resp = self
                 .pull_layer(&repo, digest, &token)
                 .await
                 .with_context(|| format!("ghcr: pull layer {digest}"))?;
 
-            self.store
-                .store_layer(&store_key, tag, digest, std::io::Cursor::new(data))
-                .with_context(|| format!("ghcr: store layer {digest}"))?;
+            // Stream the blob body directly into ImageStore without buffering.
+            let stream = resp.bytes_stream().map_err(io::Error::other);
+            let async_reader = StreamReader::new(stream);
+            // Capture the runtime handle before entering spawn_blocking — inside
+            // a blocking thread there is no Tokio context to call Handle::current().
+            let handle = Handle::current();
+            let store = Arc::clone(&self.store);
+            let store_key2 = store_key.clone();
+            let tag2 = tag.to_owned();
+            let digest2 = digest.clone();
+            tokio::task::spawn_blocking(move || {
+                let sync_reader = SyncIoBridge::new_with_handle(async_reader, handle);
+                store
+                    .store_layer(&store_key2, &tag2, &digest2, sync_reader)
+                    .with_context(|| format!("ghcr: store layer {digest2}"))
+            })
+            .await
+            .context("ghcr: spawn_blocking for store_layer")??;
 
             layer_infos.push(LayerInfo {
                 digest: layer.digest.clone(),
@@ -307,8 +341,8 @@ impl ImageRegistry for GhcrRegistry {
     }
 
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
-        let store_key = format!("ghcr.io/{name}");
-        self.store.get_image_layers(&store_key, tag)
+        // Callers pass image_ref.cache_name() which is already fully-qualified.
+        self.store.get_image_layers(name, tag)
     }
 }
 
@@ -422,5 +456,238 @@ mod tests {
         let store = Arc::new(ImageStore::new(dir.path().join("images")).unwrap());
         let reg = GhcrRegistry::new(store);
         assert!(reg.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // HTTP behaviour tests (wiremock)
+    // -------------------------------------------------------------------------
+
+    mod http {
+        use super::super::*;
+        use crate::image::ImageStore;
+        use flate2::{Compression, write::GzEncoder};
+        use serde_json::json;
+        use sha2::{Digest as ShaDigest, Sha256};
+        use std::io::Write;
+        use tempfile::TempDir;
+        use wiremock::matchers::{header, method, path, path_regex, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn make_store(dir: &TempDir) -> Arc<ImageStore> {
+            Arc::new(ImageStore::new(dir.path().join("images")).expect("ImageStore"))
+        }
+
+        /// Build a minimal gzip-compressed tar layer; return (bytes, sha256-digest).
+        fn make_test_layer() -> (Vec<u8>, String) {
+            let data = b"ghcr test layer";
+            let mut header = tar::Header::new_gnu();
+            header.set_path("hello.txt").expect("set path");
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+
+            let mut tar_buf = Vec::new();
+            {
+                let mut builder = tar::Builder::new(&mut tar_buf);
+                builder.append(&header, data.as_ref()).expect("append");
+                builder.finish().expect("finish");
+            }
+            let mut gz = GzEncoder::new(Vec::new(), Compression::fast());
+            gz.write_all(&tar_buf).expect("gz write");
+            let bytes = gz.finish().expect("gz finish");
+            let digest = format!("sha256:{}", hex::encode(Sha256::digest(&bytes)));
+            (bytes, digest)
+        }
+
+        /// OCI manifest JSON for a single layer.
+        fn manifest_json(digest: &str, size: usize) -> serde_json::Value {
+            json!({
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "config": {
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "digest": "sha256:abc",
+                    "size": 100
+                },
+                "layers": [{
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                    "digest": digest,
+                    "size": size
+                }]
+            })
+        }
+
+        /// Mount a complete auth + manifest flow for `repo`/`tag`.
+        ///
+        /// wiremock uses FIFO matching (first registered = highest priority).
+        /// Registration order:
+        ///
+        /// 1. 200 manifest mock with `Authorization: Bearer {tok}` (FIRST = highest
+        ///    priority) — only matches authenticated requests.
+        /// 2. Token exchange mock.
+        /// 3. 401 mock (LAST = lowest priority) — fallback for the unauthenticated
+        ///    probe which lacks the Authorization header and skips mock 1.
+        async fn mount_auth_with_manifest(
+            server: &MockServer,
+            repo: &str,
+            tag: &str,
+            tok: &str,
+            manifest_body: Vec<u8>,
+        ) {
+            let manifest_path = format!("/v2/{repo}/manifests/{tag}");
+            let www_auth = format!(
+                r#"Bearer realm="{}/token",service="ghcr.io",scope="repository:{repo}:pull""#,
+                server.uri(),
+            );
+            // Step 1 (FIFO highest priority): authenticated manifest fetch.
+            // Only matches requests that carry Authorization: Bearer <tok>.
+            Mock::given(method("GET"))
+                .and(path(&manifest_path))
+                .and(header("Authorization", format!("Bearer {tok}").as_str()))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_raw(manifest_body, "application/vnd.oci.image.manifest.v1+json"),
+                )
+                .expect(1)
+                .mount(server)
+                .await;
+            // Step 2: token exchange.
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .and(query_param("service", "ghcr.io"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "token": tok })))
+                .expect(1)
+                .mount(server)
+                .await;
+            // Step 3 (FIFO lowest priority): unauthenticated probe → 401.
+            // The probe has no Authorization header so it skips mock 1 and lands here.
+            Mock::given(method("GET"))
+                .and(path(&manifest_path))
+                .respond_with(
+                    ResponseTemplate::new(401).insert_header("WWW-Authenticate", www_auth.as_str()),
+                )
+                .expect(1)
+                .mount(server)
+                .await;
+        }
+
+        // ------------------------------------------------------------------
+        // Cache hit / miss
+        // ------------------------------------------------------------------
+
+        #[tokio::test]
+        async fn has_image_returns_false_for_empty_store() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let reg = GhcrRegistry::for_test(store, "http://unused", None);
+            assert!(!reg.has_image("ghcr.io/org/image", "latest").await);
+        }
+
+        #[tokio::test]
+        async fn has_image_returns_true_after_pull() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            let manifest = serde_json::to_vec(&manifest_json(&digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/img", "v1.0", "tok", manifest).await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/img/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref =
+                crate::image::reference::ImageRef::parse("ghcr.io/org/img:v1.0").expect("ref");
+            reg.pull_image(&image_ref).await.expect("pull_image");
+
+            assert!(reg.has_image("ghcr.io/org/img", "v1.0").await);
+        }
+
+        // ------------------------------------------------------------------
+        // Auth: versioned tag, no `latest`
+        // ------------------------------------------------------------------
+
+        #[tokio::test]
+        async fn authenticate_succeeds_with_versioned_tag_no_latest() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+
+            // The repo has no `latest` — only `v2.3.1`.
+            // authenticate() must probe /manifests/v2.3.1, not /manifests/latest.
+            let www_auth = format!(
+                r#"Bearer realm="{}/token",service="ghcr.io",scope="repository:org/versioned:pull""#,
+                server.uri(),
+            );
+            Mock::given(method("GET"))
+                .and(path("/v2/org/versioned/manifests/v2.3.1"))
+                .respond_with(
+                    ResponseTemplate::new(401).insert_header("WWW-Authenticate", www_auth.as_str()),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({ "token": "versioned_tok" })),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(store, &base, None);
+            let token = reg
+                .authenticate("org/versioned", "v2.3.1")
+                .await
+                .expect("authenticate");
+            assert_eq!(token, "versioned_tok");
+        }
+
+        // ------------------------------------------------------------------
+        // Streaming layer storage
+        // ------------------------------------------------------------------
+
+        #[tokio::test]
+        async fn pull_image_stores_layer_on_disk() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            let manifest = serde_json::to_vec(&manifest_json(&digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/streamed", "latest", "stream_tok", manifest)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/streamed/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref = crate::image::reference::ImageRef::parse("ghcr.io/org/streamed:latest")
+                .expect("parse ref");
+            reg.pull_image(&image_ref).await.expect("pull_image");
+
+            // Layer directory must exist after pull.
+            let layers = reg
+                .get_image_layers("ghcr.io/org/streamed", "latest")
+                .expect("get_image_layers");
+            assert!(!layers.is_empty(), "expected at least one layer dir");
+            assert!(layers[0].exists(), "layer dir should exist on disk");
+        }
     }
 }

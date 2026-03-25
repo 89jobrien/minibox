@@ -22,6 +22,7 @@ reqwest = { workspace = true }
 tempfile = { workspace = true }
 async-trait = { workspace = true }
 walkdir = { workspace = true }
+tokio-util = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }
@@ -32,6 +33,9 @@ proptest = "1"
 wiremock = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+hex = { workspace = true }
 
 [[bench]]
 name = "trait_overhead"
