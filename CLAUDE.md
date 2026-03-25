@@ -152,25 +152,28 @@ cargo xtask test-unit
 
 Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
 
-Ten crates in cargo workspace:
+Eleven crates in cargo workspace:
 
-1. **linuxbox** (library): Core container primitives, image management, shared protocol types
+1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types, image management (`ImageStore`, `RegistryClient`), preflight; re-exported by linuxbox for macro compatibility
+2. **linuxbox** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside linuxbox
    (formerly `minibox-lib` — renamed 2026-03-23; git history before this date uses the old name)
-2. **minibox-macros** (proc-macro): Derive macros used by linuxbox
-3. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
+3. **minibox-macros** (proc-macro): Derive macros used by linuxbox
+4. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
 4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
-5. **macbox** (library): macOS daemon implementation (Colima adapter suite)
-6. **winbox** (library): Windows daemon implementation (stub)
-7. **minibox-cli** (binary): CLI client sending commands to daemon
-8. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
-9. **minibox-bench** (binary): Benchmark harness
-10. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
+6. **macbox** (library): macOS daemon implementation (Colima adapter suite)
+7. **winbox** (library): Windows daemon implementation (stub)
+8. **minibox-cli** (binary): CLI client sending commands to daemon
+9. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
+10. **minibox-bench** (binary): Benchmark harness
+11. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
 ### Critical Design Patterns
 
-**Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `linuxbox/src/domain.rs` are implemented by adapters in `linuxbox/src/adapters/`. Tests use mock adapters (`adapters::mocks`). Integration tests exercise real adapters against live infrastructure.
+**Hexagonal Architecture**: Domain traits (`ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, `ImageRegistry`) in `minibox-core/src/domain.rs` (re-exported via `linuxbox`) are implemented by adapters in `linuxbox/src/adapters/`. Tests use mock adapters (`minibox_core::adapters::mocks`, behind `test-utils` feature). Integration tests exercise real adapters against live infrastructure.
+
+**Core library split**: Cross-platform types live in `minibox-core`; linuxbox re-exports them. Prefer `use minibox_core::protocol::*` in new code outside linuxbox rather than going through the re-export.
 
 **Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and `colima` (macOS via limactl/nerdctl). Wired in `miniboxd/src/main.rs`.
 
@@ -360,6 +363,8 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 ### Testing gotchas
 
 - **`std::env::set_var`/`remove_var` are `unsafe` in Rust 2024** — wrap in `unsafe {}` and serialise with a `static Mutex<()>` guard to prevent parallel test races (see `commands/mod.rs` tests for the pattern).
+- **Crate extraction + dev-deps**: When moving types to a new crate, check `tests/` files in the source crate — they may directly use crates that were previously transitive (e.g. `sha2`). Add them explicitly to `[dev-dependencies]` or `cargo nextest` (run by pre-push hook) will catch it at push time.
+- **Subprocess tests**: Use `Command::from_std(std::process::Command::new(find_minibox()))` + `MINIBOX_TEST_BIN_DIR` env var — never `Command::cargo_bin()`, which triggers a full recompile. Gate subprocess test files with `#![cfg(all(unix, feature = "subprocess-tests"))]` and a named Cargo feature; run via `just test-cli-subprocess`.
 
 ### Proptest gotchas
 
