@@ -1,5 +1,5 @@
 use crate::error::{ClientError, Result};
-use linuxbox::protocol::{DaemonRequest, DaemonResponse, decode_response};
+use minibox_core::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;

@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+minibox-core = { workspace = true }
 linuxbox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

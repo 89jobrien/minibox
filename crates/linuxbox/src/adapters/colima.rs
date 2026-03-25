@@ -25,13 +25,13 @@
 //! - A running Colima VM (`colima start`)
 //! - `nerdctl` and `jq` available inside the VM
 
-use crate::adapt;
-use crate::domain::{
+use anyhow::{Result, anyhow};
+use async_trait::async_trait;
+use minibox_core::adapt;
+use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
     ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
 };
-use anyhow::{Result, anyhow};
-use async_trait::async_trait;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -981,7 +981,7 @@ mod tests {
     /// silently drops all arguments.
     #[tokio::test]
     async fn spawn_process_includes_args_in_script() {
-        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
+        use minibox_core::domain::{ContainerHooks, ContainerSpawnConfig};
         use std::sync::{Arc, Mutex};
 
         let captured = Arc::new(Mutex::new(String::new()));
@@ -1197,7 +1197,7 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_process_returns_piped_output() {
-        use crate::domain::{ContainerHooks, ContainerSpawnConfig};
+        use minibox_core::domain::{ContainerHooks, ContainerSpawnConfig};
         use std::io::Read;
 
         let runtime = ColimaRuntime::new().with_spawner(Arc::new(|_args: &[&str]| {

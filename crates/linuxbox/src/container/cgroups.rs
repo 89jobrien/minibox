@@ -13,8 +13,8 @@
 //! leaf cgroup (e.g. via `scripts/run-cgroup-tests.sh`) rather than directly
 //! in the service's own cgroup.
 
-use crate::error::CgroupError;
 use anyhow::Context;
+use minibox_core::error::CgroupError;
 use std::fs;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};

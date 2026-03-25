@@ -20,4 +20,4 @@ futures = "0.3"
 clap = { version = "4", features = ["derive", "env"] }
 
 # Internal: protocol types (DaemonRequest, DaemonResponse, etc.)
-linuxbox = { path = "../crates/linuxbox" }
+minibox-core = { path = "../crates/minibox-core" }

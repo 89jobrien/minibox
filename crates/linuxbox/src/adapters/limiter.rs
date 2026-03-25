@@ -4,10 +4,10 @@
 //! [`crate::container::cgroups`] to implement the domain's
 //! [`ResourceLimiter`] trait.
 
-use crate::adapt;
 use crate::container::cgroups::{CgroupConfig, CgroupManager};
-use crate::domain::{ResourceConfig, ResourceLimiter};
 use anyhow::Result;
+use minibox_core::adapt;
+use minibox_core::domain::{ResourceConfig, ResourceLimiter};
 use tracing::debug;
 
 /// cgroups v2 implementation of the [`ResourceLimiter`] trait.

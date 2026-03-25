@@ -11,11 +11,11 @@ use daemonbox::state::DaemonState;
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use linuxbox::domain::{
+use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
 };
-use linuxbox::protocol::DaemonResponse;
+use minibox_core::protocol::DaemonResponse;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;

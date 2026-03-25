@@ -4,12 +4,14 @@
 //! [`crate::container::process`] to implement the domain's
 //! [`ContainerRuntime`] trait.
 
-use crate::adapt;
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
-use crate::domain::{ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult};
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::adapt;
+use minibox_core::domain::{
+    ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
+};
 use tracing::debug;
 
 /// Linux namespaces implementation of the [`ContainerRuntime`] trait.

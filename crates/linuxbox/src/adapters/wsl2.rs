@@ -57,15 +57,15 @@
 //! wsl -d Ubuntu sudo cp target/release/minibox-wsl-helper /usr/local/bin/
 //! ```
 
-use crate::{
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use minibox_core::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
         ResourceLimiter, RuntimeCapabilities, SpawnResult,
     },
 };
-use anyhow::{Context, Result};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;

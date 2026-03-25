@@ -4,10 +4,10 @@
 //! [`crate::container::filesystem`] to implement the domain's
 //! [`FilesystemProvider`] trait.
 
-use crate::adapt;
 use crate::container::filesystem;
-use crate::domain::FilesystemProvider;
 use anyhow::Result;
+use minibox_core::adapt;
+use minibox_core::domain::FilesystemProvider;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 

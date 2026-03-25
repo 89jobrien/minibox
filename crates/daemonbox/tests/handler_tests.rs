@@ -8,8 +8,8 @@ use daemonbox::state::DaemonState;
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use linuxbox::domain::NetworkMode;
-use linuxbox::protocol::DaemonResponse;
+use minibox_core::domain::NetworkMode;
+use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 

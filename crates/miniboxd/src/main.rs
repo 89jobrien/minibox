@@ -60,7 +60,7 @@ use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, Colima
 #[cfg(target_os = "linux")]
 use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::image::ImageStore;
+use minibox_core::image::ImageStore;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]

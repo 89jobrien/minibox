@@ -8,12 +8,12 @@
 //! Selected by `MINIBOX_ADAPTER=native` (the default). Requires network
 //! access to `registry-1.docker.io`.
 
-use crate::as_any;
-use crate::domain::{ImageMetadata, ImageRegistry, LayerInfo};
-use crate::image::ImageStore;
-use crate::image::registry::RegistryClient;
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::as_any;
+use minibox_core::domain::{ImageMetadata, ImageRegistry, LayerInfo};
+use minibox_core::image::ImageStore;
+use minibox_core::image::registry::RegistryClient;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;

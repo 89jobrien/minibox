@@ -1,7 +1,7 @@
 use crate::client::DaemonClient;
 use crate::error::ControllerError;
 use crate::models::CreateJobRequest;
-use linuxbox::protocol::{DaemonRequest, DaemonResponse};
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::sync::Arc;
 use std::time::Duration;
 

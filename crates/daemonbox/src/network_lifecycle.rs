@@ -1,7 +1,7 @@
 //! Lifecycle wrapper for [`NetworkProvider`] with consistent error handling.
 
 use anyhow::Result;
-use linuxbox::domain::{DynNetworkProvider, NetworkConfig};
+use minibox_core::domain::{DynNetworkProvider, NetworkConfig};
 use tracing::warn;
 
 /// Thin lifecycle wrapper around a [`NetworkProvider`].

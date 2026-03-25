@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+minibox-core = { workspace = true }
+minibox-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -13,18 +15,12 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-reqwest = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
-flate2 = { workspace = true }
-tar = { workspace = true }
 nix = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
 async-trait = { workspace = true }
 walkdir = { workspace = true }
-minibox-macros = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }
@@ -34,6 +30,7 @@ criterion = { workspace = true }
 proptest = "1"
 wiremock = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 
 [[bench]]
 name = "trait_overhead"

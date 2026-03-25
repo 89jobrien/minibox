@@ -3,10 +3,10 @@
 //! Used when `NetworkMode::Host` is selected. The container process inherits
 //! the host's network stack without any isolation.
 
-use crate::adapt;
-use crate::domain::{NetworkConfig, NetworkProvider, NetworkStats};
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::adapt;
+use minibox_core::domain::{NetworkConfig, NetworkProvider, NetworkStats};
 
 /// Network adapter that provides host networking mode.
 ///
@@ -58,7 +58,7 @@ adapt!(HostNetwork);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::NetworkConfig;
+    use minibox_core::domain::NetworkConfig;
 
     #[tokio::test]
     async fn host_network_setup_returns_host_sentinel() {

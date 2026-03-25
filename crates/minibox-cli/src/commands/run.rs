@@ -22,9 +22,9 @@
 
 use anyhow::{Context, Result};
 use base64::Engine;
-use linuxbox::domain::NetworkMode;
-use linuxbox::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use minibox_client::DaemonClient;
+use minibox_core::domain::NetworkMode;
+use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 
 /// Execute the `run` subcommand.
@@ -110,7 +110,7 @@ pub async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::protocol::{DaemonResponse, OutputStreamKind};
+    use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
 
     #[cfg(unix)]
     async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {

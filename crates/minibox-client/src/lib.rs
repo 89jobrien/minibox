@@ -29,7 +29,7 @@ pub mod socket;
 pub use error::{ClientError, Result};
 pub use socket::{DaemonClient, DaemonResponseStream};
 
-use linuxbox::protocol::DAEMON_SOCKET_PATH;
+use minibox_core::protocol::DAEMON_SOCKET_PATH;
 use std::path::PathBuf;
 
 /// Get the default daemon socket path, respecting MINIBOX_SOCKET_PATH environment variable.

@@ -3,10 +3,10 @@
 //! Used when container networking is disabled (e.g., `NetworkMode::None`).
 //! Containers get an isolated network namespace but no connectivity.
 
-use crate::adapt;
-use crate::domain::{NetworkConfig, NetworkProvider, NetworkStats};
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::adapt;
+use minibox_core::domain::{NetworkConfig, NetworkProvider, NetworkStats};
 
 /// Network adapter that disables all networking.
 ///
@@ -51,7 +51,7 @@ adapt!(NoopNetwork);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::NetworkConfig;
+    use minibox_core::domain::NetworkConfig;
 
     #[tokio::test]
     async fn noop_network_setup_returns_empty_string() {

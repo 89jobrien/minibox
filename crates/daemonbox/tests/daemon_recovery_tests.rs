@@ -8,7 +8,7 @@ use daemonbox::state::{ContainerRecord, DaemonState};
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use linuxbox::protocol::{ContainerInfo, DaemonResponse};
+use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
