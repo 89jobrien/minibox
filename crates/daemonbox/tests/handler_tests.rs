@@ -1146,6 +1146,623 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Coverage expansion: error paths not previously tested
+// ---------------------------------------------------------------------------
+
+/// `handle_pull` with a completely invalid image reference returns Error.
+///
+/// This covers the `ImageRef::parse` failure path in `handle_pull` (the early
+/// return before the registry is even consulted).
+#[tokio::test]
+async fn test_handle_pull_invalid_image_ref_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // "ghcr.io/imageonly" fails parse: non-docker.io registry requires org/name format.
+    let response = handler::handle_pull("ghcr.io/imageonly".to_string(), None, state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("invalid image reference"),
+                "expected parse error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// `handle_run` with an invalid image reference returns Error.
+///
+/// Covers the `ImageRef::parse` failure path inside `run_inner` before any
+/// registry or filesystem calls are made.
+#[tokio::test]
+async fn test_handle_run_invalid_image_ref_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "ghcr.io/imageonly".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("invalid image reference"),
+                "expected parse error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// `handle_run` returns Error when the image is not cached and the pull fails.
+///
+/// Covers the `registry.pull_image()` error path in `run_inner` — the image
+/// is absent (no `with_cached_image`) and `with_pull_failure` forces an error.
+#[tokio::test]
+async fn test_handle_run_pull_failure_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        // Not cached + pull always fails → ImagePullFailed domain error.
+        registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.to_lowercase().contains("pull")
+                    || message.to_lowercase().contains("failed")
+                    || message.contains("alpine"),
+                "expected pull-failure error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// `handle_stop` on a running container with a dead PID succeeds.
+///
+/// Covers the happy path of `stop_inner` (Unix): SIGTERM is sent (silently
+/// ignored for ESRCH), the `kill(pid, None)` probe returns ESRCH immediately,
+/// the loop exits, and the container state is updated to `"Stopped"`.
+///
+/// Using PID 999999 which almost certainly does not exist on any test host.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_stop_dead_pid_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "deadpidcontainer01".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(999_999),
+            },
+            pid: Some(999_999),
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    let response = handler::handle_stop(container_id.clone(), state.clone(), deps).await;
+
+    match response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("stopped"),
+                "expected 'stopped' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success response, got: {other:?}"),
+    }
+
+    // Container state should be "Stopped".
+    let record = state
+        .get_container(&container_id)
+        .await
+        .expect("container should still exist in state");
+    assert_eq!(
+        record.info.state, "Stopped",
+        "container state should be Stopped after handle_stop"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GHCR routing tests
+// ---------------------------------------------------------------------------
+
+/// `handle_pull` for a `ghcr.io/…` image routes to `ghcr_registry`, not
+/// `registry`.  The Docker Hub mock should see zero pulls; the GHCR mock
+/// should see exactly one.
+#[tokio::test]
+async fn test_handle_pull_routes_to_ghcr_registry() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let docker_registry = Arc::new(MockRegistry::new());
+    let ghcr_registry = Arc::new(MockRegistry::new());
+    let deps = Arc::new(HandlerDependencies {
+        registry: docker_registry.clone(),
+        ghcr_registry: ghcr_registry.clone(),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "ghcr.io/org/myimage".to_string(),
+        Some("v1.0".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::Success { .. }),
+        "expected Success, got: {response:?}"
+    );
+    assert_eq!(
+        docker_registry.pull_count(),
+        0,
+        "Docker Hub registry must not be called for ghcr.io image"
+    );
+    assert_eq!(
+        ghcr_registry.pull_count(),
+        1,
+        "GHCR registry must be called exactly once"
+    );
+}
+
+/// `handle_run` for a `ghcr.io/…` image routes to `ghcr_registry`.
+/// The Docker Hub mock sees zero pulls; the GHCR mock sees exactly one.
+#[tokio::test]
+async fn test_handle_run_routes_to_ghcr_registry() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let docker_registry = Arc::new(MockRegistry::new());
+    let ghcr_registry = Arc::new(MockRegistry::new());
+    let deps = Arc::new(HandlerDependencies {
+        registry: docker_registry.clone(),
+        ghcr_registry: ghcr_registry.clone(),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "ghcr.io/org/myimage".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    extract_container_id(&response);
+    assert_eq!(
+        docker_registry.pull_count(),
+        0,
+        "Docker Hub registry must not be called for ghcr.io image"
+    );
+    assert_eq!(
+        ghcr_registry.pull_count(),
+        1,
+        "GHCR registry must be called exactly once"
+    );
+}
+
+/// `handle_run` for a cached GHCR image skips the pull entirely.
+#[tokio::test]
+async fn test_handle_run_ghcr_cached_skips_pull() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let ghcr_registry =
+        Arc::new(MockRegistry::new().with_cached_image("ghcr.io/org/myimage", "latest"));
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: ghcr_registry.clone(),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "ghcr.io/org/myimage".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    extract_container_id(&response);
+    assert_eq!(
+        ghcr_registry.pull_count(),
+        0,
+        "cached GHCR image must not trigger a pull"
+    );
+}
+
+/// `handle_run` for a GHCR image where the pull fails returns an Error.
+#[tokio::test]
+async fn test_handle_run_ghcr_pull_failure_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "ghcr.io/org/myimage".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::Error { .. }),
+        "GHCR pull failure must produce Error response, got: {response:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_stop network cleanup
+// ---------------------------------------------------------------------------
+
+/// `handle_stop` calls `network_provider.cleanup()` before issuing SIGTERM.
+///
+/// This covers the `NetworkLifecycle::cleanup(&id)` call at the top of
+/// `handle_stop`.  We use a dead PID (999998) so the stop completes immediately
+/// without a real process wait loop.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_stop_triggers_network_cleanup() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "netstoptest0001".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(999_998),
+            },
+            pid: Some(999_998),
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    handler::handle_stop(container_id, state, deps).await;
+
+    assert_eq!(
+        mock_network.cleanup_count(),
+        1,
+        "network cleanup must be called exactly once during handle_stop"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_remove network cleanup
+// ---------------------------------------------------------------------------
+
+/// `handle_remove` calls `network_provider.cleanup()` as part of `remove_inner`.
+#[tokio::test]
+async fn test_handle_remove_triggers_network_cleanup() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Create then stop.
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+    let id = extract_container_id(&response);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    state.update_container_state(&id, "Stopped").await;
+
+    // network_provider.setup() was called during run (count=1).
+    // After remove, cleanup should also be called.
+    let setup_count_before_remove = mock_network.setup_count();
+
+    handler::handle_remove(id, state, deps).await;
+
+    assert_eq!(
+        mock_network.cleanup_count(),
+        1,
+        "network cleanup must be called exactly once during handle_remove"
+    );
+    // setup count must not increase due to remove
+    assert_eq!(
+        mock_network.setup_count(),
+        setup_count_before_remove,
+        "handle_remove must not call network setup"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Edge cases: empty command, combined image:tag, Created-state remove
+// ---------------------------------------------------------------------------
+
+/// When `command` is empty, `run_inner` defaults the spawn command to
+/// `/bin/sh`.  The container is still created successfully.
+#[tokio::test]
+async fn test_handle_run_empty_command_defaults_to_sh() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec![], // empty command
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let container = state
+        .get_container(&id)
+        .await
+        .expect("container must exist");
+    // The recorded command string is the joined vec, which for an empty vec is "".
+    // The spawn_command fallback to /bin/sh is internal; the ContainerInfo.command
+    // stores the join of the original command vec.
+    assert!(
+        container.info.command.is_empty() || container.info.command.contains("sh"),
+        "unexpected command: {}",
+        container.info.command
+    );
+}
+
+/// A combined `image:tag` string in the image field (no separate tag param)
+/// is parsed correctly by `ImageRef::parse`.
+#[tokio::test]
+async fn test_handle_run_image_colon_tag_format() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Pass tag embedded in image string; tag param is None.
+    let response = handle_run_once(
+        "alpine:3.18".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let container = state
+        .get_container(&id)
+        .await
+        .expect("container must exist");
+    assert!(
+        container.info.image.contains("3.18"),
+        "expected tag '3.18' in image label, got: {}",
+        container.info.image
+    );
+}
+
+/// `handle_remove` on a container in `"Created"` state (never ran, no PID)
+/// succeeds — `remove_inner` only blocks removal when state is `"Running"`.
+#[tokio::test]
+async fn test_handle_remove_created_container_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "createdcontainer1".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Created".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    let response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
+
+    assert!(
+        matches!(response, DaemonResponse::Success { .. }),
+        "remove of Created-state container must succeed, got: {response:?}"
+    );
+    assert!(
+        state.get_container(&container_id).await.is_none(),
+        "container must be absent from state after remove"
+    );
+}
+
+/// `handle_remove` on a `"Failed"` container (spawn error path) succeeds.
+#[tokio::test]
+async fn test_handle_remove_failed_container_succeeds() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Run will return ContainerCreated immediately; async spawn fails → "Failed".
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+    let id = extract_container_id(&response);
+
+    // Wait for async spawn task to mark container as Failed.
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    let container = state.get_container(&id).await.expect("container exists");
+    assert_eq!(container.info.state, "Failed", "container should be Failed");
+
+    // Now remove it — should succeed because "Failed" != "Running".
+    let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
+    assert!(
+        matches!(remove_response, DaemonResponse::Success { .. }),
+        "remove of Failed container must succeed, got: {remove_response:?}"
+    );
+    assert!(state.get_container(&id).await.is_none());
+}
+
+/// `handle_pull` for a GHCR image that fails returns an Error with the
+/// failure message from the GHCR registry mock.
+#[tokio::test]
+async fn test_handle_pull_ghcr_failure_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "ghcr.io/org/myimage".to_string(),
+        Some("latest".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("mock pull failure"),
+                "expected mock pull failure message, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
 /// `handle_list` with multiple containers returns all of them.
 #[tokio::test]
 async fn test_handle_list_returns_all_containers() {
@@ -1188,4 +1805,220 @@ async fn test_handle_list_returns_all_containers() {
         }
         other => panic!("expected ContainerList, got: {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// daemon_wait_for_exit coverage
+//
+// The non-streaming run path calls daemon_wait_for_exit inside spawn_blocking.
+// MockRuntime hands out fake PIDs (10000+) that don't correspond to real
+// processes, so waitpid returns ECHILD → the Err arm fires, exit code -1 is
+// recorded, and update_container_state("Stopped") is called.
+//
+// Existing tests use a fixed 100–200 ms sleep which is often not enough for
+// the spawn_blocking thread to complete before the test exits.  These tests
+// poll until the container reaches "Stopped" (up to 2s) so the blocking thread
+// definitely finishes, covering lines 731–768 of handler.rs.
+// ---------------------------------------------------------------------------
+
+/// Helper: poll DaemonState until the container reaches the expected state or
+/// the deadline passes.  Returns the final state string.
+async fn wait_for_container_state(
+    state: &Arc<DaemonState>,
+    id: &str,
+    expected: &str,
+    timeout_ms: u64,
+) -> String {
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
+    loop {
+        if let Some(record) = state.get_container(id).await {
+            if record.info.state == expected {
+                return record.info.state;
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+    }
+    state
+        .get_container(id)
+        .await
+        .map(|r| r.info.state)
+        .unwrap_or_else(|| "GONE".to_string())
+}
+
+/// Non-streaming run with a successful mock spawn: daemon_wait_for_exit is
+/// invoked via spawn_blocking with a non-existent PID, waitpid returns an
+/// error (ECHILD), and the container is eventually marked "Stopped".
+///
+/// This covers the waitpid Err arm (handler.rs 743–746) and the state-update
+/// path (lines 758–768) inside daemon_wait_for_exit.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_daemon_wait_for_exit_covers_waitpid_error_arm() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+
+    // Poll until Stopped (daemon_wait_for_exit must complete for this to happen).
+    let final_state = wait_for_container_state(&state, &id, "Stopped", 2000).await;
+
+    assert_eq!(
+        final_state, "Stopped",
+        "container should reach Stopped after daemon_wait_for_exit completes"
+    );
+}
+
+/// Multiple successive non-streaming runs all reach "Stopped" — verifies
+/// daemon_wait_for_exit handles each container's spawn_blocking call
+/// independently and doesn't interfere between containers.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_daemon_wait_for_exit_multiple_containers() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        let response = handle_run_once(
+            "alpine".to_string(),
+            None,
+            vec!["/bin/true".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        ids.push(extract_container_id(&response));
+    }
+
+    for id in &ids {
+        let final_state = wait_for_container_state(&state, id, "Stopped", 2000).await;
+        assert_eq!(
+            final_state, "Stopped",
+            "container {id} should reach Stopped"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// handle_run ephemeral=true path (lines 119–131 of handler.rs)
+//
+// On Unix, handle_run with ephemeral=true dispatches to handle_run_streaming
+// which calls run_inner_capture.  MockRuntime.spawn_process() returns
+// output_reader=None, so run_inner_capture returns an error at the
+// "capture_output=true but runtime returned no output_reader" check.
+// handle_run_streaming catches this and sends DaemonResponse::Error.
+//
+// This covers the #[cfg(unix)] ephemeral branch at lines 119–131 and the
+// error-return path in handle_run_streaming (lines 194–203).
+// ---------------------------------------------------------------------------
+
+/// handle_run with ephemeral=true on Unix dispatches to handle_run_streaming.
+/// MockRuntime returns output_reader=None, which causes run_inner_capture to
+/// fail, and the channel receives a DaemonResponse::Error.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_run_ephemeral_dispatches_streaming_path() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()), // returns output_reader=None
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        true, // ephemeral=true → streaming path
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let response = rx.recv().await.expect("handler must send a response");
+    // MockRuntime returns output_reader=None, so run_inner_capture fails with
+    // "capture_output=true but runtime returned no output_reader".
+    match response {
+        DaemonResponse::Error { ref message } => {
+            assert!(
+                message.contains("output_reader") || message.contains("capture"),
+                "expected output_reader error, got: {message}"
+            );
+        }
+        // ContainerStopped with exit_code=-1 is also acceptable if the mock
+        // runtime path somehow returns a PID without an output_reader.
+        DaemonResponse::ContainerStopped { .. } => {}
+        other => panic!("expected Error or ContainerStopped from ephemeral path, got: {other:?}"),
+    }
+}
+
+/// handle_run with ephemeral=true and a pull failure sends Error via channel.
+/// Covers the error-return at the top of handle_run_streaming (line ~195).
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_run_ephemeral_pull_failure_sends_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        true, // ephemeral=true
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let response = rx.recv().await.expect("handler must send a response");
+    assert!(
+        matches!(response, DaemonResponse::Error { .. }),
+        "ephemeral run with pull failure must produce Error, got: {response:?}"
+    );
 }

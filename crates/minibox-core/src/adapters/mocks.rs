@@ -719,7 +719,8 @@ mod tests {
         let registry = MockRegistry::new();
 
         assert_eq!(registry.pull_count(), 0);
-        let result = registry.pull_image("library/alpine", "latest").await;
+        let image_ref = crate::image::reference::ImageRef::parse("alpine").expect("parse alpine");
+        let result = registry.pull_image(&image_ref).await;
         assert!(result.is_ok());
         assert_eq!(registry.pull_count(), 1);
 
@@ -731,7 +732,8 @@ mod tests {
     async fn test_mock_registry_pull_failure() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let result = registry.pull_image("library/alpine", "latest").await;
+        let image_ref = crate::image::reference::ImageRef::parse("alpine").expect("parse alpine");
+        let result = registry.pull_image(&image_ref).await;
         assert!(result.is_err());
         assert_eq!(registry.pull_count(), 1);
     }

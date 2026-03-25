@@ -444,13 +444,17 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
     use super::*;
+    #[cfg(target_os = "linux")]
     use std::path::PathBuf;
 
     // SAFETY: env var mutations are serialised with ENV_LOCK
+    #[cfg(target_os = "linux")]
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn resolve_data_dir_non_root_uses_home() {
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe {
@@ -465,6 +469,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn resolve_data_dir_root_uses_var_lib() {
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe {
@@ -475,6 +480,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn resolve_data_dir_env_override_takes_precedence() {
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe {
