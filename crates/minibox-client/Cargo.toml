@@ -9,10 +9,7 @@ rust-version.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
 serde_json = { workspace = true }
 minibox-core = { workspace = true }
-anyhow = { workspace = true }
 thiserror = { workspace = true }
-base64 = { workspace = true }
-futures = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

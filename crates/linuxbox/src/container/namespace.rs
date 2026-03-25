@@ -12,8 +12,8 @@
 //! function; otherwise both parent and child will attempt to close the same FD
 //! when the `OwnedFd` is dropped, causing a double-close.
 
+use crate::error::NamespaceError;
 use anyhow::Context;
-use minibox_core::error::NamespaceError;
 use nix::sched::CloneFlags;
 use tracing::{debug, info};
 
