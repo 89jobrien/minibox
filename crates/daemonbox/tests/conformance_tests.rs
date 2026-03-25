@@ -116,7 +116,7 @@ mod conformance {
     async fn registry_must_handle_pull_failures_gracefully() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let image_ref = minibox_lib::ImageRef::parse("alpine").unwrap();
+        let image_ref = linuxbox::ImageRef::parse("alpine").unwrap();
         let result = registry.pull_image(&image_ref).await;
         assert!(
             result.is_err(),

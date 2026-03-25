@@ -120,7 +120,7 @@ fn active_data_dir() -> std::path::PathBuf {
         return std::path::PathBuf::from(explicit);
     }
     #[cfg(unix)]
-    let is_root = unsafe { libc::geteuid() == 0 };
+    let is_root = nix::unistd::geteuid().is_root();
     #[cfg(not(unix))]
     let is_root = false;
 

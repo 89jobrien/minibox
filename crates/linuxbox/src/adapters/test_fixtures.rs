@@ -220,7 +220,10 @@ mod tests {
     #[tokio::test]
     async fn test_builder_injects_pull_failure() {
         let adapters = MockAdapterBuilder::new().with_pull_failure().build();
-        let result = adapters.registry.pull_image("alpine", "latest").await;
+        let result = adapters
+            .registry
+            .pull_image(&crate::image::reference::ImageRef::parse("alpine").unwrap())
+            .await;
         assert!(result.is_err(), "with_pull_failure: pull_image should fail");
     }
 

@@ -57,7 +57,9 @@ async fn registry_pull_image_propagates_executor_error() {
         }
     }));
 
-    let result = registry.pull_image("alpine", "latest").await;
+    let result = registry
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .await;
     assert!(
         result.is_err(),
         "pull_image must return an error when the executor fails"
@@ -85,11 +87,11 @@ async fn registry_pull_image_parses_inspect_output() {
     }));
 
     let metadata = registry
-        .pull_image("alpine", "latest")
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
         .await
         .expect("pull_image should succeed with valid executor output");
 
-    assert_eq!(metadata.name, "alpine");
+    assert_eq!(metadata.name, "library/alpine");
     assert_eq!(metadata.tag, "latest");
     assert_eq!(metadata.layers.len(), 2, "should have two layers");
 }

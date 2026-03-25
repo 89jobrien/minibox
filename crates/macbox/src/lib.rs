@@ -169,6 +169,7 @@ pub async fn start() -> Result<()> {
 
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
+        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
         ghcr_registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
         filesystem: Arc::new(ColimaFilesystem::new()),
         resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
