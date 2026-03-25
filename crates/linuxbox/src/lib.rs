@@ -24,7 +24,7 @@ pub mod container;
 // through their own `use minibox_core::error::*` — but other callers that
 // relied on `linuxbox::domain` or `linuxbox::error` continue to compile.
 pub use minibox_core::domain;
-pub use minibox_core::error;
+pub mod error;
 pub use minibox_core::image;
 pub use minibox_core::preflight;
 pub use minibox_core::protocol;
