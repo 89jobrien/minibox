@@ -297,6 +297,7 @@ mod tests {
         let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
         let deps = Arc::new(crate::handler::HandlerDependencies {
             registry: Arc::new(MockRegistry::new()),
+            ghcr_registry: Arc::new(MockRegistry::new()),
             filesystem: Arc::new(MockFilesystem::new()),
             resource_limiter: Arc::new(MockLimiter::new()),
             runtime: Arc::new(MockRuntime::new()),

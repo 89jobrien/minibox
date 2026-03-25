@@ -12,6 +12,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
+use linuxbox::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
@@ -57,8 +58,10 @@ use crate::state::{ContainerRecord, DaemonState};
 /// ```
 #[derive(Clone)]
 pub struct HandlerDependencies {
-    /// Image registry for pulling container images.
+    /// Image registry for pulling Docker Hub images.
     pub registry: DynImageRegistry,
+    /// Image registry for pulling GHCR images.
+    pub ghcr_registry: DynImageRegistry,
     /// Filesystem provider for setting up container rootfs.
     pub filesystem: DynFilesystemProvider,
     /// Resource limiter for enforcing cgroup limits.
@@ -71,6 +74,24 @@ pub struct HandlerDependencies {
     pub containers_base: PathBuf,
     /// Base directory for runtime container state (PID files).
     pub run_containers_base: PathBuf,
+}
+
+// ─── Registry Selection ─────────────────────────────────────────────────────
+
+/// Choose the registry adapter based on the image reference's registry hostname.
+///
+/// - `ghcr.io` → `ghcr` adapter
+/// - everything else → `docker` (Docker Hub) adapter
+fn select_registry<'a>(
+    image_ref: &ImageRef,
+    docker: &'a dyn minibox_core::domain::ImageRegistry,
+    ghcr: &'a dyn minibox_core::domain::ImageRegistry,
+) -> &'a dyn minibox_core::domain::ImageRegistry {
+    if image_ref.registry == "ghcr.io" {
+        ghcr
+    } else {
+        docker
+    }
 }
 
 // ─── Run ────────────────────────────────────────────────────────────────────
@@ -268,18 +289,28 @@ async fn run_inner_capture(
     use anyhow::Context;
     use minibox_core::domain::NetworkConfig;
 
-    let tag = tag.unwrap_or_else(|| "latest".to_string());
-
-    let full_image = if image.contains('/') {
-        image.clone()
-    } else {
-        format!("library/{image}")
+    // Build full ref string from image + optional tag, then parse into ImageRef.
+    let ref_str = match &tag {
+        Some(t) => format!("{image}:{t}"),
+        None => image.clone(),
     };
+    let image_ref = ImageRef::parse(&ref_str).map_err(|e| {
+        DomainError::InvalidConfig(format!("invalid image reference {ref_str:?}: {e}"))
+    })?;
+    let tag = image_ref.tag.clone();
+    let full_image = image_ref.cache_name();
 
-    if !deps.registry.has_image(&full_image, &tag).await {
+    // Select registry based on image reference hostname.
+    let registry = select_registry(
+        &image_ref,
+        deps.registry.as_ref(),
+        deps.ghcr_registry.as_ref(),
+    );
+
+    if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
-        deps.registry
-            .pull_image(&full_image, &tag)
+        registry
+            .pull_image(&image_ref)
             .await
             .map_err(|e| DomainError::ImagePullFailed {
                 image: full_image.clone(),
@@ -288,7 +319,7 @@ async fn run_inner_capture(
             })?;
     }
 
-    let layer_dirs = deps.registry.get_image_layers(&full_image, &tag)?;
+    let layer_dirs = registry.get_image_layers(&full_image, &tag)?;
     if layer_dirs.is_empty() {
         return Err(DomainError::EmptyImage {
             name: full_image.clone(),
@@ -447,20 +478,29 @@ async fn run_inner(
     use anyhow::Context;
     use minibox_core::domain::NetworkConfig;
 
-    let tag = tag.unwrap_or_else(|| "latest".to_string());
-
-    // Normalise image name: bare "alpine" → "library/alpine"
-    let full_image = if image.contains('/') {
-        image.clone()
-    } else {
-        format!("library/{image}")
+    // Build full ref string from image + optional tag, then parse into ImageRef.
+    let ref_str = match &tag {
+        Some(t) => format!("{image}:{t}"),
+        None => image.clone(),
     };
+    let image_ref = ImageRef::parse(&ref_str).map_err(|e| {
+        DomainError::InvalidConfig(format!("invalid image reference {ref_str:?}: {e}"))
+    })?;
+    let tag = image_ref.tag.clone();
+    let full_image = image_ref.cache_name();
+
+    // Select registry based on image reference hostname.
+    let registry = select_registry(
+        &image_ref,
+        deps.registry.as_ref(),
+        deps.ghcr_registry.as_ref(),
+    );
 
     // Pull image if not cached (using injected registry trait).
-    if !deps.registry.has_image(&full_image, &tag).await {
+    if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
-        deps.registry
-            .pull_image(&full_image, &tag)
+        registry
+            .pull_image(&image_ref)
             .await
             .map_err(|e| DomainError::ImagePullFailed {
                 image: full_image.clone(),
@@ -469,7 +509,7 @@ async fn run_inner(
             })?;
     }
 
-    let layer_dirs = deps.registry.get_image_layers(&full_image, &tag)?;
+    let layer_dirs = registry.get_image_layers(&full_image, &tag)?;
     if layer_dirs.is_empty() {
         return Err(DomainError::EmptyImage {
             name: full_image.clone(),
@@ -920,7 +960,7 @@ pub async fn handle_list(state: Arc<DaemonState>) -> DaemonResponse {
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
-/// Pull an image from Docker Hub and cache it locally.
+/// Pull an image from the appropriate registry and cache it locally.
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
@@ -928,15 +968,31 @@ pub async fn handle_pull(
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
-    let tag = tag.unwrap_or_else(|| "latest".to_string());
-    let full_image = if image.contains('/') {
-        image.clone()
-    } else {
-        format!("library/{image}")
+    // Build full ref string from image + optional tag, then parse into ImageRef.
+    let ref_str = match &tag {
+        Some(t) => format!("{image}:{t}"),
+        None => image.clone(),
     };
+    let image_ref = match ImageRef::parse(&ref_str) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("handle_pull: invalid image reference {ref_str:?}: {e}");
+            return DaemonResponse::Error {
+                message: format!("invalid image reference {ref_str:?}: {e}"),
+            };
+        }
+    };
+    let tag = image_ref.tag.clone();
 
-    // Pull image (using injected registry trait).
-    match deps.registry.pull_image(&full_image, &tag).await {
+    // Select registry based on image reference hostname.
+    let registry = select_registry(
+        &image_ref,
+        deps.registry.as_ref(),
+        deps.ghcr_registry.as_ref(),
+    );
+
+    // Pull image (using selected registry trait).
+    match registry.pull_image(&image_ref).await {
         Ok(_metadata) => DaemonResponse::Success {
             message: format!("pulled {image}:{tag}"),
         },
@@ -946,5 +1002,52 @@ pub async fn handle_pull(
                 message: format!("{e:#}"),
             }
         }
+    }
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod select_registry_tests {
+    use super::*;
+    use linuxbox::ImageRef;
+    use linuxbox::adapters::{DockerHubRegistry, GhcrRegistry};
+    use minibox_core::image::ImageStore;
+    use std::sync::Arc;
+
+    #[test]
+    fn select_registry_routes_ghcr() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
+        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
+        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+
+        let ghcr_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
+        let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
+
+        assert!(std::ptr::eq(
+            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
+            ghcr.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
+        ));
+    }
+
+    #[test]
+    fn select_registry_routes_docker() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
+        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
+        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
+            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+
+        let docker_ref = ImageRef::parse("alpine").unwrap();
+        let selected = select_registry(&docker_ref, docker.as_ref(), ghcr.as_ref());
+
+        assert!(std::ptr::eq(
+            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
+            docker.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
+        ));
     }
 }

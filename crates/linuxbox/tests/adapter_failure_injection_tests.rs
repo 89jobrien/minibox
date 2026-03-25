@@ -19,7 +19,9 @@ use std::path::{Path, PathBuf};
 #[tokio::test]
 async fn test_registry_pull_failure_returns_descriptive_error() {
     let registry = MockRegistry::new().with_pull_failure();
-    let result = registry.pull_image("alpine", "latest").await;
+    let result = registry
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .await;
     assert!(result.is_err());
     assert!(
         result
@@ -207,7 +209,12 @@ async fn test_registry_tracks_all_pull_attempts() {
     let registry = MockRegistry::new();
 
     // First pull succeeds
-    assert!(registry.pull_image("alpine", "latest").await.is_ok());
+    assert!(
+        registry
+            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .await
+            .is_ok()
+    );
     assert_eq!(registry.pull_count(), 1);
 
     // Image is now cached
@@ -217,7 +224,12 @@ async fn test_registry_tracks_all_pull_attempts() {
     );
 
     // Second pull also succeeds (re-pull)
-    assert!(registry.pull_image("alpine", "latest").await.is_ok());
+    assert!(
+        registry
+            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .await
+            .is_ok()
+    );
     assert_eq!(
         registry.pull_count(),
         2,

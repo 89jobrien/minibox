@@ -57,6 +57,7 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(registry),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -72,6 +73,7 @@ fn mock_deps_with_network(
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -115,7 +117,8 @@ mod conformance {
     async fn registry_must_handle_pull_failures_gracefully() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let result = registry.pull_image("alpine", "latest").await;
+        let image_ref = linuxbox::ImageRef::parse("alpine").unwrap();
+        let result = registry.pull_image(&image_ref).await;
         assert!(
             result.is_err(),
             "Registry must return error for failed pulls"

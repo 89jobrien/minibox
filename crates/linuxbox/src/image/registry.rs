@@ -27,6 +27,7 @@ use crate::image::manifest::{
 use anyhow::Context;
 use bytes::Bytes;
 use futures::stream::StreamExt;
+use minibox_macros::{normalize_digest, normalize_name};
 use reqwest::Client;
 use serde::Deserialize;
 use tracing::{Instrument, debug, info, instrument};
@@ -384,10 +385,10 @@ impl RegistryClient {
         // 3. Download and store each layer.
         for (idx, layer_desc) in manifest.layers.iter().enumerate() {
             // Build the expected layer directory path to check for existence.
-            let digest_key = layer_desc.digest.replace(':', "_");
+            let digest_key = normalize_digest!(layer_desc.digest);
             let layer_dir = store
                 .base_dir
-                .join(name.replace('/', "_"))
+                .join(normalize_name!(name))
                 .join(tag)
                 .join("layers")
                 .join(&digest_key);

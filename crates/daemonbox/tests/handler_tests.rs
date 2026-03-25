@@ -49,6 +49,7 @@ async fn handle_run_once(
 fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -121,6 +122,7 @@ async fn test_handle_pull_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -149,6 +151,7 @@ async fn test_handle_run_with_cached_image() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -231,6 +234,7 @@ async fn test_handle_run_filesystem_setup_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -265,6 +269,7 @@ async fn test_handle_run_resource_limiter_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
         runtime: Arc::new(MockRuntime::new()),
@@ -299,6 +304,7 @@ async fn test_handle_run_runtime_spawn_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
@@ -534,6 +540,7 @@ fn create_test_deps_with_network(
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -870,6 +877,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
     // Build deps with the failable mock (setup succeeds by default).
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
         filesystem: failable_fs.clone(),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),

@@ -9,6 +9,7 @@
 
 pub mod layer;
 pub mod manifest;
+pub mod reference;
 pub mod registry;
 
 use crate::error::ImageError;

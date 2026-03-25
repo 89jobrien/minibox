@@ -7,7 +7,11 @@
 //!   cargo run --release --example showcase -p linuxbox -- --run /path/to/minibox
 //!   cargo run --release --example showcase -p linuxbox -- --run ./target/release/minibox --cleanup
 
-use linuxbox::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
+use linuxbox::{
+    adapters::DockerHubRegistry,
+    domain::ImageRegistry,
+    image::{ImageStore, reference::ImageRef},
+};
 use std::{
     io::Write,
     path::PathBuf,
@@ -294,7 +298,9 @@ async fn main() -> anyhow::Result<()> {
         let spin = Spinner::start(&format!("{pad_label} pulling..."));
         let t0 = Instant::now();
         if !cached {
-            registry.pull_image(spec.name, spec.tag).await?;
+            let image_ref = ImageRef::parse(&format!("{}:{}", spec.name, spec.tag))
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            registry.pull_image(&image_ref).await?;
         }
         let pull_ms = t0.elapsed();
         spin.stop();

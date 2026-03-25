@@ -12,6 +12,10 @@
 //! - [`adapt!`] — implement both `AsAny` and `Default` for one or more types
 //! - [`provide!`] — generate provider constructors in `minibox-llm`
 //! - [`require_capability!`] — skip tests when a probed host capability is absent
+//! - [`normalize_name!`] — replace `/` with `_` for filesystem path components
+//! - [`normalize_digest!`] — replace `:` with `_` for filesystem path components
+//! - [`normalize!`] — replace both `/` and `:` with `_`
+//! - [`denormalize_digest!`] — reverse `normalize_digest!` (replace `_` with `:`)
 //!
 //! # Call-site resolution note
 //!
@@ -151,5 +155,81 @@ macro_rules! require_capability {
             ::std::eprintln!("SKIPPED: {}", $reason);
             return;
         }
+    };
+}
+
+/// Normalize an image name string for use as a filesystem path component.
+///
+/// Replaces `/` with `_` (e.g. `"library/alpine"` → `"library_alpine"`).
+/// Use for image names. For digest strings use [`normalize_digest!`].
+/// Use [`normalize!`] to replace both.
+///
+/// # Examples
+///
+/// ```rust
+/// use minibox_macros::normalize_name;
+/// assert_eq!(normalize_name!("library/alpine"), "library_alpine");
+/// assert_eq!(normalize_name!("ghcr.io/org/image"), "ghcr.io_org_image");
+/// ```
+#[macro_export]
+macro_rules! normalize_name {
+    ($s:expr) => {
+        $s.replace('/', "_")
+    };
+}
+
+/// Normalize a digest string for use as a filesystem path component.
+///
+/// Replaces `:` with `_` (e.g. `"sha256:abc123"` → `"sha256_abc123"`).
+/// Use for layer digest keys. For image names use [`normalize_name!`].
+/// Use [`normalize!`] to replace both.
+///
+/// # Examples
+///
+/// ```rust
+/// use minibox_macros::normalize_digest;
+/// assert_eq!(normalize_digest!("sha256:abc123"), "sha256_abc123");
+/// ```
+#[macro_export]
+macro_rules! normalize_digest {
+    ($s:expr) => {
+        $s.replace(':', "_")
+    };
+}
+
+/// Normalize a string for use as a filesystem path component, replacing both
+/// `/` and `:` with `_`.
+///
+/// Equivalent to applying [`normalize_name!`] then [`normalize_digest!`].
+/// Use when the input may contain either character (e.g. full image refs).
+///
+/// # Examples
+///
+/// ```rust
+/// use minibox_macros::normalize;
+/// assert_eq!(normalize!("ghcr.io/org/image:stable"), "ghcr.io_org_image_stable");
+/// ```
+#[macro_export]
+macro_rules! normalize {
+    ($s:expr) => {
+        $s.replace(['/', ':'], "_")
+    };
+}
+
+/// Recover a digest string from a filesystem path component.
+///
+/// Reverses [`normalize_digest!`] by replacing `_` with `:`.
+/// Used when reading stored layer directories back into digest form.
+///
+/// # Examples
+///
+/// ```rust
+/// use minibox_macros::denormalize_digest;
+/// assert_eq!(denormalize_digest!("sha256_abc123"), "sha256:abc123");
+/// ```
+#[macro_export]
+macro_rules! denormalize_digest {
+    ($s:expr) => {
+        $s.replace('_', ":")
     };
 }

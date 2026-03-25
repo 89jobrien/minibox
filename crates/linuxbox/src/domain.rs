@@ -139,8 +139,7 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `name` - Image name (e.g., `"library/ubuntu"`)
-    /// * `tag` - Image tag (e.g., `"22.04"`)
+    /// * `image_ref` - Parsed image reference (registry, namespace, name, tag)
     ///
     /// # Returns
     ///
@@ -154,7 +153,10 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     /// - Manifest is invalid
     /// - Layer download fails
     /// - Digest verification fails
-    async fn pull_image(&self, name: &str, tag: &str) -> Result<ImageMetadata>;
+    async fn pull_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+    ) -> Result<ImageMetadata>;
 
     /// Get the layer paths for a cached image.
     ///
