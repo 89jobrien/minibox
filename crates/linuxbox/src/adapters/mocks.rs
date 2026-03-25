@@ -65,6 +65,8 @@ struct MockRegistryState {
     pull_should_succeed: bool,
     /// Running count of `pull_image` invocations.
     pull_count: usize,
+    /// Whether `get_image_layers` should return an empty list.
+    return_empty_layers: bool,
 }
 
 impl MockRegistry {
@@ -75,6 +77,7 @@ impl MockRegistry {
                 cached_images: Vec::new(),
                 pull_should_succeed: true,
                 pull_count: 0,
+                return_empty_layers: false,
             })),
         }
     }
@@ -94,6 +97,14 @@ impl MockRegistry {
     /// Configure all subsequent `pull_image` calls to return an error.
     pub fn with_pull_failure(self) -> Self {
         self.state.lock().unwrap().pull_should_succeed = false;
+        self
+    }
+
+    /// Configure `get_image_layers` to return an empty layer list.
+    ///
+    /// Used to exercise the `EmptyImage` error path in `run_inner`.
+    pub fn with_empty_layers(self) -> Self {
+        self.state.lock().unwrap().return_empty_layers = true;
         self
     }
 
@@ -165,7 +176,14 @@ impl ImageRegistry for MockRegistry {
     }
 
     /// Return two fixed mock layer paths regardless of the image name or tag.
+    ///
+    /// Returns an empty vec if configured via [`with_empty_layers`], which
+    /// triggers the `EmptyImage` error path in `run_inner`.
     fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
+        let state = self.state.lock().unwrap();
+        if state.return_empty_layers {
+            return Ok(vec![]);
+        }
         Ok(vec![
             PathBuf::from("/mock/layer1"),
             PathBuf::from("/mock/layer2"),
@@ -319,6 +337,14 @@ impl MockLimiter {
     /// Configure `create` to return an error.
     pub fn with_create_failure(self) -> Self {
         self.state.lock().unwrap().create_should_succeed = false;
+        self
+    }
+
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort cgroup cleanup path in `remove_inner`.
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state.lock().unwrap().cleanup_should_succeed = false;
         self
     }
 

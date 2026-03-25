@@ -13,6 +13,10 @@ use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+// `chrono` is used in manual ContainerRecord construction below.
+#[allow(unused_imports)]
+use chrono;
+
 /// Helper that calls `handle_run` via a channel and returns the first response.
 ///
 /// `handle_run` now sends responses via a channel rather than returning them,
@@ -984,6 +988,203 @@ async fn test_list_after_run() {
         DaemonResponse::ContainerList { containers } => {
             assert_eq!(containers.len(), 1, "expected 1 container in list");
             assert_eq!(containers[0].id, id);
+        }
+        other => panic!("expected ContainerList, got: {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// New coverage expansion tests
+// ---------------------------------------------------------------------------
+
+/// `run_inner` returns `DaemonResponse::Error` when the registry reports zero
+/// layers for an otherwise valid (pulled) image.
+#[tokio::test]
+async fn test_handle_run_empty_image_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        // Image is "pre-cached" so the pull is skipped, but get_image_layers returns empty.
+        registry: Arc::new(
+            MockRegistry::new()
+                .with_cached_image("library/alpine", "latest")
+                .with_empty_layers(),
+        ),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            // The handler wraps DomainError::EmptyImage; the message should
+            // reference the image or contain a recognisable keyword.
+            assert!(
+                message.to_lowercase().contains("empty")
+                    || message.to_lowercase().contains("no layer")
+                    || message.contains("alpine"),
+                "expected empty-image error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response for empty image, got: {other:?}"),
+    }
+}
+
+/// `handle_stop` on a container that is in "Created" state (no PID) returns
+/// an error indicating the container has no PID or is not running.
+///
+/// This covers the `record.pid.ok_or_else(...)` path in `stop_inner` (Unix).
+#[tokio::test]
+async fn test_handle_stop_container_without_pid_returns_error() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Insert a container record directly in "Created" state (pid = None).
+    let container_id = "nopidcontainer01".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Created".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    let response = handler::handle_stop(container_id, state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("no PID")
+                    || message.contains("not running")
+                    || message.contains("no pid"),
+                "expected 'no PID' or 'not running' in error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got: {other:?}"),
+    }
+}
+
+/// `remove_inner` cgroup cleanup failure is best-effort — `handle_remove` still
+/// returns `DaemonResponse::Success` even when `ResourceLimiter::cleanup` fails.
+#[tokio::test]
+async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new().with_cleanup_failure()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Create a container, then mark it Stopped so remove is permitted.
+    let create_response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+    let id = extract_container_id(&create_response);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    state.update_container_state(&id, "Stopped").await;
+
+    // Remove should succeed despite cgroup cleanup failure.
+    let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
+    match remove_response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("removed"),
+                "expected 'removed' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success despite cgroup cleanup failure, got: {other:?}"),
+    }
+
+    // Container should be removed from state regardless.
+    assert!(
+        state.get_container(&id).await.is_none(),
+        "container should be absent from state after remove"
+    );
+}
+
+/// `handle_list` with multiple containers returns all of them.
+#[tokio::test]
+async fn test_handle_list_returns_all_containers() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Create three containers.
+    let mut created_ids = std::collections::HashSet::new();
+    for image in &["alpine", "ubuntu", "nginx"] {
+        let response = handle_run_once(
+            image.to_string(),
+            None,
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        created_ids.insert(extract_container_id(&response));
+    }
+
+    let list_response = handler::handle_list(state).await;
+    match list_response {
+        DaemonResponse::ContainerList { containers } => {
+            assert_eq!(
+                containers.len(),
+                3,
+                "expected 3 containers in list, got {}",
+                containers.len()
+            );
+            let listed_ids: std::collections::HashSet<_> =
+                containers.iter().map(|c| c.id.clone()).collect();
+            assert_eq!(
+                listed_ids, created_ids,
+                "listed container IDs do not match created IDs"
+            );
         }
         other => panic!("expected ContainerList, got: {other:?}"),
     }

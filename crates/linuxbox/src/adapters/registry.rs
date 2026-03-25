@@ -180,7 +180,30 @@ impl ImageRegistry for DockerHubRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::image::manifest::{Descriptor, OciManifest};
     use tempfile::TempDir;
+
+    fn sample_manifest(layer_digests: &[&str]) -> OciManifest {
+        OciManifest {
+            schema_version: 2,
+            media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
+            config: Descriptor {
+                media_type: "application/vnd.oci.image.config.v1+json".to_string(),
+                size: 100,
+                digest: "sha256:config123".to_string(),
+                platform: None,
+            },
+            layers: layer_digests
+                .iter()
+                .map(|d| Descriptor {
+                    media_type: "application/vnd.oci.image.layer.v1.tar+gzip".to_string(),
+                    size: 1000,
+                    digest: d.to_string(),
+                    platform: None,
+                })
+                .collect(),
+        }
+    }
 
     #[test]
     fn test_registry_creation() {
@@ -189,6 +212,16 @@ mod tests {
 
         let registry = DockerHubRegistry::new(store.clone());
         assert!(registry.is_ok());
+    }
+
+    #[test]
+    fn test_store_accessor_returns_same_arc() {
+        let temp_dir = TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
+        let registry = DockerHubRegistry::new(store.clone()).unwrap();
+
+        // store() should return an Arc pointing to the same allocation
+        assert!(Arc::ptr_eq(registry.store(), &store));
     }
 
     #[tokio::test]
@@ -202,6 +235,21 @@ mod tests {
         assert!(!exists);
     }
 
+    #[tokio::test]
+    async fn test_has_image_true_after_store_seeded() {
+        let temp_dir = TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
+
+        // Seed the store with a manifest so has_image returns true
+        let manifest = sample_manifest(&["sha256:layer1abc"]);
+        store
+            .store_manifest("library/alpine", "latest", &manifest)
+            .unwrap();
+
+        let registry = DockerHubRegistry::new(store).unwrap();
+        assert!(registry.has_image("library/alpine", "latest").await);
+    }
+
     #[test]
     fn test_get_image_layers_for_nonexistent_image() {
         let temp_dir = TempDir::new().unwrap();
@@ -211,5 +259,59 @@ mod tests {
         // Non-existent image should return error
         let result = registry.get_image_layers("library/nonexistent", "latest");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_image_layers_success_with_seeded_store() {
+        let temp_dir = TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
+
+        // Seed the store: store a manifest with two layers
+        let digests = ["sha256:aaa111", "sha256:bbb222"];
+        let manifest = sample_manifest(&digests);
+        store
+            .store_manifest("library/busybox", "stable", &manifest)
+            .unwrap();
+
+        let registry = DockerHubRegistry::new(store).unwrap();
+        let layers = registry
+            .get_image_layers("library/busybox", "stable")
+            .expect("get_image_layers should succeed for seeded image");
+
+        assert_eq!(layers.len(), 2);
+        // ImageStore encodes digest as sha256_<hex> in the directory name
+        assert!(
+            layers[0].to_string_lossy().contains("sha256_aaa111"),
+            "first layer path should contain sha256_aaa111, got: {:?}",
+            layers[0]
+        );
+        assert!(
+            layers[1].to_string_lossy().contains("sha256_bbb222"),
+            "second layer path should contain sha256_bbb222, got: {:?}",
+            layers[1]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pull_image_fails_for_invalid_image_ref() {
+        let temp_dir = TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
+        let registry = DockerHubRegistry::new(store).unwrap();
+
+        // An ImageRef with a clearly bogus name will fail at the RegistryClient
+        // network layer (token auth or manifest fetch) — exercises the pull_image
+        // error return path without requiring a real Docker Hub connection to succeed.
+        let image_ref = crate::image::reference::ImageRef {
+            registry: "docker.io".to_string(),
+            namespace: "minibox-test-nonexistent-ns-xyz".to_string(),
+            name: "image-does-not-exist-abc999".to_string(),
+            tag: "nosuchtagXYZ".to_string(),
+        };
+
+        let result = registry.pull_image(&image_ref).await;
+        assert!(
+            result.is_err(),
+            "pull_image should return an error for a non-existent image"
+        );
     }
 }

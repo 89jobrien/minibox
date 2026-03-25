@@ -219,7 +219,7 @@ async fn test_registry_tracks_all_pull_attempts() {
 
     // Image is now cached
     assert!(
-        registry.has_image("alpine", "latest").await,
+        registry.has_image("library/alpine", "latest").await,
         "image must be cached after pull"
     );
 

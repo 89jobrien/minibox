@@ -517,4 +517,84 @@ mod tests {
             assert!(runtime.is_ok());
         }
     }
+
+    // -- ProotRuntime::capabilities() tests ---------------------------------
+
+    #[test]
+    fn proot_runtime_capabilities_all_false() {
+        #[cfg(unix)]
+        {
+            let runtime = ProotRuntime::new("/bin/sh").unwrap();
+            let caps = runtime.capabilities();
+            assert!(!caps.supports_user_namespaces);
+            assert!(!caps.supports_cgroups_v2);
+            assert!(!caps.supports_overlay_fs);
+            assert!(!caps.supports_network_isolation);
+            assert!(caps.max_containers.is_none());
+        }
+    }
+
+    // -- ProotRuntime::from_env() tests -------------------------------------
+
+    use std::sync::Mutex;
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn proot_runtime_from_env_uses_env_var() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
+        unsafe { std::env::set_var("MINIBOX_PROOT_PATH", "/bin/sh") };
+        let result = ProotRuntime::from_env();
+        // SAFETY: same mutex guard; restoring env before any other test runs.
+        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+        assert!(result.is_ok(), "expected ProotRuntime, got {result:?}");
+    }
+
+    #[test]
+    fn proot_runtime_from_env_fails_when_proot_not_found() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
+        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+
+        // Only run this assertion when proot is genuinely absent; skip otherwise.
+        let proot_on_path = std::process::Command::new("which")
+            .arg("proot")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if proot_on_path {
+            // proot is installed — we cannot test the failure branch; skip.
+            return;
+        }
+
+        let result = ProotRuntime::from_env();
+        assert!(result.is_err(), "expected Err when proot not found");
+        assert!(
+            result.unwrap_err().to_string().contains("proot not found"),
+            "error message should mention 'proot not found'"
+        );
+    }
+
+    // -- CopyFilesystem: non-directory layer skip path ----------------------
+
+    #[test]
+    fn copy_filesystem_skips_non_directory_layer() {
+        let dir = TempDir::new().unwrap();
+
+        // A regular file masquerading as a "layer" path
+        let fake_layer = dir.path().join("fake_layer.tar");
+        std::fs::write(&fake_layer, b"not a dir").unwrap();
+
+        let container_dir = dir.path().join("container");
+        let fs = CopyFilesystem::new();
+
+        // Non-directory layers are skipped with warn! — setup_rootfs should still succeed.
+        let result = fs.setup_rootfs(&[fake_layer], &container_dir);
+        assert!(result.is_ok(), "expected Ok, got {result:?}");
+        assert!(
+            result.unwrap().exists(),
+            "merged dir should exist even after skipping bad layer"
+        );
+    }
 }
