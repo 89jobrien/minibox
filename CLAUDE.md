@@ -455,17 +455,34 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
 
+## Git Workflow (3-tier stability pipeline)
+
+```
+main (develop) ──auto──► next (validated) ──manual──► stable (release) ──► v* tag
+```
+
+- **`main`**: Active R&D. Must compile. Direct push or PR merge.
+- **`next`**: Auto-promoted from `main` on green CI. Full test + audit gates.
+- **`stable`**: Maestro-consumable. Tagged releases (`v*`) cut here.
+- **`feature/*`, `hotfix/*`, `chore/*`**: Short-lived, target `main`. Auto-deleted on merge.
+
+Every commit on every branch must compile. `origin` is GitHub (`git@github.com:89jobrien/minibox.git`).
+
+**Shared target dir**: `CARGO_TARGET_DIR=~/.mbx/cache/target/` (set in `.envrc`). Worktrees share the same cache.
+
 ## GitHub Actions CI
 
-`.github/workflows/ci.yml` — macOS job (`macos-latest`): `cargo fmt --all --check` + clippy (all crates) + `cargo xtask test-unit`. No Linux job yet (self-hosted runner planned).
+Workflows in `.github/workflows/`:
 
-## Gitea CI
+- **`ci.yml`** — Quality gates, branch-conditional:
+  - All branches: `cargo check --workspace` + `cargo fmt --all --check` + clippy
+  - `next` + `stable`: above + `cargo xtask test-unit` + audit/deny/machete
+  - `stable` only: above + `cargo geiger`
+- **`phased-deployment.yml`** — Auto-promote `main→next` on green CI; manual promote `next→stable` via `workflow_dispatch`; hotfix backmerge `stable→next→main`
+- **`release.yml`** — Triggered by `v*` tag on `stable`; cross-compile musl binaries; GitHub Release
+- **`nightly.yml`** — Daily `cargo geiger` unsafe audit (informational)
 
-CI runs on self-hosted Gitea Actions (jobrien-vm). Pipeline: `cargo deny check` + `cargo audit` only — no compilation (VPS has 2 CPUs, no swap; Rust builds saturate it).
-
-- `deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
-- Gitea context vars are `gitea.repository`, `gitea.run_id`, `gitea.sha` — not `github.*`
-- `GITEA_` prefix is reserved for secrets; use other names (e.g. `CI_AGENT_TOKEN`)
+`deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
 - Check CI status: `mise run all:ci`
 
 ## Skills Available
