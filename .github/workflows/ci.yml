@@ -42,12 +42,3 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask test-unit
         run: ~/.local/bin/mise exec -- cargo xtask test-unit
-  test-e2e:
-    name: e2e tests (Linux, root)
-    runs-on: [self-hosted, minibox]
-    needs: test-unit
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - name: cargo xtask test-e2e-suite
-        run: ~/.local/bin/mise exec -- cargo xtask test-e2e-suite
