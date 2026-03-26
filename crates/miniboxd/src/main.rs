@@ -70,7 +70,7 @@ use tokio::net::UnixListener;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{SignalKind, signal};
 #[cfg(target_os = "linux")]
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 // ── Default paths ─────────────────────────────────────────────────────────
 
