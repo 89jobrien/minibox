@@ -8,39 +8,39 @@
 ## 1. System Overview — Crate Topology
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────────────────┐
 │                              minibox workspace                             │
-│                                                                             │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                         Binary Crates                                │   │
-│  │                                                                      │   │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────┐  │   │
-│  │  │  miniboxd    │  │ minibox-cli  │  │  minibox-bench            │  │   │
-│  │  │  (daemon)    │  │ (client)     │  │  (benchmarks)             │  │   │
-│  │  └──────┬───────┘  └──────┬───────┘  └───────────────────────────┘  │   │
-│  └─────────┼─────────────────┼──────────────────────────────────────────┘   │
-│            │                 │                                               │
-│  ┌─────────▼─────────────────▼──────────────────────────────────────────┐   │
-│  │                       Library Crates                                  │   │
-│  │                                                                       │   │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────┐  ┌────────┐             │   │
-│  │  │ daemonbox  │  │  linuxbox  │  │ macbox │  │ winbox │             │   │
-│  │  │ handler    │  │  adapters  │  │ colima │  │  stub  │             │   │
-│  │  │ server     │  │  container │  │ macOS  │  │  win   │             │   │
-│  │  │ state      │  │  image     │  │        │  │        │             │   │
-│  │  └─────┬──────┘  └─────┬──────┘  └────────┘  └────────┘             │   │
-│  │        │               │                                              │   │
-│  │  ┌─────▼───────────────▼──────────────────────────────────────────┐  │   │
-│  │  │                   minibox-core                                  │  │   │
-│  │  │  domain.rs   protocol.rs   image/   preflight/   error.rs      │  │   │
-│  │  └────────────────────────────────────────────────────────────────┘  │   │
-│  │                                                                       │   │
-│  │  ┌────────────────┐  ┌──────────────┐  ┌──────────────────────┐     │   │
-│  │  │ minibox-macros │  │ minibox-llm  │  │  minibox-secrets     │     │   │
-│  │  │ as_any! adapt! │  │ LLM client   │  │  credential store    │     │   │
-│  │  └────────────────┘  └──────────────┘  └──────────────────────┘     │   │
-│  └───────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                         Binary Crates                                │  │
+│  │                                                                      │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────┐   │  │
+│  │  │  miniboxd    │  │ minibox-cli  │  │  minibox-bench            │   │  │
+│  │  │  (daemon)    │  │ (client)     │  │  (benchmarks)             │   │  │
+│  │  └──────┬───────┘  └──────┬───────┘  └───────────────────────────┘   │  │
+│  └─────────┼─────────────────┼──────────────────────────────────────────┘  │
+│            │                 │                                             │
+│  ┌─────────▼─────────────────▼───────────────────────────────────────────┐ │
+│  │                       Library Crates                                  │ │
+│  │                                                                       │ │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────┐  ┌────────┐               │ │
+│  │  │ daemonbox  │  │  linuxbox  │  │ macbox │  │ winbox │               │ │
+│  │  │ handler    │  │  adapters  │  │ colima │  │  stub  │               │ │
+│  │  │ server     │  │  container │  │ macOS  │  │  win   │               │ │
+│  │  │ state      │  │  image     │  │        │  │        │               │ │
+│  │  └─────┬──────┘  └─────┬──────┘  └────────┘  └────────┘               │ │
+│  │        │               │                                              │ │
+│  │  ┌─────▼───────────────▼──────────────────────────────────────────┐   │ │
+│  │  │                   minibox-core                                 │   │ │
+│  │  │  domain.rs   protocol.rs   image/   preflight/   error.rs      │   │ │
+│  │  └────────────────────────────────────────────────────────────────┘   │ │
+│  │                                                                       │ │
+│  │  ┌────────────────┐  ┌──────────────┐  ┌──────────────────────┐       │ │
+│  │  │ minibox-macros │  │ minibox-llm  │  │  minibox-secrets     │       │ │
+│  │  │ as_any! adapt! │  │ LLM client   │  │  credential store    │       │ │
+│  │  └────────────────┘  └──────────────┘  └──────────────────────┘       │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -84,38 +84,38 @@
 ## 3. Hexagonal Architecture — Ports and Adapters
 
 ```
-                           ┌─────────────────────────────────┐
+                           ┌──────────────────────────────────┐
                            │      Domain Ports (Traits)       │
                            │       minibox-core/domain.rs     │
-                           └──────────────┬──────────────────┘
+                           └──────────────┬───────────────────┘
                                           │
               ┌───────────────────────────┼───────────────────────────┐
               │                           │                           │
          Driving                     Domain Core                   Driven
          Adapters                    (pure logic)                  Adapters
-              │                           │                           │
-    ┌─────────▼──────────┐               │              ┌────────────▼─────────────┐
-    │ minibox-cli        │               │              │ linuxbox/adapters/       │
-    │ (CLI commands)     │               │              │                          │
-    ├────────────────────┤               │              │ ┌────────────────────┐   │
-    │ daemonbox/server   │               │              │ │  ImageRegistry     │   │
-    │ (Unix socket)      │               │              │ │  ├─ DockerHub      │   │
-    └────────────────────┘               │              │ │  ├─ GHCR           │   │
-                                         │              │ │  └─ Colima         │   │
-    ┌────────────────────┐               │              │ ├────────────────────┤   │
-    │ Future:            │               │              │ │  ContainerRuntime  │   │
-    │ • HTTP/gRPC API    │               │              │ │  ├─ LinuxNamespace │   │
-    │ • mbxctl REST      │               │              │ │  ├─ Proot (GKE)   │   │
-    │ • Web dashboard    │               │              │ │  └─ Colima         │   │
-    └────────────────────┘               │              │ ├────────────────────┤   │
-                                         │              │ │  FilesystemProvider│   │
+              │                          │                            │
+    ┌─────────▼──────────┐               │               ┌────────────▼─────────────┐
+    │ minibox-cli        │               │               │ linuxbox/adapters/       │
+    │ (CLI commands)     │               │               │                          │
+    ├────────────────────┤               │               │ ┌────────────────────┐   │
+    │ daemonbox/server   │               │               │ │  ImageRegistry     │   │
+    │ (Unix socket)      │               │               │ │  ├─ DockerHub      │   │
+    └────────────────────┘               │               │ │  ├─ GHCR           │   │
+                                         │               │ │  └─ Colima         │   │
+    ┌────────────────────┐               │               │ ├────────────────────┤   │
+    │ Future:            │               │               │ │  ContainerRuntime  │   │
+    │ • HTTP/gRPC API    │               │               │ │  ├─ LinuxNamespace │   │
+    │ • mbxctl REST      │               │               │ │  ├─ Proot (GKE)    │   │
+    │ • Web dashboard    │               │               │ │  └─ Colima         │   │
+    └────────────────────┘               │               │ ├────────────────────┤   │
+                                         │               │ │  FilesystemProvider│   │
     ┌──────────────────────────────────────┐             │ │  ├─ Overlay        │   │
-    │         Domain Traits                │             │ │  ├─ Copy (GKE)    │   │
+    │         Domain Traits                │             │ │  ├─ Copy (GKE)     │   │
     │                                      │             │ │  └─ Colima         │   │
     │  ImageRegistry                       │             │ ├────────────────────┤   │
     │  ├─ has_image(name, tag) → bool      │             │ │  ResourceLimiter   │   │
     │  ├─ pull_image(ref) → ImageMetadata  │             │ │  ├─ CgroupV2       │   │
-    │  └─ get_image_layers(name, tag)      │             │ │  ├─ Noop (GKE)    │   │
+    │  └─ get_image_layers(name, tag)      │             │ │  ├─ Noop (GKE)     │   │
     │         → Vec<PathBuf>               │             │ │  └─ Colima         │   │
     │                                      │             │ └────────────────────┘   │
     │  ContainerRuntime                    │             │                          │
@@ -125,7 +125,7 @@
     │  FilesystemProvider                  │             │ ├─ GHCR API              │
     │  ├─ setup_rootfs(layers, dir)        │             │ ├─ overlayfs             │
     │  │       → PathBuf                   │             │ ├─ cgroup2 sysfs         │
-    │  └─ pivot_root(new_root) → ()        │             │ └─ proot (GKE only)     │
+    │  └─ pivot_root(new_root) → ()        │             │ └─ proot (GKE only)      │
     │                                      │             └──────────────────────────┘
     │  ResourceLimiter                     │
     │  ├─ create(id, config) → String      │
@@ -143,34 +143,34 @@
   MINIBOX_ADAPTER env var
           │
           ├─ "native" (default, Linux root)
-          │   ┌──────────────────────────────────────────────────────┐
+          │   ┌─────────────────────────────────────────────────────┐
           │   │  Registry:   DockerHubRegistry + GhcrRegistry       │
           │   │  Filesystem: OverlayFilesystem (overlay mount)      │
           │   │  Limiter:    CgroupV2Limiter (memory, cpu, pids)    │
-          │   │  Runtime:    LinuxNamespaceRuntime (clone syscall)   │
+          │   │  Runtime:    LinuxNamespaceRuntime (clone syscall)  │
           │   │  Network:    NoopNetwork                            │
           │   │  Auth:       SO_PEERCRED UID==0 required            │
-          │   └──────────────────────────────────────────────────────┘
+          │   └─────────────────────────────────────────────────────┘
           │
           ├─ "gke" (unprivileged, GKE/Cloud Run)
-          │   ┌──────────────────────────────────────────────────────┐
+          │   ┌─────────────────────────────────────────────────────┐
           │   │  Registry:   DockerHubRegistry + GhcrRegistry       │
           │   │  Filesystem: CopyFilesystem (cp -r, no overlay)     │
           │   │  Limiter:    NoopLimiter (no cgroup access)         │
           │   │  Runtime:    ProotRuntime (ptrace-based fake root)  │
           │   │  Network:    NoopNetwork                            │
           │   │  Auth:       SO_PEERCRED UID check skipped          │
-          │   └──────────────────────────────────────────────────────┘
+          │   └─────────────────────────────────────────────────────┘
           │
           └─ "colima" (macOS via Colima VM)
-              ┌──────────────────────────────────────────────────────┐
+              ┌─────────────────────────────────────────────────────┐
               │  Registry:   ColimaRegistry (limactl + nerdctl)     │
               │  Filesystem: ColimaFilesystem                       │
               │  Limiter:    ColimaLimiter                          │
               │  Runtime:    ColimaRuntime (nerdctl exec + chroot)  │
               │  Network:    NoopNetwork                            │
               │  Auth:       SO_PEERCRED not available on macOS     │
-              └──────────────────────────────────────────────────────┘
+              └─────────────────────────────────────────────────────┘
 
   Not yet wired (library-only):
   ├─ docker_desktop  (adapters/docker_desktop.rs)
@@ -188,24 +188,24 @@
   │
   ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │ minibox-cli                                                  │
-  │                                                              │
+  │ minibox-cli                                                 │
+  │                                                             │
   │ 1. Parse args (clap)                                        │
   │ 2. Build DaemonRequest::Run {                               │
   │      image: "alpine", tag: "latest",                        │
-  │      command: ["/bin/echo", "hello"],                        │
+  │      command: ["/bin/echo", "hello"],                       │
   │      ephemeral: true                                        │
-  │    }                                                         │
+  │    }                                                        │
   │ 3. Connect to /run/minibox/miniboxd.sock                    │
   │ 4. Send JSON + newline                                      │
   └───────────────────────────┬─────────────────────────────────┘
                               │ Unix socket
                               ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │ daemonbox/server.rs                                          │
-  │                                                              │
+  │ daemonbox/server.rs                                         │
+  │                                                             │
   │ 5. Accept connection                                        │
-  │ 6. getsockopt(SO_PEERCRED) → uid, pid                      │
+  │ 6. getsockopt(SO_PEERCRED) → uid, pid                       │
   │ 7. SECURITY: reject if uid != 0                             │
   │ 8. tokio::spawn → handle_connection()                       │
   │ 9. Read line, deserialize DaemonRequest                     │
@@ -215,44 +215,44 @@
                               │
                               ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │ daemonbox/handler.rs — handle_run_streaming()                │
-  │                                                              │
+  │ daemonbox/handler.rs — handle_run_streaming()               │
+  │                                                             │
   │ 12. Generate container ID (16-char UUID hex)                │
   │ 13. Parse ImageRef ("alpine" → library/alpine:latest)       │
   │ 14. Select registry (DockerHub vs GHCR)                     │
-  │                                                              │
+  │                                                             │
   │ ┌─ IMAGE PULL (if not cached) ──────────────────────────┐   │
   │ │ 15. Auth: GET auth.docker.io/token (anonymous)        │   │
   │ │ 16. Manifest: GET /v2/library/alpine/manifests/latest │   │
-  │ │ 17. For each layer:                                    │   │
+  │ │ 17. For each layer:                                   │   │
   │ │     GET /v2/library/alpine/blobs/{digest}             │   │
-  │ │     Verify SHA256, extract tar (security validated)    │   │
+  │ │     Verify SHA256, extract tar (security validated)   │   │
   │ │ 18. Store at /var/lib/minibox/images/library/alpine/  │   │
   │ └───────────────────────────────────────────────────────┘   │
-  │                                                              │
+  │                                                             │
   │ 19. Create container dirs:                                  │
   │     /var/lib/minibox/containers/{id}/merged                 │
   │     /var/lib/minibox/containers/{id}/upper                  │
   │     /var/lib/minibox/containers/{id}/work                   │
-  │                                                              │
+  │                                                             │
   │ 20. OVERLAY MOUNT (FilesystemProvider):                     │
   │     mount("overlay", merged,                                │
   │       "lowerdir=layer1:layer2,upperdir=..,workdir=..",      │
   │       MS_NOSUID | MS_NODEV)                                 │
-  │                                                              │
+  │                                                             │
   │ 21. CGROUP SETUP (ResourceLimiter):                         │
   │     mkdir /sys/fs/cgroup/minibox/{id}/                      │
   │     write memory.max, cpu.weight, pids.max=1024             │
-  │                                                              │
+  │                                                             │
   │ 22. Register container state: "Created"                     │
   │ 23. Acquire spawn_semaphore (max 100 concurrent)            │
-  │ 24. Send ContainerCreated{id} → client                     │
+  │ 24. Send ContainerCreated{id} → client                      │
   └───────────────────────────┬─────────────────────────────────┘
                               │
                               ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │ spawn_blocking → process.rs + namespace.rs                   │
-  │                                                              │
+  │ spawn_blocking → process.rs + namespace.rs                  │
+  │                                                             │
   │ PARENT PROCESS:                                             │
   │ 25. Create output pipe (O_CLOEXEC)                          │
   │ 26. Extract raw FDs, forget OwnedFds (prevent double-close) │
@@ -262,7 +262,7 @@
   │     CLONE_NEWIPC | CLONE_NEWNET | SIGCHLD                   │
   │ 29. Close write_fd in parent                                │
   │ 30. Return SpawnResult { pid, output_reader }               │
-  │                                                              │
+  │                                                             │
   │ CHILD PROCESS (PID 1 in new PID namespace):                 │
   │ 31. dup2(write_fd → stdout, stderr)                         │
   │ 32. Close write_fd and read_fd                              │
@@ -272,53 +272,53 @@
   │     a. mount("", "/", MS_REC | MS_PRIVATE)                  │
   │        ↑ required: pivot_root fails EINVAL on shared mounts │
   │     b. bind mount merged dir                                │
-  │     c. mount proc  (MS_NOSUID | MS_NODEV | MS_NOEXEC)      │
+  │     c. mount proc  (MS_NOSUID | MS_NODEV | MS_NOEXEC)       │
   │     d. mount sysfs (MS_RDONLY — prevent cgroup escape)      │
   │     e. mount devtmpfs                                       │
   │     f. pivot_root(new_root, /.put_old)                      │
   │     g. chdir("/")                                           │
-  │     h. umount2("/.put_old", MNT_DETACH)                    │
+  │     h. umount2("/.put_old", MNT_DETACH)                     │
   │     i. rmdir("/.put_old")                                   │
   │ 36. close_extra_fds():                                      │
-  │     close_range(3, ~0U, 0) (kernel 5.9+)                   │
+  │     close_range(3, ~0U, 0) (kernel 5.9+)                    │
   │     fallback: /proc/self/fd iteration                       │
   │ 37. execvp("/bin/echo", ["hello"])                          │
   │     ↓ (process replaced, never returns)                     │
   └───────────────────────────┬─────────────────────────────────┘
                               │
                               ▼
-  ┌─────────────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────────────┐
   │ Concurrent tasks (handler.rs)                                │
   │                                                              │
-  │ OUTPUT DRAIN (spawn_blocking):                              │
-  │ 38. Read 4096-byte chunks from output pipe                  │
-  │ 39. Base64 encode each chunk                                │
-  │ 40. Send ContainerOutput{stdout, data} → client             │
+  │ OUTPUT DRAIN (spawn_blocking):                               │
+  │ 38. Read 4096-byte chunks from output pipe                   │
+  │ 39. Base64 encode each chunk                                 │
+  │ 40. Send ContainerOutput{stdout, data} → client              │
   │     (client decodes + prints to terminal in real time)       │
   │                                                              │
-  │ REAPER (spawn_blocking):                                    │
-  │ 41. waitpid(child_pid, 0) — block until exit                │
-  │ 42. Extract exit code                                       │
+  │ REAPER (spawn_blocking):                                     │
+  │ 41. waitpid(child_pid, 0) — block until exit                 │
+  │ 42. Extract exit code                                        │
   │                                                              │
   │ COMPLETION:                                                  │
-  │ 43. Wait for drain to finish                                │
-  │ 44. Network cleanup                                         │
-  │ 45. Send ContainerStopped{exit_code} → client               │
-  │ 46. Auto-remove ephemeral container state                   │
-  └───────────────────────────┬─────────────────────────────────┘
+  │ 43. Wait for drain to finish                                 │
+  │ 44. Network cleanup                                          │
+  │ 45. Send ContainerStopped{exit_code} → client                │
+  │ 46. Auto-remove ephemeral container state                    │
+  └───────────────────────────┬──────────────────────────────────┘
                               │
                               ▼
-  ┌─────────────────────────────────────────────────────────────┐
+  ┌──────────────────────────────────────────────────────────────┐
   │ minibox-cli                                                  │
   │                                                              │
-  │ 47. Receive ContainerOutput → decode base64 → print         │
-  │ 48. Receive ContainerStopped → exit(exit_code)              │
+  │ 47. Receive ContainerOutput → decode base64 → print          │
+  │ 48. Receive ContainerStopped → exit(exit_code)               │
   │                                                              │
   │ Terminal output:                                             │
   │   hello                                                      │
   │   $ echo $?                                                  │
   │   0                                                          │
-  └─────────────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -332,11 +332,11 @@
   ┌─────────────────────────────────────────────────────────────────────┐
   │ Step 1: Authentication                                              │
   │                                                                     │
-  │  GET https://auth.docker.io/token                                  │
+  │  GET https://auth.docker.io/token                                   │
   │      ?service=registry.docker.io                                    │
   │      &scope=repository:library/alpine:pull                          │
   │                                                                     │
-  │  Response: { "token": "eyJ..." }                                   │
+  │  Response: { "token": "eyJ..." }                                    │
   │  (anonymous for public images)                                      │
   └───────────────────────────┬─────────────────────────────────────────┘
                               │
@@ -345,54 +345,54 @@
   │ Step 2: Manifest Fetch                                              │
   │                                                                     │
   │  GET https://registry-1.docker.io/v2/library/alpine/manifests/latest│
-  │  Accept: application/vnd.oci.image.manifest.v1+json                │
+  │  Accept: application/vnd.oci.image.manifest.v1+json                 │
   │  Authorization: Bearer {token}                                      │
   │                                                                     │
-  │  SECURITY: manifest size ≤ 10 MB                                   │
+  │  SECURITY: manifest size ≤ 10 MB                                    │
   │                                                                     │
   │  Response: OciManifest {                                            │
-  │    config: { digest: "sha256:abc..." },                            │
+  │    config: { digest: "sha256:abc..." },                             │
   │    layers: [                                                        │
-  │      { digest: "sha256:111...", size: 3145728 },                   │
-  │      { digest: "sha256:222...", size: 1048576 },                   │
+  │      { digest: "sha256:111...", size: 3145728 },                    │
+  │      { digest: "sha256:222...", size: 1048576 },                    │
   │    ]                                                                │
   │  }                                                                  │
   └───────────────────────────┬─────────────────────────────────────────┘
                               │
                               ▼
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ Step 3: Layer Download + Extraction (per layer, bottom to top)      │
-  │                                                                     │
-  │  GET /v2/library/alpine/blobs/sha256:111...                        │
-  │  Authorization: Bearer {token}                                      │
-  │                                                                     │
-  │  SECURITY: layer size ≤ 10 GB                                      │
-  │  Verify: SHA256(downloaded) == digest from manifest                │
-  │                                                                     │
-  │  ┌─────────────────────────────────────────────────────────────┐   │
-  │  │ extract_layer() — layer.rs                                  │   │
-  │  │                                                             │   │
-  │  │  gzip decompress → tar iterate entries:                     │   │
-  │  │                                                             │   │
-  │  │  for each entry:                                            │   │
-  │  │    ┌──────────────────────────────────────────────────────┐ │   │
-  │  │    │ SECURITY VALIDATION                                  │ │   │
-  │  │    │                                                      │ │   │
-  │  │    │  ✗ skip "." and "./" (tar root entries)             │ │   │
-  │  │    │  ✗ reject paths with ".." components                │ │   │
-  │  │    │  ✗ reject absolute paths                            │ │   │
-  │  │    │  ✗ reject Block and Char device nodes               │ │   │
-  │  │    │  ✗ reject named pipes                               │ │   │
-  │  │    │  ✓ strip setuid/setgid bits (04000, 02000, 01000)   │ │   │
-  │  │    │  ✓ rewrite absolute symlinks to relative:            │ │   │
-  │  │    │    /usr/bin/env → ../../usr/bin/env                  │ │   │
-  │  │    │    (prevents host path leak after pivot_root)        │ │   │
-  │  │    │  ✓ canonicalize parent, verify within base_dir      │ │   │
-  │  │    └──────────────────────────────────────────────────────┘ │   │
-  │  │                                                             │   │
-  │  │  Extract to: /var/lib/minibox/images/{ns}/{name}/{digest}/ │   │
-  │  └─────────────────────────────────────────────────────────────┘   │
-  └─────────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │ Step 3: Layer Download + Extraction (per layer, bottom to top)       │
+  │                                                                      │
+  │  GET /v2/library/alpine/blobs/sha256:111...                          │
+  │  Authorization: Bearer {token}                                       │
+  │                                                                      │
+  │  SECURITY: layer size ≤ 10 GB                                        │
+  │  Verify: SHA256(downloaded) == digest from manifest                  │
+  │                                                                      │
+  │  ┌───────────────────────────────────────────────────────────────┐   │
+  │  │ extract_layer() — layer.rs                                    │   │
+  │  │                                                               │   │
+  │  │  gzip decompress → tar iterate entries:                       │   │
+  │  │                                                               │   │
+  │  │  for each entry:                                              │   │
+  │  │    ┌────────────────────────────────────────────────────────┐ │   │
+  │  │    │ SECURITY VALIDATION                                    │ │   │
+  │  │    │                                                        │ │   │
+  │  │    │  ✗ skip "." and "./" (tar root entries)                │ │   │
+  │  │    │  ✗ reject paths with ".." components                   │ │   │
+  │  │    │  ✗ reject absolute paths                               │ │   │
+  │  │    │  ✗ reject Block and Char device nodes                  │ │   │
+  │  │    │  ✗ reject named pipes                                  │ │   │
+  │  │    │  ✓ strip setuid/setgid bits (04000, 02000, 01000)      │ │   │
+  │  │    │  ✓ rewrite absolute symlinks to relative:              │ │   │
+  │  │    │    /usr/bin/env → ../../usr/bin/env                    │ │   │
+  │  │    │    (prevents host path leak after pivot_root)          │ │   │
+  │  │    │  ✓ canonicalize parent, verify within base_dir         │ │   │
+  │  │    └────────────────────────────────────────────────────────┘ │   │
+  │  │                                                               │   │
+  │  │  Extract to: /var/lib/minibox/images/{ns}/{name}/{digest}/    │   │
+  │  └───────────────────────────────────────────────────────────────┘   │
+  └──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -403,21 +403,21 @@
   minibox-cli                                          miniboxd
   ══════════                                          ════════
        │                                                  │
-       │  ──── DaemonRequest::Run ────────────────────▶  │
+       │  ──── DaemonRequest::Run ────────────────────▶   │
        │  {"type":"Run","image":"alpine","tag":"latest",  │
-       │   "command":["/bin/echo","hello"],                │
+       │   "command":["/bin/echo","hello"],               │
        │   "ephemeral":true}\n                            │
        │                                                  │
-       │  ◀── DaemonResponse::ContainerCreated ────────  │
+       │  ◀── DaemonResponse::ContainerCreated ────────   │
        │  {"type":"ContainerCreated",                     │
        │   "id":"abc1234567890def"}\n                     │
        │                                                  │
-       │  ◀── DaemonResponse::ContainerOutput ─────────  │
+       │  ◀── DaemonResponse::ContainerOutput ─────────   │
        │  {"type":"ContainerOutput",                      │  (0+ messages,
        │   "stream":"stdout",                             │   streamed in
        │   "data":"aGVsbG8K"}\n                           │   real time)
        │                                                  │
-       │  ◀── DaemonResponse::ContainerStopped ────────  │
+       │  ◀── DaemonResponse::ContainerStopped ────────   │
        │  {"type":"ContainerStopped",                     │
        │   "exit_code":0}\n                               │
        │                                                  │
@@ -433,16 +433,16 @@
   ┌──────────────────────────────────────────────────────────────┐
   │  Run    { image, tag, command, memory_limit_bytes,           │
   │           cpu_weight, ephemeral, network }                   │
-  │  Pull   { image, tag }                                      │
-  │  Stop   { id }                                              │
-  │  Remove { id }                                              │
-  │  List   { }                                                 │
+  │  Pull   { image, tag }                                       │
+  │  Stop   { id }                                               │
+  │  Remove { id }                                               │
+  │  List   { }                                                  │
   └──────────────────────────────────────────────────────────────┘
 
   Response Types:
   ┌──────────────────────────────────────────────────────────────┐
   │  ContainerCreated  { id }                                    │
-  │  ContainerOutput   { stream: Stdout|Stderr, data: base64 }  │
+  │  ContainerOutput   { stream: Stdout|Stderr, data: base64 }   │
   │  ContainerStopped  { exit_code }                             │
   │  ContainerList     { containers: Vec<ContainerInfo> }        │
   │  Success           { message }                               │
@@ -504,44 +504,44 @@
         "lowerdir=layer2:layer1,upperdir=upper,workdir=work")
 
 
-  ┌───────────────────────────────────────────────────────┐
+  ┌────────────────────────────────────────────────────────┐
   │ Container View (after pivot_root)                      │
   │                                                        │
   │   /                                                    │
   │   ├── bin/                                             │
   │   ├── etc/                                             │
   │   ├── usr/                                             │
-  │   ├── proc/  (mounted, MS_NOSUID|MS_NODEV|MS_NOEXEC)  │
+  │   ├── proc/  (mounted, MS_NOSUID|MS_NODEV|MS_NOEXEC)   │
   │   ├── sys/   (mounted, MS_RDONLY — no cgroup escape)   │
-  │   ├── dev/   (mounted, MS_NOSUID|MS_NODEV|MS_NOEXEC)  │
+  │   ├── dev/   (mounted, MS_NOSUID|MS_NODEV|MS_NOEXEC)   │
   │   └── tmp/                                             │
-  └───────────────────────────┬───────────────────────────┘
+  └───────────────────────────┬────────────────────────────┘
                               │ merged =
                               │ /var/lib/minibox/containers/{id}/merged
                               │
-  ┌───────────────────────────▼───────────────────────────┐
-  │                   Overlay Mount                        │
-  │                                                        │
-  │  ┌──────────────────────────────────────────────────┐  │
-  │  │  upper (read-write)                              │  │
+  ┌───────────────────────────▼─────────────────────────────┐
+  │                   Overlay Mount                         │
+  │                                                         │
+  │  ┌───────────────────────────────────────────────────┐  │
+  │  │  upper (read-write)                               │  │
   │  │  /var/lib/minibox/containers/{id}/upper           │  │
-  │  │  ← all container writes go here                  │  │
-  │  └──────────────────────────────────────────────────┘  │
-  │                         │                              │
-  │  ┌──────────────────────▼───────────────────────────┐  │
-  │  │  work (overlay internal bookkeeping)             │  │
+  │  │  ← all container writes go here                   │  │
+  │  └───────────────────────────────────────────────────┘  │
+  │                         │                               │
+  │  ┌──────────────────────▼────────────────────────────┐  │
+  │  │  work (overlay internal bookkeeping)              │  │
   │  │  /var/lib/minibox/containers/{id}/work            │  │
-  │  └──────────────────────────────────────────────────┘  │
-  │                         │                              │
-  │  ┌──────────────────────▼───────────────────────────┐  │
-  │  │  lower (read-only image layers, bottom to top)   │  │
-  │  │                                                  │  │
+  │  └───────────────────────────────────────────────────┘  │
+  │                         │                               │
+  │  ┌──────────────────────▼────────────────────────────┐  │
+  │  │  lower (read-only image layers, bottom to top)    │  │
+  │  │                                                   │  │
   │  │  layer 2: /var/lib/minibox/images/.../sha256_222  │  │
   │  │  layer 1: /var/lib/minibox/images/.../sha256_111  │  │
-  │  │                                                  │  │
-  │  │  lowerdir=layer2:layer1 (topmost first in mount) │  │
-  │  └──────────────────────────────────────────────────┘  │
-  └────────────────────────────────────────────────────────┘
+  │  │                                                   │  │
+  │  │  lowerdir=layer2:layer1 (topmost first in mount)  │  │
+  │  └───────────────────────────────────────────────────┘  │
+  └─────────────────────────────────────────────────────────┘
 
 
   Cleanup on container remove:
@@ -642,7 +642,7 @@
   │                                                          │
   │ join(id, pid):                                           │
   │   write pid to cgroup.procs                              │
-  │   SECURITY: validate pid != 0 (kernel 6.8 silently      │
+  │   SECURITY: validate pid != 0 (kernel 6.8 silently       │
   │   accepts 0 but it's never valid)                        │
   │                                                          │
   │ cleanup(id):                                             │
@@ -659,20 +659,20 @@
   ┌─────────────────────────────────────────────────────────────────┐
   │                    SECURITY BOUNDARY MAP                        │
   │                                                                 │
-  │  ┌─── NETWORK BOUNDARY ───────────────────────────────────┐    │
+  │  ┌─── NETWORK BOUNDARY ────────────────────────────────────┐    │
   │  │                                                         │    │
   │  │  Docker Hub / GHCR API                                  │    │
-  │  │  ├─ Manifest size ≤ 10 MB (prevents memory exhaustion) │    │
+  │  │  ├─ Manifest size ≤ 10 MB (prevents memory exhaustion)  │    │
   │  │  ├─ Layer size ≤ 10 GB per layer                        │    │
-  │  │  ├─ Total image size ≤ 5 GB                            │    │
+  │  │  ├─ Total image size ≤ 5 GB                             │    │
   │  │  └─ SHA256 digest verification on every layer           │    │
   │  │                                                         │    │
   │  └─────────────────────────────────────────────────────────┘    │
   │                              │                                  │
-  │  ┌─── TAR EXTRACTION ────────▼────────────────────────────┐    │
+  │  ┌─── TAR EXTRACTION ────────▼─────────────────────────────┐    │
   │  │                                                         │    │
   │  │  layer.rs — validate_tar_entry_path()                   │    │
-  │  │  ├─ Reject ".." path components (Zip Slip)             │    │
+  │  │  ├─ Reject ".." path components (Zip Slip)              │    │
   │  │  ├─ Reject absolute paths                               │    │
   │  │  ├─ Reject device nodes (Block, Char)                   │    │
   │  │  ├─ Reject named pipes                                  │    │
@@ -682,7 +682,7 @@
   │  │                                                         │    │
   │  └─────────────────────────────────────────────────────────┘    │
   │                              │                                  │
-  │  ┌─── SOCKET AUTH ───────────▼────────────────────────────┐    │
+  │  ┌─── SOCKET AUTH ───────────▼─────────────────────────────┐    │
   │  │                                                         │    │
   │  │  server.rs — SO_PEERCRED                                │    │
   │  │  ├─ Kernel provides UID/PID of connecting process       │    │
@@ -692,9 +692,9 @@
   │  │                                                         │    │
   │  └─────────────────────────────────────────────────────────┘    │
   │                              │                                  │
-  │  ┌─── CONTAINER ISOLATION ───▼────────────────────────────┐    │
+  │  ┌─── CONTAINER ISOLATION ───▼─────────────────────────────┐    │
   │  │                                                         │    │
-  │  │  Namespaces: PID, MNT, UTS, IPC, NET (5 of 7)         │    │
+  │  │  Namespaces: PID, MNT, UTS, IPC, NET (5 of 7)           │    │
   │  │  ├─ pivot_root: host FS invisible after swap            │    │
   │  │  ├─ /sys mounted read-only (no cgroup writes)           │    │
   │  │  ├─ close_extra_fds: no inherited host FDs              │    │
@@ -703,9 +703,9 @@
   │  │  cgroups v2:                                            │    │
   │  │  ├─ memory.max: OOM kill on breach                      │    │
   │  │  ├─ cpu.weight: fair scheduling                         │    │
-  │  │  └─ pids.max=1024: fork bomb prevention                │    │
+  │  │  └─ pids.max=1024: fork bomb prevention                 │    │
   │  │                                                         │    │
-  │  │  ⚠ Missing:                                            │    │
+  │  │  ⚠ Missing:                                             │    │
   │  │  ├─ No user namespace remapping (runs as root inside)   │    │
   │  │  ├─ No seccomp BPF filter                               │    │
   │  │  └─ No network bridge/veth (isolated but no egress)     │    │
@@ -723,41 +723,41 @@
   │                     TOKIO ASYNC RUNTIME                       │
   │                                                               │
   │  server.rs                   handler.rs                       │
-  │  ┌──────────────────┐       ┌──────────────────────────┐     │
-  │  │ accept() loop    │       │ handle_run_streaming()   │     │
-  │  │ read_line()      │       │ mpsc::channel            │     │
-  │  │ write()          │       │ tx.send()                │     │
-  │  │ SO_PEERCRED      │       │ select!                  │     │
-  │  └──────────────────┘       └───────────┬──────────────┘     │
+  │  ┌──────────────────┐       ┌──────────────────────────┐      │
+  │  │ accept() loop    │       │ handle_run_streaming()   │      │
+  │  │ read_line()      │       │ mpsc::channel            │      │
+  │  │ write()          │       │ tx.send()                │      │
+  │  │ SO_PEERCRED      │       │ select!                  │      │
+  │  └──────────────────┘       └───────────┬──────────────┘      │
   │                                         │                     │
-  │                              ┌──────────▼──────────────┐     │
-  │                              │ tokio::spawn_blocking   │     │
-  │                              │ (crosses async/sync     │     │
-  │                              │  boundary)              │     │
-  │                              └──────────┬──────────────┘     │
+  │                              ┌──────────▼──────────────┐      │
+  │                              │ tokio::spawn_blocking   │      │
+  │                              │ (crosses async/sync     │      │
+  │                              │  boundary)              │      │
+  │                              └──────────┬──────────────┘      │
   └─────────────────────────────────────────┼─────────────────────┘
                                             │
   ┌─────────────────────────────────────────▼─────────────────────┐
-  │                  BLOCKING THREAD POOL                          │
+  │                  BLOCKING THREAD POOL                         │
   │                                                               │
   │  process.rs                filesystem.rs                      │
-  │  ┌──────────────────┐     ┌──────────────────┐               │
-  │  │ clone(2)         │     │ mount()          │               │
-  │  │ waitpid()        │     │ pivot_root()     │               │
-  │  │ execvp()         │     │ umount2()        │               │
-  │  └──────────────────┘     └──────────────────┘               │
+  │  ┌──────────────────┐     ┌──────────────────┐                │
+  │  │ clone(2)         │     │ mount()          │                │
+  │  │ waitpid()        │     │ pivot_root()     │                │
+  │  │ execvp()         │     │ umount2()        │                │
+  │  └──────────────────┘     └──────────────────┘                │
   │                                                               │
   │  cgroups.rs               layer.rs                            │
-  │  ┌──────────────────┐     ┌──────────────────┐               │
-  │  │ write cgroup     │     │ tar decompress   │               │
-  │  │ files            │     │ SHA256 verify    │               │
-  │  └──────────────────┘     │ file extraction  │               │
-  │                           └──────────────────┘               │
+  │  ┌──────────────────┐     ┌──────────────────┐                │
+  │  │ write cgroup     │     │ tar decompress   │                │
+  │  │ files            │     │ SHA256 verify    │                │
+  │  └──────────────────┘     │ file extraction  │                │
+  │                           └──────────────────┘                │
   │                                                               │
   │  pipe reading                                                 │
-  │  ┌──────────────────┐                                        │
+  │  ┌──────────────────┐                                         │
   │  │ read(fd, buf)    │ → base64 → ContainerOutput              │
-  │  └──────────────────┘                                        │
+  │  └──────────────────┘                                         │
   └───────────────────────────────────────────────────────────────┘
 
   Rule: clone/fork/exec/mount/waitpid MUST NOT run inline
@@ -910,10 +910,10 @@
   └───────────────────────────────────────────────────────────────┘
 
   Canonical fields:
-  ┌───────────────────┬─────────┬──────────────────────────────┐
-  │ Field             │ Type    │ Used in                       │
-  ├───────────────────┼─────────┼──────────────────────────────┤
-  │ container_id      │ &str    │ all container operations      │
+  ┌───────────────────┬─────────┬────────────────────────────────┐
+  │ Field             │ Type    │ Used in                        │
+  ├───────────────────┼─────────┼────────────────────────────────┤
+  │ container_id      │ &str    │ all container operations       │
   │ pid               │ u32     │ process lifecycle              │
   │ child_pid         │ i32     │ namespace.rs clone result      │
   │ clone_flags       │ i32     │ namespace.rs                   │
@@ -926,7 +926,7 @@
   │ command           │ &str    │ container entrypoint           │
   │ rootfs            │ &Path   │ container rootfs path          │
   │ mode_before/after │ u32     │ permission bit changes         │
-  └───────────────────┴─────────┴──────────────────────────────┘
+  └───────────────────┴─────────┴────────────────────────────────┘
 ```
 
 ---
@@ -1033,8 +1033,8 @@
 
 ```
   ┌───────────────────────────────────────────────────────────┐
-  │                    E2E Tests (14)                          │
-  │                 Linux + root only                          │
+  │                    E2E Tests (14)                         │
+  │                 Linux + root only                         │
   │           just test-e2e / cargo xtask test-e2e-suite      │
   │                                                           │
   │  Full daemon + CLI: pull, run, ps, stop, rm               │
@@ -1042,33 +1042,33 @@
   └─────────────────────────────┬─────────────────────────────┘
                                 │
   ┌─────────────────────────────▼─────────────────────────────┐
-  │              Integration Tests (16 + 8)                    │
-  │                 Linux + root only                          │
-  │           just test-integration                            │
+  │              Integration Tests (16 + 8)                   │
+  │                 Linux + root only                         │
+  │           just test-integration                           │
   │                                                           │
   │  Cgroup: memory limits, CPU weight, pids.max, io.max      │
-  │  Overlay: mount, layer stacking, cleanup                   │
-  │  Container: namespace isolation, pivot_root                │
+  │  Overlay: mount, layer stacking, cleanup                  │
+  │  Container: namespace isolation, pivot_root               │
   └─────────────────────────────┬─────────────────────────────┘
                                 │
   ┌─────────────────────────────▼─────────────────────────────┐
-  │             Property Tests (33)                            │
-  │                Any platform                                │
-  │           cargo xtask test-property                        │
+  │             Property Tests (33)                           │
+  │                Any platform                               │
+  │           cargo xtask test-property                       │
   │                                                           │
   │  Proptest: protocol roundtrip, state machine, image ref   │
   │  DaemonState invariants, handler edge cases               │
   └─────────────────────────────┬─────────────────────────────┘
                                 │
   ┌─────────────────────────────▼─────────────────────────────┐
-  │           Unit + Conformance Tests (257)                   │
-  │              Any platform (4 skipped on macOS)             │
-  │           cargo xtask test-unit / just test-unit           │
+  │           Unit + Conformance Tests (257)                  │
+  │              Any platform (4 skipped on macOS)            │
+  │           cargo xtask test-unit / just test-unit          │
   │                                                           │
   │  155 lib + 11 CLI + 22 handler + 16 conformance           │
   │  + 13 minibox-llm + 36 minibox-secrets + 4 macOS-skipped  │
   │                                                           │
-  │  Mock adapters from minibox_core::adapters::mocks          │
+  │  Mock adapters from minibox_core::adapters::mocks         │
   └───────────────────────────────────────────────────────────┘
 
   macOS quality gates:

@@ -26,6 +26,11 @@
 # Claude Code local configuration
 .claude/
 .worktrees/
+.superpowers/
+
+# Go build artifacts (agentbox)
+agentbox/agentbox
+agentbox/mbx-commit-msg
 
 # Rust build artifacts
 /target/
@@ -93,4 +98,3 @@ __pycache__/
 *.venv/
 *.pytest_cache/
 .firecrawl/
-.superpowers/
