@@ -188,11 +188,11 @@ agentbox-test:
 
 # Run council analysis (Go)
 agentbox-council *ARGS:
-    cd agentbox && go run ./cmd/agentbox/ council {{ARGS}}
+    cd agentbox && op run --account=my.1password.com --env-file=$HOME/.secrets -- go run ./cmd/agentbox/ council {{ARGS}}
 
 # Run meta-agent (Go)
 agentbox-meta-agent *ARGS:
-    cd agentbox && go run ./cmd/agentbox/ meta-agent {{ARGS}}
+    cd agentbox && op run --account=my.1password.com --env-file=$HOME/.secrets -- go run ./cmd/agentbox/ meta-agent {{ARGS}}
 
 # Generate commit message (Go)
 agentbox-commit-msg *ARGS:

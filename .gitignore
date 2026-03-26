@@ -76,6 +76,7 @@ Thumbs.db
 .env.local
 *.log
 *.pid
+*.json
 
 # Documentation build
 /target/doc/
@@ -92,3 +93,4 @@ __pycache__/
 *.venv/
 *.pytest_cache/
 .firecrawl/
+.superpowers/
