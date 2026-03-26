@@ -395,10 +395,11 @@ fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
         // Install: cargo install samply
         which("samply").context("samply not found — install with: cargo install samply")?;
         eprintln!("profiling with samply (suite={suite})...");
+        // BROWSER=firefox ensures samply opens Firefox, not the system default browser.
+        let _env = sh.push_env("BROWSER", "firefox");
         cmd!(sh, "samply record {bin} --suite {suite}")
             .run()
             .context("samply record failed")?;
-        // samply opens the browser automatically on completion.
     } else {
         // Linux: cargo flamegraph writes an SVG.
         which("cargo-flamegraph")
