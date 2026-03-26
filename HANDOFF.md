@@ -73,24 +73,40 @@ Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 
 ---
 
+## Git Workflow (3-tier stability pipeline)
+
+**Spec:** `docs/superpowers/specs/2026-03-26-git-workflow-design.md`
+**Status:** Approved, not yet implemented.
+
+```
+main (develop) ──auto──► next (validated) ──manual──► stable (release) ──► v* tag
+```
+
+- `main`: Active R&D. Must compile. Direct push.
+- `next`: Auto-promoted from `main` on green CI. Full test + audit gates.
+- `stable`: Manual promote. Maestro-consumable. Tagged releases cut here.
+
+**Remotes (pending migration):** `origin` should point to GitHub (currently Gitea).
+Use `git push github main` until remotes are swapped.
+
 ## CI
 
-Single workflow: `.github/workflows/ci.yml`
+Workflows: `ci.yml`, `phased-deployment.yml` (pending), `release.yml`, `nightly.yml`
 
-Jobs:
+Current `ci.yml` jobs:
 - **audit** (ubuntu-latest): `cargo audit`
 - **deny** (ubuntu-latest): `cargo deny`
 - **machete** (ubuntu-latest): `cargo machete`
 - **test-unit** (self-hosted `minibox` runner / jobrien-vm): `cargo xtask test-unit`
 
-The e2e job (`cargo xtask test-e2e-suite`) was removed on 2026-03-26 because
-`test_e2e_run_echo`, `test_e2e_run_with_memory_limit`, `test_e2e_run_with_cpu_weight`,
-and `test_e2e_ps_shows_container` have never passed in CI — all share the same
-symptom: `minibox run` returns non-zero exit with empty stdout. Root cause not yet
-diagnosed; regression to fix before re-adding the job.
+The e2e job was removed on 2026-03-26 (run regression — empty stdout from `minibox run`).
+Re-add as a `stable`-tier gate once fixed.
 
-**jobrien-vm status (2026-03-26):** SSH unreachable (100.105.75.7 timeout). Push to
-`origin`/`gitea` remotes will fail — use `git push github main` until the VM is back.
+**CI phases for self-hosted runner:**
+- Phase 1 (now): non-compile gates (audit/deny/machete/geiger)
+- Phase 2 (future): compile + test inside minibox containers (dogfooding)
+
+**jobrien-vm status (2026-03-26):** SSH unreachable (100.105.75.7 timeout).
 
 ---
 
@@ -157,6 +173,20 @@ All items below are merged to `main`:
 ---
 
 ## Next up
+
+### Implement 3-tier git workflow (spec approved)
+
+Spec: `docs/superpowers/specs/2026-03-26-git-workflow-design.md`
+
+Migration checklist:
+1. Swap remotes: `origin` → `gitea`, `github` → `origin`
+2. Create `next` and `stable` branches from current `main` HEAD
+3. Enable auto-delete head branches in GitHub repo settings
+4. Write `phased-deployment.yml` (auto-promote + manual promote + hotfix backmerge)
+5. Update `ci.yml` with branch-conditional gates
+6. Set `CARGO_TARGET_DIR` in `.envrc` / mise config
+7. Add post-job cleanup to CI for self-hosted runner
+8. Update CLAUDE.md with new branching model
 
 ### e2e run regression (CI blocker)
 
