@@ -38,6 +38,10 @@ fn main() -> Result<()> {
             bench_diff(&extra)
         }
         Some("bench-report") => bench_report(),
+        Some("flamegraph") => {
+            let extra: Vec<String> = env::args().skip(2).collect();
+            flamegraph(&sh, &extra)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -56,6 +60,9 @@ fn main() -> Result<()> {
             );
             eprintln!("  bench-diff       diff two bench JSON files (default: HEAD vs previous)");
             eprintln!("  bench-report     generate HTML report from bench/results/bench.jsonl");
+            eprintln!(
+                "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
+            );
             Ok(())
         }
     }
@@ -355,6 +362,82 @@ fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
     fs::write("bench/results/latest.json", pretty).context("write latest.json")?;
     eprintln!("✓ bench/results/latest.json updated");
     Ok(())
+}
+
+// ── Flamegraph / profiling ────────────────────────────────────────────────────
+
+/// Profile the bench binary and open the result.
+///
+/// macOS  — uses `samply record` (no SIP changes needed); opens Firefox Profiler.
+/// Linux  — uses `cargo flamegraph`; writes SVG to bench/profiles/.
+///
+/// Options (passed as extra args):
+///   --suite <name>   bench suite to run (default: codec)
+///   --open           open result automatically (default: true on macOS)
+fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
+    fs::create_dir_all("bench/profiles").context("create bench/profiles")?;
+
+    let suite = extra_args
+        .windows(2)
+        .find(|w| w[0] == "--suite")
+        .map(|w| w[1].as_str())
+        .unwrap_or("codec");
+
+    // Build release binary first
+    cmd!(sh, "cargo build --release -p minibox-bench")
+        .run()
+        .context("build minibox-bench")?;
+
+    let bin = "./target/release/minibox-bench";
+
+    if cfg!(target_os = "macos") {
+        // samply: records a profile and opens Firefox Profiler in the browser.
+        // Install: cargo install samply
+        which("samply").context("samply not found — install with: cargo install samply")?;
+        eprintln!("profiling with samply (suite={suite})...");
+        cmd!(sh, "samply record {bin} --suite {suite}")
+            .run()
+            .context("samply record failed")?;
+        // samply opens the browser automatically on completion.
+    } else {
+        // Linux: cargo flamegraph writes an SVG.
+        which("cargo-flamegraph")
+            .context("cargo-flamegraph not found — install with: cargo install flamegraph")?;
+        let svg = format!("bench/profiles/flamegraph-{suite}.svg");
+        eprintln!("profiling with cargo-flamegraph (suite={suite}) → {svg}");
+        cmd!(
+            sh,
+            "cargo flamegraph --bin minibox-bench -o {svg} -- --suite {suite}"
+        )
+        .run()
+        .context("cargo flamegraph failed")?;
+        eprintln!("saved: {svg}");
+
+        // Open in browser if available
+        let open_cmd = if which("xdg-open").is_ok() {
+            "xdg-open"
+        } else {
+            "open"
+        };
+        let _ = Command::new(open_cmd).arg(&svg).status();
+    }
+
+    Ok(())
+}
+
+/// Return Ok if `name` is on PATH, Err otherwise.
+fn which(name: &str) -> Result<()> {
+    let status = Command::new("which")
+        .arg(name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("which failed")?;
+    if status.success() {
+        Ok(())
+    } else {
+        bail!("{name} not found on PATH")
+    }
 }
 
 // ── VPS bench helpers ────────────────────────────────────────────────────────

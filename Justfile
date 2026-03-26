@@ -91,6 +91,11 @@ test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-s
 bench:
     cargo xtask bench
 
+# Profile bench binary with samply (macOS) or cargo-flamegraph (Linux)
+# Usage: just flamegraph [suite]   (default suite: codec)
+flamegraph suite="codec":
+    cargo xtask flamegraph --suite {{suite}}
+
 # AI bench analysis (subcommands: report, compare, regress, cleanup, trigger)
 bench-agent *args:
     #!/usr/bin/env bash

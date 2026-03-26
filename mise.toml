@@ -528,5 +528,8 @@ open bench/results/report.html
 '''
 
 [tasks."macos:flamegraph"]
-description = "Record flamegraph with samply (interactive, macOS)"
-run = "samply record ./target/release/minibox-bench"
+description = "Profile bench binary with samply — builds first, suite selectable. Usage: mise run macos:flamegraph -- [--suite codec|adapter]"
+run = """
+#!/usr/bin/env bash
+cargo xtask flamegraph "$@"
+"""
