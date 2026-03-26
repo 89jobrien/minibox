@@ -86,15 +86,18 @@ sudo /usr/local/bin/minibox ps
 
 | Crate            | Type    | Description                                            |
 | ---------------- | ------- | ------------------------------------------------------ |
-| `linuxbox`    | Library | Domain layer, adapters, image management, protocol     |
-| `minibox-macros` | Library | `adapt!`, `as_any!`, `default_new!` boilerplate macros |
-| `daemonbox`      | Library | Handler, state, Unix socket server (extracted from miniboxd) |
+| `minibox-core`   | Library | Protocol, domain traits, image types, error types      |
+| `linuxbox`       | Library | Linux primitives, adapters, image management           |
+| `daemonbox`      | Library | Handler, state, Unix socket server                     |
 | `miniboxd`       | Binary  | Async daemon — Unix socket listener, platform dispatch |
+| `minibox-cli`    | Binary  | CLI client                                             |
+| `minibox-macros` | Library | Proc macros (`as_any!`, `adapt!`)                      |
+| `minibox-llm`    | Library | Multi-provider LLM client with structured output       |
+| `minibox-bench`  | Binary  | Benchmark harness                                      |
+| `minibox-client` | Library | Low-level Unix socket client                           |
+| `minibox-secrets`| Library | Typed credential store with validation & audit hashes  |
 | `macbox`         | Library | macOS daemon implementation (Colima adapter suite)     |
 | `winbox`         | Library | Windows daemon implementation (stub)                   |
-| `minibox-cli`    | Binary  | CLI client                                             |
-| `minibox-llm`   | Library | Multi-provider LLM client with structured output       |
-| `minibox-bench`  | Binary  | Benchmark harness                                      |
 
 **Key modules in `linuxbox`:**
 
