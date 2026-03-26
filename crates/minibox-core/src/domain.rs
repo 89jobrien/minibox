@@ -81,6 +81,8 @@ pub type DynResourceLimiter = Arc<dyn ResourceLimiter>;
 pub type DynContainerRuntime = Arc<dyn ContainerRuntime>;
 /// Type alias for a shared, dynamic [`NetworkProvider`] implementation.
 pub type DynNetworkProvider = Arc<dyn NetworkProvider>;
+/// Type alias for a shared, dynamic [`MetricsRecorder`] implementation.
+pub type DynMetricsRecorder = Arc<dyn MetricsRecorder>;
 
 // ---------------------------------------------------------------------------
 // Downcasting support for testing
@@ -94,6 +96,25 @@ pub type DynNetworkProvider = Arc<dyn NetworkProvider>;
 pub trait AsAny: Send + Sync {
     /// Return `self` as `&dyn Any` so callers can use `downcast_ref::<T>()`.
     fn as_any(&self) -> &dyn Any;
+}
+
+// ---------------------------------------------------------------------------
+// Metrics Recorder Port
+// ---------------------------------------------------------------------------
+
+/// Port for recording operational metrics.
+///
+/// Adapters: `PrometheusMetricsRecorder` (production), `NoOpMetricsRecorder`
+/// (testing/disabled), `RecordingMetricsRecorder` (test assertions).
+///
+/// String-based names and labels keep the domain free of OTEL/Prometheus types.
+pub trait MetricsRecorder: Send + Sync {
+    /// Increment a counter by 1.
+    fn increment_counter(&self, name: &str, labels: &[(&str, &str)]);
+    /// Record a value in a histogram (e.g., duration in seconds).
+    fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]);
+    /// Set a gauge to an absolute value.
+    fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]);
 }
 
 // ---------------------------------------------------------------------------
@@ -700,6 +721,24 @@ impl AsRef<str> for ContainerId {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    // --- MetricsRecorder tests ---
+
+    /// Verify that a no-op MetricsRecorder can be constructed and used as a trait object.
+    #[test]
+    fn test_metrics_recorder_trait_object() {
+        struct StubRecorder;
+        impl MetricsRecorder for StubRecorder {
+            fn increment_counter(&self, _name: &str, _labels: &[(&str, &str)]) {}
+            fn record_histogram(&self, _name: &str, _value: f64, _labels: &[(&str, &str)]) {}
+            fn set_gauge(&self, _name: &str, _value: f64, _labels: &[(&str, &str)]) {}
+        }
+
+        let recorder: Arc<dyn MetricsRecorder> = Arc::new(StubRecorder);
+        recorder.increment_counter("test_counter", &[("key", "val")]);
+        recorder.record_histogram("test_hist", 1.5, &[]);
+        recorder.set_gauge("test_gauge", 42.0, &[("a", "b")]);
+    }
 
     // --- ContainerId tests ---
 
