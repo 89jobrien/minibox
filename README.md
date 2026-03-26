@@ -396,5 +396,55 @@ cargo deny check
 | `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root                      |
 | `RUST_LOG`            | —                                               | Tracing log level (e.g. `debug`) |
 
+---
+
+## Git Workflow (3-Tier Stability Pipeline)
+
+Minibox uses a three-tier branching model designed for stability and Maestro integration:
+
+```
+feature/*  ──┐
+hotfix/*   ──┤
+chore/*    ──┴──► main (develop) ──auto──► next (validated) ──manual──► stable (release)
+                                                                           │
+                                                                       v* tag → GitHub Release
+```
+
+### Branch Purposes
+
+| Branch     | Purpose                              | Deletion Policy    |
+|----------- |-------------------------------------|-----------------|
+| `main`     | Active R&D. All feature work merges here | Never deleted |
+| `next`     | Auto-promoted from `main` when CI passes | Never deleted |
+| `stable`   | Maestro-consumable. Tagged releases cut here | Never deleted |
+| `feature/*`, `hotfix/*`, `chore/*` | Short-lived topic branches | Deleted after merge |
+
+**Invariant:** Every commit on every branch must compile.
+
+### CI Gates
+
+**Local hooks (developer machine):**
+
+| Hook       | Command                           | Enforces                          |
+|-----------|-----------------------------------|------------------------------------|
+| pre-commit | `cargo xtask pre-commit`          | fmt-check + clippy + release build |
+| pre-push   | `cargo xtask prepush`             | nextest + llvm-cov + snapshot check |
+
+**Remote CI (GitHub Actions):**
+
+- **`main`**: `cargo check --workspace` + `cargo fmt --all --check` + clippy
+- **`next`**: above + `cargo xtask test-unit` + audit/deny/machete + benchmarks
+- **`stable`**: above + `cargo geiger` + manual review
+
+### Auto-Promotion
+
+- **main → next:** Automatic on green CI (fast-forward merge)
+- **next → stable:** Manual `workflow_dispatch` (with full `stable`-tier gates)
+- **Hotfixes:** Commits on `stable` with `[hotfix]` tag auto-backmerge to `next` and `main`
+
+See `docs/superpowers/specs/2026-03-26-git-workflow-design.md` for full workflow specification.
+
+---
+
 See `CLAUDE.md` for full development guide, debugging tips, and architecture details.
 
