@@ -32,6 +32,20 @@ anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Traces (OTEL bridge + OTLP export)
+opentelemetry = "0.31"
+opentelemetry_sdk = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.32"
+
+# Metrics (direct Prometheus client — NOT the discontinued opentelemetry-prometheus)
+prometheus-client = "0.23"
+
+# Infrastructure
+axum = { version = "0.7", features = ["tokio"] }
+dashmap = "6"
+
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
