@@ -674,10 +674,99 @@ impl FilesystemProvider for FailableFilesystemMock {
 // FilesystemProvider, not the full four-trait set.
 adapt!(FailableFilesystemMock);
 
+// ---------------------------------------------------------------------------
+// RecordingMetricsRecorder
+// ---------------------------------------------------------------------------
+
+/// Test double that captures all metric calls for assertion.
+///
+/// Thread-safe via `Mutex`. Intended for unit tests that need to verify
+/// specific metrics were emitted with correct names, values, and labels.
+#[derive(Debug, Clone)]
+pub struct RecordingMetricsRecorder {
+    state: Arc<Mutex<RecordingMetricsState>>,
+}
+
+#[derive(Debug, Default)]
+struct RecordingMetricsState {
+    counters: Vec<(String, Vec<(String, String)>)>,
+    histograms: Vec<(String, f64, Vec<(String, String)>)>,
+    gauges: Vec<(String, f64, Vec<(String, String)>)>,
+}
+
+impl RecordingMetricsRecorder {
+    /// Create a new recorder with empty state.
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(RecordingMetricsState::default())),
+        }
+    }
+
+    /// Return all recorded counter increments as `(name, labels)` pairs.
+    pub fn counters(&self) -> Vec<(String, Vec<(String, String)>)> {
+        self.state.lock().unwrap().counters.clone()
+    }
+
+    /// Return all recorded histogram observations as `(name, value, labels)` triples.
+    pub fn histograms(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+        self.state.lock().unwrap().histograms.clone()
+    }
+
+    /// Return all recorded gauge settings as `(name, value, labels)` triples.
+    pub fn gauges(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+        self.state.lock().unwrap().gauges.clone()
+    }
+}
+
+impl Default for RecordingMetricsRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
+    fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .counters
+            .push((name.to_string(), owned_labels));
+    }
+
+    fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .histograms
+            .push((name.to_string(), value, owned_labels));
+    }
+
+    fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .gauges
+            .push((name.to_string(), value, owned_labels));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::ContainerHooks;
+    use crate::domain::MetricsRecorder;
 
     #[test]
     fn mock_registry_has_image_sync_cached() {
@@ -829,6 +918,58 @@ mod tests {
         let result = net.cleanup("container-1").await;
         assert!(result.is_ok());
         assert_eq!(net.cleanup_count(), 1);
+    }
+
+    // --- RecordingMetricsRecorder tests ---
+
+    #[test]
+    fn recording_metrics_captures_counter() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "run"), ("status", "ok")],
+        );
+        recorder.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "stop"), ("status", "ok")],
+        );
+
+        let counters = recorder.counters();
+        assert_eq!(counters.len(), 2);
+        assert_eq!(counters[0].0, "minibox_container_ops_total");
+        assert_eq!(
+            counters[0].1,
+            vec![
+                ("op".to_string(), "run".to_string()),
+                ("status".to_string(), "ok".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn recording_metrics_captures_histogram() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.record_histogram(
+            "minibox_container_op_duration_seconds",
+            0.5,
+            &[("op", "run")],
+        );
+
+        let histograms = recorder.histograms();
+        assert_eq!(histograms.len(), 1);
+        assert_eq!(histograms[0].0, "minibox_container_op_duration_seconds");
+        assert!((histograms[0].1 - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn recording_metrics_captures_gauge() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.set_gauge("minibox_active_containers", 3.0, &[("adapter", "native")]);
+
+        let gauges = recorder.gauges();
+        assert_eq!(gauges.len(), 1);
+        assert_eq!(gauges[0].0, "minibox_active_containers");
+        assert!((gauges[0].1 - 3.0).abs() < f64::EPSILON);
     }
 }
 
