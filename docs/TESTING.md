@@ -84,12 +84,22 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 
 **Files:**
 
-- `crates/daemonbox/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
+- `crates/miniboxd/tests/e2e_tests.rs` — starts real miniboxd, exercises minibox CLI
+- `crates/miniboxd/tests/helpers/mod.rs` — shared RAII fixture + test utilities
 
 **Run:** `just test-e2e-suite`
 
-**Architecture:** `DaemonFixture` starts an isolated daemon instance with temp dirs,
-then runs CLI commands as subprocesses. RAII cleanup on drop.
+**Architecture:**
+
+- `DaemonFixture` starts an isolated daemon instance with per-test temp dirs, a unique
+  cgroup root (UUID-scoped), and a dedicated Unix socket. RAII `Drop` impl sends SIGTERM,
+  waits up to 5s, escalates to SIGKILL, then cleans up the cgroup tree.
+- All tests are annotated `#[serial]` (`serial_test` crate) to prevent concurrent
+  cgroup/overlayfs resource conflicts on Linux.
+- Prerequisites use `pull_required()` (panics with full diagnostics on failure) rather
+  than silent `run_cli(&["pull", ...])` calls.
+- Container readiness uses `wait_for_running()` / `poll_until()` (100ms poll, 5s timeout)
+  instead of fixed `sleep()` waits.
 
 ## Preflight / Doctor
 
