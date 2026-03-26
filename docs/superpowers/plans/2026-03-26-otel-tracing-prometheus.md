@@ -6,7 +6,7 @@
 
 **Architecture:** `MetricsRecorder` trait in minibox-core (domain port) with three implementations: `PrometheusMetricsRecorder` (production), `NoOpMetricsRecorder` (disabled/tests), `RecordingMetricsRecorder` (test assertions). OTEL trace bridge via `tracing-opentelemetry` layer. Prometheus `/metrics` HTTP endpoint via axum.
 
-**Tech Stack:** opentelemetry 0.28, opentelemetry_sdk 0.28, opentelemetry-otlp 0.28, opentelemetry-prometheus 0.28, tracing-opentelemetry 0.29, prometheus 0.13, axum 0.7, dashmap 6
+**Tech Stack:** opentelemetry 0.31, opentelemetry_sdk 0.31, opentelemetry-otlp 0.31, tracing-opentelemetry 0.32, prometheus-client 0.23, axum 0.7, dashmap 6
 
 **Spec:** `docs/superpowers/specs/2026-03-26-otel-tracing-prometheus-design.md`
 
@@ -28,14 +28,14 @@
 
 | File | Change |
 |------|--------|
-| `Cargo.toml` (workspace) | Add workspace deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, opentelemetry-prometheus, tracing-opentelemetry, prometheus, axum, dashmap |
+| `Cargo.toml` (workspace) | Add workspace deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, prometheus-client, axum, dashmap |
 | `crates/minibox-core/Cargo.toml` | No changes needed — trait has no OTEL deps |
 | `crates/minibox-core/src/domain.rs` | Add `MetricsRecorder` trait + `DynMetricsRecorder` alias |
 | `crates/minibox-core/src/adapters/mocks.rs` | Add `RecordingMetricsRecorder` test double |
-| `crates/daemonbox/Cargo.toml` | Add deps: opentelemetry, opentelemetry_sdk, opentelemetry-prometheus, prometheus, axum, dashmap, tracing-opentelemetry, tracing-subscriber |
+| `crates/daemonbox/Cargo.toml` | Add deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, tracing-subscriber, prometheus-client, axum, dashmap |
 | `crates/daemonbox/src/lib.rs` | Add `pub mod telemetry;` |
 | `crates/daemonbox/src/handler.rs` | Add `metrics: DynMetricsRecorder` to `HandlerDependencies`, instrument handlers |
-| `crates/miniboxd/Cargo.toml` | Add deps: opentelemetry-otlp (Linux only) |
+| `crates/miniboxd/Cargo.toml` | No new deps needed — traces and metrics are in daemonbox |
 | `crates/miniboxd/src/main.rs` | Replace `tracing_subscriber::fmt().init()` with `init_tracing()`, wire metrics recorder + server |
 
 ---
@@ -50,12 +50,16 @@
 Add after the existing `tracing-subscriber` line (line 34):
 
 ```toml
-opentelemetry = { version = "0.28", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.28", features = ["rt-tokio", "metrics"] }
-opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
-opentelemetry-prometheus = "0.28"
-tracing-opentelemetry = "0.29"
-prometheus = "0.13"
+# Traces (OTEL bridge + OTLP export)
+opentelemetry = "0.31"
+opentelemetry_sdk = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.32"
+
+# Metrics (direct Prometheus client — NOT the discontinued opentelemetry-prometheus)
+prometheus-client = "0.23"
+
+# Infrastructure
 axum = { version = "0.7", features = ["tokio"] }
 dashmap = "6"
 ```
@@ -308,11 +312,11 @@ Add to `[dependencies]`:
 ```toml
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
-opentelemetry-prometheus = { workspace = true }
-prometheus = { workspace = true }
-dashmap = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
+prometheus-client = { workspace = true }
+dashmap = { workspace = true }
 axum = { workspace = true }
 ```
 
@@ -330,7 +334,7 @@ pub use noop::NoOpMetricsRecorder;
 pub use prometheus_adapter::PrometheusMetricsRecorder;
 ```
 
-Note: the Prometheus adapter file is named `prometheus_adapter.rs` to avoid shadowing the `prometheus` crate import.
+Note: the Prometheus adapter file is named `prometheus_adapter.rs` to avoid shadowing the `prometheus-client` crate import.
 
 - [ ] **Step 3: Create `telemetry/noop.rs`**
 
@@ -377,106 +381,122 @@ mod tests {
 ```rust
 //! Prometheus metrics adapter implementing the `MetricsRecorder` domain port.
 //!
-//! Uses the OTEL SDK with a Prometheus exporter to bridge the domain's
-//! string-based metric API to real Prometheus metrics.
+//! Uses the `prometheus-client` crate (official Prometheus Rust client) directly.
+//! OTEL SDK is NOT involved in metrics — it handles traces only.
 
 use dashmap::DashMap;
 use minibox_core::domain::MetricsRecorder;
-use opentelemetry::metrics::{Counter, Gauge, Histogram, Meter};
-use opentelemetry_sdk::metrics::SdkMeterProvider;
-use prometheus::Registry;
+use prometheus_client::encoding::text::encode;
+use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics::gauge::Gauge;
+use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
+use prometheus_client::registry::Registry;
+use std::sync::{Arc, Mutex};
 
-/// Production metrics recorder backed by Prometheus via the OTEL SDK.
+/// Label set type for dynamic string labels.
+type Labels = Vec<(String, String)>;
+
+/// Production metrics recorder backed by `prometheus-client`.
 ///
-/// Creates OTEL instruments lazily and caches them in a `DashMap` for
-/// lock-free concurrent access from handler tasks.
+/// Creates metric families lazily and caches them in a `DashMap` for
+/// lock-free concurrent access from handler tasks. The inner `Registry`
+/// is behind a `Mutex` because `prometheus-client` requires `&mut` for
+/// registration.
 pub struct PrometheusMetricsRecorder {
-    meter: Meter,
-    registry: Registry,
-    _provider: SdkMeterProvider,
-    counters: DashMap<String, Counter<u64>>,
-    histograms: DashMap<String, Histogram<f64>>,
-    gauges: DashMap<String, Gauge<f64>>,
+    registry: Arc<Mutex<Registry>>,
+    counters: DashMap<String, Family<Labels, Counter>>,
+    histograms: DashMap<String, Family<Labels, Histogram>>,
+    gauges: DashMap<String, Family<Labels, Gauge>>,
 }
 
 impl PrometheusMetricsRecorder {
-    /// Create a new recorder with its own Prometheus registry and OTEL meter provider.
-    pub fn new() -> anyhow::Result<Self> {
-        let registry = Registry::new();
-        let exporter = opentelemetry_prometheus::exporter()
-            .with_registry(registry.clone())
-            .build()
-            .map_err(|e| anyhow::anyhow!("prometheus exporter init: {e}"))?;
-
-        let provider = SdkMeterProvider::builder()
-            .with_reader(exporter)
-            .build();
-
-        let meter = provider.meter("minibox");
-
-        Ok(Self {
-            meter,
-            registry,
-            _provider: provider,
+    /// Create a new recorder with its own Prometheus registry.
+    pub fn new() -> Self {
+        Self {
+            registry: Arc::new(Mutex::new(Registry::default())),
             counters: DashMap::new(),
             histograms: DashMap::new(),
             gauges: DashMap::new(),
-        })
+        }
     }
 
-    /// Return a reference to the Prometheus registry for the HTTP server.
-    pub fn registry(&self) -> &Registry {
-        &self.registry
+    /// Encode all registered metrics as Prometheus text exposition format.
+    pub fn encode_metrics(&self) -> String {
+        let registry = self.registry.lock().unwrap();
+        let mut buffer = String::new();
+        encode(&mut buffer, &registry).unwrap_or_default();
+        buffer
     }
 
-    fn get_or_create_counter(&self, name: &str) -> Counter<u64> {
+    fn get_or_create_counter(&self, name: &str) -> Family<Labels, Counter> {
         self.counters
             .entry(name.to_string())
-            .or_insert_with(|| self.meter.u64_counter(name).build())
+            .or_insert_with(|| {
+                let family = Family::<Labels, Counter>::default();
+                self.registry
+                    .lock()
+                    .unwrap()
+                    .register(name, name, family.clone());
+                family
+            })
             .clone()
     }
 
-    fn get_or_create_histogram(&self, name: &str) -> Histogram<f64> {
+    fn get_or_create_histogram(&self, name: &str) -> Family<Labels, Histogram> {
         self.histograms
             .entry(name.to_string())
-            .or_insert_with(|| self.meter.f64_histogram(name).build())
+            .or_insert_with(|| {
+                let family = Family::<Labels, Histogram>::new_with_constructor(|| {
+                    Histogram::new(exponential_buckets(0.001, 2.0, 16))
+                });
+                self.registry
+                    .lock()
+                    .unwrap()
+                    .register(name, name, family.clone());
+                family
+            })
             .clone()
     }
 
-    fn get_or_create_gauge(&self, name: &str) -> Gauge<f64> {
+    fn get_or_create_gauge(&self, name: &str) -> Family<Labels, Gauge> {
         self.gauges
             .entry(name.to_string())
-            .or_insert_with(|| self.meter.f64_gauge(name).build())
+            .or_insert_with(|| {
+                let family = Family::<Labels, Gauge>::default();
+                self.registry
+                    .lock()
+                    .unwrap()
+                    .register(name, name, family.clone());
+                family
+            })
             .clone()
     }
+}
+
+fn to_labels(labels: &[(&str, &str)]) -> Labels {
+    labels
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 impl MetricsRecorder for PrometheusMetricsRecorder {
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
-        let counter = self.get_or_create_counter(name);
-        let attrs: Vec<opentelemetry::KeyValue> = labels
-            .iter()
-            .map(|(k, v)| opentelemetry::KeyValue::new(k.to_string(), v.to_string()))
-            .collect();
-        counter.add(1, &attrs);
+        let family = self.get_or_create_counter(name);
+        family.get_or_create(&to_labels(labels)).inc();
     }
 
     fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
-        let histogram = self.get_or_create_histogram(name);
-        let attrs: Vec<opentelemetry::KeyValue> = labels
-            .iter()
-            .map(|(k, v)| opentelemetry::KeyValue::new(k.to_string(), v.to_string()))
-            .collect();
-        histogram.record(value, &attrs);
+        let family = self.get_or_create_histogram(name);
+        family.get_or_create(&to_labels(labels)).observe(value);
     }
 
     fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
-        let gauge = self.get_or_create_gauge(name);
-        let attrs: Vec<opentelemetry::KeyValue> = labels
-            .iter()
-            .map(|(k, v)| opentelemetry::KeyValue::new(k.to_string(), v.to_string()))
-            .collect();
-        gauge.record(value, &attrs);
+        let family = self.get_or_create_gauge(name);
+        // prometheus-client Gauge uses i64 by default; use set for atomic store.
+        // For f64 gauges, cast to i64 (sufficient for our use cases).
+        family.get_or_create(&to_labels(labels)).set(value as i64);
     }
 }
 
@@ -487,17 +507,15 @@ mod tests {
 
     #[test]
     fn prometheus_recorder_creates_and_records() {
-        let recorder = PrometheusMetricsRecorder::new().expect("recorder init");
+        let recorder = PrometheusMetricsRecorder::new();
         recorder.increment_counter("minibox_container_ops_total", &[("op", "run"), ("status", "ok")]);
         recorder.record_histogram("minibox_container_op_duration_seconds", 0.123, &[("op", "run")]);
         recorder.set_gauge("minibox_active_containers", 2.0, &[("adapter", "native")]);
 
-        // Verify the Prometheus registry contains the metrics.
-        let metric_families = recorder.registry().gather();
-        let names: Vec<&str> = metric_families.iter().map(|mf| mf.get_name()).collect();
-        assert!(names.iter().any(|n| n.contains("container_ops_total")), "missing counter in registry; found: {names:?}");
-        assert!(names.iter().any(|n| n.contains("container_op_duration")), "missing histogram in registry; found: {names:?}");
-        assert!(names.iter().any(|n| n.contains("active_containers")), "missing gauge in registry; found: {names:?}");
+        let output = recorder.encode_metrics();
+        assert!(output.contains("minibox_container_ops_total"), "missing counter in output:\n{output}");
+        assert!(output.contains("minibox_container_op_duration_seconds"), "missing histogram in output:\n{output}");
+        assert!(output.contains("minibox_active_containers"), "missing gauge in output:\n{output}");
     }
 }
 ```
@@ -549,6 +567,11 @@ mod tests {
 //!
 //! Replaces the bare `tracing_subscriber::fmt().init()` in main.rs with a
 //! layered subscriber that optionally adds OTLP trace export.
+//!
+//! Uses opentelemetry 0.31 APIs:
+//! - `SdkTracerProvider` (not the removed `TracerProvider`)
+//! - `.with_batch_exporter()` without runtime param (SDK manages its own threads since 0.28)
+//! - `provider.shutdown()` on the instance (not the removed `global::shutdown_tracer_provider()`)
 
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -560,28 +583,27 @@ use tracing_subscriber::Layer;
 /// - `otlp_endpoint = Some(url)` → fmt + OTEL trace export to the given endpoint
 ///
 /// Returns an [`OtelGuard`] that must be held for the lifetime of the program.
-/// On drop, it flushes pending spans.
+/// On drop, it flushes pending spans via `SdkTracerProvider::shutdown()`.
 pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     let env_filter = tracing_subscriber::EnvFilter::from_default_env()
         .add_directive("miniboxd=info".parse().unwrap());
     let fmt_layer = tracing_subscriber::fmt::layer().boxed();
 
-    let mut shutdown_tracer = false;
-
     if let Some(endpoint) = otlp_endpoint {
         match build_otel_layer(endpoint) {
-            Ok(otel_layer) => {
-                shutdown_tracer = true;
+            Ok((otel_layer, provider)) => {
                 tracing_subscriber::registry()
                     .with(env_filter)
                     .with(fmt_layer)
                     .with(otel_layer)
                     .init();
-                return OtelGuard { shutdown_tracer };
+                return OtelGuard {
+                    provider: Some(provider),
+                };
             }
             Err(e) => {
                 // Fall back to fmt-only if OTEL init fails.
-                tracing::warn!("OTEL trace init failed, falling back to fmt-only: {e}");
+                eprintln!("OTEL trace init failed, falling back to fmt-only: {e}");
             }
         }
     }
@@ -591,12 +613,18 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
         .with(fmt_layer)
         .init();
 
-    OtelGuard { shutdown_tracer }
+    OtelGuard { provider: None }
 }
 
 fn build_otel_layer(
     endpoint: &str,
-) -> Result<Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>, Box<dyn std::error::Error>> {
+) -> Result<
+    (
+        Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>,
+        opentelemetry_sdk::trace::SdkTracerProvider,
+    ),
+    Box<dyn std::error::Error>,
+> {
     use opentelemetry_otlp::WithExportConfig;
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
@@ -604,42 +632,39 @@ fn build_otel_layer(
         .with_endpoint(endpoint)
         .build()?;
 
-    let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+    // SDK manages batch export threads internally since 0.28 — no runtime param needed.
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
         .build();
 
-    opentelemetry::global::set_tracer_provider(tracer_provider.clone());
-    let tracer = tracer_provider.tracer("miniboxd");
-
+    let tracer = provider.tracer("miniboxd");
     let layer = tracing_opentelemetry::layer().with_tracer(tracer).boxed();
-    Ok(layer)
+
+    Ok((layer, provider))
 }
 
 /// Guard that shuts down the OTEL tracer provider on drop.
 ///
 /// Hold this in `main()`. If OTLP was not configured, drop is a no-op.
+///
+/// Note: `global::shutdown_tracer_provider()` was removed in opentelemetry 0.28.
+/// Must call `.shutdown()` on the `SdkTracerProvider` instance directly.
 pub struct OtelGuard {
-    shutdown_tracer: bool,
+    provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
 }
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        if self.shutdown_tracer {
-            opentelemetry::global::shutdown_tracer_provider();
+        if let Some(provider) = self.provider.take() {
+            if let Err(e) = provider.shutdown() {
+                eprintln!("OTEL tracer shutdown error: {e}");
+            }
         }
     }
 }
 ```
 
-- [ ] **Step 3: Add `opentelemetry-otlp` to daemonbox deps**
-
-In `crates/daemonbox/Cargo.toml`, add:
-
-```toml
-opentelemetry-otlp = { workspace = true }
-```
-
-- [ ] **Step 4: Verify it compiles**
+- [ ] **Step 3: Verify it compiles**
 
 Run: `cargo check -p daemonbox`
 Expected: PASS
@@ -667,16 +692,16 @@ use daemonbox::telemetry::PrometheusMetricsRecorder;
 use daemonbox::telemetry::server::run_metrics_server;
 use minibox_core::domain::MetricsRecorder;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn metrics_endpoint_returns_prometheus_format() {
-    let recorder = PrometheusMetricsRecorder::new().expect("recorder");
+    let recorder = Arc::new(PrometheusMetricsRecorder::new());
     recorder.increment_counter("test_counter_total", &[("label", "value")]);
 
-    let registry = recorder.registry().clone();
     let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
 
-    let (actual_addr, server_handle) = run_metrics_server(addr, registry)
+    let (actual_addr, server_handle) = run_metrics_server(addr, recorder)
         .await
         .expect("server start");
 
@@ -707,25 +732,29 @@ minibox-core = { workspace = true }
 //! Exposes a `/metrics` endpoint that returns Prometheus text exposition format.
 //! Spawned as a separate Tokio task from the composition root.
 
-use prometheus::Registry;
+use super::PrometheusMetricsRecorder;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 /// Start the metrics HTTP server.
+///
+/// Takes an `Arc<PrometheusMetricsRecorder>` — the same instance injected into
+/// handlers — and encodes its registry on each `/metrics` request.
 ///
 /// Returns the actual bound address (useful when port 0 is used in tests)
 /// and a `JoinHandle` for the server task.
 pub async fn run_metrics_server(
     bind_addr: SocketAddr,
-    registry: Registry,
+    recorder: Arc<PrometheusMetricsRecorder>,
 ) -> anyhow::Result<(SocketAddr, JoinHandle<()>)> {
     use axum::routing::get;
 
     let app = axum::Router::new().route(
         "/metrics",
         get(move || {
-            let registry = registry.clone();
-            async move { encode_metrics(&registry) }
+            let recorder = recorder.clone();
+            async move { recorder.encode_metrics() }
         }),
     );
 
@@ -741,17 +770,6 @@ pub async fn run_metrics_server(
     });
 
     Ok((actual_addr, handle))
-}
-
-fn encode_metrics(registry: &Registry) -> String {
-    use prometheus::Encoder;
-    let encoder = prometheus::TextEncoder::new();
-    let metric_families = registry.gather();
-    let mut buffer = Vec::new();
-    encoder
-        .encode(&metric_families, &mut buffer)
-        .unwrap_or_default();
-    String::from_utf8(buffer).unwrap_or_default()
 }
 ```
 
@@ -996,19 +1014,8 @@ git commit -m "feat(daemonbox): instrument handlers with MetricsRecorder"
 
 **Files:**
 - Modify: `crates/miniboxd/src/main.rs`
-- Modify: `crates/miniboxd/Cargo.toml`
 
-- [ ] **Step 1: Add miniboxd deps**
-
-In `crates/miniboxd/Cargo.toml`, under `[target.'cfg(target_os = "linux")'.dependencies]`, add:
-
-```toml
-opentelemetry-otlp = { workspace = true }
-```
-
-This is only needed for `MINIBOX_OTLP_ENDPOINT` parsing. The actual OTEL layer init is in daemonbox.
-
-- [ ] **Step 2: Replace tracing init in main.rs**
+- [ ] **Step 1: Replace tracing init in main.rs**
 
 Replace lines 245–251:
 
@@ -1039,14 +1046,10 @@ After the `state loaded from disk` log line (line 304), add:
         .parse()
         .context("parsing MINIBOX_METRICS_ADDR")?;
 
-    let metrics_recorder = Arc::new(
-        daemonbox::telemetry::PrometheusMetricsRecorder::new()
-            .context("creating Prometheus metrics recorder")?,
-    );
-    let prometheus_registry = metrics_recorder.registry().clone();
+    let metrics_recorder = Arc::new(daemonbox::telemetry::PrometheusMetricsRecorder::new());
 
     let (_metrics_addr, _metrics_handle) =
-        daemonbox::telemetry::server::run_metrics_server(metrics_addr, prometheus_registry)
+        daemonbox::telemetry::server::run_metrics_server(metrics_addr, metrics_recorder.clone())
             .await
             .context("starting metrics server")?;
     info!(addr = %_metrics_addr, "metrics server listening");
@@ -1075,7 +1078,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/miniboxd/src/main.rs crates/miniboxd/Cargo.toml
+git add crates/miniboxd/src/main.rs
 git commit -m "feat(miniboxd): wire OTEL tracing, Prometheus metrics, /metrics endpoint"
 ```
 
@@ -1101,7 +1104,7 @@ In the `daemonbox/src/` section under Key Modules, add:
 
 ```markdown
 - `telemetry/mod.rs`: Metrics and tracing infrastructure adapters
-- `telemetry/prometheus.rs`: `PrometheusMetricsRecorder` — OTEL SDK + Prometheus exporter
+- `telemetry/prometheus_adapter.rs`: `PrometheusMetricsRecorder` — `prometheus-client` crate
 - `telemetry/noop.rs`: `NoOpMetricsRecorder` for tests and disabled metrics
 - `telemetry/traces.rs`: OTEL trace exporter setup with optional OTLP bridge
 - `telemetry/server.rs`: axum `/metrics` HTTP endpoint
