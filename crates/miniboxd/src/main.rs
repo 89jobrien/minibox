@@ -243,12 +243,8 @@ impl daemonbox::server::ServerListener for UnixServerListener {
 #[tokio::main]
 async fn main() -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("miniboxd=info".parse().unwrap()),
-        )
-        .init();
+    let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
+    let _otel_guard = daemonbox::telemetry::traces::init_tracing(otlp_endpoint.as_deref());
 
     info!("miniboxd starting");
 
@@ -303,6 +299,20 @@ async fn main() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── Metrics ─────────────────────────────────────────────────────────
+    let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
+        .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
+        .parse()
+        .context("parsing MINIBOX_METRICS_ADDR")?;
+
+    let metrics_recorder = Arc::new(daemonbox::telemetry::PrometheusMetricsRecorder::new());
+
+    let (_metrics_addr, _metrics_handle) =
+        daemonbox::telemetry::server::run_metrics_server(metrics_addr, metrics_recorder.clone())
+            .await
+            .context("starting metrics server")?;
+    info!(addr = %_metrics_addr, "metrics server listening");
+
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
@@ -325,7 +335,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+                metrics: metrics_recorder.clone(),
             })
         }
         AdapterSuite::Gke => {
@@ -348,7 +358,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+                metrics: metrics_recorder.clone(),
             })
         }
         AdapterSuite::Colima => {
@@ -365,7 +375,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+                metrics: metrics_recorder.clone(),
             })
         }
     };
