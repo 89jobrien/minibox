@@ -238,6 +238,11 @@ Eleven crates in cargo workspace:
 - `server.rs`: Unix socket listener with SO_PEERCRED auth; channel-based streaming dispatch
 - `handler.rs`: Request routing; `handle_run_streaming` for ephemeral containers (Linux)
 - `state.rs`: In-memory container tracking
+- `telemetry/mod.rs`: Metrics and tracing infrastructure adapters
+- `telemetry/prometheus_adapter.rs`: `PrometheusMetricsRecorder` — `prometheus-client` crate
+- `telemetry/noop.rs`: `NoOpMetricsRecorder` for tests and disabled metrics
+- `telemetry/traces.rs`: OTEL trace exporter setup with optional OTLP bridge
+- `telemetry/server.rs`: axum `/metrics` HTTP endpoint
 
 ## Security Considerations
 
@@ -454,6 +459,8 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
+- `MINIBOX_METRICS_ADDR` — Prometheus `/metrics` bind address (default: `127.0.0.1:9090`)
+- `MINIBOX_OTLP_ENDPOINT` — OTLP collector endpoint for trace export (unset = disabled)
 
 ## GitHub Actions CI
 
