@@ -67,6 +67,7 @@ keyring = "3"
 wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
 assert_cmd = "2"    # dev-only: CLI subprocess testing
 predicates = "3"    # dev-only: assert_cmd predicate helpers
+serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 
 # Internal crates (secrets)
 minibox-secrets = { path = "crates/minibox-secrets" }

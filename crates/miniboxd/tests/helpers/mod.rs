@@ -146,6 +146,27 @@ impl DaemonFixture {
         cmd
     }
 
+    /// Pull an image, panicking with diagnostics on failure.
+    ///
+    /// Use this in tests that require an image but aren't testing the pull itself.
+    pub fn pull_required(&self, image: &str) {
+        let (success, stdout, stderr) = self.run_cli(&["pull", image]);
+        assert!(
+            success,
+            "prerequisite image pull failed for '{image}'.\nstdout: {stdout}\nstderr: {stderr}"
+        );
+    }
+
+    /// Wait for a container to appear as Running in `ps`.
+    ///
+    /// Returns `true` if seen within timeout, `false` otherwise.
+    pub fn wait_for_running(&self, container_id: &str, timeout: Duration) -> bool {
+        poll_until(timeout, Duration::from_millis(100), || {
+            let (ok, stdout, _) = self.run_cli(&["ps"]);
+            ok && stdout.contains(container_id) && stdout.contains("Running")
+        })
+    }
+
     /// Run a CLI command and return (exit_status, stdout, stderr).
     pub fn run_cli(&self, args: &[&str]) -> (bool, String, String) {
         let output = self
@@ -248,6 +269,30 @@ impl Drop for DaemonFixture {
         }
 
         // 5. TempDir handles data_dir and run_dir
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Polling helpers
+// ---------------------------------------------------------------------------
+
+/// Poll `condition` every `interval` until it returns true or `timeout` elapses.
+///
+/// Returns `true` if the condition was satisfied, `false` on timeout.
+pub fn poll_until(
+    timeout: Duration,
+    interval: Duration,
+    mut condition: impl FnMut() -> bool,
+) -> bool {
+    let start = Instant::now();
+    loop {
+        if condition() {
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            return false;
+        }
+        std::thread::sleep(interval);
     }
 }
 
