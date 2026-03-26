@@ -2,6 +2,7 @@
 
 mod noop;
 mod prometheus_adapter;
+pub mod traces;
 
 pub use noop::NoOpMetricsRecorder;
 pub use prometheus_adapter::PrometheusMetricsRecorder;
