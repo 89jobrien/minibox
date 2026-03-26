@@ -4,6 +4,7 @@ use std::{
     io::Write,
     path::Path,
     process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use xshell::{Shell, cmd};
 
@@ -394,17 +395,37 @@ fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
         // samply: records a profile and opens Firefox Profiler in the browser.
         // Install: cargo install samply
         which("samply").context("samply not found — install with: cargo install samply")?;
-        eprintln!("profiling with samply (suite={suite})...");
-        // BROWSER=firefox ensures samply opens Firefox, not the system default browser.
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let profile_path = format!("bench/profiles/samply-{suite}-{ts}.nsp");
+
+        eprintln!("profiling with samply (suite={suite}) → {profile_path}");
+        cmd!(
+            sh,
+            "samply record --save-only -o {profile_path} {bin} --suite {suite}"
+        )
+        .run()
+        .context("samply record failed")?;
+
+        eprintln!("saved: {profile_path}");
+        eprintln!("opening in Firefox...");
+        // BROWSER=firefox ensures Firefox Profiler opens, not the system default browser.
         let _env = sh.push_env("BROWSER", "firefox");
-        cmd!(sh, "samply record {bin} --suite {suite}")
+        cmd!(sh, "samply load {profile_path}")
             .run()
-            .context("samply record failed")?;
+            .context("samply load failed")?;
     } else {
         // Linux: cargo flamegraph writes an SVG.
         which("cargo-flamegraph")
             .context("cargo-flamegraph not found — install with: cargo install flamegraph")?;
-        let svg = format!("bench/profiles/flamegraph-{suite}.svg");
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let svg = format!("bench/profiles/flamegraph-{suite}-{ts}.svg");
         eprintln!("profiling with cargo-flamegraph (suite={suite}) → {svg}");
         cmd!(
             sh,
