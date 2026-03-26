@@ -641,6 +641,7 @@ async fn run_inner(
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
     let runtime_clone = Arc::clone(&deps.runtime);
+    let metrics_clone = Arc::clone(&deps.metrics);
     let net_clone = net.clone();
     let run_containers_base_clone = deps.run_containers_base.clone();
 
@@ -650,6 +651,11 @@ async fn run_inner(
             Ok(spawn_result) => {
                 let pid = spawn_result.pid;
                 info!("container {id_clone} started with PID {pid}");
+
+                metrics_clone.increment_counter(
+                    "minibox_container_ops_total",
+                    &[("op", "run"), ("adapter", "daemon"), ("status", "ok")],
+                );
 
                 // ── Network attach ─────────────────────────────────────
                 net_clone.attach(&id_clone, pid).await.ok();
@@ -671,6 +677,10 @@ async fn run_inner(
             }
             Err(e) => {
                 error!("failed to spawn container {id_clone}: {e:#}");
+                metrics_clone.increment_counter(
+                    "minibox_container_ops_total",
+                    &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
+                );
                 state_clone
                     .update_container_state(&id_clone, "Failed")
                     .await;
@@ -812,7 +822,14 @@ pub async fn handle_stop(
         .cleanup(&id)
         .await;
 
-    match stop_inner(&id, &state).await {
+    let result = stop_inner(&id, &state).await;
+    let status = if result.is_ok() { "ok" } else { "error" };
+    deps.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "stop"), ("adapter", "daemon"), ("status", status)],
+    );
+
+    match result {
         Ok(()) => DaemonResponse::Success {
             message: format!("container {id} stopped"),
         },
@@ -892,7 +909,14 @@ pub async fn handle_remove(
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
-    match remove_inner(&id, &state, &deps).await {
+    let result = remove_inner(&id, &state, &deps).await;
+    let status = if result.is_ok() { "ok" } else { "error" };
+    deps.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "remove"), ("adapter", "daemon"), ("status", status)],
+    );
+
+    match result {
         Ok(()) => DaemonResponse::Success {
             message: format!("container {id} removed"),
         },
@@ -995,17 +1019,36 @@ pub async fn handle_pull(
     );
 
     // Pull image (using selected registry trait).
-    match registry.pull_image(&image_ref).await {
-        Ok(_metadata) => DaemonResponse::Success {
-            message: format!("pulled {image}:{tag}"),
-        },
+    let start = std::time::Instant::now();
+    let (status, response) = match registry.pull_image(&image_ref).await {
+        Ok(_metadata) => (
+            "ok",
+            DaemonResponse::Success {
+                message: format!("pulled {image}:{tag}"),
+            },
+        ),
         Err(e) => {
             error!("handle_pull error: {e:#}");
-            DaemonResponse::Error {
-                message: format!("{e:#}"),
-            }
+            (
+                "error",
+                DaemonResponse::Error {
+                    message: format!("{e:#}"),
+                },
+            )
         }
-    }
+    };
+
+    deps.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "pull"), ("adapter", "daemon"), ("status", status)],
+    );
+    deps.metrics.record_histogram(
+        "minibox_container_op_duration_seconds",
+        start.elapsed().as_secs_f64(),
+        &[("op", "pull"), ("adapter", "daemon")],
+    );
+
+    response
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
