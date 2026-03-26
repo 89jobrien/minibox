@@ -16,7 +16,8 @@ use linuxbox::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
-    DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec, ResourceConfig,
+    DynImageRegistry, DynMetricsRecorder, DynNetworkProvider, DynResourceLimiter, HookSpec,
+    ResourceConfig,
 };
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
@@ -74,6 +75,8 @@ pub struct HandlerDependencies {
     pub containers_base: PathBuf,
     /// Base directory for runtime container state (PID files).
     pub run_containers_base: PathBuf,
+    /// Metrics recorder for operational observability.
+    pub metrics: DynMetricsRecorder,
 }
 
 // ─── Registry Selection ─────────────────────────────────────────────────────

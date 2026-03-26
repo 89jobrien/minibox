@@ -304,6 +304,7 @@ mod tests {
             network_provider: Arc::new(MockNetwork::new()),
             containers_base: tmp.path().join("containers"),
             run_containers_base: tmp.path().join("run"),
+            metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
         });
         (state, deps)
     }

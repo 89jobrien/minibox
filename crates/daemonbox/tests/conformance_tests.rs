@@ -64,6 +64,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     })
 }
 
@@ -80,6 +81,7 @@ fn mock_deps_with_network(
         network_provider: network,
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     })
 }
 

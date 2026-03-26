@@ -44,6 +44,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: tmp.join("containers"),
         run_containers_base: tmp.join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     })
 }
 

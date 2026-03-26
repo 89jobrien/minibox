@@ -325,6 +325,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
             })
         }
         AdapterSuite::Gke => {
@@ -347,6 +348,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
             })
         }
         AdapterSuite::Colima => {
@@ -363,6 +365,7 @@ async fn main() -> Result<()> {
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
             })
         }
     };

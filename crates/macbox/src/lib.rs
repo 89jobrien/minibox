@@ -181,6 +181,7 @@ pub async fn start() -> Result<()> {
         network_provider: Arc::new(NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
