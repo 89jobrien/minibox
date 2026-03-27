@@ -89,13 +89,18 @@ fn test_e2e_ps_shows_container() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    // Run a long-lived container
-    let (_, run_out, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/sleep", "30"]);
-    let container_id =
-        extract_container_id(&run_out).expect("could not extract container ID from run output");
+    // Spawn a long-lived container in the background; read container ID from
+    // the first line emitted by the CLI (ContainerCreated protocol message).
+    let (mut cli_child, container_id) =
+        fixture.spawn_container_background("alpine", &["/bin/sleep", "30"]);
 
     // Poll until the container appears in ps (up to 5s)
     let appeared = fixture.wait_for_running(&container_id, Duration::from_secs(5));
+
+    // Stop the container so the CLI child exits cleanly
+    let _ = fixture.run_cli(&["stop", &container_id]);
+    let _ = cli_child.wait();
+
     assert!(
         appeared,
         "container {container_id} did not appear as Running in ps within 5s"
@@ -112,9 +117,8 @@ fn test_e2e_stop_container() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (_, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/sleep", "60"]);
-    let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+    let (mut cli_child, container_id) =
+        fixture.spawn_container_background("alpine", &["/bin/sleep", "60"]);
 
     let running = fixture.wait_for_running(&container_id, Duration::from_secs(5));
     assert!(
@@ -123,6 +127,7 @@ fn test_e2e_stop_container() {
     );
 
     let (success, _, stderr) = fixture.run_cli(&["stop", &container_id]);
+    let _ = cli_child.wait();
     assert!(success, "stop should succeed.\nstderr: {stderr}");
 }
 
@@ -169,9 +174,8 @@ fn test_e2e_rm_running_rejected() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (_, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/sleep", "60"]);
-    let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+    let (mut cli_child, container_id) =
+        fixture.spawn_container_background("alpine", &["/bin/sleep", "60"]);
 
     let running = fixture.wait_for_running(&container_id, Duration::from_secs(5));
     assert!(
@@ -184,6 +188,10 @@ fn test_e2e_rm_running_rejected() {
         !success,
         "rm on running container should fail.\nstderr: {stderr}"
     );
+
+    // Clean up: stop the container so the CLI child exits
+    let _ = fixture.run_cli(&["stop", &container_id]);
+    let _ = cli_child.wait();
 }
 
 // ---------------------------------------------------------------------------
@@ -200,8 +208,9 @@ fn test_e2e_run_with_memory_limit() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (success, stdout, stderr) = fixture.run_cli(&[
-        "run",
+    // Use spawn_run_background so we can check the cgroup while the container
+    // is running (run_cli would block until the container exits).
+    let (mut cli_child, container_id) = fixture.spawn_run_background(&[
         "alpine",
         "--memory",
         "134217728", // 128MB
@@ -209,13 +218,6 @@ fn test_e2e_run_with_memory_limit() {
         "/bin/sleep",
         "30",
     ]);
-    assert!(
-        success,
-        "run with memory limit should succeed.\nstdout: {stdout}\nstderr: {stderr}"
-    );
-
-    let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
 
     let running = fixture.wait_for_running(&container_id, Duration::from_secs(5));
     assert!(
@@ -228,6 +230,9 @@ fn test_e2e_run_with_memory_limit() {
         let val = std::fs::read_to_string(&memory_max_path).unwrap_or_default();
         assert_eq!(val.trim(), "134217728", "memory.max should be 128MB");
     }
+
+    let _ = fixture.run_cli(&["stop", &container_id]);
+    let _ = cli_child.wait();
 }
 
 #[test]
@@ -240,22 +245,8 @@ fn test_e2e_run_with_cpu_weight() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (success, stdout, stderr) = fixture.run_cli(&[
-        "run",
-        "alpine",
-        "--cpu-weight",
-        "250",
-        "--",
-        "/bin/sleep",
-        "30",
-    ]);
-    assert!(
-        success,
-        "run with cpu-weight should succeed.\nstdout: {stdout}\nstderr: {stderr}"
-    );
-
-    let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+    let (mut cli_child, container_id) =
+        fixture.spawn_run_background(&["alpine", "--cpu-weight", "250", "--", "/bin/sleep", "30"]);
 
     let running = fixture.wait_for_running(&container_id, Duration::from_secs(5));
     assert!(
@@ -268,6 +259,9 @@ fn test_e2e_run_with_cpu_weight() {
         let val = std::fs::read_to_string(&cpu_path).unwrap_or_default();
         assert_eq!(val.trim(), "250", "cpu.weight should be 250");
     }
+
+    let _ = fixture.run_cli(&["stop", &container_id]);
+    let _ = cli_child.wait();
 }
 
 // ---------------------------------------------------------------------------

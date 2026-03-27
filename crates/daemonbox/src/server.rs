@@ -212,10 +212,16 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// Non-streaming responses always terminate immediately. Streaming responses
-/// (`ContainerOutput`) continue until `ContainerStopped` (which is terminal).
+/// Non-streaming responses (single `ContainerCreated`) are terminated by the
+/// sender dropping `tx`, which closes the channel and ends `rx.recv()`.
+/// Streaming responses continue through `ContainerCreated` (container ID) and
+/// `ContainerOutput` chunks until `ContainerStopped` (terminal).
+/// `Error` always terminates the exchange.
 fn is_terminal_response(r: &DaemonResponse) -> bool {
-    !matches!(r, DaemonResponse::ContainerOutput { .. })
+    matches!(
+        r,
+        DaemonResponse::ContainerStopped { .. } | DaemonResponse::Error { .. }
+    )
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all

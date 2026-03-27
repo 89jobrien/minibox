@@ -69,30 +69,28 @@ impl DaemonFixture {
 
         let socket_path = run_dir.path().join("miniboxd.sock");
 
-        // Create cgroup root under our own cgroup (not top-level, which
-        // fails on systemd hosts). Read /proc/self/cgroup to find our
-        // current cgroup, then create a test subtree there.
-        let self_cgroup = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
-        let cgroup_rel = self_cgroup
-            .lines()
-            .find_map(|l| l.strip_prefix("0::"))
-            .unwrap_or("/")
-            .trim()
-            .to_string();
-        let relative = cgroup_rel.strip_prefix('/').unwrap_or(&cgroup_rel);
+        // Create a top-level cgroup slice for this test.  Nesting under the
+        // runner's own cgroup violates cgroup v2's "no internal process" rule
+        // when the runner is a leaf cgroup (has processes in cgroup.procs),
+        // causing create_dir_all to fail with EBUSY.  A top-level slice under
+        // /sys/fs/cgroup/ has no processes and allows free sub-cgroup creation.
         let test_name = format!(
             "minibox-test-e2e-{}",
             &uuid::Uuid::new_v4().to_string()[..8]
         );
-        let cgroup_root = PathBuf::from("/sys/fs/cgroup")
-            .join(relative)
-            .join(&test_name);
+        let cgroup_root = PathBuf::from("/sys/fs/cgroup").join(&test_name);
 
         let daemon_bin = find_binary("miniboxd");
         let cli_bin = find_binary("minibox");
 
-        // Create cgroup root
+        // Create cgroup root and enable the controllers containers need.
         std::fs::create_dir_all(&cgroup_root).ok();
+        // Enable memory, cpu, and pids subtree controllers so the daemon can
+        // apply resource limits to container cgroups created inside this slice.
+        let _ = std::fs::write(
+            cgroup_root.join("cgroup.subtree_control"),
+            "+memory +cpu +pids",
+        );
 
         let child = Command::new(&daemon_bin)
             .env("MINIBOX_DATA_DIR", data_dir.path())
@@ -155,6 +153,68 @@ impl DaemonFixture {
             success,
             "prerequisite image pull failed for '{image}'.\nstdout: {stdout}\nstderr: {stderr}"
         );
+    }
+
+    /// Spawn `minibox run <run_args>` in the background and return the
+    /// container ID immediately.
+    ///
+    /// The daemon emits `ContainerCreated { id }` as the first line of stdout
+    /// in the streaming path.  This helper reads that line, then drains
+    /// remaining stdout in a background thread so the CLI does not stall on a
+    /// full pipe buffer.
+    ///
+    /// `run_args` is everything after `minibox run`, e.g.
+    /// `&["alpine", "--memory", "134217728", "--", "/bin/sleep", "30"]`.
+    ///
+    /// The returned `Child` is still alive (CLI blocks until the container
+    /// exits or is stopped).  The caller must stop the container and wait.
+    pub fn spawn_run_background(&self, run_args: &[&str]) -> (Child, String) {
+        use std::io::{BufRead, BufReader};
+
+        let mut cli_args = vec!["run"];
+        cli_args.extend_from_slice(run_args);
+
+        let mut child = self
+            .cli(&cli_args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|e| panic!("failed to spawn minibox run {run_args:?}: {e}"));
+
+        let stdout = child.stdout.take().expect("no stdout pipe");
+        let mut reader = BufReader::new(stdout);
+        let mut first_line = String::new();
+        reader
+            .read_line(&mut first_line)
+            .expect("failed to read container ID from minibox run stdout");
+        let container_id = first_line.trim().to_string();
+        assert!(
+            !container_id.is_empty(),
+            "minibox run did not emit a container ID on stdout line 1"
+        );
+
+        // Drain remaining stdout in a background thread so the CLI does not
+        // block writing ContainerOutput to a full pipe and stall the test.
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buf = [0u8; 4096];
+            loop {
+                match reader.get_mut().read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+        });
+
+        (child, container_id)
+    }
+
+    /// Convenience wrapper around [`spawn_run_background`] for the simple case
+    /// of running a command inside a named image with no extra CLI flags.
+    pub fn spawn_container_background(&self, image: &str, cmd: &[&str]) -> (Child, String) {
+        let mut run_args = vec![image, "--"];
+        run_args.extend_from_slice(cmd);
+        self.spawn_run_background(&run_args)
     }
 
     /// Wait for a container to appear as Running in `ps`.

@@ -75,3 +75,13 @@ jobs:
         run: cargo install cargo-geiger --locked
       - name: cargo geiger
         run: cargo geiger -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
+
+  test-e2e:
+    name: e2e tests (Linux, root)
+    runs-on: [self-hosted, minibox]
+    needs: test-unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask test-e2e-suite
+        run: ~/.local/bin/mise exec -- cargo xtask test-e2e-suite

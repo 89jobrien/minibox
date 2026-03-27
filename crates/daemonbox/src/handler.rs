@@ -202,6 +202,15 @@ async fn handle_run_streaming(
         }
     };
 
+    // Emit the container ID first so the CLI (and tests) can capture it
+    // without waiting for the container to exit.  The protocol spec requires
+    // ContainerCreated as the first streaming message (see protocol.rs §Ephemeral).
+    let _ = tx
+        .send(DaemonResponse::ContainerCreated {
+            id: container_id.clone(),
+        })
+        .await;
+
     // Spawn blocking task to drain the pipe and forward chunks.
     let tx_clone = tx.clone();
     // SAFETY: OwnedFd is not Send on all platforms, so we transfer ownership via raw fd.

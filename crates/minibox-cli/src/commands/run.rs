@@ -89,9 +89,12 @@ pub async fn execute(
                 std::process::exit(exit_code);
             }
             DaemonResponse::ContainerCreated { id } => {
-                // Old daemon — non-streaming path.
+                // Print the container ID for the caller.  In the ephemeral
+                // streaming path this is the first message; ContainerOutput
+                // chunks and ContainerStopped follow.  In the non-ephemeral
+                // path the daemon closes the channel after this message, so
+                // the while-loop exits naturally.
                 println!("{id}");
-                return Ok(());
             }
             DaemonResponse::Error { message } => {
                 eprintln!("error: {message}");
