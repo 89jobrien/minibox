@@ -723,6 +723,57 @@ impl ColimaRuntime {
     }
 }
 
+/// Validate that all bind mount host paths are accessible inside the Lima VM.
+///
+/// Lima shares `$HOME` and `/tmp` into the VM by default. Paths outside those
+/// prefixes are not visible and will cause silent mount failures.
+pub(crate) fn validate_lima_paths(
+    mounts: &[minibox_core::domain::BindMount],
+) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home_path = std::path::Path::new(&home);
+
+    for m in mounts {
+        let p = &m.host_path;
+        let in_home = p.starts_with(home_path);
+        let in_tmp = p.starts_with("/tmp");
+        if !in_home && !in_tmp {
+            anyhow::bail!(
+                "bind mount source {:?} is not accessible inside the Lima VM.\n\
+                 hint: Lima shares $HOME ({}) and /tmp — move the source or add it to lima.yaml shared dirs.",
+                p,
+                home
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Build the shell snippet that mounts one bind mount inside the Lima VM.
+///
+/// The snippet is injected into the spawn script before the `unshare` call.
+/// It targets rootfs-relative paths so after chroot the container sees them at container_path.
+pub(crate) fn bind_mount_shell_snippet(
+    m: &minibox_core::domain::BindMount,
+    rootfs: &std::path::Path,
+) -> String {
+    let host = m.host_path.display();
+    let container_rel = m
+        .container_path
+        .strip_prefix("/")
+        .unwrap_or(&m.container_path);
+    let target = rootfs.join(container_rel);
+    let target_display = target.display();
+
+    if m.read_only {
+        format!(
+            "sudo mkdir -p '{target_display}' && sudo mount --bind '{host}' '{target_display}' && sudo mount -o remount,ro,bind '{target_display}'"
+        )
+    } else {
+        format!("sudo mkdir -p '{target_display}' && sudo mount --bind '{host}' '{target_display}'")
+    }
+}
+
 #[async_trait]
 impl ContainerRuntime for ColimaRuntime {
     /// Return the runtime capabilities advertised by this adapter.
@@ -764,6 +815,23 @@ impl ContainerRuntime for ColimaRuntime {
             .collect::<Vec<_>>()
             .join(" ");
 
+        // Validate that all bind mount host paths are Lima-accessible.
+        validate_lima_paths(&config.mounts)?;
+
+        // Build bind mount shell commands.
+        let bind_mount_cmds: String = config
+            .mounts
+            .iter()
+            .map(|m| bind_mount_shell_snippet(m, &config.rootfs))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let privileged_flag = if config.privileged {
+            " --keep-caps"
+        } else {
+            ""
+        };
+
         if self.spawner.is_some() && config.capture_output {
             // Streaming path: foreground exec with piped stdout.
             // Uses `exec unshare` so the spawned process replaces the shell,
@@ -772,7 +840,8 @@ impl ContainerRuntime for ColimaRuntime {
                 r#"ROOTFS={rootfs}
 COMMAND={command}
 ARGS=({args})
-exec sudo unshare --pid --mount --uts --ipc --net \
+{bind_mount_cmds}
+exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
     --fork --kill-child \
     chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
 "#
@@ -824,7 +893,9 @@ exec sudo unshare --pid --mount --uts --ipc --net \
             COMMAND={command}
             ARGS=({args})
 
-            sudo unshare --pid --mount --uts --ipc --net \
+            {bind_mount_cmds}
+
+            sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
                 --fork --kill-child \
                 chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
 
@@ -1248,6 +1319,86 @@ mod tests {
         assert!(
             output.contains("hello from container"),
             "output was: {output}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod bind_mount_tests {
+    use super::*;
+    use minibox_core::domain::BindMount;
+    use std::path::PathBuf;
+
+    fn home_dir() -> PathBuf {
+        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()))
+    }
+
+    #[test]
+    fn validate_lima_paths_accepts_home_subdir() {
+        let home = home_dir();
+        let mounts = vec![BindMount {
+            host_path: home.join("some/project/bin"),
+            container_path: PathBuf::from("/bin"),
+            read_only: false,
+        }];
+        validate_lima_paths(&mounts).expect("home subdir should be accepted");
+    }
+
+    #[test]
+    fn validate_lima_paths_accepts_tmp_subdir() {
+        let mounts = vec![BindMount {
+            host_path: PathBuf::from("/tmp/minibox-test"),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }];
+        validate_lima_paths(&mounts).expect("tmp subdir should be accepted");
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_opt() {
+        let mounts = vec![BindMount {
+            host_path: PathBuf::from("/opt/homebrew/bin"),
+            container_path: PathBuf::from("/bin"),
+            read_only: false,
+        }];
+        let err = validate_lima_paths(&mounts).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Lima") || msg.contains("accessible"),
+            "expected Lima path error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_lima_paths_empty_mounts_passes() {
+        validate_lima_paths(&[]).expect("empty mounts should pass");
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_rw() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
+        assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
+        assert!(snippet.contains("/rootfs/guest"), "snippet: {snippet}");
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_ro() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest"),
+            read_only: true,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
+        assert!(
+            snippet.contains("remount,ro,bind") || snippet.contains("remount,bind,ro"),
+            "snippet: {snippet}"
         );
     }
 }
