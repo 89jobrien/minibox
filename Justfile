@@ -24,6 +24,14 @@ build-release:
 build:
     cargo build --release
 
+# Build static Linux x86_64 binaries (works from macOS or Linux).
+# Output: target/x86_64-unknown-linux-musl/release/{miniboxd,minibox}
+build-linux:
+    rustup target add x86_64-unknown-linux-musl
+    RUSTFLAGS="-C target-feature=+crt-static" \
+        cargo build --release --target x86_64-unknown-linux-musl \
+        -p miniboxd -p minibox-cli
+
 # ── Gates ────────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release
@@ -108,6 +116,80 @@ doctor:
     @echo ""
     @echo "--- Host Capabilities Report ---"
     @cargo test -p linuxbox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+
+# Trace miniboxd with uftrace.
+# macOS: cross-compiles Linux binary, runs it inside minibox via Colima.
+# Linux: runs natively (requires root + apt install uftrace).
+# After run: uftrace graph -d <trace-dir>
+trace:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    TRACE_DIR="traces/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$TRACE_DIR"
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "trace: building Linux musl binary..."
+        just build-linux
+
+        BINARY_DIR="$(pwd)/target/x86_64-unknown-linux-musl/release"
+        ABS_TRACE="$(pwd)/$TRACE_DIR"
+
+        echo "trace: running uftrace inside minibox container..."
+        minibox run --privileged \
+            -v "${BINARY_DIR}:/minibox" \
+            -v "${ABS_TRACE}:/traces" \
+            ubuntu \
+            -- sh -c "
+                apt-get install -y uftrace -q 2>/dev/null &&
+                uftrace record -P . --no-libcall -d /traces /minibox/miniboxd &
+                DAEMON_PID=\$!
+                sleep 2
+                /minibox/minibox pull alpine 2>/dev/null || true
+                /minibox/minibox run alpine -- /bin/echo 'uftrace smoke' 2>/dev/null || true
+                kill \$DAEMON_PID 2>/dev/null || true
+                wait \$DAEMON_PID 2>/dev/null || true
+            "
+
+        echo ""
+        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        uftrace report -d "$TRACE_DIR" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
+    else
+        [[ "$(uname -s)" == "Linux" ]] || { echo "error: unsupported platform"; exit 1; }
+        command -v uftrace >/dev/null 2>&1 || { echo "error: apt install uftrace"; exit 1; }
+        [[ "$(id -u)" -eq 0 ]] || { echo "error: sudo just trace"; exit 1; }
+
+        echo "trace: building native release binary..."
+        cargo build --release -p miniboxd -p minibox-cli
+
+        echo "trace: recording to $TRACE_DIR ..."
+        uftrace record -P . --no-libcall -d "$TRACE_DIR" ./target/release/miniboxd &
+        DAEMON_PID=$!
+
+        for i in $(seq 1 10); do
+            [[ -S /run/minibox/miniboxd.sock ]] && break
+            sleep 0.5
+        done
+        [[ -S /run/minibox/miniboxd.sock ]] || { echo "error: daemon socket did not appear"; kill "$DAEMON_PID" 2>/dev/null; exit 1; }
+
+        echo "trace: smoke — pull alpine..."
+        ./target/release/minibox pull alpine || true
+        echo "trace: smoke — run echo..."
+        ./target/release/minibox run alpine -- /bin/echo "uftrace smoke" || true
+
+        echo "trace: stopping daemon..."
+        kill "$DAEMON_PID" 2>/dev/null || true
+        wait "$DAEMON_PID" 2>/dev/null || true
+
+        echo ""
+        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        uftrace report -d "$TRACE_DIR" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
+    fi
+
+    echo ""
+    echo "trace: data saved to $TRACE_DIR"
+    echo "trace: call graph      → uftrace graph -d $TRACE_DIR"
+    echo "trace: chrome devtools → uftrace dump -d $TRACE_DIR --chrome > $TRACE_DIR/trace.json"
 
 # ── AI Agents ────────────────────────────────────────────────────────────────
 

@@ -46,6 +46,9 @@ Cargo.lock is committed for binary projects
 /var/lib/minibox/
 /run/minibox/
 
+# uftrace trace data
+/traces/
+
 # Generated artifacts / recipes
 /recipe.json
 /recipe.json.gz
