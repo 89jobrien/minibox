@@ -237,6 +237,8 @@ mod conformance {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -259,6 +261,8 @@ mod conformance {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let pid1 = runtime.spawn_process(&config).await.unwrap().pid;

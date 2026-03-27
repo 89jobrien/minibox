@@ -530,6 +530,15 @@ pub struct ContainerSpawnConfig {
     pub hooks: ContainerHooks,
     /// If true, skip CLONE_NEWNET — container shares host network namespace.
     pub skip_network_namespace: bool,
+    /// Bind mounts to apply inside the container before pivot_root.
+    ///
+    /// Each `BindMount.host_path` is mounted at `rootfs + BindMount.container_path`
+    /// inside the container's new mount namespace, then the container sees it at
+    /// `container_path` after pivot_root.
+    pub mounts: Vec<BindMount>,
+    /// If `true`, the container process is granted a full Linux capability set
+    /// via `capset(2)` before `execvp`. Required for DinD.
+    pub privileged: bool,
 }
 
 // ---------------------------------------------------------------------------

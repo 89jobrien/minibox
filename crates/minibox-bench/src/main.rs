@@ -1772,6 +1772,8 @@ fn bench_adapter_suite(cfg: &BenchConfig) -> SuiteResult {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let registry_concrete = MockRegistry::new().with_cached_image("alpine", "latest");

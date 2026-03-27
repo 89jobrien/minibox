@@ -1011,6 +1011,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime.spawn_process(&config).await.unwrap();
@@ -1224,6 +1226,8 @@ mod tests {
             capture_output: true,
             skip_network_namespace: false,
             hooks: ContainerHooks::default(),
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime

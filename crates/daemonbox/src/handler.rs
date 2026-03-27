@@ -431,6 +431,8 @@ async fn run_inner_capture(
         capture_output: true,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let _spawn_permit = state
@@ -633,6 +635,8 @@ async fn run_inner(
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
