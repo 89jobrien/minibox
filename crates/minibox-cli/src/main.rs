@@ -74,6 +74,20 @@ enum Commands {
         /// 'none' runs the container in an isolated namespace with no network connectivity.
         #[arg(long, default_value = "none")]
         network: String,
+
+        /// Grant full Linux capabilities to the container (required for DinD).
+        #[arg(long)]
+        privileged: bool,
+
+        /// Bind mount in src:dst[:ro] format. Repeatable.
+        /// Example: -v /tmp/bin:/minibox  -v /tmp/traces:/traces:ro
+        #[arg(short = 'v', long = "volume", value_name = "SRC:DST[:ro]")]
+        volumes: Vec<String>,
+
+        /// Long-form mount specification. Repeatable.
+        /// Example: --mount type=bind,src=/tmp/bin,dst=/minibox
+        #[arg(long = "mount", value_name = "type=bind,src=PATH,dst=PATH[,readonly]")]
+        mounts: Vec<String>,
     },
 
     /// List all containers
@@ -123,6 +137,9 @@ async fn main() -> Result<()> {
             cpu_weight,
             tag,
             network,
+            privileged,
+            volumes,
+            mounts,
         } => {
             commands::run::execute(
                 image,
@@ -131,6 +148,9 @@ async fn main() -> Result<()> {
                 memory,
                 cpu_weight,
                 network,
+                privileged,
+                volumes,
+                mounts,
                 socket_path,
             )
             .await
@@ -185,6 +205,76 @@ mod tests {
         match cli.command {
             Commands::Run { network, .. } => assert_eq!(network, "none"),
             _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_privileged_flag() {
+        let cli =
+            Cli::try_parse_from(["minibox", "run", "--privileged", "ubuntu", "--", "/bin/sh"]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { privileged, .. } => assert!(privileged),
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_volume_flag() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "-v",
+            "/tmp/host:/guest",
+            "ubuntu",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { volumes, .. } => {
+                assert_eq!(volumes.len(), 1);
+                assert_eq!(volumes[0], "/tmp/host:/guest");
+            }
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_multiple_volume_flags() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "-v",
+            "/tmp/a:/a",
+            "-v",
+            "/tmp/b:/b:ro",
+            "ubuntu",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { volumes, .. } => assert_eq!(volumes.len(), 2),
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_mount_flag() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "--mount",
+            "type=bind,src=/tmp/host,dst=/guest",
+            "ubuntu",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { mounts, .. } => assert_eq!(mounts.len(), 1),
+            _ => panic!("wrong command"),
         }
     }
 }
