@@ -125,6 +125,8 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
             hostname: config.hostname.clone(),
             capture_output,
             pre_exec_hooks: config.hooks.pre_exec.clone(),
+            mounts: config.mounts.clone(),
+            privileged: config.privileged,
         };
 
         // IMPORTANT: spawn_container_process uses blocking syscalls (clone/fork)
@@ -156,4 +158,51 @@ mod tests {
 
     // Note: Actual spawn tests require Linux with root privileges
     // and a properly setup rootfs, so they belong in integration tests
+
+    #[test]
+    fn spawn_config_fields_map_to_container_config() {
+        use minibox_core::domain::{BindMount, ContainerHooks, ContainerSpawnConfig};
+        use std::path::PathBuf;
+
+        let bind = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest"),
+            read_only: true,
+        };
+        let spawn_config = ContainerSpawnConfig {
+            rootfs: PathBuf::from("/rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            hostname: "test".to_string(),
+            cgroup_path: PathBuf::from("/cgroup"),
+            capture_output: false,
+            hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
+            mounts: vec![bind.clone()],
+            privileged: true,
+        };
+
+        // Build ContainerConfig the same way spawn_process does.
+        let container_config = crate::container::process::ContainerConfig {
+            rootfs: spawn_config.rootfs.clone(),
+            command: spawn_config.command.clone(),
+            args: spawn_config.args.clone(),
+            env: spawn_config.env.clone(),
+            namespace_config: crate::container::namespace::NamespaceConfig::all(),
+            cgroup_path: spawn_config.cgroup_path.clone(),
+            hostname: spawn_config.hostname.clone(),
+            capture_output: spawn_config.capture_output,
+            pre_exec_hooks: spawn_config.hooks.pre_exec.clone(),
+            mounts: spawn_config.mounts.clone(),
+            privileged: spawn_config.privileged,
+        };
+
+        assert_eq!(container_config.mounts.len(), 1);
+        assert_eq!(
+            container_config.mounts[0].host_path,
+            PathBuf::from("/tmp/host")
+        );
+        assert!(container_config.privileged);
+    }
 }
