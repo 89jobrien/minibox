@@ -220,7 +220,11 @@ where
 fn is_terminal_response(r: &DaemonResponse) -> bool {
     matches!(
         r,
-        DaemonResponse::ContainerStopped { .. } | DaemonResponse::Error { .. }
+        DaemonResponse::ContainerStopped { .. }
+            | DaemonResponse::Error { .. }
+            | DaemonResponse::Success { .. }
+            | DaemonResponse::ContainerCreated { .. }
+            | DaemonResponse::ContainerList { .. }
     )
 }
 
