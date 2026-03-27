@@ -131,14 +131,26 @@ cargo bench -p linuxbox          # criterion benches (local HTML reports only, n
 
 **Test Status:**
 
-- Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (257 total via nextest, 4 skipped on macOS)
+- Unit + conformance: 155 lib tests + 11 cli tests + 52 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (258 total via nextest, 4 skipped on macOS)
 - Property-based: 8 daemonbox proptest properties + 25 linuxbox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
 - Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` — check `git log` to see if a plan was already executed before treating it as pending
 
-**macOS quality gates** (`miniboxd` compiles via `macbox::start()` dispatch — `cargo check --workspace` works):
+### Before Committing
+
+**One-command pre-commit gate** (macOS):
+
+```bash
+cargo xtask pre-commit
+```
+
+This runs: `cargo fmt --all --check` + clippy (all crates) + `cargo build --release` (macOS-safe).
+
+**On Linux**, use `cargo xtask prepush` for full coverage including `cargo xtask test-unit` + llvm-cov report.
+
+**macOS quality gates** (what `cargo xtask pre-commit` runs):
 
 ```bash
 cargo fmt --all --check
