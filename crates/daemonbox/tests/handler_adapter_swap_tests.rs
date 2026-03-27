@@ -40,6 +40,8 @@ async fn handle_run_once(
         cpu_weight,
         ephemeral,
         None,
+        vec![],
+        false,
         state,
         deps,
         tx,

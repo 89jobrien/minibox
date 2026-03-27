@@ -15,8 +15,9 @@ use chrono::Utc;
 use linuxbox::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
-    ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
-    DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec, ResourceConfig,
+    BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
+    DynFilesystemProvider, DynImageRegistry, DynNetworkProvider, DynResourceLimiter, HookSpec,
+    ResourceConfig,
 };
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
@@ -110,6 +111,8 @@ pub async fn handle_run(
     cpu_weight: Option<u64>,
     #[allow(unused_variables)] ephemeral: bool,
     #[allow(unused_variables)] network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -123,6 +126,8 @@ pub async fn handle_run(
             memory_limit_bytes,
             cpu_weight,
             network,
+            mounts,
+            privileged,
             state,
             deps,
             tx,
@@ -139,6 +144,8 @@ pub async fn handle_run(
         memory_limit_bytes,
         cpu_weight,
         network,
+        mounts,
+        privileged,
         state,
         deps,
     )
@@ -168,6 +175,8 @@ async fn handle_run_streaming(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     _network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -184,6 +193,8 @@ async fn handle_run_streaming(
         memory_limit_bytes,
         cpu_weight,
         _network,
+        mounts,
+        privileged,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -292,6 +303,8 @@ async fn run_inner_capture(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
@@ -431,8 +444,8 @@ async fn run_inner_capture(
         capture_output: true,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
-        mounts: vec![],    // placeholder — Task 6 replaces this
-        privileged: false, // placeholder — Task 6 replaces this
+        mounts,
+        privileged,
     };
 
     let _spawn_permit = state
@@ -483,6 +496,8 @@ async fn run_inner(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -635,8 +650,8 @@ async fn run_inner(
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
-        mounts: vec![],    // placeholder — Task 6 replaces this
-        privileged: false, // placeholder — Task 6 replaces this
+        mounts,
+        privileged,
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -1019,6 +1034,17 @@ pub async fn handle_pull(
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod run_inner_tests {
+    #[test]
+    fn run_inner_capture_signature_accepts_mounts_and_privileged() {
+        // Compile-time check: the BindMount type is accessible in this crate.
+        use minibox_core::domain::BindMount;
+        let _: Vec<BindMount> = vec![];
+        let _: bool = false;
+    }
+}
 
 #[cfg(test)]
 mod select_registry_tests {

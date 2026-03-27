@@ -245,8 +245,8 @@ async fn dispatch(
             cpu_weight,
             ephemeral,
             network,
-            mounts: _,
-            privileged: _,
+            mounts,
+            privileged,
         } => {
             handler::handle_run(
                 image,
@@ -256,6 +256,8 @@ async fn dispatch(
                 cpu_weight,
                 ephemeral,
                 network,
+                mounts,
+                privileged,
                 state,
                 deps,
                 tx,
