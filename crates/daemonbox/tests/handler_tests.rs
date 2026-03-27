@@ -2032,3 +2032,86 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         "ephemeral run with pull failure must produce Error, got: {response:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Error path tests for missing coverage
+// ---------------------------------------------------------------------------
+
+/// When registry has no layers for an image, handle_run produces an Error.
+#[tokio::test]
+async fn test_run_empty_image_no_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_empty_layers());
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::clone(&mock_registry) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            // The error should mention no layers or empty image
+            assert!(
+                message.contains("no layers")
+                    || message.contains("empty")
+                    || message.contains("Empty"),
+                "expected empty image error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response for empty image, got {other:?}"),
+    }
+}
+
+/// Pulling an image that fails at the registry produces an Error.
+#[tokio::test]
+async fn test_pull_registry_failure_with_tag() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_pull_failure());
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::clone(&mock_registry) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "testimage".to_string(),
+        Some("v1.0".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("pull") || message.contains("failed"),
+                "expected pull failure, got: {message}"
+            );
+        }
+        _ => panic!("expected Error response for pull failure, got {response:?}"),
+    }
+}
