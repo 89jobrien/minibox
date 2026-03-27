@@ -13,6 +13,8 @@ fn small_run_request() -> DaemonRequest {
         cpu_weight: None,
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
     }
 }
 
@@ -28,6 +30,8 @@ fn large_run_request() -> DaemonRequest {
         cpu_weight: Some(7500),
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
     }
 }
 

@@ -64,6 +64,20 @@ use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// A host-path bind mount to inject into a container at startup.
+///
+/// `host_path` is canonicalized and validated before the mount is applied.
+/// `container_path` must be absolute (starts with `/`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BindMount {
+    /// Absolute path on the host to mount into the container.
+    pub host_path: std::path::PathBuf,
+    /// Absolute path inside the container where the host path is mounted.
+    pub container_path: std::path::PathBuf,
+    /// If `true`, the mount is read-only inside the container.
+    pub read_only: bool,
+}
+
 #[cfg(unix)]
 use std::os::fd::OwnedFd;
 

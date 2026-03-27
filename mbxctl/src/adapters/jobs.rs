@@ -32,6 +32,8 @@ impl JobAdapter {
             cpu_weight: req.cpu_weight,
             ephemeral: true,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let mut stream = self

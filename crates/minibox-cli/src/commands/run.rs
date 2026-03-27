@@ -59,6 +59,8 @@ pub async fn execute(
         cpu_weight,
         ephemeral: true,
         network: Some(network_mode),
+        mounts: vec![],
+        privileged: false,
     };
 
     let client = DaemonClient::with_socket(socket_path);

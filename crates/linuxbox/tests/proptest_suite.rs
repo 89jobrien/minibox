@@ -40,6 +40,8 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         cpu_weight,
                         ephemeral,
                         network: None,
+                        mounts: vec![],
+                        privileged: false,
                     }
                 }
             ),

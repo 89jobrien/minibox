@@ -716,6 +716,8 @@ fn create_background_container() -> Result<String, String> {
         cpu_weight: None,
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
     };
 
     match send_daemon_request_sync(&request)? {
@@ -1530,6 +1532,8 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         cpu_weight: None,
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
     };
     let large_run = DaemonRequest::Run {
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
@@ -1541,6 +1545,8 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         cpu_weight: Some(7500),
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
     };
     let small_pull = DaemonRequest::Pull {
         image: "alpine".to_string(),

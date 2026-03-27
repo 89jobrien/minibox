@@ -37,7 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::NetworkMode;
+use crate::domain::{BindMount, NetworkMode};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -71,6 +71,18 @@ pub enum DaemonRequest {
         /// `NetworkMode::None` (isolated namespace, no network connectivity).
         #[serde(default)]
         network: Option<NetworkMode>,
+        /// Bind mounts to apply inside the container.
+        ///
+        /// Each entry is mounted before `pivot_root` in the container's mount namespace.
+        /// On the Colima adapter, host paths must be under `$HOME` or `/tmp`.
+        #[serde(default)]
+        mounts: Vec<BindMount>,
+        /// If `true`, the container process runs with a full Linux capability set.
+        ///
+        /// Required for Docker-in-Docker (DinD) use cases where the inner process
+        /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
+        #[serde(default)]
+        privileged: bool,
     },
 
     /// Stop a running container by ID.
@@ -247,6 +259,8 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -285,6 +299,8 @@ mod tests {
             cpu_weight: Some(500),
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -483,6 +499,8 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -565,6 +583,8 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -588,6 +608,8 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -713,6 +735,8 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: Some(NetworkMode::Host),
+            mounts: vec![],
+            privileged: false,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");

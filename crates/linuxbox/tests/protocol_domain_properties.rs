@@ -79,6 +79,8 @@ proptest! {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -97,6 +99,8 @@ proptest! {
             cpu_weight: Some(u64::MAX),
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
