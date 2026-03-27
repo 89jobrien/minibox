@@ -38,6 +38,10 @@ pub struct ContainerConfig {
     pub capture_output: bool,
     /// Host-side commands to run before the container process is cloned.
     pub pre_exec_hooks: Vec<HookSpec>,
+    /// Bind mounts applied inside the container's mount namespace before pivot_root.
+    pub mounts: Vec<minibox_core::domain::BindMount>,
+    /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
+    pub privileged: bool,
 }
 
 /// Spawn the container init process.
@@ -201,6 +205,77 @@ pub fn run_hooks(
     Ok(())
 }
 
+/// Grant the container process a full Linux capability set.
+///
+/// Uses `capset(2)` with `LINUX_CAPABILITY_VERSION_3` to set all bits in
+/// `permitted`, `effective`, and `inheritable`. Called inside the child
+/// process before `execvp` when `config.privileged` is true.
+///
+/// # Safety
+///
+/// This function uses `libc::syscall(SYS_capset)`. We are in the child
+/// process (single-threaded after clone). The repr(C) structs match the
+/// kernel's `linux_capability_version_3` ABI exactly.
+#[cfg(target_os = "linux")]
+fn apply_full_capabilities() -> anyhow::Result<()> {
+    // LINUX_CAPABILITY_VERSION_3: supports 64-bit capability sets as two
+    // 32-bit words (low bits 0-31, high bits 32-40).
+    const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
+    // All 32 low capability bits set.
+    const CAP_FULL_LOW: u32 = 0xFFFF_FFFF;
+    // Capability bits 32-40 (the currently defined high caps).
+    const CAP_FULL_HIGH: u32 = 0x0000_01FF;
+
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: i32,
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
+    // SAFETY: capset(2) is a pure fd-table-independent syscall. We are in a
+    // freshly cloned child process. The CapHeader and CapData structs are
+    // #[repr(C)] with the exact layout the kernel expects for version 3.
+    unsafe {
+        let mut header = CapHeader {
+            version: LINUX_CAPABILITY_VERSION_3,
+            pid: 0, // 0 = calling process
+        };
+        let full = CapData {
+            effective: CAP_FULL_LOW,
+            permitted: CAP_FULL_LOW,
+            inheritable: CAP_FULL_LOW,
+        };
+        let full_high = CapData {
+            effective: CAP_FULL_HIGH,
+            permitted: CAP_FULL_HIGH,
+            inheritable: CAP_FULL_HIGH,
+        };
+        let mut data = [full, full_high];
+        let ret = libc::syscall(
+            libc::SYS_capset,
+            &mut header as *mut CapHeader as *mut libc::c_void,
+            data.as_mut_ptr() as *mut libc::c_void,
+        );
+        if ret != 0 {
+            return Err(anyhow::anyhow!(
+                "capset failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+
+    debug!("container: full capabilities applied");
+    Ok(())
+}
+
 /// Initialise the container environment inside the cloned child process.
 ///
 /// Called immediately after `clone(2)` returns in the child. Performs all
@@ -209,11 +284,15 @@ pub fn run_hooks(
 /// 1. Set the UTS hostname (requires `CLONE_NEWUTS`).
 /// 2. Add the child to its cgroup by writing `"0"` to `cgroup.procs` (the
 ///    kernel interprets PID 0 as the calling process).
-/// 3. Call [`pivot_root_to`] to switch the root filesystem to the overlay
+/// 3. Call [`crate::container::filesystem::apply_bind_mounts`] to apply any
+///    bind mounts into the overlay rootfs inside the new mount namespace.
+/// 4. Call [`pivot_root_to`] to switch the root filesystem to the overlay
 ///    merged directory.
-/// 4. Call [`close_extra_fds`] to release any file descriptors > 2 that
+/// 5. If `config.privileged` is true, call [`apply_full_capabilities`] to
+///    grant all Linux capabilities via `capset(2)`.
+/// 6. Call [`close_extra_fds`] to release any file descriptors > 2 that
 ///    leaked from the parent across the clone boundary.
-/// 5. Build the `argv` vector and call `execvp` to exec the user command.
+/// 7. Build the `argv` vector and call `execvp` to exec the user command.
 ///
 /// On any error the caller is expected to call `libc::_exit(127)` so the
 /// process terminates without running Rust destructors.
@@ -232,14 +311,25 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     //    for cgroup.procs.
     add_self_to_cgroup(&config.cgroup_path).with_context(|| "child: add_self_to_cgroup")?;
 
-    // 3. Pivot root to the overlay merged directory.
+    // 3. Apply bind mounts into the overlay rootfs before pivot_root.
+    //    These mounts live inside this child's new mount namespace (CLONE_NEWNS).
+    crate::container::filesystem::apply_bind_mounts(&config.mounts, &config.rootfs)
+        .with_context(|| "child: apply_bind_mounts")?;
+
+    // 4. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;
 
-    // 4. Close any file descriptors > 2 (stdin/stdout/stderr) that leaked
+    // 5. Apply full capability set if privileged mode requested.
+    #[cfg(target_os = "linux")]
+    if config.privileged {
+        apply_full_capabilities().with_context(|| "child: apply_full_capabilities")?;
+    }
+
+    // 6. Close any file descriptors > 2 (stdin/stdout/stderr) that leaked
     //    from the parent. We do this on a best-effort basis.
     close_extra_fds();
 
-    // 5. Build argv for execvp.
+    // 7. Build argv for execvp.
     let cmd = CString::new(config.command.clone()).map_err(|_| {
         ProcessError::SpawnFailed(format!("invalid command string: {}", config.command))
     })?;
@@ -322,6 +412,48 @@ fn close_extra_fds() {
             fds_closed = count,
             "container: closed extra file descriptors via /proc/self/fd scan"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_config_privileged_defaults_false() {
+        let cfg = ContainerConfig {
+            rootfs: std::path::PathBuf::from("/tmp/test-rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            namespace_config: crate::container::namespace::NamespaceConfig::all(),
+            cgroup_path: std::path::PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            hostname: "test".to_string(),
+            capture_output: false,
+            pre_exec_hooks: vec![],
+            mounts: vec![],
+            privileged: false,
+        };
+        assert!(!cfg.privileged);
+        assert!(cfg.mounts.is_empty());
+    }
+
+    #[test]
+    fn container_config_privileged_true() {
+        let cfg = ContainerConfig {
+            rootfs: std::path::PathBuf::from("/tmp/test-rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            namespace_config: crate::container::namespace::NamespaceConfig::all(),
+            cgroup_path: std::path::PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            hostname: "test".to_string(),
+            capture_output: false,
+            pre_exec_hooks: vec![],
+            mounts: vec![],
+            privileged: true,
+        };
+        assert!(cfg.privileged);
     }
 }
 
