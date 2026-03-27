@@ -146,6 +146,20 @@ cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox
 cargo xtask test-unit
 ```
 
+### Handler Testing Patterns
+
+**Channel-based responses**: `handle_run` sends responses via channel, not direct return. Use `handle_run_once()` test helper (defined in handler_tests.rs) to recover single response.
+
+**Mock adapter builders**: Configure mocks at creation time via builder methods (`.with_empty_layers()`, `.with_pull_failure()`, `.with_cached_image()`) — don't try to mutate after construction.
+
+**Mock registry type casting**: When storing `Arc<MockRegistry>` in `Arc<dyn ImageRegistry>`, use explicit cast: `Arc::clone(&mock) as Arc<dyn linuxbox::domain::ImageRegistry>`.
+
+**Test file organization**: Handler tests in `crates/daemonbox/tests/handler_tests.rs`. Test helpers (`create_test_deps_with_dir`, `create_test_state_with_dir`) are in that file.
+
+### Coverage Focus Areas
+
+`handler.rs` (daemonbox) is at 67.5% function / 55% line coverage — biggest gap in codebase. Error path tests (image pull failure, empty image, registry unreachable) have good ROI. Use `cargo xtask prepush` to generate llvm-cov coverage report.
+
 ## Architecture Overview
 
 ### Workspace Structure
@@ -238,6 +252,10 @@ Eleven crates in cargo workspace:
 - `server.rs`: Unix socket listener with SO_PEERCRED auth; channel-based streaming dispatch
 - `handler.rs`: Request routing; `handle_run_streaming` for ephemeral containers (Linux)
 - `state.rs`: In-memory container tracking
+
+### DaemonResponse Protocol Notes
+
+Current variants: `ContainerCreated`, `Success`, `Error`, `ContainerList`, `ContainerStopped`, `ContainerOutput`. **Terminal vs non-terminal**: Only `ContainerOutput` is non-terminal (can be sent multiple times during streaming). All other variants end streaming/request. If adding new variant, update `is_terminal_response()` in `server.rs` to include it in the match.
 
 ## Security Considerations
 
