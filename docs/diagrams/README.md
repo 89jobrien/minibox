@@ -8,3 +8,6 @@ Visual references for minibox design. Each file contains a description, ASCII ar
 | [hexagonal-architecture.md](hexagonal-architecture.md) | Domain ports, adapters, and composition roots per platform |
 | [platform-adapter-selection.md](platform-adapter-selection.md) | Runtime adapter selection flow per platform |
 | [container-lifecycle.md](container-lifecycle.md) | Container state machine (Created → Running → Stopped) |
+| [mbxctl-sse-pipeline.md](mbxctl-sse-pipeline.md) | HTTP control plane: POST /jobs → daemon → SSE log stream |
+| [env-var-flow.md](env-var-flow.md) | How user env vars travel from CLI/mbxctl to execve(2) |
+| [dagu-minibox-integration.md](dagu-minibox-integration.md) | Dagu workflow orchestration via mbx-dagu + mbxctl |
