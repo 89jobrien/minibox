@@ -410,6 +410,13 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 - **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (linuxbox), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
 - **Private fn doctests** — mark with ```` ```ignore ```` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
 
+### Protocol gotchas (relevant when modifying `protocol.rs` or `handler.rs`)
+
+- **Two `DaemonRequest` definitions** — `crates/minibox-core/src/protocol.rs` AND `crates/linuxbox/src/protocol.rs` both define `DaemonRequest` independently (linuxbox has its own test suite). When adding a field, update **both** files and all their construction sites.
+- **`handle_run` param chain** — Adding a parameter requires updating in order: `server.rs` dispatch pattern match → `handle_run` → `handle_run_streaming` → `run_inner_capture`; and separately `run_inner`. All five sites must change together.
+- **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
+- **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
+
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
 - **Pipe fds across `clone()`** — both parent and child get copies of any `OwnedFd` after clone. Use `std::mem::forget` on fds before the clone call, then manage raw fds manually. Child: `dup2` write end into stdout/stderr slots, then `close(write_fd_raw)` and `close(read_fd_raw)`. Parent: `drop(write_fd)` after clone returns, keep read end for output streaming.
@@ -417,6 +424,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 - **`close_extra_fds` uses `close_range(2)` fast path** — tries the syscall first (kernel 5.9+, QEMU-inspired). Falls back to `/proc/self/fd` iteration which must collect FD numbers into a `Vec` before closing (iterating and closing in the loop would close `ReadDir`'s own FD).
 - **Absolute symlink rewrite in `layer.rs`** — `strip_prefix("/")` gives a path relative to the container root, not the symlink's directory. Use `relative_path(entry_dir, abs_target)` (defined in `layer.rs`) to get the correct relative target; otherwise busybox applet symlinks resolve to non-existent paths (e.g. `/bin/bin/busybox`).
 - **Tar root entries** — `"."` and `"./"` entries in OCI layers must be skipped before path validation; `Path::join("./")` normalizes the CurDir component away, causing a false path-escape error.
+- **`child_init` uses `execve` not `execvp`** — `execvp` inherits the daemon's host environment into the container. `child_init` calls `execve` with an explicit `envp` built from `config.env`. Do not revert to `execvp`.
 
 ### Cgroup v2 gotchas (relevant when modifying `cgroups.rs`)
 
