@@ -47,7 +47,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 /// Both checks must pass for the path to be considered safe. The function
 /// returns an error whose message includes `"path traversal"` so callers and
 /// tests can match on it reliably.
-fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
+pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
     // Reject paths with parent directory components
     if has_parent_dir_component(path) {
         anyhow::bail!(

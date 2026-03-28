@@ -10,6 +10,8 @@ Minibox is a Docker-like container runtime written in Rust featuring daemon/clie
 
 This workspace uses **Rust 2024 edition**. Watch for: match ergonomics changes, `unsafe` required for `set_var`/`remove_var`, `FromRawFd` scope differences. Always run `cargo clippy` and `cargo test` after generating code.
 
+**Critical:** See [`rules/rust-patterns.md`](rules/rust-patterns.md) for Minibox-specific patterns (error handling, path validation, async/sync boundaries, tracing discipline). This is a must-read before writing container code.
+
 ## Build and Development Commands
 
 ### Python Scripts

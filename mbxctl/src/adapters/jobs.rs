@@ -14,16 +14,14 @@ impl JobAdapter {
         Self { client }
     }
 
-    /// Convenience accessor so handlers can open their own daemon connections
-    /// (e.g. for SSE streaming).
-    pub fn client(&self) -> &Arc<DaemonClient> {
-        &self.client
-    }
-
+    /// Send a Run request and wait for `ContainerCreated`.
+    ///
+    /// Returns the container ID and the live [`ResponseStream`] so the caller
+    /// can drain `ContainerOutput` / `ContainerStopped` messages.
     pub async fn create_and_run(
         &self,
         req: CreateJobRequest,
-    ) -> Result<(String, String), ControllerError> {
+    ) -> Result<(String, crate::client::ResponseStream), ControllerError> {
         let daemon_req = DaemonRequest::Run {
             image: req.image,
             tag: req.tag.or(Some("latest".to_string())),
@@ -42,7 +40,8 @@ impl JobAdapter {
             .await
             .map_err(|e| ControllerError::DaemonUnavailable(e.to_string()))?;
 
-        // Wait for ContainerCreated to get the container ID
+        // Wait for ContainerCreated to get the container ID, then hand the
+        // stream back to the caller so it can drain output messages.
         loop {
             match stream
                 .next()
@@ -50,7 +49,7 @@ impl JobAdapter {
                 .map_err(|e| ControllerError::Internal(e.to_string()))?
             {
                 Some(DaemonResponse::ContainerCreated { id }) => {
-                    return Ok((id.clone(), id));
+                    return Ok((id, stream));
                 }
                 Some(DaemonResponse::Error { message }) => {
                     return Err(ControllerError::ContainerFailed { message });
@@ -65,13 +64,13 @@ impl JobAdapter {
         }
     }
 
-    /// Run [`create_and_run`] with a timeout.
+    /// Run [`create_and_run`] with a timeout on the startup phase.
     ///
     /// Defaults to 3600 s (1 hour) when `timeout_seconds` is `None`.
     pub async fn create_and_run_with_timeout(
         &self,
         req: CreateJobRequest,
-    ) -> Result<(String, String), ControllerError> {
+    ) -> Result<(String, crate::client::ResponseStream), ControllerError> {
         let timeout_secs = req.timeout_seconds.unwrap_or(3600);
 
         tokio::time::timeout(Duration::from_secs(timeout_secs), self.create_and_run(req))

@@ -429,11 +429,10 @@ async fn runtime_spawn_script_embeds_args() {
 // ============================================================================
 // ColimaFilesystem and ColimaLimiter — trait-level tests
 //
-// Neither ColimaFilesystem nor ColimaLimiter expose `with_executor()` publicly.
-// We test them by constructing them without a VM and observing the expected
-// failure mode: the `limactl` binary is absent in the test environment, so
-// every call that requires the VM must return an error.  This verifies that
-// the adapters propagate infrastructure errors rather than silently succeeding.
+// Both adapters expose `with_executor()` for injecting a test seam (see
+// ColimaRegistry/ColimaRuntime pattern).  The tests below exercise both the
+// injected-executor path (verifying correct command construction) and the
+// no-executor path (where limactl is absent, verifying error propagation).
 // ============================================================================
 
 use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter};

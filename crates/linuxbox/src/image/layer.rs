@@ -36,7 +36,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 /// assert_eq!(relative_path(Path::new("usr/local/bin"), Path::new("usr/bin/python")),
 ///            std::path::PathBuf::from("../../bin/python"));
 /// ```
-fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
+pub(crate) fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
     use std::path::Component;
     let from: Vec<_> = from_dir
         .components()
