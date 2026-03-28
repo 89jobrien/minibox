@@ -83,6 +83,9 @@ pub enum DaemonRequest {
         /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
         #[serde(default)]
         privileged: bool,
+        /// Environment variables to set inside the container, in `KEY=VALUE` form.
+        #[serde(default)]
+        env: Vec<String>,
     },
 
     /// Stop a running container by ID.
@@ -261,6 +264,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -301,6 +305,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -501,6 +506,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -585,6 +591,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -610,6 +617,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -737,6 +745,7 @@ mod tests {
             network: Some(NetworkMode::Host),
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");

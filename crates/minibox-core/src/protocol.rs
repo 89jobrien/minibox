@@ -71,6 +71,12 @@ pub enum DaemonRequest {
         /// `NetworkMode::None` (isolated namespace, no network connectivity).
         #[serde(default)]
         network: Option<NetworkMode>,
+        /// Environment variables to set inside the container, in `KEY=VALUE` form.
+        ///
+        /// These are merged with the container's default environment (PATH, TERM).
+        /// User-supplied values take precedence over defaults for duplicate keys.
+        #[serde(default)]
+        env: Vec<String>,
         /// Bind mounts to apply inside the container.
         ///
         /// Each entry is mounted before `pivot_root` in the container's mount namespace.

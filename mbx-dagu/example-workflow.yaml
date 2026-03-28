@@ -1,0 +1,24 @@
+# Example dagu workflow using mbx-dagu to run minibox containers.
+#
+# Prerequisites:
+#   - miniboxd daemon running on the host
+#   - mbxctl running: mbxctl --listen localhost:9999
+#   - mbx-dagu binary in PATH (or use the Dockerfile image)
+#
+# Run with: dagu start example-workflow.yaml
+
+name: example-minibox-workflow
+
+steps:
+  - name: echo-hello
+    command: mbx-dagu --image alpine --tag latest -- /bin/echo "Hello from minibox!"
+
+  - name: compute-something
+    command: mbx-dagu --image alpine --tag latest --memory 134217728 -- /bin/sh -c "echo 2+2 | bc"
+    depends:
+      - echo-hello
+
+  - name: with-env-vars
+    command: mbx-dagu --image alpine --tag latest --env MY_VAR=hello,OTHER_VAR=world -- /bin/sh -c 'echo $MY_VAR $OTHER_VAR'
+    depends:
+      - compute-something

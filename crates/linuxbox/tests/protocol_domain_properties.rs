@@ -81,6 +81,7 @@ proptest! {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -101,6 +102,7 @@ proptest! {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

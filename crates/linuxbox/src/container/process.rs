@@ -10,7 +10,7 @@ use crate::error::ProcessError;
 use anyhow::Context;
 use minibox_core::domain::{HookSpec, SpawnResult};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::execvp;
+use nix::unistd::execve;
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
@@ -329,7 +329,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     //    from the parent. We do this on a best-effort basis.
     close_extra_fds();
 
-    // 7. Build argv for execvp.
+    // 7. Build argv and envp for execve.
     let cmd = CString::new(config.command.clone()).map_err(|_| {
         ProcessError::SpawnFailed(format!("invalid command string: {}", config.command))
     })?;
@@ -343,9 +343,17 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         );
     }
 
-    debug!(command = %config.command, "container: execvp");
+    let mut envp: Vec<CString> = Vec::with_capacity(config.env.len());
+    for kv in &config.env {
+        envp.push(
+            CString::new(kv.as_str())
+                .map_err(|_| ProcessError::SpawnFailed(format!("invalid env var: {kv}")))?,
+        );
+    }
 
-    execvp(&cmd, &argv).map_err(|source| ProcessError::ExecFailed {
+    debug!(command = %config.command, "container: execve");
+
+    execve(&cmd, &argv, &envp).map_err(|source| ProcessError::ExecFailed {
         cmd: config.command.clone(),
         source,
     })?;

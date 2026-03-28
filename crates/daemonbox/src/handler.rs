@@ -113,6 +113,7 @@ pub async fn handle_run(
     #[allow(unused_variables)] network: Option<NetworkMode>,
     mounts: Vec<BindMount>,
     privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -128,6 +129,7 @@ pub async fn handle_run(
             network,
             mounts,
             privileged,
+            env,
             state,
             deps,
             tx,
@@ -146,6 +148,7 @@ pub async fn handle_run(
         network,
         mounts,
         privileged,
+        env,
         state,
         deps,
     )
@@ -177,6 +180,7 @@ async fn handle_run_streaming(
     _network: Option<NetworkMode>,
     mounts: Vec<BindMount>,
     privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -195,6 +199,7 @@ async fn handle_run_streaming(
         _network,
         mounts,
         privileged,
+        env,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -305,6 +310,7 @@ async fn run_inner_capture(
     network: Option<NetworkMode>,
     mounts: Vec<BindMount>,
     privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
@@ -431,14 +437,16 @@ async fn run_inner_capture(
         .cloned()
         .unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
+    let mut container_env = vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "TERM=xterm".to_string(),
+    ];
+    container_env.extend(env);
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir.clone(),
         command: spawn_command,
         args: spawn_args,
-        env: vec![
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-            "TERM=xterm".to_string(),
-        ],
+        env: container_env,
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: true,
@@ -498,6 +506,7 @@ async fn run_inner(
     network: Option<NetworkMode>,
     mounts: Vec<BindMount>,
     privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -637,14 +646,16 @@ async fn run_inner(
         .cloned()
         .unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
+    let mut container_env = vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "TERM=xterm".to_string(),
+    ];
+    container_env.extend(env);
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir_from_overlay.clone(),
         command: spawn_command,
         args: spawn_args,
-        env: vec![
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-            "TERM=xterm".to_string(),
-        ],
+        env: container_env,
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: false,

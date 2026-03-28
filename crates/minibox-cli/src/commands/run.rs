@@ -143,6 +143,7 @@ pub async fn execute(
         network: Some(network_mode),
         mounts,
         privileged,
+        env: vec![],
     };
 
     let client = DaemonClient::with_socket(socket_path);

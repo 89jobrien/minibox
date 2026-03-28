@@ -32,6 +32,7 @@ impl JobAdapter {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: req.env,
         };
 
         let mut stream = self
