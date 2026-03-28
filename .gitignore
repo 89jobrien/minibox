@@ -22,6 +22,7 @@
 !docs/diagrams/
 !docs/archive/*.md
 !docs/archive/
+*.csv
 
 # Claude Code local configuration
 .claude/

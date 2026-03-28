@@ -29,14 +29,25 @@ pub mod socket;
 pub use error::{ClientError, Result};
 pub use socket::{DaemonClient, DaemonResponseStream};
 
-use minibox_core::protocol::DAEMON_SOCKET_PATH;
 use std::path::PathBuf;
 
 /// Get the default daemon socket path, respecting MINIBOX_SOCKET_PATH environment variable.
+///
+/// Falls back to the platform-appropriate default:
+/// - macOS: `/tmp/minibox/miniboxd.sock` (no `/run` directory on macOS)
+/// - Linux: `/run/minibox/miniboxd.sock`
 pub fn default_socket_path() -> PathBuf {
-    PathBuf::from(
-        std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| DAEMON_SOCKET_PATH.to_string()),
-    )
+    if let Ok(p) = std::env::var("MINIBOX_SOCKET_PATH") {
+        return PathBuf::from(p);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from("/tmp/minibox/miniboxd.sock")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        PathBuf::from("/run/minibox/miniboxd.sock")
+    }
 }
 
 #[cfg(test)]
@@ -54,8 +65,8 @@ mod tests {
         let path = default_socket_path();
         let path_str = path.to_string_lossy();
         assert!(
-            path_str.contains("miniboxd.sock") || path_str.contains("MINIBOX_SOCKET_PATH"),
-            "path should reference miniboxd.sock or be overridden by env var"
+            path_str.contains("miniboxd.sock"),
+            "path should reference miniboxd.sock"
         );
     }
 }

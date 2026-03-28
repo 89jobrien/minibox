@@ -129,31 +129,23 @@ trace:
     mkdir -p "$TRACE_DIR"
 
     if [[ "$(uname -s)" == "Darwin" ]]; then
+        # The Colima adapter does not stream container stdout back through minibox
+        # (spawn_process returns output_reader: None). uftrace is a Linux tool anyway.
+        # Run the trace directly inside the Lima VM via limactl shell, bypassing minibox.
         echo "trace: building Linux musl binary..."
         just build-linux
 
-        BINARY_DIR="$(pwd)/target/x86_64-unknown-linux-musl/release"
+        TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target}"
+        BINARY_DIR="${TARGET_DIR}/x86_64-unknown-linux-musl/release"
         ABS_TRACE="$(pwd)/$TRACE_DIR"
 
-        echo "trace: running uftrace inside minibox container..."
-        minibox run --privileged \
-            -v "${BINARY_DIR}:/minibox" \
-            -v "${ABS_TRACE}:/traces" \
-            ubuntu \
-            -- sh -c "
-                apt-get install -y uftrace -q 2>/dev/null &&
-                uftrace record -P . --no-libcall -d /traces /minibox/miniboxd &
-                DAEMON_PID=\$!
-                sleep 2
-                /minibox/minibox pull alpine 2>/dev/null || true
-                /minibox/minibox run alpine -- /bin/echo 'uftrace smoke' 2>/dev/null || true
-                kill \$DAEMON_PID 2>/dev/null || true
-                wait \$DAEMON_PID 2>/dev/null || true
-            "
+        # Lima mounts /tmp and /Users into the VM — both paths are accessible.
+        echo "trace: running uftrace inside Colima VM..."
+        colima ssh -- bash "$(pwd)/scripts/trace-lima.sh" "$BINARY_DIR" "$ABS_TRACE"
 
         echo ""
         echo "── uftrace report (top 20 by total time) ──────────────────────────────"
-        uftrace report -d "$TRACE_DIR" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
+        colima ssh -- uftrace report -d "${ABS_TRACE}" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
     else
         [[ "$(uname -s)" == "Linux" ]] || { echo "error: unsupported platform"; exit 1; }
         command -v uftrace >/dev/null 2>&1 || { echo "error: apt install uftrace"; exit 1; }

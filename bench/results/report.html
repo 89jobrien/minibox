@@ -19,17 +19,17 @@
 </head>
 <body>
 <h1>minibox bench report</h1>
-<p class="meta">2 commits · latest 2026-03-21T10:01:47</p>
+<p class="meta">5 commits · latest 2026-03-25T10:19:51</p>
 
 <h2 style="color:#cba6f7">Latest values</h2>
 <table>
 <thead><tr><th>suite</th><th>test</th><th>avg</th><th>p95</th></tr></thead>
 <tbody>
-<tr><td>e2e</td><td>pull_alpine</td><td class='num'>202465µs</td><td class='num'>202465µs</td></tr>
-<tr><td>e2e</td><td>run_true</td><td class='num'>8399µs</td><td class='num'>8399µs</td></tr>
-<tr><td>exec</td><td>exec_echo</td><td class='num'>20337µs</td><td class='num'>26124µs</td></tr>
-<tr><td>pull</td><td>pull_alpine</td><td class='num'>309967µs</td><td class='num'>309967µs</td></tr>
-<tr><td>run</td><td>run_true</td><td class='num'>12715µs</td><td class='num'>23879µs</td></tr>
+<tr><td>e2e</td><td>pull_alpine</td><td class='num'>244342µs</td><td class='num'>387153µs</td></tr>
+<tr><td>e2e</td><td>run_true</td><td class='num'>18083µs</td><td class='num'>29062µs</td></tr>
+<tr><td>exec</td><td>exec_echo</td><td class='num'>15795µs</td><td class='num'>23390µs</td></tr>
+<tr><td>pull</td><td>pull_alpine</td><td class='num'>225621µs</td><td class='num'>248290µs</td></tr>
+<tr><td>run</td><td>run_true</td><td class='num'>14663µs</td><td class='num'>17688µs</td></tr>
 
 </tbody>
 </table>
@@ -46,37 +46,37 @@
 <script>
 new Chart(document.getElementById('c_e2e_pull_alpine'), {
   type:'line', options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'e2e/pull_alpine (µs)'}},scales:{y:{beginAtZero:false}}},
-  data:{ labels:["b5b7df0d","b537d721"], datasets:[
-    {label:'avg',data:[199802.0,202465.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
-    {label:'p95',data:[199802.0,202465.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
+  data:{ labels:["b5b7df0d","b537d721","ae01b21b","462faffd","5b89dc18","5b89dc18"], datasets:[
+    {label:'avg',data:[199802.0,202465.0,217573.0,233890.0,205788.0,244342.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
+    {label:'p95',data:[199802.0,202465.0,217573.0,233890.0,218846.0,387153.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
   ]}
 });
 new Chart(document.getElementById('c_e2e_run_true'), {
   type:'line', options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'e2e/run_true (µs)'}},scales:{y:{beginAtZero:false}}},
-  data:{ labels:["b5b7df0d","b537d721"], datasets:[
-    {label:'avg',data:[5869.0,8399.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
-    {label:'p95',data:[5869.0,8399.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
+  data:{ labels:["b5b7df0d","b537d721","ae01b21b","462faffd","5b89dc18","5b89dc18"], datasets:[
+    {label:'avg',data:[5869.0,8399.0,10032.0,7624.0,19945.0,18083.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
+    {label:'p95',data:[5869.0,8399.0,10032.0,7624.0,26195.0,29062.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
   ]}
 });
 new Chart(document.getElementById('c_exec_exec_echo'), {
   type:'line', options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'exec/exec_echo (µs)'}},scales:{y:{beginAtZero:false}}},
-  data:{ labels:["b5b7df0d","b537d721"], datasets:[
-    {label:'avg',data:[13314.0,20337.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
-    {label:'p95',data:[17337.0,26124.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
+  data:{ labels:["b5b7df0d","b537d721","ae01b21b","462faffd","5b89dc18","5b89dc18"], datasets:[
+    {label:'avg',data:[13314.0,20337.0,14502.0,18079.0,21442.0,15795.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
+    {label:'p95',data:[17337.0,26124.0,19204.0,23876.0,32040.0,23390.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
   ]}
 });
 new Chart(document.getElementById('c_pull_pull_alpine'), {
   type:'line', options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'pull/pull_alpine (µs)'}},scales:{y:{beginAtZero:false}}},
-  data:{ labels:["b5b7df0d","b537d721"], datasets:[
-    {label:'avg',data:[319077.0,309967.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
-    {label:'p95',data:[319077.0,309967.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
+  data:{ labels:["b5b7df0d","b537d721","ae01b21b","462faffd","5b89dc18","5b89dc18"], datasets:[
+    {label:'avg',data:[319077.0,309967.0,303062.0,366989.0,226479.0,225621.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
+    {label:'p95',data:[319077.0,309967.0,303062.0,366989.0,289243.0,248290.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
   ]}
 });
 new Chart(document.getElementById('c_run_run_true'), {
   type:'line', options:{responsive:true,plugins:{legend:{position:'top'},title:{display:true,text:'run/run_true (µs)'}},scales:{y:{beginAtZero:false}}},
-  data:{ labels:["b5b7df0d","b537d721"], datasets:[
-    {label:'avg',data:[16013.0,12715.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
-    {label:'p95',data:[20017.0,23879.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
+  data:{ labels:["b5b7df0d","b537d721","ae01b21b","462faffd","5b89dc18","5b89dc18"], datasets:[
+    {label:'avg',data:[16013.0,12715.0,18058.0,23752.0,20192.0,14663.0],borderColor:'#4f88e3',backgroundColor:'#4f88e322',fill:true,tension:0.3},
+    {label:'p95',data:[20017.0,23879.0,22099.0,33286.0,27922.0,17688.0],borderColor:'#e3834f',backgroundColor:'#e3834f22',fill:true,tension:0.3}
   ]}
 });
 
