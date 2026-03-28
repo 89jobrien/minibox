@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-27
+**Last updated:** 2026-03-28
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -22,21 +22,23 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 ```
 crates/
   minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
-  linuxbox/        — Linux-specific adapters (compiles everywhere, re-exports minibox-core)
+  linuxbox/        — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
+                     NOTE: rename to `mbx` planned (issue #44 era) — name is misleading, used on all platforms
   minibox-macros/  — proc macros: as_any!, default_new!, adapt!
   daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
   miniboxd/        — unified daemon binary; dispatches by platform
                      Linux  → native handler via daemonbox
                      macOS  → macbox::start()
                      Windows → winbox::start()
-  macbox/          — macOS daemon: Colima preflight, adapter wiring, start()
+  macbox/          — macOS daemon: currently Colima adapter wiring; target: minibox-owned VZ VM
   winbox/          — Windows daemon stub: Named Pipe paths, start() stub
   minibox-cli/     — CLI client (platform-aware socket/pipe path)
   minibox-client/  — shared client library (socket connection, error types)
+                     Fixed 2026-03-28: default_socket_path() now returns /tmp/minibox/miniboxd.sock on macOS
   minibox-llm/     — multi-provider LLM client with structured output and fallback chains
   minibox-secrets/ — typed credential store (env, keyring, 1Password, Bitwarden adapters)
-  minibox-bench/   — benchmark harness (linuxbox only)
-  xtask/           — dev tool: pre-commit, test-unit, e2e-suite, coverage
+  minibox-bench/   — benchmark harness
+  crates/xtask/    — dev tool: pre-commit, test-unit, e2e-suite, coverage (moved from root xtask/ 2026-03-28)
 mbxctl/            — axum-based control plane (WIP)
 ```
 
@@ -190,6 +192,12 @@ All items below are merged to `main`:
 - [x] `minibox-llm` crate (multi-provider LLM client)
 - [x] `minibox-secrets` crate (typed credential store)
 - [x] `mbxctl` axum control plane skeleton
+- [x] `xtask` moved to `crates/xtask/` (2026-03-28)
+- [x] macOS socket path fix: `minibox-client` now defaults to `/tmp/minibox/miniboxd.sock` on macOS (2026-03-28)
+- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `linuxbox/src/container/mod.rs` (2026-03-28)
+- [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
+- [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
+- [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
 
 ---
 
@@ -212,6 +220,23 @@ All items below are merged to `main`:
 - Network setup edge cases
 
 More error scenarios can be added incrementally using existing mock builder patterns.
+
+### minibox-owned VM stack (macOS / Windows) — #40–#45
+
+The strategic goal: minibox owns the full container stack on every OS without external runtime dependencies (no Colima, no Docker).
+
+| Issue | Title | Status |
+|---|---|---|
+| #44 | minibox owns the full stack on every OS | Tracking |
+| #40 | Provision/boot VM via Apple Virtualization.Framework | Open |
+| #41 | minibox-agent — in-VM daemon over vsock | Open |
+| #42 | vsock I/O bridge — stream stdout/stderr host↔VM | Open |
+| #43 | virtiofs mounts — share OCI layers + bind mounts | Open |
+| #45 | Windows: Hyper-V / WSL2 kernel path | Open |
+
+**Architecture:** minibox-agent runs `linuxbox` primitives inside a minibox-managed VM. Host daemon communicates over vsock. OCI layers stored on host, virtiofs-mounted into VM. `ContainerSpawnConfig` (with rootfs as virtiofs path) sent to agent verbatim — no new container logic needed.
+
+**`linuxbox` rename:** The crate name is misleading (used on all platforms via agent). Rename to `mbx` planned but not yet executed.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
@@ -268,7 +293,8 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 
 | Path | Purpose |
 |---|---|
-| `/run/minibox/miniboxd.sock` | Unix socket (Linux/macOS) |
+| `/run/minibox/miniboxd.sock` | Unix socket (Linux) |
+| `/tmp/minibox/miniboxd.sock` | Unix socket (macOS) |
 | `\\.\pipe\miniboxd` | Named Pipe (Windows, future) |
 | `/var/lib/minibox/images/` | Image layer storage (root) |
 | `~/.mbx/cache/` | Image layer storage (non-root) |
