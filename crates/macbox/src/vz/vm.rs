@@ -376,6 +376,13 @@ mod imp {
 
 pub use imp::VzVm;
 
+/// Return the default VM image directory: `~/.mbx/vm`.
+///
+/// Returns `None` if the home directory cannot be determined.
+pub fn default_vm_dir() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".mbx").join("vm"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
