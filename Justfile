@@ -39,6 +39,15 @@ build-linux:
         cargo build --release --target "$MUSL_TARGET" \
         -p miniboxd -p minibox-cli
 
+# Build macOS VM image (Alpine kernel + agent cross-compiled, run once before using VZ adapter)
+build-vm-image force="":
+    #!/usr/bin/env bash
+    if [ "{{force}}" = "force" ]; then
+        cargo xtask build-vm-image --force
+    else
+        cargo xtask build-vm-image
+    fi
+
 # ── Gates ────────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release

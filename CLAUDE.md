@@ -63,6 +63,12 @@ cargo build -p minibox-cli
 
 # Check all crates without building
 cargo check --workspace
+
+# Build macOS VM image (Alpine kernel + agent, macOS only — required before MINIBOX_ADAPTER=vz)
+cargo xtask build-vm-image          # cached, skips if already built
+cargo xtask build-vm-image --force  # re-download + recompile
+just build-vm-image                 # shorthand
+just build-vm-image force           # force rebuild
 ```
 
 Binaries output to `target/release/miniboxd` and `target/release/minibox`.
@@ -206,7 +212,7 @@ Fourteen crates in cargo workspace:
 
 **Core library split**: Cross-platform types live in `minibox-core`; linuxbox re-exports them. Prefer `use minibox_core::protocol::*` in new code outside linuxbox rather than going through the re-export.
 
-**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and `colima` (macOS via limactl/nerdctl). Wired in `miniboxd/src/main.rs`.
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), `colima` (macOS via limactl/nerdctl), and `vz` (macOS VZ.framework; requires `macbox/vz` feature + VM image at `~/.mbx/vm/`). Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
