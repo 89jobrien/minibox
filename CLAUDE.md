@@ -426,6 +426,12 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 - **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
 - **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
 
+### macbox/vz gotchas (relevant when modifying `crates/macbox/src/vz/` or merging the vz branch)
+
+- **`MINIBOX_ADAPTER=vz` requires compile-time feature** — must build with `--features vz` for `macbox`/`miniboxd`; the env var alone at runtime is not enough.
+- **Duplicate `pub mod vz;` after merges** — `crates/macbox/src/lib.rs` should have exactly one `#[cfg(feature = "vz")] pub mod vz;`. Merges that touch this file can silently introduce a duplicate unconditional declaration; `cargo check` catches it immediately.
+- **`linuxbox` → `mbx` rename (2026-03-29)** — any `linuxbox::` reference (in code, notes, or plans) is stale; use `mbx::` (e.g. `mbx::adapters::NoopNetwork`).
+
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
 - **Pipe fds across `clone()`** — both parent and child get copies of any `OwnedFd` after clone. Use `std::mem::forget` on fds before the clone call, then manage raw fds manually. Child: `dup2` write end into stdout/stderr slots, then `close(write_fd_raw)` and `close(read_fd_raw)`. Parent: `drop(write_fd)` after clone returns, keep read end for output streaming.
