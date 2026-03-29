@@ -15,6 +15,7 @@ members = [
     "crates/minibox-client",
     "crates/xtask",
     "mbxctl",
+    "dashbox",
 ]
 
 [workspace.package]

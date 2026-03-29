@@ -101,6 +101,12 @@ test-sandbox:
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
 
+# ── Dashboard ────────────────────────────────────────────────────────────────
+
+# Launch dashbox TUI dashboard
+dash:
+    cargo run -p dashbox --release
+
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
 bench:

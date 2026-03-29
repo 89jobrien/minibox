@@ -62,7 +62,8 @@ Cargo.lock is committed for binary projects
 /bench/results/*.txt
 !/bench/results/latest.json
 
-# Testing
+# Profiling
+/bench/profiles/
 *.profraw
 *.profdata
 

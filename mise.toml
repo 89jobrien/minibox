@@ -244,8 +244,12 @@ HOURS="${1:-24}"
 uv run scripts/standup.py --hours "$HOURS"
 """
 
+[tasks."all:dash"]
+description = "Launch dashbox TUI dashboard"
+run = "cargo run -p dashbox --release"
+
 [tasks."all:dashboard"]
-description = "Agent run history and metrics dashboard"
+description = "Agent run history and metrics dashboard (legacy Rich)"
 run = "uv run scripts/dashboard.py"
 
 [tasks."all:demo-pull"]
