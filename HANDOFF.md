@@ -22,7 +22,7 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 ```
 crates/
   minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
-  linuxbox/        — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
+  mbx/        — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
                      NOTE: rename to `mbx` planned (issue #44 era) — name is misleading, used on all platforms
   minibox-macros/  — proc macros: as_any!, default_new!, adapt!
   daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
@@ -45,11 +45,11 @@ mbxctl/            — axum-based control plane (WIP)
 **Dependency graph:**
 
 ```
-miniboxd  ──[linux]──► linuxbox ──► minibox-core
-          ──[macos]──► macbox ──► daemonbox ──► linuxbox
-          ──[win]────► winbox ──► daemonbox ──► linuxbox
-minibox-cli ──► minibox-client ──► linuxbox
-minibox-bench ──────────────────► linuxbox
+miniboxd  ──[linux]──► mbx ──► minibox-core
+          ──[macos]──► macbox ──► daemonbox ──► mbx
+          ──[win]────► winbox ──► daemonbox ──► mbx
+minibox-cli ──► minibox-client ──► mbx
+minibox-bench ──────────────────► mbx
 minibox-llm (standalone)
 minibox-secrets (standalone)
 mbxctl (standalone, axum)
@@ -61,7 +61,7 @@ mbxctl (standalone, axum)
 
 | Suite | Count | Platform |
 |---|---|---|
-| linuxbox unit | 88 (+1 ignored) | any |
+| mbx unit | 88 (+1 ignored) | any |
 | minibox-cli | 36 | any |
 | daemonbox lib | 27 (1 failing — see below) | any |
 | daemonbox integration (handler + conformance + proptest) | 108 (+3 ignored) | any |
@@ -79,9 +79,9 @@ Coverage snapshot (2026-03-25, `cargo xtask prepush`):
 | File | fn% | line% | Notes |
 |---|---|---|---|
 | `daemonbox/src/handler.rs` | 67.5% | 55% | Biggest gap — error paths in run/pull/stop/rm |
-| `linuxbox/src/adapters/ghcr.rs` | 74.5% | 89.7% | New; 4 wiremock tests added this session |
+| `mbx/src/adapters/ghcr.rs` | 74.5% | 89.7% | New; 4 wiremock tests added this session |
 | `daemonbox/src/server.rs` | 100% | 90.6% | Healthy |
-| `linuxbox/src/adapters/registry.rs` | 89.5% | 85.8% | Good |
+| `mbx/src/adapters/registry.rs` | 89.5% | 85.8% | Good |
 
 Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 `crates/miniboxd/tests/` during daemonbox extraction, 2026-03-18).
@@ -128,7 +128,7 @@ E2e CI job restored (commit `0b862ad`, 2026-03-27) after streaming regression fi
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
+cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 
 # Full pre-commit gate:
@@ -194,7 +194,7 @@ All items below are merged to `main`:
 - [x] `mbxctl` axum control plane skeleton
 - [x] `xtask` moved to `crates/xtask/` (2026-03-28)
 - [x] macOS socket path fix: `minibox-client` now defaults to `/tmp/minibox/miniboxd.sock` on macOS (2026-03-28)
-- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `linuxbox/src/container/mod.rs` (2026-03-28)
+- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `mbx/src/container/mod.rs` (2026-03-28)
 - [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
 - [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
 - [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
@@ -234,9 +234,9 @@ The strategic goal: minibox owns the full container stack on every OS without ex
 | #43 | virtiofs mounts — share OCI layers + bind mounts | Open |
 | #45 | Windows: Hyper-V / WSL2 kernel path | Open |
 
-**Architecture:** minibox-agent runs `linuxbox` primitives inside a minibox-managed VM. Host daemon communicates over vsock. OCI layers stored on host, virtiofs-mounted into VM. `ContainerSpawnConfig` (with rootfs as virtiofs path) sent to agent verbatim — no new container logic needed.
+**Architecture:** minibox-agent runs `mbx` primitives inside a minibox-managed VM. Host daemon communicates over vsock. OCI layers stored on host, virtiofs-mounted into VM. `ContainerSpawnConfig` (with rootfs as virtiofs path) sent to agent verbatim — no new container logic needed.
 
-**`linuxbox` rename:** The crate name is misleading (used on all platforms via agent). Rename to `mbx` planned but not yet executed.
+**`mbx` rename:** The crate name is misleading (used on all platforms via agent). Rename to `mbx` planned but not yet executed.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
@@ -285,7 +285,7 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 - No `exec` command — cannot run commands in existing containers
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
-- `docker_desktop` and `wsl2` adapters exist in `linuxbox` but are **not wired** into `miniboxd`
+- `docker_desktop` and `wsl2` adapters exist in `mbx` but are **not wired** into `miniboxd`
 
 ---
 

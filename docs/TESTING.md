@@ -52,7 +52,7 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 
 **Files:**
 
-- `crates/linuxbox/src/**` + `tests/` — 155 tests (unit, adapter, property)
+- `crates/mbx/src/**` + `tests/` — 155 tests (unit, adapter, property)
 - `crates/daemonbox/src/**` + `tests/` — 55 tests (handler, conformance, proptest, recovery)
 - `crates/minibox-cli/src/**` — 11 tests
 - `crates/minibox-llm/src/**` — 13 tests (provider unit tests)
@@ -103,7 +103,7 @@ by reading real infrastructure state (cgroupfs, procfs, mount table).
 
 ## Preflight / Doctor
 
-The preflight module (`crates/linuxbox/src/preflight.rs`) probes the host for
+The preflight module (`crates/mbx/src/preflight.rs`) probes the host for
 capabilities needed by integration and e2e tests. Run `just doctor` to see a report.
 
 Tests use `require_capability!` to skip gracefully when prerequisites are missing.

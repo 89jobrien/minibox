@@ -1,4 +1,4 @@
-# linuxbox
+# mbx
 
 Linux-specific container runtime: namespaces, cgroups v2, overlay filesystem, and process management.
 

@@ -56,7 +56,7 @@ test result: ok. 36 passed; 0 failed; 1 ignored; 0 measured
 
 ### 2. Protocol Tests (21 tests)
 
-**Command:** `cargo test -p linuxbox protocol`
+**Command:** `cargo test -p mbx protocol`
 
 **Results:**
 
@@ -96,7 +96,7 @@ test result: ok. 21 passed; 0 failed
 
 ### 3. Performance Benchmarks
 
-**Command:** `cargo bench -p linuxbox --bench trait_overhead`
+**Command:** `cargo bench -p mbx --bench trait_overhead`
 
 **Results:**
 
@@ -151,7 +151,7 @@ licenses ok
 - **Allowed Licenses:** MIT, Apache-2.0, BSD-3-Clause, ISC, Unicode-3.0, Unicode-DFS-2016
 - **Denied Licenses:** GPL-3.0, AGPL-3.0 (copyleft)
 - **License Issues:** 0
-- **All crates properly licensed:** linuxbox, minibox-cli, miniboxd (MIT)
+- **All crates properly licensed:** mbx, minibox-cli, miniboxd (MIT)
 
 #### 4.3 Banned Crates (cargo-deny)
 
@@ -185,7 +185,7 @@ sources ok
 
 ### 5. Code Quality (Clippy)
 
-**Command:** `cargo clippy -p linuxbox -- -D warnings -W clippy::suspicious -W clippy::complexity`
+**Command:** `cargo clippy -p mbx -- -D warnings -W clippy::suspicious -W clippy::complexity`
 
 **Results:**
 

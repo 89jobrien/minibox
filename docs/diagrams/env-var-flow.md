@@ -72,7 +72,7 @@ flowchart TD
          ContainerSpawnConfig { env: container_env }
                   │
                   ▼
-         linuxbox/container/process.rs
+         mbx/container/process.rs
          child_init()
          envp: Vec<CString> built from config.env
                   │

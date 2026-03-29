@@ -5,7 +5,7 @@ Async container daemon entry point with platform dispatch.
 ## Architecture
 
 Dispatches to platform-specific implementations via conditional compilation:
-- **Linux** — `linuxbox` + `daemonbox` for full container runtime
+- **Linux** — `mbx` + `daemonbox` for full container runtime
 - **macOS** — `macbox` for Colima-based containers
 - **Windows** — `winbox` stub for future implementation
 

@@ -11,10 +11,10 @@
 
 - **Unified binary (`miniboxd`)** – Single entrypoint that selects platform‑specific backends behind compile‑time cfg gates.
 - **Platform shims** – `macbox`, `winbox`, and `daemonbox` hide OS differences behind a stable interface.
-- **Core library (`linuxbox`)** – Platform‑agnostic crate shared by the daemon, CLI, and benchmark tooling.
+- **Core library (`mbx`)** – Platform‑agnostic crate shared by the daemon, CLI, and benchmark tooling.
 - **JSON CLI (`minibox-cli`)** – Thin, platform‑agnostic client that speaks JSON over pipes/sockets.
 - **Bench tooling (`minibox-bench`)** – Focused crate for performance exploration and regression tracking.
-- **Proc‑macros (`minibox-macros`)** – Ergonomic proc‑macros used by `linuxbox` for internal APIs.
+- **Proc‑macros (`minibox-macros`)** – Ergonomic proc‑macros used by `mbx` for internal APIs.
 
 <!--
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
@@ -87,7 +87,7 @@ sudo /usr/local/bin/minibox ps
 | Crate            | Type    | Description                                            |
 | ---------------- | ------- | ------------------------------------------------------ |
 | `minibox-core`   | Library | Protocol, domain traits, image types, error types      |
-| `linuxbox`       | Library | Linux primitives, adapters, image management           |
+| `mbx`       | Library | Linux primitives, adapters, image management           |
 | `daemonbox`      | Library | Handler, state, Unix socket server                     |
 | `miniboxd`       | Binary  | Async daemon — Unix socket listener, platform dispatch |
 | `minibox-cli`    | Binary  | CLI client                                             |
@@ -99,7 +99,7 @@ sudo /usr/local/bin/minibox ps
 | `macbox`         | Library | macOS daemon implementation (Colima adapter suite)     |
 | `winbox`         | Library | Windows daemon implementation (stub)                   |
 
-**Key modules in `linuxbox`:**
+**Key modules in `mbx`:**
 
 | Module         | Purpose                                                                                   |
 | -------------- | ----------------------------------------------------------------------------------------- |
@@ -245,7 +245,7 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
 
 ### macOS (Docker Desktop) / Windows (WSL2) — Library only
 
-Adapters are implemented in `linuxbox` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` and `MINIBOX_ADAPTER=wsl` are not currently accepted by the daemon.
+Adapters are implemented in `mbx` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` and `MINIBOX_ADAPTER=wsl` are not currently accepted by the daemon.
 
 ---
 
@@ -289,7 +289,7 @@ MINIBOX_ADAPTER=gke miniboxd          # GKE adapter
 
 ```bash
 # Unit + protocol tests (any platform)
-cargo test -p linuxbox
+cargo test -p mbx
 
 # All tests (Linux)
 cargo test --workspace
@@ -306,7 +306,7 @@ just doctor
 # Benchmarks (any platform, no daemon needed)
 cargo xtask bench --suite codec    # 36 protocol encode/decode benchmarks
 cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
-cargo bench -p linuxbox         # Criterion HTML reports (local only)
+cargo bench -p mbx         # Criterion HTML reports (local only)
 ```
 
 **Current counts:** 221 unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
@@ -362,7 +362,7 @@ Domain traits are already defined for upcoming features. Adding a capability mea
 | `LogStore`         | JSON-lines file     |                            |
 | `StateStore`       | SQLite / sled       | replaces in-memory HashMap |
 
-Trait definitions live in `crates/linuxbox/src/domain.rs`.
+Trait definitions live in `crates/mbx/src/domain.rs`.
 
 ---
 
@@ -378,7 +378,7 @@ lsmod | grep overlay
 
 # Build
 cargo build --release              # Linux full build
-cargo build -p linuxbox         # macOS/Windows (lib only)
+cargo build -p mbx         # macOS/Windows (lib only)
 cargo check --workspace            # fast type check
 
 # Lint
