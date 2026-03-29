@@ -8,6 +8,8 @@ use std::{
 };
 use xshell::{Shell, cmd};
 
+mod vm_image;
+
 fn main() -> Result<()> {
     let task = env::args().nth(1);
     let sh = Shell::new()?;
