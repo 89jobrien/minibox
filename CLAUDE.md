@@ -212,7 +212,7 @@ Fourteen crates in cargo workspace:
 
 **Core library split**: Cross-platform types live in `minibox-core`; linuxbox re-exports them. Prefer `use minibox_core::protocol::*` in new code outside linuxbox rather than going through the re-export.
 
-**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), `colima` (macOS via limactl/nerdctl), and `vz` (macOS VZ.framework; requires `macbox/vz` feature + VM image at `~/.mbx/vm/`). Wired in `miniboxd/src/main.rs`.
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), `colima` (macOS via limactl/nerdctl), and `vz` (macOS Virtualization.framework; boots an Alpine Linux VM, forwards commands to in-VM miniboxd over vsock; requires `macbox` compiled with `--features vz` and VM image at `~/.mbx/vm/` — build with `cargo xtask build-vm-image`). Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
@@ -360,7 +360,7 @@ Understanding these helps prioritize feature development:
 - **No persistent state**: Daemon restart loses all container records
 - **No exec command**: Cannot run commands in existing containers
 - **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop`, `wsl`, `vf`, and `hcs` adapters exist in `linuxbox/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; the rest are library-only.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist in `linuxbox/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, `colima`, or `vz`.
 
 ## Tracing Contract
 
@@ -502,7 +502,7 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
-- `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
+- `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, `colima`, or `vz`
 
 ## Git Workflow (3-tier stability pipeline)
 
