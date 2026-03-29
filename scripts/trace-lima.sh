@@ -11,7 +11,7 @@ command -v uftrace >/dev/null 2>&1 || sudo apt-get install -y uftrace -q
 # miniboxd requires root; run uftrace under sudo and write trace to a temp dir
 # owned by root, then chown it back so the calling user can read the report.
 SUDO_TRACE="$ABS_TRACE"
-sudo uftrace record -P . --no-libcall -d "$SUDO_TRACE" "$BINARY_DIR/miniboxd" &
+sudo uftrace record --force -P . --no-libcall -d "$SUDO_TRACE" "$BINARY_DIR/miniboxd" &
 INNER_PID=$!
 sleep 2
 sudo "$BINARY_DIR/minibox" pull alpine 2>/dev/null || true

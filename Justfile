@@ -24,12 +24,19 @@ build-release:
 build:
     cargo build --release
 
-# Build static Linux x86_64 binaries (works from macOS or Linux).
-# Output: target/x86_64-unknown-linux-musl/release/{miniboxd,minibox}
+# Build static Linux musl binaries matching the host architecture.
+# Output: target/<arch>-unknown-linux-musl/release/{miniboxd,minibox}
 build-linux:
-    rustup target add x86_64-unknown-linux-musl
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "$(uname -m)" in
+        arm64|aarch64) MUSL_TARGET="aarch64-unknown-linux-musl" ;;
+        x86_64|amd64)  MUSL_TARGET="x86_64-unknown-linux-musl" ;;
+        *) echo "error: unsupported arch $(uname -m)"; exit 1 ;;
+    esac
+    rustup target add "$MUSL_TARGET"
     RUSTFLAGS="-C target-feature=+crt-static" \
-        cargo build --release --target x86_64-unknown-linux-musl \
+        cargo build --release --target "$MUSL_TARGET" \
         -p miniboxd -p minibox-cli
 
 # ── Gates ────────────────────────────────────────────────────────────────────
@@ -136,7 +143,12 @@ trace:
         just build-linux
 
         TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target}"
-        BINARY_DIR="${TARGET_DIR}/x86_64-unknown-linux-musl/release"
+        case "$(uname -m)" in
+            arm64|aarch64) MUSL_TARGET="aarch64-unknown-linux-musl" ;;
+            x86_64|amd64)  MUSL_TARGET="x86_64-unknown-linux-musl" ;;
+            *) echo "error: unsupported arch"; exit 1 ;;
+        esac
+        BINARY_DIR="${TARGET_DIR}/${MUSL_TARGET}/release"
         ABS_TRACE="$(pwd)/$TRACE_DIR"
 
         # Lima mounts /tmp and /Users into the VM — both paths are accessible.
