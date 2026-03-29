@@ -703,6 +703,24 @@ fn wait_for_container_presence(id: &str, should_exist: bool) -> Result<(), Strin
     }
 }
 
+fn wait_for_container_running(id: &str) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let running = list_containers_sync()?
+            .into_iter()
+            .any(|c| c.id == id && c.pid.is_some());
+        if running {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "container {id} did not reach running state (pid present) in time"
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 fn create_background_container() -> Result<String, String> {
     let request = DaemonRequest::Run {
         image: "alpine".to_string(),
@@ -723,7 +741,7 @@ fn create_background_container() -> Result<String, String> {
 
     match send_daemon_request_sync(&request)? {
         DaemonResponse::ContainerCreated { id } => {
-            wait_for_container_presence(&id, true)?;
+            wait_for_container_running(&id)?;
             Ok(id)
         }
         DaemonResponse::Error { message } => {
