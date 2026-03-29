@@ -2120,3 +2120,162 @@ async fn test_pull_registry_failure_with_tag() {
         _ => panic!("expected Error response for pull failure, got {response:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Regression: minibox run streaming protocol order (2026-03-27)
+//
+// Root causes that were fixed:
+// 1. is_terminal_response returned true for ContainerCreated → connection closed early
+// 2. handle_run_streaming never emitted ContainerCreated before streaming output
+// 3. CLI run.rs returned Ok(()) on ContainerCreated instead of continuing
+//
+// This test verifies the full streaming sequence when the runtime successfully
+// spawns a container:  ContainerCreated → ContainerOutput → ContainerStopped
+// ---------------------------------------------------------------------------
+
+/// A test-only runtime that returns a real Unix pipe so the streaming path
+/// in handle_run_streaming can be exercised end-to-end with known output.
+///
+/// `spawn_process` writes `payload` bytes to the write end of the pipe and
+/// closes it, simulating a container that produces output and then exits.
+/// `waitpid` on the fake PID will return ECHILD → exit_code = -1.
+#[cfg(unix)]
+struct PipedMockRuntime {
+    payload: Vec<u8>,
+}
+
+#[cfg(unix)]
+impl minibox_core::domain::AsAny for PipedMockRuntime {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(unix)]
+#[async_trait::async_trait]
+impl minibox_core::domain::ContainerRuntime for PipedMockRuntime {
+    fn capabilities(&self) -> minibox_core::domain::RuntimeCapabilities {
+        minibox_core::domain::RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: false,
+            supports_network_isolation: false,
+            max_containers: None,
+        }
+    }
+
+    async fn spawn_process(
+        &self,
+        _config: &minibox_core::domain::ContainerSpawnConfig,
+    ) -> anyhow::Result<minibox_core::domain::SpawnResult> {
+        use std::io::Write;
+        use std::os::unix::io::{FromRawFd, IntoRawFd, OwnedFd};
+
+        let (read_fd, write_fd) = nix::unistd::pipe().expect("pipe");
+        // Write the payload into the pipe synchronously, then close the write
+        // end so the drain loop sees EOF immediately.
+        let write_raw = write_fd.into_raw_fd();
+        {
+            // SAFETY: write_raw is the write end of our pipe, valid until close.
+            let mut w = unsafe { std::fs::File::from_raw_fd(write_raw) };
+            w.write_all(&self.payload).expect("write payload");
+            // File::drop closes write_raw here.
+        }
+        let read_raw = read_fd.into_raw_fd();
+        // SAFETY: read_raw is the read end of our pipe, transferred to OwnedFd.
+        let output_reader = unsafe { OwnedFd::from_raw_fd(read_raw) };
+        Ok(minibox_core::domain::SpawnResult {
+            pid: u32::MAX, // fake PID; waitpid will return ECHILD → exit_code -1
+            output_reader: Some(output_reader),
+        })
+    }
+}
+
+/// Regression: handle_run_streaming emits ContainerCreated as the FIRST message.
+///
+/// Before the fix, handle_run_streaming never emitted ContainerCreated at all —
+/// the CLI had no way to learn the container ID until ContainerStopped.
+/// This test verifies the correct streaming sequence:
+///   ContainerCreated → ContainerOutput(s) → ContainerStopped
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_run_streaming_emits_container_created_first() {
+    let payload = b"hello from container\n";
+    let temp_dir = TempDir::new().expect("tempdir");
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(PipedMockRuntime {
+            payload: payload.to_vec(),
+        }),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        true, // ephemeral — triggers streaming path
+        None,
+        vec![],
+        false,
+        vec![],
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Collect all responses until channel closes.
+    let mut responses = Vec::new();
+    while let Some(r) = rx.recv().await {
+        responses.push(r);
+    }
+
+    // Regression (1): ContainerCreated must be the very first message.
+    assert!(
+        !responses.is_empty(),
+        "streaming run must send at least one response"
+    );
+    match &responses[0] {
+        DaemonResponse::ContainerCreated { id } => {
+            assert!(!id.is_empty(), "ContainerCreated id must not be empty");
+        }
+        other => {
+            panic!("regression: first streaming message must be ContainerCreated, got: {other:?}")
+        }
+    }
+
+    // Regression (2): ContainerStopped must be the last message (terminal).
+    let last = responses.last().expect("at least one response");
+    assert!(
+        matches!(last, DaemonResponse::ContainerStopped { .. }),
+        "last streaming message must be ContainerStopped, got: {last:?}"
+    );
+
+    // The output from the pipe must appear as ContainerOutput between the two.
+    let output_bytes: Vec<u8> = responses
+        .iter()
+        .filter_map(|r| {
+            if let DaemonResponse::ContainerOutput { data, .. } = r {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(data).ok()
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect();
+    assert_eq!(
+        output_bytes, payload,
+        "streaming output must match the pipe payload"
+    );
+}
