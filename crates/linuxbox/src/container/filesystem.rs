@@ -354,6 +354,15 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
         .container_path
         .strip_prefix("/")
         .unwrap_or(&m.container_path);
+
+    // Reject container_path with ".." components before any filesystem access.
+    if has_parent_dir_component(container_rel) {
+        anyhow::bail!(
+            "path traversal attempt: bind mount container_path contains '..' component: {:?}",
+            m.container_path
+        );
+    }
+
     let target = rootfs.join(container_rel);
 
     // Create the mount target if it does not exist.
@@ -373,10 +382,26 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
         }
     }
 
+    // Verify the resolved target stays within rootfs (guards against symlink-based
+    // traversal through an existing container layer before pivot_root).
+    let canonical_rootfs = rootfs
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize rootfs {:?}", rootfs))?;
+    let canonical_target = target
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize bind mount target {:?}", target))?;
+    if !canonical_target.starts_with(&canonical_rootfs) {
+        anyhow::bail!(
+            "path traversal attempt: bind mount target {:?} escapes rootfs {:?}",
+            m.container_path,
+            rootfs
+        );
+    }
+
     // Apply the bind mount.
     mount(
         Some(host_canonical.as_path()),
-        target.as_path(),
+        canonical_target.as_path(),
         None::<&str>,
         MsFlags::MS_BIND | MsFlags::MS_REC,
         None::<&str>,
@@ -391,7 +416,7 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
     if m.read_only {
         mount(
             None::<&str>,
-            target.as_path(),
+            canonical_target.as_path(),
             None::<&str>,
             MsFlags::MS_BIND | MsFlags::MS_RDONLY | MsFlags::MS_REMOUNT,
             None::<&str>,
@@ -639,6 +664,43 @@ mod tests {
             }];
             let result = apply_bind_mounts(&mounts, rootfs.path());
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn apply_bind_mounts_rejects_dotdot_in_container_path() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+            // "/../../../etc" after strip_prefix("/") → "../../../etc" — must be rejected.
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/../../../etc"),
+                read_only: false,
+            }];
+            let result = apply_bind_mounts(&mounts, rootfs.path());
+            assert!(result.is_err());
+            let msg = format!("{:#}", result.unwrap_err());
+            assert!(
+                msg.contains("path traversal"),
+                "expected 'path traversal' in error, got: {msg}"
+            );
+        }
+
+        #[test]
+        fn apply_bind_mounts_rejects_relative_dotdot_container_path() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("../escape"),
+                read_only: false,
+            }];
+            let result = apply_bind_mounts(&mounts, rootfs.path());
+            assert!(result.is_err());
+            let msg = format!("{:#}", result.unwrap_err());
+            assert!(
+                msg.contains("path traversal"),
+                "expected 'path traversal' in error, got: {msg}"
+            );
         }
 
         #[test]
