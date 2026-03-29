@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::network_lifecycle::NetworkLifecycle;
@@ -260,28 +260,35 @@ async fn handle_run_streaming(
     });
 
     // Wait for the child process to exit.
+    debug!(pid = pid, "streaming: waiting for child exit");
     let exit_code = tokio::task::spawn_blocking(move || handler_wait_for_exit(pid))
         .await
         .unwrap_or(Ok(-1))
         .unwrap_or(-1);
+    debug!(pid = pid, exit_code = exit_code, "streaming: child exited");
 
     // Wait for drain to finish before sending ContainerStopped
     // so all output is flushed before the terminal message.
+    debug!(pid = pid, "streaming: waiting for drain");
     if let Err(e) = drain_handle.await {
         warn!(pid = pid, "pipe drain task panicked: {:?}", e);
     }
+    debug!(pid = pid, "streaming: drain complete");
 
     // ── Network cleanup (ephemeral) ────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
         .cleanup(&container_id)
         .await;
+    debug!(pid = pid, "streaming: network cleanup done");
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
+    debug!(pid = pid, "streaming: container removed");
 
     let _ = tx
         .send(DaemonResponse::ContainerStopped { exit_code })
         .await;
+    debug!(pid = pid, "streaming: ContainerStopped sent");
 }
 
 /// Variant of `run_inner` that enables output capture for ephemeral containers.
