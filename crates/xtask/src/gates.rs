@@ -1,0 +1,163 @@
+use anyhow::{Context, Result};
+use std::{env, fs, path::Path};
+use xshell::{Shell, cmd};
+
+/// Pre-commit gate: fmt check → lint → release build (macOS-safe)
+pub fn pre_commit(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo fmt --all --check")
+        .run()
+        .context("fmt-check failed")?;
+    cmd!(
+        sh,
+        "cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
+    )
+    .run()
+    .context("lint failed")?;
+    cmd!(sh,
+        "cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
+    ).run().context("build-release failed")?;
+    eprintln!("pre-commit checks passed");
+    Ok(())
+}
+
+/// Pre-push gate: nextest + coverage + ai-review
+pub fn prepush(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo nextest run --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox"
+    )
+    .run()
+    .context("nextest failed")?;
+    cmd!(
+        sh,
+        "cargo llvm-cov nextest -p mbx -p minibox-macros -p minibox-cli -p daemonbox --html"
+    )
+    .run()
+    .context("coverage failed")?;
+    eprintln!("coverage: target/llvm-cov/html/index.html");
+    eprintln!("running ai-review...");
+    if let Err(e) = cmd!(sh, "uv run scripts/ai-review.py --base main").run() {
+        eprintln!("warning: ai-review failed (non-fatal): {e}");
+    }
+    Ok(())
+}
+
+/// All unit + conformance tests (any platform)
+pub fn test_unit(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox --lib"
+    )
+    .run()
+    .context("lib tests failed")?;
+    cmd!(sh, "cargo test --release -p daemonbox --test handler_tests")
+        .run()
+        .context("handler_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p daemonbox --test conformance_tests"
+    )
+    .run()
+    .context("conformance_tests failed")?;
+    Ok(())
+}
+
+/// Property-based tests (proptest)
+pub fn test_property(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo test --release -p mbx --test proptest_suite")
+        .run()
+        .context("mbx property tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p daemonbox --test proptest_suite"
+    )
+    .run()
+    .context("daemonbox property tests failed")?;
+    Ok(())
+}
+
+/// Cgroup + integration tests (Linux, root required)
+pub fn test_integration(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test --release -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture"
+    )
+    .run()
+    .context("cgroup tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture"
+    )
+    .run()
+    .context("integration tests failed")?;
+    Ok(())
+}
+
+/// Daemon+CLI e2e tests (Linux, root required)
+pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo build --release")
+        .run()
+        .context("build failed")?;
+
+    cmd!(
+        sh,
+        "cargo test -p miniboxd --test e2e_tests --release --no-run"
+    )
+    .run()
+    .context("failed to build e2e test binary")?;
+
+    let binary = find_test_binary("target/release/deps", "e2e_tests")
+        .context("could not locate e2e test binary in target/release/deps")?;
+
+    let bin_dir = env::current_dir()?.join("target/release");
+    cmd!(
+        sh,
+        "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --nocapture"
+    )
+    .run()
+    .context("e2e tests failed")?;
+    Ok(())
+}
+
+/// Sandbox contract tests (Linux, root, Docker Hub required)
+pub fn test_sandbox(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo build --release")
+        .run()
+        .context("build failed")?;
+
+    cmd!(
+        sh,
+        "cargo test -p miniboxd --test sandbox_tests --release --no-run"
+    )
+    .run()
+    .context("failed to build sandbox test binary")?;
+
+    let binary = find_test_binary("target/release/deps", "sandbox_tests")
+        .context("could not locate sandbox test binary in target/release/deps")?;
+
+    let bin_dir = env::current_dir()?.join("target/release");
+    cmd!(
+        sh,
+        "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --ignored --nocapture"
+    )
+    .run()
+    .context("sandbox tests failed")?;
+    Ok(())
+}
+
+/// Find the most recently modified test binary matching a name prefix (no `.d` extension)
+pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> {
+    let dir = Path::new(deps_dir);
+    let mut candidates: Vec<_> = fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            let is_file = e.file_type().is_ok_and(|t| t.is_file());
+            name.starts_with(prefix) && !name.ends_with(".d") && is_file
+        })
+        .collect();
+    candidates.sort_by_key(|e| e.metadata().ok()?.modified().ok());
+    candidates.last().map(|e| e.path())
+}
