@@ -1455,6 +1455,7 @@ dependencies = [
  "dirs 5.0.1",
  "linuxbox",
  "minibox-core",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

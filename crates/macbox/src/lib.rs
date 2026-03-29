@@ -14,9 +14,11 @@
 //!
 //! - [`paths`] — macOS-specific default directories and socket path
 //! - [`preflight`] — Colima/backend detection via `colima status`
+//! - [`vz`] — VZ.framework and vsock integration
 
 pub mod paths;
 pub mod preflight;
+pub mod vz;
 
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
