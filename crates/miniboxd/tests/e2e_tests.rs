@@ -13,7 +13,8 @@
 #![cfg(target_os = "linux")]
 
 mod helpers;
-use helpers::{DaemonFixture, extract_container_id, poll_until};
+use helpers::{DaemonFixture, extract_container_id, find_binary, poll_until};
+use tempfile::TempDir;
 
 use linuxbox::preflight;
 use minibox_core::require_capability;
@@ -453,4 +454,118 @@ fn test_e2e_sigterm_clean_shutdown() {
 
     // Drop will try SIGTERM again on the already-exited process — that's
     // harmless (kill on dead PID returns ESRCH, ignored by Drop).
+}
+
+// ---------------------------------------------------------------------------
+// minibox-in-minibox (DinD) test
+// ---------------------------------------------------------------------------
+
+/// Spin a nested miniboxd inside a privileged container and verify that it can
+/// pull an image and run a container end-to-end.
+///
+/// **Why this works without overlay-on-overlay:**  The inner daemon's
+/// `MINIBOX_DATA_DIR` is bind-mounted from a host tmpfs-backed TempDir.
+/// The inner overlay mounts therefore use host tmpfs as their lowerdir/
+/// upperdir/workdir — not the outer container's overlay layer — so the kernel
+/// never sees overlay-on-overlay.
+///
+/// **Requirements:** Linux, root, cgroups v2, overlay_fs, network access
+#[test]
+#[serial]
+fn test_e2e_dind_pull_and_run() {
+    let caps = preflight::probe();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, cgroups_v2, "requires cgroups v2");
+    require_capability!(caps, overlay_fs, "requires overlay filesystem");
+
+    let fixture = DaemonFixture::start();
+    fixture.pull_required("alpine");
+
+    // Host-side temp dirs bind-mounted into the outer container so the inner
+    // daemon stores its state on host tmpfs (avoids overlay-on-overlay).
+    let inner_data_dir = TempDir::with_prefix("minibox-dind-data-").expect("create dind data dir");
+    let inner_run_dir = TempDir::with_prefix("minibox-dind-run-").expect("create dind run dir");
+
+    // Unique cgroup slice for the inner daemon.
+    let inner_cgroup_name = format!("minibox-dind-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+    let inner_cgroup_path = format!("/sys/fs/cgroup/{inner_cgroup_name}");
+
+    let miniboxd_bin = find_binary("miniboxd");
+    let minibox_bin = find_binary("minibox");
+
+    // Volume spec strings — must outlive the run_args slice borrow.
+    let v_miniboxd = format!("{}:/usr/local/bin/miniboxd:ro", miniboxd_bin.display());
+    let v_minibox = format!("{}:/usr/local/bin/minibox:ro", minibox_bin.display());
+    let v_cgroup = "/sys/fs/cgroup:/sys/fs/cgroup".to_string();
+    let v_data = format!("{}:/minibox-data", inner_data_dir.path().display());
+    let v_run = format!("{}:/minibox-run", inner_run_dir.path().display());
+
+    // Shell script executed inside the outer container (busybox ash).
+    // 1. Enable cgroup controllers for the inner daemon's slice.
+    // 2. Start inner miniboxd in background.
+    // 3. Wait up to 10s for socket.
+    // 4. Pull alpine via inner daemon.
+    // 5. Run echo via inner daemon and verify output.
+    let script = format!(
+        r#"set -e
+mkdir -p /sys/fs/cgroup/{inner_cgroup_name}
+echo '+memory +cpu +pids' > /sys/fs/cgroup/{inner_cgroup_name}/cgroup.subtree_control
+
+MINIBOX_DATA_DIR=/minibox-data \
+  MINIBOX_RUN_DIR=/minibox-run \
+  MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/{inner_cgroup_name} \
+  RUST_LOG=error \
+  /usr/local/bin/miniboxd &
+DAEMON_PID=$!
+
+i=0
+while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
+  sleep 0.1; i=$((i+1))
+done
+[ -S /minibox-run/miniboxd.sock ] || (echo 'inner daemon socket timeout' >&2; kill "$DAEMON_PID"; exit 1)
+
+MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox pull alpine >/dev/null
+
+OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox run alpine -- /bin/echo hello-from-dind)
+echo "$OUT" | grep -q hello-from-dind || (echo "unexpected output: $OUT" >&2; kill "$DAEMON_PID"; exit 2)
+
+kill "$DAEMON_PID" 2>/dev/null || true
+wait "$DAEMON_PID" 2>/dev/null || true
+echo dind-ok
+"#
+    );
+
+    let run_args: Vec<&str> = vec![
+        "run",
+        "--privileged",
+        "-v",
+        &v_miniboxd,
+        "-v",
+        &v_minibox,
+        "-v",
+        &v_cgroup,
+        "-v",
+        &v_data,
+        "-v",
+        &v_run,
+        "alpine",
+        "--",
+        "/bin/sh",
+        "-c",
+        &script,
+    ];
+
+    let (exit_code, stdout, stderr) = fixture.run_cli_with_exit_code(&run_args);
+
+    // Best-effort cleanup of the inner cgroup slice on the host.
+    let _ = std::fs::remove_dir_all(&inner_cgroup_path);
+
+    assert_eq!(
+        exit_code, 0,
+        "DinD container exited non-zero.\nstdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("dind-ok"),
+        "expected 'dind-ok' in DinD output.\nstdout: {stdout}"
+    );
 }
