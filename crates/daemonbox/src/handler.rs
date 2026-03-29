@@ -907,8 +907,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         kill(nix_pid, Signal::SIGTERM).ok();
     }
 
-    // Wait up to 10 s for the process to exit.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    // Wait up to 2 s for the process to exit gracefully.  In practice,
+    // PID 1 in a PID namespace silently ignores SIGTERM (kernel-enforced),
+    // so busybox `sh -c …` containers will never respond.  We keep a short
+    // window for containers that do install a handler, then fall through to
+    // SIGKILL promptly.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
         if kill(nix_pid, None).is_err() {
