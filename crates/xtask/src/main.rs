@@ -393,7 +393,8 @@ fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
         .run()
         .context("build minibox-bench")?;
 
-    let bin = "./target/release/minibox-bench";
+    let bin = sh.current_dir().join("target/release/minibox-bench");
+    let bin_path = bin.to_string_lossy().to_string();
 
     if cfg!(target_os = "macos") {
         // samply: records a profile and opens Firefox Profiler in the browser.
@@ -409,7 +410,7 @@ fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
         eprintln!("profiling with samply (suite={suite}) → {profile_path}");
         cmd!(
             sh,
-            "samply record --save-only -o {profile_path} {bin} --suite {suite}"
+            "samply record --save-only -o {profile_path} {bin_path} --suite {suite}"
         )
         .run()
         .context("samply record failed")?;
