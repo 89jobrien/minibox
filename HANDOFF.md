@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-28
+**Last updated:** 2026-03-29
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -22,15 +22,16 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 ```
 crates/
   minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
-  mbx/        — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
-                     NOTE: rename to `mbx` planned (issue #44 era) — name is misleading, used on all platforms
+  mbx/             — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
+                     RENAMED from linuxbox → mbx on 2026-03-29; any linuxbox:: ref is stale
   minibox-macros/  — proc macros: as_any!, default_new!, adapt!
   daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
   miniboxd/        — unified daemon binary; dispatches by platform
                      Linux  → native handler via daemonbox
                      macOS  → macbox::start()
                      Windows → winbox::start()
-  macbox/          — macOS daemon: currently Colima adapter wiring; target: minibox-owned VZ VM
+  macbox/          — macOS daemon: Colima adapter suite + VZ.framework adapter suite (--features vz)
+                     VZ branch: MINIBOX_ADAPTER=vz boots Alpine VM, routes cmds over vsock
   winbox/          — Windows daemon stub: Named Pipe paths, start() stub
   minibox-cli/     — CLI client (platform-aware socket/pipe path)
   minibox-client/  — shared client library (socket connection, error types)
@@ -38,7 +39,9 @@ crates/
   minibox-llm/     — multi-provider LLM client with structured output and fallback chains
   minibox-secrets/ — typed credential store (env, keyring, 1Password, Bitwarden adapters)
   minibox-bench/   — benchmark harness
-  crates/xtask/    — dev tool: pre-commit, test-unit, e2e-suite, coverage (moved from root xtask/ 2026-03-28)
+  dashbox/         — Ratatui TUI dashboard (6 tabs: Agents, Bench, History, Git, Todos, CI)
+  crates/xtask/    — dev tool: pre-commit, test-unit, e2e-suite, coverage, build-vm-image
+                     Modularised 2026-03-29: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs
 mbxctl/            — axum-based control plane (WIP)
 ```
 
@@ -147,7 +150,7 @@ platform-gated code that fails on non-target platforms. Always use `-p` flags.
 | `daemonbox` is Unix-only (no Windows dep on it) | Windows uses Named Pipe proxy (`winboxd`), not a daemonbox consumer. Avoids large conditional-compilation surface. |
 | `miniboxd/src/lib.rs` is a re-export shim | Backward compat after daemonbox extraction; let existing tests compile without surgery. |
 | `ServerListener` + `PeerCreds` traits in daemonbox | Generic `run_server<L, F>` accept loop; `UnixServerListener` is the Linux/macOS impl; future `NamedPipeListener` for Windows. |
-| `MINIBOX_ADAPTER` env var selects adapter suite | `native` (Linux namespaces) or `gke` (proot, unprivileged). |
+| `MINIBOX_ADAPTER` env var selects adapter suite | `native` (Linux namespaces), `gke` (proot, unprivileged), `colima` (macOS via limactl), `vz` (macOS VZ.framework VM — requires `--features vz` at compile time). |
 | `ImageRef` routes to registry | `[REGISTRY/]NAMESPACE/NAME[:TAG]` — Docker Hub default, ghcr.io if registry prefix is `ghcr.io`. |
 | CLI streaming via `ephemeral: true` | `ContainerOutput` / `ContainerStopped` messages stream stdout/stderr; CLI exits with container exit code. |
 
@@ -198,6 +201,16 @@ All items below are merged to `main`:
 - [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
 - [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
 - [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
+- [x] `linuxbox` → `mbx` crate rename (2026-03-29)
+- [x] VZ.framework adapter suite — `macbox` now owns full macOS VM stack (2026-03-29):
+  - `xtask build-vm-image`: Alpine aarch64 virt kernel + rootfs + musl agent cross-compile
+  - `VzVm::boot`: objc2-virtualization, VZLinuxBootLoader, virtiofs shares, vsock
+  - `VzProxy`: JSON-over-vsock, context-aware terminal detection
+  - `VzRegistry`, `VzRuntime`, `VzFilesystem`, `VzLimiter` domain adapters
+  - Smoke test: `macbox/tests/vz_adapter_smoke.rs`
+  - Wired: `MINIBOX_ADAPTER=vz` + `--features vz`
+- [x] `xtask` modularised: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs (2026-03-29)
+- [x] `dashbox` Ratatui TUI dashboard with 6 tabs (2026-03-29)
 
 ---
 
@@ -223,20 +236,18 @@ More error scenarios can be added incrementally using existing mock builder patt
 
 ### minibox-owned VM stack (macOS / Windows) — #40–#45
 
-The strategic goal: minibox owns the full container stack on every OS without external runtime dependencies (no Colima, no Docker).
+macOS VZ.framework stack is **complete and merged** (2026-03-29). Remaining work:
 
 | Issue | Title | Status |
 |---|---|---|
-| #44 | minibox owns the full stack on every OS | Tracking |
-| #40 | Provision/boot VM via Apple Virtualization.Framework | Open |
-| #41 | minibox-agent — in-VM daemon over vsock | Open |
-| #42 | vsock I/O bridge — stream stdout/stderr host↔VM | Open |
-| #43 | virtiofs mounts — share OCI layers + bind mounts | Open |
+| #44 | minibox owns the full stack on every OS | ✅ macOS done |
+| #40 | Provision/boot VM via Apple Virtualization.Framework | ✅ Done — VzVm::boot |
+| #41 | minibox-agent — in-VM daemon over vsock | ✅ Done — miniboxd as musl agent |
+| #42 | vsock I/O bridge — stream stdout/stderr host↔VM | ✅ Done — VzProxy |
+| #43 | virtiofs mounts — share OCI layers + bind mounts | ✅ Done — 3 virtiofs shares |
 | #45 | Windows: Hyper-V / WSL2 kernel path | Open |
 
-**Architecture:** minibox-agent runs `mbx` primitives inside a minibox-managed VM. Host daemon communicates over vsock. OCI layers stored on host, virtiofs-mounted into VM. `ContainerSpawnConfig` (with rootfs as virtiofs path) sent to agent verbatim — no new container logic needed.
-
-**`mbx` rename:** The crate name is misleading (used on all platforms via agent). Rename to `mbx` planned but not yet executed.
+**Next macOS VZ task:** End-to-end smoke test with a real VM image (requires `cargo xtask build-vm-image` run once to populate `~/.mbx/vm/`). The `vz_adapter_smoke` test gates on that directory existing.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
@@ -286,6 +297,7 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
 - `docker_desktop` and `wsl2` adapters exist in `mbx` but are **not wired** into `miniboxd`
+- VZ adapter is wired but untested end-to-end (requires running `cargo xtask build-vm-image` first)
 
 ---
 
