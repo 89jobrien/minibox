@@ -16,6 +16,7 @@ members = [
     "crates/xtask",
     "mbxctl",
     "dashbox",
+    "crates/dockerbox",
 ]
 
 [workspace.package]

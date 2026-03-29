@@ -537,3 +537,8 @@ run = """
 #!/usr/bin/env bash
 cargo xtask flamegraph "$@"
 """
+
+[tasks.dockerbox]
+description = "Run dockerboxd (Docker API shim for minibox)"
+run = "cargo run -p dockerbox"
+
