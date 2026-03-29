@@ -3637,7 +3637,10 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dirs 5.0.1",
+ "serde",
  "serde_json",
+ "tempfile",
  "xshell",
 ]
 

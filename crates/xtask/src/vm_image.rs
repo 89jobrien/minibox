@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[allow(dead_code)]
 pub const ALPINE_VERSION: &str = "3.21.3";
@@ -181,6 +181,82 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
     Ok(rustc_ver)
 }
 
+/// Get the default VM directory for the host.
+/// Uses ~/.mbx/vm if home directory is available, otherwise /tmp/.mbx/vm.
+#[allow(dead_code)]
+pub fn default_vm_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".mbx")
+        .join("vm")
+}
+
+/// Build or refresh the VM image directory.
+/// Downloads Alpine assets, extracts rootfs, cross-compiles agent, writes manifest.
+#[allow(dead_code)]
+pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
+    println!("Building VM image in {}", vm_dir.display());
+
+    let cache_dir = vm_dir.join("cache");
+    let rootfs_dir = vm_dir.join("rootfs");
+    let boot_dir = vm_dir.join("boot");
+    let manifest_path = vm_dir.join("manifest.json");
+
+    for dir in &[&cache_dir, &rootfs_dir, &boot_dir] {
+        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+
+    let assets = AlpineAssets::for_version(ALPINE_VERSION, ALPINE_ARCH);
+
+    // 1. Download kernel
+    let kernel_dest = boot_dir.join("vmlinuz-virt");
+    download_file(&assets.kernel, &kernel_dest, force)?;
+
+    // 2. Download initramfs
+    let initramfs_dest = boot_dir.join("initramfs-virt");
+    download_file(&assets.initramfs, &initramfs_dest, force)?;
+
+    // 3. Download minirootfs tarball
+    let tarball_dest = cache_dir.join(format!(
+        "alpine-minirootfs-{ALPINE_VERSION}-{ALPINE_ARCH}.tar.gz"
+    ));
+    download_file(&assets.minirootfs, &tarball_dest, force)?;
+
+    // 4. Extract rootfs
+    extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
+
+    // 5. Cross-compile and install agent
+    let rustc_ver = build_and_install_agent(&rootfs_dir, force)?;
+
+    // 6. Get current git commit hash for manifest
+    let commit = {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .output()
+            .context("git rev-parse")?;
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
+    // 7. Write manifest
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let manifest = VmImageManifest {
+        alpine_version: ALPINE_VERSION.into(),
+        agent_rustc_version: rustc_ver,
+        agent_commit: commit,
+        built_at: now,
+    };
+    manifest.save(&manifest_path)?;
+
+    println!("VM image ready at {}", vm_dir.display());
+    println!("  kernel    {}", kernel_dest.display());
+    println!("  initramfs {}", initramfs_dest.display());
+    println!("  rootfs    {}", rootfs_dir.display());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,5 +389,62 @@ mod tests {
         assert!(result.is_ok(), "should succeed when cached: {:?}", result);
         // File should be unchanged
         assert_eq!(std::fs::read(&dest).unwrap(), b"fake agent binary");
+    }
+
+    #[test]
+    fn vm_dir_default_uses_mbx_cache() {
+        let dir = default_vm_dir();
+        assert!(dir.is_absolute());
+        assert!(dir.to_string_lossy().contains(".mbx"));
+    }
+
+    #[test]
+    fn build_vm_image_creates_subdirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+
+        // Pre-create all cached files so download/extract/compile are all skipped
+        let cache_dir = vm_dir.join("cache");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let boot_dir = vm_dir.join("boot");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        std::fs::create_dir_all(&boot_dir).unwrap();
+
+        std::fs::write(boot_dir.join("vmlinuz-virt"), b"fake kernel").unwrap();
+        std::fs::write(boot_dir.join("initramfs-virt"), b"fake initrd").unwrap();
+
+        let tarball = cache_dir.join(format!(
+            "alpine-minirootfs-{ALPINE_VERSION}-{ALPINE_ARCH}.tar.gz"
+        ));
+        std::fs::write(&tarball, b"fake tarball").unwrap();
+
+        // Create marker for extract skip
+        std::fs::create_dir_all(rootfs_dir.join("bin")).unwrap();
+
+        // Pre-create fake agent so compile is skipped
+        std::fs::create_dir_all(rootfs_dir.join("sbin")).unwrap();
+        std::fs::write(rootfs_dir.join("sbin").join("minibox-agent"), b"fake agent").unwrap();
+
+        // Create symlink for init
+        let init_link = rootfs_dir.join("sbin").join("init");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("minibox-agent", &init_link).ok();
+
+        // Now build_vm_image should run to completion (all steps cached/skipped)
+        let result = build_vm_image(&vm_dir, false);
+        assert!(result.is_ok(), "build_vm_image failed: {:?}", result);
+
+        // Manifest should be written
+        assert!(vm_dir.join("manifest.json").exists());
+
+        // Verify manifest is valid JSON
+        let manifest_content = std::fs::read_to_string(vm_dir.join("manifest.json")).unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest_content).expect("manifest should be valid JSON");
+        assert!(parsed["alpine_version"].is_string());
+        assert!(parsed["agent_rustc_version"].is_string());
+        assert!(parsed["agent_commit"].is_string());
+        assert!(parsed["built_at"].is_number());
     }
 }

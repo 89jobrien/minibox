@@ -49,6 +49,11 @@ fn main() -> Result<()> {
             let extra: Vec<String> = env::args().skip(2).collect();
             flamegraph(&sh, &extra)
         }
+        Some("build-vm-image") => {
+            let force = env::args().any(|a| a == "--force");
+            let vm_dir = vm_image::default_vm_dir();
+            vm_image::build_vm_image(&vm_dir, force)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -70,6 +75,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
             );
+            eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent");
             Ok(())
         }
     }
