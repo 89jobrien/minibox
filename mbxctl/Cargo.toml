@@ -22,3 +22,8 @@ tokio-stream = { workspace = true }
 
 # Internal: protocol types (DaemonRequest, DaemonResponse, etc.)
 minibox-core = { workspace = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+axum = { version = "0.8", features = ["macros"] }

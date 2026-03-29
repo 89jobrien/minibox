@@ -36,13 +36,7 @@ pub async fn run(listener_addr: &str, socket_path: Option<String>) -> anyhow::Re
         tracker: JobTracker::new(),
     };
 
-    let app = Router::new()
-        .route("/api/v1/jobs", post(create_job))
-        .route("/api/v1/jobs/{job_id}", get(get_job_status))
-        .route("/api/v1/jobs/{job_id}", delete(delete_job))
-        .route("/api/v1/jobs/{job_id}/logs", get(stream_logs))
-        .layer(DefaultBodyLimit::max(1024 * 1024)) // 1 MB
-        .with_state(state);
+    let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind(listener_addr).await?;
     tracing::info!(addr = listener_addr, "mbxctl: listening");
@@ -270,6 +264,19 @@ async fn stream_logs(
         .into_response()
 }
 
+/// Build the axum router wired to the given state.
+///
+/// Extracted so tests can construct the router without binding a real TCP listener.
+fn build_router(state: AppState) -> Router {
+    Router::new()
+        .route("/api/v1/jobs", post(create_job))
+        .route("/api/v1/jobs/{job_id}", get(get_job_status))
+        .route("/api/v1/jobs/{job_id}", delete(delete_job))
+        .route("/api/v1/jobs/{job_id}/logs", get(stream_logs))
+        .layer(DefaultBodyLimit::max(1024 * 1024)) // 1 MB
+        .with_state(state)
+}
+
 /// Background task: drains `ContainerOutput` / `ContainerStopped` messages
 /// from the live daemon stream and publishes them as [`LogEvent`]s on the
 /// broadcast channel.  Updates the job tracker when the container stops.
@@ -323,5 +330,215 @@ async fn drain_container_output(
                 return Ok(());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Method, Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    /// Build a test router backed by a stub client (no real socket).
+    fn test_router() -> Router {
+        let client = Arc::new(DaemonClient::new("/nonexistent/test.sock".to_string()));
+        let state = AppState {
+            adapter: Arc::new(JobAdapter::new(client)),
+            tracker: JobTracker::new(),
+        };
+        build_router(state)
+    }
+
+    /// Helper: collect response body bytes and deserialize as JSON.
+    async fn body_json(body: Body) -> serde_json::Value {
+        let bytes = body.collect().await.expect("collect body").to_bytes();
+        serde_json::from_slice(&bytes).expect("parse JSON body")
+    }
+
+    // ── ControllerError HTTP status mapping ──────────────────────────────────
+
+    /// `JobNotFound` must map to 404, not 500.
+    /// Regression: if the wrong status code is returned, callers cannot
+    /// distinguish "job missing" from "server broken".
+    #[test]
+    fn error_job_not_found_is_404() {
+        let err = ControllerError::JobNotFound {
+            job_id: "abc".to_string(),
+        };
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// `DaemonUnavailable` must map to 503, not 500.
+    /// Regression: callers use this to decide whether to retry.
+    #[test]
+    fn error_daemon_unavailable_is_503() {
+        let err = ControllerError::DaemonUnavailable("socket gone".to_string());
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    /// `Timeout` must map to 408 Request Timeout, not 500.
+    #[test]
+    fn error_timeout_is_408() {
+        let err = ControllerError::Timeout("job exceeded timeout".to_string());
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::REQUEST_TIMEOUT);
+    }
+
+    /// `ContainerFailed` and `Internal` both map to 500.
+    #[test]
+    fn error_container_failed_is_500() {
+        let err = ControllerError::ContainerFailed {
+            message: "oom".to_string(),
+        };
+        let resp = err.into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // ── GET /api/v1/jobs/{job_id} ─────────────────────────────────────────────
+
+    /// Unknown job IDs must return 404 with a JSON error body, not panic.
+    /// Regression: prevents path-parameter injection from crashing the server.
+    #[tokio::test]
+    async fn get_unknown_job_returns_404() {
+        let router = test_router();
+
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/v1/jobs/does-not-exist")
+            .body(Body::empty())
+            .expect("build request");
+
+        let resp = router.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let json = body_json(resp.into_body()).await;
+        assert!(
+            json.get("error").is_some(),
+            "response body must contain an 'error' field: {json}"
+        );
+    }
+
+    /// A job ID containing path-traversal characters (`../`) must still return
+    /// 404 (axum normalises the path), not a 200 or a panic.
+    #[tokio::test]
+    async fn get_job_path_traversal_returns_404_or_bad_request() {
+        let router = test_router();
+
+        // axum will reject or normalise — either way must not be 200/500
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/v1/jobs/..%2F..%2Fetc%2Fpasswd")
+            .body(Body::empty())
+            .expect("build request");
+
+        let resp = router.oneshot(req).await.expect("oneshot");
+        assert_ne!(
+            resp.status(),
+            StatusCode::OK,
+            "path traversal must not succeed"
+        );
+        assert_ne!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "path traversal must not cause 500"
+        );
+    }
+
+    // ── POST /api/v1/jobs ─────────────────────────────────────────────────────
+
+    /// Malformed JSON must return a 4xx client error (axum extractor rejection),
+    /// not a 500 or a panic.
+    /// Regression: ensures serde validation is wired correctly.
+    /// Note: axum returns 400 Bad Request for syntactically invalid JSON and
+    /// 422 Unprocessable Entity for structurally valid JSON with missing fields.
+    #[tokio::test]
+    async fn post_malformed_json_returns_4xx() {
+        let router = test_router();
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from("{not valid json"))
+            .expect("build request");
+
+        let resp = router.oneshot(req).await.expect("oneshot");
+        let status = resp.status().as_u16();
+        assert!(
+            (400..500).contains(&status),
+            "malformed JSON must return 4xx, got {status}"
+        );
+        assert_ne!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "malformed JSON must not cause 500"
+        );
+    }
+
+    /// Missing required fields (image, command) must return 422.
+    #[tokio::test]
+    async fn post_missing_required_fields_returns_422() {
+        let router = test_router();
+
+        // `command` field is required (Vec<String> with no default)
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"image": "alpine"}"#))
+            .expect("build request");
+
+        let resp = router.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    /// A request body larger than 1 MB must be rejected with 413.
+    /// Regression: the `DefaultBodyLimit` layer must stay in place.
+    #[tokio::test]
+    async fn post_oversized_body_returns_413() {
+        let router = test_router();
+
+        // 1.1 MB of filler (just over the 1 MB limit)
+        let big_body = "x".repeat(1024 * 1024 + 1024);
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/jobs")
+            .header("content-type", "application/json")
+            .body(Body::from(big_body))
+            .expect("build request");
+
+        let resp = router.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    // ── DELETE /api/v1/jobs/{job_id} ──────────────────────────────────────────
+
+    /// Deleting an unknown job must not panic — it attempts a daemon stop which
+    /// will fail (no socket), returning an error response, not a 500 from a
+    /// missing-job check.
+    #[tokio::test]
+    async fn delete_unknown_job_does_not_panic() {
+        let router = test_router();
+
+        let req = Request::builder()
+            .method(Method::DELETE)
+            .uri("/api/v1/jobs/ghost-job-id")
+            .body(Body::empty())
+            .expect("build request");
+
+        // The handler falls back to using the job_id as the container_id and
+        // attempts a stop on the (nonexistent) daemon. It must return an error
+        // response, not panic.
+        let resp = router.oneshot(req).await.expect("oneshot");
+        assert_ne!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "missing job must not produce an unhandled 500: got {}",
+            resp.status()
+        );
     }
 }
