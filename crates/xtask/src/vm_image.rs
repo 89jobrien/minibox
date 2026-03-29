@@ -91,6 +91,31 @@ pub fn download_file(url: &str, dest: &Path, force: bool) -> Result<()> {
     Ok(())
 }
 
+/// Extract Alpine minirootfs tarball into `rootfs_dir`.
+/// Skips if `rootfs_dir/bin` exists (already extracted) and `force` is false.
+#[allow(dead_code)]
+pub fn extract_rootfs_if_needed(tarball: &Path, rootfs_dir: &Path, force: bool) -> Result<()> {
+    let marker = rootfs_dir.join("bin");
+    if marker.exists() && !force {
+        println!("  cached  {}", rootfs_dir.display());
+        return Ok(());
+    }
+    println!("  extract {}", tarball.display());
+    std::fs::create_dir_all(rootfs_dir)
+        .with_context(|| format!("creating rootfs dir {}", rootfs_dir.display()))?;
+    let status = std::process::Command::new("tar")
+        .args(["-xzf"])
+        .arg(tarball)
+        .args(["-C"])
+        .arg(rootfs_dir)
+        .status()
+        .context("running tar")?;
+    if !status.success() {
+        anyhow::bail!("tar extraction failed for {}", tarball.display());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +192,38 @@ mod tests {
         download_file("http://bogus.invalid/file", &dest, false).unwrap();
         // force=true: would try to fetch, which fails — but we only test the skip path here.
         // This is tested structurally; actual download is an integration concern.
+    }
+
+    #[test]
+    fn extract_skips_when_bin_marker_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rootfs = tmp.path().join("rootfs");
+        std::fs::create_dir_all(rootfs.join("bin")).unwrap();
+        // A fake tarball path — should never be read since rootfs/bin exists
+        let fake_tarball = tmp.path().join("fake.tar.gz");
+        std::fs::write(&fake_tarball, b"not a real tarball").unwrap();
+        // force=false: should skip without touching tarball
+        extract_rootfs_if_needed(&fake_tarball, &rootfs, false).unwrap();
+    }
+
+    #[test]
+    fn extract_creates_rootfs_dir_if_missing() {
+        // Structural test: verify the function creates rootfs_dir before calling tar.
+        // (We can't run tar on a fake tarball but we can verify the dir is created.)
+        let tmp = tempfile::tempdir().unwrap();
+        let rootfs = tmp.path().join("rootfs");
+        let fake_tarball = tmp.path().join("fake.tar.gz");
+        // Don't create rootfs or tarball — the function should create rootfs before tar fails.
+        std::fs::write(&fake_tarball, b"not a real tarball").unwrap();
+        // This will fail because the tarball is fake, but rootfs_dir should exist after create_dir_all
+        let result = extract_rootfs_if_needed(&fake_tarball, &rootfs, false);
+        // Either it fails from tar (expected) or succeeds if somehow tar handles it
+        // We only care that rootfs was created (not that tar succeeded)
+        assert!(
+            rootfs.exists(),
+            "rootfs dir should be created before tar runs"
+        );
+        // result is likely Err (bad tarball), which is fine
+        drop(result);
     }
 }
