@@ -19,7 +19,7 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy
-        run: cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+        run: cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 
   audit:
     name: cargo audit
@@ -74,7 +74,7 @@ jobs:
       - name: install cargo-geiger
         run: cargo install cargo-geiger --locked
       - name: cargo geiger
-        run: cargo geiger -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
+        run: cargo geiger -p mbx -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
 
   test-e2e:
     name: e2e tests (Linux, root)
