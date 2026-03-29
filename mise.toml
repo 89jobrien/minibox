@@ -257,7 +257,7 @@ description = "Pull an OCI image from Docker Hub — any platform, no daemon req
 run = """
 #!/usr/bin/env bash
 IMAGE="${1:-alpine}"
-cargo run --release --example pull -p linuxbox -- "$IMAGE"
+cargo run --release --example pull -p mbx -- "$IMAGE"
 """
 
 [tasks."all:demo-showcase"]
@@ -275,10 +275,10 @@ spin() {
 
 step "building"
 if [[ "$(uname)" == "Linux" ]]; then
-    cargo build --release -p linuxbox -p minibox-cli -p miniboxd --example showcase \
+    cargo build --release -p mbx -p minibox-cli -p miniboxd --example showcase \
         2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 else
-    cargo build --release -p linuxbox --example showcase \
+    cargo build --release -p mbx --example showcase \
         2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 fi
 ok "binaries ready"; echo ""
