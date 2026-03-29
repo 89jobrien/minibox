@@ -6,7 +6,7 @@
 //!
 //! This module contains only cross-platform error types. Linux-specific errors
 //! that depend on `nix` (FilesystemError, CgroupError, NamespaceError,
-//! ProcessError) remain in the `linuxbox` crate.
+//! ProcessError) remain in the `mbx` crate.
 
 use thiserror::Error;
 

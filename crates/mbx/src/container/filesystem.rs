@@ -594,7 +594,7 @@ mod tests {
 
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
-    // Run with: sudo cargo test -p linuxbox container::filesystem::tests
+    // Run with: sudo cargo test -p mbx container::filesystem::tests
 
     #[cfg(target_os = "linux")]
     mod bind_mount_tests {

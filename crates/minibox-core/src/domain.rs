@@ -123,7 +123,7 @@ pub trait AsAny: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use linuxbox::domain::ImageRegistry;
+/// use mbx::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,

@@ -143,7 +143,10 @@ mod tests {
         let resp = DaemonResponse::Success {
             message: "ok".into(),
         };
-        let line = serde_json::to_string(&resp).context("build response line").unwrap() + "\n";
+        let line = serde_json::to_string(&resp)
+            .context("build response line")
+            .unwrap()
+            + "\n";
 
         tokio::spawn(async move {
             use tokio::io::AsyncWriteExt;
@@ -212,7 +215,10 @@ mod tests {
         assert_eq!(responses.len(), 4);
 
         // Check first response is ContainerCreated
-        assert!(matches!(&responses[0], DaemonResponse::ContainerCreated { .. }));
+        assert!(matches!(
+            &responses[0],
+            DaemonResponse::ContainerCreated { .. }
+        ));
 
         // Check streaming outputs
         match &responses[1] {
@@ -232,7 +238,10 @@ mod tests {
         }
 
         // Check final response is terminal
-        assert!(matches!(&responses[3], DaemonResponse::ContainerStopped { .. }));
+        assert!(matches!(
+            &responses[3],
+            DaemonResponse::ContainerStopped { .. }
+        ));
     }
 
     #[tokio::test]

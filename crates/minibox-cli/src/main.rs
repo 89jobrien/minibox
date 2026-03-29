@@ -3,9 +3,9 @@
 //! Connects to the daemon over `/run/minibox/miniboxd.sock` and issues
 //! JSON-over-newline requests, printing human-readable output.
 //!
-//! Each subcommand serialises a [`linuxbox::protocol::DaemonRequest`] as a
+//! Each subcommand serialises a [`mbx::protocol::DaemonRequest`] as a
 //! single JSON line, writes it to the Unix socket, then reads one or more
-//! [`linuxbox::protocol::DaemonResponse`] lines back.  The `run` subcommand
+//! [`mbx::protocol::DaemonResponse`] lines back.  The `run` subcommand
 //! is special: it uses `ephemeral: true` and loops, streaming
 //! `ContainerOutput` chunks to the terminal until a `ContainerStopped` message
 //! is received, at which point the CLI exits with the container's exit code.
@@ -41,7 +41,7 @@ struct Cli {
 
 /// Available minibox subcommands.
 ///
-/// Each variant maps directly to a [`linuxbox::protocol::DaemonRequest`]
+/// Each variant maps directly to a [`mbx::protocol::DaemonRequest`]
 /// variant sent over the Unix socket.
 #[derive(Subcommand)]
 enum Commands {

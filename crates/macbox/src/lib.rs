@@ -23,7 +23,7 @@ pub mod vz;
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
-use linuxbox::adapters::{
+use mbx::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };

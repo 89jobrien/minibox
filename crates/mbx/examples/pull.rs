@@ -4,11 +4,11 @@
 //! `~/.mbx/cache/images` by default, or `$MINIBOX_DATA_DIR/images`.
 //!
 //! Usage:
-//!   cargo run --release --example pull -p linuxbox
-//!   cargo run --release --example pull -p linuxbox -- nginx:1.25
-//!   cargo run --release --example pull -p linuxbox -- ubuntu:22.04
+//!   cargo run --release --example pull -p mbx
+//!   cargo run --release --example pull -p mbx -- nginx:1.25
+//!   cargo run --release --example pull -p mbx -- ubuntu:22.04
 
-use linuxbox::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
+use mbx::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
 use std::{
     io::Write,
     path::PathBuf,
@@ -159,7 +159,7 @@ async fn main() -> anyhow::Result<()> {
 
     let store = Arc::new(ImageStore::new(&images_dir)?);
     let registry = DockerHubRegistry::new(store.clone())?;
-    let image_ref = linuxbox::ImageRef::parse(&format!("{name}:{tag}"))?;
+    let image_ref = mbx::ImageRef::parse(&format!("{name}:{tag}"))?;
 
     if registry.has_image(&name, &tag).await {
         ok("already cached — skipping pull");

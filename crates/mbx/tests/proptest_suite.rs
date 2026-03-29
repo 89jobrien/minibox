@@ -1,4 +1,4 @@
-//! Property-based tests for linuxbox's public API.
+//! Property-based tests for mbx's public API.
 //!
 //! Invariants tested:
 //! - Protocol encode→decode roundtrip is lossless (re-encode produces same bytes)
@@ -9,7 +9,7 @@
 //! by the `DaemonRequest::Pull` roundtrip which exercises arbitrary image/tag
 //! strings through the full protocol layer.
 
-use linuxbox::protocol::{
+use mbx::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind, decode_request,
     decode_response, encode_request, encode_response,
 };
@@ -126,7 +126,7 @@ proptest! {
 
 #[cfg(target_os = "linux")]
 mod cgroup_props {
-    use linuxbox::container::cgroups::{CgroupConfig, CgroupManager};
+    use mbx::container::cgroups::{CgroupConfig, CgroupManager};
     use proptest::prelude::*;
 
     // NOTE: On unprivileged Linux (no root / no cgroup2 mount), `create_dir_all` will

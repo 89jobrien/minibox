@@ -52,13 +52,13 @@ use daemonbox::handler::HandlerDependencies;
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{
+use mbx::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
+use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox_core::image::ImageStore;
 #[cfg(target_os = "linux")]

@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```rust,no_run
-//! use linuxbox::image::{ImageStore, registry::RegistryClient};
+//! use mbx::image::{ImageStore, registry::RegistryClient};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {

@@ -3,11 +3,11 @@
 //! Pulls work on any platform. Container runs require miniboxd running (Linux).
 //!
 //! Usage:
-//!   cargo run --release --example showcase -p linuxbox
-//!   cargo run --release --example showcase -p linuxbox -- --run /path/to/minibox
-//!   cargo run --release --example showcase -p linuxbox -- --run ./target/release/minibox --cleanup
+//!   cargo run --release --example showcase -p mbx
+//!   cargo run --release --example showcase -p mbx -- --run /path/to/minibox
+//!   cargo run --release --example showcase -p mbx -- --run ./target/release/minibox --cleanup
 
-use linuxbox::{
+use mbx::{
     adapters::DockerHubRegistry,
     domain::ImageRegistry,
     image::{ImageStore, reference::ImageRef},

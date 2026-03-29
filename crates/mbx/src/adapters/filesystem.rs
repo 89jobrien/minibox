@@ -34,8 +34,8 @@ use tracing::debug;
 /// # Example
 ///
 /// ```rust,ignore
-/// use linuxbox::adapters::OverlayFilesystem;
-/// use linuxbox::domain::FilesystemProvider;
+/// use mbx::adapters::OverlayFilesystem;
+/// use mbx::domain::FilesystemProvider;
 /// use std::path::PathBuf;
 ///
 /// let fs = OverlayFilesystem;

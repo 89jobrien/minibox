@@ -8,9 +8,7 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use linuxbox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
+use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
@@ -87,7 +85,7 @@ fn mock_deps_with_network(
 }
 
 fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = linuxbox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = mbx::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -120,7 +118,7 @@ mod conformance {
     async fn registry_must_handle_pull_failures_gracefully() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let image_ref = linuxbox::ImageRef::parse("alpine").unwrap();
+        let image_ref = mbx::ImageRef::parse("alpine").unwrap();
         let result = registry.pull_image(&image_ref).await;
         assert!(
             result.is_err(),

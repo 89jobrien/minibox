@@ -16,7 +16,7 @@ mod helpers;
 use helpers::{DaemonFixture, extract_container_id, find_binary, poll_until};
 use tempfile::TempDir;
 
-use linuxbox::preflight;
+use mbx::preflight;
 use minibox_core::require_capability;
 use serial_test::serial;
 use std::process::Command;

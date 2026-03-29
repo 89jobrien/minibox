@@ -5,9 +5,7 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use linuxbox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
+use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::domain::NetworkMode;
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
@@ -68,7 +66,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 /// Helper to create daemon state with a test image store.
 fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = linuxbox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = mbx::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -882,7 +880,7 @@ async fn test_stop_nonexistent_container() {
 /// (cleanup failures are best-effort warnings, not hard errors).
 #[tokio::test]
 async fn test_remove_with_filesystem_cleanup_failure() {
-    use linuxbox::adapters::mocks::FailableFilesystemMock;
+    use mbx::adapters::mocks::FailableFilesystemMock;
 
     let temp_dir = TempDir::new().expect("create temp dir");
     let failable_fs = Arc::new(FailableFilesystemMock::new());
@@ -2048,8 +2046,8 @@ async fn test_run_empty_image_no_layers() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new().with_empty_layers());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::clone(&mock_registry) as Arc<dyn linuxbox::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        registry: Arc::clone(&mock_registry) as Arc<dyn mbx::domain::ImageRegistry>,
+        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn mbx::domain::ImageRegistry>,
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2091,8 +2089,8 @@ async fn test_pull_registry_failure_with_tag() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new().with_pull_failure());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::clone(&mock_registry) as Arc<dyn linuxbox::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn linuxbox::domain::ImageRegistry>,
+        registry: Arc::clone(&mock_registry) as Arc<dyn mbx::domain::ImageRegistry>,
+        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn mbx::domain::ImageRegistry>,
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
