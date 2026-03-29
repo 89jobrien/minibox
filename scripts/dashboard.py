@@ -86,6 +86,7 @@ def build_summary_table(by_script: dict[str, list[dict]]) -> Table:
             continue
         complete = [r for r in runs if r.get("status") == "complete"]
         running = [r for r in runs if r.get("status") == "running"]
+        crashed = [r for r in runs if r.get("status") == "crashed"]
         durations = [r["duration_s"] for r in complete if "duration_s" in r]
         avg_dur = f"{sum(durations)/len(durations):.1f}s" if durations else "—"
         sorted_runs = sorted(runs, key=lambda r: r.get("run_id", ""), reverse=True)
@@ -107,7 +108,12 @@ def build_history_table(all_runs: list[dict], limit: int = 20) -> Table:
     recent = sorted(all_runs, key=lambda r: r.get("run_id", ""), reverse=True)[:limit]
     for run in recent:
         status = run.get("status", "?")
-        status_cell = Text("● done", style="green") if status == "complete" else Text("⠿ live", style="yellow")
+        if status == "complete":
+            status_cell = Text("● done", style="green")
+        elif status == "crashed":
+            status_cell = Text("✗ crash", style="red")
+        else:
+            status_cell = Text("⠿ live", style="yellow")
         dur = f"{run['duration_s']:.1f}s" if "duration_s" in run else "—"
         out = preview(run.get("output", "")) if status == "complete" else ""
         t.add_row(fmt_ts(run.get("run_id", "")), run.get("script", "?"), status_cell, dur, out)
@@ -214,6 +220,7 @@ def main() -> None:
         total = len(runs)
         complete = sum(1 for r in runs.values() if r.get("status") == "complete")
         running = sum(1 for r in runs.values() if r.get("status") == "running")
+        crashed = sum(1 for r in runs.values() if r.get("status") == "crashed")
 
         header = Text.assemble(
             ("Agents", "bold white"),
@@ -223,6 +230,7 @@ def main() -> None:
             (f"{complete} complete", "green"),
             ("  ", ""),
             *([( f"{running} running", "yellow")] if running else []),
+            *([("  ", ""), (f"{crashed} crashed", "red")] if crashed else []),
         )
 
         console.print(Panel(header, border_style="dim cyan", padding=(0, 1)))
