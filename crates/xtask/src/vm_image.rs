@@ -228,7 +228,10 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
     // 5. Cross-compile and install agent
     let rustc_ver = build_and_install_agent(&rootfs_dir, force)?;
 
-    // 6. Get current git commit hash for manifest
+    // 6. Install init files for PID-1 bootstrap
+    install_init_files(&rootfs_dir)?;
+
+    // 7. Get current git commit hash for manifest
     let commit = {
         let out = std::process::Command::new("git")
             .args(["rev-parse", "--short", "HEAD"])
@@ -237,7 +240,7 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     };
 
-    // 7. Write manifest
+    // 8. Write manifest
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -254,6 +257,42 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
     println!("  kernel    {}", kernel_dest.display());
     println!("  initramfs {}", initramfs_dest.display());
     println!("  rootfs    {}", rootfs_dir.display());
+    Ok(())
+}
+
+/// Install minimal init files into rootfs so the agent boots correctly.
+/// This duplicates the logic from macbox::vz::agent_init to avoid a circular dependency.
+#[allow(dead_code)]
+pub fn install_init_files(rootfs_dir: &Path) -> Result<()> {
+    let etc = rootfs_dir.join("etc");
+    std::fs::create_dir_all(&etc).context("creating rootfs/etc")?;
+
+    let inittab = "::sysinit:/etc/init.d/rcS\n::once:/sbin/minibox-agent\n::ctrlaltdel:/sbin/reboot\n::shutdown:/bin/umount -a -r\n";
+    std::fs::write(etc.join("inittab"), inittab).context("writing /etc/inittab")?;
+
+    let initd = etc.join("init.d");
+    std::fs::create_dir_all(&initd).context("creating rootfs/etc/init.d")?;
+    let rcs_content = r#"#!/bin/sh
+set -e
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sys /sys 2>/dev/null || true
+mount -t devtmpfs dev /dev 2>/dev/null || true
+mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
+mount -t virtiofs mbx-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs mbx-containers /var/lib/minibox/containers 2>/dev/null || true
+ip link set lo up 2>/dev/null || true
+hostname minibox-vm 2>/dev/null || true
+"#;
+    let rcs_path = initd.join("rcS");
+    std::fs::write(&rcs_path, rcs_content).context("writing rcS")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&rcs_path, std::fs::Permissions::from_mode(0o755))
+            .context("chmod rcS")?;
+    }
+    println!("  init    rootfs/etc/inittab + etc/init.d/rcS");
     Ok(())
 }
 

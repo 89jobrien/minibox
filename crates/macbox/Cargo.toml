@@ -38,3 +38,6 @@ objc2-virtualization = { version = "0.3", optional = true, features = [
     "VZVirtioSocketDeviceConfiguration",
 ] }
 libc = { version = "0.2", optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
