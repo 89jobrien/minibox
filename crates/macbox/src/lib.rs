@@ -18,6 +18,9 @@
 pub mod paths;
 pub mod preflight;
 
+#[cfg(feature = "vz")]
+pub mod vz;
+
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;

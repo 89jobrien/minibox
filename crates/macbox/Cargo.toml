@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+vz = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]
+
 [dependencies]
 daemonbox = { workspace = true }
 minibox-core = { workspace = true }
@@ -14,3 +17,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true, features = ["NSString", "NSURL", "NSArray"] }
+objc2-virtualization = { version = "0.3", optional = true }
