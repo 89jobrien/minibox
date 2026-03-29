@@ -116,6 +116,71 @@ pub fn extract_rootfs_if_needed(tarball: &Path, rootfs_dir: &Path, force: bool) 
     Ok(())
 }
 
+/// Return the agent destination path within rootfs.
+#[allow(dead_code)]
+pub fn agent_dest_path(rootfs_dir: &Path) -> std::path::PathBuf {
+    rootfs_dir.join("sbin").join("minibox-agent")
+}
+
+/// Cross-compile miniboxd for aarch64-unknown-linux-musl and copy into rootfs.
+/// Skips if agent already exists at dest and `force` is false.
+/// Returns the rustc version string (for the manifest).
+#[allow(dead_code)]
+pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String> {
+    let dest = agent_dest_path(rootfs_dir);
+    let target = "aarch64-unknown-linux-musl";
+
+    // Get current rustc version for manifest
+    let rustc_ver = {
+        let out = std::process::Command::new("rustc")
+            .args(["--version"])
+            .output()
+            .context("running rustc --version")?;
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
+    if dest.exists() && !force {
+        println!("  cached  agent at {}", dest.display());
+        return Ok(rustc_ver);
+    }
+
+    println!("  compile miniboxd → {target}");
+    let status = std::process::Command::new("cargo")
+        .args(["build", "--release", "--target", target, "-p", "miniboxd"])
+        .status()
+        .context("cargo build for agent")?;
+    if !status.success() {
+        anyhow::bail!("cargo build failed for miniboxd/{target}");
+    }
+
+    // Binary is at target/<target>/release/miniboxd
+    let src = std::path::Path::new("target")
+        .join(target)
+        .join("release")
+        .join("miniboxd");
+    if !src.exists() {
+        anyhow::bail!(
+            "expected binary at {} — build succeeded but file missing",
+            src.display()
+        );
+    }
+
+    std::fs::create_dir_all(rootfs_dir.join("sbin")).context("creating rootfs/sbin")?;
+    std::fs::copy(&src, &dest).with_context(|| format!("copying agent to {}", dest.display()))?;
+    println!("  installed {}", dest.display());
+
+    // Symlink /sbin/init → minibox-agent
+    let init_link = rootfs_dir.join("sbin").join("init");
+    if init_link.exists() || init_link.symlink_metadata().is_ok() {
+        std::fs::remove_file(&init_link).context("removing old /sbin/init")?;
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("minibox-agent", &init_link)
+        .context("symlinking /sbin/init → minibox-agent")?;
+
+    Ok(rustc_ver)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +290,28 @@ mod tests {
         );
         // result is likely Err (bad tarball), which is fine
         drop(result);
+    }
+
+    #[test]
+    fn agent_dest_path_is_correct() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rootfs = tmp.path().join("rootfs");
+        std::fs::create_dir_all(rootfs.join("sbin")).unwrap();
+        let dest = agent_dest_path(&rootfs);
+        assert!(dest.to_string_lossy().ends_with("sbin/minibox-agent"));
+    }
+
+    #[test]
+    fn build_and_install_agent_skips_when_cached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rootfs = tmp.path().join("rootfs");
+        std::fs::create_dir_all(rootfs.join("sbin")).unwrap();
+        let dest = agent_dest_path(&rootfs);
+        std::fs::write(&dest, b"fake agent binary").unwrap();
+        // force=false: should skip without running cargo build
+        let result = build_and_install_agent(&rootfs, false);
+        assert!(result.is_ok(), "should succeed when cached: {:?}", result);
+        // File should be unchanged
+        assert_eq!(std::fs::read(&dest).unwrap(), b"fake agent binary");
     }
 }
