@@ -205,11 +205,25 @@ pub fn run_hooks(
     Ok(())
 }
 
-/// Grant the container process a full Linux capability set.
+/// Grant the container process a curated privileged capability set.
 ///
-/// Uses `capset(2)` with `LINUX_CAPABILITY_VERSION_3` to set all bits in
-/// `permitted`, `effective`, and `inheritable`. Called inside the child
-/// process before `execvp` when `config.privileged` is true.
+/// Uses `capset(2)` with `LINUX_CAPABILITY_VERSION_3` to set a wide but
+/// deliberately bounded set of capabilities in `permitted`, `effective`, and
+/// `inheritable`. Called inside the child process before `execvp` when
+/// `config.privileged` is true.
+///
+/// # Excluded capabilities (host-escape tier)
+///
+/// The following capabilities are **never** granted, even in privileged mode,
+/// because they provide direct paths to compromising the host kernel or its
+/// security enforcement and have no legitimate container use:
+///
+/// | Capability        | Bit | Reason                                    |
+/// |-------------------|-----|-------------------------------------------|
+/// | CAP_SYS_MODULE    |  16 | Load/unload kernel modules                |
+/// | CAP_SYS_BOOT      |  22 | Reboot, shutdown, or kexec the host       |
+/// | CAP_MAC_OVERRIDE  |  32 | Bypass MAC (SELinux/AppArmor) enforcement |
+/// | CAP_MAC_ADMIN     |  33 | Modify/load MAC policies on the host      |
 ///
 /// # Safety
 ///
@@ -217,14 +231,14 @@ pub fn run_hooks(
 /// process (single-threaded after clone). The repr(C) structs match the
 /// kernel's `linux_capability_version_3` ABI exactly.
 #[cfg(target_os = "linux")]
-fn apply_full_capabilities() -> anyhow::Result<()> {
+fn apply_privileged_capabilities() -> anyhow::Result<()> {
     // LINUX_CAPABILITY_VERSION_3: supports 64-bit capability sets as two
     // 32-bit words (low bits 0-31, high bits 32-40).
     const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
-    // All 32 low capability bits set.
-    const CAP_FULL_LOW: u32 = 0xFFFF_FFFF;
-    // Capability bits 32-40 (the currently defined high caps).
-    const CAP_FULL_HIGH: u32 = 0x0000_01FF;
+    // Low caps (0-31) minus CAP_SYS_MODULE (16) and CAP_SYS_BOOT (22).
+    const CAP_PRIVILEGED_LOW: u32 = 0xFFFF_FFFF & !(1 << 16) & !(1 << 22);
+    // High caps (32-40) minus CAP_MAC_OVERRIDE (bit 0) and CAP_MAC_ADMIN (bit 1).
+    const CAP_PRIVILEGED_HIGH: u32 = 0x0000_01FF & !(1 << 0) & !(1 << 1);
 
     #[repr(C)]
     struct CapHeader {
@@ -249,14 +263,14 @@ fn apply_full_capabilities() -> anyhow::Result<()> {
             pid: 0, // 0 = calling process
         };
         let full = CapData {
-            effective: CAP_FULL_LOW,
-            permitted: CAP_FULL_LOW,
-            inheritable: CAP_FULL_LOW,
+            effective: CAP_PRIVILEGED_LOW,
+            permitted: CAP_PRIVILEGED_LOW,
+            inheritable: CAP_PRIVILEGED_LOW,
         };
         let full_high = CapData {
-            effective: CAP_FULL_HIGH,
-            permitted: CAP_FULL_HIGH,
-            inheritable: CAP_FULL_HIGH,
+            effective: CAP_PRIVILEGED_HIGH,
+            permitted: CAP_PRIVILEGED_HIGH,
+            inheritable: CAP_PRIVILEGED_HIGH,
         };
         let mut data = [full, full_high];
         let ret = libc::syscall(
@@ -272,7 +286,7 @@ fn apply_full_capabilities() -> anyhow::Result<()> {
         }
     }
 
-    debug!("container: full capabilities applied");
+    debug!("container: privileged capabilities applied");
     Ok(())
 }
 
@@ -319,10 +333,18 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     // 4. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;
 
-    // 5. Apply full capability set if privileged mode requested.
+    // 5. Apply privileged capability whitelist if requested.
     #[cfg(target_os = "linux")]
     if config.privileged {
-        apply_full_capabilities().with_context(|| "child: apply_full_capabilities")?;
+        // Audit log: privileged containers are a security boundary relaxation.
+        // CAP_SYS_MODULE, CAP_SYS_BOOT, CAP_MAC_OVERRIDE, CAP_MAC_ADMIN are
+        // always withheld to limit host-escape surface.
+        warn!(
+            hostname = %config.hostname,
+            command = %config.command,
+            "container: starting in privileged mode — capability whitelist applied"
+        );
+        apply_privileged_capabilities().with_context(|| "child: apply_privileged_capabilities")?;
     }
 
     // 6. Close any file descriptors > 2 (stdin/stdout/stderr) that leaked
@@ -462,6 +484,69 @@ mod tests {
             privileged: true,
         };
         assert!(cfg.privileged);
+    }
+
+    /// Verify that the privileged capability bitmasks exclude the four
+    /// host-escape capabilities and retain all others.
+    #[test]
+    fn privileged_capability_bitmasks_exclude_host_escape_caps() {
+        // Reproduce the constants from apply_privileged_capabilities.
+        const CAP_PRIVILEGED_LOW: u32 = 0xFFFF_FFFF & !(1 << 16) & !(1 << 22);
+        const CAP_PRIVILEGED_HIGH: u32 = 0x0000_01FF & !(1 << 0) & !(1 << 1);
+
+        // CAP_SYS_MODULE (16) must be absent from low word.
+        assert_eq!(
+            CAP_PRIVILEGED_LOW & (1 << 16),
+            0,
+            "CAP_SYS_MODULE must be excluded"
+        );
+        // CAP_SYS_BOOT (22) must be absent from low word.
+        assert_eq!(
+            CAP_PRIVILEGED_LOW & (1 << 22),
+            0,
+            "CAP_SYS_BOOT must be excluded"
+        );
+        // CAP_MAC_OVERRIDE (32 → high bit 0) must be absent from high word.
+        assert_eq!(
+            CAP_PRIVILEGED_HIGH & (1 << 0),
+            0,
+            "CAP_MAC_OVERRIDE must be excluded"
+        );
+        // CAP_MAC_ADMIN (33 → high bit 1) must be absent from high word.
+        assert_eq!(
+            CAP_PRIVILEGED_HIGH & (1 << 1),
+            0,
+            "CAP_MAC_ADMIN must be excluded"
+        );
+
+        // All other low caps should be present (spot-check a few).
+        assert_ne!(
+            CAP_PRIVILEGED_LOW & (1 << 0),
+            0,
+            "CAP_CHOWN must be retained"
+        );
+        assert_ne!(
+            CAP_PRIVILEGED_LOW & (1 << 21),
+            0,
+            "CAP_SYS_ADMIN must be retained"
+        );
+        assert_ne!(
+            CAP_PRIVILEGED_LOW & (1 << 12),
+            0,
+            "CAP_NET_ADMIN must be retained"
+        );
+
+        // All other high caps should be present (spot-check).
+        assert_ne!(
+            CAP_PRIVILEGED_HIGH & (1 << 2),
+            0,
+            "CAP_SYSLOG must be retained"
+        );
+        assert_ne!(
+            CAP_PRIVILEGED_HIGH & (1 << 7),
+            0,
+            "CAP_BPF must be retained"
+        );
     }
 }
 
