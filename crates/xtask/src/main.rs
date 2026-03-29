@@ -344,9 +344,60 @@ fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
         .lines()
         .last()
         .filter(|l| l.ends_with(".json"))
-        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?;
+        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?
+        .to_string();
 
-    save_bench_results(sh, json_path)
+    // Run codec + adapter microbenchmarks (no daemon needed) and merge into main result.
+    let micro_args: Vec<&str> = vec![
+        "--out-dir",
+        out_dir,
+        "--suite",
+        "codec",
+        "--suite",
+        "adapter",
+        "--no-cold",
+        "--no-warm",
+    ];
+    if let Ok(micro_out) = cmd!(sh, "./target/release/minibox-bench {micro_args...}").read() {
+        if let Some(micro_path) = micro_out.lines().last().filter(|l| l.ends_with(".json")) {
+            merge_bench_suites(&json_path, micro_path).ok();
+        }
+    }
+
+    save_bench_results(sh, &json_path)
+}
+
+/// Merge suites from `src_path` into `dst_path` in place.
+///
+/// Appends any suites in `src` that are not already present in `dst` by name.
+/// Used to combine codec/adapter microbench results with the main cold/warm run.
+fn merge_bench_suites(dst_path: &str, src_path: &str) -> Result<()> {
+    let dst_content = fs::read_to_string(dst_path).context("read dst bench JSON")?;
+    let src_content = fs::read_to_string(src_path).context("read src bench JSON")?;
+    let mut dst: serde_json::Value =
+        serde_json::from_str(&dst_content).context("parse dst bench JSON")?;
+    let src: serde_json::Value =
+        serde_json::from_str(&src_content).context("parse src bench JSON")?;
+
+    let dst_suites = dst["suites"].as_array_mut().context("dst missing suites")?;
+    let existing: std::collections::HashSet<String> = dst_suites
+        .iter()
+        .filter_map(|s| s["name"].as_str().map(|n| n.to_string()))
+        .collect();
+
+    if let Some(src_suites) = src["suites"].as_array() {
+        for suite in src_suites {
+            if let Some(name) = suite["name"].as_str() {
+                if !existing.contains(name) {
+                    dst_suites.push(suite.clone());
+                }
+            }
+        }
+    }
+
+    let merged = serde_json::to_string_pretty(&dst).context("re-serialise merged JSON")?;
+    fs::write(dst_path, merged).context("write merged bench JSON")?;
+    Ok(())
 }
 
 /// Patch git_sha, append to bench.jsonl, and update latest.json.
@@ -557,6 +608,24 @@ OUT_DIR="/tmp/bench-out-$$"
 rm -rf "$OUT_DIR"
 "$BENCH_BIN" --iters 5 --out-dir "$OUT_DIR"
 JSON_FILE=$(ls -t "$OUT_DIR"/*.json | head -1)
+# Merge codec + adapter microbenchmarks (no daemon required) into main result
+MICRO_DIR="/tmp/bench-micro-$$"
+rm -rf "$MICRO_DIR"
+"$BENCH_BIN" --suite codec --suite adapter --no-cold --no-warm --out-dir "$MICRO_DIR" 2>/dev/null || true
+MICRO_JSON=$(ls -t "$MICRO_DIR"/*.json 2>/dev/null | head -1)
+if [ -n "$MICRO_JSON" ]; then
+  python3 -c "
+import json, sys
+dst = json.load(open('$JSON_FILE'))
+src = json.load(open('$MICRO_JSON'))
+existing = {{s['name'] for s in dst.get('suites', [])}}
+for s in src.get('suites', []):
+    if s['name'] not in existing:
+        dst['suites'].append(s)
+json.dump(dst, open('$JSON_FILE', 'w'), indent=2)
+" 2>/dev/null || true
+fi
+rm -rf "$MICRO_DIR"
 cp "$JSON_FILE" /tmp/bench-latest.json
 ls -t "$OUT_DIR"/*.txt | head -1 | xargs cat
 rm -rf "$OUT_DIR"
