@@ -1,13 +1,11 @@
-//! macOS Virtualization.framework integration — vsock protocol bridging.
-//!
-//! This module provides building blocks for miniboxd on macOS via VZ (native
-//! hypervisor on Apple silicon and Intel). Integrates with vsock for IPC between
-//! the host daemon and the in-VM agent.
-//!
-//! # Modules
-//!
-//! - [`proxy`] — VzProxy for JSON-over-vsock request/response handling
+//! Thin Rust bindings for Apple's Virtualization.framework.
 
+pub mod adapter;
+pub mod agent_init;
+pub mod bindings;
 pub mod proxy;
+pub mod vm;
+pub mod vsock;
 
+pub use adapter::{VzFilesystem, VzLimiter, VzRegistry, VzRuntime};
 pub use proxy::VzProxy;
