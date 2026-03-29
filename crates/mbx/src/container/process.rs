@@ -347,7 +347,19 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         apply_privileged_capabilities().with_context(|| "child: apply_privileged_capabilities")?;
     }
 
-    // 6. Close any file descriptors > 2 (stdin/stdout/stderr) that leaked
+    // 6. Become a new session and process group leader so the daemon can
+    //    signal the entire container process tree by negating the PGID.
+    //    Without setsid(), the child inherits the daemon's process group;
+    //    with it, kill(-pgid) from stop_inner reaches every descendant
+    //    (including grandchildren like `sleep` spawned by `/bin/sh -c …`)
+    //    and bypasses the kernel rule that silently drops SIGTERM delivered
+    //    to PID 1 of a PID namespace when no handler is installed.
+    // SAFETY: setsid() is always safe to call; it fails only if the caller
+    // is already a process group leader, which cannot happen here because
+    // clone() always gives the child a new PID.
+    let _ = unsafe { libc::setsid() };
+
+    // 7. Close any file descriptors > 2 (stdin/stdout/stderr) that leaked
     //    from the parent. We do this on a best-effort basis.
     close_extra_fds();
 

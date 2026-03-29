@@ -891,9 +891,21 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("container {id} has no PID (not running?)"))?;
 
     let nix_pid = Pid::from_raw(pid as i32);
+    // Signal the entire process group so descendants (e.g. `sleep` spawned
+    // by `/bin/sh -c …`) receive SIGTERM directly.  child_init calls setsid()
+    // before execve, making the container init a new process group leader;
+    // negating its host PID addresses that group.  We fall back to the
+    // individual PID if the group signal returns ESRCH (process already gone).
+    let pgid = Pid::from_raw(-(pid as i32));
 
-    info!("sending SIGTERM to container {id} (PID {pid})");
-    kill(nix_pid, Signal::SIGTERM).ok();
+    info!(
+        container_id = %id,
+        pid = pid,
+        "container: sending SIGTERM to process group"
+    );
+    if kill(pgid, Signal::SIGTERM).is_err() {
+        kill(nix_pid, Signal::SIGTERM).ok();
+    }
 
     // Wait up to 10 s for the process to exit.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
@@ -904,7 +916,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
-            warn!("container {id} did not exit in 10 s, sending SIGKILL");
+            warn!(
+                container_id = %id,
+                pid = pid,
+                "container: did not exit after SIGTERM, sending SIGKILL"
+            );
+            kill(pgid, Signal::SIGKILL).ok();
             kill(nix_pid, Signal::SIGKILL).ok();
             break;
         }
