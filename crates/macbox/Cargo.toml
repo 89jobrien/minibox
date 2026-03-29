@@ -12,6 +12,7 @@ daemonbox = { workspace = true }
 minibox-core = { workspace = true }
 linuxbox = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
