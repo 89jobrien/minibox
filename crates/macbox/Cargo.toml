@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]
+vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization", "dep:libc"]
 
 [dependencies]
 daemonbox = { workspace = true }
@@ -27,6 +27,12 @@ objc2-virtualization = { version = "0.3", optional = true, features = [
     "VZSerialPortAttachment",
     "VZSerialPortConfiguration",
     "VZSharedDirectory",
+    "VZSocketDevice",
     "VZSocketDeviceConfiguration",
+    "VZVirtualMachine",
     "VZVirtualMachineConfiguration",
+    "VZVirtioSocketConnection",
+    "VZVirtioSocketDevice",
+    "VZVirtioSocketDeviceConfiguration",
 ] }
+libc = { version = "0.2", optional = true }

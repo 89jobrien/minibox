@@ -336,6 +336,13 @@ mod imp {
             Ok(VzVm { vm, config })
         }
 
+        /// Returns a reference to the underlying `VZVirtualMachine`.
+        ///
+        /// Used by the vsock module to obtain the socket device.
+        pub(crate) fn vz_vm(&self) -> &VZVirtualMachine {
+            &self.vm
+        }
+
         /// Stop the running VM.
         pub fn stop(&self) {
             // SAFETY: stopWithCompletionHandler: is documented as callable from any thread.

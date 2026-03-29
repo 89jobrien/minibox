@@ -2,3 +2,4 @@
 
 pub mod bindings;
 pub mod vm;
+pub mod vsock;
