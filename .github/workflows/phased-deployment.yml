@@ -30,9 +30,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Wait for Quality CI
         run: |
-          echo "Waiting for compile-check to finish on this SHA..."
+          SHA="${{ github.sha }}"
+          echo "Waiting for CI on ${SHA}..."
           for i in $(seq 1 30); do
-            STATUS=$(gh run list --branch main --workflow ci.yml --limit 1 --json conclusion --jq '.[0].conclusion // empty')
+            STATUS=$(gh run list --branch main --workflow ci.yml --commit "$SHA" --limit 1 --json conclusion --jq '.[0].conclusion // empty')
             if [ "$STATUS" = "success" ]; then
               echo "CI passed. Proceeding with promotion."
               exit 0
@@ -40,7 +41,7 @@ jobs:
               echo "CI failed. Skipping promotion."
               exit 1
             fi
-            echo "Attempt $i: CI status=$STATUS, waiting 10s..."
+            echo "Attempt $i: CI status='${STATUS:-pending}', waiting 10s..."
             sleep 10
           done
           echo "Timed out waiting for CI."
