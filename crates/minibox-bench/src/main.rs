@@ -571,7 +571,7 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
 
     match name {
         "pull" | "e2e" => cfg.cold,
-        "run" | "ps" | "stop" | "rm" | "exec" => cfg.warm,
+        "run" | "ps" | "stop" | "rm" | "exec" | "parallel" => cfg.warm,
         // codec, adapter, colima only run when explicitly requested via --suite
         "codec" | "adapter" | "colima" => false,
         _ => true,
@@ -582,7 +582,7 @@ fn suite_enabled(cfg: &BenchConfig, name: &str) -> bool {
 fn planned_suites(cfg: &BenchConfig) -> Vec<String> {
     let mut suites = Vec::new();
     for name in [
-        "pull", "run", "ps", "stop", "rm", "exec", "e2e", "codec", "adapter", "colima",
+        "pull", "run", "ps", "stop", "rm", "exec", "parallel", "e2e", "codec", "adapter", "colima",
     ] {
         if suite_enabled(cfg, name) {
             suites.push(name.to_string());
@@ -1279,6 +1279,134 @@ fn run_suites(
             }
         }
         suites.push(exec_suite);
+    }
+
+    if suite_enabled(cfg, "parallel") {
+        let suite_name = "parallel";
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.start(suite_name) {
+                eprintln!(
+                    "warn: failed to start profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+
+        let mut parallel_suite = SuiteResult {
+            name: "parallel".to_string(),
+            tests: Vec::new(),
+        };
+
+        // Run N containers concurrently, measure wall-clock time until all complete.
+        for concurrency in [2usize, 4, 8] {
+            let mut wall_durations = Vec::with_capacity(cfg.iters);
+            for _ in 0..cfg.iters {
+                let bin = minibox_bin.to_string();
+                let n = concurrency;
+                let start = std::time::Instant::now();
+                let handles: Vec<_> = (0..n)
+                    .map(|_| {
+                        let b = bin.clone();
+                        std::thread::spawn(move || {
+                            run_cmd(&b, &["run", "alpine", "--", "/bin/true"])
+                        })
+                    })
+                    .collect();
+                let all_ok = handles.into_iter().all(|h| {
+                    h.join()
+                        .ok()
+                        .and_then(|r| r.ok())
+                        .is_some_and(|r| r.success)
+                });
+                let elapsed = start.elapsed().as_micros() as u64;
+                if all_ok {
+                    wall_durations.push(elapsed);
+                } else {
+                    errors.push(format!("parallel_run_{n}: one or more containers failed"));
+                }
+            }
+            parallel_suite.tests.push(TestResult {
+                name: format!("parallel_run_{concurrency}"),
+                iterations: wall_durations.len(),
+                durations_micros: wall_durations.clone(),
+                stats: stats_for(&wall_durations),
+                ..Default::default()
+            });
+        }
+
+        // ps latency while 4 containers run concurrently.
+        {
+            let bin = minibox_bin.to_string();
+            let handles: Vec<_> = (0..4)
+                .map(|_| {
+                    let b = bin.clone();
+                    std::thread::spawn(move || run_cmd(&b, &["run", "alpine", "--", "/bin/true"]))
+                })
+                .collect();
+            let mut ps_durations = Vec::with_capacity(cfg.iters);
+            for _ in 0..cfg.iters {
+                if let Some(r) = run_cmd_record(&minibox_bin, &["ps"], &mut errors) {
+                    ps_durations.push(r.duration_micros);
+                }
+            }
+            // wait for background containers to finish
+            for h in handles {
+                let _ = h.join();
+            }
+            parallel_suite.tests.push(TestResult {
+                name: "ps_under_load_4".to_string(),
+                iterations: ps_durations.len(),
+                durations_micros: ps_durations.clone(),
+                stats: stats_for(&ps_durations),
+                ..Default::default()
+            });
+        }
+
+        // 2 concurrent exec/echo.
+        {
+            let mut wall_durations = Vec::with_capacity(cfg.iters);
+            for _ in 0..cfg.iters {
+                let bin = minibox_bin.to_string();
+                let start = std::time::Instant::now();
+                let handles: Vec<_> = (0..2)
+                    .map(|_| {
+                        let b = bin.clone();
+                        std::thread::spawn(move || {
+                            run_cmd(&b, &["run", "alpine", "--", "/bin/echo", "ok"])
+                        })
+                    })
+                    .collect();
+                let all_ok = handles.into_iter().all(|h| {
+                    h.join()
+                        .ok()
+                        .and_then(|r| r.ok())
+                        .is_some_and(|r| r.success)
+                });
+                let elapsed = start.elapsed().as_micros() as u64;
+                if all_ok {
+                    wall_durations.push(elapsed);
+                } else {
+                    errors.push("parallel_exec_2: one or more containers failed".to_string());
+                }
+            }
+            parallel_suite.tests.push(TestResult {
+                name: "parallel_exec_2".to_string(),
+                iterations: wall_durations.len(),
+                durations_micros: wall_durations.clone(),
+                stats: stats_for(&wall_durations),
+                ..Default::default()
+            });
+        }
+
+        if let Some(ref mut prof) = profiler {
+            if let Err(e) = prof.stop(suite_name) {
+                eprintln!(
+                    "warn: failed to stop profiler for suite {}: {}",
+                    suite_name, e
+                );
+            }
+        }
+        suites.push(parallel_suite);
     }
 
     if suite_enabled(cfg, "e2e") {
