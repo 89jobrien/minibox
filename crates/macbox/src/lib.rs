@@ -18,7 +18,6 @@
 
 pub mod paths;
 pub mod preflight;
-pub mod vz;
 
 #[cfg(feature = "vz")]
 pub mod vz;
@@ -302,7 +301,7 @@ async fn start_vz(
         filesystem: Arc::new(VzFilesystem::new(Arc::clone(&vm_arc))),
         resource_limiter: Arc::new(VzLimiter::new(Arc::clone(&vm_arc))),
         runtime: Arc::new(VzRuntime::new(Arc::clone(&vm_arc))),
-        network_provider: Arc::new(linuxbox::adapters::NoopNetwork::new()),
+        network_provider: Arc::new(mbx::adapters::NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
     });
