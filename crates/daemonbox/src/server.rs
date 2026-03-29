@@ -217,13 +217,17 @@ where
 /// Streaming responses continue through `ContainerCreated` (container ID) and
 /// `ContainerOutput` chunks until `ContainerStopped` (terminal).
 /// `Error` always terminates the exchange.
+///
+/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
+/// as the first message, followed by `ContainerOutput` chunks and then
+/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
+/// server loop exits naturally when `rx.recv()` returns `None`.
 fn is_terminal_response(r: &DaemonResponse) -> bool {
     matches!(
         r,
         DaemonResponse::ContainerStopped { .. }
             | DaemonResponse::Error { .. }
             | DaemonResponse::Success { .. }
-            | DaemonResponse::ContainerCreated { .. }
             | DaemonResponse::ContainerList { .. }
     )
 }
@@ -388,10 +392,10 @@ mod tests {
             "Error must be terminal"
         );
         assert!(
-            is_terminal_response(&DaemonResponse::ContainerCreated {
+            !is_terminal_response(&DaemonResponse::ContainerCreated {
                 id: "abc".to_string()
             }),
-            "ContainerCreated must be terminal"
+            "ContainerCreated must be non-terminal (ephemeral runs follow with ContainerOutput)"
         );
         assert!(
             is_terminal_response(&DaemonResponse::ContainerStopped { exit_code: 0 }),

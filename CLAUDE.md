@@ -29,7 +29,7 @@ All `scripts/*.py` SDK scripts (`council.py`, `ai-review.py`, `meta-agent.py`, e
 - **TUI scripts** (`dashboard.py`): same uv pattern but use `rich` instead of `claude-agent-sdk`. Dashboard reads both `~/.mbx/agent-runs.jsonl` (agents) and `bench/results/` (benchmarks).
 
 - `just meta-agent "task"` — design + spawn parallel agents for any task; fetches + caches SDK docs, discovers repo context
-- `just council [base] [mode]` — multi-role branch analysis (core: 3 roles, extensive: 5 roles) + synthesis
+- `just council [base] [mode]` — multi-role branch analysis (core: 3 roles, extensive: 5 roles) + synthesis (**hook conflict**: blocked by `no-grep-use-tool` pre-tool hook on macOS since command text contains "grep"; use `/devloop-analyze` skill or synthesize from `git log` directly)
 - `just ai-review [base]` — security/correctness review of diff vs base branch
 - `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
@@ -133,7 +133,7 @@ cargo bench -p linuxbox          # criterion benches (local HTML reports only, n
 
 **Test Status:**
 
-- Unit + conformance: 155 lib tests + 11 cli tests + 52 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (258 total via nextest, 4 skipped on macOS)
+- Unit + conformance: ~300+ tests via nextest (run `cargo nextest run --lib` for current count; 4 skipped on macOS)
 - Property-based: 8 daemonbox proptest properties + 25 linuxbox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
@@ -156,7 +156,7 @@ This runs: `cargo fmt --all --check` + clippy (all crates) + `cargo build --rele
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
+cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p minibox-client -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -180,20 +180,22 @@ cargo xtask test-unit
 
 Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
 
-Eleven crates in cargo workspace:
+Thirteen crates in cargo workspace:
 
 1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types, image management (`ImageStore`, `RegistryClient`), preflight; re-exported by linuxbox for macro compatibility
 2. **linuxbox** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside linuxbox
    (formerly `minibox-lib` — renamed 2026-03-23; git history before this date uses the old name)
 3. **minibox-macros** (proc-macro): Derive macros used by linuxbox
 4. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
-4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
+5. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
 6. **macbox** (library): macOS daemon implementation (Colima adapter suite)
 7. **winbox** (library): Windows daemon implementation (stub)
 8. **minibox-cli** (binary): CLI client sending commands to daemon
-9. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
-10. **minibox-bench** (binary): Benchmark harness
-11. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
+9. **minibox-client** (library): Unix socket client — `DaemonClient`, `DaemonResponseStream`; extracted from minibox-cli for reuse by mbxctl and tests
+10. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
+11. **minibox-bench** (binary): Benchmark harness
+12. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
+13. **mbxctl** (binary): Alternative management CLI (axum-based, WIP) — in `mbxctl/` at workspace root
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
