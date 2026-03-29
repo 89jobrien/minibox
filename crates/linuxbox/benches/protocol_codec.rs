@@ -15,6 +15,7 @@ fn small_run_request() -> DaemonRequest {
         network: None,
         mounts: vec![],
         privileged: false,
+        env: vec![],
     }
 }
 
@@ -32,6 +33,7 @@ fn large_run_request() -> DaemonRequest {
         network: None,
         mounts: vec![],
         privileged: false,
+        env: vec![],
     }
 }
 

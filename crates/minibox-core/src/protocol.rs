@@ -267,6 +267,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -307,6 +308,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -507,6 +509,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -591,6 +594,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -616,6 +620,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -743,6 +748,7 @@ mod tests {
             network: Some(NetworkMode::Host),
             mounts: vec![],
             privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -780,6 +786,7 @@ mod tests {
                 read_only: false,
             }],
             privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -809,6 +816,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: true,
+            env: vec![],
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
