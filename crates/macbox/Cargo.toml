@@ -7,7 +7,7 @@ license.workspace = true
 [dependencies]
 daemonbox = { workspace = true }
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
+mbx = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -57,7 +57,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates
 minibox-core = { path = "crates/minibox-core" }
-linuxbox = { path = "crates/mbx" }
+mbx = { path = "crates/mbx" }
 minibox-macros = { path = "crates/minibox-macros" }
 minibox-client = { path = "crates/minibox-client" }
 daemonbox = { path = "crates/daemonbox" }
