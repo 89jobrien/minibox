@@ -5,7 +5,6 @@
 //! requires it.
 
 use anyhow::{Context, Result, bail};
-use std::path::Path;
 
 /// Load the Virtualization.framework bundle.
 ///
@@ -39,38 +38,4 @@ pub fn load_vz_framework() -> Result<()> {
     }
     #[cfg(not(target_os = "macos"))]
     bail!("Virtualization.framework is only available on macOS")
-}
-
-/// Create a VZLinuxBootLoader — STUB, implemented in Task 7 alongside VzVm.
-///
-/// # Safety
-///
-/// Must be called on the VZ dispatch queue. The returned pointer is owned by
-/// the caller and must be released via the Objective-C runtime when done.
-pub unsafe fn new_linux_boot_loader(
-    _kernel_path: &Path,
-    _initrd_path: Option<&Path>,
-    _cmdline: &str,
-) -> Result<*mut std::ffi::c_void> {
-    bail!("VZ bindings not yet fully implemented — see vm.rs Task 7")
-}
-
-/// Create a VZVirtioFileSystemDeviceConfiguration — STUB.
-///
-/// # Safety
-///
-/// Must be called on the VZ dispatch queue. The returned pointer is owned by
-/// the caller and must be released via the Objective-C runtime when done.
-pub unsafe fn new_virtio_fs(_tag: &str, _host_path: &Path) -> Result<*mut std::ffi::c_void> {
-    bail!("VZ bindings not yet fully implemented — see vm.rs Task 7")
-}
-
-/// Create a VZVirtioSocketDeviceConfiguration — STUB.
-///
-/// # Safety
-///
-/// Must be called on the VZ dispatch queue. The returned pointer is owned by
-/// the caller and must be released via the Objective-C runtime when done.
-pub unsafe fn new_vsock_device() -> Result<*mut std::ffi::c_void> {
-    bail!("VZ bindings not yet fully implemented — see vm.rs Task 7")
 }
