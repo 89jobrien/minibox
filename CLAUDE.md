@@ -180,7 +180,7 @@ cargo xtask test-unit
 
 Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
 
-Thirteen crates in cargo workspace:
+Fourteen crates in cargo workspace:
 
 1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types, image management (`ImageStore`, `RegistryClient`), preflight; re-exported by linuxbox for macro compatibility
 2. **linuxbox** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside linuxbox
@@ -196,6 +196,7 @@ Thirteen crates in cargo workspace:
 11. **minibox-bench** (binary): Benchmark harness
 12. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
 13. **mbxctl** (binary): Alternative management CLI (axum-based, WIP) — in `mbxctl/` at workspace root
+14. **dashbox** (binary): Ratatui TUI dashboard — 6 tabs (Agents, Bench, History, Git, Todos, CI) with inline command pane and background task execution. Run via `just dash`.
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
