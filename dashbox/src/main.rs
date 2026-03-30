@@ -2,6 +2,8 @@
 mod app;
 mod command;
 mod data;
+mod diagram;
+mod diagrams;
 mod tabs;
 mod ui;
 
@@ -88,6 +90,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
                         }
                         KeyCode::Char('6') => {
                             app.select_tab(Tab::Ci);
+                            continue;
+                        }
+                        KeyCode::Char('7') => {
+                            app.select_tab(Tab::Diagrams);
                             continue;
                         }
                         KeyCode::Left => {

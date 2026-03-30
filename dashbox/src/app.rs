@@ -6,6 +6,7 @@ use crate::tabs::TabRenderer;
 use crate::tabs::agents::AgentsTab;
 use crate::tabs::bench::BenchTab;
 use crate::tabs::ci::CiTab;
+use crate::tabs::diagrams::DiagramsTab;
 use crate::tabs::git::GitTab;
 use crate::tabs::history::HistoryTab;
 use crate::tabs::todos::TodosTab;
@@ -18,16 +19,18 @@ pub enum Tab {
     Git,
     Todos,
     Ci,
+    Diagrams,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 6] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Agents,
         Tab::Bench,
         Tab::History,
         Tab::Git,
         Tab::Todos,
         Tab::Ci,
+        Tab::Diagrams,
     ];
 
     pub fn title(&self) -> &'static str {
@@ -38,6 +41,7 @@ impl Tab {
             Tab::Git => "4 Git",
             Tab::Todos => "5 Todos",
             Tab::Ci => "6 CI",
+            Tab::Diagrams => "7 Diagrams",
         }
     }
 
@@ -49,6 +53,7 @@ impl Tab {
             Tab::Git => 3,
             Tab::Todos => 4,
             Tab::Ci => 5,
+            Tab::Diagrams => 6,
         }
     }
 
@@ -81,6 +86,7 @@ impl App {
                 Box::new(GitTab::new()),
                 Box::new(TodosTab::new()),
                 Box::new(CiTab::new()),
+                Box::new(DiagramsTab::new()),
             ],
             inline_cmd: None,
             bg_cmd: None,

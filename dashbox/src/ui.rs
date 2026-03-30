@@ -62,7 +62,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     let left_text = if app.inline_cmd.is_some() {
         format!(" Esc:close pane  {tab_keys}")
     } else {
-        format!(" q:quit  1-6:tab  r:refresh  {tab_keys}")
+        format!(" q:quit  1-7:tab  r:refresh  {tab_keys}")
     };
 
     let right_text = if let Some(ref cmd) = app.bg_cmd {

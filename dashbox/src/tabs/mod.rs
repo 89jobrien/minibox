@@ -2,6 +2,7 @@
 pub mod agents;
 pub mod bench;
 pub mod ci;
+pub mod diagrams;
 pub mod git;
 pub mod history;
 pub mod todos;
