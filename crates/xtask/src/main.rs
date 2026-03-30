@@ -1,3 +1,17 @@
+//! xtask — workspace dev-tool binary.
+//!
+//! Each module has one clear responsibility. Add new tasks by creating a new
+//! module and wiring it into the `match` below; do NOT grow existing modules
+//! beyond their stated scope.
+//!
+//! | Module      | Responsibility                                              |
+//! |-------------|-------------------------------------------------------------|
+//! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
+//! | `bench`     | Benchmark orchestration: local run, VPS run, diff, report  |
+//! | `flamegraph`| Profiling: samply (macOS) / cargo-flamegraph (Linux)        |
+//! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
+//! | `vm_image`  | VM image build: Alpine kernel + minibox agent (macOS/vz)    |
+
 use anyhow::{Result, bail};
 use std::{env, path::Path};
 use xshell::Shell;

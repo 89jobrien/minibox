@@ -2277,3 +2277,147 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         "streaming output must match the pipe payload"
     );
 }
+
+// ---------------------------------------------------------------------------
+// SIGTERM / process-group signal contract tests
+// ---------------------------------------------------------------------------
+
+/// `handle_stop` on a container whose PID is already dead succeeds immediately.
+///
+/// Documents the fast path: both the SIGTERM to the process group and the
+/// `kill(pid, None)` probe return `ESRCH`, so the poll loop exits on the first
+/// iteration and the container state transitions to "Stopped".
+///
+/// This is the common case for short-lived containers (e.g. `/bin/true`) that
+/// finish before `stop` is called.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_dead_pid_exits_immediately() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // PID 999_997 is virtually certain not to exist on any test host.
+    let container_id = "sigterm_dead_pid01".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/true".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(999_997),
+            },
+            pid: Some(999_997),
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    let before = tokio::time::Instant::now();
+    let response = handler::handle_stop(container_id.clone(), state.clone(), deps).await;
+    let elapsed = before.elapsed();
+
+    // Must succeed.
+    match response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("stopped"),
+                "expected 'stopped' in: {message}"
+            );
+        }
+        other => panic!("expected Success, got: {other:?}"),
+    }
+
+    // Must be fast — dead PID exits the poll loop on the first probe (≤250 ms
+    // sleep interval + small epsilon).  If this takes >1 s something is wrong.
+    assert!(
+        elapsed.as_secs() < 1,
+        "stop of dead PID took {}ms, expected <1s",
+        elapsed.as_millis()
+    );
+
+    let record = state
+        .get_container(&container_id)
+        .await
+        .expect("container still in state");
+    assert_eq!(record.info.state, "Stopped");
+}
+
+/// `handle_stop` on a container with no PID returns an error.
+///
+/// Documents the `record.pid.ok_or_else(...)` branch: a container in "Created"
+/// state that was never started has no PID and cannot be signalled.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_container_no_pid_returns_error() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "sigterm_nopid0001".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Created".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+        })
+        .await;
+
+    let response = handler::handle_stop(container_id, state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("no PID")
+                    || message.contains("not running")
+                    || message.contains("no pid"),
+                "expected a 'no PID' / 'not running' error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got: {other:?}"),
+    }
+}
+
+/// Stopping a non-existent container returns an error.
+///
+/// Documents the `ContainerNotFound` path in `stop_inner`: if the container ID
+/// has no record in state, the handler returns an `Error` response.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_unknown_container_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_stop("does_not_exist_xyz".to_string(), state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found")
+                    || message.contains("NotFound")
+                    || message.contains("does_not_exist"),
+                "expected a 'not found' error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got: {other:?}"),
+    }
+}

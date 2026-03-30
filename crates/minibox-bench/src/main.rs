@@ -1292,6 +1292,9 @@ fn run_suites(
             }
         }
 
+        // Snapshot error count before the suite so we can detect flakiness.
+        let errors_before_parallel = errors.len();
+
         let mut parallel_suite = SuiteResult {
             name: "parallel".to_string(),
             tests: Vec::new(),
@@ -1406,6 +1409,24 @@ fn run_suites(
                 );
             }
         }
+
+        // Flake detection: if more than half of the expected parallel
+        // iterations produced errors, surface a warning.  The threshold is
+        // 50% of (iters × 3 concurrency levels + 1 ps-under-load + 1
+        // parallel-exec) = iters × 5.  In practice any ratio >50% means the
+        // daemon is unstable under concurrency and results are not reliable.
+        let parallel_errors = errors.len().saturating_sub(errors_before_parallel);
+        let parallel_expected_iters = cfg.iters * 5; // 3 run levels + ps + exec
+        if parallel_errors * 2 > parallel_expected_iters {
+            eprintln!(
+                "warn: parallel suite flakiness detected: {} error(s) out of ~{} expected iterations (>{:.0}% failure rate)",
+                parallel_errors,
+                parallel_expected_iters,
+                100.0 * parallel_errors as f64 / parallel_expected_iters as f64,
+            );
+            eprintln!("warn: parallel bench results may not be reliable — check daemon health");
+        }
+
         suites.push(parallel_suite);
     }
 

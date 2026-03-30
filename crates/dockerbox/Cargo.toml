@@ -8,6 +8,10 @@ license.workspace = true
 name = "dockerboxd"
 path = "src/main.rs"
 
+[lib]
+name = "dockerbox"
+path = "src/lib.rs"
+
 [dependencies]
 minibox-client = { workspace = true }
 minibox-core   = { workspace = true }
@@ -26,3 +30,7 @@ tokio-stream   = { workspace = true }
 futures        = { workspace = true }
 chrono         = { workspace = true }
 base64         = { workspace = true }
+
+[dev-dependencies]
+tower            = { version = "0.5", features = ["util"] }
+http-body-util   = "0.1"
