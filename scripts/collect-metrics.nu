@@ -14,16 +14,16 @@ def parse-test-output [raw: string] {
         | where { |e| $e != null }
     )
 
-    let tests = ($events | where { |e| ($e | get -i type | default "") == "test" })
-    let ok      = ($tests | where { |e| ($e | get -i event | default "") == "ok"      } | length)
-    let failed  = ($tests | where { |e| ($e | get -i event | default "") == "failed"  } | length)
-    let ignored = ($tests | where { |e| ($e | get -i event | default "") == "ignored" } | length)
+    let tests = ($events | where { |e| ($e | get -o type | default "") == "test" })
+    let ok      = ($tests | where { |e| ($e | get -o event | default "") == "ok"      } | length)
+    let failed  = ($tests | where { |e| ($e | get -o event | default "") == "failed"  } | length)
+    let ignored = ($tests | where { |e| ($e | get -o event | default "") == "ignored" } | length)
     let total   = $ok + $failed + $ignored
 
     let failures = (
         $tests
-        | where { |e| ($e | get -i event | default "") == "failed" }
-        | get -i name
+        | where { |e| ($e | get -o event | default "") == "failed" }
+        | get -o name
         | default []
     )
 
@@ -58,14 +58,14 @@ def load-bench-summary [] {
 
     let data = (open $latest)
     $data.suites | each { |suite|
-        let valid = ($suite.tests | where { |t| ($t | get -i stats | is-not-empty) })
+        let valid = ($suite.tests | where { |t| ($t | get -o stats | is-not-empty) })
         {
             suite:  $suite.name
             tests:  ($suite.tests | length)
             with_stats: ($valid | length)
             avg_us: (
                 if ($valid | length) > 0 {
-                    $valid | each { |t| $t | get -i stats.avg | default 0.0 } | math avg | math round --precision 1
+                    $valid | each { |t| $t | get -o stats.avg | default 0.0 } | math avg | math round --precision 1
                 } else { null }
             )
         }
@@ -126,7 +126,7 @@ def main [
     let all_failures = (
         $results
         | each { |r|
-            let fs = ($r | get -i failures | default [])
+            let fs = ($r | get -o failures | default [])
             $fs | each { |f| $"($r.crate)::($f)" }
         }
         | flatten

@@ -16,8 +16,9 @@ def fmt-dur [secs: float] {
     }
 }
 
-def preview [text: string] {
-    let first = ($text | lines | first)
+def preview [text] {
+    let t = ($text | default "" | into string)
+    let first = ($t | lines | first | default "")
     if ($first | str length) > 40 {
         $"($first | str substring 0..40)…"
     } else {
@@ -50,48 +51,52 @@ def agents-summary [] {
     }
 
     print "=== Agent Summary ==="
-    $runs
-    | group-by script
-    | items { |script, entries|
-        let completed = ($entries | where status == "complete")
-        let avg_dur = if ($completed | length) > 0 {
-            $completed | get duration_s | math avg | math round --precision 1
-        } else { 0.0 }
-        let last_run = ($entries | sort-by run_id | last)
-        {
-            script: $script
-            runs: ($entries | length)
-            avg_s: $avg_dur
-            last_run: (fmt-ts $last_run.run_id)
-            last_output: (preview ($last_run | get -i output | default ""))
+    let summary = (
+        $runs
+        | group-by script
+        | items { |script, entries|
+            let completed = ($entries | where status == "complete")
+            let avg_dur = if ($completed | length) > 0 {
+                $completed | get duration_s | math avg | math round --precision 1
+            } else { 0.0 }
+            let last_run = ($entries | sort-by run_id | last)
+            {
+                script: $script
+                runs: ($entries | length)
+                avg_s: $avg_dur
+                last_run: (fmt-ts $last_run.run_id)
+                last_output: (preview ($last_run | get -o output | default ""))
+            }
         }
-    }
-    | sort-by script
-    | table
+        | sort-by script
+    )
+    print ($summary | table)
 
     print ""
     print "=== Recent Runs (last 20) ==="
-    $runs
-    | sort-by run_id
-    | last 20
-    | each { |r|
-        let status_str = match $r.status {
-            "complete" => "done"
-            "crash"    => "CRASH"
-            _          => "live"
+    let recent = (
+        $runs
+        | sort-by run_id
+        | last 20
+        | each { |r|
+            let status_str = match $r.status {
+                "complete" => "done"
+                "crash"    => "CRASH"
+                _          => "live"
+            }
+            let dur = if ($r | get -o duration_s | is-empty) { "" } else {
+                fmt-dur $r.duration_s
+            }
+            {
+                time:    (fmt-ts $r.run_id)
+                script:  $r.script
+                status:  $status_str
+                dur:     $dur
+                output:  (preview ($r | get -o output | default ""))
+            }
         }
-        let dur = if ($r | get -i duration_s | is-empty) { "" } else {
-            fmt-dur $r.duration_s
-        }
-        {
-            time:    (fmt-ts $r.run_id)
-            script:  $r.script
-            status:  $status_str
-            dur:     $dur
-            output:  (preview ($r | get -i output | default ""))
-        }
-    }
-    | table
+    )
+    print ($recent | table)
 }
 
 def bench-summary [] {
@@ -102,9 +107,9 @@ def bench-summary [] {
     }
 
     let latest = (open $latest_path)
-    let sha     = ($latest | get -i metadata.git_sha | default "?")
-    let host    = ($latest | get -i metadata.hostname  | default "?")
-    let ts      = ($latest | get -i metadata.timestamp | default "?" | str substring 0..19)
+    let sha     = ($latest | get -o metadata.git_sha | default "?")
+    let host    = ($latest | get -o metadata.hostname  | default "?")
+    let ts      = ($latest | get -o metadata.timestamp | default "?" | into string | str substring 0..19)
 
     print $"=== Benchmarks — ($sha | str substring 0..8) @ ($host) ($ts) ==="
 
@@ -112,22 +117,23 @@ def bench-summary [] {
         $latest.suites
         | each { |suite|
             $suite.tests | each { |t|
-                let avg = ($t | get -i stats.avg | default null)
-                let p95 = ($t | get -i stats.p95 | default null)
-                let unit = if $t.unit == "nanos" { "ns" } else { "µs" }
+                let avg  = ($t | get -o stats.avg | default null)
+                let p95  = ($t | get -o stats.p95 | default null)
+                let unit = ($t | get -o unit | default "µs")
+                let unit_str = if $unit == "nanos" { "ns" } else { "µs" }
                 {
                     suite: $suite.name
                     test:  $t.name
-                    avg:   (if $avg != null { $"($avg | math round)($unit)" } else { "-" })
-                    p95:   (if $p95 != null { $"($p95 | math round)($unit)" } else { "-" })
-                    iters: ($t | get -i iterations | default 0)
+                    avg:   (if $avg != null { $"($avg | math round)($unit_str)" } else { "-" })
+                    p95:   (if $p95 != null { $"($p95 | math round)($unit_str)" } else { "-" })
+                    iters: ($t | get -o iterations | default 0)
                 }
             }
         }
         | flatten
     )
 
-    $rows | table
+    print ($rows | table)
 
     # Storage stats
     let jsonl = "bench/results/bench.jsonl"
