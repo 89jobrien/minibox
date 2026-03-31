@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## dockerbox — Docker API Shim
+
+`crates/dockerbox` — HTTP-over-Unix-socket shim that translates Docker API calls to minibox protocol.
+- Binary: `dockerboxd`; socket at `/run/dockerbox/dockerbox.sock` (`DOCKERBOX_SOCKET` overrides)
+- Upstream minibox socket: `MINIBOX_SOCKET` (default `/run/minibox/minibox.sock`)
+- **ID translation**: minibox uses 16-char hex IDs; Docker expects 64. `to_docker_id` pads with trailing zeros.
+- **create/start**: minibox starts containers at `Run` time — `start_container` is intentionally a no-op.
+- **Log streaming**: stub only — minibox has no attach-to-existing-container support yet.
+- Networks/volumes: in-memory stubs; volumes map to `$HOME/.local/share/dockerbox/volumes/{name}/`.
+
 ## Project Overview
 
 Minibox is a Docker-like container runtime written in Rust featuring daemon/client architecture, OCI image pulling from Docker Hub, Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem support.

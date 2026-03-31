@@ -15,22 +15,22 @@ adapters and has zero platform-specific code.
 ## ASCII
 
 ```
-╔══════════════════════════════════════════════════════════════════╗
-║               COMPOSITION ROOTS  (driving side)                  ║
-║  miniboxd/main.rs        macbox::start()      winbox::start()    ║
-╠══════════════════════════════════════════════════════════════════╣
+╔═══════════════════════════════════════════════════════════════════╗
+║               COMPOSITION ROOTS  (driving side)                   ║
+║  miniboxd/main.rs        macbox::start()      winbox::start()     ║
+╠═══════════════════════════════════════════════════════════════════╣
 ║                     APPLICATION CORE                              ║
 ║                         daemonbox                                 ║
-║               handler.rs   state.rs   server.rs                  ║
-║          (depends only on domain port traits — no cfg blocks)    ║
-╠══════════════════════════════════════════════════════════════════╣
+║               handler.rs   state.rs   server.rs                   ║
+║          (depends only on domain port traits — no cfg blocks)     ║
+╠═══════════════════════════════════════════════════════════════════╣
 ║                     DOMAIN PORTS                                  ║
-║               mbx/src/domain.rs                           ║
+║               mbx/src/domain.rs                              ║
 ║    ContainerRuntime   FilesystemProvider                          ║
 ║    ImageRegistry      ResourceLimiter                             ║
-╠══════════════════════════════════════════════════════════════════╣
+╠═══════════════════════════════════════════════════════════════════╣
 ║                     DRIVEN ADAPTERS                               ║
-║              mbx/src/adapters/                            ║
+║              mbx/src/adapters/                               ║
 ║                                                                   ║
 ║  Linux:    LinuxNamespaceRuntime  OverlayFilesystem               ║
 ║            CgroupV2Limiter        DockerHubRegistry               ║
@@ -42,7 +42,7 @@ adapters and has zero platform-specific code.
 ║  Windows:  HcsRuntime   HcsFilesystem   HcsRegistry               ║
 ║            JobObjectLimiter                                       ║
 ║            Wsl2Runtime  Wsl2Filesystem  Wsl2Registry              ║
-╚══════════════════════════════════════════════════════════════════╝
+╚═══════════════════════════════════════════════════════════════════╝
 ```
 
 ## Mermaid

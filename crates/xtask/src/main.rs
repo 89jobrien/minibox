@@ -57,6 +57,7 @@ fn main() -> Result<()> {
             bench::bench_diff(&extra)
         }
         Some("bench-report") => bench::bench_report(),
+        Some("bench-sync") => bench::bench_sync(),
         Some("flamegraph") => {
             let extra: Vec<String> = env::args().skip(2).collect();
             flamegraph::flamegraph(&sh, &extra)
@@ -83,7 +84,10 @@ fn main() -> Result<()> {
                 "  bench-vps        run benchmark on VPS, append to bench/results/bench.jsonl"
             );
             eprintln!("  bench-diff       diff two bench JSON files (default: HEAD vs previous)");
-            eprintln!("  bench-report     generate HTML report from bench/results/bench.jsonl");
+            eprintln!(
+                "  bench-report     generate HTML report from bench/results/bench.jsonl
+  bench-sync       rsync VPS bench.jsonl and merge new entries locally"
+            );
             eprintln!(
                 "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
             );

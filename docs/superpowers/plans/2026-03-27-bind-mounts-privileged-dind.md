@@ -12,25 +12,26 @@
 
 ## File Map
 
-| Action | File |
-|--------|------|
-| Modify | `crates/minibox-core/src/domain.rs` |
-| Modify | `crates/minibox-core/src/protocol.rs` |
-| Modify | `crates/linuxbox/src/container/filesystem.rs` |
-| Modify | `crates/linuxbox/src/container/process.rs` |
-| Modify | `crates/linuxbox/src/adapters/runtime.rs` |
-| Modify | `crates/daemonbox/src/handler.rs` |
-| Modify | `crates/daemonbox/src/server.rs` |
-| Modify | `crates/linuxbox/src/adapters/colima.rs` |
-| Modify | `crates/minibox-cli/src/main.rs` |
+| Action | File                                     |
+| ------ | ---------------------------------------- |
+| Modify | `crates/minibox-core/src/domain.rs`      |
+| Modify | `crates/minibox-core/src/protocol.rs`    |
+| Modify | `crates/mbx/src/container/filesystem.rs` |
+| Modify | `crates/mbx/src/container/process.rs`    |
+| Modify | `crates/mbx/src/adapters/runtime.rs`     |
+| Modify | `crates/daemonbox/src/handler.rs`        |
+| Modify | `crates/daemonbox/src/server.rs`         |
+| Modify | `crates/mbx/src/adapters/colima.rs`      |
+| Modify | `crates/minibox-cli/src/main.rs`         |
 | Modify | `crates/minibox-cli/src/commands/run.rs` |
-| Modify | `Justfile` |
+| Modify | `Justfile`                               |
 
 ---
 
 ## Task 1: `BindMount` type in `domain.rs` + protocol fields
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 - Modify: `crates/minibox-core/src/protocol.rs`
 
@@ -192,6 +193,7 @@ git commit -m "feat(protocol): add BindMount type and mounts/privileged to Daemo
 ## Task 2: `ContainerSpawnConfig` fields in `domain.rs`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 
 - [ ] **Step 1: Add fields to `ContainerSpawnConfig`**
@@ -247,7 +249,8 @@ git commit -m "feat(domain): add mounts and privileged fields to ContainerSpawnC
 ## Task 3: `apply_bind_mounts` in `filesystem.rs`
 
 **Files:**
-- Modify: `crates/linuxbox/src/container/filesystem.rs`
+
+- Modify: `crates/mbx/src/container/filesystem.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -256,7 +259,7 @@ Add to the `#[cfg(test)]` block at the bottom of `filesystem.rs`:
 ```rust
 // ── apply_bind_mounts ────────────────────────────────────────────────────
 // These tests require Linux (MS_BIND is Linux-only) and root.
-// Run with: sudo cargo test -p linuxbox container::filesystem::tests::bind_mount
+// Run with: sudo cargo test -p mbx container::filesystem::tests::bind_mount
 
 #[cfg(target_os = "linux")]
 mod bind_mount_tests {
@@ -359,7 +362,7 @@ mod bind_mount_tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p linuxbox container::filesystem::tests::bind_mount 2>&1 | head -10
+cargo test -p mbx container::filesystem::tests::bind_mount 2>&1 | head -10
 ```
 
 Expected: compile error — `apply_bind_mounts` and `cleanup_bind_mounts` not found.
@@ -509,7 +512,7 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
 - [ ] **Step 4: Run tests**
 
 ```bash
-sudo cargo test -p linuxbox container::filesystem::tests::bind_mount -- --nocapture 2>&1 | tail -15
+sudo cargo test -p mbx container::filesystem::tests::bind_mount -- --nocapture 2>&1 | tail -15
 ```
 
 Expected: `apply_bind_mounts_mounts_directory`, `apply_bind_mounts_read_only`, `apply_bind_mounts_creates_target_dir` pass; `apply_bind_mounts_nonexistent_host_path_fails` passes.
@@ -517,7 +520,7 @@ Expected: `apply_bind_mounts_mounts_directory`, `apply_bind_mounts_read_only`, `
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/src/container/filesystem.rs
+git add crates/mbx/src/container/filesystem.rs
 git commit -m "feat(filesystem): add apply_bind_mounts and cleanup_bind_mounts"
 ```
 
@@ -526,7 +529,8 @@ git commit -m "feat(filesystem): add apply_bind_mounts and cleanup_bind_mounts"
 ## Task 4: `ContainerConfig` fields + `apply_full_capabilities` in `process.rs`
 
 **Files:**
-- Modify: `crates/linuxbox/src/container/process.rs`
+
+- Modify: `crates/mbx/src/container/process.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -580,7 +584,7 @@ mod tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p linuxbox container::process::tests 2>&1 | head -10
+cargo test -p mbx container::process::tests 2>&1 | head -10
 ```
 
 Expected: compile error — `mounts` and `privileged` fields not found in `ContainerConfig`.
@@ -758,7 +762,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
 - [ ] **Step 6: Run tests**
 
 ```bash
-cargo test -p linuxbox container::process::tests 2>&1 | tail -10
+cargo test -p mbx container::process::tests 2>&1 | tail -10
 ```
 
 Expected: both new tests pass.
@@ -766,7 +770,7 @@ Expected: both new tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/linuxbox/src/container/process.rs
+git add crates/mbx/src/container/process.rs
 git commit -m "feat(process): add mounts/privileged to ContainerConfig; apply bind mounts and capset in child_init"
 ```
 
@@ -775,7 +779,8 @@ git commit -m "feat(process): add mounts/privileged to ContainerConfig; apply bi
 ## Task 5: Wire `mounts` and `privileged` through `LinuxNamespaceRuntime`
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/runtime.rs`
+
+- Modify: `crates/mbx/src/adapters/runtime.rs`
 
 - [ ] **Step 1: Write a test**
 
@@ -832,7 +837,7 @@ fn spawn_config_fields_map_to_container_config() {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cargo test -p linuxbox adapters::runtime::tests 2>&1 | head -10
+cargo test -p mbx adapters::runtime::tests 2>&1 | head -10
 ```
 
 Expected: compile error — `ContainerConfig` missing `mounts` and `privileged` (fixed in Task 4), or `ContainerSpawnConfig` missing fields (fixed in Task 2).
@@ -860,7 +865,7 @@ let container_config = ContainerConfig {
 - [ ] **Step 4: Run test**
 
 ```bash
-cargo test -p linuxbox adapters::runtime::tests 2>&1 | tail -5
+cargo test -p mbx adapters::runtime::tests 2>&1 | tail -5
 ```
 
 Expected: `spawn_config_fields_map_to_container_config` passes.
@@ -868,7 +873,7 @@ Expected: `spawn_config_fields_map_to_container_config` passes.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/runtime.rs
+git add crates/mbx/src/adapters/runtime.rs
 git commit -m "feat(runtime): wire mounts and privileged from ContainerSpawnConfig to ContainerConfig"
 ```
 
@@ -877,6 +882,7 @@ git commit -m "feat(runtime): wire mounts and privileged from ContainerSpawnConf
 ## Task 6: Wire `mounts` and `privileged` through `handler.rs` and `server.rs`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 
@@ -1140,7 +1146,8 @@ git commit -m "feat(handler): wire mounts and privileged through handle_run, run
 ## Task 7: Colima adapter — Lima path validation + bind mounts in spawn script
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/colima.rs`
+
+- Modify: `crates/mbx/src/adapters/colima.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -1226,7 +1233,7 @@ mod bind_mount_tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p linuxbox adapters::colima::bind_mount_tests 2>&1 | head -10
+cargo test -p mbx adapters::colima::bind_mount_tests 2>&1 | head -10
 ```
 
 Expected: compile error — `validate_lima_paths` and `bind_mount_shell_snippet` not found.
@@ -1320,6 +1327,7 @@ let privileged_flag = if config.privileged { "--keep-caps" } else { "" };
 Then update both spawn_script strings to include the bind mount commands and privileged flag:
 
 **Streaming spawn_script:**
+
 ```rust
 let spawn_script = format!(
     r#"ROOTFS={rootfs}
@@ -1334,6 +1342,7 @@ exec sudo unshare --pid --mount --uts --ipc --net {privileged_flag} \
 ```
 
 **Background spawn_script:**
+
 ```rust
 let spawn_script = format!(
     r#"
@@ -1354,7 +1363,7 @@ let spawn_script = format!(
 - [ ] **Step 5: Run tests**
 
 ```bash
-cargo test -p linuxbox adapters::colima::bind_mount_tests 2>&1 | tail -10
+cargo test -p mbx adapters::colima::bind_mount_tests 2>&1 | tail -10
 ```
 
 Expected: all 6 tests pass.
@@ -1368,7 +1377,7 @@ cargo check --workspace 2>&1 | tail -5
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/colima.rs
+git add crates/mbx/src/adapters/colima.rs
 git commit -m "feat(colima): add Lima path validation and bind mount injection into spawn script"
 ```
 
@@ -1377,6 +1386,7 @@ git commit -m "feat(colima): add Lima path validation and bind mount injection i
 ## Task 8: CLI — `--privileged`, `-v`, `--mount` flags
 
 **Files:**
+
 - Modify: `crates/minibox-cli/src/main.rs`
 - Modify: `crates/minibox-cli/src/commands/run.rs`
 
@@ -1747,6 +1757,7 @@ git commit -m "feat(cli): add --privileged, -v/--volume, --mount flags to minibo
 ## Task 9: `just build-linux` recipe and updated `just trace`
 
 **Files:**
+
 - Modify: `Justfile`
 
 - [ ] **Step 1: Verify musl target is available**
@@ -1891,21 +1902,21 @@ After completing all tasks, verify:
 
 ## Spec Coverage Check
 
-| Spec section | Covered by task |
-|---|---|
-| `BindMount` type in protocol | Task 1 |
-| `mounts` + `privileged` in `DaemonRequest::Run` | Task 1 |
-| `ContainerSpawnConfig` fields | Task 2 |
-| `apply_bind_mounts` in `filesystem.rs` | Task 3 |
-| `ContainerConfig` + `apply_full_capabilities` | Task 4 |
-| `LinuxNamespaceRuntime` wiring | Task 5 |
-| Handler wiring | Task 6 |
-| Lima path validation | Task 7 |
-| Colima bind mounts in spawn script | Task 7 |
-| CLI `--privileged`, `-v`, `--mount` | Task 8 |
-| `just build-linux` | Task 9 |
-| Updated `just trace` (macOS + Linux) | Task 9 |
-| Error: host path does not exist | Task 3 (test), Task 8 (CLI parse) |
-| Error: host path outside Lima dirs | Task 7 (test + impl) |
-| Error: relative `dst` | Task 8 (test + impl) |
-| Cleanup on partial bind mount failure | Task 3 (impl) |
+| Spec section                                    | Covered by task                   |
+| ----------------------------------------------- | --------------------------------- |
+| `BindMount` type in protocol                    | Task 1                            |
+| `mounts` + `privileged` in `DaemonRequest::Run` | Task 1                            |
+| `ContainerSpawnConfig` fields                   | Task 2                            |
+| `apply_bind_mounts` in `filesystem.rs`          | Task 3                            |
+| `ContainerConfig` + `apply_full_capabilities`   | Task 4                            |
+| `LinuxNamespaceRuntime` wiring                  | Task 5                            |
+| Handler wiring                                  | Task 6                            |
+| Lima path validation                            | Task 7                            |
+| Colima bind mounts in spawn script              | Task 7                            |
+| CLI `--privileged`, `-v`, `--mount`             | Task 8                            |
+| `just build-linux`                              | Task 9                            |
+| Updated `just trace` (macOS + Linux)            | Task 9                            |
+| Error: host path does not exist                 | Task 3 (test), Task 8 (CLI parse) |
+| Error: host path outside Lima dirs              | Task 7 (test + impl)              |
+| Error: relative `dst`                           | Task 8 (test + impl)              |
+| Cleanup on partial bind mount failure           | Task 3 (impl)                     |

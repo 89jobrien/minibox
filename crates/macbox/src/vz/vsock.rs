@@ -228,11 +228,12 @@ mod imp {
 
 #[cfg(not(all(target_os = "macos", feature = "vz")))]
 mod imp {
+    use crate::vz::vm::VzVm;
     use anyhow::{Result, bail};
     use tokio::net::UnixStream;
 
     /// Stub: always returns an error on non-macOS / non-vz builds.
-    pub async fn connect_to_agent(_max_attempts: u32) -> Result<UnixStream> {
+    pub async fn connect_to_agent(_vm: &VzVm, _max_attempts: u32) -> Result<UnixStream> {
         bail!("vsock::connect_to_agent requires macOS + the `vz` feature")
     }
 }

@@ -5,6 +5,7 @@
 **Goal:** Build a four-phase integration enabling dagu workflow engine to orchestrate minibox containers with real-time output streaming and resource limits.
 
 **Architecture:**
+
 - Phase 1: Build `dagu:minibox` container image with pre-installed plugin
 - Phase 2: Extract socket communication into reusable `minibox-client` library
 - Phase 3: Create `mbxctl` HTTP controller wrapping the client
@@ -21,6 +22,7 @@
 ### Task 1: Create mbx-dagu Repository Structure
 
 **Files:**
+
 - Create: `mbx-dagu/Dockerfile`
 - Create: `mbx-dagu/dagu-config.yaml`
 - Create: `mbx-dagu/go.mod`
@@ -134,6 +136,7 @@ git commit -m "build: initialize mbx-dagu repo with Dockerfile and config"
 ### Task 2: Create Empty Go Plugin Entry Point
 
 **Files:**
+
 - Create: `mbx-dagu/cmd/plugin/main.go`
 - Create: `mbx-dagu/executor/executor.go`
 - Create: `mbx-dagu/executor/models.go`
@@ -235,6 +238,7 @@ git commit -m "feat(plugin): add Go plugin entry point and executor skeleton"
 ### Task 3: Build and Test Docker Image
 
 **Files:**
+
 - Modify: `mbx-dagu/.github/workflows/build.yml` (if using GHA)
 
 - [ ] **Step 1: Build Docker image locally**
@@ -298,6 +302,7 @@ git commit -m "build: docker image builds and runs successfully"
 ### Task 4: Create minibox-client Crate Structure
 
 **Files:**
+
 - Create: `crates/minibox-client/Cargo.toml`
 - Create: `crates/minibox-client/src/lib.rs`
 - Create: `crates/minibox-client/src/error.rs`
@@ -323,7 +328,7 @@ rust-version.workspace = true
 [dependencies]
 tokio = { workspace = true, features = ["net", "io-util"] }
 serde_json = { workspace = true }
-linuxbox = { workspace = true }
+mbx = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 base64 = { workspace = true }
@@ -379,7 +384,7 @@ pub mod socket;
 pub use error::{ClientError, Result};
 pub use socket::{DaemonClient, DaemonResponseStream};
 
-use linuxbox::protocol::DAEMON_SOCKET_PATH;
+use mbx::protocol::DAEMON_SOCKET_PATH;
 use std::path::PathBuf;
 
 pub fn default_socket_path() -> PathBuf {
@@ -405,7 +410,7 @@ mod tests {
 
 ```rust
 use crate::error::{ClientError, Result};
-use linuxbox::protocol::{DaemonRequest, DaemonResponse, decode_response};
+use mbx::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -523,6 +528,7 @@ git commit -m "feat: add minibox-client library with Unix socket communication"
 ### Task 5: Refactor minibox-cli to Use minibox-client
 
 **Files:**
+
 - Modify: `crates/minibox-cli/Cargo.toml`
 - Modify: `crates/minibox-cli/src/commands/mod.rs`
 - Modify: `crates/minibox-cli/src/commands/run.rs`
@@ -634,6 +640,7 @@ git commit -m "refactor(cli): use minibox-client library for socket communicatio
 ### Task 6: Create mbxctl Crate Structure
 
 **Files:**
+
 - Create: `mbxctl/Cargo.toml`
 - Create: `mbxctl/src/main.rs`
 - Create: `mbxctl/src/server.rs`
@@ -671,7 +678,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 minibox-client = { path = "../minibox/crates/minibox-client" }
-linuxbox = { path = "../minibox/crates/linuxbox" }
+mbx = { path = "../minibox/crates/mbx" }
 futures = "0.3"
 
 [dev-dependencies]
@@ -914,6 +921,7 @@ git commit -m "feat: initialize mbxctl HTTP server skeleton"
 ### Task 7: Implement Job Creation and HTTP Endpoints
 
 **Files:**
+
 - Modify: `mbxctl/src/adapters/jobs.rs`
 - Modify: `mbxctl/src/server.rs`
 
@@ -922,7 +930,7 @@ git commit -m "feat: initialize mbxctl HTTP server skeleton"
 ```rust
 use crate::error::{ControllerError, Result};
 use crate::models::{CreateJobRequest, JobStatus};
-use linuxbox::protocol::DaemonRequest;
+use mbx::protocol::DaemonRequest;
 use minibox_client::DaemonClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -962,8 +970,8 @@ impl JobAdapter {
             match stream.next().await
                 .map_err(|e| ControllerError::Internal(e.to_string()))?
             {
-                Some(linuxbox::protocol::DaemonResponse::ContainerCreated { id }) => break id,
-                Some(linuxbox::protocol::DaemonResponse::Error { message }) => {
+                Some(mbx::protocol::DaemonResponse::ContainerCreated { id }) => break id,
+                Some(mbx::protocol::DaemonResponse::Error { message }) => {
                     return Err(ControllerError::ContainerFailed { message });
                 }
                 _ => continue,
@@ -1118,12 +1126,14 @@ git commit -m "feat: implement job creation and HTTP endpoints (create_job, get_
 ### Task 8: Complete Streaming and Timeout Support
 
 **Files:**
+
 - Modify: `mbxctl/src/adapters/jobs.rs`
 - Modify: `mbxctl/src/server.rs`
 
 (Due to length, implementation would follow same pattern as Task 7 with streaming, SSE, timeout enforcement using `tokio::time::timeout`)
 
 **Simplification for Plan**: These are complex but follow established patterns. Core logic:
+
 - Use `tokio::time::timeout()` to enforce timeout
 - Stream `ContainerOutput` as Server-Sent Events
 - Return `CompletedEvent` when container stops
@@ -1131,6 +1141,7 @@ git commit -m "feat: implement job creation and HTTP endpoints (create_job, get_
 - [ ] **Step N: Write streaming logic (pseudocode)**
 
 Each `ContainerOutput` from daemon becomes SSE event:
+
 ```
 data: {"stream":"stdout","data":"base64...","timestamp":"..."}
 ```
@@ -1146,6 +1157,7 @@ git commit -m "feat: add log streaming (SSE) and timeout enforcement"
 ### Task 9: Create Installation Script
 
 **Files:**
+
 - Create: `mbxctl/install.sh`
 
 - [ ] **Step 1: Write install.sh**
@@ -1223,6 +1235,7 @@ git commit -m "build: add installation script for mbxctl"
 ### Task 10: Implement Go Plugin Executor Logic
 
 **Files:**
+
 - Modify: `mbx-dagu/executor/executor.go`
 - Create: `mbx-dagu/executor/http_client.go`
 - Modify: `mbx-dagu/cmd/plugin/main.go`
@@ -1508,6 +1521,7 @@ git commit -m "feat: implement complete Go executor plugin for dagu"
 ### Task 11: End-to-End Testing
 
 **Files:**
+
 - Create: `mbx-dagu/tests/e2e_test.go`
 
 - [ ] **Step 1: Write E2E test setup**
@@ -1575,6 +1589,7 @@ git commit -m "test: add end-to-end integration test for executor plugin"
 ### Task 12: Build Final Docker Image
 
 **Files:**
+
 - (No new files; rebuild existing Dockerfile)
 
 - [ ] **Step 1: Build image with complete plugin**
@@ -1659,6 +1674,7 @@ From Web UI, create a DAG with `executor: minibox` step, run it.
 - [ ] **Step 6: Verify output**
 
 Check that:
+
 - Step runs in container
 - Output appears in UI
 - Exit code is captured
@@ -1674,12 +1690,12 @@ git commit -m "test: verify full stack integration (dagu+minibox+mbxctl)"
 
 ## Testing Summary
 
-| Phase | Unit Tests | Integration | E2E |
-|-------|-----------|---|---|
-| 1 | ✅ Docker build | ✅ Image runs | ✅ Web UI |
-| 2 | ✅ Socket parsing | ✅ Real daemon | ❌ CLI tests pass |
-| 3 | ✅ HTTP handlers | ✅ Real daemon | ✅ API works |
-| 4 | ✅ Parser | ✅ Real daemon | ✅ DAG runs |
+| Phase | Unit Tests        | Integration    | E2E               |
+| ----- | ----------------- | -------------- | ----------------- |
+| 1     | ✅ Docker build   | ✅ Image runs  | ✅ Web UI         |
+| 2     | ✅ Socket parsing | ✅ Real daemon | ❌ CLI tests pass |
+| 3     | ✅ HTTP handlers  | ✅ Real daemon | ✅ API works      |
+| 4     | ✅ Parser         | ✅ Real daemon | ✅ DAG runs       |
 
 ---
 

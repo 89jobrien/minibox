@@ -31,10 +31,74 @@
 //! 8. Gracefully shut down on SIGTERM / SIGINT.
 
 // ── macOS ─────────────────────────────────────────────────────────────────
+//
+// VZ.framework (Tahoe/macOS 26+) asserts that VZVirtualMachineConfiguration
+// and VZVirtualMachine are constructed on the GCD main queue. `#[tokio::main]`
+// parks the main thread inside the tokio scheduler, so `dispatch_sync` to
+// the main queue from any worker thread deadlocks.
+//
+// Fix: build the tokio runtime on a background thread, keep the main thread
+// free, then call `dispatch_main()` to spin the GCD main-queue runloop.
+// When tokio finishes it queues `std::process::exit` onto the main queue.
+//
+// No new crate deps — `dispatch_main`, `dispatch_get_main_queue`, and
+// `dispatch_async_f` are all in libSystem which is always linked on macOS.
 #[cfg(target_os = "macos")]
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    macbox::start().await
+fn main() {
+    // `dispatch_get_main_queue()` is a C macro that expands to `&_dispatch_main_q`.
+    // We link the real exported symbols directly; libdispatch is a sub-library of
+    // libSystem and is always present on macOS.
+    #[link(name = "System", kind = "dylib")]
+    unsafe extern "C" {
+        static _dispatch_main_q: std::ffi::c_void;
+        fn dispatch_async_f(
+            queue: *const std::ffi::c_void,
+            context: *mut std::ffi::c_void,
+            work: unsafe extern "C" fn(*mut std::ffi::c_void),
+        );
+        fn dispatch_main() -> !;
+    }
+
+    // Trampoline: receives a heap-allocated i32 exit code and calls process::exit.
+    // SAFETY: ctx is a valid Box<i32> allocated below; called exactly once by GCD.
+    unsafe extern "C" fn exit_trampoline(ctx: *mut std::ffi::c_void) {
+        // SAFETY: ctx was created via Box::into_raw(Box::new(code)) below.
+        let code = unsafe { *Box::from_raw(ctx as *mut i32) };
+        std::process::exit(code);
+    }
+
+    std::thread::Builder::new()
+        .name("tokio-main".into())
+        .spawn(move || {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build tokio runtime");
+            let code = match rt.block_on(macbox::start()) {
+                Ok(()) => 0i32,
+                Err(e) => {
+                    eprintln!("miniboxd: fatal: {e:#}");
+                    1
+                }
+            };
+            // Queue process::exit onto the GCD main queue, which unblocks dispatch_main().
+            // SAFETY: dispatch_get_main_queue returns a valid non-null queue;
+            // exit_trampoline receives ownership of the Box<i32> and frees it.
+            // SAFETY: _dispatch_main_q is a valid dispatch queue; ctx is a
+            // heap-allocated i32 owned by exit_trampoline.
+            unsafe {
+                let ctx = Box::into_raw(Box::new(code)) as *mut std::ffi::c_void;
+                dispatch_async_f(&_dispatch_main_q, ctx, exit_trampoline);
+            }
+        })
+        .expect("failed to spawn tokio-main thread");
+
+    // Hand the main thread to the GCD runloop. VZ.framework dispatch_sync calls
+    // from the tokio thread will be served here. Never returns — process exits
+    // via exit_trampoline above.
+    // SAFETY: dispatch_main() is the documented entry point for GCD-based CLI
+    // processes on macOS. It does not return.
+    unsafe { dispatch_main() }
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────

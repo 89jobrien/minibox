@@ -62,17 +62,17 @@ flowchart LR
 ## ASCII (fallback)
 
 ```text
-┌─────────────┐  [linux]  ┌───────────────┐
+┌─────────────┐  [linux]  ┌────────────┐
 │             ├──────────►│  mbx  │
-│             │  [linux]  └───────────────┘
+│             │  [linux]  └────────────┘
 │             ├──────────►  nix
-│  miniboxd   │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
+│  miniboxd   │           ┌───────────────┐  ┌────────────┐  ┌────────────┐
 │  (unified   │  [macos]  │    macbox     ├─►│ daemonbox  ├─►│  mbx  │
-│   binary)   ├──────────►│               ├─►└────────────┘  └───────────────┘
+│   binary)   ├──────────►│               ├─►└────────────┘  └────────────┘
 │             │           └───────────────┘
-│             │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
+│             │           ┌───────────────┐  ┌────────────┐  ┌────────────┐
 │             │  [win]    │    winbox     ├─►│ daemonbox  ├─►│  mbx  │
-│             ├──────────►│               ├─►└────────────┘  └───────────────┘
+│             ├──────────►│               ├─►└────────────┘  └────────────┘
 └─────────────┘           └───────────────┘
 
 ┌─────────────────┐
@@ -102,6 +102,3 @@ cargo run -p minibox-cli -- --help
 ```
 
 For more detailed usage, flags, and configuration examples, see the individual crate READMEs under `crates/`.
-```
-
-Want a second `README-slides.md` variant with a darker background‑friendly Mermaid theme for your slide generator?

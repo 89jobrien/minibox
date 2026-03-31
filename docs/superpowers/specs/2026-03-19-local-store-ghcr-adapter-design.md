@@ -23,12 +23,12 @@ These are the implementation prerequisites for the containerized CI execution ph
 [REGISTRY/]NAMESPACE/NAME[:TAG]
 ```
 
-| Component  | Default        | Example               |
-| ---------- | -------------- | --------------------- |
-| `REGISTRY` | `docker.io`    | `ghcr.io`             |
-| `NAMESPACE`| `library`      | `org` or `library`    |
-| `NAME`     | (required)     | `alpine`, `minibox-rust-ci` |
-| `TAG`      | `latest`       | `stable`, `1.88`      |
+| Component   | Default     | Example                     |
+| ----------- | ----------- | --------------------------- |
+| `REGISTRY`  | `docker.io` | `ghcr.io`                   |
+| `NAMESPACE` | `library`   | `org` or `library`          |
+| `NAME`      | (required)  | `alpine`, `minibox-rust-ci` |
+| `TAG`       | `latest`    | `stable`, `1.88`            |
 
 ### Parsing rules
 
@@ -41,7 +41,7 @@ A reference containing a `.` or `:` in the first path component is treated as a 
 
 ### Implementation
 
-A new `ImageRef` type in `crates/linuxbox/src/image/reference.rs`:
+A new `ImageRef` type in `crates/mbx/src/image/reference.rs`:
 
 ```rust
 pub struct ImageRef {
@@ -114,10 +114,10 @@ Registry hostname and full namespace are included in the path:
 
 ### Affected modules
 
-- `crates/linuxbox/src/image/reference.rs` — new `ImageRef` type (see above)
-- `crates/linuxbox/src/adapters/registry.rs` — `DockerHubRegistry`: use `ImageRef::cache_path()` for layer extraction paths; update `data_dir` resolution logic
-- `crates/linuxbox/src/image/` — layer extraction paths use resolved `data_dir`
-- `crates/linuxbox/src/preflight.rs` — doctor check reports active data dir
+- `crates/mbx/src/image/reference.rs` — new `ImageRef` type (see above)
+- `crates/mbx/src/adapters/registry.rs` — `DockerHubRegistry`: use `ImageRef::cache_path()` for layer extraction paths; update `data_dir` resolution logic
+- `crates/mbx/src/image/` — layer extraction paths use resolved `data_dir`
+- `crates/mbx/src/preflight.rs` — doctor check reports active data dir
 
 ---
 
@@ -131,13 +131,13 @@ Pre-baked CI images will be published to `ghcr.io`. Minibox needs to pull from g
 
 `ghcr.io` implements the OCI Distribution Spec (same as Docker Hub v2). The only differences from `DockerHubRegistry` are:
 
-|                     | DockerHubRegistry           | GhcrRegistry                    |
-| ------------------- | --------------------------- | ------------------------------- |
-| Registry base URL   | `registry-1.docker.io`      | `ghcr.io`                       |
-| Auth endpoint       | `auth.docker.io/token`      | Parsed from `WWW-Authenticate`  |
-| Anonymous pulls     | Yes (public images)         | Yes (public images)             |
-| Authenticated pulls | Not implemented             | `GHCR_TOKEN` env var            |
-| Token scope         | `repository:pull`           | `repository:read`               |
+|                     | DockerHubRegistry      | GhcrRegistry                   |
+| ------------------- | ---------------------- | ------------------------------ |
+| Registry base URL   | `registry-1.docker.io` | `ghcr.io`                      |
+| Auth endpoint       | `auth.docker.io/token` | Parsed from `WWW-Authenticate` |
+| Anonymous pulls     | Yes (public images)    | Yes (public images)            |
+| Authenticated pulls | Not implemented        | `GHCR_TOKEN` env var           |
+| Token scope         | `repository:pull`      | `repository:read`              |
 
 ### Auth flow
 
@@ -179,7 +179,7 @@ Both `DockerHubRegistry` and `GhcrRegistry` are initialized unconditionally at d
 
 ### Implementation
 
-New file: `crates/linuxbox/src/adapters/ghcr.rs`
+New file: `crates/mbx/src/adapters/ghcr.rs`
 
 ```rust
 pub struct GhcrRegistry {
@@ -189,12 +189,12 @@ pub struct GhcrRegistry {
 }
 ```
 
-Implements `ImageRegistry` trait. Shares layer extraction, manifest parsing, and digest verification with `DockerHubRegistry` — these live in `crates/linuxbox/src/image/` and are registry-agnostic.
+Implements `ImageRegistry` trait. Shares layer extraction, manifest parsing, and digest verification with `DockerHubRegistry` — these live in `crates/mbx/src/image/` and are registry-agnostic.
 
 ### Affected modules
 
-- `crates/linuxbox/src/adapters/ghcr.rs` — new file
-- `crates/linuxbox/src/adapters/mod.rs` — export `GhcrRegistry`
+- `crates/mbx/src/adapters/ghcr.rs` — new file
+- `crates/mbx/src/adapters/mod.rs` — export `GhcrRegistry`
 - `crates/miniboxd/src/main.rs` — initialize both registries at startup
 - `crates/miniboxd/src/handler.rs` — add `select_registry()`, update all image operations to call it
 
@@ -224,7 +224,7 @@ When `ephemeral: true`, the daemon deletes the container's overlay upper dir and
 
 ### New message types
 
-Added to `crates/linuxbox/src/protocol.rs`:
+Added to `crates/mbx/src/protocol.rs`:
 
 ```rust
 #[serde(tag = "type")]
@@ -268,7 +268,7 @@ All messages are newline-delimited JSON over the existing Unix socket, consisten
 
 ### Implementation
 
-- `crates/linuxbox/src/container/process.rs` — pipe child stdout/stderr to a pair of `UnixStream` handles; spawn two reader tasks that send `ContainerOutput` messages to the client connection
+- `crates/mbx/src/container/process.rs` — pipe child stdout/stderr to a pair of `UnixStream` handles; spawn two reader tasks that send `ContainerOutput` messages to the client connection
 - `crates/miniboxd/src/handler.rs` — `handle_run`: after spawning container, enter read loop sending `ContainerOutput` until process exits, then send `ContainerStopped`
 - `crates/minibox-cli/src/commands/run.rs` — read streaming response, write to stdout/stderr, exit with received code
 

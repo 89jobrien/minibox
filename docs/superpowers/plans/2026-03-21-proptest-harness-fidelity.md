@@ -12,11 +12,11 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
-| `crates/daemonbox/tests/proptest_suite.rs` | Replace `make_rt()` per-case with a shared static `OnceLock<Runtime>` |
-| `crates/minibox-bench/src/main.rs` | Fix `bench_adapter_suite` — move `rt` creation outside `nano_test` closures; add sync helpers for mock calls |
-| `crates/linuxbox/src/adapters/mocks.rs` | Add sync test-helper methods `has_image_sync` and `spawn_process_sync` (or expose existing sync internals) |
+| File                                       | Change                                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `crates/daemonbox/tests/proptest_suite.rs` | Replace `make_rt()` per-case with a shared static `OnceLock<Runtime>`                                        |
+| `crates/minibox-bench/src/main.rs`         | Fix `bench_adapter_suite` — move `rt` creation outside `nano_test` closures; add sync helpers for mock calls |
+| `crates/mbx/src/adapters/mocks.rs`         | Add sync test-helper methods `has_image_sync` and `spawn_process_sync` (or expose existing sync internals)   |
 
 ---
 
@@ -25,6 +25,7 @@
 **Background:** Every `proptest!` block calls `make_rt()` which does `Runtime::new()` — a full Tokio runtime instantiation including thread spawning. With 256 cases per property × 7 properties = ~1800 runtimes per test run. A single `OnceLock<Runtime>` initialised once per test binary is sufficient.
 
 **Files:**
+
 - Modify: `crates/daemonbox/tests/proptest_suite.rs:14-16`
 
 - [ ] **Step 1: Write a failing test**
@@ -133,12 +134,13 @@ git commit -m "perf(proptest): replace per-case make_rt() with shared OnceLock<R
 **Background:** In `bench_adapter_suite`, two tests call `rt.block_on(async { mock.method().await })`. We need to know if the mock futures do any real async work or just return immediately.
 
 **Files:**
-- Read: `crates/linuxbox/src/adapters/mocks.rs`
+
+- Read: `crates/mbx/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Inspect mock implementations**
 
 ```bash
-grep -A 10 "fn has_image\|fn spawn_process" crates/linuxbox/src/adapters/mocks.rs
+grep -A 10 "fn has_image\|fn spawn_process" crates/mbx/src/adapters/mocks.rs
 ```
 
 Expected: both return a simple `async { ... }` with no `.await` inside — they are trivially synchronous futures wrapped in async.
@@ -152,7 +154,8 @@ If `has_image` returns `async { true }` and `spawn_process` returns `async { Ok(
 ### Task 3: Add sync test helpers to mock adapters
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/mocks.rs`
+
+- Modify: `crates/mbx/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Write failing test**
 
@@ -170,7 +173,7 @@ fn mock_registry_has_image_sync_available() {
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-cargo test -p linuxbox mock_registry_has_image_sync
+cargo test -p mbx mock_registry_has_image_sync
 ```
 
 Expected: FAIL — `has_image_sync` does not exist.
@@ -215,7 +218,7 @@ pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnRes
 - [ ] **Step 5: Run tests**
 
 ```bash
-cargo test -p linuxbox mock_registry_has_image_sync
+cargo test -p mbx mock_registry_has_image_sync
 ```
 
 Expected: pass.
@@ -223,7 +226,7 @@ Expected: pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/mocks.rs
+git add crates/mbx/src/adapters/mocks.rs
 git commit -m "feat(mocks): add has_image_sync and spawn_process_sync test helpers"
 ```
 
@@ -232,6 +235,7 @@ git commit -m "feat(mocks): add has_image_sync and spawn_process_sync test helpe
 ### Task 4: Fix `bench_adapter_suite` — remove `block_on` from timed closures
 
 **Files:**
+
 - Modify: `crates/minibox-bench/src/main.rs` — `bench_adapter_suite()` (line ~730)
 
 - [ ] **Step 1: Write a failing test**

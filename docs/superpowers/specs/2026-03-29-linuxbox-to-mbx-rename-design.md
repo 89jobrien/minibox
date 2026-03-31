@@ -1,37 +1,42 @@
-# Design: Rename `linuxbox` Crate to `mbx`
+# Design: Rename `mbx` Crate to `mbx`
 
 **Date:** 2026-03-29
 **Status:** Approved
 
 ## Summary
 
-Rename the `linuxbox` crate to `mbx` — both the directory (`crates/linuxbox/` → `crates/mbx/`) and the crate name. This is a mechanical refactor with no behavioral changes.
+Rename the `mbx` crate to `mbx` — both the directory (`crates/mbx/` → `crates/mbx/`) and the crate name. This is a mechanical refactor with no behavioral changes.
 
 ## Scope
 
-- 118 occurrences of `linuxbox` across 45 files
-- Crate directory: `crates/linuxbox/` → `crates/mbx/`
-- Crate name: `linuxbox` → `mbx`
+- 118 occurrences of `mbx` across 45 files
+- Crate directory: `crates/mbx/` → `crates/mbx/`
+- Crate name: `mbx` → `mbx`
 - All dependents updated in-place
 
 ## Changes
 
 ### 1. Directory rename
+
 ```
-git mv crates/linuxbox crates/mbx
+git mv crates/mbx crates/mbx
 ```
 
 ### 2. Crate manifest (`crates/mbx/Cargo.toml`)
+
 ```toml
-name = "mbx"   # was: linuxbox
+name = "mbx"   # was: mbx
 ```
 
 ### 3. Workspace manifest (`Cargo.toml`)
-- Update workspace member: `"crates/linuxbox"` → `"crates/mbx"`
-- Update workspace dep: `linuxbox = { path = "crates/linuxbox" }` → `mbx = { path = "crates/mbx" }`
+
+- Update workspace member: `"crates/mbx"` → `"crates/mbx"`
+- Update workspace dep: `mbx = { path = "crates/mbx" }` → `mbx = { path = "crates/mbx" }`
 
 ### 4. Dependent crate manifests
-Five crates declare `linuxbox = { workspace = true }`:
+
+Five crates declare `mbx = { workspace = true }`:
+
 - `crates/miniboxd/Cargo.toml`
 - `crates/macbox/Cargo.toml`
 - `crates/daemonbox/Cargo.toml`
@@ -41,12 +46,15 @@ Five crates declare `linuxbox = { workspace = true }`:
 All become `mbx = { workspace = true }`.
 
 ### 5. Rust source files
-All `use linuxbox::` and `linuxbox::` qualified paths become `use mbx::` and `mbx::` respectively. Affects ~45 `.rs` files.
+
+All `use mbx::` and `mbx::` qualified paths become `use mbx::` and `mbx::` respectively. Affects ~45 `.rs` files.
 
 ### 6. `recipe.json`
-cargo-chef artifact — update `linuxbox` crate name to `mbx` manually (or regenerate with `cargo chef prepare`).
+
+cargo-chef artifact — update `mbx` crate name to `mbx` manually (or regenerate with `cargo chef prepare`).
 
 ### 7. Documentation
+
 Update all references in `CLAUDE.md` and any docs under `docs/`.
 
 ## Verification Gate

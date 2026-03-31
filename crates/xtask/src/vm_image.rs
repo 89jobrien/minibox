@@ -154,10 +154,11 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
     }
 
     // Binary is at target/<target>/release/miniboxd
-    let src = std::path::Path::new("target")
-        .join(target)
-        .join("release")
-        .join("miniboxd");
+    // Respect CARGO_TARGET_DIR if set (e.g. ~/.mbx/cache/target/)
+    let target_base = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
+    let src = target_base.join(target).join("release").join("miniboxd");
     if !src.exists() {
         anyhow::bail!(
             "expected binary at {} — build succeeded but file missing",

@@ -13,13 +13,13 @@ fmt-check:
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+    cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
+    cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
 
 build:
     cargo build --release
@@ -39,15 +39,6 @@ build-linux:
         cargo build --release --target "$MUSL_TARGET" \
         -p miniboxd -p minibox-cli
 
-# Build macOS VM image (Alpine kernel + agent cross-compiled, run once before using VZ adapter)
-build-vm-image force="":
-    #!/usr/bin/env bash
-    if [ "{{force}}" = "force" ]; then
-        cargo xtask build-vm-image --force
-    else
-        cargo xtask build-vm-image
-    fi
-
 # ── Gates ────────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release
@@ -61,7 +52,7 @@ prepush:
 # fmt-check + lint + test-unit
 ci:
     cargo fmt --all --check
-    cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+    cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
     just test-unit
 
 # ── Testing ──────────────────────────────────────────────────────────────────
@@ -72,16 +63,16 @@ test-unit:
 
 # Adapter isolation tests (any platform)
 test-adapters:
-    cargo test -p linuxbox --test adapter_colima_tests
+    cargo test -p mbx --test adapter_colima_tests
     cargo test -p daemonbox --test handler_adapter_swap_tests
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox
+    cargo nextest run --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox --html
+    cargo llvm-cov nextest -p mbx -p minibox-macros -p minibox-cli -p daemonbox --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # CLI subprocess integration tests (builds binary first, any platform)
@@ -121,6 +112,10 @@ dash:
 bench:
     cargo xtask bench
 
+# Sync VPS bench results into local bench/results/bench.jsonl
+bench-sync:
+    cargo xtask bench-sync
+
 # Profile bench binary with samply (macOS) or cargo-flamegraph (Linux)
 # Usage: just flamegraph [suite]   (default suite: codec)
 flamegraph suite="codec":
@@ -134,10 +129,10 @@ bench-agent *args:
 # ── Daemon ───────────────────────────────────────────────────────────────────
 
 doctor:
-    @cargo test -p linuxbox preflight::tests -- --nocapture 2>&1 || true
+    @cargo test -p mbx preflight::tests -- --nocapture 2>&1 || true
     @echo ""
     @echo "--- Host Capabilities Report ---"
-    @cargo test -p linuxbox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+    @cargo test -p mbx preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
 
 # Trace miniboxd with uftrace.
 # macOS: cross-compiles Linux binary, runs it inside minibox via Colima.

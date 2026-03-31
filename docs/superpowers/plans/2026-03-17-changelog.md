@@ -4,6 +4,7 @@ completed: "2026-03-17"
 branch: main
 note: CHANGELOG shipped v0.0.1–v0.0.10
 ---
+
 # CHANGELOG Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -275,7 +276,7 @@ git commit -m "docs: add CHANGELOG v0.0.4 (GKE adapter, DomainError)"
 
 ### Added
 
-- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `linuxbox/src/domain.rs`.
+- Hexagonal architecture domain layer: `ResourceLimiter`, `FilesystemProvider`, `ContainerRuntime`, and `ImageRegistry` traits in `mbx/src/domain.rs`.
 - Infrastructure adapters implementing domain traits for native Linux (namespaces, overlay FS, cgroups v2) and cross-platform stubs (Windows/macOS).
 - Dependency injection wired into daemon handlers; mock adapter implementations for unit tests.
 - Comprehensive unit tests using mock adapters; integration tests against real Linux infrastructure.

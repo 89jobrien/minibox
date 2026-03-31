@@ -254,6 +254,83 @@ rm -rf "$OUT_DIR"
     Ok(())
 }
 
+// ── bench-sync ────────────────────────────────────────────────────────────────
+
+/// Rsync VPS bench.jsonl and merge net-new entries into the local copy.
+///
+/// Deduplicates by `metadata.timestamp` — safe to run repeatedly.
+pub fn bench_sync() -> Result<()> {
+    let tmp = format!("/tmp/bench-sync-vps-{}.jsonl", std::process::id());
+
+    eprintln!("fetching VPS bench.jsonl...");
+    let status = Command::new("rsync")
+        .args([
+            "-az",
+            "--compress",
+            &format!("{VPS_HOST}:/home/dev/minibox/bench/results/bench.jsonl"),
+            &tmp,
+        ])
+        .status()
+        .context("rsync failed — is jobrien-vm reachable?")?;
+    if !status.success() {
+        bail!("rsync exited with status {status}");
+    }
+
+    let local_path = "bench/results/bench.jsonl";
+    fs::create_dir_all("bench/results").context("create bench/results")?;
+
+    // Collect existing timestamps so we can skip duplicates.
+    let existing_timestamps: HashSet<String> = if fs::metadata(local_path).is_ok() {
+        fs::read_to_string(local_path)
+            .context("read local bench.jsonl")?
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter_map(|v| v["metadata"]["timestamp"].as_str().map(|s| s.to_string()))
+            .collect()
+    } else {
+        HashSet::new()
+    };
+
+    let vps_content = fs::read_to_string(&tmp).context("read tmp vps bench.jsonl")?;
+    let _ = fs::remove_file(&tmp);
+
+    let new_entries: Vec<&str> = vps_content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter(|l| {
+            serde_json::from_str::<serde_json::Value>(l)
+                .ok()
+                .and_then(|v| v["metadata"]["timestamp"].as_str().map(|s| s.to_string()))
+                .map(|ts| !existing_timestamps.contains(&ts))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if new_entries.is_empty() {
+        eprintln!(
+            "bench-sync: already up to date ({} existing entries)",
+            existing_timestamps.len()
+        );
+        return Ok(());
+    }
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(local_path)
+        .context("open bench.jsonl for append")?;
+    for entry in &new_entries {
+        writeln!(file, "{entry}").context("append entry to bench.jsonl")?;
+    }
+
+    eprintln!(
+        "✓ bench-sync: merged {} new VPS entries into bench/results/bench.jsonl",
+        new_entries.len()
+    );
+    Ok(())
+}
+
 // ── bench-diff ────────────────────────────────────────────────────────────────
 
 /// Compare two bench JSON files and print a delta table.

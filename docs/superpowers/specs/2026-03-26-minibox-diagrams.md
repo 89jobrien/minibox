@@ -24,7 +24,7 @@
 │  │                       Library Crates                                  │ │
 │  │                                                                       │ │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────┐  ┌────────┐               │ │
-│  │  │ daemonbox  │  │  linuxbox  │  │ macbox │  │ winbox │               │ │
+│  │  │ daemonbox  │  │  mbx  │  │ macbox │  │ winbox │               │ │
 │  │  │ handler    │  │  adapters  │  │ colima │  │  stub  │               │ │
 │  │  │ server     │  │  container │  │ macOS  │  │  win   │               │ │
 │  │  │ state      │  │  image     │  │        │  │        │               │ │
@@ -51,8 +51,8 @@
   miniboxd
   ├──→ daemonbox
   │    ├──→ minibox-core
-  │    └──→ linuxbox
-  ├──→ linuxbox
+  │    └──→ mbx
+  ├──→ mbx
   │    ├──→ minibox-core
   │    ├──→ minibox-macros (proc-macro)
   │    └──→ nix (syscalls)
@@ -71,12 +71,12 @@
   ├── error.rs          Cross-platform error types
   └── adapters/mocks    Test doubles (behind test-utils feature)
 
-  linuxbox re-exports minibox-core:
+  mbx re-exports minibox-core:
     pub use minibox_core::domain;   ← as_any!/adapt! macros expand to crate::domain::AsAny
     pub use minibox_core::image;
     pub use minibox_core::protocol;
 
-  ⚠ Do NOT remove linuxbox re-exports — macro expansion depends on them
+  ⚠ Do NOT remove mbx re-exports — macro expansion depends on them
 ```
 
 ---
@@ -95,7 +95,7 @@
          Adapters                    (pure logic)                  Adapters
               │                          │                            │
     ┌─────────▼──────────┐               │               ┌────────────▼─────────────┐
-    │ minibox-cli        │               │               │ linuxbox/adapters/       │
+    │ minibox-cli        │               │               │ mbx/adapters/       │
     │ (CLI commands)     │               │               │                          │
     ├────────────────────┤               │               │ ┌────────────────────┐   │
     │ daemonbox/server   │               │               │ │  ImageRegistry     │   │
@@ -1017,12 +1017,12 @@
   }
 
   Platform crate naming convention: {platform}box
-  ├─ linuxbox   (Linux namespaces, cgroups, overlay)
+  ├─ mbx   (Linux namespaces, cgroups, overlay)
   ├─ macbox     (macOS via Colima VM)
   └─ winbox     (Windows stub)
 
   Compile gates:
-  ├─ linuxbox/container/  → #[cfg(target_os = "linux")]
+  ├─ mbx/container/  → #[cfg(target_os = "linux")]
   ├─ nix syscall wrappers → #[cfg(unix)]
   └─ miniboxd compiles on all platforms (macbox::start() dispatch)
 ```

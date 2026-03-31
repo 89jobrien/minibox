@@ -1,7 +1,8 @@
 {
   "hooks": {
-    "BeforeSubmitPrompt": [
+    "UserPromptSubmit": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",

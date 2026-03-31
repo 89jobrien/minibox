@@ -13,15 +13,14 @@ then proposes a conventional commit message. Optionally stages all and commits.
 
 import argparse
 import asyncio
+import os as _os
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-import sys as _sys
-import os as _os
-_sys.path.insert(0, _os.path.dirname(__file__))
+sys.path.insert(0, _os.path.dirname(__file__))
 import agent_log
 
 _os.environ.pop("CLAUDECODE", None)
@@ -72,7 +71,7 @@ async def generate_message(ctx: dict) -> str:
             "- Follow the existing commit style shown in the recent log\n"
             "- Use conventional commits format: `type(scope): description`\n"
             "  Types: feat, fix, docs, refactor, test, chore, perf, ci\n"
-            "  Scope: crate name, module, or area (e.g. linuxbox, standup, justfile)\n"
+            "  Scope: crate name, module, or area (e.g. mbx, standup, justfile)\n"
             "- First line: ≤72 chars, imperative mood, no period\n"
             "- If the change warrants it, add a blank line then a short body (2–4 lines max)\n"
             "- Do NOT add 'Co-Authored-By' lines — those are added separately\n"
@@ -81,7 +80,11 @@ async def generate_message(ctx: dict) -> str:
             f"Recent commits (style reference):\n{ctx['recent_log']}\n\n"
             f"Staged changes ({ctx['staged_stat'] or 'none'}):\n"
             f"```diff\n{ctx['staged_diff'] or '(nothing staged)'}\n```\n\n"
-            + (f"Unstaged (not included):\n{ctx['unstaged_stat']}\n" if ctx["unstaged_stat"] else "")
+            + (
+                f"Unstaged (not included):\n{ctx['unstaged_stat']}\n"
+                if ctx["unstaged_stat"]
+                else ""
+            )
         ),
         options=ClaudeAgentOptions(
             allowed_tools=["Read", "Glob", "Grep"],
@@ -95,12 +98,24 @@ async def generate_message(ctx: dict) -> str:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-a", "--stage", action="store_true",
-                        help="Stage all changes (git add -A) before generating")
-    parser.add_argument("-c", "--commit", action="store_true",
-                        help="Commit with the generated message after confirming")
-    parser.add_argument("-y", "--yes", action="store_true",
-                        help="Skip confirmation and commit immediately (implies --commit)")
+    parser.add_argument(
+        "-a",
+        "--stage",
+        action="store_true",
+        help="Stage all changes (git add -A) before generating",
+    )
+    parser.add_argument(
+        "-c",
+        "--commit",
+        action="store_true",
+        help="Commit with the generated message after confirming",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Skip confirmation and commit immediately (implies --commit)",
+    )
     args = parser.parse_args()
 
     if args.yes:
@@ -117,7 +132,9 @@ async def main() -> None:
 
     print(f"Generating commit message for {ctx['staged_stat']}...\n")
 
-    run_id = agent_log.log_start("commit-msg", {"stage": args.stage, "commit": args.commit})
+    run_id = agent_log.log_start(
+        "commit-msg", {"stage": args.stage, "commit": args.commit}
+    )
     start = time.monotonic()
 
     msg = await generate_message(ctx)
@@ -129,16 +146,28 @@ async def main() -> None:
     if args.commit:
         if not args.yes:
             if not sys.stdin.isatty():
-                print("\nNon-interactive session — use -y to commit without confirmation.")
-                agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
-                              msg, time.monotonic() - start)
+                print(
+                    "\nNon-interactive session — use -y to commit without confirmation."
+                )
+                agent_log.log_complete(
+                    run_id,
+                    "commit-msg",
+                    {"stage": args.stage, "commit": False},
+                    msg,
+                    time.monotonic() - start,
+                )
                 sys.exit(0)
             print("\nCommit with this message? [y/N] ", end="", flush=True)
             answer = input().strip().lower()
             if answer != "y":
                 print("Aborted.")
-                agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": False},
-                              msg, time.monotonic() - start)
+                agent_log.log_complete(
+                    run_id,
+                    "commit-msg",
+                    {"stage": args.stage, "commit": False},
+                    msg,
+                    time.monotonic() - start,
+                )
                 sys.exit(0)
 
         full_msg = msg + "\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
@@ -149,8 +178,13 @@ async def main() -> None:
             print("\nCommit failed — check git output above.")
             sys.exit(1)
 
-    agent_log.log_complete(run_id, "commit-msg", {"stage": args.stage, "commit": args.commit},
-                  msg, time.monotonic() - start)
+    agent_log.log_complete(
+        run_id,
+        "commit-msg",
+        {"stage": args.stage, "commit": args.commit},
+        msg,
+        time.monotonic() - start,
+    )
 
 
 if __name__ == "__main__":

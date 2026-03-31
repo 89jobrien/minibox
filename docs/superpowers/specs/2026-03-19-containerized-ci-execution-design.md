@@ -89,7 +89,7 @@ cargo xtask ci-smoke
 
 - Bind mount support: `minibox run --mount <host-path>:<container-path>` (Phase 1 complete)
 - `RunContainer` protocol gains `mounts: Vec<Mount>` field
-- `crates/linuxbox/src/container/filesystem.rs`: `MS_BIND` mount setup before `pivot_root`
+- `crates/mbx/src/container/filesystem.rs`: `MS_BIND` mount setup before `pivot_root`
 
 **What changes:**
 
@@ -108,8 +108,8 @@ Hooks mount the host workspace into the container. The container sees live sourc
         "--",
         "sh", "-c",
         "cd /workspace && cargo fmt --all --check && \
-         cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings && \
-         cargo build --release -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
+         cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings && \
+         cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
     ).run()?;
 }
 ```
@@ -119,7 +119,7 @@ Hooks mount the host workspace into the container. The container sees live sourc
 - `std::fs::canonicalize(host_path)` resolves symlinks and `..`; the canonical path must start with an allowed prefix.
 - Allowed prefixes: user's `$HOME` and `/tmp`. Paths outside these are rejected.
 - The container path must be absolute and free of `..` components.
-- This mirrors the `canonicalize()` + path-escape rejection in `crates/linuxbox/src/container/filesystem.rs`.
+- This mirrors the `canonicalize()` + path-escape rejection in `crates/mbx/src/container/filesystem.rs`.
 
 **Cargo cache mount:** `~/.mbx/cache/cargo-registry` is bind-mounted at `/root/.cargo/registry` inside the container. The directory is created on first use if absent. Containers accumulate the registry cache across runs; the overlay upper dir isolates any per-container writes.
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Crate:** linuxbox (domain + adapters), daemonbox (handler wiring)
+**Crate:** mbx (domain + adapters), daemonbox (handler wiring)
 
 ## Problem
 
@@ -41,6 +41,7 @@ Empty network namespace. Container has loopback only. No changes needed.
 ### `Bridge` (local veth + bridge)
 
 Traditional Docker-style networking:
+
 - Create `minibox0` bridge on first use
 - Allocate IP from `172.18.0.0/16` subnet
 - Create veth pair: host end attached to bridge, container end in namespace
@@ -58,6 +59,7 @@ Requires approval gate in minibox-orch (security escalation).
 ### `Tailnet` (WireGuard mesh via Headscale)
 
 Container joins a Headscale-coordinated tailnet:
+
 - Daemon creates ephemeral pre-auth key via Headscale REST API
 - Container runs `tailscaled` in userspace networking mode (no TUN required)
 - Container registers with `tailscale up --login-server=<url> --authkey=<key>`
@@ -135,7 +137,7 @@ The existing trait methods (`setup`, `attach`, `cleanup`, `stats`) are sufficien
 ## Adapter Architecture
 
 ```
-linuxbox/src/adapters/
+mbx/src/adapters/
 ├── network/
 │   ├── mod.rs          # NetworkMode dispatch
 │   ├── none.rs         # NoopNetwork (current behavior)
@@ -181,6 +183,7 @@ impl HeadscaleClient {
 ```
 
 Key endpoints used:
+
 - `POST /api/v1/preauthkey` — create ephemeral key
 - `GET /api/v1/node` — list/find nodes
 - `DELETE /api/v1/node/{id}` — deregister on stop
@@ -252,6 +255,7 @@ StopContainer / reaper
 ### Handler changes (daemonbox)
 
 `handle_run_streaming` in `handler.rs` needs to:
+
 1. Accept `NetworkConfig` from `RunContainer` request
 2. Call `network_provider.setup()` before spawn
 3. Call `network_provider.attach()` after spawn returns PID
@@ -286,6 +290,7 @@ Four strategies, ordered by complexity. Based on Tailscale's official userspace 
 Run `tailscaled` on the **host** side in userspace networking mode. Container processes connect via proxy environment variables.
 
 **Host side:**
+
 ```bash
 tailscaled --tun=userspace-networking \
            --socks5-server=0.0.0.0:1055 \
@@ -294,6 +299,7 @@ tailscale up --login-server=https://<headscale> --authkey=<key>
 ```
 
 **Container side** (injected as env vars by minibox):
+
 ```bash
 ALL_PROXY=socks5://<host-ip>:1055/
 HTTP_PROXY=http://<host-ip>:1055/
@@ -308,6 +314,7 @@ http_proxy=http://<host-ip>:1055/
 Run a dedicated `tailscaled` process per container in its network namespace. Each container gets its own tailnet IP and MagicDNS name. This is Tailscale's officially recommended approach for containerized services.
 
 **Per container:**
+
 ```bash
 # Inside the container's network namespace
 tailscaled --tun=userspace-networking \
@@ -322,12 +329,14 @@ tailscale --socket=/tmp/tailscaled.sock up \
 
 **Pros:** Each container is a distinct tailnet node with its own IP, ACLs, and DNS name. Clean deregistration on stop.
 **Cons:** Requires `tailscaled`/`tailscale` binaries inside the container. Two approaches:
-  - Bind-mount from host (requires bind mount support in minibox)
-  - Use `tailscale/tailscale` base image or multi-stage image with tailscale pre-installed
+
+- Bind-mount from host (requires bind mount support in minibox)
+- Use `tailscale/tailscale` base image or multi-stage image with tailscale pre-installed
 
 ### Strategy C: Bind-mount injection
 
 Mount the host's `tailscaled` and `tailscale` binaries into the container rootfs read-only:
+
 - `/usr/local/bin/tailscaled` → bind mount
 - `/usr/local/bin/tailscale` → bind mount
 - `/var/lib/tailscale/` → per-container tmpfs for state
@@ -343,6 +352,7 @@ Embed Tailscale directly into the minibox daemon process via `libtailscale`, the
 **Build requirement:** Go 1.20+ toolchain at compile time. `libtailscale-sys` invokes CGo to build the Go source into a static archive (`libtailscale.a`), which is then linked into the Rust binary.
 
 **How it works:**
+
 ```rust
 // In the daemon, per container:
 use libtailscale::Tailscale;
@@ -363,6 +373,7 @@ let conn = ts.dial("tcp", "other-node:5432")?; // dial tailnet peers
 **Architecture:** The daemon manages a pool of `Tailscale` instances (one per tailnet-mode container). Each instance is a lightweight embedded tsnet server with its own identity, IP, and MagicDNS name. No TUN device, no sidecar process, no bind mounts.
 
 **Pros:**
+
 - Zero external dependencies at runtime (no `tailscaled` binary)
 - Per-container tailnet identity with full `listen()`/`dial()` API
 - MagicDNS and ACLs work natively
@@ -370,6 +381,7 @@ let conn = ts.dial("tcp", "other-node:5432")?; // dial tailnet peers
 - Headscale-compatible via `set_control_url()`
 
 **Cons:**
+
 - Requires Go toolchain at build time (CGo)
 - Adds ~15MB to daemon binary (embedded Go runtime)
 - `libtailscale` Rust crate fails to build on docs.rs (CGo dependency) — must vendor or build locally
@@ -377,6 +389,7 @@ let conn = ts.dial("tcp", "other-node:5432")?; // dial tailnet peers
 - Go runtime GC runs inside the Rust process (memory accounting, potential latency spikes)
 
 **Container-side integration options:**
+
 1. **Proxy injection** — daemon runs SOCKS5 proxy per container, injects `ALL_PROXY` env var
 2. **FD passing** — daemon `dial()`s tailnet peers on behalf of the container, passes connected fds
 3. **Network namespace wiring** — daemon's embedded tsnet writes to a socketpair or veth that terminates in the container's netns
@@ -403,6 +416,7 @@ minibox-secrets (CredentialProvider)
 ```
 
 Environment variables:
+
 - `MINIBOX_HEADSCALE_URL` — Headscale server URL
 - `MINIBOX_HEADSCALE_API_KEY` — API key (or `op://minibox/headscale/api-key`)
 - `MINIBOX_HEADSCALE_USER` — default user for container registration

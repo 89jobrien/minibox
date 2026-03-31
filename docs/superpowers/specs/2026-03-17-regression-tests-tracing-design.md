@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-17
 **Scope:** macOS-runnable unit tests + tracing hotpath fix
-**Crates touched:** `linuxbox` (tests + code change)
+**Crates touched:** `mbx` (tests + code change)
 
 ---
 
@@ -11,7 +11,7 @@
 The council analysis flagged three gaps from recent work:
 
 1. The `"."` / `"./"` tar root-entry skip and the absolute-symlink rewrite fix in `layer.rs` have no regression coverage.
-2. The `as_any!`, `default_new!`, and `adapt!` macros (defined in `minibox-macros`, used in `linuxbox`) have no tests documenting downcast contracts or failure modes.
+2. The `as_any!`, `default_new!`, and `adapt!` macros (defined in `minibox-macros`, used in `mbx`) have no tests documenting downcast contracts or failure modes.
 3. Three fine-grained inner spans in `registry.rs` (`verify_digest`, `extract`, `store_manifest`) fire at `INFO` level, adding span overhead where `DEBUG` is more appropriate.
 
 All work runs on macOS. No Linux-only or root-required tests are included.
@@ -20,7 +20,7 @@ All work runs on macOS. No Linux-only or root-required tests are included.
 
 ## Area 1 — `layer.rs` regression tests
 
-**File:** `crates/linuxbox/src/image/layer.rs`, existing `#[cfg(test)]` block.
+**File:** `crates/mbx/src/image/layer.rs`, existing `#[cfg(test)]` block.
 
 ### `relative_path` unit tests
 
@@ -58,9 +58,9 @@ Both are `#[cfg(unix)]` and use `tar_gz_with_symlink`. After calling `extract_la
 
 ## Area 2 — Macro contract tests
 
-**File:** `crates/linuxbox/src/adapters/mocks.rs`, new `#[cfg(test)]` block at bottom.
+**File:** `crates/mbx/src/adapters/mocks.rs`, new `#[cfg(test)]` block at bottom.
 
-The `as_any!` macro body uses `crate::domain::AsAny`. Because `macro_rules!` path resolution happens at the call site, `crate` resolves to whichever crate expands the macro — in this case `linuxbox`. `minibox-macros` itself has no `domain` module, so tests must live in `linuxbox`. The mock adapters (`MockRegistry`, `MockFilesystem`, `MockLimiter`, `MockRuntime`) already use `adapt!`, making `mocks.rs` the natural test site.
+The `as_any!` macro body uses `crate::domain::AsAny`. Because `macro_rules!` path resolution happens at the call site, `crate` resolves to whichever crate expands the macro — in this case `mbx`. `minibox-macros` itself has no `domain` module, so tests must live in `mbx`. The mock adapters (`MockRegistry`, `MockFilesystem`, `MockLimiter`, `MockRuntime`) already use `adapt!`, making `mocks.rs` the natural test site.
 
 **Calling convention:** `Arc<dyn Trait>` does not auto-deref to `AsAny`. Use `arc.as_ref().as_any()` to reach the trait method through the `dyn` reference.
 
@@ -79,7 +79,7 @@ These tests document the contract: "anything passed through `adapt!` can be reco
 
 ## Area 3 — Tracing level adjustment in `registry.rs`
 
-**File:** `crates/linuxbox/src/image/registry.rs`, `pull_image` method.
+**File:** `crates/mbx/src/image/registry.rs`, `pull_image` method.
 
 ### Problem
 
@@ -142,7 +142,7 @@ let _span = tracing::debug_span!("store_manifest").entered();
 After implementing, run on macOS:
 
 ```bash
-cargo test -p linuxbox
+cargo test -p mbx
 cargo fmt --all --check
 cargo clippy --workspace -- -D warnings
 ```

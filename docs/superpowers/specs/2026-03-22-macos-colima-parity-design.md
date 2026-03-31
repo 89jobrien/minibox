@@ -227,13 +227,13 @@ Gated behind macOS + Colima-running check. Results flow to `bench/results/bench.
 
 ## Changes Summary
 
-| File                                 | Change                                                                                                           |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `linuxbox/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new`    |
-| `daemonbox/src/handler.rs`           | Widen three `#[cfg(target_os = "linux")]` gates to `#[cfg(unix)]`                                                |
-| `macbox/src/lib.rs`                  | Update composition root: pass executor to `ColimaLimiter::new`, create and pass `LimaSpawner` to `ColimaRuntime` |
-| `minibox-bench/src/main.rs`          | Add `colima` suite with three measurements                                                                       |
-| `.github/workflows/ci.yml`           | New `macos-colima` job                                                                                           |
+| File                         | Change                                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `mbx/src/adapters/colima.rs` | Rewrite `spawn_process` for streaming; add `LimaSpawner`; fix io.max device detection in `ColimaLimiter::new`    |
+| `daemonbox/src/handler.rs`   | Widen three `#[cfg(target_os = "linux")]` gates to `#[cfg(unix)]`                                                |
+| `macbox/src/lib.rs`          | Update composition root: pass executor to `ColimaLimiter::new`, create and pass `LimaSpawner` to `ColimaRuntime` |
+| `minibox-bench/src/main.rs`  | Add `colima` suite with three measurements                                                                       |
+| `.github/workflows/ci.yml`   | New `macos-colima` job                                                                                           |
 
 **Not changed:** `domain.rs` (`SpawnResult` unchanged), `state.rs` (`DaemonState` unchanged), `server.rs`, `minibox-cli`, protocol types.
 

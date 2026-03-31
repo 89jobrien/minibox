@@ -4,7 +4,7 @@
 
 **Goal:** Make Gitea the primary remote, mirror to GitHub, and run a full 5-job CI pipeline (unit → property → integration+e2e → bench) via Gitea Actions on jobrien-vm.
 
-**Architecture:** Rename git remotes so `origin` points to Gitea. Gitea push-mirrors to GitHub automatically. A `.gitea/workflows/ci.yml` workflow drives `act_runner` (already running as a system service on the VPS) through the staged pipeline. Property-based tests live in `crates/linuxbox/tests/proptest_suite.rs` (public API) and an inline proptest block in `layer.rs` (internal path validation).
+**Architecture:** Rename git remotes so `origin` points to Gitea. Gitea push-mirrors to GitHub automatically. A `.gitea/workflows/ci.yml` workflow drives `act_runner` (already running as a system service on the VPS) through the staged pipeline. Property-based tests live in `crates/mbx/tests/proptest_suite.rs` (public API) and an inline proptest block in `layer.rs` (internal path validation).
 
 **Tech Stack:** Gitea Actions (act_runner), proptest 1.x, existing xtask commands (`test-unit`, `test-e2e-suite`, `bench`, `nuke-test-state`), mise for toolchain activation on the runner.
 
@@ -12,13 +12,13 @@
 
 ## File Map
 
-| Action | File | Purpose |
-|--------|------|---------|
-| Modify | `.github/workflows/ci.yml` | Remove `linux` self-hosted job |
-| Create | `.gitea/workflows/ci.yml` | Full 5-job VPS pipeline |
-| Modify | `crates/linuxbox/Cargo.toml` | Add `proptest` dev-dependency |
-| Create | `crates/linuxbox/tests/proptest_suite.rs` | Protocol roundtrip proptests |
-| Modify | `crates/linuxbox/src/image/layer.rs` | Add inline proptest block for path validation |
+| Action | File                                 | Purpose                                       |
+| ------ | ------------------------------------ | --------------------------------------------- |
+| Modify | `.github/workflows/ci.yml`           | Remove `linux` self-hosted job                |
+| Create | `.gitea/workflows/ci.yml`            | Full 5-job VPS pipeline                       |
+| Modify | `crates/mbx/Cargo.toml`              | Add `proptest` dev-dependency                 |
+| Create | `crates/mbx/tests/proptest_suite.rs` | Protocol roundtrip proptests                  |
+| Modify | `crates/mbx/src/image/layer.rs`      | Add inline proptest block for path validation |
 
 ---
 
@@ -40,6 +40,7 @@ git remote -v
 ```
 
 Expected:
+
 ```
 github  git@github.com:89jobrien/minibox.git (fetch)
 github  git@github.com:89jobrien/minibox.git (push)
@@ -52,6 +53,7 @@ origin  http://100.105.75.7:3000/joe/minibox.git (push)
 ## Task 2: Remove Linux Job from GitHub Actions
 
 **Files:**
+
 - Modify: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Remove the `linux` job block from `.github/workflows/ci.yml`**
@@ -84,7 +86,7 @@ jobs:
       - name: clippy
         run: >
           cargo clippy
-          -p linuxbox -p minibox-macros -p minibox-cli
+          -p mbx -p minibox-macros -p minibox-cli
           -p daemonbox -p macbox -p miniboxd
           -- -D warnings
       - name: unit tests
@@ -103,9 +105,10 @@ git commit -m "ci: remove linux self-hosted job from GitHub Actions (moves to Gi
 ## Task 3: Add Proptest Dependency
 
 **Files:**
-- Modify: `crates/linuxbox/Cargo.toml`
 
-- [ ] **Step 1: Add proptest to dev-dependencies in `crates/linuxbox/Cargo.toml`**
+- Modify: `crates/mbx/Cargo.toml`
+
+- [ ] **Step 1: Add proptest to dev-dependencies in `crates/mbx/Cargo.toml`**
 
 Find the `[dev-dependencies]` section and add:
 
@@ -118,7 +121,7 @@ proptest = "1"
 - [ ] **Step 2: Verify it resolves**
 
 ```bash
-cargo check -p linuxbox
+cargo check -p mbx
 ```
 
 Expected: `Finished` with no errors.
@@ -128,14 +131,15 @@ Expected: `Finished` with no errors.
 ## Task 4: Write Protocol Roundtrip Proptests
 
 **Files:**
-- Create: `crates/linuxbox/tests/proptest_suite.rs`
+
+- Create: `crates/mbx/tests/proptest_suite.rs`
 
 These are integration tests (in `tests/`) so they can only access the public API.
 
-- [ ] **Step 1: Create `crates/linuxbox/tests/proptest_suite.rs`**
+- [ ] **Step 1: Create `crates/mbx/tests/proptest_suite.rs`**
 
 ```rust
-//! Property-based tests for linuxbox's public API.
+//! Property-based tests for mbx's public API.
 //!
 //! Invariants tested:
 //! - Protocol encode→decode roundtrip is lossless (re-encode produces same bytes)
@@ -146,7 +150,7 @@ These are integration tests (in `tests/`) so they can only access the public API
 //! by the `DaemonRequest::Pull` roundtrip which exercises arbitrary image/tag
 //! strings through the full protocol layer.
 
-use linuxbox::protocol::{
+use mbx::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind,
     decode_request, decode_response, encode_request, encode_response,
 };
@@ -252,7 +256,7 @@ proptest! {
 - [ ] **Step 2: Run the tests**
 
 ```bash
-cargo test -p linuxbox --test proptest_suite
+cargo test -p mbx --test proptest_suite
 ```
 
 Expected: both proptest targets pass (100 cases each by default).
@@ -264,7 +268,8 @@ Expected: both proptest targets pass (100 cases each by default).
 `validate_tar_entry_path` is private, so these live in an inline `#[cfg(test)]` block inside `layer.rs`.
 
 **Files:**
-- Modify: `crates/linuxbox/src/image/layer.rs`
+
+- Modify: `crates/mbx/src/image/layer.rs`
 
 - [ ] **Step 1: Add proptest to the existing `#[cfg(test)]` block at the bottom of `layer.rs`**
 
@@ -311,7 +316,7 @@ Add a new `proptest_tests` submodule inside the existing `#[cfg(test)] mod tests
 - [ ] **Step 2: Run the tests**
 
 ```bash
-cargo test -p linuxbox image::layer::tests::proptest_tests
+cargo test -p mbx image::layer::tests::proptest_tests
 ```
 
 Expected: both proptest targets pass.
@@ -319,10 +324,10 @@ Expected: both proptest targets pass.
 - [ ] **Step 3: Commit tasks 3–5**
 
 ```bash
-git add crates/linuxbox/Cargo.toml \
-        crates/linuxbox/tests/proptest_suite.rs \
-        crates/linuxbox/src/image/layer.rs
-git commit -m "test(linuxbox): add property-based tests for protocol roundtrip and path validation"
+git add crates/mbx/Cargo.toml \
+        crates/mbx/tests/proptest_suite.rs \
+        crates/mbx/src/image/layer.rs
+git commit -m "test(mbx): add property-based tests for protocol roundtrip and path validation"
 ```
 
 ---
@@ -350,6 +355,7 @@ If empty or not set, `ubuntu-latest` is the act_runner default label.
 ## Task 7: Create Gitea Actions Workflow
 
 **Files:**
+
 - Create: `.gitea/workflows/ci.yml`
 
 Use the `runs-on` label confirmed in Task 6 (default: `ubuntu-latest`).
@@ -384,7 +390,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: property tests
-        run: ~/.local/bin/mise exec -- cargo test -p linuxbox --test proptest_suite
+        run: ~/.local/bin/mise exec -- cargo test -p mbx --test proptest_suite
 
   integration:
     name: Integration Tests
@@ -444,12 +450,12 @@ Navigate to: `http://100.105.75.7:3000/joe/minibox/settings`
 
 Settings → **Mirror** → **Push Mirrors** → Add:
 
-| Field | Value |
-|-------|-------|
-| Git Repository URL | `https://github.com/89jobrien/minibox.git` |
-| Force Push | ✓ (enabled) |
-| Username | your GitHub username |
-| Password/Token | GitHub personal access token with `repo` scope |
+| Field              | Value                                          |
+| ------------------ | ---------------------------------------------- |
+| Git Repository URL | `https://github.com/89jobrien/minibox.git`     |
+| Force Push         | ✓ (enabled)                                    |
+| Username           | your GitHub username                           |
+| Password/Token     | GitHub personal access token with `repo` scope |
 
 Click **Add Push Mirror**.
 

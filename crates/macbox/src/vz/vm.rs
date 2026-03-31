@@ -81,7 +81,9 @@ mod imp {
             unsafe { boot_loader.setInitialRamdiskURL(Some(&initrd_url)) };
         }
 
-        let cmdline = NSString::from_str("console=hvc0 root=/dev/vda rw rootfstype=virtiofs quiet");
+        // virtiofs root: use the tag name, not a block device path.
+        let cmdline =
+            NSString::from_str("console=hvc0 root=mbx-rootfs rootfstype=virtiofs rw quiet");
         // SAFETY: setCommandLine: is a standard setter.
         unsafe { boot_loader.setCommandLine(&cmdline) };
 
@@ -185,38 +187,38 @@ mod imp {
     unsafe impl Sync for VzVm {}
 
     impl VzVm {
-        /// Boot the Linux VM described by `config`.
+        /// Build and start the VM on the GCD main queue, returning the VM handle
+        /// and a shared start-result signal.
         ///
-        /// This function builds the `VZVirtualMachineConfiguration`, validates it,
-        /// creates the `VZVirtualMachine`, starts it asynchronously, and polls until
-        /// the VM reaches the `Running` state (or an error/timeout occurs).
+        /// **Must be called from the GCD main queue** (via `dispatch_sync_f`).
+        /// Returns immediately after calling `startWithCompletionHandler` — does
+        /// NOT poll. The caller polls `start_signal` from a worker thread so the
+        /// main queue stays free to dispatch the completion callback.
         ///
-        /// Must be called from a blocking context (e.g. inside `tokio::task::spawn_blocking`).
-        pub fn boot(config: VzVmConfig) -> Result<Self> {
+        /// # Safety
+        ///
+        /// All VZ object constructors are standard ObjC inits called on the main
+        /// queue as required by VZ.framework on Tahoe (macOS 26+).
+        pub fn prepare_on_main_queue(
+            config: VzVmConfig,
+        ) -> Result<(Self, Arc<Mutex<Option<Result<(), String>>>>)> {
             use crate::vz::bindings::load_vz_framework;
 
             load_vz_framework().context("load Virtualization.framework")?;
 
-            // ------------------------------------------------------------------
-            // Build configuration
-            // ------------------------------------------------------------------
             // SAFETY: All VZ object allocations below are standard ObjC inits.
-            // We are in a blocking context so no async-runtime constraints apply.
+            // This function is only called on the GCD main queue.
             let vm_config = unsafe { VZVirtualMachineConfiguration::new() };
 
-            // Boot loader
             let boot_loader =
                 unsafe { build_boot_loader(&config) }.context("build VZLinuxBootLoader")?;
-            // SAFETY: setBootLoader: is a standard setter; boot_loader is a valid VZLinuxBootLoader
-            // which conforms to VZBootLoader.
+            // SAFETY: setBootLoader: accepts a VZLinuxBootLoader which conforms to VZBootLoader.
             unsafe { vm_config.setBootLoader(Some(&*boot_loader)) };
 
-            // Memory and CPU
             // SAFETY: setMemorySize: / setCPUCount: are standard setters.
             unsafe { vm_config.setMemorySize(config.memory_bytes) };
             unsafe { vm_config.setCPUCount(config.cpu_count) };
 
-            // Virtiofs shares: rootfs (read-write), images (read-only), containers (read-write)
             let rootfs_dev = unsafe { build_virtiofs("mbx-rootfs", &config.rootfs_path(), false) }
                 .context("build virtiofs mbx-rootfs")?;
             let images_dev = unsafe { build_virtiofs("mbx-images", &config.images_dir, true) }
@@ -225,19 +227,15 @@ mod imp {
                 unsafe { build_virtiofs("mbx-containers", &config.containers_dir, false) }
                     .context("build virtiofs mbx-containers")?;
 
-            // Upcast subtype Retained to parent type before building NSArray, because
-            // setDirectorySharingDevices: expects NSArray<VZDirectorySharingDeviceConfiguration>.
-            // SAFETY: into_super() is a safe upcast in the ObjC class hierarchy.
+            // SAFETY: into_super() is a safe upcast; setDirectorySharingDevices: is a standard setter.
             let fs_devices: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
                 NSArray::from_retained_slice(&[
                     rootfs_dev.into_super(),
                     images_dev.into_super(),
                     containers_dev.into_super(),
                 ]);
-            // SAFETY: setDirectorySharingDevices: is a standard setter.
             unsafe { vm_config.setDirectorySharingDevices(&fs_devices) };
 
-            // Vsock device — upcast VZVirtioSocketDeviceConfiguration → VZSocketDeviceConfiguration.
             // SAFETY: VZVirtioSocketDeviceConfiguration::new() follows ObjC +new.
             let vsock = unsafe { VZVirtioSocketDeviceConfiguration::new() };
             let socket_devices: Retained<NSArray<VZSocketDeviceConfiguration>> =
@@ -245,61 +243,65 @@ mod imp {
             // SAFETY: setSocketDevices: is a standard setter.
             unsafe { vm_config.setSocketDevices(&socket_devices) };
 
-            // Serial port → stderr — upcast to VZSerialPortConfiguration.
             let serial_cfg = unsafe { build_serial_port() };
             let serial_devices: Retained<NSArray<VZSerialPortConfiguration>> =
                 NSArray::from_retained_slice(&[serial_cfg.into_super()]);
             // SAFETY: setSerialPorts: is a standard setter.
             unsafe { vm_config.setSerialPorts(&serial_devices) };
 
-            // Validate configuration
             // SAFETY: validateWithError: is a standard validation method.
             unsafe { vm_config.validateWithError() }.map_err(|e| {
                 anyhow::anyhow!("VZVirtualMachineConfiguration validation failed: {:?}", e)
             })?;
 
-            // ------------------------------------------------------------------
-            // Create VZVirtualMachine (uses main queue)
-            // ------------------------------------------------------------------
-            // SAFETY: initWithConfiguration: is a standard init; vm_config is a valid,
-            // validated VZVirtualMachineConfiguration.
+            // SAFETY: initWithConfiguration: is a standard init; vm_config is validated.
             let vm = unsafe {
                 VZVirtualMachine::initWithConfiguration(VZVirtualMachine::alloc(), &vm_config)
             };
 
-            // ------------------------------------------------------------------
-            // Start the VM and wait for Running state
-            // ------------------------------------------------------------------
-            // We use a Mutex<Option<Result<(), String>>> to pass the completion result
-            // from the ObjC block back to the Rust polling loop.
-            let start_result: Arc<Mutex<Option<Result<(), String>>>> = Arc::new(Mutex::new(None));
-            let start_result_clone = Arc::clone(&start_result);
+            // Shared signal: completion handler writes here; caller polls from worker thread.
+            let start_signal: Arc<Mutex<Option<Result<(), String>>>> = Arc::new(Mutex::new(None));
+            let signal_clone = Arc::clone(&start_signal);
 
-            // SAFETY: startWithCompletionHandler: is a standard async method.
-            // The block captures start_result_clone via Arc and is only called once,
-            // after which the Arc reference count drops. NSError pointer is either
-            // null (success) or a valid autoreleased error object.
+            // SAFETY: startWithCompletionHandler: accepts `^(NSError*)`. The block captures
+            // signal_clone via Arc (refcount); called exactly once by VZ.framework.
             let block = block2::RcBlock::new(move |error: *mut objc2_foundation::NSError| {
-                let mut guard = start_result_clone
-                    .lock()
-                    .expect("start_result mutex poisoned");
+                let mut guard = signal_clone.lock().expect("start_signal mutex poisoned");
                 if error.is_null() {
                     *guard = Some(Ok(()));
                 } else {
-                    // SAFETY: error is non-null and is a valid NSError pointer provided by VZ.
-                    let description = unsafe { &*error }.localizedDescription();
-                    *guard = Some(Err(description.to_string()));
+                    // SAFETY: error is a valid NSError pointer provided by VZ.framework.
+                    let err = unsafe { &*error };
+                    let description = err.localizedDescription();
+                    let code = err.code();
+                    let domain = err.domain();
+                    *guard = Some(Err(format!(
+                        "{} (domain={} code={})",
+                        description, domain, code
+                    )));
                 }
             });
-            // SAFETY: startWithCompletionHandler: accepts a block matching `^(NSError*)`.
+            // SAFETY: startWithCompletionHandler: is a standard async method.
+            // Returns immediately; completion fires on the main queue later.
             unsafe { vm.startWithCompletionHandler(&*block) };
 
-            // Poll until the completion handler fires or the VM reaches Running/Error state.
-            let deadline = Instant::now() + Duration::from_secs(30);
+            Ok((VzVm { vm, config }, start_signal))
+        }
+
+        /// Poll `start_signal` until the VM reaches Running state or an error occurs.
+        ///
+        /// **Must NOT be called on the GCD main queue** — the main queue must stay
+        /// free to dispatch the `startWithCompletionHandler` completion callback.
+        /// Call this from a tokio `spawn_blocking` worker thread after
+        /// `prepare_on_main_queue` returns.
+        pub fn wait_for_running(
+            vm: Self,
+            start_signal: Arc<Mutex<Option<Result<(), String>>>>,
+        ) -> Result<Self> {
+            let deadline = Instant::now() + Duration::from_secs(60);
             loop {
-                // Check completion handler result first.
                 {
-                    let guard = start_result.lock().expect("start_result mutex poisoned");
+                    let guard = start_signal.lock().expect("start_signal mutex poisoned");
                     if let Some(ref outcome) = *guard {
                         match outcome {
                             Ok(()) => break,
@@ -308,9 +310,8 @@ mod imp {
                     }
                 }
 
-                // Also check VM state directly.
-                // SAFETY: state is a standard property getter.
-                let state = unsafe { vm.state() };
+                // SAFETY: state is a standard property getter; safe from any thread.
+                let state = unsafe { vm.vm.state() };
                 match state {
                     VZVirtualMachineState::Running => break,
                     VZVirtualMachineState::Error => {
@@ -323,17 +324,17 @@ mod imp {
                     bail!("timed out waiting for VZVirtualMachine to reach Running state");
                 }
 
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(100));
             }
 
             tracing::info!(
-                memory_bytes = config.memory_bytes,
-                cpu_count = config.cpu_count,
-                rootfs = %config.rootfs_path().display(),
+                memory_bytes = vm.config.memory_bytes,
+                cpu_count = vm.config.cpu_count,
+                rootfs = %vm.config.rootfs_path().display(),
                 "vz: VM started"
             );
 
-            Ok(VzVm { vm, config })
+            Ok(vm)
         }
 
         /// Returns a reference to the underlying `VZVirtualMachine`.

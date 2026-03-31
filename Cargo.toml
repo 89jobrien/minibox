@@ -14,8 +14,8 @@ members = [
     "crates/minibox-secrets",
     "crates/minibox-client",
     "crates/xtask",
-    "mbxctl",
-    "dashbox",
+    "crates/mbxctl",
+    "crates/dashbox",
     "crates/dockerbox",
 ]
 

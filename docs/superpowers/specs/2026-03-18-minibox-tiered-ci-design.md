@@ -25,14 +25,14 @@ Local hooks remain unchanged — they are a speed boost for the developer, not t
 Tier 1 (fast, required):
   fmt          ubuntu-latest   ~30s    cargo fmt --all --check
   clippy-linux ubuntu-latest   ~2min   cargo clippy --workspace --all-targets -- -D warnings
-  clippy-macos macos-latest    ~2min   cargo clippy -p linuxbox -p minibox-macros
+  clippy-macos macos-latest    ~2min   cargo clippy -p mbx -p minibox-macros
                                                     -p minibox-cli -p daemonbox -- -D warnings
 
 Tier 2 (test, ~8 min, required, parallel with Tier 1):
   test-linux   ubuntu-latest           cargo nextest run --workspace --lib
                                        cargo nextest run -p daemonbox
                                            --test handler_tests --test conformance_tests
-  test-macos   macos-latest            cargo nextest run -p linuxbox -p minibox-macros
+  test-macos   macos-latest            cargo nextest run -p mbx -p minibox-macros
                                                         -p minibox-cli -p daemonbox
 ```
 

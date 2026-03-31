@@ -278,10 +278,66 @@ async fn start_vz(
         cpu_count: 2,
     };
 
-    // VZ.framework calls are synchronous on a GCD queue — must be off the async runtime.
-    let vm = tokio::task::spawn_blocking(move || VzVm::boot(config))
+    // VZ.framework (Tahoe/macOS 26+) requires VZVirtualMachineConfiguration and
+    // VZVirtualMachine to be constructed on the GCD main queue. The start
+    // completion handler is also dispatched back to the main queue, so we must
+    // NOT block the main queue while waiting for it to fire.
+    //
+    // Two-phase boot:
+    //   1. dispatch_sync_f to main queue: build config, create VM, call
+    //      startWithCompletionHandler — returns immediately with a shared signal.
+    //   2. Poll the signal from the tokio worker thread (main queue stays free).
+    //
+    // No new deps — _dispatch_main_q / dispatch_sync_f are in libSystem.
+    #[link(name = "System", kind = "dylib")]
+    unsafe extern "C" {
+        static _dispatch_main_q: std::ffi::c_void;
+        fn dispatch_sync_f(
+            queue: *const std::ffi::c_void,
+            context: *mut std::ffi::c_void,
+            work: unsafe extern "C" fn(*mut std::ffi::c_void),
+        );
+    }
+
+    // Phase 1: prepare on main queue via dispatch_sync_f.
+    type PrepareResult = anyhow::Result<(VzVm, Arc<std::sync::Mutex<Option<Result<(), String>>>>)>;
+    struct PrepareCtx {
+        config: Option<VzVmConfig>,
+        result: Option<PrepareResult>,
+    }
+    unsafe extern "C" fn prepare_trampoline(ctx: *mut std::ffi::c_void) {
+        // SAFETY: ctx is a valid &mut PrepareCtx allocated on the stack in the
+        // spawn_blocking closure below; dispatch_sync_f guarantees it outlives
+        // this call and that this function runs exactly once.
+        let c = unsafe { &mut *(ctx as *mut PrepareCtx) };
+        let config = c.config.take().expect("PrepareCtx config missing");
+        c.result = Some(VzVm::prepare_on_main_queue(config));
+    }
+
+    let (vm, start_signal) = tokio::task::spawn_blocking(move || {
+        let mut ctx = PrepareCtx {
+            config: Some(config),
+            result: None,
+        };
+        // SAFETY: _dispatch_main_q is the live GCD main queue (kept running by
+        // dispatch_main() in miniboxd's main()); prepare_trampoline writes to ctx
+        // before dispatch_sync_f returns; ctx is stack-allocated and outlives the call.
+        unsafe {
+            dispatch_sync_f(
+                &_dispatch_main_q,
+                &mut ctx as *mut PrepareCtx as *mut std::ffi::c_void,
+                prepare_trampoline,
+            );
+        }
+        ctx.result.expect("prepare_trampoline did not set result")
+    })
+    .await
+    .context("spawn_blocking prepare_on_main_queue")??;
+
+    // Phase 2: poll from worker thread — main queue stays free for VZ callbacks.
+    let vm = tokio::task::spawn_blocking(move || VzVm::wait_for_running(vm, start_signal))
         .await
-        .context("spawn_blocking VzVm::boot")??;
+        .context("spawn_blocking wait_for_running")??;
 
     info!(
         port = vz::vsock::AGENT_PORT,
@@ -305,6 +361,7 @@ async fn start_vz(
         network_provider: Arc::new(mbx::adapters::NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

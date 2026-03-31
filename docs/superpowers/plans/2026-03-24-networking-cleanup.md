@@ -6,7 +6,7 @@
 
 **Architecture:** `NetworkLifecycle` wraps `DynNetworkProvider` with best-effort cleanup semantics; it is `#[derive(Clone)]` so `run_inner`'s `tokio::task::spawn` closure can call `attach` after cloning. All five inline network call sites in `handler.rs` become one-liner `NetworkLifecycle` method calls.
 
-**Tech Stack:** Rust 2024, Tokio async, `async_trait`, `MockNetwork` from `linuxbox::adapters::mocks`
+**Tech Stack:** Rust 2024, Tokio async, `async_trait`, `MockNetwork` from `mbx::adapters::mocks`
 
 **Spec:** `docs/superpowers/specs/2026-03-24-networking-cleanup-design.md`
 
@@ -14,18 +14,18 @@
 
 ## File Map
 
-| Action | File | Purpose |
-|--------|------|---------|
-| Create | `crates/daemonbox/src/network_lifecycle.rs` | `NetworkLifecycle` struct |
-| Modify | `crates/daemonbox/src/lib.rs` | declare `pub mod network_lifecycle` |
-| Modify | `crates/daemonbox/src/handler.rs` | replace 5 inline network call sites |
-| Modify | `crates/linuxbox/src/adapters/mocks.rs` | add `with_cleanup_failure()` to `MockNetwork` |
-| Modify | `crates/linuxbox/src/domain/networking.rs` | expand doc comments |
-| Modify | `crates/linuxbox/src/protocol.rs` | expand `network` field doc |
-| Modify | `crates/minibox-cli/src/main.rs` | expand `--network` help text |
-| Modify | `crates/daemonbox/tests/conformance_tests.rs` | add NetworkProvider conformance section |
-| Modify | `crates/linuxbox/src/adapters/colima.rs` | add env-var regression tests to inline `mod tests` |
-| Modify | `crates/linuxbox/tests/adapter_colima_tests.rs` | add manifest.json regression tests |
+| Action | File                                          | Purpose                                            |
+| ------ | --------------------------------------------- | -------------------------------------------------- |
+| Create | `crates/daemonbox/src/network_lifecycle.rs`   | `NetworkLifecycle` struct                          |
+| Modify | `crates/daemonbox/src/lib.rs`                 | declare `pub mod network_lifecycle`                |
+| Modify | `crates/daemonbox/src/handler.rs`             | replace 5 inline network call sites                |
+| Modify | `crates/mbx/src/adapters/mocks.rs`            | add `with_cleanup_failure()` to `MockNetwork`      |
+| Modify | `crates/mbx/src/domain/networking.rs`         | expand doc comments                                |
+| Modify | `crates/mbx/src/protocol.rs`                  | expand `network` field doc                         |
+| Modify | `crates/minibox-cli/src/main.rs`              | expand `--network` help text                       |
+| Modify | `crates/daemonbox/tests/conformance_tests.rs` | add NetworkProvider conformance section            |
+| Modify | `crates/mbx/src/adapters/colima.rs`           | add env-var regression tests to inline `mod tests` |
+| Modify | `crates/mbx/tests/adapter_colima_tests.rs`    | add manifest.json regression tests                 |
 
 ---
 
@@ -36,7 +36,8 @@ Needed by Task 2's error-swallowing test.
 > **Note on ordering:** The spec prescribes `NetworkLifecycle` extraction first, but Task 2's `cleanup_swallows_provider_error` test requires `MockNetwork.with_cleanup_failure()`. MockNetwork is committed first as a prerequisite; NetworkLifecycle extraction follows immediately in Task 2.
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/mocks.rs:488-524`
+
+- Modify: `crates/mbx/src/adapters/mocks.rs:488-524`
 
 - [ ] **Step 1: Add `cleanup_should_succeed` field to `MockNetworkState`**
 
@@ -89,14 +90,15 @@ async fn cleanup(&self, _container_id: &str) -> Result<()> {
 - [ ] **Step 5: Verify it compiles**
 
 ```bash
-cargo check -p linuxbox
+cargo check -p mbx
 ```
+
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/mocks.rs
+git add crates/mbx/src/adapters/mocks.rs
 git commit -m "test(mocks): add with_cleanup_failure() to MockNetwork"
 ```
 
@@ -105,6 +107,7 @@ git commit -m "test(mocks): add with_cleanup_failure() to MockNetwork"
 ## Task 2: Create `NetworkLifecycle` module
 
 **Files:**
+
 - Create: `crates/daemonbox/src/network_lifecycle.rs`
 - Modify: `crates/daemonbox/src/lib.rs`
 
@@ -116,7 +119,7 @@ Create `crates/daemonbox/src/network_lifecycle.rs` with the test module only (st
 //! Lifecycle wrapper for [`NetworkProvider`] with consistent error handling.
 
 use anyhow::Result;
-use linuxbox::domain::{DynNetworkProvider, NetworkConfig};
+use mbx::domain::{DynNetworkProvider, NetworkConfig};
 use tracing::warn;
 
 /// Thin lifecycle wrapper around a [`NetworkProvider`].
@@ -169,7 +172,7 @@ impl NetworkLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::adapters::mocks::MockNetwork;
+    use mbx::adapters::mocks::MockNetwork;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -276,6 +279,7 @@ git commit -m "feat(daemonbox): add NetworkLifecycle wrapper with best-effort cl
 Replace all 5 inline `network_provider` call sites with `NetworkLifecycle`.
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 
 - [ ] **Step 1: Add the import at the top of `handler.rs`**
@@ -289,6 +293,7 @@ use crate::network_lifecycle::NetworkLifecycle;
 - [ ] **Step 2: Replace `handle_run_streaming` cleanup (line ~228)**
 
 Find:
+
 ```rust
     // ── Network cleanup (ephemeral) ────────────────────────────────────
     if let Err(e) = deps.network_provider.cleanup(&container_id).await {
@@ -297,6 +302,7 @@ Find:
 ```
 
 Replace with:
+
 ```rust
     // ── Network cleanup (ephemeral) ────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
@@ -307,6 +313,7 @@ Replace with:
 - [ ] **Step 3: Replace `run_inner_capture` setup + attach (lines ~343-412)**
 
 Find the setup block:
+
 ```rust
     // ── Network setup ──────────────────────────────────────────────────
     let net_mode = network.unwrap_or(NetworkMode::None);
@@ -322,6 +329,7 @@ Find the setup block:
 ```
 
 Replace with:
+
 ```rust
     // ── Network setup ──────────────────────────────────────────────────
     let net_mode = network.unwrap_or(NetworkMode::None);
@@ -334,6 +342,7 @@ Replace with:
 ```
 
 Then find the attach block:
+
 ```rust
     // ── Network attach ─────────────────────────────────────────────────
     deps.network_provider
@@ -343,6 +352,7 @@ Then find the attach block:
 ```
 
 Replace with:
+
 ```rust
     // ── Network attach ─────────────────────────────────────────────────
     net.attach(&id, pid).await.context("network attach")?;
@@ -351,6 +361,7 @@ Replace with:
 - [ ] **Step 4: Replace `run_inner` setup + spawn-attach (lines ~536-616)**
 
 Find the setup block (identical pattern to run_inner_capture):
+
 ```rust
     // ── Network setup ──────────────────────────────────────────────────
     let net_mode = network.unwrap_or(NetworkMode::None);
@@ -366,6 +377,7 @@ Find the setup block (identical pattern to run_inner_capture):
 ```
 
 Replace with:
+
 ```rust
     // ── Network setup ──────────────────────────────────────────────────
     let net_mode = network.unwrap_or(NetworkMode::None);
@@ -378,16 +390,19 @@ Replace with:
 ```
 
 Then find the block that clones `network_provider` for the spawn closure:
+
 ```rust
     let network_provider_clone = Arc::clone(&deps.network_provider);
 ```
 
 Replace with:
+
 ```rust
     let net_clone = net.clone();
 ```
 
 Then inside the `tokio::task::spawn` closure, find:
+
 ```rust
                 // ── Network attach ─────────────────────────────────────
                 if let Err(e) = network_provider_clone.attach(&id_clone, pid).await {
@@ -396,6 +411,7 @@ Then inside the `tokio::task::spawn` closure, find:
 ```
 
 Replace with:
+
 ```rust
                 // ── Network attach ─────────────────────────────────────
                 if let Err(e) = net_clone.attach(&id_clone, pid).await {
@@ -406,6 +422,7 @@ Replace with:
 - [ ] **Step 5: Replace `handle_stop` cleanup (line ~772)**
 
 Find:
+
 ```rust
     // ── Network cleanup ────────────────────────────────────────────────
     if let Err(e) = deps.network_provider.cleanup(&id).await {
@@ -414,6 +431,7 @@ Find:
 ```
 
 Replace with:
+
 ```rust
     // ── Network cleanup ────────────────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
@@ -424,6 +442,7 @@ Replace with:
 - [ ] **Step 6: Replace `remove_inner` cleanup (line ~909)**
 
 Find:
+
 ```rust
     // ── Network cleanup ────────────────────────────────────────────────
     if let Err(e) = deps.network_provider.cleanup(id).await {
@@ -432,6 +451,7 @@ Find:
 ```
 
 Replace with:
+
 ```rust
     // ── Network cleanup ────────────────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
@@ -465,8 +485,9 @@ git commit -m "refactor(handler): replace inline network calls with NetworkLifec
 ## Task 4: Expand doc comments
 
 **Files:**
-- Modify: `crates/linuxbox/src/domain/networking.rs`
-- Modify: `crates/linuxbox/src/protocol.rs`
+
+- Modify: `crates/mbx/src/domain/networking.rs`
+- Modify: `crates/mbx/src/protocol.rs`
 - Modify: `crates/minibox-cli/src/main.rs`
 
 - [ ] **Step 1: Expand `NetworkMode` variant docs in `networking.rs`**
@@ -561,7 +582,7 @@ Find the `--network` arg definition (~line 72-74):
 - [ ] **Step 5: Verify docs build cleanly**
 
 ```bash
-cargo doc --no-deps -p linuxbox -p minibox-cli 2>&1 | grep -E "^error|warning\["
+cargo doc --no-deps -p mbx -p minibox-cli 2>&1 | grep -E "^error|warning\["
 ```
 
 Expected: no errors. Warnings about missing docs on other items are acceptable.
@@ -569,7 +590,7 @@ Expected: no errors. Warnings about missing docs on other items are acceptable.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/domain/networking.rs crates/linuxbox/src/protocol.rs crates/minibox-cli/src/main.rs
+git add crates/mbx/src/domain/networking.rs crates/mbx/src/protocol.rs crates/minibox-cli/src/main.rs
 git commit -m "docs(networking): expand NetworkMode/NetworkConfig/protocol/CLI doc comments"
 ```
 
@@ -578,6 +599,7 @@ git commit -m "docs(networking): expand NetworkMode/NetworkConfig/protocol/CLI d
 ## Task 5: NetworkProvider conformance tests
 
 **Files:**
+
 - Modify: `crates/daemonbox/tests/conformance_tests.rs`
 
 - [ ] **Step 1: Add a `NetworkProvider` conformance section**
@@ -593,7 +615,7 @@ At the end of the `mod conformance { ... }` block (after the existing handler te
     #[tokio::test]
     async fn network_noop_must_succeed_for_none_mode() {
         let mock = MockNetwork::new();
-        let config = linuxbox::domain::NetworkConfig::default(); // mode = None
+        let config = mbx::domain::NetworkConfig::default(); // mode = None
         let result = mock.setup("ctr-noop", &config).await;
         assert!(result.is_ok(), "noop setup must succeed: {result:?}");
     }
@@ -602,7 +624,7 @@ At the end of the `mod conformance { ... }` block (after the existing handler te
     #[tokio::test]
     async fn network_setup_must_return_namespace_path() {
         let mock = MockNetwork::new();
-        let config = linuxbox::domain::NetworkConfig::default();
+        let config = mbx::domain::NetworkConfig::default();
         let ns_path = mock.setup("ctr-ns", &config).await.expect("setup failed");
         assert!(!ns_path.is_empty(), "setup must return a non-empty namespace path");
     }
@@ -611,7 +633,7 @@ At the end of the `mod conformance { ... }` block (after the existing handler te
     #[tokio::test]
     async fn network_cleanup_must_succeed_after_setup() {
         let mock = MockNetwork::new();
-        let config = linuxbox::domain::NetworkConfig::default();
+        let config = mbx::domain::NetworkConfig::default();
         mock.setup("ctr-clean", &config).await.expect("setup failed");
         let result = mock.cleanup("ctr-clean").await;
         assert!(result.is_ok(), "cleanup must succeed after setup: {result:?}");
@@ -670,7 +692,7 @@ In the existing `mod performance_conformance { ... }` block, add:
     #[tokio::test]
     async fn network_noop_setup_must_complete_under_1ms() {
         let mock = MockNetwork::new();
-        let config = linuxbox::domain::NetworkConfig::default();
+        let config = mbx::domain::NetworkConfig::default();
         let start = std::time::Instant::now();
         mock.setup("perf-ctr", &config).await.unwrap();
         let elapsed = start.elapsed();
@@ -703,7 +725,8 @@ git commit -m "test(conformance): add NetworkProvider direct trait and handler c
 Add to `colima.rs` inline `mod tests` (the only place that can call private functions).
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/colima.rs`
+
+- Modify: `crates/mbx/src/adapters/colima.rs`
 
 The existing `ENV_MUTEX` is already declared at line 907. These tests go inside the same `mod tests` block.
 
@@ -857,7 +880,7 @@ After the existing `test_lima_home_defaults_to_colima_lima_dir` test (~line 952)
 - [ ] **Step 2: Run the colima unit tests**
 
 ```bash
-cargo test -p linuxbox adapters::colima::tests -- --nocapture
+cargo test -p mbx adapters::colima::tests -- --nocapture
 ```
 
 Expected: 5 new tests pass alongside existing 5 (10 total in `colima::tests`).
@@ -865,7 +888,7 @@ Expected: 5 new tests pass alongside existing 5 (10 total in `colima::tests`).
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/colima.rs
+git add crates/mbx/src/adapters/colima.rs
 git commit -m "test(colima): add env var regression tests for colima_home/lima_home/limactl_command"
 ```
 
@@ -876,7 +899,8 @@ git commit -m "test(colima): add env var regression tests for colima_home/lima_h
 Add to the external integration test file, testing the `ColimaRegistry` via injected executor.
 
 **Files:**
-- Modify: `crates/linuxbox/tests/adapter_colima_tests.rs`
+
+- Modify: `crates/mbx/tests/adapter_colima_tests.rs`
 
 - [ ] **Step 1: Add happy-path, malformed, and empty-layers manifest tests**
 
@@ -973,7 +997,7 @@ fn get_image_layers_returns_error_on_empty_layers_array() {
 - [ ] **Step 3: Run the colima integration tests**
 
 ```bash
-cargo test -p linuxbox --test adapter_colima_tests -- --nocapture
+cargo test -p mbx --test adapter_colima_tests -- --nocapture
 ```
 
 Expected: 3 new tests pass alongside existing tests.
@@ -989,7 +1013,7 @@ Expected: all tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/adapter_colima_tests.rs
+git add crates/mbx/tests/adapter_colima_tests.rs
 git commit -m "test(colima): add manifest.json malformed and empty-layers regression tests"
 ```
 
@@ -1008,7 +1032,7 @@ Expected output: all tests pass, no new failures.
 - [ ] **Run clippy to catch any lint regressions**
 
 ```bash
-cargo clippy -p linuxbox -p daemonbox -p minibox-cli -- -D warnings
+cargo clippy -p mbx -p daemonbox -p minibox-cli -- -D warnings
 ```
 
 Expected: no warnings treated as errors.

@@ -16,33 +16,34 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `crates/daemonbox/src/telemetry/mod.rs` | Re-exports, `TelemetryConfig` |
-| `crates/daemonbox/src/telemetry/prometheus.rs` | `PrometheusMetricsRecorder` adapter |
-| `crates/daemonbox/src/telemetry/noop.rs` | `NoOpMetricsRecorder` |
-| `crates/daemonbox/src/telemetry/traces.rs` | OTEL trace exporter setup, `OtelGuard` |
-| `crates/daemonbox/src/telemetry/server.rs` | axum `/metrics` HTTP server |
+| File                                           | Responsibility                         |
+| ---------------------------------------------- | -------------------------------------- |
+| `crates/daemonbox/src/telemetry/mod.rs`        | Re-exports, `TelemetryConfig`          |
+| `crates/daemonbox/src/telemetry/prometheus.rs` | `PrometheusMetricsRecorder` adapter    |
+| `crates/daemonbox/src/telemetry/noop.rs`       | `NoOpMetricsRecorder`                  |
+| `crates/daemonbox/src/telemetry/traces.rs`     | OTEL trace exporter setup, `OtelGuard` |
+| `crates/daemonbox/src/telemetry/server.rs`     | axum `/metrics` HTTP server            |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `Cargo.toml` (workspace) | Add workspace deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, prometheus-client, axum, dashmap |
-| `crates/minibox-core/Cargo.toml` | No changes needed — trait has no OTEL deps |
-| `crates/minibox-core/src/domain.rs` | Add `MetricsRecorder` trait + `DynMetricsRecorder` alias |
-| `crates/minibox-core/src/adapters/mocks.rs` | Add `RecordingMetricsRecorder` test double |
-| `crates/daemonbox/Cargo.toml` | Add deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, tracing-subscriber, prometheus-client, axum, dashmap |
-| `crates/daemonbox/src/lib.rs` | Add `pub mod telemetry;` |
-| `crates/daemonbox/src/handler.rs` | Add `metrics: DynMetricsRecorder` to `HandlerDependencies`, instrument handlers |
-| `crates/miniboxd/Cargo.toml` | No new deps needed — traces and metrics are in daemonbox |
-| `crates/miniboxd/src/main.rs` | Replace `tracing_subscriber::fmt().init()` with `init_tracing()`, wire metrics recorder + server |
+| File                                        | Change                                                                                                                                      |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cargo.toml` (workspace)                    | Add workspace deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, prometheus-client, axum, dashmap           |
+| `crates/minibox-core/Cargo.toml`            | No changes needed — trait has no OTEL deps                                                                                                  |
+| `crates/minibox-core/src/domain.rs`         | Add `MetricsRecorder` trait + `DynMetricsRecorder` alias                                                                                    |
+| `crates/minibox-core/src/adapters/mocks.rs` | Add `RecordingMetricsRecorder` test double                                                                                                  |
+| `crates/daemonbox/Cargo.toml`               | Add deps: opentelemetry, opentelemetry_sdk, opentelemetry-otlp, tracing-opentelemetry, tracing-subscriber, prometheus-client, axum, dashmap |
+| `crates/daemonbox/src/lib.rs`               | Add `pub mod telemetry;`                                                                                                                    |
+| `crates/daemonbox/src/handler.rs`           | Add `metrics: DynMetricsRecorder` to `HandlerDependencies`, instrument handlers                                                             |
+| `crates/miniboxd/Cargo.toml`                | No new deps needed — traces and metrics are in daemonbox                                                                                    |
+| `crates/miniboxd/src/main.rs`               | Replace `tracing_subscriber::fmt().init()` with `init_tracing()`, wire metrics recorder + server                                            |
 
 ---
 
 ## Task 1: Add Workspace Dependencies
 
 **Files:**
+
 - Modify: `Cargo.toml` (workspace root, lines 26–72)
 
 - [ ] **Step 1: Add new workspace dependencies**
@@ -81,7 +82,8 @@ git commit -m "deps: add opentelemetry, prometheus, axum, dashmap workspace deps
 ## Task 2: Add `MetricsRecorder` Domain Trait
 
 **Files:**
-- Modify: `crates/minibox-core/src/domain.rs` (after line 83, the Dyn* aliases section)
+
+- Modify: `crates/minibox-core/src/domain.rs` (after line 83, the Dyn\* aliases section)
 
 - [ ] **Step 1: Write the test for `MetricsRecorder` trait object creation**
 
@@ -166,6 +168,7 @@ git commit -m "feat(core): add MetricsRecorder domain trait (port)"
 ## Task 3: Add `RecordingMetricsRecorder` Test Double
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Write the test**
@@ -299,6 +302,7 @@ git commit -m "feat(core): add RecordingMetricsRecorder test double"
 ## Task 4: Add `NoOpMetricsRecorder` and `PrometheusMetricsRecorder`
 
 **Files:**
+
 - Create: `crates/daemonbox/src/telemetry/mod.rs`
 - Create: `crates/daemonbox/src/telemetry/noop.rs`
 - Create: `crates/daemonbox/src/telemetry/prometheus.rs`
@@ -541,6 +545,7 @@ git commit -m "feat(daemonbox): add NoOp and Prometheus MetricsRecorder adapters
 ## Task 5: Add OTEL Trace Exporter
 
 **Files:**
+
 - Create: `crates/daemonbox/src/telemetry/traces.rs`
 
 - [ ] **Step 1: Write the test**
@@ -681,6 +686,7 @@ git commit -m "feat(daemonbox): add OTEL trace exporter with optional OTLP bridg
 ## Task 6: Add Metrics HTTP Server
 
 **Files:**
+
 - Create: `crates/daemonbox/src/telemetry/server.rs`
 
 - [ ] **Step 1: Write the integration test**
@@ -790,6 +796,7 @@ git commit -m "feat(daemonbox): add /metrics HTTP server for Prometheus scraping
 ## Task 7: Wire `MetricsRecorder` into `HandlerDependencies`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs` (lines 17–77)
 - Modify: `crates/miniboxd/src/main.rs` (lines 306–368)
 
@@ -845,6 +852,7 @@ git commit -m "feat(daemonbox): add metrics field to HandlerDependencies"
 ## Task 8: Instrument Handlers with Metrics
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 
 - [ ] **Step 1: Write a test verifying handler emits metrics**
@@ -1013,6 +1021,7 @@ git commit -m "feat(daemonbox): instrument handlers with MetricsRecorder"
 ## Task 9: Wire Telemetry in Composition Root
 
 **Files:**
+
 - Modify: `crates/miniboxd/src/main.rs`
 
 - [ ] **Step 1: Replace tracing init in main.rs**
@@ -1072,7 +1081,7 @@ Expected: PASS
 
 - [ ] **Step 6: Run macOS quality gates**
 
-Run: `cargo fmt --all --check && cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
+Run: `cargo fmt --all --check && cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -1087,6 +1096,7 @@ git commit -m "feat(miniboxd): wire OTEL tracing, Prometheus metrics, /metrics e
 ## Task 10: Update CLAUDE.md
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Add telemetry env vars to Environment Variables section**
@@ -1137,15 +1147,15 @@ These are straightforward `deps.metrics.record_*()` calls once the infrastructur
 
 ## Summary
 
-| Task | What | Files | Tests |
-|------|------|-------|-------|
-| 1 | Workspace deps | `Cargo.toml` | cargo check |
-| 2 | `MetricsRecorder` trait | `domain.rs` | 1 unit |
-| 3 | `RecordingMetricsRecorder` | `mocks.rs` | 3 unit |
-| 4 | NoOp + Prometheus adapters | `telemetry/` (3 files) | 2 unit |
-| 5 | OTEL trace exporter | `traces.rs` | 1 unit |
-| 6 | Metrics HTTP server | `server.rs` | 1 integration |
-| 7 | Wire into HandlerDependencies | `handler.rs`, `main.rs` | cargo check |
-| 8 | Instrument handlers | `handler.rs` | 1 integration |
-| 9 | Composition root wiring | `main.rs` | quality gates |
-| 10 | Documentation | `CLAUDE.md` | — |
+| Task | What                          | Files                   | Tests         |
+| ---- | ----------------------------- | ----------------------- | ------------- |
+| 1    | Workspace deps                | `Cargo.toml`            | cargo check   |
+| 2    | `MetricsRecorder` trait       | `domain.rs`             | 1 unit        |
+| 3    | `RecordingMetricsRecorder`    | `mocks.rs`              | 3 unit        |
+| 4    | NoOp + Prometheus adapters    | `telemetry/` (3 files)  | 2 unit        |
+| 5    | OTEL trace exporter           | `traces.rs`             | 1 unit        |
+| 6    | Metrics HTTP server           | `server.rs`             | 1 integration |
+| 7    | Wire into HandlerDependencies | `handler.rs`, `main.rs` | cargo check   |
+| 8    | Instrument handlers           | `handler.rs`            | 1 integration |
+| 9    | Composition root wiring       | `main.rs`               | quality gates |
+| 10   | Documentation                 | `CLAUDE.md`             | —             |

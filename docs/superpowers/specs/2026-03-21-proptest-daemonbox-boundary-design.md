@@ -58,7 +58,7 @@ All use `tokio::runtime::Runtime::new().unwrap().block_on(...)` to drive async m
 
 ### Handler Input Safety (3 tests)
 
-Wire `HandlerDependencies` using `adapters::mocks` (already present in linuxbox). No Linux syscalls are required. Both `handle_stop` and `handle_remove` check `state.get_container(id)` first — for an unknown ID they return `ContainerNotFound` before touching any filesystem or mock dependencies.
+Wire `HandlerDependencies` using `adapters::mocks` (already present in mbx). No Linux syscalls are required. Both `handle_stop` and `handle_remove` check `state.get_container(id)` first — for an unknown ID they return `ContainerNotFound` before touching any filesystem or mock dependencies.
 
 5. **`handle_stop_unknown_id_is_error`** — `handle_stop(arbitrary_id, empty_state)` always returns `DaemonResponse::Error`, never panics.
 
@@ -66,7 +66,7 @@ Wire `HandlerDependencies` using `adapters::mocks` (already present in linuxbox)
 
 7. **`handle_list_always_returns_container_list`** — `handle_list(state)` with arbitrary pre-populated state always returns `DaemonResponse::ContainerList`, never any other variant.
 
-## File 2: `crates/linuxbox/tests/proptest_suite.rs` (extend)
+## File 2: `crates/mbx/tests/proptest_suite.rs` (extend)
 
 ### CgroupConfig Boundary Validation (2 tests, Linux + root only)
 
@@ -81,7 +81,7 @@ Gated with `#[cfg(target_os = "linux")]`. Skipped by `cargo xtask test-unit` on 
 ## Test Placement Rationale
 
 - Public API invariants for daemonbox types → `crates/daemonbox/tests/` (integration test style, exercises public API only)
-- Extensions to existing linuxbox property suite → `crates/linuxbox/tests/proptest_suite.rs`
+- Extensions to existing mbx property suite → `crates/mbx/tests/proptest_suite.rs`
 - No inline `#[cfg(test)]` blocks — handler dispatch requires `HandlerDependencies` wiring that is cleaner in integration test context
 
 ## Platform Matrix

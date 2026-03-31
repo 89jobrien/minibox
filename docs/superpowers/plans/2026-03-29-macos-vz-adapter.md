@@ -14,23 +14,24 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Create | `crates/macbox/src/vz/vsock.rs` | Async vsock connection to guest port 9000 |
-| Create | `crates/macbox/src/vz/proxy.rs` | `VzProxy` — send request, stream responses |
-| Create | `crates/macbox/src/vz/adapter.rs` | Four `VzAdapter*` structs implementing domain traits |
-| Modify | `crates/macbox/src/vz/mod.rs` | Re-export vsock, proxy, adapter |
-| Modify | `crates/macbox/src/lib.rs` | VZ branch in `start()` |
-| Modify | `crates/macbox/Cargo.toml` | Add `tokio-vsock` to `vz` feature |
-| Create | `crates/macbox/src/vz/agent_init.rs` | Alpine init script builder (written to rootfs) |
-| Modify | `crates/miniboxd/src/main.rs` | `MINIBOX_ADAPTER=vz` dispatch on macOS |
-| Create | `crates/macbox/tests/vz_adapter_smoke.rs` | Integration smoke test (requires VM image) |
+| Action | Path                                      | Responsibility                                       |
+| ------ | ----------------------------------------- | ---------------------------------------------------- |
+| Create | `crates/macbox/src/vz/vsock.rs`           | Async vsock connection to guest port 9000            |
+| Create | `crates/macbox/src/vz/proxy.rs`           | `VzProxy` — send request, stream responses           |
+| Create | `crates/macbox/src/vz/adapter.rs`         | Four `VzAdapter*` structs implementing domain traits |
+| Modify | `crates/macbox/src/vz/mod.rs`             | Re-export vsock, proxy, adapter                      |
+| Modify | `crates/macbox/src/lib.rs`                | VZ branch in `start()`                               |
+| Modify | `crates/macbox/Cargo.toml`                | Add `tokio-vsock` to `vz` feature                    |
+| Create | `crates/macbox/src/vz/agent_init.rs`      | Alpine init script builder (written to rootfs)       |
+| Modify | `crates/miniboxd/src/main.rs`             | `MINIBOX_ADAPTER=vz` dispatch on macOS               |
+| Create | `crates/macbox/tests/vz_adapter_smoke.rs` | Integration smoke test (requires VM image)           |
 
 ---
 
 ### Task 1: vsock connection module
 
 **Files:**
+
 - Modify: `crates/macbox/Cargo.toml`
 - Create: `crates/macbox/src/vz/vsock.rs`
 
@@ -69,6 +70,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz guest_addr_constants
 ```
+
 Expected: compile error — module does not exist.
 
 - [ ] **Step 4: Implement**
@@ -123,6 +125,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz guest_addr_constants
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -137,6 +140,7 @@ git commit -m "feat(macbox/vz): vsock connect_to_agent with retry"
 ### Task 2: `VzProxy` — serialize requests, stream responses
 
 **Files:**
+
 - Create: `crates/macbox/src/vz/proxy.rs`
 
 `VzProxy` wraps a vsock connection and implements the same request/response pattern as `minibox-client`: write one JSON line, read JSON lines until a terminal response.
@@ -176,6 +180,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz proxy_reads_single
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement**
@@ -300,6 +305,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz proxy_reads proxy_collects
 ```
+
 Expected: both PASS.
 
 - [ ] **Step 5: Wire new module into `vz/mod.rs`**
@@ -325,6 +331,7 @@ git commit -m "feat(macbox/vz): VzProxy — JSON-over-vsock request/response"
 ### Task 3: Four VzAdapter trait implementations
 
 **Files:**
+
 - Create: `crates/macbox/src/vz/adapter.rs`
 
 Each adapter holds `Arc<VzVm>` and opens a fresh vsock connection per call. For simplicity (and correctness), connections are not pooled — vsock connections inside the VM are cheap.
@@ -337,7 +344,7 @@ Each adapter holds `Arc<VzVm>` and opens a fresh vsock connection per call. For 
 mod tests {
     // Structural tests — verify adapters implement the right traits.
     use super::*;
-    use linuxbox::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use mbx::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
 
     fn assert_image_registry<T: ImageRegistry>() {}
     fn assert_container_runtime<T: ContainerRuntime>() {}
@@ -359,6 +366,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz adapter_implements_all
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement all four adapters**
@@ -407,7 +415,7 @@ impl VzRegistry {
     }
 }
 
-impl linuxbox::domain::ImageRegistry for VzRegistry {
+impl mbx::domain::ImageRegistry for VzRegistry {
     fn pull_image(&self, image_ref: &str) -> Result<()> {
         // Split image_ref into name and optional tag (e.g. "alpine:3.21" → "alpine", "3.21")
         let (image, tag) = match image_ref.split_once(':') {
@@ -443,7 +451,7 @@ impl VzFilesystem {
     }
 }
 
-impl linuxbox::domain::FilesystemProvider for VzFilesystem {
+impl mbx::domain::FilesystemProvider for VzFilesystem {
     fn create_container_fs(&self, _container_id: &str, _image_ref: &str) -> Result<std::path::PathBuf> {
         // The in-VM agent handles all filesystem setup; the host side doesn't
         // need to do anything. Return a placeholder path that is never used.
@@ -468,7 +476,7 @@ impl VzLimiter {
     }
 }
 
-impl linuxbox::domain::ResourceLimiter for VzLimiter {
+impl mbx::domain::ResourceLimiter for VzLimiter {
     fn apply_limits(
         &self,
         _container_id: &str,
@@ -495,7 +503,7 @@ impl VzRuntime {
     }
 }
 
-impl linuxbox::domain::ContainerRuntime for VzRuntime {
+impl mbx::domain::ContainerRuntime for VzRuntime {
     fn create_container(
         &self,
         config: &minibox_core::domain::ContainerConfig,
@@ -575,7 +583,7 @@ impl linuxbox::domain::ContainerRuntime for VzRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use mbx::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
 
     fn assert_image_registry<T: ImageRegistry>() {}
     fn assert_container_runtime<T: ContainerRuntime>() {}
@@ -604,6 +612,7 @@ pub use adapter::{VzFilesystem, VzLimiter, VzRegistry, VzRuntime};
 ```
 cargo test -p macbox --features vz adapter_implements
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -618,6 +627,7 @@ git commit -m "feat(macbox/vz): four VzAdapter trait impls forwarding to in-VM a
 ### Task 4: Agent PID-1 init script
 
 **Files:**
+
 - Create: `crates/macbox/src/vz/agent_init.rs`
 
 The Alpine rootfs has `/sbin/init → minibox-agent`, but minibox-agent expects a running system (mounts, network). We need a shell init script or we run minibox-agent directly as PID 1 and handle init duties in code. **Design decision from spec:** minibox-agent IS miniboxd and handles init in code (mount /proc, /sys, etc. before entering the accept loop). We need a small `/etc/inittab`-compatible entry or we rely on passing `init=/sbin/minibox-agent` to the kernel cmdline.
@@ -656,6 +666,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz inittab_contains agent_mounts
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement**
@@ -816,6 +827,7 @@ Then call `install_init_files(&rootfs_dir)?;` in `build_vm_image()` after `build
 ```
 cargo test -p macbox --features vz inittab_contains rc_local_mounts
 ```
+
 Expected: all 3 PASS.
 
 - [ ] **Step 6: Commit**
@@ -830,6 +842,7 @@ git commit -m "feat(macbox/vz): agent PID-1 init script — mounts virtiofs, exe
 ### Task 5: Wire VZ branch into `macbox::start()`
 
 **Files:**
+
 - Modify: `crates/macbox/src/lib.rs`
 - Modify: `crates/miniboxd/src/main.rs`
 
@@ -857,6 +870,7 @@ mod vz_start_tests {
 ```
 cargo test -p macbox --features vz vz_adapter_env
 ```
+
 Expected: compile error — `is_vz_adapter` not defined.
 
 - [ ] **Step 3: Add VZ branch to `lib.rs`**
@@ -983,6 +997,7 @@ pub fn default_vm_dir() -> Option<std::path::PathBuf> {
 ```
 cargo test -p macbox --features vz vz_adapter_env
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Check full compilation**
@@ -991,6 +1006,7 @@ Expected: PASS.
 cargo check -p macbox --features vz
 cargo check -p miniboxd
 ```
+
 Expected: both compile clean.
 
 - [ ] **Step 6: Commit**
@@ -1005,6 +1021,7 @@ git commit -m "feat(macbox): MINIBOX_ADAPTER=vz branch in start() — boots VzVm
 ### Task 6: Integration smoke test
 
 **Files:**
+
 - Create: `crates/macbox/tests/vz_adapter_smoke.rs`
 
 This test only runs on macOS when the VM image exists. It boots the VM, sends a `ListContainers` request via the proxy, and expects an empty list back.
@@ -1097,6 +1114,7 @@ tempfile = "3"
 ```bash
 cargo test -p macbox --features vz --no-run
 ```
+
 Expected: compiles, test binary built.
 
 - [ ] **Step 3: Commit**
@@ -1111,6 +1129,7 @@ git commit -m "test(macbox/vz): smoke test for VzAdapter — boots VM, checks Li
 ### Task 7: Pre-commit gate + CLAUDE.md update
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Run pre-commit gate**
@@ -1118,9 +1137,11 @@ git commit -m "test(macbox/vz): smoke test for VzAdapter — boots VM, checks Li
 ```bash
 cargo xtask pre-commit
 ```
+
 Expected: PASS — `cargo fmt --all --check` + clippy + release build all green.
 
 Fix any clippy warnings before committing. Common issues:
+
 - Unused `vm` field → add `#[allow(dead_code)]` or use `_vm` naming
 - `Retained::into_raw` without `from_raw` → ensure all raw pointers are eventually managed
 
@@ -1134,6 +1155,7 @@ In the "Adapter Suites" section, update:
 ```
 
 In the "Current Limitations" section, remove or update:
+
 > Adapter wiring incomplete: `vf` adapter is now wired as `vz` when `MINIBOX_ADAPTER=vz`.
 
 - [ ] **Step 3: Commit**

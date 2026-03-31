@@ -12,13 +12,13 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `crates/miniboxd/tests/helpers/mod.rs` | **Create** | `DaemonFixture` (moved), `SandboxClient`, `ExecResult`, `find_binary`, `extract_container_id` |
-| `crates/miniboxd/tests/e2e_tests.rs` | **Modify** | Replace inline fixture with `mod helpers; use helpers::*;` |
-| `crates/miniboxd/tests/sandbox_tests.rs` | **Create** | 15 sandbox scenario tests |
-| `xtask/src/main.rs` | **Modify** | Add `test-sandbox` subcommand |
-| `Justfile` | **Modify** | Add `test-sandbox` recipe |
+| File                                     | Action     | Responsibility                                                                                |
+| ---------------------------------------- | ---------- | --------------------------------------------------------------------------------------------- |
+| `crates/miniboxd/tests/helpers/mod.rs`   | **Create** | `DaemonFixture` (moved), `SandboxClient`, `ExecResult`, `find_binary`, `extract_container_id` |
+| `crates/miniboxd/tests/e2e_tests.rs`     | **Modify** | Replace inline fixture with `mod helpers; use helpers::*;`                                    |
+| `crates/miniboxd/tests/sandbox_tests.rs` | **Create** | 15 sandbox scenario tests                                                                     |
+| `xtask/src/main.rs`                      | **Modify** | Add `test-sandbox` subcommand                                                                 |
+| `Justfile`                               | **Modify** | Add `test-sandbox` recipe                                                                     |
 
 ---
 
@@ -27,12 +27,14 @@
 Move `DaemonFixture`, `find_binary()`, and `extract_container_id()` from `e2e_tests.rs` into a shared module. Add `run_cli_with_exit_code()` and make everything `pub`.
 
 **Files:**
+
 - Create: `crates/miniboxd/tests/helpers/mod.rs`
 - Modify: `crates/miniboxd/tests/e2e_tests.rs`
 
 - [ ] **Step 1: Create `helpers/mod.rs` with DaemonFixture**
 
 Create `crates/miniboxd/tests/helpers/mod.rs`. Copy the following from `e2e_tests.rs`:
+
 - `find_binary()` (lines 32-59) — make `pub`
 - `DaemonFixture` struct (lines 66-73) — make `pub` struct with `pub` fields
 - All `impl DaemonFixture` methods (lines 75-197) — make `pub`
@@ -66,6 +68,7 @@ use tempfile::TempDir;
 ```
 
 **Note:** `DaemonFixture` also uses `libc` (for `kill`/`SIGTERM` in `Drop` and `sigterm()`) and `uuid` (for `Uuid::new_v4()` in `start()`). Both resolve as transitive deps of miniboxd today, but if compilation fails, add to miniboxd's `[dev-dependencies]`:
+
 ```toml
 libc = { workspace = true }
 uuid = { workspace = true }
@@ -81,6 +84,7 @@ use helpers::{DaemonFixture, extract_container_id};
 ```
 
 Delete from `e2e_tests.rs`:
+
 - `find_binary()` (lines 32-59)
 - `DaemonFixture` struct + all impls + Drop (lines 62-254)
 - `extract_container_id()` (lines 675-694)
@@ -106,6 +110,7 @@ git commit -m "refactor(e2e): extract DaemonFixture to shared helpers module"
 Add `ExecResult` and `SandboxClient` to the shared helpers module.
 
 **Files:**
+
 - Modify: `crates/miniboxd/tests/helpers/mod.rs`
 
 - [ ] **Step 1: Add ExecResult and SandboxClient**
@@ -249,13 +254,14 @@ git commit -m "feat(test): add SandboxClient agent-oriented test wrapper"
 First 6 shell tests: stdout, stderr, exit codes, large output, network isolation, filesystem.
 
 **Files:**
+
 - Create: `crates/miniboxd/tests/sandbox_tests.rs`
 
 - [ ] **Step 1: Create sandbox_tests.rs with shared fixture and first 6 tests**
 
 Create `crates/miniboxd/tests/sandbox_tests.rs`:
 
-```rust
+````rust
 //! Sandbox contract tests: validates minibox as an AI agent code-execution sandbox.
 //!
 //! Tests exercise real images (alpine, python:3.12-alpine) in real containers,
@@ -274,8 +280,8 @@ Create `crates/miniboxd/tests/sandbox_tests.rs`:
 mod helpers;
 use helpers::SandboxClient;
 
-use linuxbox::preflight;
-use linuxbox::require_capability;
+use mbx::preflight;
+use mbx::require_capability;
 use std::sync::{Mutex, OnceLock};
 
 // ---------------------------------------------------------------------------
@@ -376,7 +382,7 @@ fn sandbox_network_isolated() {
         result.stderr
     );
 }
-```
+````
 
 - [ ] **Step 2: Verify it compiles**
 
@@ -397,6 +403,7 @@ git commit -m "test(sandbox): add shell scenarios — stdout, stderr, exit codes
 Filesystem, sequential isolation, concurrent isolation, OOM kill.
 
 **Files:**
+
 - Modify: `crates/miniboxd/tests/sandbox_tests.rs`
 
 - [ ] **Step 1: Append tests 7-10**
@@ -520,6 +527,7 @@ git commit -m "test(sandbox): add filesystem, isolation, concurrent, and OOM sce
 Five Python-specific tests using `python:3.12-alpine`.
 
 **Files:**
+
 - Modify: `crates/miniboxd/tests/sandbox_tests.rs`
 
 - [ ] **Step 1: Append Python tests**
@@ -648,6 +656,7 @@ git commit -m "test(sandbox): add Python scenarios — script execution, JSON, e
 Add `test-sandbox` subcommand to xtask and a Just recipe.
 
 **Files:**
+
 - Modify: `xtask/src/main.rs`
 - Modify: `Justfile`
 
@@ -726,7 +735,7 @@ Expected: all existing tests pass (sandbox tests won't run — they're `#[ignore
 
 - [ ] **Step 2: Run clippy**
 
-Run: `cd /Users/joe/dev/minibox && cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings 2>&1`
+Run: `cd /Users/joe/dev/minibox && cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings 2>&1`
 Expected: no warnings
 
 - [ ] **Step 3: Verify sandbox_tests compiles**
@@ -739,6 +748,7 @@ Expected: compiles (binary created but tests not executed)
 ## Execution Order
 
 Tasks must be executed sequentially:
+
 1. **Task 1** — extract DaemonFixture (prerequisite for everything)
 2. **Task 2** — add SandboxClient (prerequisite for tests)
 3. **Task 3** — shell tests 1-6

@@ -12,22 +12,23 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Modify | `crates/xtask/src/main.rs` | Add `build-vm-image` dispatch + `build_vm_image()` fn |
-| Create | `crates/xtask/src/vm_image.rs` | All download/extract/cross-compile logic |
-| Modify | `crates/macbox/Cargo.toml` | Add `objc2`, `objc2-foundation` deps; `vz` feature flag |
-| Create | `crates/macbox/src/vz/mod.rs` | Public re-exports for VZ bindings module |
-| Create | `crates/macbox/src/vz/bindings.rs` | Thin `objc2` wrappers for VZ.framework classes |
-| Create | `crates/macbox/src/vz/vm.rs` | `VzVm` struct: boot, wait-ready, shutdown |
-| Modify | `crates/macbox/src/lib.rs` | `mod vz` behind `#[cfg(feature = "vz")]` |
-| Create | `~/.mbx/vm/manifest.json` | **Runtime artifact** — versioned image manifest |
+| Action | Path                               | Responsibility                                          |
+| ------ | ---------------------------------- | ------------------------------------------------------- |
+| Modify | `crates/xtask/src/main.rs`         | Add `build-vm-image` dispatch + `build_vm_image()` fn   |
+| Create | `crates/xtask/src/vm_image.rs`     | All download/extract/cross-compile logic                |
+| Modify | `crates/macbox/Cargo.toml`         | Add `objc2`, `objc2-foundation` deps; `vz` feature flag |
+| Create | `crates/macbox/src/vz/mod.rs`      | Public re-exports for VZ bindings module                |
+| Create | `crates/macbox/src/vz/bindings.rs` | Thin `objc2` wrappers for VZ.framework classes          |
+| Create | `crates/macbox/src/vz/vm.rs`       | `VzVm` struct: boot, wait-ready, shutdown               |
+| Modify | `crates/macbox/src/lib.rs`         | `mod vz` behind `#[cfg(feature = "vz")]`                |
+| Create | `~/.mbx/vm/manifest.json`          | **Runtime artifact** — versioned image manifest         |
 
 ---
 
 ### Task 1: `VmImageManifest` type and serialization
 
 **Files:**
+
 - Create: `crates/xtask/src/vm_image.rs`
 
 - [ ] **Step 1: Write the failing test**
@@ -59,6 +60,7 @@ mod tests {
 ```
 cargo test -p xtask vm_image::tests::manifest_roundtrip
 ```
+
 Expected: compile error — `vm_image` module does not exist yet.
 
 - [ ] **Step 3: Implement the type**
@@ -117,6 +119,7 @@ mod vm_image;
 ```
 cargo test -p xtask vm_image::tests::manifest_roundtrip
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -131,9 +134,11 @@ git commit -m "feat(xtask): add VmImageManifest type with load/save"
 ### Task 2: Alpine asset download helpers
 
 **Files:**
+
 - Modify: `crates/xtask/src/vm_image.rs`
 
 The Alpine virt kernel, initramfs, and minirootfs tarball are downloaded from:
+
 - `https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-virt-3.21.3-aarch64.iso` — NO, we need individual files:
   - kernel: `https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/netboot/vmlinuz-virt`
   - initramfs: `https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/netboot/initramfs-virt`
@@ -157,6 +162,7 @@ fn alpine_urls_format_correctly() {
 ```
 cargo test -p xtask alpine_urls
 ```
+
 Expected: compile error — `AlpineAssets` not defined.
 
 - [ ] **Step 3: Implement**
@@ -214,6 +220,7 @@ pub fn download_file(url: &str, dest: &Path, force: bool) -> Result<()> {
 ```
 cargo test -p xtask alpine_urls
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -228,6 +235,7 @@ git commit -m "feat(xtask): AlpineAssets URL builder and download_file helper"
 ### Task 3: Rootfs extraction
 
 **Files:**
+
 - Modify: `crates/xtask/src/vm_image.rs`
 
 The minirootfs tarball is extracted to `vm_dir/rootfs/`. We use the host `tar` command — no Rust tar crate in xtask to keep compile times low.
@@ -254,6 +262,7 @@ fn extract_skips_when_rootfs_exists() {
 ```
 cargo test -p xtask extract_skips
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement**
@@ -298,6 +307,7 @@ tempfile = "3"
 ```
 cargo test -p xtask extract_skips
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -312,6 +322,7 @@ git commit -m "feat(xtask): rootfs extraction helper with skip-if-cached"
 ### Task 4: Cross-compile minibox-agent and place into rootfs
 
 **Files:**
+
 - Modify: `crates/xtask/src/vm_image.rs`
 
 The agent IS `miniboxd` compiled for `aarch64-unknown-linux-musl`. It goes to `rootfs/sbin/minibox-agent`. We also symlink `rootfs/sbin/init -> minibox-agent` so VZ.framework can boot with it as PID 1.
@@ -334,6 +345,7 @@ fn agent_dest_path_is_correct() {
 ```
 cargo test -p xtask agent_dest_path
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement**
@@ -404,6 +416,7 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 ```
 cargo test -p xtask agent_dest_path
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -418,6 +431,7 @@ git commit -m "feat(xtask): cross-compile agent and install into rootfs/sbin"
 ### Task 5: `build_vm_image` orchestrator function + xtask dispatch
 
 **Files:**
+
 - Modify: `crates/xtask/src/vm_image.rs`
 - Modify: `crates/xtask/src/main.rs`
 
@@ -439,6 +453,7 @@ fn vm_dir_default_uses_mbx_cache() {
 ```
 cargo test -p xtask vm_dir_default
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement orchestrator**
@@ -542,6 +557,7 @@ eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent
 ```
 cargo test -p xtask vm_dir_default
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Smoke test the xtask dispatch (no actual download)**
@@ -551,6 +567,7 @@ cargo xtask build-vm-image --help 2>&1 | head -5
 # Should not error — just prints help for unknown args and exits
 cargo check -p xtask
 ```
+
 Expected: compiles without errors.
 
 - [ ] **Step 7: Commit**
@@ -565,6 +582,7 @@ git commit -m "feat(xtask): build-vm-image command — download Alpine + cross-c
 ### Task 6: VZ.framework objc2 bindings — boot loader and VM configuration
 
 **Files:**
+
 - Modify: `crates/macbox/Cargo.toml`
 - Create: `crates/macbox/src/vz/mod.rs`
 - Create: `crates/macbox/src/vz/bindings.rs`
@@ -754,6 +772,7 @@ pub mod vz;
 ```bash
 cargo check -p macbox --features vz
 ```
+
 Expected: compiles. There will be `unused` warnings for the binding fns — that's fine.
 
 - [ ] **Step 6: Commit**
@@ -768,6 +787,7 @@ git commit -m "feat(macbox): VZ.framework objc2 bindings — boot loader, virtio
 ### Task 7: `VzVm` — boot, wait-ready, shutdown
 
 **Files:**
+
 - Create: `crates/macbox/src/vz/vm.rs`
 
 `VzVm` owns the `VZVirtualMachine` and exposes `boot() -> Result<()>` and `shutdown()`. All VZ calls happen on a dedicated GCD serial queue via `dispatch_sync` to satisfy the main-thread-or-dedicated-queue requirement. `tokio::task::spawn_blocking` bridges to async.
@@ -801,6 +821,7 @@ mod tests {
 ```
 cargo test -p macbox --features vz vz_vm_config_fields
 ```
+
 Expected: compile error — `VzVmConfig` not defined.
 
 - [ ] **Step 3: Implement `VzVmConfig` and `VzVm`**
@@ -1060,9 +1081,11 @@ mod tests {
 - [ ] **Step 4: Add `block2` dependency** (needed for completion handler blocks)
 
 In `crates/macbox/Cargo.toml`:
+
 ```toml
 block2 = { version = "0.5", optional = true }
 ```
+
 And add `"dep:block2"` to the `vz` feature.
 
 - [ ] **Step 5: Run tests**
@@ -1070,6 +1093,7 @@ And add `"dep:block2"` to the `vz` feature.
 ```bash
 cargo test -p macbox --features vz vz_vm_config
 ```
+
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Check it compiles**
@@ -1077,6 +1101,7 @@ Expected: PASS (2 tests).
 ```bash
 cargo check -p macbox --features vz
 ```
+
 Expected: compiles (may have unused warnings — OK for now).
 
 - [ ] **Step 7: Commit**
@@ -1091,6 +1116,7 @@ git commit -m "feat(macbox): VzVm struct with boot/stop via Virtualization.frame
 ### Task 8: Justfile + CLAUDE.md wiring
 
 **Files:**
+
 - Modify: `Justfile`
 - Modify: `CLAUDE.md`
 
@@ -1122,6 +1148,7 @@ cargo xtask build-vm-image --force  # re-download + recompile
 ```bash
 just --list | grep build-vm-image
 ```
+
 Expected: shows `build-vm-image` recipe.
 
 - [ ] **Step 4: Commit**

@@ -1,9 +1,11 @@
 > **Note (2026-03-20):** This analysis is from 2026-03-17 and is partially stale.
-> Several critical issues have been resolved since: handler/conformance tests now compile
-> (daemonbox crate, `handler_tests.rs` + `conformance_tests.rs` moved there), structured
-> logging/tracing contract finalized (CLAUDE.md), and setuid stripping was audited.
-> The security findings in VULN-001 through VULN-011 remain the authoritative vulnerability list
-> but some may have been addressed — verify against current code before acting on them.
+> Several critical issues have been resolved since:
+>
+> - handler/conformance tests now compile (daemonbox crate, `handler_tests.rs` + `conformance_tests.rs` moved there)
+> - structured logging/tracing contract finalized (CLAUDE.md)
+> - setuid stripping was audited
+>   The security findings in VULN-001 through VULN-011 remain the authoritative vulnerability list
+>   but some may have been addressed — verify against current code before acting on them.
 
 # Minibox Codebase Analysis Report
 
@@ -68,40 +70,40 @@ The primary defenses against path traversal, Zip Slip attacks, and image tamperi
 
 ## High Priority Improvements
 
-| #   | Category     | Issue                                                              | File(s)                                              |
-| --- | ------------ | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| #   | Category     | Issue                                                              | File(s)                                      |
+| --- | ------------ | ------------------------------------------------------------------ | -------------------------------------------- |
 | 7   | Security     | Container ID not validated before cgroup path construction         | `crates/mbx/src/container/cgroups.rs:45`     |
 | 8   | Security     | `devtmpfs` mount exposes all host devices (`/dev/sda`, `/dev/mem`) | `crates/mbx/src/container/filesystem.rs:217` |
-| 9   | Security     | `MAX_REQUEST_SIZE` enforced after full read into memory (DoS)      | `crates/miniboxd/src/server.rs:68-96`                |
+| 9   | Security     | `MAX_REQUEST_SIZE` enforced after full read into memory (DoS)      | `crates/miniboxd/src/server.rs:68-96`        |
 | 10  | Security     | FD leak window between `clone()` and `close_extra_fds()`           | `crates/mbx/src/container/process.rs:92-94`  |
-| 11  | Security     | PID reuse race in `handle_stop` could kill wrong process           | `crates/miniboxd/src/handler.rs:327-348`             |
+| 11  | Security     | PID reuse race in `handle_stop` could kill wrong process           | `crates/miniboxd/src/handler.rs:327-348`     |
 | 12  | Performance  | Sequential layer downloads (5-layer image = 5x latency)            | `crates/mbx/src/image/registry.rs:351`       |
 | 13  | Performance  | `spawn_blocking` contention between spawns and extraction          | `crates/mbx/src/adapters/runtime.rs:125`     |
-| 14  | Architecture | `run_inner` has 10 responsibilities in one function                | `crates/miniboxd/src/handler.rs:106-264`             |
-| 15  | Tests        | `DaemonState` has zero unit tests for state transitions            | `crates/miniboxd/src/state.rs`                       |
-| 16  | Tests        | `server.rs` connection handler completely untested                 | `crates/miniboxd/src/server.rs`                      |
-| 17  | Logging      | Raw request content logged -- future secret leakage risk           | `crates/miniboxd/src/server.rs:107,111`              |
+| 14  | Architecture | `run_inner` has 10 responsibilities in one function                | `crates/miniboxd/src/handler.rs:106-264`     |
+| 15  | Tests        | `DaemonState` has zero unit tests for state transitions            | `crates/miniboxd/src/state.rs`               |
+| 16  | Tests        | `server.rs` connection handler completely untested                 | `crates/miniboxd/src/server.rs`              |
+| 17  | Logging      | Raw request content logged -- future secret leakage risk           | `crates/miniboxd/src/server.rs:107,111`      |
 | 18  | Docs         | `MAX_LAYER_SIZE` is 10GB but CLAUDE.md says 1GB                    | `crates/mbx/src/image/registry.rs:43`        |
 
 ---
 
 ## Medium Priority Improvements
 
-| #   | Category     | Issue                                                                       | File(s)                                                                                      |
-| --- | ------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| #   | Category     | Issue                                                                       | File(s)                                                                      |
+| --- | ------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | 19  | Architecture | Dual error hierarchy (`MiniboxError` + `DomainError`) with `anyhow` erasure | `crates/mbx/src/error.rs`, `crates/mbx/src/domain.rs`                        |
-| 20  | Architecture | `AsAny` trait leaks test infrastructure into domain interface               | `crates/mbx/src/domain.rs:75-77`                                                     |
-| 21  | Architecture | PID stored in both `ContainerRecord.pid` and `.info.pid`                    | `crates/miniboxd/src/state.rs:22-32`                                                         |
+| 20  | Architecture | `AsAny` trait leaks test infrastructure into domain interface               | `crates/mbx/src/domain.rs:75-77`                                             |
+| 21  | Architecture | PID stored in both `ContainerRecord.pid` and `.info.pid`                    | `crates/miniboxd/src/state.rs:22-32`                                         |
 | 22  | Architecture | 5 speculative domain ports with no implementations                          | `crates/mbx/src/domain/extensions.rs`, `crates/mbx/src/domain/networking.rs` |
-| 23  | Performance  | `canonicalize(dest)` called per tar entry (~1400 syscalls/layer)            | `crates/mbx/src/image/layer.rs:146`                                                  |
-| 24  | Performance  | `CopyFilesystem` blocks async executor for ~600ms                           | `crates/mbx/src/adapters/gke.rs:143`                                                 |
-| 25  | Performance  | Stop polling with 250ms sleep instead of notification                       | `crates/miniboxd/src/handler.rs:335`                                                         |
-| 26  | Logging      | Zero tracing spans -- no request correlation possible                       | All files                                                                                    |
-| 27  | Logging      | All logs use unstructured string interpolation                              | All files                                                                                    |
-| 28  | Logging      | Duplicate INFO logs for same PID spawn event (3x)                           | `namespace.rs`, `process.rs`, `handler.rs`                                                   |
-| 29  | Code         | `has_parent_dir_component` duplicated in two files                          | `filesystem.rs:23`, `layer.rs:14`                                                            |
-| 30  | Code         | Container state uses magic string literals, not typed enum                  | `crates/miniboxd/src/state.rs`                                                               |
-| 31  | Code         | Cross-platform adapters compile on Linux without `#[cfg]` guards            | `crates/mbx/src/adapters/mod.rs`                                                     |
+| 23  | Performance  | `canonicalize(dest)` called per tar entry (~1400 syscalls/layer)            | `crates/mbx/src/image/layer.rs:146`                                          |
+| 24  | Performance  | `CopyFilesystem` blocks async executor for ~600ms                           | `crates/mbx/src/adapters/gke.rs:143`                                         |
+| 25  | Performance  | Stop polling with 250ms sleep instead of notification                       | `crates/miniboxd/src/handler.rs:335`                                         |
+| 26  | Logging      | Zero tracing spans -- no request correlation possible                       | All files                                                                    |
+| 27  | Logging      | All logs use unstructured string interpolation                              | All files                                                                    |
+| 28  | Logging      | Duplicate INFO logs for same PID spawn event (3x)                           | `namespace.rs`, `process.rs`, `handler.rs`                                   |
+| 29  | Code         | `has_parent_dir_component` duplicated in two files                          | `filesystem.rs:23`, `layer.rs:14`                                            |
+| 30  | Code         | Container state uses magic string literals, not typed enum                  | `crates/miniboxd/src/state.rs`                                               |
+| 31  | Code         | Cross-platform adapters compile on Linux without `#[cfg]` guards            | `crates/mbx/src/adapters/mod.rs`                                             |
 
 ---
 

@@ -10,12 +10,14 @@
 Integrate dagu (workflow orchestration engine) with minibox (container runtime) to enable complex multi-container job workflows. This design proposes a phased approach: run dagu as a containerized service, then add orchestration capabilities through a Go plugin that communicates with a Rust HTTP controller.
 
 **Goals:**
+
 - Enable dagu DAG workflows to orchestrate minibox containers
 - Provide real-time output streaming and resource limit control
 - Work across platforms (macOS via colima, Linux native)
 - Keep concerns separated (dagu handles workflows, minibox handles containers, controller bridges them)
 
 **Scope:**
+
 - Phase 1: Containerized dagu (approach 1)
 - Phase 2: minibox-client library extraction
 - Phase 3: mbxctl HTTP controller (approach 4 hybrid)
@@ -73,14 +75,15 @@ Integrate dagu (workflow orchestration engine) with minibox (container runtime) 
 
 ### Components
 
-| Component | Language | Repository | Purpose | Release |
-|-----------|----------|------------|---------|---------|
-| **dagu:minibox** | Docker | ghcr.io | Container image with dagu + mbx-dagu plugin | Per mbx-dagu releases |
-| **minibox-client** | Rust | minibox/crates/minibox-client | Client library for Unix socket communication | With minibox releases |
-| **mbxctl** | Rust | separate repo (github.com/your-org/mbxctl) | HTTP server wrapping minibox-client | Independent |
-| **mbx-dagu** | Go | separate repo (github.com/dagu-org/mbx-dagu) | Dagu executor plugin calling mbxctl | Independent |
+| Component          | Language | Repository                                   | Purpose                                      | Release               |
+| ------------------ | -------- | -------------------------------------------- | -------------------------------------------- | --------------------- |
+| **dagu:minibox**   | Docker   | ghcr.io                                      | Container image with dagu + mbx-dagu plugin  | Per mbx-dagu releases |
+| **minibox-client** | Rust     | minibox/crates/minibox-client                | Client library for Unix socket communication | With minibox releases |
+| **mbxctl**         | Rust     | separate repo (github.com/your-org/mbxctl)   | HTTP server wrapping minibox-client          | Independent           |
+| **mbx-dagu**       | Go       | separate repo (github.com/dagu-org/mbx-dagu) | Dagu executor plugin calling mbxctl          | Independent           |
 
 **Rationale for split:**
+
 - `minibox-client` is a core library that minibox and its adapters depend on (lives in workspace)
 - `mbxctl` and `mbx-dagu` are independent integrations with their own release cycles and communities (separate repos)
 
@@ -223,7 +226,7 @@ Note: On Windows, the implementation will handle named pipes via the same env va
 
 ### Implementation Details
 
-- **No duplication**: Reuses `DaemonRequest`, `DaemonResponse`, `ContainerInfo` types from linuxbox
+- **No duplication**: Reuses `DaemonRequest`, `DaemonResponse`, `ContainerInfo` types from mbx
 - **Frame parsing**: Handles newline-delimited JSON framing (already defined in protocol.rs)
 - **Base64 decoding**: Handles `ContainerOutput.data` decoding
 - **Both sync and async**: Provides async I/O via Tokio; blocking wrapper available for sync callers
@@ -251,7 +254,7 @@ members = [
 [dependencies]
 tokio = { workspace = true, features = ["net", "io-util"] }
 serde_json = { workspace = true }
-linuxbox = { workspace = true }
+mbx = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 base64 = { workspace = true }
@@ -435,6 +438,7 @@ pub async fn create_and_run(
 ```
 
 When timeout expires:
+
 1. mbxctl cancels the `tokio::time::timeout()` future
 2. Sends `Stop` request to miniboxd to kill the container
 3. Returns timeout error to client
@@ -552,7 +556,7 @@ Dagu loads executors as external binaries. The executor reads a JSON request fro
 {
   "command": "alpine",
   "args": ["npm", "build"],
-  "env": {"NODE_ENV": "production"},
+  "env": { "NODE_ENV": "production" },
   "cwd": "/workspace",
   "timeout": 300
 }
@@ -700,6 +704,7 @@ Dagu will invoke the plugin for any step with `executor: minibox`.
 ### Error Handling
 
 Plugin handles:
+
 - Controller unavailable → return error exit code
 - Job timeout → kill job, return timeout error
 - Invalid image → propagate daemon error
@@ -711,12 +716,12 @@ Plugin handles:
 
 ### Test Coverage Matrix
 
-|  | macOS (colima) | Linux (native) |
-|---|---|---|
-| **Phase 1** (image build) | ✓ Unit | ✓ Integration |
-| **Phase 2** (client lib) | ✓ Unit | ✓ Integration |
-| **Phase 3** (mbxctl) | ✓ Unit | ✓ Integration |
-| **Phase 4** (mbx-dagu) | ✓ Unit | ✓ E2E |
+|                           | macOS (colima) | Linux (native) |
+| ------------------------- | -------------- | -------------- |
+| **Phase 1** (image build) | ✓ Unit         | ✓ Integration  |
+| **Phase 2** (client lib)  | ✓ Unit         | ✓ Integration  |
+| **Phase 3** (mbxctl)      | ✓ Unit         | ✓ Integration  |
+| **Phase 4** (mbx-dagu)    | ✓ Unit         | ✓ E2E          |
 
 ### Unit Tests (All Platforms)
 
@@ -799,35 +804,38 @@ minibox run dagu:minibox \
 
 ## Design Decisions & Rationales
 
-| Decision | Rationale | Alternative Considered |
-|----------|-----------|------------------------|
-| **Extract minibox-client in workspace** | Reusable library for minibox ecosystem; both CLI and mbxctl use it | Embed in each consumer |
-| **Separate repos for mbxctl + mbx-dagu** | Independent release cycles, communities, and versioning | Monorepo (adds coupling, release coordination burden) |
-| **HTTP for controller API** | Language-agnostic, easy debugging (curl), standard (SSE for streaming) | gRPC (more complex, less debuggable for simple cases) |
-| **HTTP localhost (not socket mount)** | Simpler, more portable; dagu container reaches `http://localhost:9999` naturally | Socket mount (adds complexity, doesn't work well across container boundaries) |
-| **Transparent proxy (stateless)** | Simple, fast, dagu owns job history; return container_id for recovery | Persistent store (adds complexity, potential SPOF) |
-| **Timeout at mbxctl layer** | Clean separation of concerns; standard `tokio::time::timeout()` pattern | Delegate to miniboxd (miniboxd has no timeout support) |
-| **Server-Sent Events (SSE)** | Standard for unidirectional streams, works in browsers | WebSocket (overkill), polling (inefficient) |
-| **Go for dagu plugin** | Aligns with dagu's ecosystem, dagu maintainers familiar | Rust plugin (adds build complexity to minibox workspace) |
-| **Four separate phases** | Each phase is independently valuable and testable | Monolithic implementation (harder to debug) |
+| Decision                                 | Rationale                                                                        | Alternative Considered                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Extract minibox-client in workspace**  | Reusable library for minibox ecosystem; both CLI and mbxctl use it               | Embed in each consumer                                                        |
+| **Separate repos for mbxctl + mbx-dagu** | Independent release cycles, communities, and versioning                          | Monorepo (adds coupling, release coordination burden)                         |
+| **HTTP for controller API**              | Language-agnostic, easy debugging (curl), standard (SSE for streaming)           | gRPC (more complex, less debuggable for simple cases)                         |
+| **HTTP localhost (not socket mount)**    | Simpler, more portable; dagu container reaches `http://localhost:9999` naturally | Socket mount (adds complexity, doesn't work well across container boundaries) |
+| **Transparent proxy (stateless)**        | Simple, fast, dagu owns job history; return container_id for recovery            | Persistent store (adds complexity, potential SPOF)                            |
+| **Timeout at mbxctl layer**              | Clean separation of concerns; standard `tokio::time::timeout()` pattern          | Delegate to miniboxd (miniboxd has no timeout support)                        |
+| **Server-Sent Events (SSE)**             | Standard for unidirectional streams, works in browsers                           | WebSocket (overkill), polling (inefficient)                                   |
+| **Go for dagu plugin**                   | Aligns with dagu's ecosystem, dagu maintainers familiar                          | Rust plugin (adds build complexity to minibox workspace)                      |
+| **Four separate phases**                 | Each phase is independently valuable and testable                                | Monolithic implementation (harder to debug)                                   |
 
 ---
 
 ## Success Criteria
 
 ### Phase 1: Containerized Dagu
+
 - ✅ Image builds without errors
 - ✅ Runs in minibox (`minibox run dagu:minibox`)
 - ✅ Web UI accessible at port 8080
 - ✅ Published to ghcr.io (or registry)
 
 ### Phase 2: minibox-client Library
+
 - ✅ Unit tests pass (mock socket)
 - ✅ Integration tests pass on Linux (real miniboxd)
 - ✅ API is clean, extensible, reusable
 - ✅ Error handling consistent with minibox patterns
 
 ### Phase 3: mbxctl Controller
+
 - ✅ HTTP API works against real miniboxd
 - ✅ Streaming works (SSE events received correctly)
 - ✅ Error handling is robust and informative
@@ -835,6 +843,7 @@ minibox run dagu:minibox \
 - ✅ Works on both macOS and Linux
 
 ### Phase 4: mbx-dagu Plugin
+
 - ✅ DAG with `executor: minibox` steps runs end-to-end
 - ✅ Output captured and visible in dagu Web UI
 - ✅ Exit codes propagate correctly
@@ -842,6 +851,7 @@ minibox run dagu:minibox \
 - ✅ Resource limits (memory, CPU) are applied
 
 ### All Phases
+
 - ✅ Works on macOS (via colima) and Linux
 - ✅ Security: socket is read-only mount, no privilege escalation
 - ✅ Performance: overhead negligible vs direct `minibox run`
@@ -865,4 +875,4 @@ These can be addressed in future iterations.
 
 - [Dagu Documentation](https://dagu-org.github.io/)
 - [Minibox Architecture](../../CLAUDE.md)
-- [Minibox Protocol](../../../crates/linuxbox/src/protocol.rs)
+- [Minibox Protocol](../../../crates/mbx/src/protocol.rs)

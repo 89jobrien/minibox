@@ -29,7 +29,7 @@ DaemonRequest::Run { mounts: Vec<BindMount>, privileged: bool, ... }
     ▼
 handler.rs → run_inner()
     │
-    ├─ native adapter (linuxbox)
+    ├─ native adapter (mbx)
     │       ├─ filesystem.rs: MS_BIND mounts before pivot_root
     │       └─ process.rs: capset(all) in child if privileged
     │
@@ -67,7 +67,7 @@ pub privileged: bool,
 
 ## Section 2 — Native Linux Adapter
 
-### Bind Mounts (`crates/linuxbox/src/container/filesystem.rs`)
+### Bind Mounts (`crates/mbx/src/container/filesystem.rs`)
 
 After the overlay is mounted and before `pivot_root`, each `BindMount` is applied inside the container's new mount namespace:
 
@@ -79,7 +79,7 @@ After the overlay is mounted and before `pivot_root`, each `BindMount` is applie
 
 Error on any failure; clean up already-applied mounts before returning (best-effort, warn on secondary error).
 
-### Privileged Mode (`crates/linuxbox/src/container/process.rs`)
+### Privileged Mode (`crates/mbx/src/container/process.rs`)
 
 `NamespaceConfig` gains `user_namespace: bool`. Privileged containers set this to `false` so they inherit the parent's (root) capability set rather than starting with a reduced set inside a user namespace.
 
@@ -95,7 +95,7 @@ This grants `CAP_SYS_ADMIN`, `CAP_SYS_CHROOT`, `CAP_NET_ADMIN`, `CAP_MKNOD`, and
 
 ## Section 3 — Colima Adapter
 
-**File:** `crates/linuxbox/src/adapters/colima.rs`
+**File:** `crates/mbx/src/adapters/colima.rs`
 
 The `create` method translates `ContainerSpawnConfig` fields to `nerdctl run` flags:
 
@@ -205,13 +205,13 @@ trace:
 
 ## Error Handling
 
-| Scenario | Behaviour |
-|---|---|
-| Bind mount host path does not exist | CLI rejects at parse time with path shown |
-| Bind mount host path outside Lima share dirs (Colima) | Adapter returns error before nerdctl is called |
-| Privileged + no root on native | `capset` fails; child exits; daemon surfaces error to CLI |
-| Bind mount target creation fails in container | `create_dir_all` error propagated; overlay cleanup runs |
-| Partial bind mount failure mid-sequence | Already-applied bind mounts unmounted (best-effort, warn on failure) |
+| Scenario                                              | Behaviour                                                            |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| Bind mount host path does not exist                   | CLI rejects at parse time with path shown                            |
+| Bind mount host path outside Lima share dirs (Colima) | Adapter returns error before nerdctl is called                       |
+| Privileged + no root on native                        | `capset` fails; child exits; daemon surfaces error to CLI            |
+| Bind mount target creation fails in container         | `create_dir_all` error propagated; overlay cleanup runs              |
+| Partial bind mount failure mid-sequence               | Already-applied bind mounts unmounted (best-effort, warn on failure) |
 
 ## Testing
 

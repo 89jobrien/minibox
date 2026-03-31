@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-18
 **Status:** Approved
-**Scope:** `linuxbox` — `image/layer.rs`, `image/mod.rs`, `image/registry.rs`, `error.rs`, `Cargo.toml`
+**Scope:** `mbx` — `image/layer.rs`, `image/mod.rs`, `image/registry.rs`, `error.rs`, `Cargo.toml`
 
 ## Overview
 
@@ -31,7 +31,7 @@ Layer 2 does not start until layer 1 is fully extracted. A 5-layer image with 20
 - `image/mod.rs`: `store_layer` removes internal `read_to_end` buffer; passes reader directly to `extract_layer`.
 - `registry.rs`: Replace sequential `for` loop with `JoinSet` + `Arc<Semaphore>`. `pull_layer` returns `reqwest::Response` instead of `Bytes`. Add `MAX_CONCURRENT_LAYERS = 4`. Add `LimitedStream`. The existing `info!("pulled blob {} ({} bytes)", ...)` log line moves into the `spawn_blocking` result, logging compressed bytes received (available from `HashingReader`'s byte count) after extraction completes.
 - `error.rs`: Add `RegistryError::LayerTask { digest, message }` for `JoinError` wrapping.
-- `Cargo.toml`: Add `tokio-util = { version = "0.7", features = ["io"] }` and `pin-project-lite = "0.2"` to workspace and `linuxbox`.
+- `Cargo.toml`: Add `tokio-util = { version = "0.7", features = ["io"] }` and `pin-project-lite = "0.2"` to workspace and `mbx`.
 
 ### `HashingReader<R: Read>`
 
