@@ -3,7 +3,7 @@
 // Nodes and edges are defined independently, then composed into a Diagram via
 // a `layout` grid.  New diagrams can reuse any subset of the node/edge pools.
 
-use crate::diagram::{Diagram, Edge, EdgeStyle, Node, NodeKind};
+use crate::diagram::{EdgeStyle, NodeKind, OwnedDiagram, OwnedEdge, OwnedNode};
 
 /// The 3-tier git promotion pipeline: feature → main → next → stable → tag.
 pub fn ci_flow() -> Diagram {
