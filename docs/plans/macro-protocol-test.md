@@ -7,7 +7,7 @@ note: Never built; manual protocol tests used instead
 
 **Date:** 2026-03-17
 **Status:** Design
-**Scope:** `linuxbox/src/protocol.rs` (test module), `miniboxd/tests/`
+**Scope:** `mbx/src/protocol.rs` (test module), `miniboxd/tests/`
 
 ---
 

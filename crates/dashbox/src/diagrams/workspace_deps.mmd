@@ -1,0 +1,52 @@
+graph LR
+  miniboxd>miniboxd<
+  %% detail: Unified daemon binary. Unconditional: daemonbox. Linux: mbx+minibox-core+nix. macOS: macbox. Windows: winbox.
+  miniboxcli>minibox-cli<
+  %% detail: Platform-agnostic CLI binary. Deps: minibox-core + minibox-client. No direct mbx dependency.
+  mbxbench>mbx-bench<
+  %% detail: Benchmark harness binary. Deps: minibox-core + mbx.
+  dockerboxd>dockerboxd<
+  %% detail: Docker API shim (axum HTTP over Unix socket). Translates Docker API to minibox protocol. Deps: minibox-client + minibox-core.
+  macbox{macbox}
+  %% detail: macOS daemon: Colima + vz adapters. Deps: daemonbox + minibox-core + mbx. Optional: objc2 + Virtualization.framework.
+  winbox{winbox}
+  %% detail: Windows daemon stub (HCS planned). Deps: daemonbox + mbx.
+  daemonbox{daemonbox}
+  %% detail: Platform-agnostic handler/state/server. Deps: minibox-core + mbx. Unix: nix for SO_PEERCRED auth.
+  mbxclient{mbx-client}
+  %% detail: Unix socket client: DaemonClient + DaemonResponseStream. Deps: minibox-core only.
+  mbx{mbx}
+  %% detail: Linux container primitives: namespaces, cgroups v2, overlay FS, image pull, adapters. Deps: minibox-core + minibox-macros + nix.
+  mbxcore{mbx-core}
+  %% detail: Cross-platform types: protocol, domain traits, image management, preflight. Deps: minibox-macros. Unix: nix.
+  mbxmacros[mbx-macros]
+  %% detail: Proc-macro crate: as_any! and adapt! macros used by mbx and minibox-core. True leaf -- no workspace deps.
+
+  miniboxd --> daemonbox
+  miniboxd -->|linux| mbxcore
+  miniboxd -->|linux| mbx
+  miniboxd -.->|macos| macbox
+  miniboxd -.->|windows| winbox
+  miniboxcli --> mbxcore
+  miniboxcli --> mbxclient
+  mbxbench --> mbxcore
+  mbxbench --> mbx
+  dockerboxd --> mbxclient
+  dockerboxd --> mbxcore
+  macbox --> daemonbox
+  macbox --> mbxcore
+  macbox --> mbx
+  winbox --> daemonbox
+  winbox --> mbx
+  daemonbox --> mbxcore
+  daemonbox --> mbx
+  mbxclient --> mbxcore
+  mbx --> mbxcore
+  mbx --> mbxmacros
+  mbxcore --> mbxmacros
+
+%% name: Workspace Deps
+%% layout: miniboxd miniboxcli mbxbench dockerboxd
+%% layout: macbox winbox daemonbox mbxclient
+%% layout: mbx mbxcore
+%% layout: mbxmacros

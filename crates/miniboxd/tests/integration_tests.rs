@@ -20,11 +20,11 @@
 
 #![cfg(target_os = "linux")]
 
-use linuxbox::adapters::{
+use mbx::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NoopNetwork, OverlayFilesystem,
 };
-use linuxbox::image::ImageStore;
-use linuxbox::protocol::DaemonResponse;
+use mbx::image::ImageStore;
+use mbx::protocol::DaemonResponse;
 use miniboxd::handler::{self, HandlerDependencies};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;

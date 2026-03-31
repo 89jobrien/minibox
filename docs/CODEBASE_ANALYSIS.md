@@ -22,7 +22,7 @@ Minibox demonstrates **strong architectural foundations** -- the hexagonal archi
 
 ### 1. SECURITY: Setuid Bit Stripping Is a No-Op
 
-**Files**: `crates/linuxbox/src/image/layer.rs:99-101`, `crates/linuxbox/src/adapters/gke.rs:210-215`
+**Files**: `crates/mbx/src/image/layer.rs:99-101`, `crates/mbx/src/adapters/gke.rs:210-215`
 
 The tar extraction code computes safe modes but never applies them -- the `tar` crate doesn't expose `set_mode()` before extraction, and **umask does NOT strip setuid bits**. The GKE `CopyFilesystem` adapter actively _re-applies_ original permissions including setuid/setgid. Container images can deliver setuid root binaries.
 
@@ -30,7 +30,7 @@ The tar extraction code computes safe modes but never applies them -- the `tar` 
 
 ### 2. SECURITY: No User Namespace -- Container Root = Host Root
 
-**File**: `crates/linuxbox/src/container/namespace.rs:17-63`
+**File**: `crates/mbx/src/container/namespace.rs:17-63`
 
 `CLONE_NEWUSER` is absent from the namespace configuration. Any container escape grants immediate full host root. This is the single biggest architectural security risk.
 
@@ -38,7 +38,7 @@ The tar extraction code computes safe modes but never applies them -- the `tar` 
 
 ### 3. SECURITY: Symlink TOCTOU Race in Tar Extraction
 
-**File**: `crates/linuxbox/src/image/layer.rs:150-162`
+**File**: `crates/mbx/src/image/layer.rs:150-162`
 
 The path validation canonicalizes the parent only when it already exists. A crafted tar archive can create a directory, replace it with a symlink to `/etc`, then extract files through the symlink. Relative symlink targets with `..` components are also not validated.
 
@@ -46,7 +46,7 @@ The path validation canonicalizes the parent only when it already exists. A craf
 
 ### 4. SECURITY: Overlayfs Mount Option String Injection
 
-**File**: `crates/linuxbox/src/container/filesystem.rs:114-125`
+**File**: `crates/mbx/src/container/filesystem.rs:114-125`
 
 Layer paths containing commas or colons can inject additional mount options into the overlayfs mount string, potentially bypassing `MS_NOSUID | MS_NODEV` flags.
 
@@ -60,7 +60,7 @@ Layer paths containing commas or colons can inject additional mount options into
 
 ### 6. TESTS: Zero Coverage on Security-Critical Code
 
-**Files**: `crates/linuxbox/src/container/filesystem.rs:validate_layer_path`, `crates/linuxbox/src/image/layer.rs:validate_tar_entry_path`, `crates/linuxbox/src/image/layer.rs:verify_digest`
+**Files**: `crates/mbx/src/container/filesystem.rs:validate_layer_path`, `crates/mbx/src/image/layer.rs:validate_tar_entry_path`, `crates/mbx/src/image/layer.rs:verify_digest`
 
 The primary defenses against path traversal, Zip Slip attacks, and image tampering have no tests. These are explicitly flagged as "TODO (security-critical)" in CLAUDE.md.
 
@@ -70,18 +70,18 @@ The primary defenses against path traversal, Zip Slip attacks, and image tamperi
 
 | #   | Category     | Issue                                                              | File(s)                                              |
 | --- | ------------ | ------------------------------------------------------------------ | ---------------------------------------------------- |
-| 7   | Security     | Container ID not validated before cgroup path construction         | `crates/linuxbox/src/container/cgroups.rs:45`     |
-| 8   | Security     | `devtmpfs` mount exposes all host devices (`/dev/sda`, `/dev/mem`) | `crates/linuxbox/src/container/filesystem.rs:217` |
+| 7   | Security     | Container ID not validated before cgroup path construction         | `crates/mbx/src/container/cgroups.rs:45`     |
+| 8   | Security     | `devtmpfs` mount exposes all host devices (`/dev/sda`, `/dev/mem`) | `crates/mbx/src/container/filesystem.rs:217` |
 | 9   | Security     | `MAX_REQUEST_SIZE` enforced after full read into memory (DoS)      | `crates/miniboxd/src/server.rs:68-96`                |
-| 10  | Security     | FD leak window between `clone()` and `close_extra_fds()`           | `crates/linuxbox/src/container/process.rs:92-94`  |
+| 10  | Security     | FD leak window between `clone()` and `close_extra_fds()`           | `crates/mbx/src/container/process.rs:92-94`  |
 | 11  | Security     | PID reuse race in `handle_stop` could kill wrong process           | `crates/miniboxd/src/handler.rs:327-348`             |
-| 12  | Performance  | Sequential layer downloads (5-layer image = 5x latency)            | `crates/linuxbox/src/image/registry.rs:351`       |
-| 13  | Performance  | `spawn_blocking` contention between spawns and extraction          | `crates/linuxbox/src/adapters/runtime.rs:125`     |
+| 12  | Performance  | Sequential layer downloads (5-layer image = 5x latency)            | `crates/mbx/src/image/registry.rs:351`       |
+| 13  | Performance  | `spawn_blocking` contention between spawns and extraction          | `crates/mbx/src/adapters/runtime.rs:125`     |
 | 14  | Architecture | `run_inner` has 10 responsibilities in one function                | `crates/miniboxd/src/handler.rs:106-264`             |
 | 15  | Tests        | `DaemonState` has zero unit tests for state transitions            | `crates/miniboxd/src/state.rs`                       |
 | 16  | Tests        | `server.rs` connection handler completely untested                 | `crates/miniboxd/src/server.rs`                      |
 | 17  | Logging      | Raw request content logged -- future secret leakage risk           | `crates/miniboxd/src/server.rs:107,111`              |
-| 18  | Docs         | `MAX_LAYER_SIZE` is 10GB but CLAUDE.md says 1GB                    | `crates/linuxbox/src/image/registry.rs:43`        |
+| 18  | Docs         | `MAX_LAYER_SIZE` is 10GB but CLAUDE.md says 1GB                    | `crates/mbx/src/image/registry.rs:43`        |
 
 ---
 
@@ -89,19 +89,19 @@ The primary defenses against path traversal, Zip Slip attacks, and image tamperi
 
 | #   | Category     | Issue                                                                       | File(s)                                                                                      |
 | --- | ------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 19  | Architecture | Dual error hierarchy (`MiniboxError` + `DomainError`) with `anyhow` erasure | `crates/linuxbox/src/error.rs`, `crates/linuxbox/src/domain.rs`                        |
-| 20  | Architecture | `AsAny` trait leaks test infrastructure into domain interface               | `crates/linuxbox/src/domain.rs:75-77`                                                     |
+| 19  | Architecture | Dual error hierarchy (`MiniboxError` + `DomainError`) with `anyhow` erasure | `crates/mbx/src/error.rs`, `crates/mbx/src/domain.rs`                        |
+| 20  | Architecture | `AsAny` trait leaks test infrastructure into domain interface               | `crates/mbx/src/domain.rs:75-77`                                                     |
 | 21  | Architecture | PID stored in both `ContainerRecord.pid` and `.info.pid`                    | `crates/miniboxd/src/state.rs:22-32`                                                         |
-| 22  | Architecture | 5 speculative domain ports with no implementations                          | `crates/linuxbox/src/domain/extensions.rs`, `crates/linuxbox/src/domain/networking.rs` |
-| 23  | Performance  | `canonicalize(dest)` called per tar entry (~1400 syscalls/layer)            | `crates/linuxbox/src/image/layer.rs:146`                                                  |
-| 24  | Performance  | `CopyFilesystem` blocks async executor for ~600ms                           | `crates/linuxbox/src/adapters/gke.rs:143`                                                 |
+| 22  | Architecture | 5 speculative domain ports with no implementations                          | `crates/mbx/src/domain/extensions.rs`, `crates/mbx/src/domain/networking.rs` |
+| 23  | Performance  | `canonicalize(dest)` called per tar entry (~1400 syscalls/layer)            | `crates/mbx/src/image/layer.rs:146`                                                  |
+| 24  | Performance  | `CopyFilesystem` blocks async executor for ~600ms                           | `crates/mbx/src/adapters/gke.rs:143`                                                 |
 | 25  | Performance  | Stop polling with 250ms sleep instead of notification                       | `crates/miniboxd/src/handler.rs:335`                                                         |
 | 26  | Logging      | Zero tracing spans -- no request correlation possible                       | All files                                                                                    |
 | 27  | Logging      | All logs use unstructured string interpolation                              | All files                                                                                    |
 | 28  | Logging      | Duplicate INFO logs for same PID spawn event (3x)                           | `namespace.rs`, `process.rs`, `handler.rs`                                                   |
 | 29  | Code         | `has_parent_dir_component` duplicated in two files                          | `filesystem.rs:23`, `layer.rs:14`                                                            |
 | 30  | Code         | Container state uses magic string literals, not typed enum                  | `crates/miniboxd/src/state.rs`                                                               |
-| 31  | Code         | Cross-platform adapters compile on Linux without `#[cfg]` guards            | `crates/linuxbox/src/adapters/mod.rs`                                                     |
+| 31  | Code         | Cross-platform adapters compile on Linux without `#[cfg]` guards            | `crates/mbx/src/adapters/mod.rs`                                                     |
 
 ---
 

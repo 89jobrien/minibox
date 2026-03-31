@@ -2,14 +2,29 @@ name: Quality
 
 on:
   push:
-    branches: [main, "feature/*", "hotfix/*", "chore/*"]
+    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
   pull_request:
-    branches: [main]
+    branches: [main, next]
 
 jobs:
+  compile-check:
+    name: compile + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check
+        run: cargo check --workspace
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
@@ -20,6 +35,7 @@ jobs:
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -27,6 +43,7 @@ jobs:
   machete:
     name: cargo machete
     runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
@@ -37,11 +54,28 @@ jobs:
   test-unit:
     name: unit tests (Linux)
     runs-on: [self-hosted, minibox]
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    needs: compile-check
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask test-unit
         run: ~/.local/bin/mise exec -- cargo xtask test-unit
+
+  geiger:
+    name: unsafe audit (geiger)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/stable'
+    needs: compile-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-geiger
+        run: cargo install cargo-geiger --locked
+      - name: cargo geiger
+        run: cargo geiger -p mbx -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
+
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]

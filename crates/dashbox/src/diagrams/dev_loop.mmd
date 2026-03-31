@@ -1,0 +1,26 @@
+graph LR
+  edit[edit]
+  %% detail: Write Rust. Use bacon for fast watch-mode check. Shared CARGO_TARGET_DIR at ~/.mbx/cache/target/ across worktrees.
+  chk[cargo chk]
+  %% detail: Fast type-check pass, no codegen. Catches most errors in <1s. Run via bacon or directly.
+  precommit[pre-commit]
+  %% detail: cargo xtask pre-commit: fmt --check + clippy -D warnings + release build. macOS-safe (no Linux-only crates).
+  commit[commit]
+  %% detail: git commit. SSH-signed via 1Password agent. AI-generated message: just commit-msg. Hooks run obfsck secrets audit.
+  push[git push]
+  %% detail: just sync-check fetches+rebases onto origin/main first. Then pushes to remote, triggering GitHub Actions.
+  ci{CI (GHA)}
+  %% detail: ci.yml: check+fmt+clippy on all branches. nextest+audit+deny+machete on next+stable. geiger on stable only.
+  next([next])
+  %% detail: phased-deployment.yml auto-promotes main->next after green CI. Triggers the full nextest + audit gate suite.
+
+  edit --> chk
+  chk --> precommit
+  precommit --> commit
+  commit --> push
+  push -->|triggers| ci
+  ci -.->|promotes| next
+
+%% name: Dev Loop
+%% layout: edit chk precommit commit
+%% layout: push ci next

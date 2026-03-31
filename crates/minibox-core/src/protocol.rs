@@ -37,7 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::NetworkMode;
+use crate::domain::{BindMount, NetworkMode};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -71,6 +71,24 @@ pub enum DaemonRequest {
         /// `NetworkMode::None` (isolated namespace, no network connectivity).
         #[serde(default)]
         network: Option<NetworkMode>,
+        /// Environment variables to set inside the container, in `KEY=VALUE` form.
+        ///
+        /// These are merged with the container's default environment (PATH, TERM).
+        /// User-supplied values take precedence over defaults for duplicate keys.
+        #[serde(default)]
+        env: Vec<String>,
+        /// Bind mounts to apply inside the container.
+        ///
+        /// Each entry is mounted before `pivot_root` in the container's mount namespace.
+        /// On the Colima adapter, host paths must be under `$HOME` or `/tmp`.
+        #[serde(default)]
+        mounts: Vec<BindMount>,
+        /// If `true`, the container process runs with a full Linux capability set.
+        ///
+        /// Required for Docker-in-Docker (DinD) use cases where the inner process
+        /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
+        #[serde(default)]
+        privileged: bool,
     },
 
     /// Stop a running container by ID.
@@ -247,6 +265,9 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -285,6 +306,9 @@ mod tests {
             cpu_weight: Some(500),
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -483,6 +507,9 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -565,6 +592,9 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -588,6 +618,9 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -713,6 +746,9 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: Some(NetworkMode::Host),
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -728,6 +764,85 @@ mod tests {
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
             DaemonRequest::Run { network, .. } => assert_eq!(network, None),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn run_request_with_mounts_roundtrip() {
+        use crate::domain::BindMount;
+        use std::path::PathBuf;
+        let req = DaemonRequest::Run {
+            image: "ubuntu".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![BindMount {
+                host_path: PathBuf::from("/tmp/foo"),
+                container_path: PathBuf::from("/bar"),
+                read_only: false,
+            }],
+            privileged: false,
+            env: vec![],
+        };
+        let encoded = encode_request(&req).unwrap();
+        let decoded = decode_request(&encoded).unwrap();
+        match decoded {
+            DaemonRequest::Run {
+                mounts, privileged, ..
+            } => {
+                assert_eq!(mounts.len(), 1);
+                assert_eq!(mounts[0].host_path, PathBuf::from("/tmp/foo"));
+                assert_eq!(mounts[0].container_path, PathBuf::from("/bar"));
+                assert!(!mounts[0].read_only);
+                assert!(!privileged);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn run_request_privileged_roundtrip() {
+        let req = DaemonRequest::Run {
+            image: "ubuntu".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: true,
+            env: vec![],
+        };
+        let encoded = encode_request(&req).unwrap();
+        let decoded = decode_request(&encoded).unwrap();
+        match decoded {
+            DaemonRequest::Run {
+                privileged, mounts, ..
+            } => {
+                assert!(privileged);
+                assert!(mounts.is_empty());
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn run_request_old_json_without_mounts_defaults() {
+        // Old clients that don't send mounts/privileged must still deserialize.
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run {
+                mounts, privileged, ..
+            } => {
+                assert!(mounts.is_empty());
+                assert!(!privileged);
+            }
             _ => panic!("expected Run"),
         }
     }

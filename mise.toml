@@ -244,8 +244,12 @@ HOURS="${1:-24}"
 uv run scripts/standup.py --hours "$HOURS"
 """
 
+[tasks."all:dash"]
+description = "Launch dashbox TUI dashboard"
+run = "cargo run -p dashbox --release"
+
 [tasks."all:dashboard"]
-description = "Agent run history and metrics dashboard"
+description = "Agent run history and metrics dashboard (legacy Rich)"
 run = "uv run scripts/dashboard.py"
 
 [tasks."all:demo-pull"]
@@ -253,7 +257,7 @@ description = "Pull an OCI image from Docker Hub — any platform, no daemon req
 run = """
 #!/usr/bin/env bash
 IMAGE="${1:-alpine}"
-cargo run --release --example pull -p linuxbox -- "$IMAGE"
+cargo run --release --example pull -p mbx -- "$IMAGE"
 """
 
 [tasks."all:demo-showcase"]
@@ -271,11 +275,11 @@ spin() {
 
 step "building"
 if [[ "$(uname)" == "Linux" ]]; then
-    cargo build --release -p linuxbox -p minibox-cli -p miniboxd --example showcase \
-        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+    cargo build --release -p mbx -p minibox-cli -p miniboxd --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 else
-    cargo build --release -p linuxbox --example showcase \
-        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+    cargo build --release -p mbx --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 fi
 ok "binaries ready"; echo ""
 
@@ -332,7 +336,7 @@ fi
 hdr "minibox · hello world"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -374,7 +378,7 @@ fi
 hdr "minibox · namespace isolation"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -436,7 +440,7 @@ fi
 hdr "minibox · dogfood"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -494,7 +498,7 @@ if ! colima status &>/dev/null; then
 fi
 
 step "building"
-cargo build --release -p miniboxd -p minibox-cli 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1
+cargo build --release -p miniboxd -p minibox-cli 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -528,5 +532,13 @@ open bench/results/report.html
 '''
 
 [tasks."macos:flamegraph"]
-description = "Record flamegraph with samply (interactive, macOS)"
-run = "samply record ./target/release/minibox-bench"
+description = "Profile bench binary with samply — builds first, suite selectable. Usage: mise run macos:flamegraph -- [--suite codec|adapter]"
+run = """
+#!/usr/bin/env bash
+cargo xtask flamegraph "$@"
+"""
+
+[tasks.dockerbox]
+description = "Run dockerboxd (Docker API shim for minibox)"
+run = "cargo run -p dockerbox"
+

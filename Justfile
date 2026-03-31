@@ -24,6 +24,30 @@ build-release:
 build:
     cargo build --release
 
+# Build static Linux musl binaries matching the host architecture.
+# Output: target/<arch>-unknown-linux-musl/release/{miniboxd,minibox}
+build-linux:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "$(uname -m)" in
+        arm64|aarch64) MUSL_TARGET="aarch64-unknown-linux-musl" ;;
+        x86_64|amd64)  MUSL_TARGET="x86_64-unknown-linux-musl" ;;
+        *) echo "error: unsupported arch $(uname -m)"; exit 1 ;;
+    esac
+    rustup target add "$MUSL_TARGET"
+    RUSTFLAGS="-C target-feature=+crt-static" \
+        cargo build --release --target "$MUSL_TARGET" \
+        -p miniboxd -p minibox-cli
+
+# Build macOS VM image (Alpine kernel + agent cross-compiled, run once before using VZ adapter)
+build-vm-image force="":
+    #!/usr/bin/env bash
+    if [ "{{force}}" = "force" ]; then
+        cargo xtask build-vm-image --force
+    else
+        cargo xtask build-vm-image
+    fi
+
 # ── Gates ────────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release
@@ -86,10 +110,21 @@ test-sandbox:
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
 
+# ── Dashboard ────────────────────────────────────────────────────────────────
+
+# Launch dashbox TUI dashboard
+dash:
+    cargo run -p dashbox --release
+
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
 bench:
     cargo xtask bench
+
+# Profile bench binary with samply (macOS) or cargo-flamegraph (Linux)
+# Usage: just flamegraph [suite]   (default suite: codec)
+flamegraph suite="codec":
+    cargo xtask flamegraph --suite {{suite}}
 
 # AI bench analysis (subcommands: report, compare, regress, cleanup, trigger)
 bench-agent *args:
@@ -103,6 +138,77 @@ doctor:
     @echo ""
     @echo "--- Host Capabilities Report ---"
     @cargo test -p linuxbox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+
+# Trace miniboxd with uftrace.
+# macOS: cross-compiles Linux binary, runs it inside minibox via Colima.
+# Linux: runs natively (requires root + apt install uftrace).
+# After run: uftrace graph -d <trace-dir>
+trace:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    TRACE_DIR="traces/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$TRACE_DIR"
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # The Colima adapter does not stream container stdout back through minibox
+        # (spawn_process returns output_reader: None). uftrace is a Linux tool anyway.
+        # Run the trace directly inside the Lima VM via limactl shell, bypassing minibox.
+        echo "trace: building Linux musl binary..."
+        just build-linux
+
+        TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target}"
+        case "$(uname -m)" in
+            arm64|aarch64) MUSL_TARGET="aarch64-unknown-linux-musl" ;;
+            x86_64|amd64)  MUSL_TARGET="x86_64-unknown-linux-musl" ;;
+            *) echo "error: unsupported arch"; exit 1 ;;
+        esac
+        BINARY_DIR="${TARGET_DIR}/${MUSL_TARGET}/release"
+        ABS_TRACE="$(pwd)/$TRACE_DIR"
+
+        # Lima mounts /tmp and /Users into the VM — both paths are accessible.
+        echo "trace: running uftrace inside Colima VM..."
+        colima ssh -- bash "$(pwd)/scripts/trace-lima.sh" "$BINARY_DIR" "$ABS_TRACE"
+
+        echo ""
+        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        colima ssh -- uftrace report -d "${ABS_TRACE}" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
+    else
+        [[ "$(uname -s)" == "Linux" ]] || { echo "error: unsupported platform"; exit 1; }
+        command -v uftrace >/dev/null 2>&1 || { echo "error: apt install uftrace"; exit 1; }
+        [[ "$(id -u)" -eq 0 ]] || { echo "error: sudo just trace"; exit 1; }
+
+        echo "trace: building native release binary..."
+        cargo build --release -p miniboxd -p minibox-cli
+
+        echo "trace: recording to $TRACE_DIR ..."
+        uftrace record -P . --no-libcall -d "$TRACE_DIR" ./target/release/miniboxd &
+        DAEMON_PID=$!
+
+        for i in $(seq 1 10); do
+            [[ -S /run/minibox/miniboxd.sock ]] && break
+            sleep 0.5
+        done
+        [[ -S /run/minibox/miniboxd.sock ]] || { echo "error: daemon socket did not appear"; kill "$DAEMON_PID" 2>/dev/null; exit 1; }
+
+        echo "trace: smoke — pull alpine..."
+        ./target/release/minibox pull alpine || true
+        echo "trace: smoke — run echo..."
+        ./target/release/minibox run alpine -- /bin/echo "uftrace smoke" || true
+
+        echo "trace: stopping daemon..."
+        kill "$DAEMON_PID" 2>/dev/null || true
+        wait "$DAEMON_PID" 2>/dev/null || true
+
+        echo ""
+        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        uftrace report -d "$TRACE_DIR" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
+    fi
+
+    echo ""
+    echo "trace: data saved to $TRACE_DIR"
+    echo "trace: call graph      → uftrace graph -d $TRACE_DIR"
+    echo "trace: chrome devtools → uftrace dump -d $TRACE_DIR --chrome > $TRACE_DIR/trace.json"
 
 # ── AI Agents ────────────────────────────────────────────────────────────────
 

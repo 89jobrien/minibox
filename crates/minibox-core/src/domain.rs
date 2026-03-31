@@ -64,6 +64,20 @@ use std::any::Any;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// A host-path bind mount to inject into a container at startup.
+///
+/// `host_path` is canonicalized and validated before the mount is applied.
+/// `container_path` must be absolute (starts with `/`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BindMount {
+    /// Absolute path on the host to mount into the container.
+    pub host_path: std::path::PathBuf,
+    /// Absolute path inside the container where the host path is mounted.
+    pub container_path: std::path::PathBuf,
+    /// If `true`, the mount is read-only inside the container.
+    pub read_only: bool,
+}
+
 #[cfg(unix)]
 use std::os::fd::OwnedFd;
 
@@ -130,7 +144,7 @@ pub trait MetricsRecorder: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use linuxbox::domain::ImageRegistry;
+/// use mbx::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,
@@ -537,6 +551,15 @@ pub struct ContainerSpawnConfig {
     pub hooks: ContainerHooks,
     /// If true, skip CLONE_NEWNET — container shares host network namespace.
     pub skip_network_namespace: bool,
+    /// Bind mounts to apply inside the container before pivot_root.
+    ///
+    /// Each `BindMount.host_path` is mounted at `rootfs + BindMount.container_path`
+    /// inside the container's new mount namespace, then the container sees it at
+    /// `container_path` after pivot_root.
+    pub mounts: Vec<BindMount>,
+    /// If `true`, the container process is granted a full Linux capability set
+    /// via `capset(2)` before `execvp`. Required for DinD.
+    pub privileged: bool,
 }
 
 // ---------------------------------------------------------------------------

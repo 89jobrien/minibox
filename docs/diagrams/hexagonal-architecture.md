@@ -3,7 +3,7 @@
 ## Description
 
 Minibox uses hexagonal (ports and adapters) architecture. The domain ports
-(traits) in `linuxbox/src/domain.rs` define the interfaces. The application
+(traits) in `mbx/src/domain.rs` define the interfaces. The application
 core in `daemonbox` depends only on those traits — it never imports a concrete
 adapter. Composition roots (`miniboxd/main.rs` for Linux, `macbox::start()` for
 macOS, `winbox::start()` for Windows) are the only place where concrete adapters
@@ -25,12 +25,12 @@ adapters and has zero platform-specific code.
 ║          (depends only on domain port traits — no cfg blocks)    ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║                     DOMAIN PORTS                                  ║
-║               linuxbox/src/domain.rs                           ║
+║               mbx/src/domain.rs                           ║
 ║    ContainerRuntime   FilesystemProvider                          ║
 ║    ImageRegistry      ResourceLimiter                             ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║                     DRIVEN ADAPTERS                               ║
-║              linuxbox/src/adapters/                            ║
+║              mbx/src/adapters/                            ║
 ║                                                                   ║
 ║  Linux:    LinuxNamespaceRuntime  OverlayFilesystem               ║
 ║            CgroupV2Limiter        DockerHubRegistry               ║
@@ -61,7 +61,7 @@ graph TB
         server["server.rs"]
     end
 
-    subgraph ports["Domain Ports — linuxbox/domain.rs"]
+    subgraph ports["Domain Ports — mbx/domain.rs"]
         runtime_trait["ContainerRuntime"]
         fs_trait["FilesystemProvider"]
         registry_trait["ImageRegistry"]

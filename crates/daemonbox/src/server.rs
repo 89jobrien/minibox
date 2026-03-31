@@ -212,10 +212,18 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// Non-streaming responses always terminate immediately. Streaming responses
-/// (`ContainerOutput`) continue until `ContainerStopped` (which is terminal).
+/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
+/// as the first message, followed by `ContainerOutput` chunks and then
+/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
+/// server loop exits naturally when `rx.recv()` returns `None`.
 fn is_terminal_response(r: &DaemonResponse) -> bool {
-    !matches!(r, DaemonResponse::ContainerOutput { .. })
+    matches!(
+        r,
+        DaemonResponse::ContainerStopped { .. }
+            | DaemonResponse::Error { .. }
+            | DaemonResponse::Success { .. }
+            | DaemonResponse::ContainerList { .. }
+    )
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -239,6 +247,9 @@ async fn dispatch(
             cpu_weight,
             ephemeral,
             network,
+            mounts,
+            privileged,
+            env,
         } => {
             handler::handle_run(
                 image,
@@ -248,6 +259,9 @@ async fn dispatch(
                 cpu_weight,
                 ephemeral,
                 network,
+                mounts,
+                privileged,
+                env,
                 state,
                 deps,
                 tx,
@@ -276,7 +290,7 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::adapters::mocks::{
+    use mbx::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
     use minibox_core::image::ImageStore;
@@ -348,12 +362,74 @@ mod tests {
 
     // ─── is_terminal_response ────────────────────────────────────────────────
 
+    /// Exhaustive coverage test: every `DaemonResponse` variant must appear in
+    /// this test.  The inner `match` has no wildcard arm so the compiler will
+    /// emit an error if a new variant is ever added without updating this test
+    /// AND updating `is_terminal_response`.
+    #[test]
+    fn test_is_terminal_response_all_variants() {
+        // Build one instance of every variant and assert the expected terminal
+        // status.  The match below is non-exhaustive-arm-free on purpose: the
+        // compiler will catch any missing variant at compile time.
+        let variants: &[(DaemonResponse, bool)] = &[
+            (
+                DaemonResponse::ContainerCreated {
+                    id: "abc".to_string(),
+                },
+                false, // non-terminal: ephemeral runs follow with ContainerOutput chunks
+            ),
+            (
+                DaemonResponse::Success {
+                    message: "ok".to_string(),
+                },
+                true,
+            ),
+            (DaemonResponse::ContainerList { containers: vec![] }, true),
+            (
+                DaemonResponse::Error {
+                    message: "boom".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerOutput {
+                    stream: minibox_core::protocol::OutputStreamKind::Stdout,
+                    data: "dGVzdA==".to_string(),
+                },
+                false,
+            ),
+            (DaemonResponse::ContainerStopped { exit_code: 0 }, true),
+        ];
+
+        for (variant, expected_terminal) in variants {
+            // Verify is_terminal_response returns the expected value.
+            assert_eq!(
+                is_terminal_response(variant),
+                *expected_terminal,
+                "unexpected terminal status for variant: {variant:?}",
+            );
+
+            // Exhaustiveness guard: this match must cover every arm with no
+            // wildcard.  If you add a new DaemonResponse variant, the compiler
+            // will refuse to compile until you add it here AND in the `variants`
+            // slice above.
+            let _exhaustiveness_guard: bool = match variant {
+                DaemonResponse::ContainerCreated { .. } => true,
+                DaemonResponse::Success { .. } => true,
+                DaemonResponse::ContainerList { .. } => true,
+                DaemonResponse::Error { .. } => true,
+                DaemonResponse::ContainerOutput { .. } => false,
+                DaemonResponse::ContainerStopped { .. } => true,
+            };
+        }
+    }
+
     #[test]
     fn test_is_terminal_response_for_each_variant() {
         // ContainerOutput is the only non-terminal response
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerOutput {
-                stream: linuxbox::protocol::OutputStreamKind::Stdout,
+                stream: mbx::protocol::OutputStreamKind::Stdout,
                 data: "dGVzdA==".to_string(),
             }),
             "ContainerOutput must be non-terminal"
@@ -373,10 +449,10 @@ mod tests {
             "Error must be terminal"
         );
         assert!(
-            is_terminal_response(&DaemonResponse::ContainerCreated {
+            !is_terminal_response(&DaemonResponse::ContainerCreated {
                 id: "abc".to_string()
             }),
-            "ContainerCreated must be terminal"
+            "ContainerCreated must be non-terminal (ephemeral runs follow with ContainerOutput)"
         );
         assert!(
             is_terminal_response(&DaemonResponse::ContainerStopped { exit_code: 0 }),

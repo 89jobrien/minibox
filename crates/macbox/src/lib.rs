@@ -14,14 +14,18 @@
 //!
 //! - [`paths`] — macOS-specific default directories and socket path
 //! - [`preflight`] — Colima/backend detection via `colima status`
+//! - [`vz`] — VZ.framework and vsock integration
 
 pub mod paths;
 pub mod preflight;
 
+#[cfg(feature = "vz")]
+pub mod vz;
+
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
-use linuxbox::adapters::{
+use mbx::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
@@ -132,6 +136,19 @@ pub async fn start() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── VZ branch ────────────────────────────────────────────────────────
+    #[cfg(feature = "vz")]
+    if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz") {
+        return start_vz(
+            socket_path,
+            images_dir,
+            containers_dir,
+            run_containers_dir,
+            state,
+        )
+        .await;
+    }
+
     // ── Dependency Injection — Colima adapter suite ──────────────────────
     let lima_home_env = lima_home();
 
@@ -228,4 +245,120 @@ pub async fn start() -> Result<()> {
     }
     info!("miniboxd (macOS) stopped");
     Ok(())
+}
+
+/// Start the macOS daemon using the VZ.framework adapter suite.
+///
+/// Selected when `MINIBOX_ADAPTER=vz` is set and the `vz` feature is compiled
+/// in. Boots a [`vz::vm::VzVm`], waits for the in-VM agent to accept
+/// connections over vsock, wires up the four Vz* adapters into
+/// [`HandlerDependencies`], and then runs the standard socket server accept
+/// loop.
+#[cfg(feature = "vz")]
+async fn start_vz(
+    socket_path: std::path::PathBuf,
+    images_dir: std::path::PathBuf,
+    containers_dir: std::path::PathBuf,
+    run_containers_dir: std::path::PathBuf,
+    state: Arc<daemonbox::state::DaemonState>,
+) -> Result<()> {
+    use vz::vm::{VzVm, VzVmConfig, default_vm_dir};
+    use vz::{VzFilesystem, VzLimiter, VzRegistry, VzRuntime};
+
+    let vm_dir = default_vm_dir()
+        .ok_or_else(|| anyhow::anyhow!("vz: cannot determine home directory for VM image path"))?;
+
+    info!(vm_dir = %vm_dir.display(), "vz: booting Linux VM");
+
+    let config = VzVmConfig {
+        vm_dir,
+        images_dir,
+        containers_dir: containers_dir.clone(),
+        memory_bytes: 1 * 1024 * 1024 * 1024, // 1 GiB
+        cpu_count: 2,
+    };
+
+    // VZ.framework calls are synchronous on a GCD queue — must be off the async runtime.
+    let vm = tokio::task::spawn_blocking(move || VzVm::boot(config))
+        .await
+        .context("spawn_blocking VzVm::boot")??;
+
+    info!(
+        port = vz::vsock::AGENT_PORT,
+        "vz: VM booted, waiting for agent"
+    );
+
+    let vm_arc = Arc::new(vm);
+
+    // Wait for the in-VM agent to start accepting vsock connections.
+    vz::vsock::connect_to_agent(&vm_arc, 60)
+        .await
+        .context("vz: agent did not come up within 60 attempts")?;
+    info!("vz: agent ready");
+
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
+        ghcr_registry: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
+        filesystem: Arc::new(VzFilesystem::new(Arc::clone(&vm_arc))),
+        resource_limiter: Arc::new(VzLimiter::new(Arc::clone(&vm_arc))),
+        runtime: Arc::new(VzRuntime::new(Arc::clone(&vm_arc))),
+        network_provider: Arc::new(mbx::adapters::NoopNetwork::new()),
+        containers_base: containers_dir,
+        run_containers_base: run_containers_dir,
+    });
+
+    // ── Socket ───────────────────────────────────────────────────────────
+    if socket_path.exists() {
+        warn!("vz: removing stale socket at {}", socket_path.display());
+        std::fs::remove_file(&socket_path)
+            .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
+    }
+
+    let raw_listener = UnixListener::bind(&socket_path)
+        .with_context(|| format!("vz: binding Unix socket at {}", socket_path.display()))?;
+
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| {
+                format!(
+                    "vz: setting socket permissions on {}",
+                    socket_path.display()
+                )
+            })?;
+    }
+
+    info!("vz: listening on {}", socket_path.display());
+
+    let vm_for_shutdown = Arc::clone(&vm_arc);
+    let shutdown = async move {
+        tokio::signal::ctrl_c().await.ok();
+        info!("vz: received Ctrl-C, shutting down VM");
+        vm_for_shutdown.stop();
+    };
+
+    daemonbox::server::run_server(
+        MacUnixListener(raw_listener),
+        state,
+        deps,
+        false, // require_root_auth — VZ operations run in the VM
+        shutdown,
+    )
+    .await?;
+
+    if socket_path.exists() {
+        let _ = std::fs::remove_file(&socket_path);
+    }
+    info!("miniboxd (macOS/vz) stopped");
+    Ok(())
+}
+
+#[cfg(all(test, feature = "vz"))]
+mod vz_start_tests {
+    #[test]
+    fn vz_adapter_env_detection() {
+        // Structural check — env comparison logic compiles and returns bool.
+        let is_vz = std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz");
+        let _ = is_vz;
+    }
 }

@@ -12,8 +12,8 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use linuxbox::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
-//! use linuxbox::domain::*;
+//! use mbx::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
+//! use mbx::domain::*;
 //! use std::sync::Arc;
 //!
 //! #[tokio::test]
@@ -789,6 +789,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
         let result = runtime.spawn_process_sync(&cfg).unwrap();
         assert_eq!(result.pid, 10000);
@@ -863,6 +865,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime.spawn_process(&config).await;

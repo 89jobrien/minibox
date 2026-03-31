@@ -7,7 +7,7 @@ note: Never built; hand-written dispatch in daemonbox/handler.rs is the real app
 
 **Date:** 2026-03-17
 **Status:** Design
-**Scope:** `linuxbox/src/protocol.rs`, `miniboxd/src/server.rs`, `miniboxd/src/handler.rs`
+**Scope:** `mbx/src/protocol.rs`, `miniboxd/src/server.rs`, `miniboxd/src/handler.rs`
 
 ---
 

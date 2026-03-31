@@ -9,6 +9,8 @@ pub struct CreateJobRequest {
     pub cpu_weight: Option<u64>,
     pub stream_output: Option<bool>,
     pub timeout_seconds: Option<u64>,
+    #[serde(default)]
+    pub env: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

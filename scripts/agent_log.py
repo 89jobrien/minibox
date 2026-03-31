@@ -7,6 +7,8 @@ Writes to two sinks:
 
 import json
 import subprocess
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -39,6 +41,32 @@ def log_complete(run_id: str, script: str, args: dict, output: str, duration_s: 
             "duration_s": round(duration_s, 2),
             "output": output,
         }) + "\n")
+
+
+@contextmanager
+def tracked_run(script: str, args: dict):
+    """Context manager that guarantees log_complete is called, even on crash.
+
+    Usage:
+        with agent_log.tracked_run("ai-review", {"base": "main"}) as run:
+            # do work
+            run.output = "result text"
+    """
+    run = _TrackedRun(script, args)
+    try:
+        yield run
+    except BaseException:
+        run.output = run.output or "crashed"
+        raise
+    finally:
+        log_complete(run.run_id, script, args, run.output or "", time.monotonic() - run.start)
+
+
+class _TrackedRun:
+    def __init__(self, script: str, args: dict):
+        self.run_id = log_start(script, args)
+        self.start = time.monotonic()
+        self.output = ""
 
 
 def save_commit_log(sha: str, script: str, content: str, meta: dict) -> Path:

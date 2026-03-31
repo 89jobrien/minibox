@@ -74,7 +74,7 @@ sudo ./target/release/minibox ps
 MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
 ```
 
-The Docker Desktop adapter exists in `linuxbox` but is not yet wired into
+The Docker Desktop adapter exists in `mbx` but is not yet wired into
 `miniboxd`. Use `MINIBOX_ADAPTER=colima` for macOS.
 
 **Integration Notes**

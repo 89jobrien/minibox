@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
+mbx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -34,3 +34,4 @@ proptest = "1"
 reqwest = { workspace = true }
 tokio = { workspace = true }
 minibox-core = { workspace = true }
+async-trait = { workspace = true }

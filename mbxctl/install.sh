@@ -25,7 +25,8 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/mbxctl --listen 0.0.0.0:9999
+ExecStart=/usr/local/bin/mbxctl --listen localhost:9999
+# Override with --listen 0.0.0.0:9999 for network-accessible deployments (add auth first)
 Restart=on-failure
 RestartSec=5s
 Environment=MINIBOX_SOCKET_PATH=/run/minibox/miniboxd.sock

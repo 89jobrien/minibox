@@ -12,7 +12,7 @@ Cross-platform shared types, protocol definitions, and domain traits for minibox
 
 ## Re-exports
 
-`linuxbox` re-exports all public types from `minibox-core` for convenience. Prefer direct imports in new code outside linuxbox.
+`mbx` re-exports all public types from `minibox-core` for convenience. Prefer direct imports in new code outside mbx.
 
 ## Test Utilities
 

@@ -14,11 +14,11 @@ A new Rust binary crate that treats `miniboxd` as a substrate and layers self-ev
   - Talk to `miniboxd` via JSON-over-Unix protocol.
   - Schedule/evaluate jobs inside containers.
   - Run inner task loops and outer harness-evolution loops.
-- Keep `linuxbox` strictly infra (images, containers, adapters); all agent logic lives in `minibox-orch`.
+- Keep `mbx` strictly infra (images, containers, adapters); all agent logic lives in `minibox-orch`.
 
 ## Architecture
 
-Hexagonal (ports and adapters), matching the patterns established in `linuxbox`.
+Hexagonal (ports and adapters), matching the patterns established in `mbx`.
 
 ```text
                     Composition Root (main.rs)
@@ -526,7 +526,7 @@ pub enum EvolutionOutcome {
 
 | Adapter                | Trait            | Backend                                      |
 | ---------------------- | ---------------- | -------------------------------------------- |
-| `SocketDaemonClient`   | `DaemonClient`   | Unix socket, reuses `linuxbox::protocol`  |
+| `SocketDaemonClient`   | `DaemonClient`   | Unix socket, reuses `mbx::protocol`  |
 | `AnthropicModelClient` | `ModelClient`    | `reqwest` to `api.anthropic.com/v1/messages` |
 | `OpenAiModelClient`    | `ModelClient`    | `reqwest` to configurable base URL           |
 | `TomlProfileStore`     | `ProfileStore`   | TOML files in `profiles/<id>.toml`           |
@@ -591,7 +591,7 @@ pattern in `miniboxd/src/handler.rs`).
 
 ### Mock Adapters
 
-Follow the pattern from `linuxbox/src/adapters/mocks.rs`:
+Follow the pattern from `mbx/src/adapters/mocks.rs`:
 
 - `Arc<Mutex<State>>` for interior mutability.
 - Builder methods: `.with_run_failure()`, `.with_active_profile()`, `.with_response()`.
@@ -627,7 +627,7 @@ Environment variables:
 
 ```text
 minibox-orch
-  +-- linuxbox       (protocol types: DaemonRequest, DaemonResponse, ContainerInfo)
+  +-- mbx       (protocol types: DaemonRequest, DaemonResponse, ContainerInfo)
   +-- serde, serde_json (serialization)
   +-- toml              (profile serialization)
   +-- rusqlite          (telemetry storage)

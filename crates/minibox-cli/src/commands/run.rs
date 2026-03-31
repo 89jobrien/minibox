@@ -20,18 +20,87 @@
 //! * [`DaemonResponse::Error`] — a fatal error from the daemon; printed to
 //!   stderr and the CLI exits with code 1.
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use base64::Engine;
 use minibox_client::DaemonClient;
-use minibox_core::domain::NetworkMode;
+use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
+use std::path::PathBuf;
+
+/// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
+pub fn parse_volume(s: &str) -> anyhow::Result<BindMount> {
+    let parts: Vec<&str> = s.splitn(3, ':').collect();
+    if parts.len() < 2 {
+        anyhow::bail!(
+            "invalid volume format {:?}: expected src:dst or src:dst:ro",
+            s
+        );
+    }
+    let host_path = PathBuf::from(parts[0]);
+    let container_path = PathBuf::from(parts[1]);
+    if !container_path.is_absolute() {
+        anyhow::bail!(
+            "container path {:?} must be absolute (start with /)",
+            container_path
+        );
+    }
+    let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
+    Ok(BindMount {
+        host_path,
+        container_path,
+        read_only,
+    })
+}
+
+/// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
+pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
+    let mut mount_type = None::<String>;
+    let mut src = None::<PathBuf>;
+    let mut dst = None::<PathBuf>;
+    let mut read_only = false;
+
+    for kv in s.split(',') {
+        if kv == "readonly" || kv == "ro" {
+            read_only = true;
+            continue;
+        }
+        let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+        match k {
+            "type" => mount_type = Some(v.to_string()),
+            "src" | "source" => src = Some(PathBuf::from(v)),
+            "dst" | "target" | "destination" => dst = Some(PathBuf::from(v)),
+            _ => {}
+        }
+    }
+
+    match mount_type.as_deref() {
+        Some("bind") | None => {}
+        Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
+    }
+
+    let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
+    let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
+    if !container_path.is_absolute() {
+        anyhow::bail!(
+            "container path {:?} must be absolute (start with /)",
+            container_path
+        );
+    }
+
+    Ok(BindMount {
+        host_path,
+        container_path,
+        read_only,
+    })
+}
 
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
 /// streams `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`
 /// is received.  Exits with the container's exit code.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     image: String,
     tag: String,
@@ -39,6 +108,9 @@ pub async fn execute(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: String,
+    privileged: bool,
+    volumes: Vec<String>,
+    mount_specs: Vec<String>,
     socket_path: &std::path::Path,
 ) -> Result<()> {
     let network_mode = match network.as_str() {
@@ -51,6 +123,16 @@ pub async fn execute(
         }
     };
 
+    // Parse -v shorthand mounts.
+    let mut mounts: Vec<BindMount> = Vec::new();
+    for v in &volumes {
+        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {:?}", v))?);
+    }
+    // Parse --mount long-form mounts.
+    for m in &mount_specs {
+        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {:?}", m))?);
+    }
+
     let request = DaemonRequest::Run {
         image,
         tag: Some(tag),
@@ -59,6 +141,9 @@ pub async fn execute(
         cpu_weight,
         ephemeral: true,
         network: Some(network_mode),
+        mounts,
+        privileged,
+        env: vec![],
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -89,9 +174,12 @@ pub async fn execute(
                 std::process::exit(exit_code);
             }
             DaemonResponse::ContainerCreated { id } => {
-                // Old daemon — non-streaming path.
+                // Print the container ID for the caller.  In the ephemeral
+                // streaming path this is the first message; ContainerOutput
+                // chunks and ContainerStopped follow.  In the non-ephemeral
+                // path the daemon closes the channel after this message, so
+                // the while-loop exits naturally.
                 println!("{id}");
-                return Ok(());
             }
             DaemonResponse::Error { message } => {
                 eprintln!("error: {message}");
@@ -153,6 +241,9 @@ mod tests {
             None,
             None,
             "none".to_string(),
+            false,
+            vec![],
+            vec![],
             &socket_path,
         )
         .await;
@@ -213,6 +304,72 @@ mod tests {
             err.to_string().contains("unknown network mode"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn parse_volume_valid_rw() {
+        let m = parse_volume("/tmp/host:/guest").unwrap();
+        assert_eq!(m.host_path, PathBuf::from("/tmp/host"));
+        assert_eq!(m.container_path, PathBuf::from("/guest"));
+        assert!(!m.read_only);
+    }
+
+    #[test]
+    fn parse_volume_valid_ro() {
+        let m = parse_volume("/tmp/host:/guest:ro").unwrap();
+        assert_eq!(m.host_path, PathBuf::from("/tmp/host"));
+        assert_eq!(m.container_path, PathBuf::from("/guest"));
+        assert!(m.read_only);
+    }
+
+    #[test]
+    fn parse_volume_missing_colon_errors() {
+        let err = parse_volume("/tmp/nocolon").unwrap_err();
+        assert!(err.to_string().contains(":"), "expected colon hint: {err}");
+    }
+
+    #[test]
+    fn parse_volume_relative_dst_errors() {
+        let err = parse_volume("/tmp/host:relative/path").unwrap_err();
+        assert!(
+            err.to_string().contains("absolute") || err.to_string().contains("/"),
+            "expected absolute path error: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_mount_valid_bind() {
+        let m = parse_mount("type=bind,src=/tmp/host,dst=/guest").unwrap();
+        assert_eq!(m.host_path, PathBuf::from("/tmp/host"));
+        assert_eq!(m.container_path, PathBuf::from("/guest"));
+        assert!(!m.read_only);
+    }
+
+    #[test]
+    fn parse_mount_readonly() {
+        let m = parse_mount("type=bind,src=/tmp/host,dst=/guest,readonly").unwrap();
+        assert!(m.read_only);
+    }
+
+    #[test]
+    fn parse_mount_non_bind_type_errors() {
+        let err = parse_mount("type=volume,src=myvolume,dst=/data").unwrap_err();
+        assert!(
+            err.to_string().contains("bind") || err.to_string().contains("type"),
+            "expected bind-only error: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_mount_missing_src_errors() {
+        let err = parse_mount("type=bind,dst=/guest").unwrap_err();
+        assert!(err.to_string().contains("src"), "expected src error: {err}");
+    }
+
+    #[test]
+    fn parse_mount_missing_dst_errors() {
+        let err = parse_mount("type=bind,src=/tmp/host").unwrap_err();
+        assert!(err.to_string().contains("dst"), "expected dst error: {err}");
     }
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.

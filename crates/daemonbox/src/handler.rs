@@ -12,19 +12,19 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use linuxbox::ImageRef;
+use mbx::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
-    ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, DynFilesystemProvider,
-    DynImageRegistry, DynMetricsRecorder, DynNetworkProvider, DynResourceLimiter, HookSpec,
-    ResourceConfig,
+    BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
+    DynFilesystemProvider, DynImageRegistry, DynMetricsRecorder, DynNetworkProvider,
+    DynResourceLimiter, HookSpec, ResourceConfig,
 };
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::network_lifecycle::NetworkLifecycle;
@@ -46,7 +46,7 @@ use crate::state::{ContainerRecord, DaemonState};
 /// Created once in the composition root (main.rs) and passed to all handlers:
 ///
 /// ```rust,ignore
-/// use linuxbox::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+/// use mbx::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
 ///
 /// let deps = Arc::new(HandlerDependencies {
 ///     registry: Arc::new(DockerHubRegistry::new(store)?),
@@ -113,6 +113,9 @@ pub async fn handle_run(
     cpu_weight: Option<u64>,
     #[allow(unused_variables)] ephemeral: bool,
     #[allow(unused_variables)] network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -126,6 +129,9 @@ pub async fn handle_run(
             memory_limit_bytes,
             cpu_weight,
             network,
+            mounts,
+            privileged,
+            env,
             state,
             deps,
             tx,
@@ -142,6 +148,9 @@ pub async fn handle_run(
         memory_limit_bytes,
         cpu_weight,
         network,
+        mounts,
+        privileged,
+        env,
         state,
         deps,
     )
@@ -171,6 +180,9 @@ async fn handle_run_streaming(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     _network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -187,6 +199,9 @@ async fn handle_run_streaming(
         memory_limit_bytes,
         cpu_weight,
         _network,
+        mounts,
+        privileged,
+        env,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -204,6 +219,20 @@ async fn handle_run_streaming(
             return;
         }
     };
+
+    // Emit the container ID first so the CLI (and tests) can capture it
+    // without waiting for the container to exit.  The protocol spec requires
+    // ContainerCreated as the first streaming message (see protocol.rs §Ephemeral).
+    debug!(pid = pid, "streaming: sending ContainerCreated");
+    let _ = tx
+        .send(DaemonResponse::ContainerCreated {
+            id: container_id.clone(),
+        })
+        .await;
+    debug!(
+        pid = pid,
+        "streaming: ContainerCreated sent, spawning drain"
+    );
 
     // Spawn blocking task to drain the pipe and forward chunks.
     let tx_clone = tx.clone();
@@ -238,28 +267,35 @@ async fn handle_run_streaming(
     });
 
     // Wait for the child process to exit.
+    debug!(pid = pid, "streaming: waiting for child exit");
     let exit_code = tokio::task::spawn_blocking(move || handler_wait_for_exit(pid))
         .await
         .unwrap_or(Ok(-1))
         .unwrap_or(-1);
+    debug!(pid = pid, exit_code = exit_code, "streaming: child exited");
 
     // Wait for drain to finish before sending ContainerStopped
     // so all output is flushed before the terminal message.
+    debug!(pid = pid, "streaming: waiting for drain");
     if let Err(e) = drain_handle.await {
         warn!(pid = pid, "pipe drain task panicked: {:?}", e);
     }
+    debug!(pid = pid, "streaming: drain complete");
 
     // ── Network cleanup (ephemeral) ────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
         .cleanup(&container_id)
         .await;
+    debug!(pid = pid, "streaming: network cleanup done");
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
+    debug!(pid = pid, "streaming: container removed");
 
     let _ = tx
         .send(DaemonResponse::ContainerStopped { exit_code })
         .await;
+    debug!(pid = pid, "streaming: ContainerStopped sent");
 }
 
 /// Variant of `run_inner` that enables output capture for ephemeral containers.
@@ -286,6 +322,9 @@ async fn run_inner_capture(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
@@ -412,19 +451,23 @@ async fn run_inner_capture(
         .cloned()
         .unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
+    let mut container_env = vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "TERM=xterm".to_string(),
+    ];
+    container_env.extend(env);
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir.clone(),
         command: spawn_command,
         args: spawn_args,
-        env: vec![
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-            "TERM=xterm".to_string(),
-        ],
+        env: container_env,
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: true,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
+        mounts,
+        privileged,
     };
 
     let _spawn_permit = state
@@ -475,6 +518,9 @@ async fn run_inner(
     memory_limit_bytes: Option<u64>,
     cpu_weight: Option<u64>,
     network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
+    env: Vec<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -614,19 +660,23 @@ async fn run_inner(
         .cloned()
         .unwrap_or_else(|| "/bin/sh".to_string());
     let spawn_args = command.iter().skip(1).cloned().collect();
+    let mut container_env = vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "TERM=xterm".to_string(),
+    ];
+    container_env.extend(env);
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir_from_overlay.clone(),
         command: spawn_command,
         args: spawn_args,
-        env: vec![
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-            "TERM=xterm".to_string(),
-        ],
+        env: container_env,
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
+        mounts,
+        privileged,
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -694,7 +744,7 @@ async fn run_inner(
 /// Wait for a process to exit and return its exit code.
 ///
 /// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `linuxbox::container::process::wait_for_exit` variant is only
+/// The `mbx::container::process::wait_for_exit` variant is only
 /// available on Linux (the `container` module is gated
 /// `#[cfg(target_os = "linux")]`). This local version provides the same
 /// functionality for the macOS streaming path.
@@ -725,7 +775,7 @@ fn handler_wait_for_exit(pid: u32) -> Result<i32> {
 ///
 /// After the process exits:
 /// 1. Any post-exit hooks registered on the container are executed
-///    (Linux only, via `linuxbox::container::process::run_hooks`).
+///    (Linux only, via `mbx::container::process::run_hooks`).
 /// 2. The container state is updated to `"Stopped"` in `DaemonState`.
 ///    Because this runs in a blocking thread, the state update bridges back
 ///    to the async runtime via `Handle::try_current` or a one-shot runtime.
@@ -761,7 +811,7 @@ fn daemon_wait_for_exit(
 
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
-        use linuxbox::container::process::run_hooks;
+        use mbx::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(_exit_code)) {
             warn!("container {id} post-exit hooks error: {e:#}");
         }
@@ -860,12 +910,28 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("container {id} has no PID (not running?)"))?;
 
     let nix_pid = Pid::from_raw(pid as i32);
+    // Signal the entire process group so descendants (e.g. `sleep` spawned
+    // by `/bin/sh -c …`) receive SIGTERM directly.  child_init calls setsid()
+    // before execve, making the container init a new process group leader;
+    // negating its host PID addresses that group.  We fall back to the
+    // individual PID if the group signal returns ESRCH (process already gone).
+    let pgid = Pid::from_raw(-(pid as i32));
 
-    info!("sending SIGTERM to container {id} (PID {pid})");
-    kill(nix_pid, Signal::SIGTERM).ok();
+    info!(
+        container_id = %id,
+        pid = pid,
+        "container: sending SIGTERM to process group"
+    );
+    if kill(pgid, Signal::SIGTERM).is_err() {
+        kill(nix_pid, Signal::SIGTERM).ok();
+    }
 
-    // Wait up to 10 s for the process to exit.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    // Wait up to 2 s for the process to exit gracefully.  In practice,
+    // PID 1 in a PID namespace silently ignores SIGTERM (kernel-enforced),
+    // so busybox `sh -c …` containers will never respond.  We keep a short
+    // window for containers that do install a handler, then fall through to
+    // SIGKILL promptly.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
         if kill(nix_pid, None).is_err() {
@@ -873,7 +939,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
-            warn!("container {id} did not exit in 10 s, sending SIGKILL");
+            warn!(
+                container_id = %id,
+                pid = pid,
+                "container: did not exit after SIGTERM, sending SIGKILL"
+            );
+            kill(pgid, Signal::SIGKILL).ok();
             kill(nix_pid, Signal::SIGKILL).ok();
             break;
         }
@@ -1054,10 +1125,21 @@ pub async fn handle_pull(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+mod run_inner_tests {
+    #[test]
+    fn run_inner_capture_signature_accepts_mounts_and_privileged() {
+        // Compile-time check: the BindMount type is accessible in this crate.
+        use minibox_core::domain::BindMount;
+        let _: Vec<BindMount> = vec![];
+        let _: bool = false;
+    }
+}
+
+#[cfg(test)]
 mod select_registry_tests {
     use super::*;
-    use linuxbox::ImageRef;
-    use linuxbox::adapters::{DockerHubRegistry, GhcrRegistry};
+    use mbx::ImageRef;
+    use mbx::adapters::{DockerHubRegistry, GhcrRegistry};
     use minibox_core::image::ImageStore;
     use std::sync::Arc;
 

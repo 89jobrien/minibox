@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "crates/minibox-core",
-    "crates/linuxbox",
+    "crates/mbx",
     "crates/miniboxd",
     "crates/minibox-cli",
     "crates/minibox-bench",
@@ -13,8 +13,10 @@ members = [
     "crates/minibox-llm",
     "crates/minibox-secrets",
     "crates/minibox-client",
-    "xtask",
+    "crates/xtask",
     "mbxctl",
+    "dashbox",
+    "crates/dockerbox",
 ]
 
 [workspace.package]
@@ -63,13 +65,14 @@ async-trait = "0.1"
 walkdir = "2"
 base64 = "0.22"
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Benchmarking
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates
 minibox-core = { path = "crates/minibox-core" }
-linuxbox = { path = "crates/linuxbox" }
+mbx = { path = "crates/mbx" }
 minibox-macros = { path = "crates/minibox-macros" }
 minibox-client = { path = "crates/minibox-client" }
 daemonbox = { path = "crates/daemonbox" }
@@ -81,6 +84,7 @@ keyring = "3"
 wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
 assert_cmd = "2"    # dev-only: CLI subprocess testing
 predicates = "3"    # dev-only: assert_cmd predicate helpers
+serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 
 # Internal crates (secrets)
 minibox-secrets = { path = "crates/minibox-secrets" }

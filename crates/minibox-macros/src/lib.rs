@@ -21,8 +21,8 @@
 //!
 //! The `as_any!` macro references `crate::domain::AsAny`. In `macro_rules!`,
 //! `crate` resolves at the *call site*, not the defining crate. When called
-//! from `linuxbox`, `crate` correctly expands to `linuxbox`, so the
-//! path resolves to `linuxbox::domain::AsAny`. Using `$crate` would
+//! from `mbx`, `crate` correctly expands to `mbx`, so the
+//! path resolves to `mbx::domain::AsAny`. Using `$crate` would
 //! incorrectly resolve to `minibox_macros`, which does not define `AsAny`.
 //! Clippy warns about this pattern (`crate_in_macro_def`); the warning is
 //! suppressed with `#[allow]` — do not change it to `$crate`.
@@ -31,7 +31,7 @@
 ///
 /// This allows trait objects to be downcast back to their concrete type at
 /// runtime via `std::any::Any`. The path `crate::domain::AsAny` resolves at
-/// the **call site** (i.e., in `linuxbox`), not in this defining crate.
+/// the **call site** (i.e., in `mbx`), not in this defining crate.
 /// See the crate-level documentation for the full explanation.
 ///
 /// # Example
@@ -40,8 +40,8 @@
 /// as_any!(WslRuntime, WslFilesystem, WslLimiter);
 /// ```
 // `crate::domain::AsAny` is intentional: in macro_rules!, `crate` resolves at
-// the call site, so this expands to `linuxbox::domain::AsAny` when invoked
-// from linuxbox. Using `$crate` here would wrongly resolve to minibox-macros,
+// the call site, so this expands to `mbx::domain::AsAny` when invoked
+// from mbx. Using `$crate` here would wrongly resolve to minibox-macros,
 // which does not export `AsAny`. Suppressing the clippy lint is correct here.
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]

@@ -1,0 +1,26 @@
+graph LR
+  imageref[ImageRef]
+  %% detail: Parse [REGISTRY/]NAMESPACE/NAME[:TAG]. Routes to correct registry adapter. Default: docker.io/library.
+  tokenauth{token auth}
+  %% detail: Docker Hub: POST /token with scope repository:pull. Returns short-lived JWT. Anonymous auth, no login required.
+  manifest{manifest}
+  %% detail: GET /v2/{name}/manifests/{ref}. Max size: 10MB. Parses OCI image manifest JSON for layer digest list.
+  layers{layers}
+  %% detail: GET /v2/{name}/blobs/{digest} per layer. Max: 1GB/layer, 5GB total. Streamed to disk.
+  verify{verify}
+  %% detail: SHA256 digest of downloaded blob compared against manifest entry. Reject on mismatch.
+  untar[untar]
+  %% detail: Extract tar layer. Security checks: reject path traversal (..), absolute symlinks, device nodes. Strip setuid bits.
+  cached>cached<
+  %% detail: Layers written to /var/lib/minibox/images/{name}/{digest}/. Ready for overlay mount.
+
+  imageref --> tokenauth
+  tokenauth --> manifest
+  manifest --> layers
+  layers --> verify
+  verify --> untar
+  untar --> cached
+
+%% name: Image Pull
+%% layout: imageref tokenauth manifest layers
+%% layout: verify untar cached

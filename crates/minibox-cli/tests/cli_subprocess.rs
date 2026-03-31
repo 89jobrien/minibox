@@ -10,7 +10,7 @@
 #![cfg(all(unix, feature = "subprocess-tests"))]
 
 use assert_cmd::Command;
-use linuxbox::protocol::{ContainerInfo, DaemonResponse};
+use mbx::protocol::{ContainerInfo, DaemonResponse};
 use predicates::prelude::*;
 use std::path::Path;
 use tempfile::TempDir;

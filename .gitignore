@@ -22,10 +22,16 @@
 !docs/diagrams/
 !docs/archive/*.md
 !docs/archive/
+*.csv
 
 # Claude Code local configuration
 .claude/
 .worktrees/
+.superpowers/
+
+# Go build artifacts (agentbox)
+agentbox/agentbox
+agentbox/mbx-commit-msg
 
 # Rust build artifacts
 /target/
@@ -41,6 +47,9 @@ Cargo.lock is committed for binary projects
 /var/lib/minibox/
 /run/minibox/
 
+# uftrace trace data
+/traces/
+
 # Generated artifacts / recipes
 /recipe.json
 /recipe.json.gz
@@ -53,7 +62,8 @@ Cargo.lock is committed for binary projects
 /bench/results/*.txt
 !/bench/results/latest.json
 
-# Testing
+# Profiling
+/bench/profiles/
 *.profraw
 *.profdata
 
@@ -93,4 +103,3 @@ __pycache__/
 *.venv/
 *.pytest_cache/
 .firecrawl/
-.superpowers/
