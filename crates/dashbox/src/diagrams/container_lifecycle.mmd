@@ -1,0 +1,26 @@
+graph LR
+  runreq[run req]
+  %% detail: CLI sends RunContainer JSON over Unix socket at /run/minibox/miniboxd.sock. Protocol: JSON-over-newline.
+  auth{auth}
+  %% detail: SO_PEERCRED on Unix socket. Kernel provides client UID/PID. Only UID 0 (root) permitted. Logged for audit trail.
+  imgcache{img cache}
+  %% detail: Check /var/lib/minibox/images/ for cached layers. If missing, pulls from Docker Hub with anonymous token auth.
+  overlay[overlay]
+  %% detail: mount overlay: lowerdir=layers (read-only), upperdir=container_rw, workdir=container_work. Requires CLONE_NEWNS + root.
+  clone[clone()]
+  %% detail: clone(2) with CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET. Parent spawns reaper task for child PID.
+  pivotroot[pivot_root]
+  %% detail: Child: MS_PRIVATE propagation, bind-mount rootfs, pivot_root to container FS, unmount old root.
+  exec[exec]
+  %% detail: execve() with explicit envp (not execvp). Closes extra FDs via close_range(). PID 1 inside container namespace.
+
+  runreq --> auth
+  auth --> imgcache
+  imgcache --> overlay
+  overlay --> clone
+  clone --> pivotroot
+  pivotroot --> exec
+
+%% name: Container Lifecycle
+%% layout: runreq auth imgcache overlay
+%% layout: clone pivotroot exec

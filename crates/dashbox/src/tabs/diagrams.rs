@@ -13,7 +13,6 @@ use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
 use crate::data::ci::CiSource;
 use crate::diagram::{EdgeStyle, NavDir, NodeKind, NodeStatus, OwnedDiagram};
-use crate::diagrams;
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 
@@ -25,103 +24,52 @@ const BOX_W: usize = NODE_INNER + 4;
 /// Width of the connector string between two nodes in the same row.
 const CONN_W: usize = 9;
 
-// ── View cycling ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum View {
-    CiFlow,
-    DevLoop,
-    ContainerLifecycle,
-    ImagePull,
-    AdapterSuite,
-    WorkspaceDeps,
-}
-
-impl View {
-    const ALL: [View; 6] = [
-        View::CiFlow,
-        View::DevLoop,
-        View::ContainerLifecycle,
-        View::ImagePull,
-        View::AdapterSuite,
-        View::WorkspaceDeps,
-    ];
-
-    fn name(self) -> &'static str {
-        match self {
-            View::CiFlow => "CI Flow",
-            View::DevLoop => "Dev Loop",
-            View::ContainerLifecycle => "Container Lifecycle",
-            View::ImagePull => "Image Pull",
-            View::AdapterSuite => "Adapter Suite",
-            View::WorkspaceDeps => "Workspace Deps",
-        }
-    }
-
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|&v| v == self).unwrap_or(0)
-    }
-
-    fn next(self) -> Self {
-        Self::ALL[(self.index() + 1) % Self::ALL.len()]
-    }
-
-    fn prev(self) -> Self {
-        let n = Self::ALL.len();
-        Self::ALL[(self.index() + n - 1) % n]
-    }
-}
-
 // ── Tab state ────────────────────────────────────────────────────────────────
 
 pub struct DiagramsTab {
-    view: View,
-    ci_flow: Diagram,
-    dev_loop: Diagram,
-    container_lifecycle: Diagram,
-    image_pull: Diagram,
-    adapter_suite: Diagram,
-    workspace_deps: Diagram,
+    diagrams: Vec<OwnedDiagram>,
+    active: usize,
     selected: usize,
     ci_source: CachedSource<CiSource>,
 }
 
 impl DiagramsTab {
-    pub fn new() -> Self {
-        let ci_flow = diagrams::ci_flow();
-        let first = ci_flow.first_node().unwrap_or(0);
+    pub fn new(extra: Vec<OwnedDiagram>) -> Self {
+        let mut diagrams = crate::diagrams::built_in_diagrams();
+        diagrams.extend(extra);
+        let first = diagrams.first().and_then(|d| d.first_node()).unwrap_or(0);
         Self {
-            view: View::CiFlow,
-            ci_flow,
-            dev_loop: diagrams::dev_loop(),
-            container_lifecycle: diagrams::container_lifecycle(),
-            image_pull: diagrams::image_pull(),
-            adapter_suite: diagrams::adapter_suite(),
-            workspace_deps: diagrams::workspace_deps(),
+            diagrams,
+            active: 0,
             selected: first,
             ci_source: CachedSource::new(CiSource::new(), 30),
         }
     }
 
-    fn active_diagram(&self) -> &Diagram {
-        match self.view {
-            View::CiFlow => &self.ci_flow,
-            View::DevLoop => &self.dev_loop,
-            View::ContainerLifecycle => &self.container_lifecycle,
-            View::ImagePull => &self.image_pull,
-            View::AdapterSuite => &self.adapter_suite,
-            View::WorkspaceDeps => &self.workspace_deps,
-        }
+    fn active_diagram(&self) -> &OwnedDiagram {
+        &self.diagrams[self.active]
     }
 
-    fn go_to_view(&mut self, v: View) {
-        self.view = v;
+    fn go_to_index(&mut self, idx: usize) {
+        self.active = idx;
         self.selected = self.active_diagram().first_node().unwrap_or(0);
     }
 
-    /// Live CI status overlay — only populated for the CI Flow diagram.
+    fn next_diagram(&mut self) {
+        let next = (self.active + 1) % self.diagrams.len();
+        self.go_to_index(next);
+    }
+
+    fn prev_diagram(&mut self) {
+        let n = self.diagrams.len();
+        let prev = (self.active + n - 1) % n;
+        self.go_to_index(prev);
+    }
+
+    /// Live CI status overlay — only populated for the first diagram (CI Flow, index 0).
+    /// Node IDs in ci_flow.mmd: feature=0, main=1, next=2, stable=3, vtag=4
     fn build_statuses(&mut self) -> HashMap<usize, NodeStatus> {
-        if self.view != View::CiFlow {
+        if self.active != 0 {
             return HashMap::new();
         }
         self.ci_source.ensure_fresh();
@@ -146,7 +94,7 @@ impl DiagramsTab {
                 .entry(run.head_branch.as_str())
                 .or_insert(status);
         }
-        // Node IDs in ci_flow: main=1, next=2, stable=3
+        // feature=0, main=1, next=2, stable=3, vtag=4
         [("main", 1usize), ("next", 2), ("stable", 3)]
             .iter()
             .filter_map(|&(branch, id)| branch_status.get(branch).map(|&s| (id, s)))
@@ -186,16 +134,13 @@ fn center_label(text: &str, width: usize) -> String {
 }
 
 /// Build a connector string of exactly `width` display columns.
-fn connector_str(edge: &Edge, width: usize) -> String
-where
-    Edge: Sized,
-{
+fn connector_str(edge: &crate::diagram::OwnedEdge, width: usize) -> String {
     let fill = match edge.style {
         EdgeStyle::Solid => '─',
         EdgeStyle::Dashed => '-',
         EdgeStyle::Manual => '·',
     };
-    let lbl = edge.label.unwrap_or("");
+    let lbl = edge.label.as_deref().unwrap_or("");
     let lbl_len = lbl.chars().count();
     let fill_total = width.saturating_sub(1 + lbl_len);
     let left = fill_total / 2;
@@ -223,7 +168,7 @@ fn connector_color(style: EdgeStyle) -> Color {
 /// Render one row of nodes as three `Line`s: top borders, labels, bottom borders.
 fn render_row_lines(
     row: &[usize],
-    diagram: &Diagram,
+    diagram: &OwnedDiagram,
     selected: usize,
     statuses: &HashMap<usize, NodeStatus>,
     is_continuation: bool,
@@ -232,7 +177,6 @@ fn render_row_lines(
     let mut mids: Vec<Span<'static>> = Vec::new();
     let mut bots: Vec<Span<'static>> = Vec::new();
 
-    // Indent: 2 spaces, with the ↳ marker on the mid line for continuations.
     tops.push(Span::raw("  "));
     mids.push(if is_continuation {
         Span::styled("↳ ", Style::default().fg(Color::DarkGray))
@@ -244,7 +188,6 @@ fn render_row_lines(
     let gap: String = " ".repeat(CONN_W);
 
     for (i, &nid) in row.iter().enumerate() {
-        // Connector before each node after the first
         if i > 0 {
             let prev = row[i - 1];
             if let Some(edge) = diagram.edge_between(prev, nid) {
@@ -276,8 +219,7 @@ fn render_row_lines(
             Style::default().fg(color)
         };
 
-        let label = center_label(node.label, NODE_INNER);
-        // ┌──────────────┐  (NODE_INNER+2 dashes)
+        let label = center_label(&node.label, NODE_INNER);
         let top = format!("┌{:─<w$}┐", "", w = NODE_INNER + 2);
         let mid = format!("│ {label} │");
         let bot = format!("└{:─<w$}┘", "", w = NODE_INNER + 2);
@@ -291,7 +233,7 @@ fn render_row_lines(
 }
 
 fn diagram_lines(
-    diagram: &Diagram,
+    diagram: &OwnedDiagram,
     selected: usize,
     statuses: &HashMap<usize, NodeStatus>,
 ) -> Vec<Line<'static>> {
@@ -314,7 +256,7 @@ fn diagram_lines(
 }
 
 fn detail_lines(
-    diagram: &Diagram,
+    diagram: &OwnedDiagram,
     selected: usize,
     statuses: &HashMap<usize, NodeStatus>,
 ) -> Vec<Line<'static>> {
@@ -332,22 +274,22 @@ fn detail_lines(
     };
     let kind_col = kind_color(node.kind);
 
-    let mut lines: Vec<Line<'static>> = Vec::new();
-
-    lines.push(Line::from(Span::styled(
-        node.label.to_string(),
-        Style::default().fg(kind_col).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(vec![
-        Span::styled(
-            node.kind.label().to_string(),
-            Style::default().fg(Color::DarkGray),
-        ),
-        Span::styled(status_str.to_string(), Style::default().fg(status_color)),
-    ]));
-    lines.push(Line::raw(""));
-    lines.push(Line::from(Span::raw(node.detail.to_string())));
-    lines.push(Line::raw(""));
+    let mut lines: Vec<Line<'static>> = vec![
+        Line::from(Span::styled(
+            node.label.clone(),
+            Style::default().fg(kind_col).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled(
+                node.kind.label().to_string(),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(status_str.to_string(), Style::default().fg(status_color)),
+        ]),
+        Line::raw(""),
+        Line::from(Span::raw(node.detail.clone())),
+        Line::raw(""),
+    ];
 
     let outgoing = diagram.outgoing(selected);
     if !outgoing.is_empty() {
@@ -356,13 +298,16 @@ fn detail_lines(
             Style::default().fg(Color::DarkGray),
         )));
         for edge in outgoing {
-            let target = diagram.node(edge.to).map(|n| n.label).unwrap_or("?");
+            let target = diagram
+                .node(edge.to)
+                .map(|n| n.label.as_str())
+                .unwrap_or("?");
             let arrow = match edge.style {
                 EdgeStyle::Solid => "──►",
                 EdgeStyle::Dashed => "─ ►",
                 EdgeStyle::Manual => "··►",
             };
-            let text = match edge.label {
+            let text = match &edge.label {
                 Some(lbl) => format!(" {arrow} {target}  ({lbl})"),
                 None => format!(" {arrow} {target}"),
             };
@@ -398,15 +343,14 @@ impl TabRenderer for DiagramsTab {
         let statuses = self.build_statuses();
         let diagram = self.active_diagram();
         let selected = self.selected;
-        let view = self.view;
+        let active = self.active;
+        let total = self.diagrams.len();
 
         let chunks = Layout::horizontal([Constraint::Percentage(70), Constraint::Percentage(30)])
             .split(area);
 
         // ── Left: diagram canvas ──────────────────────────────────────────
-        let idx = view.index() + 1;
-        let total = View::ALL.len();
-        let title = format!(" {} ({idx}/{total})  d/D:cycle ", view.name());
+        let title = format!(" {} ({}/{})  d/D:cycle ", diagram.name, active + 1, total);
         let left_block = Block::default()
             .borders(Borders::ALL)
             .title(title)
@@ -441,7 +385,6 @@ impl TabRenderer for DiagramsTab {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> TabAction {
-        // capture navigate before the immutable borrow below
         let nav_result = {
             let diagram = self.active_diagram();
             match key.code {
@@ -458,8 +401,8 @@ impl TabRenderer for DiagramsTab {
         };
 
         match key.code {
-            KeyCode::Char('d') => self.go_to_view(self.view.next()),
-            KeyCode::Char('D') => self.go_to_view(self.view.prev()),
+            KeyCode::Char('d') => self.next_diagram(),
+            KeyCode::Char('D') => self.prev_diagram(),
             _ => {
                 if let Some(nid) = nav_result {
                     self.selected = nid;

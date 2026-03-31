@@ -1,0 +1,19 @@
+graph LR
+  feature([feature/*])
+  %% detail: Short-lived branches targeting main. PRs trigger fmt+clippy+check gates. Auto-deleted on merge.
+  main([main])
+  %% detail: Active R&D. CI gates: cargo check + fmt --check + clippy -D warnings. Direct push or PR merge.
+  next([next])
+  %% detail: Auto-promoted from main on green CI via phased-deployment.yml. Extra gates: nextest + cargo audit + deny + machete.
+  stable([stable])
+  %% detail: Manual promotion from next via workflow_dispatch. Extra gates: cargo geiger + release build.
+  vtag>v* tag<
+  %% detail: Versioned release cut from stable. Triggers release.yml: cross-compiled musl binaries + GitHub Release.
+
+  feature -->|PR| main
+  main -->|auto| next
+  next ==>|manual| stable
+  stable -.->|tag| vtag
+
+%% name: CI Flow
+%% layout: feature main next stable vtag

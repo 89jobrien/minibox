@@ -1,0 +1,20 @@
+graph LR
+  adapter[ADAPTER]
+  %% detail: MINIBOX_ADAPTER env var selects the adapter suite at daemon startup. Wired in miniboxd/src/main.rs.
+  native{native}
+  %% detail: Linux namespaces + cgroups v2 + overlay FS. Requires root. Default adapter. Full isolation.
+  gke{gke}
+  %% detail: Unprivileged: proot + copy FS + no-op limiter. No root required. For GKE/restricted environments.
+  colima{colima}
+  %% detail: macOS via limactl + nerdctl inside Colima VM. Routed through ColimaRuntime adapter. Requires Colima running.
+  vz{vz}
+  %% detail: macOS Virtualization.framework: boots Alpine Linux VM, forwards commands via vsock. Requires --features vz + VM image.
+
+  adapter -->|native| native
+  adapter -->|gke| gke
+  adapter -->|colima| colima
+  adapter -.->|vz| vz
+
+%% name: Adapter Suite
+%% layout: adapter
+%% layout: native gke colima vz
