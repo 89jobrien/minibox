@@ -218,6 +218,67 @@ All items below are merged to `main`:
 
 ---
 
+## Issue backlog timeline
+
+All open issues in execution order. Update status as issues close.
+
+### Tier 1 — Quick wins (no daemon/Linux required)
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #4 | GHA CI: add fmt+clippy gates | S | open |
+| #7 | save_bench_results: avoid full Value parse/serialize | S | open |
+| #8 | Adapter microbench: single tokio runtime per suite | S | open |
+| #9 | VPS: replace sshpass with 1Password SSH agent | S | open |
+| #10 | Bench artifacts: aggregates only, raw opt-in | M | open |
+| #12 | has_image_sync: eliminate per-call String alloc | XS | open |
+| #13 | Proptest DaemonState: avoid disk I/O per iteration | S | open |
+
+### Tier 2 — mbx-dagu fixes
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #31 | Add .gitmodules or document nested repo | XS | open |
+| #35 | Dockerfile: use dagu base image not alpine | XS | open |
+| #36 | executor.go: pass Env/MemoryLimitBytes/CpuWeight | S | open |
+
+### Tier 3 — Linux-only tests (run on VPS to verify)
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #22 | Native adapter isolation tests | M | open |
+| #23 | GKE adapter isolation tests | M | open |
+| #24 | Container lifecycle failure tests | M | open |
+
+### Tier 4 — Core runtime features (Linux + daemon)
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #17 | Named containers | M | open |
+| #18 | Container log capture + `logs` command | M | open |
+| #21 | Shared OCI image-pulling library (crate extraction) | M | open |
+| #20 | Container networking (veth/bridge) | L | open |
+| #16 | exec into running containers (setns) | L | open |
+| #19 | PTY/stdio piping for interactive containers | L | open |
+
+### Tier 5 — vz macOS VM stack (milestone: #44)
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #40 | VZ: provision + start Linux VM | L | done |
+| #41 | VZ: minibox-agent in-VM daemon | L | done |
+| #42 | VZ: vsock I/O bridge | M | done |
+| #43 | VZ: virtiofs host-path mounts | M | done |
+| #44 | Full cross-OS container stack (macOS milestone) | — | macOS done |
+
+### Tier 6 — Windows
+
+| # | Title | Size | Status |
+|---|-------|------|--------|
+| #45 | winbox: Hyper-V/WSL2 Linux VM | XL | open |
+
+---
+
 ## Next up
 
 ### ✅ DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
