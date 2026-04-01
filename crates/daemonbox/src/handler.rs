@@ -31,6 +31,27 @@ use crate::network_lifecycle::NetworkLifecycle;
 use crate::state::{ContainerRecord, DaemonState};
 use async_trait::async_trait;
 
+// ─── Default adapters ────────────────────────────────────────────────────────
+
+/// Production no-op image loader.
+///
+/// Used as a placeholder in platform adapters (e.g. macbox, winbox) that do
+/// not yet implement local tarball loading. Accepts any load request and
+/// returns `Ok(())` immediately. This is a real adapter, not a test double.
+pub struct NoopImageLoader;
+
+#[async_trait]
+impl minibox_core::domain::ImageLoader for NoopImageLoader {
+    async fn load_image(
+        &self,
+        _path: &std::path::Path,
+        _name: &str,
+        _tag: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Handler Dependencies (Dependency Injection)
 // ---------------------------------------------------------------------------
@@ -1199,31 +1220,11 @@ pub async fn handle_load_image(
             }
         }
         Err(e) => {
-            error!("handle_load_image error: {e:#}");
+            error!(error = %e, "load_image: failed");
             DaemonResponse::Error {
                 message: format!("{e:#}"),
             }
         }
-    }
-}
-
-// ─── Test doubles ───────────────────────────────────────────────────────────
-
-/// No-op image loader — accepts any load request and returns `Ok(())`.
-///
-/// Used as a placeholder in platform adapters that do not yet implement
-/// local tarball loading (e.g. macbox, winbox).
-pub struct NoopImageLoader;
-
-#[async_trait]
-impl minibox_core::domain::ImageLoader for NoopImageLoader {
-    async fn load_image(
-        &self,
-        _path: &std::path::Path,
-        _name: &str,
-        _tag: &str,
-    ) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 
