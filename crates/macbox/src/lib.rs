@@ -184,6 +184,7 @@ pub async fn start() -> Result<()> {
             .map_err(|e| anyhow::anyhow!("limactl spawn failed: {e}"))
     });
 
+    let colima_image_loader = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
         // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
@@ -199,7 +200,7 @@ pub async fn start() -> Result<()> {
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        image_loader: colima_image_loader as minibox_core::domain::DynImageLoader,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

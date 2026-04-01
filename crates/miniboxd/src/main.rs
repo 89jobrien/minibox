@@ -117,7 +117,8 @@ use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
 use mbx::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
+    OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
@@ -417,6 +418,7 @@ async fn main() -> Result<()> {
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
+                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
             })
         }
         AdapterSuite::Gke => {
@@ -440,6 +442,7 @@ async fn main() -> Result<()> {
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
+                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
             })
         }
         AdapterSuite::Colima => {
@@ -457,6 +460,7 @@ async fn main() -> Result<()> {
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
             })
         }
     };
