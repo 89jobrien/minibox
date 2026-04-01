@@ -107,6 +107,9 @@ pub struct HandlerDependencies {
     /// Image pusher for pushing images to OCI registries.
     /// `None` on platforms or configurations where push is not supported.
     pub image_pusher: Option<minibox_core::domain::DynImagePusher>,
+    /// Container committer for snapshotting a container's overlay diff.
+    /// `None` on platforms where commit is not supported (macOS, Windows).
+    pub commit_adapter: Option<minibox_core::domain::DynContainerCommitter>,
 }
 
 impl HandlerDependencies {
@@ -1384,6 +1387,77 @@ pub async fn handle_push(
             let _ = tx
                 .send(DaemonResponse::Success {
                     message: format!("pushed {} digest:{}", image_ref_str, result.digest),
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
+                })
+                .await;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_commit(
+    container_id: String,
+    target_image: String,
+    author: Option<String>,
+    message: Option<String>,
+    env_overrides: Vec<String>,
+    cmd_override: Option<Vec<String>>,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let Some(ref committer) = deps.commit_adapter else {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: "commit not supported on this platform".to_string(),
+            })
+            .await;
+        return;
+    };
+
+    let cid = match minibox_core::domain::ContainerId::new(container_id.clone()) {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("invalid container id: {e}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    let config = minibox_core::domain::CommitConfig {
+        author,
+        message,
+        env_overrides,
+        cmd_override,
+    };
+
+    match committer.commit(&cid, &target_image, &config).await {
+        Ok(meta) => {
+            info!(
+                container_id = %container_id,
+                target = %target_image,
+                layers = meta.layers.len(),
+                "commit: completed"
+            );
+            let _ = tx
+                .send(DaemonResponse::Success {
+                    message: format!(
+                        "committed {} digest:{}",
+                        target_image,
+                        meta.layers
+                            .first()
+                            .map(|l| l.digest.as_str())
+                            .unwrap_or("unknown")
+                    ),
                 })
                 .await;
         }

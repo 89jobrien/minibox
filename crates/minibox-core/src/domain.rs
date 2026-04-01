@@ -828,6 +828,33 @@ pub trait ImagePusher: AsAny + Send + Sync {
 /// Type alias for a shared, dynamic [`ImagePusher`] implementation.
 pub type DynImagePusher = Arc<dyn ImagePusher>;
 
+// ---------------------------------------------------------------------------
+// Container Committer Port
+// ---------------------------------------------------------------------------
+
+/// Configuration for committing a container to a new image.
+#[derive(Debug, Clone)]
+pub struct CommitConfig {
+    pub author: Option<String>,
+    pub message: Option<String>,
+    pub env_overrides: Vec<String>,
+    pub cmd_override: Option<Vec<String>>,
+}
+
+/// Port for snapshotting a container's filesystem diff into a new image.
+#[async_trait]
+pub trait ContainerCommitter: AsAny + Send + Sync {
+    async fn commit(
+        &self,
+        container_id: &ContainerId,
+        target_ref: &str,
+        config: &CommitConfig,
+    ) -> anyhow::Result<ImageMetadata>;
+}
+
+/// Type alias for a shared, dynamic [`ContainerCommitter`] implementation.
+pub type DynContainerCommitter = Arc<dyn ContainerCommitter>;
+
 #[cfg(test)]
 mod tests {
     use super::*;

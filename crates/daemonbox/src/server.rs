@@ -307,6 +307,27 @@ async fn dispatch(
         } => {
             handler::handle_push(image_ref, credentials, state, deps, tx).await;
         }
+        DaemonRequest::Commit {
+            container_id,
+            target_image,
+            author,
+            message,
+            env_overrides,
+            cmd_override,
+        } => {
+            handler::handle_commit(
+                container_id,
+                target_image,
+                author,
+                message,
+                env_overrides,
+                cmd_override,
+                state,
+                deps,
+                tx,
+            )
+            .await;
+        }
     }
 }
 
@@ -345,6 +366,7 @@ mod tests {
             image_loader: Arc::new(crate::handler::NoopImageLoader),
             exec_runtime: None,
             image_pusher: None,
+            commit_adapter: None,
         });
         (state, deps)
     }

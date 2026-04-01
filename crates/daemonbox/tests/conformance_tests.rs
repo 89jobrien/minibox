@@ -70,6 +70,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
         image_pusher: None,
+        commit_adapter: None,
     })
 }
 
@@ -90,6 +91,7 @@ fn mock_deps_with_network(
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
         image_pusher: None,
+        commit_adapter: None,
     })
 }
 

@@ -76,6 +76,11 @@
 
 // Platform-native adapters (Linux only)
 #[cfg(target_os = "linux")]
+pub mod commit;
+#[cfg(target_os = "linux")]
+pub use commit::OverlayCommitAdapter;
+
+#[cfg(target_os = "linux")]
 pub mod exec;
 #[cfg(target_os = "linux")]
 pub use exec::NativeExecRuntime;

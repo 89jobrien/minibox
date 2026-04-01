@@ -159,6 +159,22 @@ pub enum ExecError {
 // Push errors
 // ---------------------------------------------------------------------------
 
+/// Errors from container commit operations.
+#[derive(Debug, Error)]
+pub enum CommitError {
+    #[error("overlay upperdir missing for container {container_id}")]
+    UpperdirMissing { container_id: String },
+
+    #[error("layer tar failed: {reason}")]
+    LayerTarFailed { reason: String },
+
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("commit error: {0}")]
+    Other(String),
+}
+
 /// Errors from OCI image push operations.
 #[derive(Debug, Error)]
 pub enum PushError {

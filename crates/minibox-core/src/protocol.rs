@@ -164,6 +164,20 @@ pub enum DaemonRequest {
         /// Credentials for authenticating to the target registry.
         credentials: PushCredentials,
     },
+
+    /// Snapshot a container's filesystem changes into a new local image.
+    Commit {
+        container_id: String,
+        target_image: String,
+        #[serde(default)]
+        author: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        #[serde(default)]
+        env_overrides: Vec<String>,
+        #[serde(default)]
+        cmd_override: Option<Vec<String>>,
+    },
 }
 
 // ---------------------------------------------------------------------------
