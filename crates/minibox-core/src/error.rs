@@ -154,3 +154,26 @@ pub enum ExecError {
     #[error("exec error: {0}")]
     Other(String),
 }
+
+// ---------------------------------------------------------------------------
+// Push errors
+// ---------------------------------------------------------------------------
+
+/// Errors from OCI image push operations.
+#[derive(Debug, Error)]
+pub enum PushError {
+    #[error("registry authentication failed for {registry}: {message}")]
+    AuthFailed { registry: String, message: String },
+
+    #[error("blob upload failed for {digest}: {reason}")]
+    BlobUploadFailed { digest: String, reason: String },
+
+    #[error("manifest push failed: {reason}")]
+    ManifestPushFailed { reason: String },
+
+    #[error("network error: {0}")]
+    Network(#[from] reqwest::Error),
+
+    #[error("push error: {0}")]
+    Other(String),
+}

@@ -787,6 +787,47 @@ pub trait ExecRuntime: AsAny + Send + Sync {
 /// Type alias for a shared, dynamic [`ExecRuntime`] implementation.
 pub type DynExecRuntime = Arc<dyn ExecRuntime>;
 
+// ---------------------------------------------------------------------------
+// Image Pusher Port
+// ---------------------------------------------------------------------------
+
+/// Credentials for authenticating to a registry.
+#[derive(Debug, Clone)]
+pub enum RegistryCredentials {
+    Anonymous,
+    Basic { username: String, password: String },
+    Token(String),
+}
+
+/// Result of a successful image push.
+#[derive(Debug, Clone)]
+pub struct PushResult {
+    pub digest: String,
+    pub size_bytes: u64,
+}
+
+/// Push progress update.
+#[derive(Debug, Clone)]
+pub struct PushProgress {
+    pub layer_digest: String,
+    pub bytes_uploaded: u64,
+    pub total_bytes: u64,
+}
+
+/// Port for pushing images to OCI-compliant registries.
+#[async_trait]
+pub trait ImagePusher: AsAny + Send + Sync {
+    async fn push_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+        credentials: &RegistryCredentials,
+        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+    ) -> anyhow::Result<PushResult>;
+}
+
+/// Type alias for a shared, dynamic [`ImagePusher`] implementation.
+pub type DynImagePusher = Arc<dyn ImagePusher>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
