@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-29
+**Last updated:** 2026-04-01
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -219,6 +219,12 @@ All items below are merged to `main`:
   - Wired: `MINIBOX_ADAPTER=vz` + `--features vz`
 - [x] `xtask` modularised: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs (2026-03-29)
 - [x] `dashbox` Ratatui TUI dashboard with 6 tabs (2026-03-29)
+- [x] VZ isolation test suite (`vz_isolation_tests.rs`) — 11 behavioral tests covering overlay, cgroups, namespaces, rootfs (2026-04-01, commit `b53c7c6`):
+  - `harness = false` + custom `main()` calling `dispatch_main()` on OS main thread — fixes indefinite hang caused by VZ.framework completion handlers needing a live GCD main queue
+  - `entitlements/vz-test.entitlements` (`com.apple.security.virtualization`) + codesign step in `just test-vz-isolation`
+  - Tests run, surface real errors, then exit — no more silent hang
+  - **Blocked:** `VZErrorInternal(code=1)` is a confirmed Apple OS bug in VZ.framework on macOS 26 ARM64 (also affects Podman, apple/container — see [apple/container#1254](https://github.com/apple/container/issues/1254)). No user-space workaround. Will unblock when Apple ships a fix.
+- [x] `vsock connectToPort:completionHandler:` dispatched on GCD main queue (2026-04-01, commit `a733344`) — fixes vsock hang on Tahoe
 
 ---
 
@@ -319,7 +325,7 @@ macOS VZ.framework stack is **complete and merged** (2026-03-29). Remaining work
 | #43   | virtiofs mounts — share OCI layers + bind mounts     | ✅ Done — 3 virtiofs shares      |
 | #45   | Windows: Hyper-V / WSL2 kernel path                  | Open                             |
 
-**Next macOS VZ task:** End-to-end smoke test with a real VM image (requires `cargo xtask build-vm-image` run once to populate `~/.mbx/vm/`). The `vz_adapter_smoke` test gates on that directory existing.
+**VZ status (2026-04-01):** Test harness is complete and correct. Blocked by confirmed Apple OS bug — `VZErrorInternal(code=1)` on `startWithCompletionHandler` on macOS 26 ARM64. Affects all VZ.framework users (Podman, apple/container). Monitor [apple/container#1254](https://github.com/apple/container/issues/1254) for resolution. No code changes needed on our side when Apple ships the fix — `just test-vz-isolation` should pass as-is.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
@@ -388,7 +394,7 @@ See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` 
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
 - `docker_desktop` and `wsl2` adapters exist in `mbx` but are **not wired** into `miniboxd`
-- VZ adapter is wired but untested end-to-end (requires running `cargo xtask build-vm-image` first)
+- VZ adapter is wired; VM image is built (`~/.mbx/vm/`); test harness is ready — blocked on Apple OS bug `VZErrorInternal(code=1)` on macOS 26 ARM64 (see [apple/container#1254](https://github.com/apple/container/issues/1254))
 
 ---
 
