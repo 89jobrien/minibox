@@ -128,3 +128,29 @@ pub enum RegistryError {
     #[error("registry error: {0}")]
     Other(String),
 }
+
+// ---------------------------------------------------------------------------
+// Exec errors
+// ---------------------------------------------------------------------------
+
+/// Errors from exec-into-container operations.
+#[derive(Debug, Error)]
+pub enum ExecError {
+    #[error("container {container_id} is not running")]
+    ContainerNotRunning { container_id: String },
+
+    #[error("exec {exec_id} not found")]
+    ExecNotFound { exec_id: String },
+
+    #[error("nsenter failed for container {container_id}: {reason}")]
+    NsenterFailed {
+        container_id: String,
+        reason: String,
+    },
+
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("exec error: {0}")]
+    Other(String),
+}

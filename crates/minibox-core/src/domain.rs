@@ -754,6 +754,39 @@ impl AsRef<str> for ContainerId {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Exec Runtime Port
+// ---------------------------------------------------------------------------
+
+/// Configuration for running a command inside a running container.
+#[derive(Debug, Clone)]
+pub struct ExecConfig {
+    pub cmd: Vec<String>,
+    pub env: Vec<String>,
+    pub working_dir: Option<std::path::PathBuf>,
+    pub tty: bool,
+}
+
+/// Handle representing a started exec instance.
+#[derive(Debug, Clone)]
+pub struct ExecHandle {
+    pub id: String,
+}
+
+/// Port for running commands inside already-running containers.
+#[async_trait]
+pub trait ExecRuntime: AsAny + Send + Sync {
+    async fn run_in_container(
+        &self,
+        container_id: &ContainerId,
+        config: &ExecConfig,
+        tx: tokio::sync::mpsc::Sender<crate::protocol::DaemonResponse>,
+    ) -> anyhow::Result<ExecHandle>;
+}
+
+/// Type alias for a shared, dynamic [`ExecRuntime`] implementation.
+pub type DynExecRuntime = Arc<dyn ExecRuntime>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
