@@ -223,6 +223,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::Error { .. }
             | DaemonResponse::Success { .. }
             | DaemonResponse::ContainerList { .. }
+            | DaemonResponse::ImageLoaded { .. }
     )
 }
 
@@ -405,6 +406,12 @@ mod tests {
                 false,
             ),
             (DaemonResponse::ContainerStopped { exit_code: 0 }, true),
+            (
+                DaemonResponse::ImageLoaded {
+                    image: "mbx-tester:latest".to_string(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -426,6 +433,7 @@ mod tests {
                 DaemonResponse::Error { .. } => true,
                 DaemonResponse::ContainerOutput { .. } => false,
                 DaemonResponse::ContainerStopped { .. } => true,
+                DaemonResponse::ImageLoaded { .. } => true,
             };
         }
     }
@@ -467,6 +475,12 @@ mod tests {
         assert!(
             is_terminal_response(&DaemonResponse::ContainerList { containers: vec![] }),
             "ContainerList must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::ImageLoaded {
+                image: "mbx-tester:latest".to_string()
+            }),
+            "ImageLoaded must be terminal"
         );
     }
 
