@@ -94,7 +94,7 @@ test-cli-subprocess:
 
 # Cgroup integration tests (Linux, root)
 test-integration:
-    sudo -E cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture
+    sudo -E bash scripts/run-cgroup-tests.sh
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p mbx --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
 
