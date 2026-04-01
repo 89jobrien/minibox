@@ -419,6 +419,7 @@ async fn main() -> Result<()> {
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                exec_runtime: None,
             })
         }
         AdapterSuite::Gke => {
@@ -443,6 +444,7 @@ async fn main() -> Result<()> {
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                exec_runtime: None,
             })
         }
         AdapterSuite::Colima => {
@@ -461,6 +463,7 @@ async fn main() -> Result<()> {
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                exec_runtime: None,
             })
         }
     };

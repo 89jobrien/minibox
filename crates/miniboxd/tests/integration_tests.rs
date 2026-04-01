@@ -81,6 +81,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
         network_provider: Arc::new(NoopNetwork::new()),
         image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+        exec_runtime: None,
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),

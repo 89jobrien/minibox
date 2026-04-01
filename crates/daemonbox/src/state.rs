@@ -39,6 +39,13 @@ pub struct ContainerRecord {
     /// Host-side commands to run after the container process exits.
     #[serde(default)]
     pub post_exit_hooks: Vec<HookSpec>,
+    /// Path to the container's overlay upper (writable) layer directory.
+    /// `None` for adapters that don't use an overlay filesystem.
+    #[serde(default)]
+    pub overlay_upper: Option<PathBuf>,
+    /// Image reference used to create this container (e.g. `"alpine:latest"`).
+    #[serde(default)]
+    pub source_image_ref: Option<String>,
 }
 
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
@@ -272,6 +279,42 @@ impl DaemonState {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ContainerStateAccess implementation
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl mbx::daemonbox_state::ContainerStateAccess for DaemonState {
+    async fn get_container_pid(&self, container_id: &str) -> anyhow::Result<u32> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        record
+            .pid
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} has no pid (not running)"))
+    }
+
+    async fn get_overlay_upper(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        record
+            .overlay_upper
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} has no overlay upper dir"))
+    }
+
+    async fn get_source_image_ref(&self, container_id: &str) -> anyhow::Result<String> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        Ok(record.source_image_ref.clone().unwrap_or_default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,6 +336,8 @@ mod tests {
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],
+            overlay_upper: None,
+            source_image_ref: None,
         }
     }
 

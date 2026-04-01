@@ -76,6 +76,11 @@
 
 // Platform-native adapters (Linux only)
 #[cfg(target_os = "linux")]
+pub mod exec;
+#[cfg(target_os = "linux")]
+pub use exec::NativeExecRuntime;
+
+#[cfg(target_os = "linux")]
 mod filesystem;
 #[cfg(target_os = "linux")]
 mod limiter;

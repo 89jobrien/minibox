@@ -225,6 +225,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerList { .. }
             | DaemonResponse::ImageLoaded { .. }
     )
+    // ContainerOutput, ContainerCreated, and ExecStarted are non-terminal.
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -291,6 +292,15 @@ async fn dispatch(
             let response = handler::handle_load_image(path, name, tag, state, deps).await;
             let _ = tx.send(response).await;
         }
+        DaemonRequest::Exec {
+            container_id,
+            cmd,
+            env,
+            working_dir,
+            tty,
+        } => {
+            handler::handle_exec(container_id, cmd, env, working_dir, tty, state, deps, tx).await;
+        }
     }
 }
 
@@ -327,6 +337,7 @@ mod tests {
             run_containers_base: tmp.path().join("run"),
             metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
             image_loader: Arc::new(crate::handler::NoopImageLoader),
+            exec_runtime: None,
         });
         (state, deps)
     }

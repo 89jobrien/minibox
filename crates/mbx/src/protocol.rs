@@ -126,6 +126,18 @@ pub enum DaemonRequest {
         /// Image tag to register (e.g. `"latest"`).
         tag: String,
     },
+
+    /// Execute a command inside an already-running container.
+    Exec {
+        container_id: String,
+        cmd: Vec<String>,
+        #[serde(default)]
+        env: Vec<String>,
+        #[serde(default)]
+        working_dir: Option<String>,
+        #[serde(default)]
+        tty: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +210,11 @@ pub enum DaemonResponse {
     ContainerStopped {
         /// Exit code of the container process.
         exit_code: i32,
+    },
+
+    /// Sent once after exec setup completes, before any output arrives.
+    ExecStarted {
+        exec_id: String,
     },
 }
 

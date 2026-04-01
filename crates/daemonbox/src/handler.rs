@@ -101,6 +101,9 @@ pub struct HandlerDependencies {
     pub metrics: DynMetricsRecorder,
     /// Loader for local OCI image tarballs.
     pub image_loader: minibox_core::domain::DynImageLoader,
+    /// Exec runtime for running commands inside containers.
+    /// `None` on platforms where exec is not supported (macOS, Windows).
+    pub exec_runtime: Option<minibox_core::domain::DynExecRuntime>,
 }
 
 impl HandlerDependencies {
@@ -497,6 +500,8 @@ async fn run_inner_capture(
         rootfs_path: merged_dir.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
+        overlay_upper: None,
+        source_image_ref: None,
     };
     state.add_container(record).await;
 
@@ -707,6 +712,8 @@ async fn run_inner(
         rootfs_path: merged_dir_from_overlay.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
+        overlay_upper: None,
+        source_image_ref: None,
     };
     state.add_container(record).await;
 
@@ -1224,6 +1231,79 @@ pub async fn handle_load_image(
             DaemonResponse::Error {
                 message: format!("{e:#}"),
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Exec handler
+// ---------------------------------------------------------------------------
+
+/// Run a command inside an already-running container via namespace join.
+///
+/// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
+/// Returns `Error` immediately if the exec runtime is unavailable or the
+/// container is not running.
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_exec(
+    container_id: String,
+    cmd: Vec<String>,
+    env: Vec<String>,
+    working_dir: Option<String>,
+    tty: bool,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let Some(ref exec_rt) = deps.exec_runtime else {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: "exec not supported on this platform".to_string(),
+            })
+            .await;
+        return;
+    };
+
+    let cid = match minibox_core::domain::ContainerId::new(container_id.clone()) {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("invalid container id: {e}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    let config = minibox_core::domain::ExecConfig {
+        cmd,
+        env,
+        working_dir: working_dir.map(std::path::PathBuf::from),
+        tty,
+    };
+
+    match exec_rt
+        .as_ref()
+        .run_in_container(&cid, &config, tx.clone())
+        .await
+    {
+        Ok(handle) => {
+            info!(
+                container_id = %container_id,
+                exec_id = %handle.id,
+                "exec: started"
+            );
+            let _ = tx
+                .send(DaemonResponse::ExecStarted { exec_id: handle.id })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("exec failed: {e:#}"),
+                })
+                .await;
         }
     }
 }

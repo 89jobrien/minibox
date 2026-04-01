@@ -130,6 +130,23 @@ pub enum DaemonRequest {
         /// Image tag to register (e.g. `"latest"`).
         tag: String,
     },
+
+    /// Execute a command inside an already-running container.
+    Exec {
+        /// ID of the target container (must be in Running state).
+        container_id: String,
+        /// Command and arguments to execute.
+        cmd: Vec<String>,
+        /// Additional environment variables in `KEY=VALUE` form.
+        #[serde(default)]
+        env: Vec<String>,
+        /// Working directory inside the container. Defaults to `/`.
+        #[serde(default)]
+        working_dir: Option<String>,
+        /// If `true`, allocate a pseudo-TTY for the exec process.
+        #[serde(default)]
+        tty: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +219,14 @@ pub enum DaemonResponse {
     ContainerStopped {
         /// Exit code of the container process.
         exit_code: i32,
+    },
+
+    /// Sent once after exec setup completes, before any output arrives.
+    ///
+    /// Non-terminal: output chunks and a final `ContainerStopped` follow.
+    ExecStarted {
+        /// Unique identifier for this exec instance.
+        exec_id: String,
     },
 }
 
