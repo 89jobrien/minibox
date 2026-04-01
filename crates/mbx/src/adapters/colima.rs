@@ -29,8 +29,8 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageLoader, ImageMetadata,
+    ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -296,6 +296,23 @@ impl ImageRegistry for ColimaRegistry {
             .collect();
 
         Ok(layer_paths)
+    }
+}
+
+#[async_trait]
+impl ImageLoader for ColimaRegistry {
+    /// Load a local OCI tarball into the Colima VM's containerd image store.
+    ///
+    /// The tarball path must be reachable from inside the Lima VM.
+    /// Lima automatically shares `/tmp` and `$HOME`, so paths under those
+    /// directories work without extra configuration.
+    async fn load_image(&self, path: &std::path::Path, _name: &str, _tag: &str) -> Result<()> {
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| anyhow!("non-UTF-8 path: {}", path.display()))?;
+        self.lima_exec(&["nerdctl", "load", "-i", path_str])
+            .map(|_| ())
+            .map_err(|e| anyhow!("nerdctl load failed: {e}"))
     }
 }
 
@@ -1050,6 +1067,40 @@ mod tests {
                 "layer path {s:?} is not in a Lima-shared directory (/tmp or /Users)"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn colima_load_image_calls_nerdctl_load() {
+        let called_args: Arc<std::sync::Mutex<Vec<String>>> =
+            Arc::new(std::sync::Mutex::new(vec![]));
+        let called_clone = Arc::clone(&called_args);
+
+        let loader = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+            called_clone
+                .lock()
+                .unwrap()
+                .extend(args.iter().map(|s| s.to_string()));
+            Ok(String::new())
+        }));
+
+        let result = loader
+            .load_image(
+                std::path::Path::new("/tmp/mbx-tester.tar"),
+                "mbx-tester",
+                "latest",
+            )
+            .await;
+        assert!(result.is_ok(), "load_image failed: {result:?}");
+
+        let args = called_args.lock().unwrap();
+        assert!(
+            args.iter().any(|a| a == "nerdctl"),
+            "expected nerdctl call, got: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a == "load"),
+            "expected 'load' arg, got: {args:?}"
+        );
     }
 
     /// spawn_process must include config.args in the shell script sent to the
