@@ -225,6 +225,15 @@ All items below are merged to `main`:
   - Tests run, surface real errors, then exit — no more silent hang
   - **Blocked:** `VZErrorInternal(code=1)` is a confirmed Apple OS bug in VZ.framework on macOS 26 ARM64 (also affects Podman, apple/container — see [apple/container#1254](https://github.com/apple/container/issues/1254)). No user-space workaround. Will unblock when Apple ships a fix.
 - [x] `vsock connectToPort:completionHandler:` dispatched on GCD main queue (2026-04-01, commit `a733344`) — fixes vsock hang on Tahoe
+- [x] `test-linux` dogfood infrastructure (2026-04-01, feature/test-linux-dogfood):
+  - `LoadImage { path, name, tag }` / `ImageLoaded { image }` protocol variants (both protocol files)
+  - `ImageLoader` domain trait port + `NativeImageLoader` adapter (OCI tarball → `ImageStore`)
+  - `ColimaRegistry` implements `ImageLoader` (delegates to `nerdctl load -i <path>` via `LimaExecutor`)
+  - `HandlerDependencies.image_loader: DynImageLoader` + `handle_load_image()` handler
+  - Composition roots wired: `macbox` uses `ColimaRegistry`, `miniboxd` native uses `NativeImageLoader`
+  - `minibox load <path>` CLI subcommand
+  - `cargo xtask build-test-image` — cross-compiles 6 binaries for `aarch64-unknown-linux-musl`, fetches Alpine base layer from Docker Hub, assembles OCI tarball at `$HOME/.mbx/test-image/mbx-tester.tar`; cached by mtime, `--force` bypasses
+  - `cargo xtask test-linux` / `just test-linux` — orchestrates build-image → load → `minibox run --privileged mbx-tester /run-tests.sh`
 
 ---
 
@@ -290,6 +299,19 @@ All open issues in execution order. Update status as issues close.
 ---
 
 ## Next up
+
+### ✅ DONE (2026-04-01) — test-linux dogfood infrastructure
+
+`feature/test-linux-dogfood` branch — **ready to merge to main.**
+
+Full flow: `cargo xtask test-linux` builds a cross-compiled `mbx-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged mbx-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
+
+Key new commands:
+- `cargo xtask build-test-image [--force]` — build + cache `mbx-tester.tar`
+- `cargo xtask test-linux` / `just test-linux` — full dogfood run
+- `minibox load <path> [--name <name>] [--tag <tag>]` — load local OCI tarball
+
+Pre-commit gate passing. All 21 unit tests passing. Ready to merge.
 
 ### ✅ DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
 
