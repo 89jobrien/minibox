@@ -12,6 +12,9 @@ path = "src/main.rs"
 name = "dockerbox"
 path = "src/lib.rs"
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [dependencies]
 minibox-client = { workspace = true }
 minibox-core   = { workspace = true }

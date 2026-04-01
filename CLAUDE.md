@@ -12,6 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Log streaming**: stub only — minibox has no attach-to-existing-container support yet.
 - Networks/volumes: in-memory stubs; volumes map to `$HOME/.local/share/dockerbox/volumes/{name}/`.
 
+### dockerbox socket security model
+
+- **Default permissions**: `0o660` — root-owned, group-accessible (matches Docker daemon convention).
+- **Group access**: set `DOCKERBOX_SOCKET_GROUP=docker` (or any group) to `chown` the socket at startup. Members of that group can connect without sudo.
+- **Override mode**: `DOCKERBOX_SOCKET_MODE=0640` (or any octal) to restrict further.
+- **Upstream gate**: the miniboxd socket is separately protected by `SO_PEERCRED` (UID 0 only). Any operation that reaches miniboxd goes through that gate regardless of dockerbox's socket permissions.
+- **Before broader use**: if exposing dockerbox beyond a single trusted developer machine, set `DOCKERBOX_SOCKET_GROUP` to a restricted group and verify no world-readable permission is set.
+
 ## Project Overview
 
 Minibox is a Docker-like container runtime written in Rust featuring daemon/client architecture, OCI image pulling from Docker Hub, Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem support.
