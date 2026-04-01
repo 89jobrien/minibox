@@ -87,6 +87,8 @@ use std::os::fd::OwnedFd;
 
 /// Type alias for a shared, dynamic [`ImageRegistry`] implementation.
 pub type DynImageRegistry = Arc<dyn ImageRegistry>;
+/// Type alias for a shared, dynamic [`ImageLoader`] implementation.
+pub type DynImageLoader = Arc<dyn ImageLoader>;
 /// Type alias for a shared, dynamic [`FilesystemProvider`] implementation.
 pub type DynFilesystemProvider = Arc<dyn FilesystemProvider>;
 /// Type alias for a shared, dynamic [`ResourceLimiter`] implementation.
@@ -212,6 +214,18 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     ///
     /// Returns an error if the image is not cached locally.
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>>;
+}
+
+/// Port for loading a local OCI image tarball into the image store.
+///
+/// Implementations:
+/// - `NativeImageLoader`: extracts tarball directly into `ImageStore`
+/// - `ColimaRegistry`: delegates to `nerdctl load -i <path>` in the Lima VM
+#[async_trait]
+pub trait ImageLoader: Send + Sync {
+    /// Load the OCI tarball at `path` and register it as `name:tag`.
+    async fn load_image(&self, path: &std::path::Path, name: &str, tag: &str)
+    -> anyhow::Result<()>;
 }
 
 /// Metadata about a pulled container image.
@@ -949,5 +963,36 @@ mod tests {
         };
         let debug_str = format!("{caps:?}");
         assert!(!debug_str.is_empty(), "Debug impl should produce output");
+    }
+
+    // --- ImageLoader tests ---
+
+    #[cfg(test)]
+    mod image_loader_tests {
+        use super::*;
+        use std::path::Path;
+
+        struct AlwaysOkLoader;
+
+        #[async_trait::async_trait]
+        impl ImageLoader for AlwaysOkLoader {
+            async fn load_image(
+                &self,
+                _path: &Path,
+                _name: &str,
+                _tag: &str,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+        }
+
+        #[tokio::test]
+        async fn image_loader_trait_is_object_safe() {
+            let loader: Box<dyn ImageLoader> = Box::new(AlwaysOkLoader);
+            let result = loader
+                .load_image(std::path::Path::new("/fake.tar"), "mbx-tester", "latest")
+                .await;
+            assert!(result.is_ok());
+        }
     }
 }
