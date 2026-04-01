@@ -1,3 +1,4 @@
+#![cfg(feature = "metrics")]
 use daemonbox::telemetry::PrometheusMetricsRecorder;
 use daemonbox::telemetry::server::run_metrics_server;
 use minibox_core::domain::MetricsRecorder;
