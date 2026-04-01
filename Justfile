@@ -76,8 +76,15 @@ coverage:
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # VZ isolation tests (macOS, requires VM image at ~/.mbx/vm/)
+# Builds the test binary, codesigns it with the virtualization entitlement,
+# then runs it directly (bypasses cargo test runner to preserve dispatch_main harness).
 test-vz-isolation:
-    cargo test -p macbox --features vz --test vz_isolation_tests -- --test-threads=1 --nocapture --show-output
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -p macbox --features vz --test vz_isolation_tests
+    BIN=$(ls -t "$HOME/.mbx/cache/target/debug/deps/vz_isolation_tests-"* | head -1)
+    codesign --force --sign - --entitlements entitlements/vz-test.entitlements "$BIN"
+    "$BIN"
 
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
