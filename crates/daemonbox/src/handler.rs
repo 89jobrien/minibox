@@ -1164,6 +1164,19 @@ pub async fn handle_pull(
     response
 }
 
+pub async fn handle_load_image(
+    _path: String,
+    name: String,
+    tag: String,
+    _state: Arc<DaemonState>,
+    _deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    // TODO: Implement loading OCI image tarball from path into image store.
+    // For now, return a stub response.
+    let image_ref = format!("{name}:{tag}");
+    DaemonResponse::ImageLoaded { image: image_ref }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

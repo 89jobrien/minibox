@@ -286,6 +286,10 @@ async fn dispatch(
             let response = handler::handle_pull(image, tag, state, deps).await;
             let _ = tx.send(response).await;
         }
+        DaemonRequest::LoadImage { path, name, tag } => {
+            let response = handler::handle_load_image(path, name, tag, state, deps).await;
+            let _ = tx.send(response).await;
+        }
     }
 }
 

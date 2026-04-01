@@ -116,6 +116,16 @@ pub enum DaemonRequest {
         /// Image tag. Defaults to `"latest"` when `None`.
         tag: Option<String>,
     },
+
+    /// Load a local OCI image tarball into the daemon's image store.
+    LoadImage {
+        /// Absolute path to the OCI tarball on the host filesystem.
+        path: String,
+        /// Image name to register (e.g. `"mbx-tester"`).
+        name: String,
+        /// Image tag to register (e.g. `"latest"`).
+        tag: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +165,12 @@ pub enum DaemonResponse {
     ContainerList {
         /// All containers known to the daemon.
         containers: Vec<ContainerInfo>,
+    },
+
+    /// Confirmation that a local image tarball was loaded successfully.
+    ImageLoaded {
+        /// The image reference that was registered, e.g. `"mbx-tester:latest"`.
+        image: String,
     },
 
     /// An error occurred processing the request.
