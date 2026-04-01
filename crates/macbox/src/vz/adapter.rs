@@ -180,6 +180,7 @@ impl ContainerRuntime for VzRuntime {
             env: config.env.clone(),
             mounts: config.mounts.clone(),
             privileged: config.privileged,
+            name: None,
         };
 
         let responses = call_agent(&self.vm, &req)
