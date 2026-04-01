@@ -110,6 +110,10 @@ test-e2e-suite:
 test-sandbox:
     cargo xtask test-sandbox
 
+# Linux dogfood: build test image + load + run all tests inside container
+test-linux:
+    cargo xtask test-linux
+
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
 

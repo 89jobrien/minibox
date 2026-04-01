@@ -12,6 +12,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use xshell::{Shell, cmd};
 
 const TARGET: &str = "aarch64-unknown-linux-musl";
 const ALPINE_IMAGE: &str = "alpine";
@@ -26,6 +27,23 @@ pub fn default_test_image_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join(".mbx")
         .join("test-image")
+}
+
+/// Full Linux dogfood flow: build test image, load into minibox, run tests.
+pub fn test_linux(sh: &Shell) -> Result<()> {
+    // 1. Build image (cached unless out of date)
+    build_test_image(false)?;
+
+    let home = std::env::var("HOME").context("HOME not set")?;
+    let image_path = format!("{home}/.mbx/test-image/mbx-tester.tar");
+
+    // 2. Load into minibox
+    cmd!(sh, "minibox load {image_path}").run()?;
+
+    // 3. Run — privileged, ephemeral, stream output
+    cmd!(sh, "minibox run --privileged mbx-tester /run-tests.sh").run()?;
+
+    Ok(())
 }
 
 /// Entry point: build or refresh the test OCI tarball.

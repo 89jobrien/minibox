@@ -73,6 +73,7 @@ fn main() -> Result<()> {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
         }
+        Some("test-linux") => test_image::test_linux(&sh),
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -99,6 +100,9 @@ fn main() -> Result<()> {
             );
             eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
+            eprintln!(
+                "  test-linux       build image + load into minibox + run tests in container"
+            );
             Ok(())
         }
     }
