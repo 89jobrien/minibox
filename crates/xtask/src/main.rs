@@ -17,6 +17,7 @@ use std::{env, path::Path};
 use xshell::Shell;
 
 mod bench;
+mod bench_types;
 mod cleanup;
 mod flamegraph;
 mod gates;

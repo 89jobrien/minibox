@@ -1,6 +1,7 @@
+use crate::bench_types::BenchReport;
 use anyhow::{Context, Result, bail};
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs,
     io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
@@ -12,11 +13,6 @@ const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
 
 // ── Local bench ───────────────────────────────────────────────────────────────
 
-/// Spawn `bin` with `args`, stream each line to stderr in real time, and return
-/// the last line that ends with `.json` (the output path printed by minibox-bench).
-///
-/// Returns `Ok(None)` if the process succeeded but printed no `.json` line.
-/// Returns `Err` if the process exits non-zero.
 /// Return the path of the most recently modified `.json` file in `dir`,
 /// skipping `bench.jsonl` and `latest.json` which are managed separately.
 fn newest_json_in_dir(dir: &str) -> Option<String> {
@@ -36,6 +32,8 @@ fn newest_json_in_dir(dir: &str) -> Option<String> {
         .map(|(_, path)| path)
 }
 
+/// Spawn `bin` with `args`, stream each line to stderr in real time, and return
+/// the last line that ends with `.json` (the output path printed by minibox-bench).
 fn stream_bench_last_json(bin: &str, args: &[&str]) -> Result<Option<String>> {
     let mut child = Command::new(bin)
         .args(args)
@@ -107,83 +105,73 @@ pub fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
 /// Merge suites from `src_path` into `dst_path` in place.
 ///
 /// Appends any suites in `src` that are not already present in `dst` by name.
-/// Used to combine codec/adapter microbench results with the main cold/warm run.
 pub fn merge_bench_suites(dst_path: &str, src_path: &str) -> Result<()> {
-    let dst_content = fs::read_to_string(dst_path).context("read dst bench JSON")?;
-    let src_content = fs::read_to_string(src_path).context("read src bench JSON")?;
-    let mut dst: serde_json::Value =
-        serde_json::from_str(&dst_content).context("parse dst bench JSON")?;
-    let src: serde_json::Value =
-        serde_json::from_str(&src_content).context("parse src bench JSON")?;
+    let mut dst: BenchReport =
+        serde_json::from_str(&fs::read_to_string(dst_path).context("read dst bench JSON")?)
+            .context("parse dst bench JSON")?;
 
-    let dst_suites = dst["suites"].as_array_mut().context("dst missing suites")?;
-    let existing: HashSet<String> = dst_suites
-        .iter()
-        .filter_map(|s| s["name"].as_str().map(|n| n.to_string()))
+    let src: BenchReport =
+        serde_json::from_str(&fs::read_to_string(src_path).context("read src bench JSON")?)
+            .context("parse src bench JSON")?;
+
+    let existing: HashSet<String> = dst.suites.iter().map(|s| s.name.clone()).collect();
+    let new_suites: Vec<_> = src
+        .suites
+        .into_iter()
+        .filter(|s| !existing.contains(&s.name))
         .collect();
+    dst.suites.extend(new_suites);
 
-    if let Some(src_suites) = src["suites"].as_array() {
-        for suite in src_suites {
-            if let Some(name) = suite["name"].as_str() {
-                if !existing.contains(name) {
-                    dst_suites.push(suite.clone());
-                }
-            }
-        }
-    }
-
-    let merged = serde_json::to_string_pretty(&dst).context("re-serialise merged JSON")?;
-    fs::write(dst_path, merged).context("write merged bench JSON")?;
-    Ok(())
+    fs::write(
+        dst_path,
+        serde_json::to_string_pretty(&dst).context("re-serialise merged JSON")?,
+    )
+    .context("write merged bench JSON")
 }
 
-/// Patch git_sha, append to bench.jsonl, and update latest.json.
-/// Remove suites where every test has `iterations == 0` (fixture setup failed or
-/// daemon was unreachable). These produce no signal and pollute baselines.
+/// Remove suites where every test has `iterations == 0`.
 /// Returns the number of suites dropped.
-fn strip_zero_iteration_suites(json: &mut serde_json::Value) -> usize {
-    let Some(suites) = json["suites"].as_array_mut() else {
-        return 0;
-    };
-    let before = suites.len();
-    suites.retain(|suite| {
-        suite["tests"].as_array().is_some_and(|tests| {
-            tests
-                .iter()
-                .any(|t| t["iterations"].as_u64().unwrap_or(0) > 0)
-        })
-    });
-    before - suites.len()
+fn strip_zero_iteration_suites(report: &mut BenchReport) -> usize {
+    let before = report.suites.len();
+    report
+        .suites
+        .retain(|suite| suite.tests.iter().any(|t| t.iterations > 0));
+    before - report.suites.len()
+}
+
+/// Normalise a raw hostname to `"vps"` or `"local"`.
+fn redact_hostname(hostname: &str) -> &'static str {
+    if hostname.contains("vps")
+        || hostname.contains("vm")
+        || hostname.contains("runner")
+        || hostname.contains("ci")
+    {
+        "vps"
+    } else {
+        "local"
+    }
 }
 
 pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
-    let content = fs::read_to_string(json_path).context("read bench JSON")?;
-    let mut json: serde_json::Value =
-        serde_json::from_str(&content).context("invalid bench JSON")?;
+    let mut report: BenchReport =
+        serde_json::from_str(&fs::read_to_string(json_path).context("read bench JSON")?)
+            .context("invalid bench JSON")?;
+
     if let Ok(sha) = cmd!(sh, "git rev-parse HEAD").read() {
         let sha = sha.trim();
         if !sha.is_empty() {
-            json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
+            report.metadata.git_sha = sha.to_string();
         }
     }
-    // Redact hostname before persisting to bench.jsonl.
-    if let Some(hostname) = json["metadata"]["hostname"].as_str() {
-        let token = if hostname.contains("vps")
-            || hostname.contains("vm")
-            || hostname.contains("runner")
-            || hostname.contains("ci")
-        {
-            "vps"
-        } else {
-            "local"
-        };
-        json["metadata"]["hostname"] = serde_json::Value::String(token.to_string());
-    }
-    let dropped = strip_zero_iteration_suites(&mut json);
+
+    report.metadata.hostname = redact_hostname(&report.metadata.hostname).to_string();
+
+    let dropped = strip_zero_iteration_suites(&mut report);
     if dropped > 0 {
         eprintln!("bench: dropped {dropped} suite(s) with zero iterations (fixture failures)");
     }
-    let line = serde_json::to_string(&json).context("re-serialise failed")?;
+
+    let line = serde_json::to_string(&report).context("serialise bench JSON")?;
     let jsonl_path = "bench/results/bench.jsonl";
     let mut file = fs::OpenOptions::new()
         .create(true)
@@ -193,7 +181,7 @@ pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
     writeln!(file, "{line}").context("append to bench.jsonl")?;
     eprintln!("✓ bench/results/bench.jsonl appended");
 
-    let pretty = serde_json::to_string_pretty(&json).context("pretty-print failed")?;
+    let pretty = serde_json::to_string_pretty(&report).context("pretty-print bench JSON")?;
     fs::write("bench/results/latest.json", pretty).context("write latest.json")?;
     eprintln!("✓ bench/results/latest.json updated");
     Ok(())
@@ -364,14 +352,14 @@ pub fn bench_sync() -> Result<()> {
     let local_path = "bench/results/bench.jsonl";
     fs::create_dir_all("bench/results").context("create bench/results")?;
 
-    // Collect existing timestamps so we can skip duplicates.
     let existing_timestamps: HashSet<String> = if fs::metadata(local_path).is_ok() {
         fs::read_to_string(local_path)
             .context("read local bench.jsonl")?
             .lines()
             .filter(|l| !l.trim().is_empty())
-            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-            .filter_map(|v| v["metadata"]["timestamp"].as_str().map(|s| s.to_string()))
+            .filter_map(|l| serde_json::from_str::<BenchReport>(l).ok())
+            .filter(|r| !r.metadata.timestamp.is_empty())
+            .map(|r| r.metadata.timestamp)
             .collect()
     } else {
         HashSet::new()
@@ -380,37 +368,21 @@ pub fn bench_sync() -> Result<()> {
     let vps_content = fs::read_to_string(&tmp).context("read tmp vps bench.jsonl")?;
     let _ = fs::remove_file(&tmp);
 
-    // Parse new VPS entries, dedup by timestamp, and drop zero-iteration suites.
     let mut new_lines: Vec<String> = Vec::new();
     let mut skipped_zero = 0usize;
     for l in vps_content.lines().filter(|l| !l.trim().is_empty()) {
-        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(l) else {
+        let Ok(mut report) = serde_json::from_str::<BenchReport>(l) else {
             continue;
         };
-        let ts = v["metadata"]["timestamp"]
-            .as_str()
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        if ts.is_empty() || existing_timestamps.contains(&ts) {
+        if report.metadata.timestamp.is_empty()
+            || existing_timestamps.contains(&report.metadata.timestamp)
+        {
             continue;
         }
-        let dropped = strip_zero_iteration_suites(&mut v);
+        let dropped = strip_zero_iteration_suites(&mut report);
         skipped_zero += dropped;
-        // Redact hostname: replace raw machine name with a normalized token so
-        // bench.jsonl committed to the repo doesn't leak infrastructure details.
-        if let Some(hostname) = v["metadata"]["hostname"].as_str() {
-            let token = if hostname.contains("vps")
-                || hostname.contains("vm")
-                || hostname.contains("runner")
-                || hostname.contains("ci")
-            {
-                "vps"
-            } else {
-                "local"
-            };
-            v["metadata"]["hostname"] = serde_json::Value::String(token.to_string());
-        }
-        new_lines.push(serde_json::to_string(&v).context("re-serialise VPS entry")?);
+        report.metadata.hostname = redact_hostname(&report.metadata.hostname).to_string();
+        new_lines.push(serde_json::to_string(&report).context("re-serialise VPS entry")?);
     }
 
     if new_lines.is_empty() {
@@ -451,25 +423,26 @@ pub fn bench_sync() -> Result<()> {
 
 /// Compare two bench JSON files and print a delta table.
 pub fn bench_diff(args: &[String]) -> Result<()> {
-    let (path_a, path_b) = match args.len() {
+    let parse_file = |path: &str| -> Result<BenchReport> {
+        serde_json::from_str(&fs::read_to_string(path).with_context(|| format!("read {path}"))?)
+            .with_context(|| format!("parse {path}"))
+    };
+
+    let (a, b) = match args.len() {
         0 => {
             let jsonl =
                 fs::read_to_string("bench/results/bench.jsonl").context("read bench.jsonl")?;
-            let entries: Vec<serde_json::Value> = jsonl
+            let entries: Vec<BenchReport> = jsonl
                 .lines()
                 .filter(|l| !l.trim().is_empty())
                 .filter_map(|l| serde_json::from_str(l).ok())
                 .collect();
-            let with_data: Vec<&serde_json::Value> = entries
+            let with_data: Vec<&BenchReport> = entries
                 .iter()
-                .filter(|e| {
-                    e["suites"].as_array().is_some_and(|s| {
-                        s.iter().any(|suite| {
-                            suite["tests"]
-                                .as_array()
-                                .is_some_and(|tests| tests.iter().any(|t| !t["stats"].is_null()))
-                        })
-                    })
+                .filter(|r| {
+                    r.suites
+                        .iter()
+                        .any(|suite| suite.tests.iter().any(|t| t.stats.is_some()))
                 })
                 .collect();
             if with_data.len() < 2 {
@@ -481,28 +454,22 @@ pub fn bench_diff(args: &[String]) -> Result<()> {
             print_diff(with_data[n - 2], with_data[n - 1]);
             return Ok(());
         }
-        1 => (args[0].as_str(), "bench/results/latest.json"),
-        _ => (args[0].as_str(), args[1].as_str()),
+        1 => (
+            parse_file(args[0].as_str())?,
+            parse_file("bench/results/latest.json")?,
+        ),
+        _ => (parse_file(args[0].as_str())?, parse_file(args[1].as_str())?),
     };
-
-    let a: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(path_a).with_context(|| format!("read {path_a}"))?,
-    )
-    .context("parse file-a")?;
-    let b: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(path_b).with_context(|| format!("read {path_b}"))?,
-    )
-    .context("parse file-b")?;
 
     print_diff(&a, &b);
     Ok(())
 }
 
-pub fn print_diff(a: &serde_json::Value, b: &serde_json::Value) {
-    let sha_a = a["metadata"]["git_sha"].as_str().unwrap_or("?");
-    let sha_b = b["metadata"]["git_sha"].as_str().unwrap_or("?");
-    let ts_a = a["metadata"]["timestamp"].as_str().unwrap_or("?");
-    let ts_b = b["metadata"]["timestamp"].as_str().unwrap_or("?");
+pub fn print_diff(a: &BenchReport, b: &BenchReport) {
+    let sha_a = &a.metadata.git_sha;
+    let sha_b = &b.metadata.git_sha;
+    let ts_a = &a.metadata.timestamp;
+    let ts_b = &b.metadata.timestamp;
 
     println!("bench diff");
     println!(
@@ -518,43 +485,44 @@ pub fn print_diff(a: &serde_json::Value, b: &serde_json::Value) {
     println!();
 
     type Key = (String, String);
-    #[derive(Debug)]
     struct S {
         avg: f64,
         p95: f64,
         unit: String,
     }
 
-    fn extract(v: &serde_json::Value) -> HashMap<Key, S> {
-        let mut m = HashMap::new();
-        for suite in v["suites"].as_array().unwrap_or(&vec![]) {
-            let sname = suite["name"].as_str().unwrap_or("").to_string();
-            for test in suite["tests"].as_array().unwrap_or(&vec![]) {
-                let tname = test["name"].as_str().unwrap_or("").to_string();
-                let stats = &test["stats"];
-                if stats.is_null() {
-                    continue;
-                }
-                let avg = stats["avg"].as_f64().unwrap_or(0.0);
-                let p95 = stats["p95"].as_f64().unwrap_or(0.0);
-                let unit = test["unit"].as_str().unwrap_or("").to_string();
-                m.insert((sname.clone(), tname), S { avg, p95, unit });
+    let extract = |report: &BenchReport| -> std::collections::HashMap<Key, S> {
+        let mut m = std::collections::HashMap::new();
+        for suite in &report.suites {
+            for test in &suite.tests {
+                let Some(stats) = &test.stats else { continue };
+                m.insert(
+                    (suite.name.clone(), test.name.clone()),
+                    S {
+                        avg: stats.avg as f64,
+                        p95: stats.p95 as f64,
+                        unit: test.unit.clone(),
+                    },
+                );
             }
         }
         m
-    }
+    };
 
     let ma = extract(a);
     let mb = extract(b);
 
-    let mut keys: Vec<Key> = Vec::new();
-    for suite in b["suites"].as_array().unwrap_or(&vec![]) {
-        let sname = suite["name"].as_str().unwrap_or("").to_string();
-        for test in suite["tests"].as_array().unwrap_or(&vec![]) {
-            let tname = test["name"].as_str().unwrap_or("").to_string();
-            keys.push((sname.clone(), tname));
-        }
-    }
+    // Build key list in b's suite/test order, then append any a-only keys.
+    let mut keys: Vec<Key> = b
+        .suites
+        .iter()
+        .flat_map(|suite| {
+            suite
+                .tests
+                .iter()
+                .map(|t| (suite.name.clone(), t.name.clone()))
+        })
+        .collect();
     for k in ma.keys() {
         if !keys.contains(k) {
             keys.push(k.clone());
@@ -648,7 +616,6 @@ pub fn bench_report() -> Result<()> {
     let jsonl = fs::read_to_string("bench/results/bench.jsonl")
         .context("read bench/results/bench.jsonl")?;
 
-    #[derive(Debug)]
     struct Row {
         sha: String,
         ts: String,
@@ -665,31 +632,20 @@ pub fn bench_report() -> Result<()> {
         if line.is_empty() {
             continue;
         }
-        let v: serde_json::Value = serde_json::from_str(line).context("parse bench.jsonl line")?;
-        let sha = v["metadata"]["git_sha"].as_str().unwrap_or("").to_string();
-        let ts = v["metadata"]["timestamp"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        for suite in v["suites"].as_array().unwrap_or(&vec![]) {
-            let sname = suite["name"].as_str().unwrap_or("").to_string();
-            for test in suite["tests"].as_array().unwrap_or(&vec![]) {
-                let tname = test["name"].as_str().unwrap_or("").to_string();
-                let stats = &test["stats"];
-                if stats.is_null() {
-                    continue;
-                }
-                let avg = stats["avg"].as_f64().unwrap_or(0.0);
-                let p95 = stats["p95"].as_f64().unwrap_or(0.0);
-                let unit = test["unit"].as_str().unwrap_or("").to_string();
+        let report: BenchReport = serde_json::from_str(line).context("parse bench.jsonl line")?;
+        let sha = report.metadata.git_sha.clone();
+        let ts = report.metadata.timestamp.clone();
+        for suite in &report.suites {
+            for test in &suite.tests {
+                let Some(stats) = &test.stats else { continue };
                 rows.push(Row {
                     sha: sha.clone(),
                     ts: ts.clone(),
-                    suite: sname.clone(),
-                    test: tname,
-                    avg,
-                    p95,
-                    unit,
+                    suite: suite.name.clone(),
+                    test: test.name.clone(),
+                    avg: stats.avg as f64,
+                    p95: stats.p95 as f64,
+                    unit: test.unit.clone(),
                 });
             }
         }
@@ -856,5 +812,77 @@ mod tests {
         let (commit, push) = parse_bench_vps_flags(&args);
         assert!(commit);
         assert!(!push);
+    }
+
+    #[test]
+    fn strip_zero_iterations_removes_empty_suites() {
+        #[allow(unused_imports)]
+        use crate::bench_types::Stats;
+        use crate::bench_types::{BenchReport, SuiteResult, TestResult};
+        let mut report = BenchReport::default();
+        report.suites.push(SuiteResult {
+            name: "has_data".to_string(),
+            tests: vec![TestResult {
+                name: "t1".to_string(),
+                iterations: 5,
+                ..Default::default()
+            }],
+        });
+        report.suites.push(SuiteResult {
+            name: "all_zero".to_string(),
+            tests: vec![TestResult {
+                name: "t2".to_string(),
+                iterations: 0,
+                ..Default::default()
+            }],
+        });
+        let dropped = super::strip_zero_iteration_suites(&mut report);
+        assert_eq!(dropped, 1);
+        assert_eq!(report.suites.len(), 1);
+        assert_eq!(report.suites[0].name, "has_data");
+    }
+
+    #[test]
+    fn redact_hostname_classifies_correctly() {
+        use super::redact_hostname;
+        assert_eq!(redact_hostname("jobrien-vm"), "vps");
+        assert_eq!(redact_hostname("github-runner-01"), "vps");
+        assert_eq!(redact_hostname("macbook-pro"), "local");
+        assert_eq!(redact_hostname("ci-build"), "vps");
+    }
+
+    #[test]
+    fn merge_bench_suites_deduplicates() {
+        use crate::bench_types::{BenchReport, SuiteResult};
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let make_report = |suite_names: &[&str]| -> String {
+            let mut r = BenchReport::default();
+            for name in suite_names {
+                r.suites.push(SuiteResult {
+                    name: name.to_string(),
+                    tests: vec![],
+                });
+            }
+            serde_json::to_string(&r).unwrap()
+        };
+
+        let mut dst = NamedTempFile::new().unwrap();
+        dst.write_all(make_report(&["codec", "adapter"]).as_bytes())
+            .unwrap();
+        let dst_path = dst.path().to_str().unwrap().to_string();
+
+        let mut src = NamedTempFile::new().unwrap();
+        src.write_all(make_report(&["adapter", "pull"]).as_bytes())
+            .unwrap();
+        let src_path = src.path().to_str().unwrap().to_string();
+
+        super::merge_bench_suites(&dst_path, &src_path).unwrap();
+
+        let merged: BenchReport =
+            serde_json::from_str(&std::fs::read_to_string(&dst_path).unwrap()).unwrap();
+        let names: Vec<&str> = merged.suites.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["codec", "adapter", "pull"]);
     }
 }
