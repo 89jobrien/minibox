@@ -17,6 +17,22 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     RT.get_or_init(|| tokio::runtime::Runtime::new().expect("tokio runtime"))
 }
 
+// ── Shared TempDir ────────────────────────────────────────────────────────────
+//
+// A single TempDir shared across all proptest iterations avoids the overhead
+// of creating and destroying a temporary directory for each of the 256+
+// iterations proptest runs per property. DaemonState still writes state.json
+// to disk on each add/remove, but the write overwrites the same file rather
+// than creating a new directory subtree each time.
+
+static TMPDIR: OnceLock<tempfile::TempDir> = OnceLock::new();
+
+fn shared_tmp() -> &'static Path {
+    TMPDIR
+        .get_or_init(|| tempfile::TempDir::new().expect("shared proptest TempDir"))
+        .path()
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 #[test]
@@ -46,9 +62,9 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
     })
 }
 
-// DaemonState::save_to_disk fires on every add/remove — each proptest
-// case performs disk I/O to the TempDir. This is expected and fast
-// because TempDir is on a local filesystem.
+// Each proptest iteration creates a fresh DaemonState pointing at the shared
+// TempDir. save_to_disk still fires on add/remove but overwrites the same
+// file, avoiding per-iteration tmpdir lifecycle costs.
 fn make_state(tmp: &Path) -> Arc<DaemonState> {
     let image_store = ImageStore::new(tmp.join("images")).expect("ImageStore::new");
     Arc::new(DaemonState::new(image_store, tmp))
@@ -84,8 +100,7 @@ proptest! {
 
     #[test]
     fn state_add_then_get_finds_record(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
         let record = make_record(&id);
 
         runtime().block_on(state.add_container(record));
@@ -101,8 +116,7 @@ proptest! {
 
     #[test]
     fn state_remove_after_add_returns_none(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         runtime().block_on(state.add_container(make_record(&id)));
         runtime().block_on(state.remove_container(&id));
@@ -119,8 +133,7 @@ proptest! {
     fn state_list_count_matches_adds(
         ids in proptest::collection::hash_set(arb_container_id(), 1..=8)
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &ids {
             runtime().block_on(state.add_container(make_record(id)));
@@ -139,8 +152,7 @@ proptest! {
         adds in proptest::collection::hash_set(arb_container_id(), 1..=8),
         remove_count in 0_usize..=8_usize,
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &adds {
             runtime().block_on(state.add_container(make_record(id)));
@@ -166,10 +178,9 @@ proptest! {
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
     #[test]
     fn handle_stop_unknown_id_is_error(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
-
-        let deps = make_deps(tmp.path());
+        let tmp = shared_tmp();
+        let state = make_state(tmp);
+        let deps = make_deps(tmp);
         let resp = runtime().block_on(handle_stop(id.clone(), state, deps));
 
         prop_assert!(
@@ -183,9 +194,9 @@ proptest! {
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
     #[test]
     fn handle_remove_unknown_id_is_error(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
-        let deps = make_deps(tmp.path());
+        let tmp = shared_tmp();
+        let state = make_state(tmp);
+        let deps = make_deps(tmp);
 
         let resp = runtime().block_on(handle_remove(id.clone(), state, deps));
 
@@ -202,8 +213,7 @@ proptest! {
     fn handle_list_always_returns_container_list(
         ids in proptest::collection::hash_set(arb_container_id(), 0..=5)
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &ids {
             runtime().block_on(state.add_container(make_record(id)));
