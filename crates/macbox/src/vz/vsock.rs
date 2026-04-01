@@ -35,6 +35,18 @@ mod imp {
     use std::time::{Duration, Instant};
     use tokio::net::UnixStream;
 
+    // GCD main queue — must be running (dispatch_main or a live NSRunLoop) for
+    // VZ.framework completion handlers to fire.
+    #[link(name = "System", kind = "dylib")]
+    unsafe extern "C" {
+        static _dispatch_main_q: std::ffi::c_void;
+        fn dispatch_sync_f(
+            queue: *const std::ffi::c_void,
+            context: *mut std::ffi::c_void,
+            work: unsafe extern "C" fn(*mut std::ffi::c_void),
+        );
+    }
+
     /// Connect to the `minibox-agent` running at `AGENT_PORT` inside `vm`.
     ///
     /// Retries up to `max_attempts` times with 200 ms back-off between attempts,
@@ -159,10 +171,43 @@ mod imp {
             },
         );
 
-        // SAFETY: connectToPort:completionHandler: accepts a block of type
-        // `^(VZVirtioSocketConnection*, NSError*)`.  virtio_dev is a valid
-        // VZVirtioSocketDevice obtained from the running VM.
-        unsafe { virtio_dev.connectToPort_completionHandler(AGENT_PORT, &*block) };
+        // VZ.framework (Tahoe+) requires connectToPort:completionHandler: to be
+        // called on the GCD main queue, same as VM construction.  Dispatch it
+        // synchronously so the call completes before we start polling.
+        //
+        // SAFETY: _dispatch_main_q is the live GCD main queue.  The trampoline
+        // ctx is stack-allocated and outlives dispatch_sync_f.  The block and
+        // virtio_dev are valid for the duration of this function.
+        struct ConnectCtx<'a> {
+            virtio_dev: &'a VZVirtioSocketDevice,
+            block: &'a block2::Block<
+                dyn Fn(
+                    *mut objc2_virtualization::VZVirtioSocketConnection,
+                    *mut objc2_foundation::NSError,
+                ),
+            >,
+        }
+        unsafe extern "C" fn connect_trampoline(ctx: *mut std::ffi::c_void) {
+            // SAFETY: ctx is a valid &mut ConnectCtx on the caller's stack.
+            let c = unsafe { &*(ctx as *const ConnectCtx) };
+            unsafe {
+                c.virtio_dev
+                    .connectToPort_completionHandler(AGENT_PORT, c.block)
+            };
+        }
+        let mut connect_ctx = ConnectCtx {
+            virtio_dev,
+            block: &*block,
+        };
+        // SAFETY: dispatch_sync_f runs connect_trampoline on the main queue and
+        // returns only after it completes; connect_ctx is valid throughout.
+        unsafe {
+            dispatch_sync_f(
+                &_dispatch_main_q,
+                &mut connect_ctx as *mut ConnectCtx as *mut std::ffi::c_void,
+                connect_trampoline,
+            );
+        }
 
         // Poll for the result.  VZ fires the completion handler quickly but we
         // must not busy-loop indefinitely.
