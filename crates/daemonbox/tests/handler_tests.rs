@@ -65,6 +65,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     })
 }
 
@@ -141,6 +142,7 @@ async fn test_handle_pull_failure() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -173,6 +175,7 @@ async fn test_handle_run_with_cached_image() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -259,6 +262,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -297,6 +301,7 @@ async fn test_handle_run_resource_limiter_failure() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -335,6 +340,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -574,6 +580,7 @@ fn create_test_deps_with_network(
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     })
 }
 
@@ -922,6 +929,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1053,6 +1061,7 @@ async fn test_handle_run_empty_image_returns_error() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1148,6 +1157,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1268,6 +1278,7 @@ async fn test_handle_run_pull_failure_returns_error() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1379,6 +1390,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1425,6 +1437,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1471,6 +1484,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1510,6 +1524,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1758,6 +1773,7 @@ async fn test_handle_remove_failed_container_succeeds() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1806,6 +1822,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2016,6 +2033,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2073,6 +2091,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2123,6 +2142,7 @@ async fn test_run_empty_image_no_layers() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2169,6 +2189,7 @@ async fn test_pull_registry_failure_with_tag() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2286,6 +2307,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     });
     let state = create_test_state_with_dir(&temp_dir);
 

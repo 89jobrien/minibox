@@ -104,6 +104,9 @@ pub struct HandlerDependencies {
     /// Exec runtime for running commands inside containers.
     /// `None` on platforms where exec is not supported (macOS, Windows).
     pub exec_runtime: Option<minibox_core::domain::DynExecRuntime>,
+    /// Image pusher for pushing images to OCI registries.
+    /// `None` on platforms or configurations where push is not supported.
+    pub image_pusher: Option<minibox_core::domain::DynImagePusher>,
 }
 
 impl HandlerDependencies {
@@ -1302,6 +1305,92 @@ pub async fn handle_exec(
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: format!("exec failed: {e:#}"),
+                })
+                .await;
+        }
+    }
+}
+
+// ─── Push ────────────────────────────────────────────────────────────────────
+
+/// Push a locally-stored image to a remote OCI registry.
+///
+/// Sends zero or more `PushProgress` messages followed by `Success` or `Error`.
+pub async fn handle_push(
+    image_ref_str: String,
+    credentials: minibox_core::protocol::PushCredentials,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let Some(ref pusher) = deps.image_pusher else {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: "push not supported on this platform".to_string(),
+            })
+            .await;
+        return;
+    };
+
+    let image_ref = match minibox_core::image::reference::ImageRef::parse(&image_ref_str) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("invalid image ref: {e}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    let creds = match credentials {
+        minibox_core::protocol::PushCredentials::Anonymous => {
+            minibox_core::domain::RegistryCredentials::Anonymous
+        }
+        minibox_core::protocol::PushCredentials::Basic { username, password } => {
+            minibox_core::domain::RegistryCredentials::Basic { username, password }
+        }
+        minibox_core::protocol::PushCredentials::Token { token } => {
+            minibox_core::domain::RegistryCredentials::Token(token)
+        }
+    };
+
+    let (progress_tx, mut progress_rx) = mpsc::channel::<minibox_core::domain::PushProgress>(32);
+    let tx2 = tx.clone();
+    tokio::spawn(async move {
+        while let Some(p) = progress_rx.recv().await {
+            let _ = tx2
+                .send(DaemonResponse::PushProgress {
+                    layer_digest: p.layer_digest,
+                    bytes_uploaded: p.bytes_uploaded,
+                    total_bytes: p.total_bytes,
+                })
+                .await;
+        }
+    });
+
+    match pusher
+        .push_image(&image_ref, &creds, Some(progress_tx))
+        .await
+    {
+        Ok(result) => {
+            info!(
+                image_ref = %image_ref_str,
+                digest = %result.digest,
+                size_bytes = result.size_bytes,
+                "push: completed"
+            );
+            let _ = tx
+                .send(DaemonResponse::Success {
+                    message: format!("pushed {} digest:{}", image_ref_str, result.digest),
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
                 })
                 .await;
         }

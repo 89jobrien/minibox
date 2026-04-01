@@ -40,6 +40,15 @@
 use crate::domain::{BindMount, NetworkMode};
 use serde::{Deserialize, Serialize};
 
+/// Serializable registry credentials for protocol transport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum PushCredentials {
+    Anonymous,
+    Basic { username: String, password: String },
+    Token { token: String },
+}
+
 // ---------------------------------------------------------------------------
 // Requests (CLI -> Daemon)
 // ---------------------------------------------------------------------------
@@ -138,6 +147,12 @@ pub enum DaemonRequest {
         #[serde(default)]
         tty: bool,
     },
+
+    /// Push a locally-stored image to a remote OCI registry.
+    Push {
+        image_ref: String,
+        credentials: PushCredentials,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +230,15 @@ pub enum DaemonResponse {
     /// Sent once after exec setup completes, before any output arrives.
     ExecStarted {
         exec_id: String,
+    },
+
+    /// Push progress update for a single layer.
+    ///
+    /// Non-terminal: sent zero or more times during a push operation.
+    PushProgress {
+        layer_digest: String,
+        bytes_uploaded: u64,
+        total_bytes: u64,
     },
 }
 

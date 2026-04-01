@@ -69,6 +69,7 @@ fn make_deps(
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     })
 }
 

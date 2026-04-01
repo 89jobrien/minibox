@@ -177,6 +177,7 @@ pub async fn start() -> Result<()> {
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: colima_image_loader as minibox_core::domain::DynImageLoader,
         exec_runtime: None,
+        image_pusher: None,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -342,6 +343,7 @@ async fn start_vz(
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
         exec_runtime: None,
+        image_pusher: None,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

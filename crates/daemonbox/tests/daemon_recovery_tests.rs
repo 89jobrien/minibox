@@ -33,6 +33,7 @@ fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies>
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
         exec_runtime: None,
+        image_pusher: None,
     })
 }
 
