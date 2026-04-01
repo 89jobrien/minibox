@@ -2099,4 +2099,57 @@ mod tests {
         );
         assert_eq!(result.unit, "nanos");
     }
+
+    /// Contract test: the bench binary must print the JSON output path as the
+    /// last line on stdout so that `xtask bench` (and `stream_bench_last_json`)
+    /// can locate the result file without scanning the output directory.
+    ///
+    /// Runs the binary with `--dry-run --suite codec` (no daemon required) and
+    /// a tmp `--out-dir` so the test is self-contained.
+    #[test]
+    fn stdout_last_line_is_json_path() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Locate the binary next to the test executable.
+        let bin = std::env::current_exe()
+            .expect("current_exe")
+            .parent()
+            .expect("bin dir")
+            .join("minibox-bench");
+        if !bin.exists() {
+            // Binary not built yet (unit test run without --release build); skip.
+            eprintln!("skip stdout_last_line_is_json_path: binary not found at {bin:?}");
+            return;
+        }
+
+        let tmp = TempDir::new().expect("tempdir");
+        let out = Command::new(&bin)
+            .args([
+                "--dry-run",
+                "--suite",
+                "codec",
+                "--out-dir",
+                tmp.path().to_str().expect("utf8 path"),
+            ])
+            .output()
+            .expect("spawn minibox-bench");
+
+        assert!(
+            out.status.success(),
+            "minibox-bench exited non-zero: {}",
+            out.status
+        );
+
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let last_line = stdout.lines().last().unwrap_or("").trim();
+        assert!(
+            last_line.ends_with(".json"),
+            "expected last stdout line to end with .json, got: {last_line:?}"
+        );
+        assert!(
+            std::path::Path::new(last_line).exists(),
+            "JSON path printed to stdout does not exist: {last_line:?}"
+        );
+    }
 }
