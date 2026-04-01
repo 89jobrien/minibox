@@ -45,7 +45,7 @@ tracing-opentelemetry = "0.32"
 prometheus-client = "0.23"
 
 # Infrastructure
-axum = { version = "0.7", features = ["tokio"] }
+axum = { version = "0.8", features = ["tokio"] }
 dashmap = "6"
 
 clap = { version = "4", features = ["derive"] }

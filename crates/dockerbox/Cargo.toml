@@ -15,7 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 minibox-client = { workspace = true }
 minibox-core   = { workspace = true }
-axum           = { version = "0.8", features = ["tokio"] }
+axum           = { workspace = true }
 tokio          = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
