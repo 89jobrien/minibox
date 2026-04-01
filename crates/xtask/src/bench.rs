@@ -333,6 +333,20 @@ pub fn bench_sync() -> Result<()> {
         }
         let dropped = strip_zero_iteration_suites(&mut v);
         skipped_zero += dropped;
+        // Redact hostname: replace raw machine name with a normalized token so
+        // bench.jsonl committed to the repo doesn't leak infrastructure details.
+        if let Some(hostname) = v["metadata"]["hostname"].as_str() {
+            let token = if hostname.contains("vps")
+                || hostname.contains("vm")
+                || hostname.contains("runner")
+                || hostname.contains("ci")
+            {
+                "vps"
+            } else {
+                "local"
+            };
+            v["metadata"]["hostname"] = serde_json::Value::String(token.to_string());
+        }
         new_lines.push(serde_json::to_string(&v).context("re-serialise VPS entry")?);
     }
 
