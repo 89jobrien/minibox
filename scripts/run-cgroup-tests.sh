@@ -49,7 +49,7 @@ echo "runner-leaf subtree_control: $(cat $LEAF/cgroup.subtree_control)"
 echo "Script is running in cgroup: $(cat /proc/self/cgroup)"
 
 echo "=== Building test binary ==="
-cd /Users/joe/dev/minibox
+cd "$(dirname "$(dirname "$(realpath "$0")")")"
 cargo build -p miniboxd --test cgroup_tests 2>&1
 
 # Find the test binary
