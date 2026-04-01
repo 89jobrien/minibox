@@ -250,6 +250,7 @@ async fn dispatch(
             mounts,
             privileged,
             env,
+            name,
         } => {
             handler::handle_run(
                 image,
@@ -262,6 +263,7 @@ async fn dispatch(
                 mounts,
                 privileged,
                 env,
+                name,
                 state,
                 deps,
                 tx,

@@ -111,6 +111,7 @@ pub async fn execute(
     privileged: bool,
     volumes: Vec<String>,
     mount_specs: Vec<String>,
+    name: Option<String>,
     socket_path: &std::path::Path,
 ) -> Result<()> {
     let network_mode = match network.as_str() {
@@ -144,6 +145,7 @@ pub async fn execute(
         mounts,
         privileged,
         env: vec![],
+        name,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -244,6 +246,7 @@ mod tests {
             false,
             vec![],
             vec![],
+            None,
             &socket_path,
         )
         .await;

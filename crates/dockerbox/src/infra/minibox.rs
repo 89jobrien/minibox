@@ -141,6 +141,7 @@ impl ContainerRuntime for MiniboxAdapter {
                 env: config.env.clone(),
                 mounts,
                 privileged: config.privileged,
+                name: None,
             })
             .await?;
 

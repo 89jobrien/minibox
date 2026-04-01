@@ -199,6 +199,28 @@ impl DaemonState {
         map.get(id).cloned()
     }
 
+    /// Resolve a name-or-ID string to a container ID.
+    ///
+    /// First tries an exact ID match, then falls back to a name match.
+    /// Returns `None` if no container with that ID or name exists.
+    pub async fn resolve_id(&self, name_or_id: &str) -> Option<String> {
+        let map = self.containers.read().await;
+        // Exact ID match first.
+        if map.contains_key(name_or_id) {
+            return Some(name_or_id.to_string());
+        }
+        // Name match: find the first container whose info.name == Some(name_or_id).
+        map.values()
+            .find(|r| r.info.name.as_deref() == Some(name_or_id))
+            .map(|r| r.info.id.clone())
+    }
+
+    /// Check whether a container name is already in use.
+    pub async fn name_in_use(&self, name: &str) -> bool {
+        let map = self.containers.read().await;
+        map.values().any(|r| r.info.name.as_deref() == Some(name))
+    }
+
     /// Return `ContainerInfo` snapshots for every tracked container.
     ///
     /// The returned vec is a point-in-time snapshot; order is unspecified
@@ -247,5 +269,76 @@ impl DaemonState {
         }
         drop(map);
         self.save_to_disk().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minibox_core::protocol::ContainerInfo;
+    use tempfile::TempDir;
+
+    fn make_record_with_name(id: &str, name: Option<&str>) -> ContainerRecord {
+        ContainerRecord {
+            info: ContainerInfo {
+                id: id.to_string(),
+                name: name.map(|s| s.to_string()),
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Created".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+            post_exit_hooks: vec![],
+        }
+    }
+
+    fn make_state_in(tmp: &TempDir) -> DaemonState {
+        let image_store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
+        DaemonState::new(image_store, tmp.path())
+    }
+
+    #[tokio::test]
+    async fn resolve_id_finds_by_exact_id() {
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        state
+            .add_container(make_record_with_name("abc123", None))
+            .await;
+        assert_eq!(state.resolve_id("abc123").await, Some("abc123".to_string()));
+    }
+
+    #[tokio::test]
+    async fn resolve_id_finds_by_name() {
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        state
+            .add_container(make_record_with_name("abc123", Some("my-container")))
+            .await;
+        assert_eq!(
+            state.resolve_id("my-container").await,
+            Some("abc123".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_id_returns_none_for_unknown() {
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        assert_eq!(state.resolve_id("nonexistent").await, None);
+    }
+
+    #[tokio::test]
+    async fn name_in_use_detects_duplicate() {
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        state
+            .add_container(make_record_with_name("abc123", Some("web")))
+            .await;
+        assert!(state.name_in_use("web").await);
+        assert!(!state.name_in_use("db").await);
     }
 }

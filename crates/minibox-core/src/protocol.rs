@@ -89,6 +89,13 @@ pub enum DaemonRequest {
         /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
         #[serde(default)]
         privileged: bool,
+        /// Optional human-readable name for the container.
+        ///
+        /// When set, the container can be referenced by name in `stop` and `rm`
+        /// commands in addition to its auto-generated ID.  Names must be unique;
+        /// if a container with the same name already exists the request fails.
+        #[serde(default)]
+        name: Option<String>,
     },
 
     /// Stop a running container by ID.
@@ -191,6 +198,9 @@ pub enum DaemonResponse {
 pub struct ContainerInfo {
     /// Short UUID identifying the container.
     pub id: String,
+    /// Optional human-readable name assigned at creation time.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Image name.
     pub image: String,
     /// Full command line as a single space-separated string.
@@ -268,6 +278,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -309,6 +320,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -456,6 +468,7 @@ mod tests {
         let containers = vec![
             ContainerInfo {
                 id: "abc123".to_string(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "running".to_string(),
@@ -464,6 +477,7 @@ mod tests {
             },
             ContainerInfo {
                 id: "def456".to_string(),
+                name: None,
                 image: "ubuntu:22.04".to_string(),
                 command: "/bin/bash".to_string(),
                 state: "stopped".to_string(),
@@ -510,6 +524,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -595,6 +610,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -621,6 +637,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -640,6 +657,7 @@ mod tests {
     fn test_container_info_special_characters() {
         let info = ContainerInfo {
             id: "abc123".to_string(),
+            name: None,
             image: "test/image:v1.0-alpha".to_string(),
             command: "/bin/sh -c 'echo \"hello world\"'".to_string(),
             state: "running".to_string(),
@@ -749,6 +767,7 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -787,6 +806,7 @@ mod tests {
             }],
             privileged: false,
             env: vec![],
+            name: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -817,6 +837,7 @@ mod tests {
             mounts: vec![],
             privileged: true,
             env: vec![],
+            name: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

@@ -30,6 +30,7 @@ fn make_record(id: &str, state: &str, pid: Option<u32>) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
+            name: None,
             image: "alpine:latest".to_string(),
             command: "/bin/sh".to_string(),
             state: state.to_string(),

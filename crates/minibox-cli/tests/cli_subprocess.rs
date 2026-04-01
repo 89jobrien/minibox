@@ -110,6 +110,7 @@ async fn ps_exits_zero_with_empty_list() {
 async fn ps_exits_zero_with_container_row() {
     let container = ContainerInfo {
         id: "abc123456789ab".to_string(),
+        name: None,
         image: "alpine".to_string(),
         command: "/bin/sh".to_string(),
         state: "running".to_string(),

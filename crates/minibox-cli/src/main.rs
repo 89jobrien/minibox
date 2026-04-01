@@ -88,6 +88,11 @@ enum Commands {
         /// Example: --mount type=bind,src=/tmp/bin,dst=/minibox
         #[arg(long = "mount", value_name = "type=bind,src=PATH,dst=PATH[,readonly]")]
         mounts: Vec<String>,
+
+        /// Assign a human-readable name to the container.
+        /// Can be used instead of the ID in stop/rm commands.
+        #[arg(long)]
+        name: Option<String>,
     },
 
     /// List all containers
@@ -140,6 +145,7 @@ async fn main() -> Result<()> {
             privileged,
             volumes,
             mounts,
+            name,
         } => {
             commands::run::execute(
                 image,
@@ -151,6 +157,7 @@ async fn main() -> Result<()> {
                 privileged,
                 volumes,
                 mounts,
+                name,
                 socket_path,
             )
             .await

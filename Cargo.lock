@@ -1629,6 +1629,7 @@ dependencies = [
  "minibox-core",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

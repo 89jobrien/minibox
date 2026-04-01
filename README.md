@@ -16,11 +16,9 @@
 - **Bench tooling (`minibox-bench`)** – Focused crate for performance exploration and regression tracking.
 - **Proc‑macros (`minibox-macros`)** – Ergonomic proc‑macros used by `mbx` for internal APIs.
 
-<!--
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
 [![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)
--->
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
@@ -28,13 +26,13 @@ A Docker-like container runtime written in Rust. Daemon/client architecture with
 
 ## Supported
 
-- Linux: native 
+- Linux: native
 - Colima: mac/linux runtime, Docker alt
 - GKE: unprivileged deployment
 
 ## On Deck
 
-- WSL2: Everything is wired or at least stubbed. 
+- WSL2: Everything is wired or at least stubbed.
 - MacOS: Virtualization framework for native macos
 
 ## Backburner
@@ -84,20 +82,20 @@ sudo /usr/local/bin/minibox ps
 
 ## Crate Structure
 
-| Crate            | Type    | Description                                            |
-| ---------------- | ------- | ------------------------------------------------------ |
-| `minibox-core`   | Library | Protocol, domain traits, image types, error types      |
-| `mbx`       | Library | Linux primitives, adapters, image management           |
-| `daemonbox`      | Library | Handler, state, Unix socket server                     |
-| `miniboxd`       | Binary  | Async daemon — Unix socket listener, platform dispatch |
-| `minibox-cli`    | Binary  | CLI client                                             |
-| `minibox-macros` | Library | Proc macros (`as_any!`, `adapt!`)                      |
-| `minibox-llm`    | Library | Multi-provider LLM client with structured output       |
-| `minibox-bench`  | Binary  | Benchmark harness                                      |
-| `minibox-client` | Library | Low-level Unix socket client                           |
-| `minibox-secrets`| Library | Typed credential store with validation & audit hashes  |
-| `macbox`         | Library | macOS daemon implementation (Colima adapter suite)     |
-| `winbox`         | Library | Windows daemon implementation (stub)                   |
+| Crate             | Type    | Description                                            |
+| ----------------- | ------- | ------------------------------------------------------ |
+| `minibox-core`    | Library | Protocol, domain traits, image types, error types      |
+| `mbx`             | Library | Linux primitives, adapters, image management           |
+| `daemonbox`       | Library | Handler, state, Unix socket server                     |
+| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch |
+| `minibox-cli`     | Binary  | CLI client                                             |
+| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`)                      |
+| `minibox-llm`     | Library | Multi-provider LLM client with structured output       |
+| `minibox-bench`   | Binary  | Benchmark harness                                      |
+| `minibox-client`  | Library | Low-level Unix socket client                           |
+| `minibox-secrets` | Library | Typed credential store with validation & audit hashes  |
+| `macbox`          | Library | macOS daemon implementation (Colima adapter suite)     |
+| `winbox`          | Library | Windows daemon implementation (stub)                   |
 
 **Key modules in `mbx`:**
 
@@ -189,11 +187,11 @@ miniboxd starts
 
 | Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status       |
 | -------------------- | ------------------ | ----------------- | ------------ |
-| Native Linux         | `native` (default) | ✅ Yes            | Production   |
-| GKE unprivileged     | `gke`              | ✅ Yes            | Production   |
-| macOS Colima         | `colima`           | ✅ Yes            | Production   |
-| macOS Docker Desktop | `docker-desktop`   | ❌ No             | Library only |
-| Windows WSL2         | `wsl`              | ❌ No             | Library only |
+| Native Linux         | `native` (default) | Yes               | Production   |
+| GKE unprivileged     | `gke`              | Yes               | Production   |
+| macOS Colima         | `colima`           | Yes               | Production   |
+| macOS Docker Desktop | `docker-desktop`   | No                | Library only |
+| Windows WSL2         | `wsl`              | No                | Library only |
 
 Passing an unwired value causes the daemon to exit at startup with an error.
 
@@ -412,12 +410,12 @@ chore/*    ──┴──► main (develop) ──auto──► next (validated
 
 ### Branch Purposes
 
-| Branch     | Purpose                              | Deletion Policy    |
-|----------- |-------------------------------------|-----------------|
-| `main`     | Active R&D. All feature work merges here | Never deleted |
-| `next`     | Auto-promoted from `main` when CI passes | Never deleted |
-| `stable`   | Maestro-consumable. Tagged releases cut here | Never deleted |
-| `feature/*`, `hotfix/*`, `chore/*` | Short-lived topic branches | Deleted after merge |
+| Branch                             | Purpose                                      | Deletion Policy     |
+| ---------------------------------- | -------------------------------------------- | ------------------- |
+| `main`                             | Active R&D. All feature work merges here     | Never deleted       |
+| `next`                             | Auto-promoted from `main` when CI passes     | Never deleted       |
+| `stable`                           | Maestro-consumable. Tagged releases cut here | Never deleted       |
+| `feature/*`, `hotfix/*`, `chore/*` | Short-lived topic branches                   | Deleted after merge |
 
 **Invariant:** Every commit on every branch must compile.
 
@@ -425,10 +423,10 @@ chore/*    ──┴──► main (develop) ──auto──► next (validated
 
 **Local hooks (developer machine):**
 
-| Hook       | Command                           | Enforces                          |
-|-----------|-----------------------------------|------------------------------------|
-| pre-commit | `cargo xtask pre-commit`          | fmt-check + clippy + release build |
-| pre-push   | `cargo xtask prepush`             | nextest + llvm-cov + snapshot check |
+| Hook       | Command                  | Enforces                            |
+| ---------- | ------------------------ | ----------------------------------- |
+| pre-commit | `cargo xtask pre-commit` | fmt-check + clippy + release build  |
+| pre-push   | `cargo xtask prepush`    | nextest + llvm-cov + snapshot check |
 
 **Remote CI (GitHub Actions):**
 
@@ -447,4 +445,3 @@ See `docs/superpowers/specs/2026-03-26-git-workflow-design.md` for full workflow
 ---
 
 See `CLAUDE.md` for full development guide, debugging tips, and architecture details.
-

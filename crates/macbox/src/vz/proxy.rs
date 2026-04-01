@@ -393,6 +393,7 @@ mod tests {
         let (client, mut server) = duplex(2048);
         let containers = vec![ContainerInfo {
             id: "test-123".to_string(),
+            name: None,
             image: "alpine:latest".to_string(),
             command: "/bin/sh".to_string(),
             state: "running".to_string(),

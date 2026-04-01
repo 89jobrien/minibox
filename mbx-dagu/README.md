@@ -5,6 +5,7 @@ A CLI bridge that lets [dagu](https://github.com/dagu-org/dagu) run containers v
 ## Architecture
 
 `mbx-dagu` is a standalone Go binary (no dagu import) that:
+
 1. Accepts container configuration as CLI flags
 2. Submits a job to `mbxctl` (the minibox control plane) via HTTP
 3. Polls until the job completes
@@ -35,15 +36,15 @@ See `example-workflow.yaml` for a complete example.
 
 ## Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--image` | (required) | Container image name |
-| `--tag` | `latest` | Image tag |
-| `--memory` | `0` | Memory limit in bytes (0 = unlimited) |
-| `--cpu-weight` | `0` | CPU weight (0 = default) |
-| `--env` | `""` | Comma-separated `KEY=VALUE` env vars |
-| `--timeout` | `1h` | Job timeout |
-| `--mbxctl` | `$MBXCTL_URL` or `http://localhost:9999` | mbxctl base URL |
+| Flag           | Default                                  | Description                           |
+| -------------- | ---------------------------------------- | ------------------------------------- |
+| `--image`      | (required)                               | Container image name                  |
+| `--tag`        | `latest`                                 | Image tag                             |
+| `--memory`     | `0`                                      | Memory limit in bytes (0 = unlimited) |
+| `--cpu-weight` | `0`                                      | CPU weight (0 = default)              |
+| `--env`        | `""`                                     | Comma-separated `KEY=VALUE` env vars  |
+| `--timeout`    | `1h`                                     | Job timeout                           |
+| `--mbxctl`     | `$MBXCTL_URL` or `http://localhost:9999` | mbxctl base URL                       |
 
 ## Directory layout
 

@@ -74,6 +74,7 @@ fn make_record(id: &str) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
+            name: None,
             image: "test-image".into(),
             command: String::new(),
             state: "created".into(),

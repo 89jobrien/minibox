@@ -86,6 +86,12 @@ pub enum DaemonRequest {
         /// Environment variables to set inside the container, in `KEY=VALUE` form.
         #[serde(default)]
         env: Vec<String>,
+        /// Optional human-readable name for the container.
+        ///
+        /// When set, the container can be referenced by name in `stop` and `rm`
+        /// commands in addition to its auto-generated ID.
+        #[serde(default)]
+        name: Option<String>,
     },
 
     /// Stop a running container by ID.
@@ -188,6 +194,9 @@ pub enum DaemonResponse {
 pub struct ContainerInfo {
     /// Short UUID identifying the container.
     pub id: String,
+    /// Optional human-readable name assigned at creation time.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Image name.
     pub image: String,
     /// Full command line as a single space-separated string.

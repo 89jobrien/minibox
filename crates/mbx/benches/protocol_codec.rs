@@ -16,6 +16,7 @@ fn small_run_request() -> DaemonRequest {
         mounts: vec![],
         privileged: false,
         env: vec![],
+        name: None,
     }
 }
 
@@ -34,6 +35,7 @@ fn large_run_request() -> DaemonRequest {
         mounts: vec![],
         privileged: false,
         env: vec![],
+        name: None,
     }
 }
 
@@ -130,6 +132,7 @@ fn large_container_list_response() -> DaemonResponse {
 fn make_container_info(i: usize) -> ContainerInfo {
     ContainerInfo {
         id: format!("{:016x}", i),
+        name: None,
         image: format!("library/image-{}", i),
         command: format!("echo hello {}", i),
         state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),

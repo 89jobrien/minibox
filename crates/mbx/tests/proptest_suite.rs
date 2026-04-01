@@ -43,6 +43,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         mounts: vec![],
                         privileged: false,
                         env: vec![],
+                        name: None,
                     }
                 }
             ),
@@ -75,6 +76,7 @@ fn arb_container_info() -> impl Strategy<Value = ContainerInfo> {
         .prop_map(
             |(id, image, command, state, created_at, pid)| ContainerInfo {
                 id,
+                name: None,
                 image,
                 command,
                 state,

@@ -38,6 +38,7 @@ fn make_record(id: &str) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
+            name: None,
             image: "alpine:latest".to_string(),
             command: "/bin/sh".to_string(),
             state: "Created".to_string(),

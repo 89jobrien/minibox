@@ -42,6 +42,7 @@ async fn handle_run_once(
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -638,6 +639,7 @@ async fn test_handle_run_explicit_network_none() {
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -848,6 +850,7 @@ async fn test_run_with_network_mode_host() {
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -1081,6 +1084,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Created".to_string(),
@@ -1292,6 +1296,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Running".to_string(),
@@ -1521,6 +1526,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Running".to_string(),
@@ -1680,6 +1686,7 @@ async fn test_handle_remove_created_container_succeeds() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Created".to_string(),
@@ -1988,6 +1995,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -2042,6 +2050,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -2248,6 +2257,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         vec![],
         false,
         vec![],
+        None,
         state,
         deps,
         tx,
@@ -2328,6 +2338,7 @@ async fn test_stop_dead_pid_exits_immediately() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/true".to_string(),
                 state: "Running".to_string(),
@@ -2390,6 +2401,7 @@ async fn test_stop_container_no_pid_returns_error() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Created".to_string(),

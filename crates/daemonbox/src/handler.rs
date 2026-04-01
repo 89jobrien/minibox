@@ -116,10 +116,26 @@ pub async fn handle_run(
     mounts: Vec<BindMount>,
     privileged: bool,
     env: Vec<String>,
+    name: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    // Reject duplicate names eagerly before doing any work.
+    // Two-guard pattern: Option check then async check (cannot be written as
+    // a single `if let ... && await` in stable Rust).
+    #[allow(clippy::collapsible_if)]
+    if let Some(ref n) = name {
+        if state.name_in_use(n).await {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("container name {n:?} is already in use"),
+                })
+                .await;
+            return;
+        }
+    }
+
     #[cfg(unix)]
     if ephemeral {
         handle_run_streaming(
@@ -132,6 +148,7 @@ pub async fn handle_run(
             mounts,
             privileged,
             env,
+            name,
             state,
             deps,
             tx,
@@ -151,6 +168,7 @@ pub async fn handle_run(
         mounts,
         privileged,
         env,
+        name,
         state,
         deps,
     )
@@ -183,6 +201,7 @@ async fn handle_run_streaming(
     mounts: Vec<BindMount>,
     privileged: bool,
     env: Vec<String>,
+    name: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -202,6 +221,7 @@ async fn handle_run_streaming(
         mounts,
         privileged,
         env,
+        name,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -325,6 +345,7 @@ async fn run_inner_capture(
     mounts: Vec<BindMount>,
     privileged: bool,
     env: Vec<String>,
+    name: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd)> {
@@ -433,6 +454,7 @@ async fn run_inner_capture(
     let record = ContainerRecord {
         info: ContainerInfo {
             id: id.clone(),
+            name: name.clone(),
             image: image_label,
             command: command_str,
             state: "Created".to_string(),
@@ -521,6 +543,7 @@ async fn run_inner(
     mounts: Vec<BindMount>,
     privileged: bool,
     env: Vec<String>,
+    name: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -641,6 +664,7 @@ async fn run_inner(
     let record = ContainerRecord {
         info: ContainerInfo {
             id: id.clone(),
+            name: name.clone(),
             image: image_label.clone(),
             command: command_str,
             state: "Created".to_string(),
@@ -863,10 +887,19 @@ fn daemon_wait_for_exit(
 
 /// Send SIGTERM to a container, then SIGKILL after 10 seconds if needed.
 pub async fn handle_stop(
-    id: String,
+    name_or_id: String,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
+    let id = match state.resolve_id(&name_or_id).await {
+        Some(id) => id,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container not found: {name_or_id}"),
+            };
+        }
+    };
+
     // ── Network cleanup ────────────────────────────────────────────────
     NetworkLifecycle::new(deps.network_provider.clone())
         .cleanup(&id)
@@ -976,10 +1009,19 @@ async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
 
 /// Clean up a stopped container: unmount overlay, delete dirs, remove cgroup.
 pub async fn handle_remove(
-    id: String,
+    name_or_id: String,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
+    let id = match state.resolve_id(&name_or_id).await {
+        Some(id) => id,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container not found: {name_or_id}"),
+            };
+        }
+    };
+
     let result = remove_inner(&id, &state, &deps).await;
     let status = if result.is_ok() { "ok" } else { "error" };
     deps.metrics.increment_counter(

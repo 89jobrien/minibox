@@ -165,6 +165,7 @@ mod tests {
 
         let container = ContainerInfo {
             id: "abc123456789".to_string(),
+            name: None,
             image: "alpine".to_string(),
             command: "/bin/sh".to_string(),
             state: "running".to_string(),
