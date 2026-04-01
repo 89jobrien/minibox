@@ -351,11 +351,13 @@ See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` 
 
 ### Ready to execute (no blockers)
 
-| Item                                   | Plan / Notes                                                                                                                                                     |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Linux CI job (self-hosted runner)      | Use `mbx:minibox-ci` skill; runner is on jobrien-vm (currently unreachable — SSH timeout as of 2026-03-26)                                                       |
-| `WslRuntime` executor injection seam   | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters (same pattern as Colima `LimaExecutor`) so they can be unit-tested without real WSL |
-| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time; contract is documented in CLAUDE.md                                                          |
+| Item                                   | Plan / Notes                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| Linux CI job (self-hosted runner)      | Use `mbx:minibox-ci` skill; runner is on jobrien-vm (SSH timeout 2026-03-26)   |
+| `WslRuntime` executor injection seam   | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters   |
+|                                        | (same pattern as Colima `LimaExecutor`) so they can be unit-tested without WSL |
+| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time;            |
+|                                        | contract is documented in CLAUDE.md                                            |
 
 ### Blocked on hardware
 
