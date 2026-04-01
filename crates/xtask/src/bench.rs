@@ -129,6 +129,19 @@ pub fn merge_bench_suites(dst_path: &str, src_path: &str) -> Result<()> {
     .context("write merged bench JSON")
 }
 
+/// Drop raw sample vectors from all test results, keeping only aggregates.
+///
+/// `bench.jsonl` stores aggregates only; the timestamped `.json` file written
+/// by minibox-bench retains the raw samples for offline analysis.
+fn strip_raw_samples(report: &mut BenchReport) {
+    for suite in &mut report.suites {
+        for test in &mut suite.tests {
+            test.durations_micros.clear();
+            test.durations_nanos.clear();
+        }
+    }
+}
+
 /// Remove suites where every test has `iterations == 0`.
 /// Returns the number of suites dropped.
 fn strip_zero_iteration_suites(report: &mut BenchReport) -> usize {
@@ -170,6 +183,7 @@ pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
     if dropped > 0 {
         eprintln!("bench: dropped {dropped} suite(s) with zero iterations (fixture failures)");
     }
+    strip_raw_samples(&mut report);
 
     let line = serde_json::to_string(&report).context("serialise bench JSON")?;
     let jsonl_path = "bench/results/bench.jsonl";
@@ -382,6 +396,7 @@ pub fn bench_sync() -> Result<()> {
         let dropped = strip_zero_iteration_suites(&mut report);
         skipped_zero += dropped;
         report.metadata.hostname = redact_hostname(&report.metadata.hostname).to_string();
+        strip_raw_samples(&mut report);
         new_lines.push(serde_json::to_string(&report).context("re-serialise VPS entry")?);
     }
 
