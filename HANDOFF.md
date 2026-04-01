@@ -267,6 +267,18 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 | Systemd socket activation               | 3        | Read `LISTEN_PID`/`LISTEN_FDS`, set CLOEXEC on passed FDs, clear env. ~30 lines. Reference: QEMU `systemd.c:check_socket_activation()`.         |
 | Human-readable size parsing for CLI     | 3        | Parse "512M", "2G", "1.5T" for `--memory` flags. Reference: QEMU `cutils.c:qemu_strtosz()`.                                                     |
 
+### License files (quick win — no blockers)
+
+minibox has `license = "MIT"` in `Cargo.toml` but no `LICENSE` file in the repo, and the license should be upgraded to dual MIT/Apache-2.0 to match Rust ecosystem convention.
+
+Steps (reference: notfiles was done 2026-03-31):
+1. Change `Cargo.toml` root to `[workspace.package]` with `license = "MIT OR Apache-2.0"`, add `license.workspace = true` to all crate `Cargo.toml` files
+2. Add `LICENSE-MIT` (copyright `2026 Joseph O'Brien`) and `LICENSE-APACHE` (full canonical text from apache.org — **do not use curl, it truncates; write directly**)
+3. Add `## License` section to README (dual-license boilerplate + contribution clause)
+4. Commit and push to `origin` (GitHub)
+
+See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` for exact content to copy.
+
 ### Ready to execute (no blockers)
 
 | Item                                   | Plan / Notes                                                                                                                                                     |
