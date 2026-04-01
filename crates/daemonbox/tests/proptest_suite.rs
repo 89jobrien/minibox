@@ -63,6 +63,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     })
 }
 

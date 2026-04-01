@@ -855,6 +855,58 @@ pub trait ContainerCommitter: AsAny + Send + Sync {
 /// Type alias for a shared, dynamic [`ContainerCommitter`] implementation.
 pub type DynContainerCommitter = Arc<dyn ContainerCommitter>;
 
+// ---------------------------------------------------------------------------
+// Image Builder Port
+// ---------------------------------------------------------------------------
+
+/// Context directory and Dockerfile location for a build.
+#[derive(Debug, Clone)]
+pub struct BuildContext {
+    /// Directory that serves as the build context (files available to COPY/ADD).
+    pub directory: std::path::PathBuf,
+    /// Path to the Dockerfile, relative to `directory`.
+    pub dockerfile: std::path::PathBuf,
+}
+
+/// Configuration for an image build operation.
+#[derive(Debug, Clone)]
+pub struct BuildConfig {
+    /// Target image tag (e.g. `"myapp:latest"`).
+    pub tag: String,
+    /// Build-time argument overrides (ARG key=value).
+    pub build_args: Vec<(String, String)>,
+    /// When `true`, skip any cached layers and rebuild from scratch.
+    pub no_cache: bool,
+}
+
+/// A progress update emitted while a build is running.
+#[derive(Debug, Clone)]
+pub struct BuildProgress {
+    /// 1-based index of the current step.
+    pub step: u32,
+    /// Total number of steps in the Dockerfile.
+    pub total_steps: u32,
+    /// Human-readable description of the current step.
+    pub message: String,
+}
+
+/// Port for building container images from a Dockerfile.
+#[async_trait]
+pub trait ImageBuilder: AsAny + Send + Sync {
+    /// Build an image from the given context and config, streaming progress via `progress_tx`.
+    ///
+    /// Returns [`ImageMetadata`] for the newly built image on success.
+    async fn build_image(
+        &self,
+        context: &BuildContext,
+        config: &BuildConfig,
+        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+    ) -> anyhow::Result<ImageMetadata>;
+}
+
+/// Type alias for a shared, dynamic [`ImageBuilder`] implementation.
+pub type DynImageBuilder = Arc<dyn ImageBuilder>;
+
 #[cfg(test)]
 mod tests {
     use super::*;

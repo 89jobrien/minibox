@@ -110,6 +110,9 @@ pub struct HandlerDependencies {
     /// Container committer for snapshotting a container's overlay diff.
     /// `None` on platforms where commit is not supported (macOS, Windows).
     pub commit_adapter: Option<minibox_core::domain::DynContainerCommitter>,
+    /// Image builder for building images from a Dockerfile.
+    /// `None` on platforms where build is not supported (macOS, Windows).
+    pub image_builder: Option<minibox_core::domain::DynImageBuilder>,
 }
 
 impl HandlerDependencies {
@@ -1465,6 +1468,95 @@ pub async fn handle_commit(
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: e.to_string(),
+                })
+                .await;
+        }
+    }
+}
+
+// ─── Build ──────────────────────────────────────────────────────────────────
+
+/// Build an image from an inline Dockerfile string.
+///
+/// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
+/// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
+/// success or [`DaemonResponse::Error`] on failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_build(
+    dockerfile: String,
+    context_path: String,
+    tag: String,
+    build_args: Vec<(String, String)>,
+    no_cache: bool,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let Some(ref builder) = deps.image_builder else {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: "build not supported on this platform".to_string(),
+            })
+            .await;
+        return;
+    };
+
+    // Write Dockerfile content to a temp file inside context_path.
+    let context_dir = std::path::PathBuf::from(&context_path);
+    let dockerfile_path = context_dir.join("Dockerfile.mbx-build");
+    if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: format!("write Dockerfile: {e}"),
+            })
+            .await;
+        return;
+    }
+
+    let context = minibox_core::domain::BuildContext {
+        directory: context_dir,
+        dockerfile: std::path::PathBuf::from("Dockerfile.mbx-build"),
+    };
+    let config = minibox_core::domain::BuildConfig {
+        tag: tag.clone(),
+        build_args,
+        no_cache,
+    };
+
+    let (progress_tx, mut progress_rx) = mpsc::channel::<minibox_core::domain::BuildProgress>(64);
+    let tx2 = tx.clone();
+    tokio::spawn(async move {
+        while let Some(p) = progress_rx.recv().await {
+            let _ = tx2
+                .send(DaemonResponse::BuildOutput {
+                    step: p.step,
+                    total_steps: p.total_steps,
+                    message: p.message,
+                })
+                .await;
+        }
+    });
+
+    match builder.build_image(&context, &config, progress_tx).await {
+        Ok(meta) => {
+            info!(
+                tag = %tag,
+                layers = meta.layers.len(),
+                "build: complete"
+            );
+            let image_id = meta
+                .layers
+                .first()
+                .map(|l| l.digest.clone())
+                .unwrap_or_else(|| format!("built:{tag}"));
+            let _ = tx
+                .send(DaemonResponse::BuildComplete { image_id, tag })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("build failed: {e}"),
                 })
                 .await;
         }

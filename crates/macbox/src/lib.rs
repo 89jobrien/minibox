@@ -179,6 +179,7 @@ pub async fn start() -> Result<()> {
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -346,6 +347,7 @@ async fn start_vz(
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

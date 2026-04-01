@@ -76,6 +76,11 @@
 
 // Platform-native adapters (Linux only)
 #[cfg(target_os = "linux")]
+pub mod builder;
+#[cfg(target_os = "linux")]
+pub use builder::MiniboxImageBuilder;
+
+#[cfg(target_os = "linux")]
 pub mod commit;
 #[cfg(target_os = "linux")]
 pub use commit::OverlayCommitAdapter;

@@ -178,6 +178,22 @@ pub enum DaemonRequest {
         #[serde(default)]
         cmd_override: Option<Vec<String>>,
     },
+
+    /// Build an image from a Dockerfile.
+    Build {
+        /// Dockerfile content (as string).
+        dockerfile: String,
+        /// Build context directory path on the daemon host.
+        context_path: String,
+        /// Target tag for the built image.
+        tag: String,
+        /// Build-time argument overrides.
+        #[serde(default)]
+        build_args: Vec<(String, String)>,
+        /// When `true`, skip any cached layers.
+        #[serde(default)]
+        no_cache: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +287,26 @@ pub enum DaemonResponse {
         bytes_uploaded: u64,
         /// Total bytes in this layer.
         total_bytes: u64,
+    },
+
+    /// Streaming build log line.
+    ///
+    /// Non-terminal: sent once per Dockerfile step before `BuildComplete`.
+    BuildOutput {
+        /// 1-based step index.
+        step: u32,
+        /// Total steps in the Dockerfile.
+        total_steps: u32,
+        /// Human-readable step description.
+        message: String,
+    },
+
+    /// Build completed successfully.
+    BuildComplete {
+        /// Content-addressable ID of the new image.
+        image_id: String,
+        /// Tag applied to the built image.
+        tag: String,
     },
 }
 

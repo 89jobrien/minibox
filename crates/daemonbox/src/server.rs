@@ -224,8 +224,9 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::Success { .. }
             | DaemonResponse::ContainerList { .. }
             | DaemonResponse::ImageLoaded { .. }
+            | DaemonResponse::BuildComplete { .. }
     )
-    // ContainerOutput, ContainerCreated, ExecStarted, and PushProgress are non-terminal.
+    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, and BuildOutput are non-terminal.
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -328,6 +329,25 @@ async fn dispatch(
             )
             .await;
         }
+        DaemonRequest::Build {
+            dockerfile,
+            context_path,
+            tag,
+            build_args,
+            no_cache,
+        } => {
+            handler::handle_build(
+                dockerfile,
+                context_path,
+                tag,
+                build_args,
+                no_cache,
+                state,
+                deps,
+                tx,
+            )
+            .await;
+        }
     }
 }
 
@@ -367,6 +387,7 @@ mod tests {
             exec_runtime: None,
             image_pusher: None,
             commit_adapter: None,
+            image_builder: None,
         });
         (state, deps)
     }
@@ -453,6 +474,35 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::ExecStarted {
+                    exec_id: "exec001".to_string(),
+                },
+                false, // non-terminal: output and ContainerStopped follow
+            ),
+            (
+                DaemonResponse::PushProgress {
+                    layer_digest: "sha256:abc".to_string(),
+                    bytes_uploaded: 100,
+                    total_bytes: 1000,
+                },
+                false, // non-terminal
+            ),
+            (
+                DaemonResponse::BuildOutput {
+                    step: 1,
+                    total_steps: 3,
+                    message: "Step 1/3: FROM alpine".to_string(),
+                },
+                false, // non-terminal
+            ),
+            (
+                DaemonResponse::BuildComplete {
+                    image_id: "sha256:deadbeef".to_string(),
+                    tag: "myapp:latest".to_string(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -468,13 +518,17 @@ mod tests {
             // will refuse to compile until you add it here AND in the `variants`
             // slice above.
             let _exhaustiveness_guard: bool = match variant {
-                DaemonResponse::ContainerCreated { .. } => true,
+                DaemonResponse::ContainerCreated { .. } => false,
                 DaemonResponse::Success { .. } => true,
                 DaemonResponse::ContainerList { .. } => true,
                 DaemonResponse::Error { .. } => true,
                 DaemonResponse::ContainerOutput { .. } => false,
                 DaemonResponse::ContainerStopped { .. } => true,
                 DaemonResponse::ImageLoaded { .. } => true,
+                DaemonResponse::ExecStarted { .. } => false,
+                DaemonResponse::PushProgress { .. } => false,
+                DaemonResponse::BuildOutput { .. } => false,
+                DaemonResponse::BuildComplete { .. } => true,
             };
         }
     }

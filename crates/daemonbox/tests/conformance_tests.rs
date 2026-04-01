@@ -71,6 +71,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     })
 }
 
@@ -92,6 +93,7 @@ fn mock_deps_with_network(
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     })
 }
 

@@ -175,6 +175,32 @@ pub enum CommitError {
     Other(String),
 }
 
+// ---------------------------------------------------------------------------
+// Build errors
+// ---------------------------------------------------------------------------
+
+/// Errors from Dockerfile build operations.
+#[derive(Debug, Error)]
+pub enum BuildError {
+    #[error("Dockerfile not found at {path}")]
+    DockerfileNotFound { path: String },
+
+    #[error("parse error at line {line}: {reason}")]
+    ParseError { line: u32, reason: String },
+
+    #[error("unsupported instruction: {instruction}")]
+    UnsupportedInstruction { instruction: String },
+
+    #[error("build step {step} failed with exit code {exit_code}")]
+    BuildStepFailed { step: u32, exit_code: i32 },
+
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("build error: {0}")]
+    Other(String),
+}
+
 /// Errors from OCI image push operations.
 #[derive(Debug, Error)]
 pub enum PushError {

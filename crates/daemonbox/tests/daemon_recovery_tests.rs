@@ -35,6 +35,7 @@ fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies>
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
+        image_builder: None,
     })
 }
 
