@@ -300,9 +300,9 @@ All open issues in execution order. Update status as issues close.
 
 ## Next up
 
-### ✅ DONE (2026-04-01) — test-linux dogfood infrastructure
+### DONE (2026-04-01) — test-linux dogfood infrastructure
 
-`feature/test-linux-dogfood` branch — **ready to merge to main.**
+`feature/test-linux-dogfood` merged to main.
 
 Full flow: `cargo xtask test-linux` builds a cross-compiled `mbx-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged mbx-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
 
@@ -313,7 +313,7 @@ Key new commands:
 
 Pre-commit gate passing. All 21 unit tests passing. Ready to merge.
 
-### ✅ DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
+### DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
 
 **Fixed test failure** (commit f57b5c9):
 
@@ -340,11 +340,11 @@ macOS VZ.framework stack is **complete and merged** (2026-03-29). Remaining work
 
 | Issue | Title                                                | Status                           |
 | ----- | ---------------------------------------------------- | -------------------------------- |
-| #44   | minibox owns the full stack on every OS              | ✅ macOS done                    |
-| #40   | Provision/boot VM via Apple Virtualization.Framework | ✅ Done — VzVm::boot             |
-| #41   | minibox-agent — in-VM daemon over vsock              | ✅ Done — miniboxd as musl agent |
-| #42   | vsock I/O bridge — stream stdout/stderr host↔VM      | ✅ Done — VzProxy                |
-| #43   | virtiofs mounts — share OCI layers + bind mounts     | ✅ Done — 3 virtiofs shares      |
+| #44   | minibox owns the full stack on every OS              | done —macOS done                    |
+| #40   | Provision/boot VM via Apple Virtualization.Framework | done —Done — VzVm::boot             |
+| #41   | minibox-agent — in-VM daemon over vsock              | done —Done — miniboxd as musl agent |
+| #42   | vsock I/O bridge — stream stdout/stderr host↔VM      | done —Done — VzProxy                |
+| #43   | virtiofs mounts — share OCI layers + bind mounts     | done —Done — 3 virtiofs shares      |
 | #45   | Windows: Hyper-V / WSL2 kernel path                  | Open                             |
 
 **VZ status (2026-04-01):** Test harness is complete and correct. Blocked by confirmed Apple OS bug — `VZErrorInternal(code=1)` on `startWithCompletionHandler` on macOS 26 ARM64. Affects all VZ.framework users (Podman, apple/container). Monitor [apple/container#1254](https://github.com/apple/container/issues/1254) for resolution. No code changes needed on our side when Apple ships the fix — `just test-vz-isolation` should pass as-is.
