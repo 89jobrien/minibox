@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 use crate::network_lifecycle::NetworkLifecycle;
 use crate::state::{ContainerRecord, DaemonState};
+use async_trait::async_trait;
 
 // ---------------------------------------------------------------------------
 // Handler Dependencies (Dependency Injection)
@@ -77,6 +78,16 @@ pub struct HandlerDependencies {
     pub run_containers_base: PathBuf,
     /// Metrics recorder for operational observability.
     pub metrics: DynMetricsRecorder,
+    /// Loader for local OCI image tarballs.
+    pub image_loader: minibox_core::domain::DynImageLoader,
+}
+
+impl HandlerDependencies {
+    /// Override the image loader (builder-style).
+    pub fn with_image_loader(mut self, loader: minibox_core::domain::DynImageLoader) -> Self {
+        self.image_loader = loader;
+        self
+    }
 }
 
 // ─── Registry Selection ─────────────────────────────────────────────────────
@@ -1164,17 +1175,56 @@ pub async fn handle_pull(
     response
 }
 
+// ─── Load Image ─────────────────────────────────────────────────────────────
+
+/// Load a local OCI image tarball into the image store.
+#[instrument(skip(_state, deps), fields(path = %path, name = %name, tag = %tag))]
 pub async fn handle_load_image(
-    _path: String,
+    path: String,
     name: String,
     tag: String,
     _state: Arc<DaemonState>,
-    _deps: Arc<HandlerDependencies>,
+    deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
-    // TODO: Implement loading OCI image tarball from path into image store.
-    // For now, return a stub response.
-    let image_ref = format!("{name}:{tag}");
-    DaemonResponse::ImageLoaded { image: image_ref }
+    let image_path = std::path::Path::new(&path);
+    match deps.image_loader.load_image(image_path, &name, &tag).await {
+        Ok(()) => {
+            info!(
+                path = %path,
+                image = %format!("{name}:{tag}"),
+                "load_image: loaded successfully"
+            );
+            DaemonResponse::ImageLoaded {
+                image: format!("{name}:{tag}"),
+            }
+        }
+        Err(e) => {
+            error!("handle_load_image error: {e:#}");
+            DaemonResponse::Error {
+                message: format!("{e:#}"),
+            }
+        }
+    }
+}
+
+// ─── Test doubles ───────────────────────────────────────────────────────────
+
+/// No-op image loader — accepts any load request and returns `Ok(())`.
+///
+/// Used as a placeholder in platform adapters that do not yet implement
+/// local tarball loading (e.g. macbox, winbox).
+pub struct NoopImageLoader;
+
+#[async_trait]
+impl minibox_core::domain::ImageLoader for NoopImageLoader {
+    async fn load_image(
+        &self,
+        _path: &std::path::Path,
+        _name: &str,
+        _tag: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

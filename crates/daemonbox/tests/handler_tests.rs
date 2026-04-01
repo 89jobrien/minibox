@@ -63,6 +63,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     })
 }
 
@@ -137,6 +138,7 @@ async fn test_handle_pull_failure() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -167,6 +169,7 @@ async fn test_handle_run_with_cached_image() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -251,6 +254,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -287,6 +291,7 @@ async fn test_handle_run_resource_limiter_failure() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -323,6 +328,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -560,6 +566,7 @@ fn create_test_deps_with_network(
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     })
 }
 
@@ -906,6 +913,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1035,6 +1043,7 @@ async fn test_handle_run_empty_image_returns_error() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1128,6 +1137,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1246,6 +1256,7 @@ async fn test_handle_run_pull_failure_returns_error() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1355,6 +1366,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1399,6 +1411,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1443,6 +1456,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1480,6 +1494,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1726,6 +1741,7 @@ async fn test_handle_remove_failed_container_succeeds() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1772,6 +1788,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1980,6 +1997,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2035,6 +2053,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2083,6 +2102,7 @@ async fn test_run_empty_image_no_layers() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2127,6 +2147,7 @@ async fn test_pull_registry_failure_with_tag() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2242,6 +2263,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2454,4 +2476,72 @@ async fn test_stop_unknown_container_returns_error() {
         }
         other => panic!("expected Error, got: {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// handle_load_image Tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_load_image_success() {
+    let tmp = TempDir::new().unwrap();
+
+    struct OkLoader;
+    #[async_trait::async_trait]
+    impl minibox_core::domain::ImageLoader for OkLoader {
+        async fn load_image(&self, _p: &std::path::Path, _n: &str, _t: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    let deps = Arc::try_unwrap(create_test_deps_with_dir(&tmp))
+        .unwrap_or_else(|_| panic!("Arc had other refs"))
+        .with_image_loader(Arc::new(OkLoader) as minibox_core::domain::DynImageLoader);
+    let state = create_test_state_with_dir(&tmp);
+
+    let response = handler::handle_load_image(
+        "fake.tar".to_string(),
+        "mbx-tester".to_string(),
+        "latest".to_string(),
+        state,
+        Arc::new(deps),
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::ImageLoaded { .. }),
+        "expected ImageLoaded, got: {response:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_load_image_failure() {
+    let tmp = TempDir::new().unwrap();
+
+    struct FailLoader;
+    #[async_trait::async_trait]
+    impl minibox_core::domain::ImageLoader for FailLoader {
+        async fn load_image(&self, _p: &std::path::Path, _n: &str, _t: &str) -> anyhow::Result<()> {
+            anyhow::bail!("file not found")
+        }
+    }
+
+    let deps = Arc::try_unwrap(create_test_deps_with_dir(&tmp))
+        .unwrap_or_else(|_| panic!("Arc had other refs"))
+        .with_image_loader(Arc::new(FailLoader) as minibox_core::domain::DynImageLoader);
+    let state = create_test_state_with_dir(&tmp);
+
+    let response = handler::handle_load_image(
+        "/nonexistent/fake.tar".to_string(),
+        "mbx-tester".to_string(),
+        "latest".to_string(),
+        state,
+        Arc::new(deps),
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::Error { .. }),
+        "expected Error, got: {response:?}"
+    );
 }

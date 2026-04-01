@@ -59,6 +59,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         containers_base: tmp.join("containers"),
         run_containers_base: tmp.join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     })
 }
 

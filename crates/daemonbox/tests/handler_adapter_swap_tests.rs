@@ -67,6 +67,7 @@ fn make_deps(
         containers_base: tmp.path().join("containers"),
         run_containers_base: tmp.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
     })
 }
 

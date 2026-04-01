@@ -326,6 +326,7 @@ mod tests {
             containers_base: tmp.path().join("containers"),
             run_containers_base: tmp.path().join("run"),
             metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
+            image_loader: Arc::new(crate::handler::NoopImageLoader),
         });
         (state, deps)
     }
