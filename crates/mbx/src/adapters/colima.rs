@@ -61,6 +61,17 @@ fn lima_home() -> String {
 }
 
 fn limactl_command(path: &str) -> Command {
+    // limactl refuses to run as root. When miniboxd is started via sudo,
+    // SUDO_USER is set to the original user. Drop back to that user so
+    // limactl can reach the Lima socket in their home directory.
+    if nix::unistd::geteuid().is_root()
+        && let Ok(sudo_user) = std::env::var("SUDO_USER")
+    {
+        let mut cmd = Command::new("sudo");
+        cmd.args(["-u", &sudo_user, "--", path]);
+        cmd.env("LIMA_HOME", lima_home());
+        return cmd;
+    }
     let mut cmd = Command::new(path);
     cmd.env("LIMA_HOME", lima_home());
     cmd
