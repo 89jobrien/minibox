@@ -111,6 +111,11 @@ static VM_FIXTURE: OnceLock<Option<VmFixture>> = OnceLock::new();
 /// Return a reference to the shared VM, or `None` if the VM image is absent.
 ///
 /// Boots the VM on first call; subsequent calls return the cached result.
+///
+/// `OnceLock::get_or_init` is synchronous, but `boot_vm` is async.  Calling
+/// `Runtime::block_on` from inside a `#[tokio::test]` worker panics ("cannot
+/// start a runtime from within a runtime").  Fix: spawn a fresh OS thread
+/// (no tokio context), run the async boot there, and join the result.
 fn shared_vm() -> Option<&'static Arc<VzVm>> {
     let fixture = VM_FIXTURE.get_or_init(|| {
         if !vm_image_available() {
@@ -120,45 +125,48 @@ fn shared_vm() -> Option<&'static Arc<VzVm>> {
             return None;
         }
 
-        eprintln!("vz_isolation_tests: booting Linux VM (once for entire suite)...");
+        // Spawn a fresh OS thread — no tokio context, so Runtime::block_on is safe.
+        let result: Option<VmFixture> = std::thread::spawn(|| {
+            eprintln!("vz_isolation_tests: booting Linux VM (once for entire suite)...");
 
-        let images_tmp = TempDir::new().expect("images TempDir");
-        let containers_tmp = TempDir::new().expect("containers TempDir");
+            let images_tmp = TempDir::new().expect("images TempDir");
+            let containers_tmp = TempDir::new().expect("containers TempDir");
 
-        let config = VzVmConfig {
-            vm_dir: vm_dir(),
-            images_dir: images_tmp.path().join("images"),
-            containers_dir: containers_tmp.path().join("containers"),
-            memory_bytes: 512 * 1024 * 1024,
-            cpu_count: 1,
-        };
-        std::fs::create_dir_all(&config.images_dir).expect("create images dir");
-        std::fs::create_dir_all(&config.containers_dir).expect("create containers dir");
+            let config = VzVmConfig {
+                vm_dir: vm_dir(),
+                images_dir: images_tmp.path().join("images"),
+                containers_dir: containers_tmp.path().join("containers"),
+                memory_bytes: 512 * 1024 * 1024,
+                cpu_count: 1,
+            };
+            std::fs::create_dir_all(&config.images_dir).expect("create images dir");
+            std::fs::create_dir_all(&config.containers_dir).expect("create containers dir");
 
-        // Boot synchronously using a fresh single-threaded Tokio runtime.
-        // We can't use the test's runtime here because OnceLock::get_or_init
-        // is synchronous.
-        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-        let vm = rt.block_on(boot_vm(config)).expect("VM boot failed");
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            let vm = rt.block_on(boot_vm(config)).expect("VM boot failed");
 
-        eprintln!("vz_isolation_tests: VM booted, waiting for agent...");
+            eprintln!("vz_isolation_tests: VM booted, waiting for agent...");
 
-        // Wait for agent to come up (up to 60 s).
-        let vm_arc = Arc::new(vm);
-        let vm_clone = Arc::clone(&vm_arc);
-        rt.block_on(async move {
-            connect_to_agent(&vm_clone, 60 * 5)
-                .await
-                .expect("agent did not come up within 60s")
-        });
+            let vm_arc = Arc::new(vm);
+            let vm_clone = Arc::clone(&vm_arc);
+            rt.block_on(async move {
+                connect_to_agent(&vm_clone, 60 * 5)
+                    .await
+                    .expect("agent did not come up within 300s")
+            });
 
-        eprintln!("vz_isolation_tests: agent ready — running tests");
+            eprintln!("vz_isolation_tests: agent ready — running tests");
 
-        Some(VmFixture {
-            vm: vm_arc,
-            _images_dir: images_tmp,
-            _containers_dir: containers_tmp,
+            Some(VmFixture {
+                vm: vm_arc,
+                _images_dir: images_tmp,
+                _containers_dir: containers_tmp,
+            })
         })
+        .join()
+        .expect("VM boot thread panicked");
+
+        result
     });
 
     fixture.as_ref().map(|f| &f.vm)
