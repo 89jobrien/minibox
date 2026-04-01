@@ -35,29 +35,6 @@ use std::sync::Arc;
 use tokio::net::UnixListener;
 use tracing::{info, warn};
 
-fn colima_home() -> PathBuf {
-    if let Ok(path) = std::env::var("COLIMA_HOME")
-        && !path.is_empty()
-    {
-        return PathBuf::from(path);
-    }
-
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("~"))
-        .join(".colima")
-}
-
-fn lima_home() -> String {
-    if let Ok(path) = std::env::var("LIMA_HOME")
-        && !path.is_empty()
-    {
-        return path;
-    }
-
-    colima_home().join("_lima").to_string_lossy().to_string()
-}
-
 /// Errors that can be returned by the macOS daemon entry point.
 #[derive(thiserror::Error, Debug)]
 pub enum MacboxError {
@@ -150,17 +127,17 @@ pub async fn start() -> Result<()> {
     }
 
     // ── Dependency Injection — Colima adapter suite ──────────────────────
-    let lima_home_env = lima_home();
 
     // Shared executor closure — runs fire-and-forget commands inside the Lima VM.
+    // Uses `colima ssh --` rather than `limactl shell colima` because Colima manages
+    // its own Lima instance directory and limactl may not find it via LIMA_HOME.
     let executor: LimaExecutor = Arc::new(move |args: &[&str]| {
-        let output = std::process::Command::new("limactl")
-            .env("LIMA_HOME", &lima_home_env)
-            .arg("shell")
-            .arg("colima")
+        let output = std::process::Command::new("colima")
+            .arg("ssh")
+            .arg("--")
             .args(args)
             .output()
-            .map_err(|e| anyhow::anyhow!("limactl exec failed: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("colima ssh exec failed: {e}"))?;
         if !output.status.success() {
             return Err(anyhow::anyhow!(
                 "limactl command failed: {}",
@@ -171,17 +148,15 @@ pub async fn start() -> Result<()> {
     });
 
     // Spawner closure — starts a long-lived process with piped stdout.
-    let lima_home_env = lima_home();
     let spawner: LimaSpawner = Arc::new(move |args: &[&str]| {
-        std::process::Command::new("limactl")
-            .env("LIMA_HOME", &lima_home_env)
-            .arg("shell")
-            .arg("colima")
+        std::process::Command::new("colima")
+            .arg("ssh")
+            .arg("--")
             .args(args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
             .spawn()
-            .map_err(|e| anyhow::anyhow!("limactl spawn failed: {e}"))
+            .map_err(|e| anyhow::anyhow!("colima ssh spawn failed: {e}"))
     });
 
     let colima_image_loader = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
