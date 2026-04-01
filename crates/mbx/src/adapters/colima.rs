@@ -199,12 +199,17 @@ impl ImageRegistry for ColimaRegistry {
         // Strip "library/" prefix — nerdctl and docker both omit it for official images.
         let short_name = name.strip_prefix("library/").unwrap_or(name);
         let full_name = format!("{short_name}:{tag}");
-        // Try docker first (Docker runtime), fall back to nerdctl (containerd runtime).
-        self.lima_exec(&["docker", "image", "inspect", &full_name])
-            .is_ok()
-            || self
-                .lima_exec(&["nerdctl", "image", "inspect", &full_name])
-                .is_ok()
+        // Use `images --filter` which works with both nerdctl-as-docker and real docker.
+        // `image inspect` can fail even when the image exists (nerdctl docker-compat quirk).
+        self.lima_exec(&[
+            "docker",
+            "images",
+            "--filter",
+            &format!("reference={full_name}"),
+            "--quiet",
+        ])
+        .map(|out| !out.trim().is_empty())
+        .unwrap_or(false)
     }
 
     /// Pull the image via `nerdctl` inside the VM and return its metadata.
