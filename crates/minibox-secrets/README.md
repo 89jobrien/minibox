@@ -4,24 +4,24 @@ Typed credential store with a provider chain, validation, and SHA-256 audit hash
 
 ## Credential Kinds
 
-| Kind | Type | Validation |
-|------|------|------------|
-| `api_key` | `ApiKey` | Non-empty, ≥8 chars, no whitespace |
-| `token` | `Token` | Non-empty, optional expiry check |
+| Kind           | Type          | Validation                                            |
+| -------------- | ------------- | ----------------------------------------------------- |
+| `api_key`      | `ApiKey`      | Non-empty, ≥8 chars, no whitespace                    |
+| `token`        | `Token`       | Non-empty, optional expiry check                      |
 | `database_url` | `DatabaseUrl` | Non-empty, scheme must be postgres/mysql/sqlite/redis |
-| `ssh_key` | `SshKey` | PEM header with `PRIVATE KEY` |
+| `ssh_key`      | `SshKey`      | PEM header with `PRIVATE KEY`                         |
 
 Every credential stores a SHA-256 hex digest (`hash` field) that is safe to log, compare, and persist for audit trails.
 
 ## Providers
 
-| Provider | Scheme | Ref format | Feature flag |
-|----------|--------|------------|-------------|
-| `EnvProvider` | `env:` | `env:VAR_NAME:kind` | default |
-| `KeyringProvider` | `keyring:` | `keyring:service/username:kind` | `keyring` |
-| `OnePasswordProvider` | `op://` | `op://vault/item/field:kind` | `onepassword` |
-| `BitwardenProvider` | `bw:` | `bw:item-name/field:kind` | `bitwarden` |
-| `InMemoryProvider` | `inmemory:` | `inmemory:key:kind` | default (testing) |
+| Provider              | Scheme      | Ref format                      | Feature flag      |
+| --------------------- | ----------- | ------------------------------- | ----------------- |
+| `EnvProvider`         | `env:`      | `env:VAR_NAME:kind`             | default           |
+| `KeyringProvider`     | `keyring:`  | `keyring:service/username:kind` | `keyring`         |
+| `OnePasswordProvider` | `op://`     | `op://vault/item/field:kind`    | `onepassword`     |
+| `BitwardenProvider`   | `bw:`       | `bw:item-name/field:kind`       | `bitwarden`       |
+| `InMemoryProvider`    | `inmemory:` | `inmemory:key:kind`             | default (testing) |
 
 All providers implement `CredentialProvider` — an async trait with a single method:
 
@@ -55,11 +55,11 @@ let fetched = chain.get(&cred_ref).await?;
 
 ### Cache behaviour
 
-| `CacheHint` | Behaviour |
-|-------------|-----------|
-| `Never` | Always re-fetches (env vars) |
-| `Session` | Cached for process lifetime |
-| `Until(t)` | Cached until timestamp, then evicted and re-fetched |
+| `CacheHint` | Behaviour                                           |
+| ----------- | --------------------------------------------------- |
+| `Never`     | Always re-fetches (env vars)                        |
+| `Session`   | Cached for process lifetime                         |
+| `Until(t)`  | Cached until timestamp, then evicted and re-fetched |
 
 Use `chain.invalidate("ref-string")` to evict a single entry or `chain.clear()` to flush the entire cache.
 

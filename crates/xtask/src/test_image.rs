@@ -12,6 +12,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use tempfile::TempDir;
 use xshell::{Shell, cmd};
 
 const TARGET: &str = "aarch64-unknown-linux-musl";
@@ -29,24 +30,22 @@ pub fn default_test_image_dir() -> PathBuf {
         .join("test-image")
 }
 
-/// Full Linux dogfood flow: build test image, load into minibox, run tests.
+/// Full Linux dogfood flow: build test image inside Colima, run tests.
 pub fn test_linux(sh: &Shell) -> Result<()> {
-    // 1. Build image (cached unless out of date)
-    build_test_image(false)?;
+    // Find the scripts dir relative to workspace root
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("xtask parent")?
+        .parent()
+        .context("workspace root")?;
+    let build_script = workspace_root.join("scripts").join("build-test-image.nu");
 
-    let home = std::env::var("HOME").context("HOME not set")?;
-    let image_path = format!("{home}/.mbx/test-image/mbx-tester.tar");
+    // 1. Build image inside Colima via Nu script
+    println!("$ nu {}", build_script.display());
+    cmd!(sh, "nu {build_script}").run()?;
 
-    // 2. Load directly into Colima via colima ssh.
-    // Try docker load first (Docker runtime), fall back to nerdctl (containerd runtime).
-    println!("$ colima ssh -- docker load -i {image_path}");
-    let load_result = cmd!(sh, "colima ssh -- docker load -i {image_path}").run();
-    if load_result.is_err() {
-        println!("docker load failed, trying nerdctl...");
-        cmd!(sh, "colima ssh -- nerdctl load -i {image_path}").run()?;
-    }
-
-    // 3. Run — privileged, ephemeral, stream output
+    // 2. Run — privileged, ephemeral, stream output
+    println!("$ minibox run --privileged mbx-tester -- /run-tests.sh");
     cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh").run()?;
 
     Ok(())
@@ -68,13 +67,8 @@ pub fn build_test_image(force: bool) -> Result<()> {
         return Ok(());
     }
 
-    let staging = out_dir.join("staging");
-    // Clean staging dir to start fresh
-    if staging.exists() {
-        fs::remove_dir_all(&staging)
-            .with_context(|| format!("removing staging dir {}", staging.display()))?;
-    }
-    fs::create_dir_all(&staging).context("creating staging dir")?;
+    let staging_tmp = TempDir::new_in(&out_dir).context("creating staging tempdir")?;
+    let staging = staging_tmp.path().to_path_buf();
 
     // 1. Cross-compile binaries
     let binaries = cross_compile_binaries(force)?;
@@ -82,6 +76,8 @@ pub fn build_test_image(force: bool) -> Result<()> {
     // 2. Fetch Alpine base layer
     println!("[2/4] fetching Alpine {ALPINE_TAG} {ALPINE_ARCH} layer …");
     let (alpine_layer_path, alpine_layer_digest) = fetch_alpine_layer(&out_dir, force)?;
+    // DiffID = SHA256 of the *uncompressed* layer tar (not the compressed blob digest)
+    let alpine_diff_id = format!("sha256:{}", sha256_of_file(&alpine_layer_path)?);
 
     // 3. Build the binaries layer tarball
     println!("[3/4] assembling binaries layer …");
@@ -93,6 +89,7 @@ pub fn build_test_image(force: bool) -> Result<()> {
         &tar_path,
         &alpine_layer_path,
         &alpine_layer_digest,
+        &alpine_diff_id,
         &bins_layer_path,
         &bins_layer_digest,
     )?;
@@ -317,10 +314,23 @@ fn fetch_alpine_layer(cache_dir: &Path, force: bool) -> Result<(PathBuf, String)
     // Step 2: get manifest to find the layer blob digest for our arch
     let layer_digest = get_alpine_layer_digest(&token)?;
 
-    // Step 3: download the layer blob
+    // Step 3: download the layer blob (gzip-compressed from registry)
     println!("  fetching alpine layer blob {} …", &layer_digest[..19]);
     let blob_url = format!("{DOCKER_REGISTRY}/v2/library/{ALPINE_IMAGE}/blobs/{layer_digest}");
-    curl_download_with_auth(&blob_url, &layer_path, &token)?;
+    let gz_path = cache_dir.join(format!("alpine-{ALPINE_TAG}-{ALPINE_ARCH}-layer.tar.gz"));
+    curl_download_with_auth(&blob_url, &gz_path, &token)?;
+
+    // Decompress: registry blobs are gzip-compressed; docker load expects uncompressed layer.tar
+    println!("  decompressing alpine layer …");
+    let status = Command::new("gunzip")
+        .args(["-f"]) // -f overwrites existing .tar in place
+        .arg(&gz_path)
+        .status()
+        .context("gunzip alpine layer")?;
+    if !status.success() {
+        bail!("gunzip failed for alpine layer");
+    }
+    // gunzip removes .gz suffix in-place: .tar.gz → .tar (which is layer_path)
 
     // Save digest for cache
     fs::write(&digest_path, &layer_digest).context("writing layer digest cache")?;
@@ -483,14 +493,16 @@ fn build_binaries_layer(
             .context("chmod run-tests.sh")?;
     }
 
-    // Build the tar
+    // Build the tar — suppress macOS extended attrs (APFS, resource forks)
+    // that produce invalid tar headers when extracted by Linux containerd
     let layer_tar = staging.join("bins-layer.tar");
     let status = Command::new("tar")
-        .args(["-cf"])
+        .args(["--no-xattrs", "-cf"])
         .arg(&layer_tar)
         .args(["-C"])
         .arg(&layer_dir)
         .arg(".")
+        .env("COPYFILE_DISABLE", "1")
         .status()
         .context("tar bins layer")?;
     if !status.success() {
@@ -569,6 +581,7 @@ fn assemble_oci_tar(
     out_tar: &Path,
     alpine_layer: &Path,
     alpine_digest: &str,
+    alpine_diff_id: &str,
     bins_layer: &Path,
     bins_digest: &str,
 ) -> Result<()> {
@@ -582,12 +595,13 @@ fn assemble_oci_tar(
     let bins_layer_name = format!("{}/layer.tar", &bins_id[..12]);
 
     // Build OCI image config
+    // diff_ids must be SHA256 of *uncompressed* layer tars (DiffID), not compressed blob digests
     let config_obj = json!({
         "architecture": "arm64",
         "os": "linux",
         "rootfs": {
             "type": "layers",
-            "diff_ids": [alpine_digest, bins_digest]
+            "diff_ids": [alpine_diff_id, bins_digest]
         },
         "config": {
             "Cmd": ["/run-tests.sh"]
@@ -662,14 +676,9 @@ fn assemble_oci_tar(
     let oci_layout = json!({"imageLayoutVersion": "1.0.0"});
 
     // Write the tar by building it from a staging area
-    let staging = out_tar
-        .parent()
-        .context("tar parent dir")?
-        .join("oci-staging");
-    if staging.exists() {
-        fs::remove_dir_all(&staging).context("removing oci-staging")?;
-    }
-    fs::create_dir_all(&staging).context("creating oci-staging")?;
+    let staging_tmp = TempDir::new_in(out_tar.parent().context("tar parent dir")?)
+        .context("creating oci-staging tempdir")?;
+    let staging = staging_tmp.path();
 
     // Write JSON files
     let write_json = |name: &str, value: &serde_json::Value| -> Result<()> {
@@ -695,24 +704,22 @@ fn assemble_oci_tar(
     fs::copy(alpine_layer, alpine_layer_dir.join("layer.tar")).context("copying alpine layer")?;
     fs::copy(bins_layer, bins_layer_dir.join("layer.tar")).context("copying bins layer")?;
 
-    // Build the final tar
+    // Build the final tar — suppress macOS extended attrs
     if out_tar.exists() {
         fs::remove_file(out_tar).context("removing old mbx-tester.tar")?;
     }
     let status = Command::new("tar")
-        .args(["-cf"])
+        .args(["--no-xattrs", "-cf"])
         .arg(out_tar)
         .args(["-C"])
-        .arg(&staging)
+        .arg(staging)
         .arg(".")
+        .env("COPYFILE_DISABLE", "1")
         .status()
         .context("tar oci-staging")?;
     if !status.success() {
         bail!("tar failed building OCI tarball");
     }
-
-    // Clean up staging
-    fs::remove_dir_all(&staging).context("removing oci-staging")?;
 
     Ok(())
 }

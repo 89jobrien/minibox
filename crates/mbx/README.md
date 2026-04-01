@@ -6,7 +6,7 @@ Linux-specific container runtime: namespaces, cgroups v2, overlay filesystem, an
 
 - **container/** — Namespace setup, cgroup creation, overlay mounts, pivot_root, exec
 - **image/** — OCI layer extraction with path traversal protection, image reference parsing, Docker Hub registry client
-- **adapters/** — Platform-specific adapter implementations (native Linux, colima, gke, docker-desktop, vf, hcs, wsl2)
+- **adapters/** — Platform-specific adapter implementations (native Linux, colima, gke, docker-desktop, ghcr, vf, hcs, wsl2) plus `NativeImageLoader` for loading OCI tarballs into the image store
 - **domain.rs** — Re-exports all `minibox-core` domain traits
 
 ## Key Functions
