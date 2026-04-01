@@ -23,6 +23,7 @@ tempfile = { workspace = true }
 async-trait = { workspace = true }
 walkdir = { workspace = true }
 tokio-util = { workspace = true }
+tar = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }

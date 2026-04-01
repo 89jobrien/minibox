@@ -99,6 +99,10 @@ pub mod network;
 // GitHub Container Registry adapter (cross-platform)
 pub mod ghcr;
 
+// Native OCI tarball loader
+pub mod image_loader;
+pub use image_loader::NativeImageLoader;
+
 // Test doubles (always available for testing)
 pub mod mocks;
 
