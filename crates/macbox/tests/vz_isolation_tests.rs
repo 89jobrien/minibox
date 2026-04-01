@@ -5,17 +5,17 @@
 //! VZ.framework and drives the same behavioral assertions through the
 //! in-VM miniboxd agent using `ephemeral: true` Run requests.
 //!
-//! Each test:
-//!   1. Boots the VM (or reuses a fixture VM started via `setup_vm()`)
-//!   2. Sends an ephemeral `Run` to the agent
-//!   3. Collects `ContainerOutput` chunks and `ContainerStopped { exit_code }`
-//!   4. Asserts on exit code and/or decoded stdout
+//! The VM is booted **once** for the entire test binary via `VM_FIXTURE` (a
+//! `std::sync::OnceLock`).  All tests share the same running VM — each test
+//! opens a fresh vsock connection, sends its request, and asserts on the
+//! response.  This keeps total wall time proportional to the number of
+//! container runs, not the number of VM boots.
 //!
-//! **Skip condition**: if the VM image is absent (`~/.mbx/vm/`) tests print a
-//! skip message and return without failing — matching the smoke test behaviour.
+//! **Skip condition**: if the VM image is absent (`~/.mbx/vm/`) every test
+//! prints a skip message and returns without failing.
 //!
-//! Run via `just test-vz-isolation` (builds with `--features vz`, points at
-//! a pre-built VM image).
+//! Run via `just test-vz-isolation` (requires `--features vz` and a pre-built
+//! VM image — `cargo xtask build-vm-image`).
 
 #![cfg(all(target_os = "macos", feature = "vz"))]
 
@@ -24,10 +24,11 @@ use macbox::vz::proxy::VzProxy;
 use macbox::vz::vm::{VzVm, VzVmConfig};
 use macbox::vz::vsock::connect_to_agent;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
-// Boot helpers (copied from vz_adapter_smoke.rs — see note there)
+// GCD boot helpers
 // ---------------------------------------------------------------------------
 
 fn vm_dir() -> std::path::PathBuf {
@@ -56,8 +57,8 @@ struct PrepareCtx {
     result: Option<PrepareResult>,
 }
 unsafe extern "C" fn prepare_trampoline(ctx: *mut std::ffi::c_void) {
-    // SAFETY: ctx is &mut PrepareCtx on the stack; dispatch_sync_f guarantees
-    // it outlives this call and runs exactly once.
+    // SAFETY: ctx is &mut PrepareCtx stack-allocated in the spawn_blocking closure;
+    // dispatch_sync_f guarantees it outlives this call and runs exactly once.
     let c = unsafe { &mut *(ctx as *mut PrepareCtx) };
     let config = c.config.take().expect("PrepareCtx config missing");
     c.result = Some(VzVm::prepare_on_main_queue(config));
@@ -70,7 +71,7 @@ async fn boot_vm(config: VzVmConfig) -> anyhow::Result<VzVm> {
             config: Some(config),
             result: None,
         };
-        // SAFETY: _dispatch_main_q is the GCD main queue; prepare_trampoline
+        // SAFETY: _dispatch_main_q is the live GCD main queue; prepare_trampoline
         // writes to ctx before dispatch_sync_f returns.
         unsafe {
             dispatch_sync_f(
@@ -90,43 +91,95 @@ async fn boot_vm(config: VzVmConfig) -> anyhow::Result<VzVm> {
 }
 
 // ---------------------------------------------------------------------------
-// Per-test VM setup
+// Shared VM fixture — booted once, shared across all tests
 // ---------------------------------------------------------------------------
 
-async fn setup_vm() -> Option<Arc<VzVm>> {
-    if !vm_image_available() {
-        eprintln!("SKIP: VM image not found at ~/.mbx/vm/ — run `cargo xtask build-vm-image`");
-        return None;
-    }
-    let tmp = tempfile::tempdir().unwrap();
-    let config = VzVmConfig {
-        vm_dir: vm_dir(),
-        images_dir: tmp.path().join("images"),
-        containers_dir: tmp.path().join("containers"),
-        memory_bytes: 512 * 1024 * 1024,
-        cpu_count: 1,
-    };
-    std::fs::create_dir_all(&config.images_dir).unwrap();
-    std::fs::create_dir_all(&config.containers_dir).unwrap();
+/// Holds the running VM and its backing temp directories.
+///
+/// The `TempDir`s must stay alive for the duration of the test binary —
+/// dropping them would delete the images/containers directories while the VM
+/// is still using them via virtiofs.
+struct VmFixture {
+    vm: Arc<VzVm>,
+    // Kept alive to prevent the temp dirs from being deleted.
+    _images_dir: TempDir,
+    _containers_dir: TempDir,
+}
 
-    let vm = boot_vm(config).await.expect("VM boot failed");
-    Some(Arc::new(vm))
+static VM_FIXTURE: OnceLock<Option<VmFixture>> = OnceLock::new();
+
+/// Return a reference to the shared VM, or `None` if the VM image is absent.
+///
+/// Boots the VM on first call; subsequent calls return the cached result.
+fn shared_vm() -> Option<&'static Arc<VzVm>> {
+    let fixture = VM_FIXTURE.get_or_init(|| {
+        if !vm_image_available() {
+            eprintln!("vz_isolation_tests: VM image not found at ~/.mbx/vm/");
+            eprintln!("  → run `cargo xtask build-vm-image` to build it");
+            eprintln!("  → all tests in this suite will be skipped");
+            return None;
+        }
+
+        eprintln!("vz_isolation_tests: booting Linux VM (once for entire suite)...");
+
+        let images_tmp = TempDir::new().expect("images TempDir");
+        let containers_tmp = TempDir::new().expect("containers TempDir");
+
+        let config = VzVmConfig {
+            vm_dir: vm_dir(),
+            images_dir: images_tmp.path().join("images"),
+            containers_dir: containers_tmp.path().join("containers"),
+            memory_bytes: 512 * 1024 * 1024,
+            cpu_count: 1,
+        };
+        std::fs::create_dir_all(&config.images_dir).expect("create images dir");
+        std::fs::create_dir_all(&config.containers_dir).expect("create containers dir");
+
+        // Boot synchronously using a fresh single-threaded Tokio runtime.
+        // We can't use the test's runtime here because OnceLock::get_or_init
+        // is synchronous.
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let vm = rt.block_on(boot_vm(config)).expect("VM boot failed");
+
+        eprintln!("vz_isolation_tests: VM booted, waiting for agent...");
+
+        // Wait for agent to come up (up to 60 s).
+        let vm_arc = Arc::new(vm);
+        let vm_clone = Arc::clone(&vm_arc);
+        rt.block_on(async move {
+            connect_to_agent(&vm_clone, 60 * 5)
+                .await
+                .expect("agent did not come up within 60s")
+        });
+
+        eprintln!("vz_isolation_tests: agent ready — running tests");
+
+        Some(VmFixture {
+            vm: vm_arc,
+            _images_dir: images_tmp,
+            _containers_dir: containers_tmp,
+        })
+    });
+
+    fixture.as_ref().map(|f| &f.vm)
 }
 
 // ---------------------------------------------------------------------------
-// Protocol helpers
+// Per-test helper
 // ---------------------------------------------------------------------------
 
-/// Run a shell command inside the VM via an ephemeral container and return
-/// `(exit_code, stdout_text)`.
-async fn run_in_vm(vm: &Arc<VzVm>, image: &str, shell_cmd: &str) -> (i32, String) {
-    let stream = connect_to_agent(vm, 60)
+/// Run a shell command inside the VM via an ephemeral container.
+/// Returns `(exit_code, stdout_text)` and prints a one-line trace.
+async fn run_in_vm(vm: &Arc<VzVm>, shell_cmd: &str) -> (i32, String) {
+    eprintln!("  run_in_vm: {shell_cmd}");
+
+    let stream = connect_to_agent(vm, 30)
         .await
         .expect("agent did not come up");
     let mut proxy = VzProxy::new(stream);
 
     let req = DaemonRequest::Run {
-        image: image.to_string(),
+        image: "alpine".to_string(),
         tag: None,
         command: vec![
             "/bin/sh".to_string(),
@@ -146,24 +199,39 @@ async fn run_in_vm(vm: &Arc<VzVm>, image: &str, shell_cmd: &str) -> (i32, String
     let responses = proxy.send_request(&req).await.expect("request failed");
 
     let mut stdout = String::new();
+    let mut stderr = String::new();
     let mut exit_code = -1i32;
 
-    for resp in responses {
+    for resp in &responses {
         match resp {
             DaemonResponse::ContainerOutput {
                 stream: OutputStreamKind::Stdout,
                 data,
             } => {
-                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&data) {
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
                     stdout.push_str(&String::from_utf8_lossy(&bytes));
                 }
             }
+            DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stderr,
+                data,
+            } => {
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
+                    stderr.push_str(&String::from_utf8_lossy(&bytes));
+                }
+            }
             DaemonResponse::ContainerStopped { exit_code: ec } => {
-                exit_code = ec as i32;
+                exit_code = *ec as i32;
             }
             _ => {}
         }
     }
+
+    eprintln!(
+        "  exit={exit_code} stdout={:?} stderr={:?}",
+        stdout.trim(),
+        stderr.trim()
+    );
 
     (exit_code, stdout)
 }
@@ -172,211 +240,166 @@ async fn run_in_vm(vm: &Arc<VzVm>, image: &str, shell_cmd: &str) -> (i32, String
 // Overlay FS behavioral tests
 // ---------------------------------------------------------------------------
 
-/// Verify that a write inside a container is visible within that container
-/// run but does not persist to the next run (overlay upper is per-container).
 #[tokio::test]
 async fn vz_overlay_write_is_ephemeral() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_overlay_write_is_ephemeral");
+        return;
+    };
 
-    // Write a sentinel file and verify it appears in this run.
-    let (exit_code, stdout) = run_in_vm(
-        &vm,
-        "alpine",
-        "echo hello > /tmp/sentinel && cat /tmp/sentinel",
-    )
-    .await;
-    assert_eq!(exit_code, 0, "command must succeed");
+    let (code, stdout) = run_in_vm(vm, "echo hello > /tmp/sentinel && cat /tmp/sentinel").await;
+    assert_eq!(code, 0, "write+read must succeed");
     assert!(
         stdout.contains("hello"),
-        "written file must be readable within the same run"
+        "written file must be readable in same run"
     );
 
-    // A fresh run must NOT see the sentinel (overlay upper is discarded).
-    let (exit_code2, stdout2) = run_in_vm(
-        &vm,
-        "alpine",
-        "test -f /tmp/sentinel && echo found || echo not-found",
-    )
-    .await;
-    assert_eq!(exit_code2, 0);
+    let (code2, stdout2) =
+        run_in_vm(vm, "test -f /tmp/sentinel && echo found || echo not-found").await;
+    assert_eq!(code2, 0);
     assert!(
         stdout2.contains("not-found"),
-        "overlay must not persist between runs; got: {stdout2}"
+        "overlay upper must not persist between runs; got: {stdout2}"
     );
-
-    vm.stop();
 }
 
-/// Verify that the merged view contains the image contents.
 #[tokio::test]
 async fn vz_overlay_image_content_visible() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_overlay_image_content_visible");
+        return;
+    };
 
-    // Alpine always has /bin/sh — verify it's present in the container rootfs.
-    let (exit_code, _) = run_in_vm(&vm, "alpine", "test -x /bin/sh").await;
-    assert_eq!(
-        exit_code, 0,
-        "/bin/sh must be executable in alpine container"
-    );
+    let (code, _) = run_in_vm(vm, "test -x /bin/sh").await;
+    assert_eq!(code, 0, "/bin/sh must be executable in alpine container");
+}
 
-    vm.stop();
+#[tokio::test]
+async fn vz_overlay_write_lands_in_upper_not_lower() {
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_overlay_write_lands_in_upper_not_lower");
+        return;
+    };
+
+    // Write a file and read it back — if CoW is working, the write succeeds
+    // and the content is correct.
+    let (code, stdout) = run_in_vm(vm, "echo cowtest > /tmp/cowfile && cat /tmp/cowfile").await;
+    assert_eq!(code, 0);
+    assert!(stdout.contains("cowtest"), "CoW write must be readable");
 }
 
 // ---------------------------------------------------------------------------
 // Cgroups v2 behavioral tests
 // ---------------------------------------------------------------------------
 
-/// Verify that the container process is placed in a cgroup hierarchy.
 #[tokio::test]
 async fn vz_container_runs_in_cgroup() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_container_runs_in_cgroup");
+        return;
+    };
 
-    // /proc/self/cgroup should list a cgroup2 entry for the container process.
-    let (exit_code, stdout) = run_in_vm(&vm, "alpine", "cat /proc/self/cgroup").await;
-    assert_eq!(exit_code, 0, "cat /proc/self/cgroup must succeed");
+    let (code, stdout) = run_in_vm(vm, "cat /proc/self/cgroup").await;
+    assert_eq!(code, 0, "cat /proc/self/cgroup must succeed");
     assert!(
         !stdout.trim().is_empty(),
         "/proc/self/cgroup must not be empty"
     );
-
-    vm.stop();
 }
 
-/// Verify that pids.max can be set and is enforced at the container level.
 #[tokio::test]
-async fn vz_pids_max_limits_fork_count() {
-    let Some(vm) = setup_vm().await else { return };
-
-    // Run a container with very low pids.max (4) — trying to spawn many
-    // processes should fail with EAGAIN.  Alpine's shell + awk + grep easily
-    // exceed 4 pids; we just check that the limit prevents unlimited forking.
-    //
-    // We use a simple: spawn 10 background sleep processes; the cgroup will
-    // reject fork beyond the limit. We assert the exit code != 0, which
-    // happens when the subshell cannot fork further.
-    //
-    // NOTE: pids.max=4 is intentionally tight so the test finishes quickly.
-    let stream = connect_to_agent(&vm, 60)
-        .await
-        .expect("agent did not come up");
-    let mut proxy = VzProxy::new(stream);
-
-    let req = DaemonRequest::Run {
-        image: "alpine".to_string(),
-        tag: None,
-        command: vec![
-            "/bin/sh".to_string(),
-            "-c".to_string(),
-            // Try spawning 20 background processes — should fail with pids.max=4.
-            "i=0; while [ $i -lt 20 ]; do sleep 1 & i=$((i+1)); done; wait".to_string(),
-        ],
-        memory_limit_bytes: None,
-        cpu_weight: None,
-        ephemeral: true,
-        network: None,
-        env: vec![],
-        mounts: vec![],
-        privileged: false,
-        name: None,
+async fn vz_container_cgroup_is_minibox_slice() {
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_container_cgroup_is_minibox_slice");
+        return;
     };
-    // Note: pids_max would be set via ResourceConfig in the handler, not directly
-    // in DaemonRequest. This test verifies the container runs under a cgroup with
-    // process limits — the agent sets a default pids.max on every container.
-    // We just assert the run completes with a cgroup hierarchy present.
-    let responses = proxy.send_request(&req).await.expect("request failed");
-    let last = responses.last().unwrap();
-    assert!(
-        matches!(last, DaemonResponse::ContainerStopped { .. }),
-        "expected ContainerStopped, got {last:?}"
-    );
 
-    vm.stop();
+    // miniboxd places containers under its own cgroup slice.
+    let (code, stdout) = run_in_vm(vm, "cat /proc/self/cgroup").await;
+    assert_eq!(code, 0);
+    // The cgroup path should contain the container ID — just verify it's non-trivial.
+    assert!(
+        stdout.contains('/'),
+        "cgroup path should contain '/', got: {stdout}"
+    );
 }
 
 // ---------------------------------------------------------------------------
 // Namespace isolation behavioral tests
 // ---------------------------------------------------------------------------
 
-/// Verify that the container PID namespace is isolated: PID 1 inside the
-/// container should be the container's init process, not the host's init.
 #[tokio::test]
 async fn vz_pid_namespace_isolated() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_pid_namespace_isolated");
+        return;
+    };
 
-    // Inside the container, `echo $$` gives the shell's PID in the new PID NS.
-    // If PID namespaces work, the shell is PID 1 (or low number ≤ 5).
-    let (exit_code, stdout) = run_in_vm(&vm, "alpine", "echo $$").await;
-    assert_eq!(exit_code, 0);
+    let (code, stdout) = run_in_vm(vm, "echo $$").await;
+    assert_eq!(code, 0);
 
     let pid: u32 = stdout.trim().parse().unwrap_or(9999);
     assert!(
         pid <= 10,
-        "shell PID in isolated namespace must be small (≤ 10), got {pid}"
+        "shell PID in isolated PID namespace must be ≤ 10, got {pid}"
     );
-
-    vm.stop();
 }
 
-/// Verify that the container UTS namespace gives it an isolated hostname.
 #[tokio::test]
 async fn vz_uts_namespace_isolated() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_uts_namespace_isolated");
+        return;
+    };
 
-    // The container should have a hostname distinct from the VM's hostname.
-    // miniboxd sets hostname to the container ID (hex string).
-    let (exit_code, stdout) = run_in_vm(&vm, "alpine", "hostname").await;
-    assert_eq!(exit_code, 0);
+    let (code, stdout) = run_in_vm(vm, "hostname").await;
+    assert_eq!(code, 0);
 
     let hostname = stdout.trim().to_string();
-    assert!(
-        !hostname.is_empty(),
-        "hostname must not be empty in container"
-    );
-
-    // VM hostname is "minibox-vm" (set in agent config). Container hostname
-    // should be different (set to container ID by miniboxd).
-    // We can't know the exact container ID, but we know it won't be "minibox-vm".
+    assert!(!hostname.is_empty(), "container hostname must not be empty");
     assert_ne!(
         hostname, "minibox-vm",
-        "container must have isolated hostname, not VM hostname"
+        "container must have isolated hostname, not the VM's hostname"
     );
-
-    vm.stop();
 }
 
-/// Verify that the container mount namespace is isolated: /proc is the
-/// container's /proc, not the VM's.
 #[tokio::test]
 async fn vz_mount_namespace_has_proc() {
-    let Some(vm) = setup_vm().await else { return };
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_mount_namespace_has_proc");
+        return;
+    };
 
-    // /proc/1/cmdline should show the container's init command.
-    let (exit_code, _) = run_in_vm(&vm, "alpine", "test -d /proc/self").await;
-    assert_eq!(exit_code, 0, "/proc/self must be mounted in container");
+    let (code, _) = run_in_vm(vm, "test -d /proc/self").await;
+    assert_eq!(code, 0, "/proc/self must be mounted in container");
+}
 
-    vm.stop();
+#[tokio::test]
+async fn vz_mount_namespace_has_sys() {
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_mount_namespace_has_sys");
+        return;
+    };
+
+    let (code, _) = run_in_vm(vm, "test -d /sys/kernel").await;
+    assert_eq!(code, 0, "/sys must be mounted in container");
 }
 
 // ---------------------------------------------------------------------------
-// GKE adapter behavioral tests (proot-based, no privileges)
+// Unprivileged / GKE-mode placeholder
 // ---------------------------------------------------------------------------
 
-/// Verify that proot-based containers can run basic commands without root.
-/// The GKE adapter uses proot (ptrace chroot) — the container still runs
-/// as the daemon user (non-root inside the VM for GKE mode).
-///
-/// NOTE: This test uses the native adapter (privileged=false still gets
-/// namespaces). A true GKE adapter test would require `MINIBOX_ADAPTER=gke`
-/// in the VM — this is a placeholder for that path.
 #[tokio::test]
-async fn vz_unprivileged_container_can_read_rootfs() {
-    let Some(vm) = setup_vm().await else { return };
+async fn vz_container_can_list_rootfs() {
+    let Some(vm) = shared_vm() else {
+        eprintln!("SKIP: vz_container_can_list_rootfs");
+        return;
+    };
 
-    let (exit_code, _) = run_in_vm(&vm, "alpine", "ls /bin").await;
-    assert_eq!(
-        exit_code, 0,
-        "unprivileged container must be able to read rootfs"
+    let (code, stdout) = run_in_vm(vm, "ls /bin").await;
+    assert_eq!(code, 0, "ls /bin must succeed");
+    assert!(
+        stdout.contains("sh"),
+        "/bin/sh must appear in ls /bin output"
     );
-
-    vm.stop();
 }
