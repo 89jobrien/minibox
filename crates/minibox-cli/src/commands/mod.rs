@@ -4,6 +4,7 @@
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
 
+pub mod load;
 pub mod ps;
 pub mod pull;
 pub mod rm;

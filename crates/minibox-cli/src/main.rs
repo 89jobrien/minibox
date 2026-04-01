@@ -119,6 +119,20 @@ enum Commands {
         #[arg(short, long, default_value = "latest")]
         tag: String,
     },
+
+    /// Load an image from a local OCI tar archive
+    Load {
+        /// Path to the OCI image tar archive
+        path: String,
+
+        /// Image name (default: derived from filename without extension)
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Image tag (default: latest)
+        #[arg(long, default_value = "latest")]
+        tag: String,
+    },
 }
 
 /// Entry point.  Parses arguments, dispatches to the appropriate command
@@ -170,6 +184,11 @@ async fn main() -> Result<()> {
         Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
 
         Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
+
+        Commands::Load { path, name, tag } => {
+            let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
+            commands::load::execute(path, name, tag, socket_path).await
+        }
     }
 }
 
