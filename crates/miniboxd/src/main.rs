@@ -460,7 +460,7 @@ async fn main() -> Result<()> {
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
-                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
             })
         }
     };

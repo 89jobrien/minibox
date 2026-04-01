@@ -364,7 +364,7 @@ async fn start_vz(
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        image_loader: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
