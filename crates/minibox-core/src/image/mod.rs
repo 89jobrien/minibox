@@ -7,6 +7,7 @@
 //!
 //! [`ImageStore`] is the main entry point.
 
+pub mod dockerfile;
 pub mod layer;
 pub mod manifest;
 pub mod reference;
