@@ -41,7 +41,7 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
     cmd!(sh, "minibox load {image_path}").run()?;
 
     // 3. Run — privileged, ephemeral, stream output
-    cmd!(sh, "minibox run --privileged mbx-tester /run-tests.sh").run()?;
+    cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh").run()?;
 
     Ok(())
 }
