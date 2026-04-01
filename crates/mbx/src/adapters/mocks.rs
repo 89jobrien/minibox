@@ -122,7 +122,8 @@ impl MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(image.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == image && t == tag)
     }
 }
 
@@ -134,7 +135,8 @@ impl ImageRegistry for MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(name.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == name && t == tag)
     }
 
     /// Simulate an image pull.
