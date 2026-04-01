@@ -196,12 +196,15 @@ impl ImageRegistry for ColimaRegistry {
     ///
     /// Runs `nerdctl image inspect <name>:<tag>` and treats a non-zero exit code as absent.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        // nerdctl stores Docker Hub official images without the "library/" prefix.
-        // Strip it so `library/mbx-tester` → `mbx-tester` for the inspect call.
-        let nerdctl_name = name.strip_prefix("library/").unwrap_or(name);
-        let full_name = format!("{nerdctl_name}:{tag}");
-        self.lima_exec(&["nerdctl", "image", "inspect", &full_name])
+        // Strip "library/" prefix — nerdctl and docker both omit it for official images.
+        let short_name = name.strip_prefix("library/").unwrap_or(name);
+        let full_name = format!("{short_name}:{tag}");
+        // Try docker first (Docker runtime), fall back to nerdctl (containerd runtime).
+        self.lima_exec(&["docker", "image", "inspect", &full_name])
             .is_ok()
+            || self
+                .lima_exec(&["nerdctl", "image", "inspect", &full_name])
+                .is_ok()
     }
 
     /// Pull the image via `nerdctl` inside the VM and return its metadata.

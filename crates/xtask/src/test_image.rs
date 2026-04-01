@@ -37,9 +37,14 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
     let home = std::env::var("HOME").context("HOME not set")?;
     let image_path = format!("{home}/.mbx/test-image/mbx-tester.tar");
 
-    // 2. Load directly into Colima's containerd via colima ssh (bypasses daemon auth)
-    println!("$ colima ssh -- nerdctl load -i {image_path}");
-    cmd!(sh, "colima ssh -- nerdctl load -i {image_path}").run()?;
+    // 2. Load directly into Colima via colima ssh.
+    // Try docker load first (Docker runtime), fall back to nerdctl (containerd runtime).
+    println!("$ colima ssh -- docker load -i {image_path}");
+    let load_result = cmd!(sh, "colima ssh -- docker load -i {image_path}").run();
+    if load_result.is_err() {
+        println!("docker load failed, trying nerdctl...");
+        cmd!(sh, "colima ssh -- nerdctl load -i {image_path}").run()?;
+    }
 
     // 3. Run — privileged, ephemeral, stream output
     cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh").run()?;
