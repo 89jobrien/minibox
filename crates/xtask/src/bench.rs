@@ -90,6 +90,24 @@ pub fn merge_bench_suites(dst_path: &str, src_path: &str) -> Result<()> {
 }
 
 /// Patch git_sha, append to bench.jsonl, and update latest.json.
+/// Remove suites where every test has `iterations == 0` (fixture setup failed or
+/// daemon was unreachable). These produce no signal and pollute baselines.
+/// Returns the number of suites dropped.
+fn strip_zero_iteration_suites(json: &mut serde_json::Value) -> usize {
+    let Some(suites) = json["suites"].as_array_mut() else {
+        return 0;
+    };
+    let before = suites.len();
+    suites.retain(|suite| {
+        suite["tests"].as_array().is_some_and(|tests| {
+            tests
+                .iter()
+                .any(|t| t["iterations"].as_u64().unwrap_or(0) > 0)
+        })
+    });
+    before - suites.len()
+}
+
 pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
     let content = fs::read_to_string(json_path).context("read bench JSON")?;
     let mut json: serde_json::Value =
@@ -99,6 +117,10 @@ pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
         if !sha.is_empty() {
             json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
         }
+    }
+    let dropped = strip_zero_iteration_suites(&mut json);
+    if dropped > 0 {
+        eprintln!("bench: dropped {dropped} suite(s) with zero iterations (fixture failures)");
     }
     let line = serde_json::to_string(&json).context("re-serialise failed")?;
     let jsonl_path = "bench/results/bench.jsonl";
@@ -295,22 +317,34 @@ pub fn bench_sync() -> Result<()> {
     let vps_content = fs::read_to_string(&tmp).context("read tmp vps bench.jsonl")?;
     let _ = fs::remove_file(&tmp);
 
-    let new_entries: Vec<&str> = vps_content
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .filter(|l| {
-            serde_json::from_str::<serde_json::Value>(l)
-                .ok()
-                .and_then(|v| v["metadata"]["timestamp"].as_str().map(|s| s.to_string()))
-                .map(|ts| !existing_timestamps.contains(&ts))
-                .unwrap_or(false)
-        })
-        .collect();
+    // Parse new VPS entries, dedup by timestamp, and drop zero-iteration suites.
+    let mut new_lines: Vec<String> = Vec::new();
+    let mut skipped_zero = 0usize;
+    for l in vps_content.lines().filter(|l| !l.trim().is_empty()) {
+        let Ok(mut v) = serde_json::from_str::<serde_json::Value>(l) else {
+            continue;
+        };
+        let ts = v["metadata"]["timestamp"]
+            .as_str()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        if ts.is_empty() || existing_timestamps.contains(&ts) {
+            continue;
+        }
+        let dropped = strip_zero_iteration_suites(&mut v);
+        skipped_zero += dropped;
+        new_lines.push(serde_json::to_string(&v).context("re-serialise VPS entry")?);
+    }
 
-    if new_entries.is_empty() {
+    if new_lines.is_empty() {
         eprintln!(
-            "bench-sync: already up to date ({} existing entries)",
-            existing_timestamps.len()
+            "bench-sync: already up to date ({} existing entries{})",
+            existing_timestamps.len(),
+            if skipped_zero > 0 {
+                format!(", {skipped_zero} zero-iter suite(s) dropped")
+            } else {
+                String::new()
+            }
         );
         return Ok(());
     }
@@ -320,13 +354,18 @@ pub fn bench_sync() -> Result<()> {
         .append(true)
         .open(local_path)
         .context("open bench.jsonl for append")?;
-    for entry in &new_entries {
+    for entry in &new_lines {
         writeln!(file, "{entry}").context("append entry to bench.jsonl")?;
     }
 
     eprintln!(
-        "✓ bench-sync: merged {} new VPS entries into bench/results/bench.jsonl",
-        new_entries.len()
+        "✓ bench-sync: merged {} new VPS entries into bench/results/bench.jsonl{}",
+        new_lines.len(),
+        if skipped_zero > 0 {
+            format!(" ({skipped_zero} zero-iter suite(s) stripped)")
+        } else {
+            String::new()
+        }
     );
     Ok(())
 }
