@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
-    io::Write,
+    io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
 };
 use xshell::{Shell, cmd};
@@ -11,6 +11,38 @@ pub const VPS_HOST: &str = "jobrien-vm";
 const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
 
 // ── Local bench ───────────────────────────────────────────────────────────────
+
+/// Spawn `bin` with `args`, stream each line to stderr in real time, and return
+/// the last line that ends with `.json` (the output path printed by minibox-bench).
+///
+/// Returns `Ok(None)` if the process succeeded but printed no `.json` line.
+/// Returns `Err` if the process exits non-zero.
+fn stream_bench_last_json(bin: &str, args: &[&str]) -> Result<Option<String>> {
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .with_context(|| format!("spawn {bin}"))?;
+
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let reader = BufReader::new(stdout);
+
+    let mut last_json: Option<String> = None;
+    for line in reader.lines() {
+        let line = line.context("read bench stdout")?;
+        eprintln!("{line}");
+        if line.ends_with(".json") {
+            last_json = Some(line);
+        }
+    }
+
+    let status = child.wait().context("wait bench")?;
+    if !status.success() {
+        bail!("{bin} exited with {status}");
+    }
+    Ok(last_json)
+}
 
 /// Run benchmark binary (local, requires Linux + miniboxd running) and save results.
 pub fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
@@ -26,16 +58,9 @@ pub fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
         args.push("--profile");
     }
 
-    let output = cmd!(sh, "./target/release/minibox-bench {args...}")
-        .read()
-        .context("bench binary failed")?;
-
-    let json_path = output
-        .lines()
-        .last()
-        .filter(|l| l.ends_with(".json"))
-        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?
-        .to_string();
+    let json_path = stream_bench_last_json("./target/release/minibox-bench", &args)
+        .context("bench binary failed")?
+        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?;
 
     let micro_args: Vec<&str> = vec![
         "--out-dir",
@@ -47,10 +72,10 @@ pub fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
         "--no-cold",
         "--no-warm",
     ];
-    if let Ok(micro_out) = cmd!(sh, "./target/release/minibox-bench {micro_args...}").read() {
-        if let Some(micro_path) = micro_out.lines().last().filter(|l| l.ends_with(".json")) {
-            merge_bench_suites(&json_path, micro_path).ok();
-        }
+    if let Ok(Some(micro_path)) =
+        stream_bench_last_json("./target/release/minibox-bench", &micro_args)
+    {
+        merge_bench_suites(&json_path, &micro_path).ok();
     }
 
     save_bench_results(sh, &json_path)
