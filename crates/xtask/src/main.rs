@@ -21,6 +21,7 @@ mod bench_types;
 mod cleanup;
 mod flamegraph;
 mod gates;
+mod test_image;
 mod vm_image;
 
 fn main() -> Result<()> {
@@ -68,6 +69,10 @@ fn main() -> Result<()> {
             let vm_dir = vm_image::default_vm_dir();
             vm_image::build_vm_image(&vm_dir, force)
         }
+        Some("build-test-image") => {
+            let force = env::args().any(|a| a == "--force");
+            test_image::build_test_image(force)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -93,6 +98,7 @@ fn main() -> Result<()> {
                 "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
             );
             eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent");
+            eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
             Ok(())
         }
     }
