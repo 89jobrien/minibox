@@ -37,8 +37,9 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
     let home = std::env::var("HOME").context("HOME not set")?;
     let image_path = format!("{home}/.mbx/test-image/mbx-tester.tar");
 
-    // 2. Load into minibox
-    cmd!(sh, "minibox load {image_path}").run()?;
+    // 2. Load directly into Colima's containerd via colima ssh (bypasses daemon auth)
+    println!("$ colima ssh -- nerdctl load -i {image_path}");
+    cmd!(sh, "colima ssh -- nerdctl load -i {image_path}").run()?;
 
     // 3. Run — privileged, ephemeral, stream output
     cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh").run()?;
