@@ -12,6 +12,11 @@ path = "src/lib.rs"
 name = "miniboxd"
 path = "src/main.rs"
 
+[features]
+default = ["metrics", "otel"]
+metrics = ["daemonbox/metrics"]
+otel    = ["daemonbox/otel"]
+
 [dependencies]
 daemonbox = { workspace = true }
 tokio = { workspace = true }

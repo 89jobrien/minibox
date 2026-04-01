@@ -307,8 +307,20 @@ impl daemonbox::server::ServerListener for UnixServerListener {
 #[tokio::main]
 async fn main() -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
-    let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
-    let _otel_guard = daemonbox::telemetry::traces::init_tracing(otlp_endpoint.as_deref());
+    #[cfg(feature = "otel")]
+    let _otel_guard = {
+        let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
+        daemonbox::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
+    };
+    #[cfg(not(feature = "otel"))]
+    {
+        use tracing_subscriber::EnvFilter;
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                EnvFilter::from_default_env().add_directive("miniboxd=info".parse().unwrap()),
+            )
+            .init();
+    }
 
     info!("miniboxd starting");
 
@@ -364,18 +376,23 @@ async fn main() -> Result<()> {
     info!("state loaded from disk");
 
     // ── Metrics ─────────────────────────────────────────────────────────
-    let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
-        .parse()
-        .context("parsing MINIBOX_METRICS_ADDR")?;
-
-    let metrics_recorder = Arc::new(daemonbox::telemetry::PrometheusMetricsRecorder::new());
-
-    let (_metrics_addr, _metrics_handle) =
-        daemonbox::telemetry::server::run_metrics_server(metrics_addr, metrics_recorder.clone())
-            .await
-            .context("starting metrics server")?;
-    info!(addr = %_metrics_addr, "metrics server listening");
+    #[cfg(feature = "metrics")]
+    let metrics_recorder = {
+        let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
+            .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
+            .parse()
+            .context("parsing MINIBOX_METRICS_ADDR")?;
+        let recorder = Arc::new(daemonbox::telemetry::PrometheusMetricsRecorder::new());
+        let (_addr, _handle) =
+            daemonbox::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
+                .await
+                .context("starting metrics server")?;
+        info!(addr = %_addr, "metrics server listening");
+        recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+    };
+    #[cfg(not(feature = "metrics"))]
+    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
+        Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new());
 
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;

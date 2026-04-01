@@ -8,50 +8,54 @@
 
 ## 1. System Overview
 
+Shows the four-layer module structure of the `agentbox/` Go module: Binary (CLI entry points), Orchestration (council/meta-agent logic + tool adapters + SDK runner), Infrastructure (LLM provider, git context, JSONL output, pub/sub broker), and Domain (shared interfaces and types). Each layer depends only on layers below it; the Domain layer has no outward dependencies.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          agentbox/ Go module                           │
-│                                                                        │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                        Binary Layer                                │ │
-│  │  ┌──────────────────────┐  ┌───────────────────────────────────┐  │ │
-│  │  │   cmd/agentbox/      │  │   cmd/mbx-commit-msg/             │  │ │
-│  │  │   • council           │  │   • standalone commit-msg tool    │  │ │
-│  │  │   • meta-agent        │  │                                   │  │ │
-│  │  └──────────┬───────────┘  └──────────────┬────────────────────┘  │ │
-│  └─────────────┼─────────────────────────────┼───────────────────────┘ │
-│                │                             │                         │
-│  ┌─────────────▼─────────────────────────────▼───────────────────────┐ │
-│  │                     Orchestration Layer                            │ │
+┌───────────────────────────────────────────────────────────────────────┐
+│                          agentbox/ Go module                          │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                        Binary Layer                              │ │
+│  │  ┌───────────────────────┐  ┌─────────────────────────────────┐  │ │
+│  │  │   cmd/agentbox/       │  │   cmd/mbx-commit-msg/           │  │ │
+│  │  │   • council           │  │   • standalone commit-msg tool  │  │ │
+│  │  │   • meta-agent        │  │                                 │  │ │
+│  │  └──────────┬────────────┘  └──────────────┬──────────────────┘  │ │
+│  └─────────────┼──────────────────────────────┼─────────────────────┘ │
+│                │                              │                       │
+│  ┌─────────────▼──────────────────────────────▼─────────────────────┐ │
+│  │                     Orchestration Layer                          │ │
 │  │  ┌─────────────────────┐  ┌──────────────────┐  ┌──────────────┐ │ │
-│  │  │ orchestrator/       │  │ tools/            │  │ agent/       │ │ │
-│  │  │ • Council           │  │ • CommitMsg       │  │ • SDKRunner  │ │ │
-│  │  │ • MetaAgent         │  │                   │  │              │ │ │
-│  │  └────────┬────────────┘  └────────┬─────────┘  └──────┬───────┘ │ │
-│  └───────────┼────────────────────────┼────────────────────┼─────────┘ │
-│              │                        │                    │           │
-│  ┌───────────▼────────────────────────▼────────────────────▼─────────┐ │
-│  │                     Infrastructure Layer                          │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │ │
-│  │  │ llm/     │  │ context/ │  │ output/  │  │ pubsub/          │ │ │
-│  │  │ Anthropic│  │ Git CLI  │  │ JSONL    │  │ ChannelBroker    │ │ │
-│  │  │ Chain    │  │ Rules    │  │ Report   │  │ (Go channels)    │ │ │
-│  │  │ Retry    │  │ Diff     │  │ Dual     │  │                  │ │ │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘ │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                        │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                        Domain Layer                                │ │
-│  │  domain/types.go      Message, AgentConfig, AgentResult, AgentRun │ │
-│  │  domain/interfaces.go AgentRunner, LlmProvider, MessageBroker,    │ │
-│  │                       ContextProvider, ResultWriter               │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+│  │  │ orchestrator/       │  │ tools/           │  │ agent/       │ │ │
+│  │  │ • Council           │  │ • CommitMsg      │  │ • SDKRunner  │ │ │
+│  │  │ • MetaAgent         │  │                  │  │              │ │ │
+│  │  └────────┬────────────┘  └────────┬─────────┘  └───────┬──────┘ │ │
+│  └───────────┼────────────────────────┼────────────────────┼────────┘ │
+│              │                        │                    │          │
+│  ┌───────────▼────────────────────────▼────────────────────▼────────┐ │
+│  │                     Infrastructure Layer                         │ │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │ │
+│  │  │ llm/     │  │ context/ │  │ output/  │  │ pubsub/          │  │ │
+│  │  │ Anthropic│  │ Git CLI  │  │ JSONL    │  │ ChannelBroker    │  │ │
+│  │  │ Chain    │  │ Rules    │  │ Report   │  │ (Go channels)    │  │ │
+│  │  │ Retry    │  │ Diff     │  │ Dual     │  │                  │  │ │
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘  │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                        Domain Layer                              │ │
+│  │  domain/types.go     Message, AgentConfig, AgentResult, AgentRun │ │
+│  │  domain/interfaces.go AgentRunner, LlmProvider, MessageBroker,   │ │
+│  │                       ContextProvider, ResultWriter              │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 2. Hexagonal Architecture — Ports and Adapters
+
+Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go interfaces (ports). Driving adapters on the left (`cmd/agentbox`, `cmd/mbx-commit-msg`, future HTTP/gRPC) invoke the core. Driven adapters on the right implement each port: `ClaudeSDKRunner` for agent execution, `AnthropicProvider` for LLM calls, `ChannelBroker` for pub/sub, `GitProvider` for branch context, and `DualWriter` for JSONL + Markdown output. Swapping any adapter requires no changes to the domain core.
 
 ```
                     ┌──────────────────────────────────┐
@@ -104,6 +108,8 @@
 ---
 
 ## 3. Council Data Flow
+
+End-to-end sequence for `agentbox council`. After parsing flags, three adapters are wired in parallel: SDK runner, git context provider, and output writer. `BranchContext()` runs `git log`/`git diff` to build the review payload. Three reviewer roles (Strict Critic, Creative Explorer, General Analyst) each receive the same branch context and run sequentially as independent SDK queries with read-only tool access. Their scored outputs feed a final `RunSynthesis` call that produces a weighted verdict, which is written to both the JSONL telemetry log and a per-SHA Markdown report.
 
 ```
                           User: agentbox council --base main --mode core
@@ -193,6 +199,8 @@
 ---
 
 ## 4. Meta-Agent Data Flow
+
+Three-phase pipeline for `agentbox meta-agent`. Phase 1 (Design): a designer SDK query reads the repo and outputs a JSON array of 2–5 specialized sub-agents, each with a distinct role, prompt, and tool list; malformed JSON falls back to a single analyst. Phase 2 (Parallel Execution): each sub-agent runs in its own goroutine with an independent SDK query; results are collected via a channel and `WaitGroup`. Phase 3 (Synthesis): all sub-agent outputs are merged by a final SDK call that produces a deduplicated, ranked report, then written to disk.
 
 ```
           User: agentbox meta-agent "Find memory leaks in async handlers"
@@ -288,6 +296,8 @@
 
 ## 5. LLM Provider Stack
 
+Shows the two-layer resilience wrapper around `AnthropicProvider`. `RetryingProvider` wraps any inner provider and retries with exponential backoff (1s, 2s, …, max 30s) before giving up. `FallbackChain` tries a prioritized list of providers in order, returning the first success and surfacing a combined error only if all fail. `AnthropicProvider` is the concrete leaf: it calls `anthropic.Client.Messages.New()`, extracts text blocks, and returns a `CompletionResponse{Text, Provider}`.
+
 ```
                           CompletionRequest
                           {Prompt, System, MaxTokens}
@@ -345,6 +355,8 @@
 
 ## 6. Agent SDK Execution Model
 
+Illustrates how `ClaudeSDKRunner` translates an `AgentConfig` into a running Claude Code subprocess. `configToQueryOptions` maps the config's tool list and system prompt into SDK query options; `claudecode.Query()` spawns the `claude` CLI as a child process communicating over NDJSON stdin/stdout. The model runs its own agentic loop (think → tool use → observe → respond). The runner iterates the message stream, collecting `ResultMessage` values until `ErrNoMore`, and returns a single `AgentResult`.
+
 ```
                          AgentConfig
                          {Name, Prompt, Tools, SystemPrompt}
@@ -395,6 +407,8 @@
 
 ## 7. Output Pipeline
 
+Shows the dual-write fan-out at the end of every orchestrator run. `WriteRun` appends a JSONL record (start + completion with `duration_s` and full `output`) to the append-only `~/.mbx/agent-runs.jsonl` file consumed by `dashboard.py` and standup scripts. `WriteReport` writes a human-readable Markdown file per run to `~/.mbx/ai-logs/` named by commit SHA and script type. Both paths are wired through `DualWriter`, which implements `ResultWriter` and delegates to `JSONLWriter` and `ReportWriter` respectively.
+
 ```
   Orchestrator completes
          │
@@ -443,6 +457,8 @@
 ---
 
 ## 8. Pub/Sub Topology (Tier A — In-Process)
+
+Describes `ChannelBroker`, the Tier A `MessageBroker` implementation. It maintains a `topics` map of string → `[]chan Message`. `Publish` is non-blocking: it attempts a channel send and silently drops messages to slow subscribers rather than blocking the publisher. `Subscribe` appends a new buffered channel (size 64) to a topic. `Close` closes all channels and clears the map. The lower half shows the Tier B upgrade path: replacing `ChannelBroker` with `NATSBroker` behind the same `domain.MessageBroker` interface requires no changes to orchestrators.
 
 ```
   Current state: ChannelBroker (Go channels, buffered 64)
@@ -498,6 +514,8 @@
 
 ## 9. Tool Allowlist Convention
 
+Documents which tools each orchestrator grants to SDK agents and how tool safety is enforced. All read-only orchestrators (council, commit-msg) are limited to `Read`, `Glob`, `Grep`. Meta-agent spawned sub-agents default to read-only but the designer LLM may grant `Bash`, `Write`, `Edit` for modifier agents. After `parseAgentPlan` parses the designer's JSON output, each requested tool is validated against a static allowlist; unknown tools are rejected and empty tool lists fall back to the read-only default. The sanitized tool list is passed to `ClaudeSDKRunner` via `WithAllowedTools`, which the `claude` CLI enforces at the subprocess level.
+
 ```
   Orchestrator                 Tools Granted           Permission Level
   ─────────────────────────── ────────────────────── ──────────────────
@@ -536,6 +554,8 @@
 ---
 
 ## 10. Commit Message Flow
+
+End-to-end sequence for `mbx-commit-msg`. The tool first verifies there is staged content (`git diff --cached`), collecting diff, stat, branch name, recent log, and working-tree status. If the diff exceeds 64 KB, only the stat summary is sent to reduce token cost. `CommitMsg.Generate()` calls the SDK with a conventional-commit prompt (type(scope): description, ≤72 chars, imperative mood). The generated message is printed to stdout; with `-c -y`, a `Co-Authored-By` trailer is appended and `git commit` runs automatically.
 
 ```
   User: mbx-commit-msg -a -c -y
@@ -604,6 +624,8 @@
 
 ## 11. Telemetry Record Format
 
+Shows the two-record lifecycle for each agent run in `agent-runs.jsonl`. A "running" record is written immediately at start (allowing crash detection by looking for runs with no matching "complete" record). A "complete" record is appended on success with `duration_s` and the full `output` text. The lower section shows the companion per-run Markdown report format written to `ai-logs/`: a frontmatter header (base, mode, date) followed by the full multi-role analysis and synthesis narrative.
+
 ```
   JSONL Record Lifecycle (agent-runs.jsonl):
 
@@ -654,6 +676,8 @@
 ---
 
 ## 12. Dependency Graph
+
+Maps all import relationships across the module. Two external dependencies: `anthropic-sdk-go` (used only in `internal/llm/`) and `claude-agent-sdk-go` (used only in `internal/agent/`). All other packages use only the Go standard library. The internal graph shows a strict DAG: both binaries import from the orchestration and infrastructure packages, which all converge downward on `internal/domain` — the only package with no outward dependencies. This structure prevents import cycles and ensures domain types are never coupled to infrastructure.
 
 ```
   External Dependencies:
@@ -711,6 +735,8 @@
 ---
 
 ## 13. Tier A → B → C Evolution
+
+Roadmap for agentbox's three deployment tiers. Tier A (current): a single Go binary runs all agents in-process using Go channels; output goes to `~/.mbx/` files. Tier B (future): `agentboxd` becomes a standalone daemon communicating with `miniboxd` over NATS; individual council/review/commit agents are separate processes dispatched by the daemon. Tier C (future): a capability registry stores agent manifests (inputs, outputs, tool allowlists) that can be auto-discovered via OCI labels or a NATS service registry, enabling dynamic agent composition without code changes.
 
 ```
   ┌────────────────────────────────────────────────────────────────────┐
