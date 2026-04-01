@@ -19,4 +19,18 @@ jobs:
       - name: install cargo-geiger
         run: cargo install cargo-geiger --locked
       - name: cargo geiger
-        run: cargo geiger -p mbx -p minibox-macros -p minibox-cli -p daemonbox 2>&1 || true
+        id: geiger
+        run: |
+          cargo geiger -p mbx -p minibox-macros -p minibox-cli -p daemonbox 2>&1 | tee geiger-report.txt
+          # Extract unsafe counts and write to job summary
+          echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: upload geiger report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geiger-report
+          path: geiger-report.txt
+          retention-days: 30

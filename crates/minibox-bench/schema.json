@@ -23,15 +23,21 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["name", "iterations", "durations_micros"],
+              "required": ["name", "iterations"],
               "properties": {
                 "name": {"type": "string"},
                 "iterations": {"type": "integer", "minimum": 0},
                 "durations_micros": {
                   "type": "array",
-                  "items": {"type": "integer", "minimum": 0}
+                  "items": {"type": "integer", "minimum": 0},
+                  "description": "Per-iteration durations in microseconds (populated for micro-scale suites)"
                 },
-                "unit": {"type": "string", "description": "Unit of durations_micros values: 'micros' (default) or 'nanos'"}
+                "durations_nanos": {
+                  "type": "array",
+                  "items": {"type": "integer", "minimum": 0},
+                  "description": "Per-iteration durations in nanoseconds (populated for nano-scale suites)"
+                },
+                "unit": {"type": "string", "description": "Unit of duration values: 'micros' or 'nanos'"}
               }
             }
           }

@@ -17,6 +17,25 @@ const BENCH_BIN: &str = "/home/dev/minibox/target/release/minibox-bench";
 ///
 /// Returns `Ok(None)` if the process succeeded but printed no `.json` line.
 /// Returns `Err` if the process exits non-zero.
+/// Return the path of the most recently modified `.json` file in `dir`,
+/// skipping `bench.jsonl` and `latest.json` which are managed separately.
+fn newest_json_in_dir(dir: &str) -> Option<String> {
+    let entries = fs::read_dir(dir).ok()?;
+    entries
+        .filter_map(|e| {
+            let e = e.ok()?;
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            if !name.ends_with(".json") || name == "latest.json" {
+                return None;
+            }
+            let modified = e.metadata().ok()?.modified().ok()?;
+            Some((modified, e.path().to_string_lossy().into_owned()))
+        })
+        .max_by_key(|(t, _)| *t)
+        .map(|(_, path)| path)
+}
+
 fn stream_bench_last_json(bin: &str, args: &[&str]) -> Result<Option<String>> {
     let mut child = Command::new(bin)
         .args(args)
@@ -60,7 +79,11 @@ pub fn bench(sh: &Shell, extra_args: &[String]) -> Result<()> {
 
     let json_path = stream_bench_last_json("./target/release/minibox-bench", &args)
         .context("bench binary failed")?
-        .ok_or_else(|| anyhow::anyhow!("bench binary did not print a .json path on stdout"))?;
+        .or_else(|| {
+            eprintln!("warn: bench binary did not print a .json path on stdout; falling back to newest file in {out_dir}");
+            newest_json_in_dir(out_dir)
+        })
+        .ok_or_else(|| anyhow::anyhow!("no .json output found in {out_dir}"))?;
 
     let micro_args: Vec<&str> = vec![
         "--out-dir",
@@ -142,6 +165,19 @@ pub fn save_bench_results(sh: &Shell, json_path: &str) -> Result<()> {
         if !sha.is_empty() {
             json["metadata"]["git_sha"] = serde_json::Value::String(sha.to_string());
         }
+    }
+    // Redact hostname before persisting to bench.jsonl.
+    if let Some(hostname) = json["metadata"]["hostname"].as_str() {
+        let token = if hostname.contains("vps")
+            || hostname.contains("vm")
+            || hostname.contains("runner")
+            || hostname.contains("ci")
+        {
+            "vps"
+        } else {
+            "local"
+        };
+        json["metadata"]["hostname"] = serde_json::Value::String(token.to_string());
     }
     let dropped = strip_zero_iteration_suites(&mut json);
     if dropped > 0 {
@@ -284,10 +320,12 @@ rm -rf "$OUT_DIR"
                 sh,
                 "git add bench/results/bench.jsonl bench/results/latest.json"
             )
-            .ignore_status()
-            .run()?;
+            .run()
+            .context("git add bench results")?;
             let msg = format!("bench: vps results @ {sha_short}");
-            cmd!(sh, "git commit -m {msg}").ignore_status().run()?;
+            cmd!(sh, "git commit -m {msg}")
+                .run()
+                .context("git commit bench results")?;
             eprintln!("✓ bench results committed");
         }
         if do_push {
