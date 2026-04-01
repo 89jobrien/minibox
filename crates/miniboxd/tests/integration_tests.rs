@@ -21,7 +21,8 @@
 #![cfg(target_os = "linux")]
 
 use mbx::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NoopNetwork, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, NoopNetwork,
+    OverlayFilesystem,
 };
 use mbx::image::ImageStore;
 use mbx::protocol::DaemonResponse;
@@ -30,6 +31,37 @@ use miniboxd::state::DaemonState;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
+use tokio::sync::mpsc;
+
+async fn handle_run_once(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let (tx, mut rx) = mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    rx.recv().await.expect("handler sent no response")
+}
 
 /// Helper to create real infrastructure dependencies with temporary storage.
 fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
@@ -38,15 +70,17 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
     let image_store = ImageStore::new(&images_dir).expect("failed to create image store");
     let state = Arc::new(DaemonState::new(image_store, temp_dir.path()));
 
+    let docker_registry = Arc::new(
+        DockerHubRegistry::new(Arc::clone(&state.image_store)).expect("failed to create registry"),
+    );
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(
-            DockerHubRegistry::new(Arc::clone(&state.image_store))
-                .expect("failed to create registry"),
-        ),
+        registry: Arc::clone(&docker_registry) as _,
+        ghcr_registry: Arc::clone(&docker_registry) as _,
         filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
         network_provider: Arc::new(NoopNetwork::new()),
+        image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
@@ -157,13 +191,12 @@ async fn test_run_simple_container() {
     .await;
 
     // Run a simple echo command
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec!["/bin/echo".to_string(), "hello from container".to_string()],
         None,
         None,
-        false,
         state.clone(),
         deps,
     )
@@ -200,7 +233,7 @@ async fn test_run_container_with_resource_limits() {
     .await;
 
     // Run with strict resource limits
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec![
@@ -210,7 +243,6 @@ async fn test_run_container_with_resource_limits() {
         ],
         Some(128 * 1024 * 1024), // 128MB memory limit
         Some(250),               // CPU weight 250 (quarter of default)
-        false,
         state.clone(),
         deps,
     )
@@ -255,13 +287,12 @@ async fn test_container_removal_cleanup() {
     .await;
 
     // Create and run container
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec!["/bin/true".to_string()],
         None,
         None,
-        false,
         state.clone(),
         deps.clone(),
     )
@@ -376,7 +407,7 @@ async fn test_complete_container_lifecycle() {
     assert!(state.image_store.has_image("library/alpine", "latest"));
 
     // 3. Run container with resource limits
-    let run_response = handler::handle_run(
+    let run_response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec![
@@ -386,7 +417,6 @@ async fn test_complete_container_lifecycle() {
         ],
         Some(256 * 1024 * 1024), // 256MB
         Some(500),               // CPU weight 500
-        false,
         state.clone(),
         deps.clone(),
     )
@@ -449,7 +479,7 @@ async fn test_multiple_concurrent_containers() {
         let deps_clone = deps.clone();
 
         let task = tokio::spawn(async move {
-            handler::handle_run(
+            handle_run_once(
                 "alpine".to_string(),
                 Some("latest".to_string()),
                 vec![
@@ -459,7 +489,6 @@ async fn test_multiple_concurrent_containers() {
                 ],
                 Some(64 * 1024 * 1024), // 64MB per container
                 None,
-                false,
                 state_clone,
                 deps_clone,
             )
