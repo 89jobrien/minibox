@@ -12,14 +12,11 @@ def main [
     }
 
     # Kill existing daemon if running
-    let pids = (do { ps | where name == "miniboxd" } | complete)
-    if ($pids.exit_code == 0) {
-        let running = ($pids.stdout | from nuon)
-        if ($running | length) > 0 {
-            print $"Stopping existing miniboxd \(($running | length) instance\(s\)\)..."
-            $running | each { |p| ^kill ($p.pid | into string) }
-            sleep 500ms
-        }
+    let running = (ps | where name == "miniboxd")
+    if ($running | length) > 0 {
+        print $"Stopping existing miniboxd \(($running | length) instance\(s\)\)..."
+        $running | each { |p| ^kill ($p.pid | into string) }
+        sleep 500ms
     }
 
     print $"Starting miniboxd \(MINIBOX_ADAPTER=($adapter)\)..."
