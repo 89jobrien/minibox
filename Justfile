@@ -77,7 +77,7 @@ coverage:
 
 # VZ isolation tests (macOS, requires VM image at ~/.mbx/vm/)
 test-vz-isolation:
-    cargo test -p macbox --features vz --test vz_isolation_tests -- --nocapture
+    cargo test -p macbox --features vz --test vz_isolation_tests -- --test-threads=1 --nocapture --show-output
 
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
