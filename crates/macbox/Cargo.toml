@@ -41,3 +41,4 @@ libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+base64 = { workspace = true }

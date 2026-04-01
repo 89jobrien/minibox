@@ -75,6 +75,10 @@ coverage:
     cargo llvm-cov nextest -p mbx -p minibox-macros -p minibox-cli -p daemonbox --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
+# VZ isolation tests (macOS, requires VM image at ~/.mbx/vm/)
+test-vz-isolation:
+    cargo test -p macbox --features vz --test vz_isolation_tests -- --nocapture
+
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
     cargo build -p minibox-cli
@@ -85,6 +89,7 @@ test-cli-subprocess:
 test-integration:
     sudo -E cargo test -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
+    sudo -E cargo test -p mbx --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
 
 # Lifecycle e2e (Linux, root, Docker Hub)
 test-e2e:

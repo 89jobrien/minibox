@@ -237,6 +237,7 @@ mod tests {
             env: vec![],
             mounts: vec![],
             privileged: false,
+            name: None,
         };
         let responses = proxy.send_request(&req).await.expect("send request");
 
@@ -329,6 +330,7 @@ mod tests {
             env: vec![],
             mounts: vec![],
             privileged: false,
+            name: None,
         };
         let result = proxy.send_request(&req).await;
 
@@ -373,6 +375,7 @@ mod tests {
             env: vec![],
             mounts: vec![],
             privileged: false,
+            name: None,
         };
         let result = proxy.send_request(&req).await;
 
