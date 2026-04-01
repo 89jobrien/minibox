@@ -25,6 +25,8 @@ async-trait = { workspace = true }
 walkdir = { workspace = true }
 tokio-util = { workspace = true }
 tar = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }

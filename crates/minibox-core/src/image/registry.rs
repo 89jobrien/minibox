@@ -470,6 +470,162 @@ impl RegistryClient {
         );
         Ok(())
     }
+
+    // -----------------------------------------------------------------------
+    // Push support
+    // -----------------------------------------------------------------------
+
+    /// Obtain a push-scoped token for `repo`.
+    ///
+    /// `username` / `password` are forwarded as HTTP Basic Auth when provided;
+    /// otherwise an anonymous token is requested (sufficient for public repos
+    /// that allow unauthenticated pushes, though rare in practice).
+    pub async fn get_push_token(
+        &self,
+        repo: &str,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let url = format!(
+            "{}?service=registry.docker.io&scope=repository:{repo}:push,pull",
+            self.auth_url
+        );
+
+        let req = self.http.get(&url);
+        let req = match (username, password) {
+            (Some(u), Some(p)) => req.basic_auth(u, Some(p)),
+            _ => req,
+        };
+
+        let resp = req
+            .send()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| format!("push auth request for {repo}"))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(RegistryError::AuthFailed {
+                image: repo.to_owned(),
+                message: format!("HTTP {status}: {msg}"),
+            }
+            .into());
+        }
+
+        let token_resp: TokenResponse = resp
+            .json::<TokenResponse>()
+            .await
+            .map_err(RegistryError::Network)
+            .with_context(|| "parsing push auth token response")?;
+
+        Ok(token_resp.token)
+    }
+
+    /// Check whether a blob already exists in the registry (HEAD request).
+    pub async fn blob_exists(
+        &self,
+        registry_base: &str,
+        repo: &str,
+        digest: &str,
+        token: &str,
+    ) -> bool {
+        let url = format!("{registry_base}/v2/{repo}/blobs/{digest}");
+        self.http
+            .head(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+    }
+
+    /// Start a new blob upload session and return the `Location` upload URL.
+    pub async fn initiate_blob_upload(
+        &self,
+        registry_base: &str,
+        repo: &str,
+        token: &str,
+    ) -> anyhow::Result<String> {
+        let url = format!("{registry_base}/v2/{repo}/blobs/uploads/");
+        let resp = self
+            .http
+            .post(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("initiate blob upload")?;
+        let location = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .context("missing Location header from blob upload initiation")?
+            .to_string();
+        Ok(location)
+    }
+
+    /// Upload a blob via PUT, appending the `digest` query parameter.
+    pub async fn upload_blob(
+        &self,
+        upload_url: &str,
+        digest: &str,
+        data: Bytes,
+        token: &str,
+    ) -> anyhow::Result<()> {
+        let url = format!("{upload_url}?digest={digest}");
+        let resp = self
+            .http
+            .put(&url)
+            .bearer_auth(token)
+            .header("Content-Type", "application/octet-stream")
+            .body(data)
+            .send()
+            .await
+            .context("upload blob")?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("blob upload failed {status}: {body}");
+        }
+        Ok(())
+    }
+
+    /// Push a manifest to `registry_base/v2/{repo}/manifests/{reference}`.
+    ///
+    /// Returns the `Docker-Content-Digest` header value (the canonical digest
+    /// assigned by the registry).
+    pub async fn push_manifest(
+        &self,
+        registry_base: &str,
+        repo: &str,
+        reference: &str,
+        manifest: &crate::image::manifest::OciManifest,
+        token: &str,
+    ) -> anyhow::Result<String> {
+        let url = format!("{registry_base}/v2/{repo}/manifests/{reference}");
+        let body = serde_json::to_vec(manifest).context("serializing manifest")?;
+        let resp = self
+            .http
+            .put(&url)
+            .bearer_auth(token)
+            .header("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+            .body(body)
+            .send()
+            .await
+            .context("push manifest")?;
+        let digest = resp
+            .headers()
+            .get("docker-content-digest")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("manifest push failed {status}: {body}");
+        }
+        Ok(digest)
+    }
 }
 
 impl Default for RegistryClient {

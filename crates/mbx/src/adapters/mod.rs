@@ -108,6 +108,10 @@ pub mod ghcr;
 pub mod image_loader;
 pub use image_loader::NativeImageLoader;
 
+// OCI push adapter
+pub mod push;
+pub use push::OciPushAdapter;
+
 // Test doubles (always available for testing)
 pub mod mocks;
 

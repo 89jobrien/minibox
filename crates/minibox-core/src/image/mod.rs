@@ -151,6 +151,26 @@ impl ImageStore {
     }
 
     // -----------------------------------------------------------------------
+    // Public helpers for push adapter
+    // -----------------------------------------------------------------------
+
+    /// Load and deserialize the stored manifest for `name:tag`.
+    ///
+    /// Public wrapper of the private [`Self::load_manifest`] used by the push
+    /// adapter to enumerate layer digests before uploading.
+    pub fn load_manifest_pub(&self, name: &str, tag: &str) -> anyhow::Result<OciManifest> {
+        self.load_manifest(name, tag)
+    }
+
+    /// Return the path to the `layers/` subdirectory for `name:tag`.
+    ///
+    /// Public wrapper of the private [`Self::layers_dir`] used by the push
+    /// adapter to locate extracted layer directories.
+    pub fn layers_dir_pub(&self, name: &str, tag: &str) -> anyhow::Result<std::path::PathBuf> {
+        self.layers_dir(name, tag)
+    }
+
+    // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
 
