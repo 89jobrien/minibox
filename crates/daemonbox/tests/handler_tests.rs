@@ -2073,6 +2073,7 @@ async fn test_run_empty_image_no_layers() {
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2116,6 +2117,7 @@ async fn test_pull_registry_failure_with_tag() {
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2230,6 +2232,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
