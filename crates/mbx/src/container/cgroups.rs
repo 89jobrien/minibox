@@ -45,7 +45,7 @@ pub struct CgroupManager {
     /// Container ID used to derive the cgroup path and for log fields.
     id: String,
     /// Absolute path to this container's cgroup directory.
-    pub cgroup_path: PathBuf,
+    cgroup_path: PathBuf,
     config: CgroupConfig,
 }
 
