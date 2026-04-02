@@ -104,6 +104,18 @@ enum Commands {
         id: String,
     },
 
+    /// Pause a running container
+    Pause {
+        /// Container ID
+        id: String,
+    },
+
+    /// Resume a paused container
+    Resume {
+        /// Container ID
+        id: String,
+    },
+
     /// Remove a stopped container
     Rm {
         /// Container ID
@@ -180,6 +192,10 @@ async fn main() -> Result<()> {
         Commands::Ps => commands::ps::execute(socket_path).await,
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
+
+        Commands::Pause { id } => commands::pause::execute(id, socket_path).await,
+
+        Commands::Resume { id } => commands::resume::execute(id, socket_path).await,
 
         Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
 

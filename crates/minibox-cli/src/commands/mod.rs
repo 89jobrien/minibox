@@ -5,8 +5,10 @@
 //! connection and protocol formatting.
 
 pub mod load;
+pub mod pause;
 pub mod ps;
 pub mod pull;
+pub mod resume;
 pub mod rm;
 pub mod run;
 pub mod stop;
