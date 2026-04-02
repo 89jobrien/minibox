@@ -9,6 +9,7 @@ use crate::tabs::ci::CiTab;
 use crate::tabs::diagrams::DiagramsTab;
 use crate::tabs::git::GitTab;
 use crate::tabs::history::HistoryTab;
+use crate::tabs::metrics::MetricsTab;
 use crate::tabs::todos::TodosTab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,10 +21,11 @@ pub enum Tab {
     Todos,
     Ci,
     Diagrams,
+    Metrics,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 7] = [
+    pub const ALL: [Tab; 8] = [
         Tab::Agents,
         Tab::Bench,
         Tab::History,
@@ -31,6 +33,7 @@ impl Tab {
         Tab::Todos,
         Tab::Ci,
         Tab::Diagrams,
+        Tab::Metrics,
     ];
 
     pub fn title(&self) -> &'static str {
@@ -42,6 +45,7 @@ impl Tab {
             Tab::Todos => "5 Todos",
             Tab::Ci => "6 CI",
             Tab::Diagrams => "7 Diagrams",
+            Tab::Metrics => "8 Metrics",
         }
     }
 
@@ -54,6 +58,7 @@ impl Tab {
             Tab::Todos => 4,
             Tab::Ci => 5,
             Tab::Diagrams => 6,
+            Tab::Metrics => 7,
         }
     }
 
@@ -89,6 +94,7 @@ impl App {
                 Box::new(DiagramsTab::new(
                     crate::diagram::source::load_user_diagrams(),
                 )),
+                Box::new(MetricsTab::new()),
             ],
             inline_cmd: None,
             bg_cmd: None,
