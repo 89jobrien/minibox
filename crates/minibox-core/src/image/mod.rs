@@ -74,6 +74,65 @@ impl ImageStore {
         Ok(paths)
     }
 
+    /// List all `"name:tag"` strings known to this store.
+    ///
+    /// Walks `{base_dir}/*/` directories looking for `manifest.json`.
+    pub async fn list_all_images(&self) -> anyhow::Result<Vec<String>> {
+        let mut result = Vec::new();
+        let mut rd = tokio::fs::read_dir(&self.base_dir).await?;
+        while let Some(name_entry) = rd.next_entry().await? {
+            if !name_entry.file_type().await?.is_dir() {
+                continue;
+            }
+            let name = name_entry.file_name().to_string_lossy().replace('_', "/");
+            let mut td = tokio::fs::read_dir(name_entry.path()).await?;
+            while let Some(tag_entry) = td.next_entry().await? {
+                if !tag_entry.file_type().await?.is_dir() {
+                    continue;
+                }
+                let manifest = tag_entry.path().join("manifest.json");
+                if manifest.exists() {
+                    let tag = tag_entry.file_name().to_string_lossy().to_string();
+                    result.push(format!("{name}:{tag}"));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// Return the total disk usage of an image's layer dirs in bytes.
+    pub async fn image_size_bytes(&self, name: &str, tag: &str) -> anyhow::Result<u64> {
+        let dir = self.image_dir(name, tag)?;
+        let mut total = 0u64;
+        let mut stack = vec![dir];
+        while let Some(d) = stack.pop() {
+            let mut rd = tokio::fs::read_dir(&d).await?;
+            while let Some(e) = rd.next_entry().await? {
+                let meta = e.metadata().await?;
+                if meta.is_dir() {
+                    stack.push(e.path());
+                } else {
+                    total += meta.len();
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    /// Delete an image's manifest and all layer directories.
+    ///
+    /// Best-effort: logs a warning if the directory cannot be removed.
+    pub async fn delete_image(&self, name: &str, tag: &str) -> anyhow::Result<()> {
+        let dir = self.image_dir(name, tag)?;
+        if dir.exists() {
+            tokio::fs::remove_dir_all(&dir)
+                .await
+                .with_context(|| format!("image: remove_dir_all {}", dir.display()))?;
+            info!(image = %format!("{name}:{tag}"), "image: deleted");
+        }
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Write
     // -----------------------------------------------------------------------
@@ -528,5 +587,42 @@ mod tests {
         );
 
         assert!(store.has_image("library/ubuntu", "20.04"));
+    }
+
+    #[tokio::test]
+    async fn test_list_all_images_empty() {
+        let tmp = TempDir::new().unwrap();
+        let store = ImageStore::new(tmp.path()).unwrap();
+        let images = store.list_all_images().await.unwrap();
+        assert!(images.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_delete_image_removes_dir() {
+        let tmp = TempDir::new().unwrap();
+        let store = ImageStore::new(tmp.path()).unwrap();
+        // Seed a fake image dir
+        let img_dir = tmp.path().join("alpine").join("latest");
+        tokio::fs::create_dir_all(&img_dir).await.unwrap();
+        tokio::fs::write(img_dir.join("manifest.json"), b"{}").await.unwrap();
+
+        store.delete_image("alpine", "latest").await.unwrap();
+
+        assert!(!img_dir.exists());
+    }
+
+    #[tokio::test]
+    async fn test_image_size_bytes() {
+        let tmp = TempDir::new().unwrap();
+        let store = ImageStore::new(tmp.path().join("images")).unwrap();
+
+        let manifest = sample_manifest(&["sha256:layer1"]);
+        store
+            .store_manifest("alpine", "latest", &manifest)
+            .unwrap();
+
+        let size = store.image_size_bytes("alpine", "latest").await.unwrap();
+        // Should include the manifest.json at least
+        assert!(size > 0, "image_size_bytes should be > 0 for stored image");
     }
 }
