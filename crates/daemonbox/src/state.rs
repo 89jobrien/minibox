@@ -261,33 +261,6 @@ impl DaemonState {
         map.values().map(|r| r.info.clone()).collect()
     }
 
-    /// Change the `state` field of a container.
-    ///
-    /// Valid state transitions follow the container lifecycle:
-    /// `"Created"` → `"Running"` → `"Stopped"` (or `"Failed"`).
-    ///
-    /// When `new_state` is `"Stopped"`, both the host PID and the
-    /// `ContainerInfo.pid` field are cleared because the process is no longer
-    /// alive.
-    pub async fn update_container_state(&self, id: &str, new_state: &str) {
-        let mut map = self.containers.write().await;
-        if let Some(record) = map.get_mut(id) {
-            debug!(
-                container_id = id,
-                from = %record.info.state,
-                to = new_state,
-                "state: container state transition"
-            );
-            record.info.state = new_state.to_string();
-            if new_state == "Stopped" {
-                record.info.pid = None;
-                record.pid = None;
-            }
-        }
-        drop(map);
-        self.save_to_disk().await;
-    }
-
     /// Change the `state` field of a container using the typed [`ContainerState`] enum.
     ///
     /// Enforces valid transitions:
@@ -296,7 +269,7 @@ impl DaemonState {
     /// - `Running → Stopped` / `Running → Failed` / `Created → Running`
     ///
     /// Returns an error if the transition is not permitted.
-    pub async fn update_container_state_typed(
+    pub async fn update_container_state(
         &self,
         id: &str,
         new_state: ContainerState,
@@ -488,7 +461,7 @@ mod tests {
 
         // Pause it
         state
-            .update_container_state_typed(&id, ContainerState::Paused)
+            .update_container_state(&id, ContainerState::Paused)
             .await
             .expect("pause transition");
         let c = state.get_container(&id).await.unwrap();
@@ -496,7 +469,7 @@ mod tests {
 
         // Resume it
         state
-            .update_container_state_typed(&id, ContainerState::Running)
+            .update_container_state(&id, ContainerState::Running)
             .await
             .expect("resume transition");
         let c = state.get_container(&id).await.unwrap();

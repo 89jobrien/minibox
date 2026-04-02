@@ -28,7 +28,7 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::network_lifecycle::NetworkLifecycle;
-use crate::state::{ContainerRecord, DaemonState};
+use crate::state::{ContainerRecord, ContainerState, DaemonState};
 use async_trait::async_trait;
 
 // ─── Default adapters ────────────────────────────────────────────────────────
@@ -803,9 +803,12 @@ async fn run_inner(
                     "minibox_container_ops_total",
                     &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
                 );
-                state_clone
-                    .update_container_state(&id_clone, "Failed")
-                    .await;
+                if let Err(e) = state_clone
+                    .update_container_state(&id_clone, ContainerState::Failed)
+                    .await
+                {
+                    warn!(container_id = %id_clone, error = %e, "state: failed to mark container Failed");
+                }
             }
         }
     });
@@ -892,14 +895,20 @@ fn daemon_wait_for_exit(
     // Mark stopped; bridge async state update from sync context.
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
-            handle.block_on(state.update_container_state(id, "Stopped"));
+            if let Err(e) =
+                handle.block_on(state.update_container_state(id, ContainerState::Stopped))
+            {
+                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+            }
         }
         Err(_) => {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("one-shot runtime");
-            rt.block_on(state.update_container_state(id, "Stopped"));
+            if let Err(e) = rt.block_on(state.update_container_state(id, ContainerState::Stopped)) {
+                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+            }
         }
     }
 }
@@ -1031,7 +1040,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         }
     }
 
-    state.update_container_state(id, "Stopped").await;
+    if let Err(e) = state
+        .update_container_state(id, ContainerState::Stopped)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+    }
     Ok(())
 }
 
