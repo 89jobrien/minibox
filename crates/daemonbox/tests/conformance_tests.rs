@@ -18,6 +18,24 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+/// No-op image GC for tests.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 /// Helper that wraps `handle_run` with a channel, returning the first response.
 #[allow(clippy::too_many_arguments)]
 async fn handle_run_once(
@@ -74,6 +92,13 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     })
 }
 
@@ -98,6 +123,13 @@ fn mock_deps_with_network(
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     })
 }
 

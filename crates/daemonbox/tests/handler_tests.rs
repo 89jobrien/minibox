@@ -51,8 +51,28 @@ async fn handle_run_once(
     rx.recv().await.expect("handler sent no response")
 }
 
+/// No-op image GC for tests.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 /// Helper to create test dependencies with mocks.
 fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -70,6 +90,8 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 
@@ -151,6 +173,13 @@ async fn test_handle_pull_failure() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -188,6 +217,13 @@ async fn test_handle_run_with_cached_image() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -279,6 +315,13 @@ async fn test_handle_run_filesystem_setup_failure() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -322,6 +365,13 @@ async fn test_handle_run_resource_limiter_failure() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -365,6 +415,13 @@ async fn test_handle_run_runtime_spawn_failure() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -601,6 +658,8 @@ fn create_test_deps_with_network(
     temp_dir: &TempDir,
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -618,6 +677,8 @@ fn create_test_deps_with_network(
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 
@@ -971,6 +1032,13 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1110,6 +1178,13 @@ async fn test_handle_run_empty_image_returns_error() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1212,6 +1287,13 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1340,6 +1422,13 @@ async fn test_handle_run_pull_failure_returns_error() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1458,6 +1547,13 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1509,6 +1605,13 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1560,6 +1663,13 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1604,6 +1714,13 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1864,6 +1981,13 @@ async fn test_handle_remove_failed_container_succeeds() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1917,6 +2041,13 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2132,6 +2263,13 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2194,6 +2332,13 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2249,6 +2394,13 @@ async fn test_run_empty_image_no_layers() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2300,6 +2452,13 @@ async fn test_pull_registry_failure_with_tag() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2422,6 +2581,13 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 

@@ -129,6 +129,10 @@ use minibox_core::events::BroadcastEventBroker;
 #[cfg(target_os = "linux")]
 use minibox_core::image::ImageStore;
 #[cfg(target_os = "linux")]
+use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
+#[cfg(target_os = "linux")]
+use minibox_core::image::lease::DiskLeaseService;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
@@ -378,6 +382,16 @@ async fn main() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── Image GC ─────────────────────────────────────────────────────────
+    let leases_path = data_dir.join("leases.json");
+    let lease_service = Arc::new(
+        DiskLeaseService::new(leases_path)
+            .await
+            .context("creating lease service")?,
+    );
+    let image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
     // ── Event broker ─────────────────────────────────────────────────────
     let event_broker = Arc::new(BroadcastEventBroker::new());
 
@@ -428,6 +442,8 @@ async fn main() -> Result<()> {
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
                 event_source: Arc::clone(&event_broker)
                     as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
         AdapterSuite::Gke => {
@@ -456,6 +472,8 @@ async fn main() -> Result<()> {
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
                 event_source: Arc::clone(&event_broker)
                     as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
         AdapterSuite::Colima => {
@@ -478,6 +496,8 @@ async fn main() -> Result<()> {
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
                 event_source: Arc::clone(&event_broker)
                     as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
     };

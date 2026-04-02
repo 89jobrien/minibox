@@ -13,9 +13,9 @@ use uuid::Uuid;
 /// A lease protecting one or more image refs from garbage collection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseRecord {
-    pub id:         String,
+    pub id: String,
     pub created_at: SystemTime,
-    pub expire_at:  SystemTime,
+    pub expire_at: SystemTime,
     /// Image `"name:tag"` strings protected by this lease.
     pub image_refs: HashSet<String>,
 }
@@ -40,16 +40,16 @@ pub trait ImageLeaseService: Send + Sync {
 /// Disk-backed lease service. Persists to a single JSON file.
 pub struct DiskLeaseService {
     leases: Arc<RwLock<HashMap<String, LeaseRecord>>>,
-    path:   PathBuf,
+    path: PathBuf,
 }
 
 impl DiskLeaseService {
     pub async fn new(path: PathBuf) -> Result<Self> {
         let leases = if path.exists() {
-            let bytes = tokio::fs::read(&path).await
+            let bytes = tokio::fs::read(&path)
+                .await
                 .with_context(|| format!("lease: read {}", path.display()))?;
-            serde_json::from_slice(&bytes)
-                .unwrap_or_default()
+            serde_json::from_slice(&bytes).unwrap_or_default()
         } else {
             HashMap::new()
         };
@@ -106,7 +106,11 @@ impl ImageLeaseService for DiskLeaseService {
 
     async fn list_active(&self) -> Result<Vec<LeaseRecord>> {
         let now = SystemTime::now();
-        Ok(self.leases.read().await.values()
+        Ok(self
+            .leases
+            .read()
+            .await
+            .values()
             .filter(|l| l.expire_at > now)
             .cloned()
             .collect())
@@ -114,9 +118,12 @@ impl ImageLeaseService for DiskLeaseService {
 
     async fn is_leased(&self, image_ref: &str) -> Result<bool> {
         let now = SystemTime::now();
-        Ok(self.leases.read().await.values().any(|l| {
-            l.expire_at > now && l.image_refs.contains(image_ref)
-        }))
+        Ok(self
+            .leases
+            .read()
+            .await
+            .values()
+            .any(|l| l.expire_at > now && l.image_refs.contains(image_ref)))
     }
 }
 
@@ -127,9 +134,14 @@ mod tests {
     #[tokio::test]
     async fn test_acquire_and_release() {
         let tmp = tempfile::tempdir().unwrap();
-        let svc = DiskLeaseService::new(tmp.path().join("leases.json")).await.unwrap();
+        let svc = DiskLeaseService::new(tmp.path().join("leases.json"))
+            .await
+            .unwrap();
 
-        let lease_id = svc.acquire("alpine:latest", Duration::from_secs(3600)).await.unwrap();
+        let lease_id = svc
+            .acquire("alpine:latest", Duration::from_secs(3600))
+            .await
+            .unwrap();
         let leases = svc.list().await.unwrap();
         assert_eq!(leases.len(), 1);
         assert!(leases[0].image_refs.contains("alpine:latest"));
@@ -142,10 +154,15 @@ mod tests {
     #[tokio::test]
     async fn test_expired_lease_not_listed() {
         let tmp = tempfile::tempdir().unwrap();
-        let svc = DiskLeaseService::new(tmp.path().join("leases.json")).await.unwrap();
+        let svc = DiskLeaseService::new(tmp.path().join("leases.json"))
+            .await
+            .unwrap();
 
         // Acquire with 0-second TTL (immediately expired)
-        let _id = svc.acquire("old:image", Duration::from_secs(0)).await.unwrap();
+        let _id = svc
+            .acquire("old:image", Duration::from_secs(0))
+            .await
+            .unwrap();
         let active = svc.list_active().await.unwrap();
         assert!(active.is_empty());
     }

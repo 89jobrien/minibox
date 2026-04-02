@@ -118,6 +118,10 @@ pub struct HandlerDependencies {
     pub event_sink: Arc<dyn EventSink>,
     /// Source for subscribing to the container event stream.
     pub event_source: Arc<dyn minibox_core::events::EventSource>,
+    /// Image garbage collector for prune operations.
+    pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
+    /// Image store for direct image operations (e.g. RemoveImage).
+    pub image_store: Arc<minibox_core::image::ImageStore>,
 }
 
 impl HandlerDependencies {
@@ -1814,6 +1818,115 @@ pub(crate) async fn handle_subscribe_events(
                 // Continue — don't break on lag.
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
+}
+
+// ─── Prune ──────────────────────────────────────────────────────────────────
+
+/// Remove unused images from the image store.
+pub(crate) async fn handle_prune(
+    dry_run: bool,
+    state: Arc<DaemonState>,
+    image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
+    event_sink: Arc<dyn EventSink>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let in_use: Vec<String> = state
+        .list_containers()
+        .await
+        .into_iter()
+        .filter_map(|c| {
+            if c.state == "running" || c.state == "paused" {
+                Some(c.image.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    match image_gc.prune(dry_run, &in_use).await {
+        Ok(report) => {
+            let count = report.removed.len();
+            let freed = report.freed_bytes;
+            event_sink.emit(minibox_core::events::ContainerEvent::ImagePruned {
+                count,
+                freed_bytes: freed,
+                timestamp: std::time::SystemTime::now(),
+            });
+            let _ = tx
+                .send(DaemonResponse::Pruned {
+                    removed: report.removed,
+                    freed_bytes: freed,
+                    dry_run: report.dry_run,
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
+                })
+                .await;
+        }
+    }
+}
+
+// ─── RemoveImage ─────────────────────────────────────────────────────────────
+
+/// Remove a specific image by reference.
+pub(crate) async fn handle_remove_image(
+    image_ref: String,
+    state: Arc<DaemonState>,
+    image_store: Arc<minibox_core::image::ImageStore>,
+    event_sink: Arc<dyn EventSink>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let in_use = state
+        .list_containers()
+        .await
+        .into_iter()
+        .any(|c| (c.state == "running" || c.state == "paused") && c.image == image_ref);
+
+    if in_use {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: format!("image {image_ref} is in use by a running container"),
+            })
+            .await;
+        return;
+    }
+
+    let (name, tag) = match image_ref.rsplit_once(':') {
+        Some(pair) => pair,
+        None => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("invalid image ref: {image_ref}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    match image_store.delete_image(name, tag).await {
+        Ok(()) => {
+            event_sink.emit(minibox_core::events::ContainerEvent::ImageRemoved {
+                image: image_ref.clone(),
+                timestamp: std::time::SystemTime::now(),
+            });
+            let _ = tx
+                .send(DaemonResponse::Success {
+                    message: format!("removed {image_ref}"),
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
+                })
+                .await;
         }
     }
 }

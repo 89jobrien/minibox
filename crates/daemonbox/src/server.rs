@@ -227,6 +227,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::BuildComplete { .. }
             | DaemonResponse::ContainerPaused { .. }
             | DaemonResponse::ContainerResumed { .. }
+            | DaemonResponse::Pruned { .. }
     )
     // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and Event are non-terminal.
 }
@@ -364,6 +365,24 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::Prune { dry_run } => {
+            tokio::spawn(handler::handle_prune(
+                dry_run,
+                Arc::clone(&state),
+                Arc::clone(&deps.image_gc),
+                Arc::clone(&deps.event_sink),
+                tx,
+            ));
+        }
+        DaemonRequest::RemoveImage { image_ref } => {
+            tokio::spawn(handler::handle_remove_image(
+                image_ref,
+                Arc::clone(&state),
+                Arc::clone(&deps.image_store),
+                Arc::clone(&deps.event_sink),
+                tx,
+            ));
+        }
     }
 }
 
@@ -379,6 +398,25 @@ mod tests {
     use tempfile::TempDir;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+    // ─── test-only no-op GC ─────────────────────────────────────────────────
+
+    struct NoopImageGc;
+
+    #[async_trait::async_trait]
+    impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+        async fn prune(
+            &self,
+            dry_run: bool,
+            _in_use: &[String],
+        ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+            Ok(minibox_core::image::gc::PruneReport {
+                removed: vec![],
+                freed_bytes: 0,
+                dry_run,
+            })
+        }
+    }
+
     // ─── helpers ────────────────────────────────────────────────────────────
 
     fn test_deps(
@@ -389,6 +427,10 @@ mod tests {
     ) {
         let store = ImageStore::new(tmp.path().join("images")).expect("create ImageStore");
         let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
+        let image_store =
+            Arc::new(ImageStore::new(tmp.path().join("images")).expect("create ImageStore"));
+        let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
+            Arc::new(NoopImageGc);
         let deps = Arc::new(crate::handler::HandlerDependencies {
             registry: Arc::new(MockRegistry::new()),
             ghcr_registry: Arc::new(MockRegistry::new()),
@@ -406,6 +448,8 @@ mod tests {
             image_builder: None,
             event_sink: Arc::new(minibox_core::events::NoopEventSink),
             event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            image_gc,
+            image_store,
         });
         (state, deps)
     }
@@ -543,6 +587,14 @@ mod tests {
                 },
                 false, // non-terminal: streaming
             ),
+            (
+                DaemonResponse::Pruned {
+                    removed: vec![],
+                    freed_bytes: 0,
+                    dry_run: false,
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -572,6 +624,7 @@ mod tests {
                 DaemonResponse::ContainerPaused { .. } => true,
                 DaemonResponse::ContainerResumed { .. } => true,
                 DaemonResponse::Event { .. } => false,
+                DaemonResponse::Pruned { .. } => true,
             };
         }
     }

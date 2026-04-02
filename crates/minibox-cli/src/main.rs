@@ -138,6 +138,21 @@ enum Commands {
     /// newline-delimited JSON object until the connection is closed.
     Events,
 
+    /// Remove unused images from the image store.
+    ///
+    /// Images currently in use by running or paused containers are skipped.
+    Prune {
+        /// Show what would be removed without actually deleting anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Remove a specific image by reference (e.g. alpine:latest).
+    Rmi {
+        /// Image reference in name:tag format.
+        image_ref: String,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -213,6 +228,10 @@ async fn main() -> Result<()> {
         }
 
         Commands::Events => commands::events::execute(socket_path).await,
+
+        Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
+
+        Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
     }
 }
 
