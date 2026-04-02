@@ -5,6 +5,7 @@ pub mod ci;
 pub mod diagrams;
 pub mod git;
 pub mod history;
+pub mod metrics;
 pub mod todos;
 
 use crossterm::event::KeyEvent;
