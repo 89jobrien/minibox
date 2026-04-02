@@ -96,6 +96,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
                             app.select_tab(Tab::Diagrams);
                             continue;
                         }
+                        KeyCode::Char('8') => {
+                            app.select_tab(Tab::Metrics);
+                            continue;
+                        }
                         KeyCode::Left => {
                             app.prev_tab();
                             continue;
