@@ -87,6 +87,7 @@ Thumbs.db
 *.log
 *.pid
 *.json
+!/grafana/*.json
 
 # Documentation build
 /target/doc/
