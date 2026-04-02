@@ -3,6 +3,7 @@ pub mod agents;
 pub mod bench;
 pub mod ci;
 pub mod git;
+pub mod metrics;
 pub mod todos;
 
 use anyhow::Result;
