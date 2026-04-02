@@ -1083,7 +1083,7 @@ pub async fn handle_pause(id: String, state: Arc<DaemonState>) -> DaemonResponse
             };
         }
     };
-    if record.info.state != "Running" {
+    if record.info.state != ContainerState::Running.as_str() {
         return DaemonResponse::Error {
             message: format!(
                 "container {id} is not running (state: {})",
@@ -1121,7 +1121,7 @@ pub async fn handle_resume(id: String, state: Arc<DaemonState>) -> DaemonRespons
             };
         }
     };
-    if record.info.state != "Paused" {
+    if record.info.state != ContainerState::Paused.as_str() {
         return DaemonResponse::Error {
             message: format!(
                 "container {id} is not paused (state: {})",
