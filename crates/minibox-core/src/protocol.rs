@@ -113,6 +113,18 @@ pub enum DaemonRequest {
         id: String,
     },
 
+    /// Freeze all processes in a running container via cgroup.freeze.
+    PauseContainer {
+        /// Container ID to pause.
+        id: String,
+    },
+
+    /// Thaw a paused container.
+    ResumeContainer {
+        /// Container ID to resume.
+        id: String,
+    },
+
     /// Remove a stopped container and its resources.
     Remove {
         /// Container ID.
@@ -227,6 +239,18 @@ pub enum DaemonResponse {
     Success {
         /// Human-readable status message.
         message: String,
+    },
+
+    /// Confirmation that a container was paused.
+    ContainerPaused {
+        /// The container ID.
+        id: String,
+    },
+
+    /// Confirmation that a container was resumed.
+    ContainerResumed {
+        /// The container ID.
+        id: String,
     },
 
     /// Response to a [`DaemonRequest::List`] request.

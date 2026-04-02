@@ -225,6 +225,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerList { .. }
             | DaemonResponse::ImageLoaded { .. }
             | DaemonResponse::BuildComplete { .. }
+            | DaemonResponse::ContainerPaused { .. }
+            | DaemonResponse::ContainerResumed { .. }
     )
     // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, and BuildOutput are non-terminal.
 }
@@ -276,6 +278,20 @@ async fn dispatch(
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
             let _ = tx.send(response).await;
+        }
+        DaemonRequest::PauseContainer { id: _ } => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: "pause not yet implemented".to_string(),
+                })
+                .await;
+        }
+        DaemonRequest::ResumeContainer { id: _ } => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: "resume not yet implemented".to_string(),
+                })
+                .await;
         }
         DaemonRequest::Remove { id } => {
             let response = handler::handle_remove(id, state, deps).await;
@@ -503,6 +519,18 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::ContainerPaused {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerResumed {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -529,6 +557,8 @@ mod tests {
                 DaemonResponse::PushProgress { .. } => false,
                 DaemonResponse::BuildOutput { .. } => false,
                 DaemonResponse::BuildComplete { .. } => true,
+                DaemonResponse::ContainerPaused { .. } => true,
+                DaemonResponse::ContainerResumed { .. } => true,
             };
         }
     }
