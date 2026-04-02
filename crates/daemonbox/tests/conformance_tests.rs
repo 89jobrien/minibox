@@ -73,6 +73,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 
@@ -96,6 +97,7 @@ fn mock_deps_with_network(
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 

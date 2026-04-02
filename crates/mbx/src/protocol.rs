@@ -195,6 +195,11 @@ pub enum DaemonRequest {
         #[serde(default)]
         no_cache: bool,
     },
+
+    /// Subscribe to the container event stream.
+    ///
+    /// The daemon will send `Event` responses until the connection closes.
+    SubscribeEvents,
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +313,14 @@ pub enum DaemonResponse {
     BuildComplete {
         image_id: String,
         tag: String,
+    },
+
+    /// A container lifecycle event.
+    ///
+    /// Non-terminal: sent zero or more times until the connection closes.
+    Event {
+        /// The container lifecycle event payload.
+        event: minibox_core::events::ContainerEvent,
     },
 }
 

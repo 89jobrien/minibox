@@ -206,6 +206,11 @@ pub enum DaemonRequest {
         #[serde(default)]
         no_cache: bool,
     },
+
+    /// Subscribe to the container event stream.
+    ///
+    /// The daemon will send `Event` responses until the connection closes.
+    SubscribeEvents,
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +336,15 @@ pub enum DaemonResponse {
         image_id: String,
         /// Tag applied to the built image.
         tag: String,
+    },
+
+    /// A container lifecycle event.
+    ///
+    /// Non-terminal: sent zero or more times until the connection closes.
+    /// Emitted in response to [`DaemonRequest::SubscribeEvents`].
+    Event {
+        /// The container lifecycle event payload.
+        event: crate::events::ContainerEvent,
     },
 }
 

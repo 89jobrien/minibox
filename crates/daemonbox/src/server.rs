@@ -228,7 +228,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerPaused { .. }
             | DaemonResponse::ContainerResumed { .. }
     )
-    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, and BuildOutput are non-terminal.
+    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and Event are non-terminal.
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -358,6 +358,12 @@ async fn dispatch(
             )
             .await;
         }
+        DaemonRequest::SubscribeEvents => {
+            tokio::spawn(handler::handle_subscribe_events(
+                Arc::clone(&deps.event_source),
+                tx,
+            ));
+        }
     }
 }
 
@@ -399,6 +405,7 @@ mod tests {
             commit_adapter: None,
             image_builder: None,
             event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         });
         (state, deps)
     }
@@ -526,6 +533,16 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::Event {
+                    event: minibox_core::events::ContainerEvent::Started {
+                        id: "abc".to_string(),
+                        pid: 1,
+                        timestamp: std::time::SystemTime::UNIX_EPOCH,
+                    },
+                },
+                false, // non-terminal: streaming
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -554,6 +571,7 @@ mod tests {
                 DaemonResponse::BuildComplete { .. } => true,
                 DaemonResponse::ContainerPaused { .. } => true,
                 DaemonResponse::ContainerResumed { .. } => true,
+                DaemonResponse::Event { .. } => false,
             };
         }
     }

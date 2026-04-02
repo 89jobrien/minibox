@@ -132,6 +132,12 @@ enum Commands {
         tag: String,
     },
 
+    /// Stream container lifecycle events as JSON-lines to stdout.
+    ///
+    /// Subscribes to the daemon event stream and prints each event as a
+    /// newline-delimited JSON object until the connection is closed.
+    Events,
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -205,6 +211,8 @@ async fn main() -> Result<()> {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
             commands::load::execute(path, name, tag, socket_path).await
         }
+
+        Commands::Events => commands::events::execute(socket_path).await,
     }
 }
 

@@ -426,6 +426,8 @@ async fn main() -> Result<()> {
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
             })
         }
         AdapterSuite::Gke => {
@@ -452,6 +454,8 @@ async fn main() -> Result<()> {
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
             })
         }
         AdapterSuite::Colima => {
@@ -472,6 +476,8 @@ async fn main() -> Result<()> {
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
                 event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
             })
         }
     };

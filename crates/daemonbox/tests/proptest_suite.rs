@@ -65,6 +65,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 

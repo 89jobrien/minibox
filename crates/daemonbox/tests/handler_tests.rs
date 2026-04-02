@@ -69,6 +69,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 
@@ -149,6 +150,7 @@ async fn test_handle_pull_failure() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -185,6 +187,7 @@ async fn test_handle_run_with_cached_image() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -275,6 +278,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -317,6 +321,7 @@ async fn test_handle_run_resource_limiter_failure() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -359,6 +364,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -611,6 +617,7 @@ fn create_test_deps_with_network(
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 
@@ -963,6 +970,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1101,6 +1109,7 @@ async fn test_handle_run_empty_image_returns_error() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1202,6 +1211,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1329,6 +1339,7 @@ async fn test_handle_run_pull_failure_returns_error() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1446,6 +1457,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1496,6 +1508,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1546,6 +1559,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1589,6 +1603,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1848,6 +1863,7 @@ async fn test_handle_remove_failed_container_succeeds() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1900,6 +1916,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2114,6 +2131,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2175,6 +2193,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2229,6 +2248,7 @@ async fn test_run_empty_image_no_layers() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2279,6 +2299,7 @@ async fn test_pull_registry_failure_with_tag() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2400,6 +2421,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         commit_adapter: None,
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
