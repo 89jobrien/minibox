@@ -540,3 +540,29 @@ mod tests {
         assert_eq!(ip1, ip2); // released IP is reused
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod integration_tests {
+    use super::*;
+
+    /// Run with: just test-integration (requires root + Linux)
+    ///
+    /// Verifies BridgeNetwork can create a bridge interface without panicking.
+    /// Full attach() test requires a running container — see e2e suite.
+    #[tokio::test]
+    #[ignore = "requires root and Linux kernel with bridge support"]
+    async fn test_bridge_setup_creates_interface() {
+        let bridge = BridgeNetwork::new().expect("BridgeNetwork init");
+        bridge.ensure_bridge().expect("ensure_bridge");
+
+        // Verify minibox0 exists
+        let status = std::process::Command::new("ip")
+            .args(["link", "show", "minibox0"])
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "minibox0 bridge should exist after ensure_bridge()"
+        );
+    }
+}
