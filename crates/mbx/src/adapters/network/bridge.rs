@@ -151,6 +151,63 @@ impl BridgeNetwork {
         Ok(())
     }
 
+    /// Apply port mappings via iptables DNAT rules.
+    fn apply_port_mappings(
+        &self,
+        container_ip: &str,
+        mappings: &[minibox_core::domain::PortMapping],
+    ) -> Result<()> {
+        for pm in mappings {
+            let proto = pm.protocol.to_string();
+            let dport = pm.host_port.to_string();
+            let to_dest = format!("{container_ip}:{}", pm.container_port);
+
+            // Check if rule already exists (idempotent)
+            let check = Command::new("iptables")
+                .args([
+                    "-t",
+                    "nat",
+                    "-C",
+                    "PREROUTING",
+                    "-p",
+                    &proto,
+                    "--dport",
+                    &dport,
+                    "-j",
+                    "DNAT",
+                    "--to-destination",
+                    &to_dest,
+                ])
+                .status()
+                .context("iptables check for DNAT rule")?;
+            if !check.success() {
+                run_cmd(&[
+                    "iptables",
+                    "-t",
+                    "nat",
+                    "-A",
+                    "PREROUTING",
+                    "-p",
+                    &proto,
+                    "--dport",
+                    &dport,
+                    "-j",
+                    "DNAT",
+                    "--to-destination",
+                    &to_dest,
+                ])
+                .context("add DNAT rule")?;
+            }
+            tracing::info!(
+                host_port = pm.host_port,
+                container_port = pm.container_port,
+                proto = %proto,
+                "network: port mapping added"
+            );
+        }
+        Ok(())
+    }
+
     /// Derive a short 8-char hex prefix from a container ID for veth naming.
     fn veth_prefix(container_id: &str) -> String {
         // veth interface names must be ≤15 chars; "veth-" + 8 = 13, safe.
@@ -229,7 +286,23 @@ impl NetworkProvider for BridgeNetwork {
             config.dns_servers.clone()
         };
 
+        // Apply port mappings before persisting context.
+        self.apply_port_mappings(&container_ip.to_string(), &config.port_mappings)?;
+
         // Persist context for attach().
+        let port_mappings_json: Vec<serde_json::Value> = config
+            .port_mappings
+            .iter()
+            .map(|pm| {
+                serde_json::json!({
+                    "proto": pm.protocol.to_string(),
+                    "host_port": pm.host_port,
+                    "container_port": pm.container_port,
+                    "container_ip": container_ip.to_string(),
+                })
+            })
+            .collect();
+
         let ctx = serde_json::json!({
             "container_ip": container_ip.to_string(),
             "prefix_len": prefix_len,
@@ -237,6 +310,7 @@ impl NetworkProvider for BridgeNetwork {
             "veth": veth,
             "gateway": gateway,
             "dns": dns,
+            "port_mappings": port_mappings_json,
         });
         let ctx_path = Self::net_context_path(container_id);
         if let Some(parent) = ctx_path.parent() {
@@ -341,7 +415,7 @@ impl NetworkProvider for BridgeNetwork {
     async fn cleanup(&self, container_id: &str) -> Result<()> {
         let ctx_path = Self::net_context_path(container_id);
 
-        // Best-effort: read context to find veth name, delete it.
+        // Best-effort: read context to find veth name, delete it, and remove port mappings.
         if let Ok(ctx_raw) = std::fs::read_to_string(&ctx_path) {
             if let Ok(ctx) = serde_json::from_str::<serde_json::Value>(&ctx_raw) {
                 if let Some(veth) = ctx["veth"].as_str() {
@@ -358,6 +432,33 @@ impl NetworkProvider for BridgeNetwork {
                 if let Some(ip_str) = ctx["container_ip"].as_str() {
                     if let Ok(ip) = ip_str.parse::<IpAddr>() {
                         self.ip_alloc.lock().unwrap().release(ip);
+                    }
+                }
+                // Remove port mapping rules.
+                if let Some(mappings) = ctx["port_mappings"].as_array() {
+                    for m in mappings {
+                        let proto = m["proto"].as_str().unwrap_or("tcp");
+                        let dport = m["host_port"].to_string();
+                        let to_dest = format!(
+                            "{}:{}",
+                            m["container_ip"].as_str().unwrap_or(""),
+                            m["container_port"]
+                        );
+                        let _ = run_cmd(&[
+                            "iptables",
+                            "-t",
+                            "nat",
+                            "-D",
+                            "PREROUTING",
+                            "-p",
+                            proto,
+                            "--dport",
+                            &dport,
+                            "-j",
+                            "DNAT",
+                            "--to-destination",
+                            &to_dest,
+                        ]);
                     }
                 }
             }
