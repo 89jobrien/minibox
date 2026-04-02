@@ -8,7 +8,7 @@
 //!   223      update_container_state: container not found (no-op)
 //!   231      update_container_state: Stopped → clears pid fields
 
-use daemonbox::state::{ContainerRecord, DaemonState};
+use daemonbox::state::{ContainerRecord, ContainerState, DaemonState};
 use minibox_core::image::ImageStore;
 use minibox_core::protocol::ContainerInfo;
 use std::path::PathBuf;
@@ -246,8 +246,9 @@ async fn test_update_container_state_nonexistent_is_noop() {
 
     // No containers have been added — this must not panic.
     state
-        .update_container_state("nonexistent-id", "Stopped")
-        .await;
+        .update_container_state("nonexistent-id", ContainerState::Stopped)
+        .await
+        .ok();
 
     let containers = state.list_containers().await;
     assert!(
@@ -268,8 +269,9 @@ async fn test_update_container_state_nonexistent_does_not_affect_others() {
         .await;
 
     state
-        .update_container_state("no-such-container", "Stopped")
-        .await;
+        .update_container_state("no-such-container", ContainerState::Stopped)
+        .await
+        .ok();
 
     let c = state
         .get_container("existing-1")
@@ -309,7 +311,10 @@ async fn test_update_container_state_stopped_clears_pid() {
     assert_eq!(running.info.state, "Running");
 
     // Transition to Stopped — pid fields must be cleared.
-    state.update_container_state(id, "Stopped").await;
+    state
+        .update_container_state(id, ContainerState::Stopped)
+        .await
+        .expect("Stopped transition");
 
     let stopped = state
         .get_container(id)
@@ -331,7 +336,10 @@ async fn test_update_container_state_non_stopped_preserves_pid() {
     state.set_container_pid(id, 5678).await;
 
     // Transition to "Failed" (not "Stopped") — pid must be preserved.
-    state.update_container_state(id, "Failed").await;
+    state
+        .update_container_state(id, ContainerState::Failed)
+        .await
+        .expect("Failed transition");
 
     let record = state.get_container(id).await.expect("container must exist");
     assert_eq!(record.info.state, "Failed");
@@ -373,7 +381,9 @@ async fn test_concurrent_add_remove_is_consistent() {
             let record = make_record(&id, "Created", None);
             s.add_container(record).await;
             s.set_container_pid(&id, (1000 + i) as u32).await;
-            s.update_container_state(&id, "Stopped").await;
+            s.update_container_state(&id, ContainerState::Stopped)
+                .await
+                .expect("Stopped transition");
             s.remove_container(&id).await;
         }));
     }

@@ -279,19 +279,13 @@ async fn dispatch(
             let response = handler::handle_stop(id, state, deps).await;
             let _ = tx.send(response).await;
         }
-        DaemonRequest::PauseContainer { id: _ } => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: "pause not yet implemented".to_string(),
-                })
-                .await;
+        DaemonRequest::PauseContainer { id } => {
+            let response = handler::handle_pause(id, state).await;
+            let _ = tx.send(response).await;
         }
-        DaemonRequest::ResumeContainer { id: _ } => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: "resume not yet implemented".to_string(),
-                })
-                .await;
+        DaemonRequest::ResumeContainer { id } => {
+            let response = handler::handle_resume(id, state).await;
+            let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {
             let response = handler::handle_remove(id, state, deps).await;

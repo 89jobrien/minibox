@@ -1067,6 +1067,84 @@ async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
     anyhow::bail!("handle_stop not supported on this platform for container {id}")
 }
 
+// ─── Pause / Resume ─────────────────────────────────────────────────────────
+
+/// Freeze a running container by writing `1` to its `cgroup.freeze` file.
+///
+/// Returns `DaemonResponse::ContainerPaused` on success, `DaemonResponse::Error`
+/// if the container is not found, not running, or the cgroup write fails.
+pub async fn handle_pause(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+    let record = state.get_container(&id).await;
+    let record = match record {
+        Some(r) => r,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container {id} not found"),
+            };
+        }
+    };
+    if record.info.state != "Running" {
+        return DaemonResponse::Error {
+            message: format!(
+                "container {id} is not running (state: {})",
+                record.info.state
+            ),
+        };
+    }
+    let freeze_path = record.cgroup_path.join("cgroup.freeze");
+    if let Err(e) = tokio::fs::write(&freeze_path, "1\n").await {
+        return DaemonResponse::Error {
+            message: format!("pause failed: {e}"),
+        };
+    }
+    if let Err(e) = state
+        .update_container_state(&id, ContainerState::Paused)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark paused");
+    }
+    info!(container_id = %id, "container: paused");
+    DaemonResponse::ContainerPaused { id }
+}
+
+/// Unfreeze a paused container by writing `0` to its `cgroup.freeze` file.
+///
+/// Returns `DaemonResponse::ContainerResumed` on success, `DaemonResponse::Error`
+/// if the container is not found, not paused, or the cgroup write fails.
+pub async fn handle_resume(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+    let record = state.get_container(&id).await;
+    let record = match record {
+        Some(r) => r,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container {id} not found"),
+            };
+        }
+    };
+    if record.info.state != "Paused" {
+        return DaemonResponse::Error {
+            message: format!(
+                "container {id} is not paused (state: {})",
+                record.info.state
+            ),
+        };
+    }
+    let freeze_path = record.cgroup_path.join("cgroup.freeze");
+    if let Err(e) = tokio::fs::write(&freeze_path, "0\n").await {
+        return DaemonResponse::Error {
+            message: format!("resume failed: {e}"),
+        };
+    }
+    if let Err(e) = state
+        .update_container_state(&id, ContainerState::Running)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark running after resume");
+    }
+    info!(container_id = %id, "container: resumed");
+    DaemonResponse::ContainerResumed { id }
+}
+
 // ─── Remove ─────────────────────────────────────────────────────────────────
 
 /// Clean up a stopped container: unmount overlay, delete dirs, remove cgroup.

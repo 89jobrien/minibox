@@ -294,10 +294,11 @@ impl DaemonState {
             }
             // Standard forward transitions
             ("Created", ContainerState::Running)
+            | ("Created", ContainerState::Failed)
             | ("Running", ContainerState::Stopped)
             | ("Running", ContainerState::Failed)
             | ("Paused", ContainerState::Stopped) => {
-                if new_state == ContainerState::Stopped || new_state == ContainerState::Failed {
+                if new_state == ContainerState::Stopped {
                     record.info.pid = None;
                     record.pid = None;
                 }
