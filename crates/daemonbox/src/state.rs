@@ -35,7 +35,7 @@ impl ContainerState {
         match self {
             ContainerState::Created => "Created",
             ContainerState::Running => "Running",
-            ContainerState::Paused => "paused",
+            ContainerState::Paused => "Paused",
             ContainerState::Stopped => "Stopped",
             ContainerState::Failed => "Failed",
         }
@@ -133,7 +133,10 @@ impl DaemonState {
 
         // Processes from the previous daemon session are gone.
         for record in records.values_mut() {
-            if record.info.state == "Running" || record.info.state == "Created" {
+            if record.info.state == "Running"
+                || record.info.state == "Created"
+                || record.info.state == "Paused"
+            {
                 debug!(
                     "marking stale container {} as Stopped (was {})",
                     record.info.id, record.info.state
@@ -283,17 +286,17 @@ impl DaemonState {
         match (current, new_state) {
             // Pause: Running → Paused
             ("Running", ContainerState::Paused) => {
-                record.info.state = "paused".to_string();
+                record.info.state = "Paused".to_string();
             }
             // Resume: Paused → Running
-            ("paused", ContainerState::Running) => {
+            ("Paused", ContainerState::Running) => {
                 record.info.state = "Running".to_string();
             }
             // Standard forward transitions
             ("Created", ContainerState::Running)
             | ("Running", ContainerState::Stopped)
             | ("Running", ContainerState::Failed)
-            | ("paused", ContainerState::Stopped) => {
+            | ("Paused", ContainerState::Stopped) => {
                 if new_state == ContainerState::Stopped || new_state == ContainerState::Failed {
                     record.info.pid = None;
                     record.pid = None;
@@ -465,7 +468,7 @@ mod tests {
             .await
             .expect("pause transition");
         let c = state.get_container(&id).await.unwrap();
-        assert_eq!(c.info.state, "paused");
+        assert_eq!(c.info.state, "Paused");
 
         // Resume it
         state
