@@ -18,6 +18,30 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, warn};
 
+/// Typed container state for use with [`DaemonState::update_container_state`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContainerState {
+    Created,
+    Running,
+    /// Container is frozen (cgroup.freeze = 1).
+    Paused,
+    Stopped,
+    Failed,
+}
+
+impl ContainerState {
+    /// Return the wire-format string for this state.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ContainerState::Created => "Created",
+            ContainerState::Running => "Running",
+            ContainerState::Paused => "paused",
+            ContainerState::Stopped => "Stopped",
+            ContainerState::Failed => "Failed",
+        }
+    }
+}
+
 // SECURITY: Maximum concurrent container spawn operations to prevent fork bombs
 const MAX_CONCURRENT_SPAWNS: usize = 100;
 
@@ -249,8 +273,10 @@ impl DaemonState {
         let mut map = self.containers.write().await;
         if let Some(record) = map.get_mut(id) {
             debug!(
-                "updating container {} state {} → {}",
-                id, record.info.state, new_state
+                container_id = id,
+                from = %record.info.state,
+                to = new_state,
+                "state: container state transition"
             );
             record.info.state = new_state.to_string();
             if new_state == "Stopped" {
@@ -260,6 +286,64 @@ impl DaemonState {
         }
         drop(map);
         self.save_to_disk().await;
+    }
+
+    /// Change the `state` field of a container using the typed [`ContainerState`] enum.
+    ///
+    /// Enforces valid transitions:
+    /// - `Running → Paused` (freeze)
+    /// - `Paused → Running` (resume)
+    /// - `Running → Stopped` / `Running → Failed` / `Created → Running`
+    ///
+    /// Returns an error if the transition is not permitted.
+    pub async fn update_container_state_typed(
+        &self,
+        id: &str,
+        new_state: ContainerState,
+    ) -> anyhow::Result<()> {
+        let mut map = self.containers.write().await;
+        let record = map
+            .get_mut(id)
+            .ok_or_else(|| anyhow::anyhow!("container {id} not found"))?;
+
+        let current = record.info.state.as_str();
+        match (current, new_state) {
+            // Pause: Running → Paused
+            ("Running", ContainerState::Paused) => {
+                record.info.state = "paused".to_string();
+            }
+            // Resume: Paused → Running
+            ("paused", ContainerState::Running) => {
+                record.info.state = "Running".to_string();
+            }
+            // Standard forward transitions
+            ("Created", ContainerState::Running)
+            | ("Running", ContainerState::Stopped)
+            | ("Running", ContainerState::Failed)
+            | ("paused", ContainerState::Stopped) => {
+                if new_state == ContainerState::Stopped || new_state == ContainerState::Failed {
+                    record.info.pid = None;
+                    record.pid = None;
+                }
+                record.info.state = new_state.as_str().to_string();
+            }
+            _ => {
+                anyhow::bail!(
+                    "invalid transition: {} → {:?}",
+                    record.info.state,
+                    new_state
+                );
+            }
+        }
+
+        debug!(
+            container_id = id,
+            to = new_state.as_str(),
+            "state: container state transition"
+        );
+        drop(map);
+        self.save_to_disk().await;
+        Ok(())
     }
 
     /// Record the host-namespace PID after the container process is successfully
@@ -320,6 +404,10 @@ mod tests {
     use super::*;
     use minibox_core::protocol::ContainerInfo;
     use tempfile::TempDir;
+
+    fn make_test_record() -> ContainerRecord {
+        make_record_with_name("test-container-id", None)
+    }
 
     fn make_record_with_name(id: &str, name: Option<&str>) -> ContainerRecord {
         ContainerRecord {
@@ -385,5 +473,33 @@ mod tests {
             .await;
         assert!(state.name_in_use("web").await);
         assert!(!state.name_in_use("db").await);
+    }
+
+    #[tokio::test]
+    async fn test_pause_resume_state_transitions() {
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+
+        // Add a running container
+        let mut record = make_test_record();
+        record.info.state = "Running".to_string();
+        state.add_container(record.clone()).await;
+        let id = record.info.id.clone();
+
+        // Pause it
+        state
+            .update_container_state_typed(&id, ContainerState::Paused)
+            .await
+            .expect("pause transition");
+        let c = state.get_container(&id).await.unwrap();
+        assert_eq!(c.info.state, "paused");
+
+        // Resume it
+        state
+            .update_container_state_typed(&id, ContainerState::Running)
+            .await
+            .expect("resume transition");
+        let c = state.get_container(&id).await.unwrap();
+        assert_eq!(c.info.state, "Running");
     }
 }
