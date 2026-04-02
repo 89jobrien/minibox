@@ -225,6 +225,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerList { .. }
             | DaemonResponse::ImageLoaded { .. }
             | DaemonResponse::BuildComplete { .. }
+            | DaemonResponse::ContainerPaused { .. }
+            | DaemonResponse::ContainerResumed { .. }
     )
     // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, and BuildOutput are non-terminal.
 }
@@ -347,6 +349,20 @@ async fn dispatch(
                 tx,
             )
             .await;
+        }
+        DaemonRequest::PauseContainer { id: _ } => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: "pause not yet implemented".to_string(),
+                })
+                .await;
+        }
+        DaemonRequest::ResumeContainer { id: _ } => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: "resume not yet implemented".to_string(),
+                })
+                .await;
         }
     }
 }
