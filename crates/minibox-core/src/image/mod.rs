@@ -9,6 +9,7 @@
 
 pub mod dockerfile;
 pub mod layer;
+pub mod lease;
 pub mod manifest;
 pub mod reference;
 pub mod registry;
