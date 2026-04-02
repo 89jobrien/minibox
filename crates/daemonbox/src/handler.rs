@@ -19,6 +19,7 @@ use minibox_core::domain::{
     DynFilesystemProvider, DynImageRegistry, DynMetricsRecorder, DynNetworkProvider,
     DynResourceLimiter, HookSpec, ResourceConfig,
 };
+use minibox_core::events::{ContainerEvent, EventSink};
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -113,6 +114,8 @@ pub struct HandlerDependencies {
     /// Image builder for building images from a Dockerfile.
     /// `None` on platforms where build is not supported (macOS, Windows).
     pub image_builder: Option<minibox_core::domain::DynImageBuilder>,
+    /// Event sink for emitting container lifecycle events.
+    pub event_sink: Arc<dyn EventSink>,
 }
 
 impl HandlerDependencies {
@@ -255,6 +258,7 @@ async fn handle_run_streaming(
 
     // Build the container ID and rootfs via the shared inner setup, but we need
     // capture_output=true. We inline a variant of run_inner here.
+    let image_label = format!("{}:{}", image, tag.as_deref().unwrap_or("latest"));
     let result = run_inner_capture(
         image,
         tag,
@@ -288,6 +292,16 @@ async fn handle_run_streaming(
     // without waiting for the container to exit.  The protocol spec requires
     // ContainerCreated as the first streaming message (see protocol.rs §Ephemeral).
     debug!(pid = pid, "streaming: sending ContainerCreated");
+    deps.event_sink.emit(ContainerEvent::Created {
+        id: container_id.clone(),
+        image: image_label,
+        timestamp: std::time::SystemTime::now(),
+    });
+    deps.event_sink.emit(ContainerEvent::Started {
+        id: container_id.clone(),
+        pid,
+        timestamp: std::time::SystemTime::now(),
+    });
     let _ = tx
         .send(DaemonResponse::ContainerCreated {
             id: container_id.clone(),
@@ -352,9 +366,34 @@ async fn handle_run_streaming(
         .await;
     debug!(pid = pid, "streaming: network cleanup done");
 
+    // Grab cgroup path before removing state, for OOM detection.
+    let cgroup_path_opt = state
+        .get_container(&container_id)
+        .await
+        .map(|r| r.cgroup_path.clone());
+
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
     debug!(pid = pid, "streaming: container removed");
+
+    // Emit Stopped or OomKilled lifecycle event.
+    let oom = if let Some(ref cgroup_path) = cgroup_path_opt {
+        check_oom_killed(cgroup_path).await
+    } else {
+        false
+    };
+    if oom {
+        deps.event_sink.emit(ContainerEvent::OomKilled {
+            id: container_id.clone(),
+            timestamp: std::time::SystemTime::now(),
+        });
+    } else {
+        deps.event_sink.emit(ContainerEvent::Stopped {
+            id: container_id.clone(),
+            exit_code,
+            timestamp: std::time::SystemTime::now(),
+        });
+    }
 
     let _ = tx
         .send(DaemonResponse::ContainerStopped { exit_code })
@@ -766,6 +805,8 @@ async fn run_inner(
     let metrics_clone = Arc::clone(&deps.metrics);
     let net_clone = net.clone();
     let run_containers_base_clone = deps.run_containers_base.clone();
+    let event_sink_clone = Arc::clone(&deps.event_sink);
+    let image_label_clone = image_label.clone();
 
     tokio::task::spawn(async move {
         // Permit is held until this task completes (via _spawn_permit drop)
@@ -773,6 +814,17 @@ async fn run_inner(
             Ok(spawn_result) => {
                 let pid = spawn_result.pid;
                 info!("container {id_clone} started with PID {pid}");
+
+                event_sink_clone.emit(ContainerEvent::Created {
+                    id: id_clone.clone(),
+                    image: image_label_clone,
+                    timestamp: std::time::SystemTime::now(),
+                });
+                event_sink_clone.emit(ContainerEvent::Started {
+                    id: id_clone.clone(),
+                    pid,
+                    timestamp: std::time::SystemTime::now(),
+                });
 
                 metrics_clone.increment_counter(
                     "minibox_container_ops_total",
@@ -793,8 +845,18 @@ async fn run_inner(
                 let id_wait = id_clone.clone();
                 let rootfs_wait = spawn_config.rootfs.clone();
                 let hooks_wait = spawn_config.hooks.post_exit.clone();
+                let event_sink_wait = Arc::clone(&event_sink_clone);
+                let cgroup_path_wait = spawn_config.cgroup_path.clone();
                 tokio::task::spawn_blocking(move || {
-                    daemon_wait_for_exit(pid, &id_wait, state_wait, rootfs_wait, hooks_wait);
+                    daemon_wait_for_exit(
+                        pid,
+                        &id_wait,
+                        state_wait,
+                        rootfs_wait,
+                        hooks_wait,
+                        event_sink_wait,
+                        cgroup_path_wait,
+                    );
                 });
             }
             Err(e) => {
@@ -842,6 +904,35 @@ fn handler_wait_for_exit(pid: u32) -> Result<i32> {
     }
 }
 
+/// Check if a container was OOM-killed by reading cgroup v2 `memory.events`.
+///
+/// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
+/// the file cannot be read (e.g. cgroup already deleted, or non-Linux platform).
+async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
+    let events_path = cgroup_path.join("memory.events");
+    if let Ok(content) = tokio::fs::read_to_string(&events_path).await {
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("oom_kill ") {
+                return rest.trim().parse::<u64>().unwrap_or(0) > 0;
+            }
+        }
+    }
+    false
+}
+
+/// Synchronous variant of [`check_oom_killed`] for use inside `spawn_blocking` contexts.
+fn check_oom_killed_sync(cgroup_path: &std::path::Path) -> bool {
+    let events_path = cgroup_path.join("memory.events");
+    if let Ok(content) = std::fs::read_to_string(&events_path) {
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("oom_kill ") {
+                return rest.trim().parse::<u64>().unwrap_or(0) > 0;
+            }
+        }
+    }
+    false
+}
+
 /// Block the calling thread until the container process exits.
 ///
 /// This function must be called from a `tokio::task::spawn_blocking` context
@@ -861,11 +952,13 @@ fn daemon_wait_for_exit(
     state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    event_sink: Arc<dyn EventSink>,
+    cgroup_path: std::path::PathBuf,
 ) {
     use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::Pid;
     let nix_pid = Pid::from_raw(pid as i32);
-    let _exit_code = match waitpid(nix_pid, None) {
+    let exit_code = match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
             info!("container {id} exited with code {code}");
             code
@@ -887,9 +980,24 @@ fn daemon_wait_for_exit(
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
         use mbx::container::process::run_hooks;
-        if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(_exit_code)) {
+        if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
             warn!("container {id} post-exit hooks error: {e:#}");
         }
+    }
+
+    // Check OOM and emit lifecycle event (sync: read memory.events directly).
+    let oom = check_oom_killed_sync(&cgroup_path);
+    if oom {
+        event_sink.emit(ContainerEvent::OomKilled {
+            id: id.to_string(),
+            timestamp: std::time::SystemTime::now(),
+        });
+    } else {
+        event_sink.emit(ContainerEvent::Stopped {
+            id: id.to_string(),
+            exit_code,
+            timestamp: std::time::SystemTime::now(),
+        });
     }
 
     // Mark stopped; bridge async state update from sync context.
@@ -924,6 +1032,8 @@ fn daemon_wait_for_exit(
     _state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    _event_sink: Arc<dyn EventSink>,
+    _cgroup_path: std::path::PathBuf,
 ) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
@@ -936,6 +1046,8 @@ fn daemon_wait_for_exit(
     _state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    _event_sink: Arc<dyn EventSink>,
+    _cgroup_path: std::path::PathBuf,
 ) {
     // No-op on this platform.
 }
@@ -1073,7 +1185,11 @@ async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
 ///
 /// Returns `DaemonResponse::ContainerPaused` on success, `DaemonResponse::Error`
 /// if the container is not found, not running, or the cgroup write fails.
-pub async fn handle_pause(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+pub async fn handle_pause(
+    id: String,
+    state: Arc<DaemonState>,
+    event_sink: Arc<dyn EventSink>,
+) -> DaemonResponse {
     let record = state.get_container(&id).await;
     let record = match record {
         Some(r) => r,
@@ -1104,6 +1220,10 @@ pub async fn handle_pause(id: String, state: Arc<DaemonState>) -> DaemonResponse
         warn!(container_id = %id, error = %e, "state: failed to mark paused");
     }
     info!(container_id = %id, "container: paused");
+    event_sink.emit(ContainerEvent::Paused {
+        id: id.clone(),
+        timestamp: std::time::SystemTime::now(),
+    });
     DaemonResponse::ContainerPaused { id }
 }
 
@@ -1111,7 +1231,11 @@ pub async fn handle_pause(id: String, state: Arc<DaemonState>) -> DaemonResponse
 ///
 /// Returns `DaemonResponse::ContainerResumed` on success, `DaemonResponse::Error`
 /// if the container is not found, not paused, or the cgroup write fails.
-pub async fn handle_resume(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+pub async fn handle_resume(
+    id: String,
+    state: Arc<DaemonState>,
+    event_sink: Arc<dyn EventSink>,
+) -> DaemonResponse {
     let record = state.get_container(&id).await;
     let record = match record {
         Some(r) => r,
@@ -1142,6 +1266,10 @@ pub async fn handle_resume(id: String, state: Arc<DaemonState>) -> DaemonRespons
         warn!(container_id = %id, error = %e, "state: failed to mark running after resume");
     }
     info!(container_id = %id, "container: resumed");
+    event_sink.emit(ContainerEvent::Resumed {
+        id: id.clone(),
+        timestamp: std::time::SystemTime::now(),
+    });
     DaemonResponse::ContainerResumed { id }
 }
 

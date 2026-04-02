@@ -125,6 +125,8 @@ use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRunti
 #[cfg(target_os = "linux")]
 use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
+use minibox_core::events::BroadcastEventBroker;
+#[cfg(target_os = "linux")]
 use minibox_core::image::ImageStore;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
@@ -376,6 +378,9 @@ async fn main() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── Event broker ─────────────────────────────────────────────────────
+    let event_broker = Arc::new(BroadcastEventBroker::new());
+
     // ── Metrics ─────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
     let metrics_recorder = {
@@ -420,6 +425,7 @@ async fn main() -> Result<()> {
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
             })
         }
         AdapterSuite::Gke => {
@@ -445,6 +451,7 @@ async fn main() -> Result<()> {
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
             })
         }
         AdapterSuite::Colima => {
@@ -464,6 +471,7 @@ async fn main() -> Result<()> {
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
             })
         }
     };

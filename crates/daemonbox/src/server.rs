@@ -280,11 +280,11 @@ async fn dispatch(
             let _ = tx.send(response).await;
         }
         DaemonRequest::PauseContainer { id } => {
-            let response = handler::handle_pause(id, state).await;
+            let response = handler::handle_pause(id, state, Arc::clone(&deps.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::ResumeContainer { id } => {
-            let response = handler::handle_resume(id, state).await;
+            let response = handler::handle_resume(id, state, Arc::clone(&deps.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {
@@ -398,6 +398,7 @@ mod tests {
             image_pusher: None,
             commit_adapter: None,
             image_builder: None,
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
         });
         (state, deps)
     }
