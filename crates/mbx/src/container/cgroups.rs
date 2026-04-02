@@ -183,7 +183,7 @@ impl CgroupManager {
     }
 
     /// Returns the cgroup path for this container.
-    pub fn path(&self) -> &std::path::Path {
+    pub fn cgroup_path(&self) -> &std::path::Path {
         &self.cgroup_path
     }
 
@@ -298,7 +298,7 @@ mod tests {
     fn test_cgroup_pause_resume_methods_exist() {
         // Verify the methods compile. Real behavior requires root + cgroup mount.
         let mgr = CgroupManager::new("test-pause-id", CgroupConfig::default());
-        let _ = mgr.path();
+        let _ = mgr.cgroup_path();
         // pause/resume are async; confirm they exist via function reference
         let _: fn(&CgroupManager) -> _ = CgroupManager::pause;
         let _: fn(&CgroupManager) -> _ = CgroupManager::resume;
