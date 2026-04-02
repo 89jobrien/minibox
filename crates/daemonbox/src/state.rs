@@ -83,6 +83,8 @@ pub struct DaemonState {
     pub spawn_semaphore: Arc<Semaphore>,
     /// Path to the state file on disk.
     state_file: PathBuf,
+    /// IP addresses currently allocated by bridge network, keyed by container_id.
+    pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
 }
 
 impl DaemonState {
@@ -96,6 +98,7 @@ impl DaemonState {
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: data_dir.join(STATE_FILENAME),
+            allocated_ips: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 

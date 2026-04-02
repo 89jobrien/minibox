@@ -116,6 +116,8 @@ use daemonbox::handler::HandlerDependencies;
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
+use mbx::adapters::network::BridgeNetwork;
+#[cfg(target_os = "linux")]
 use mbx::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
     OverlayFilesystem,
@@ -417,6 +419,21 @@ async fn main() -> Result<()> {
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
+    // ── Network provider selection (Linux native only) ────────────────────
+    #[cfg(target_os = "linux")]
+    let native_network: Arc<dyn minibox_core::domain::NetworkProvider> = {
+        let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
+        match mode.as_str() {
+            "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
+            "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+            _ => Arc::new(NoopNetwork::new()),
+        }
+    };
+    info!(
+        network_mode = %std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string()),
+        "network provider selected"
+    );
+
     let deps = match suite {
         AdapterSuite::Native => {
             let registry = Arc::new(
@@ -433,7 +450,7 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(OverlayFilesystem::new()),
                 resource_limiter: Arc::new(CgroupV2Limiter::new()),
                 runtime: Arc::new(LinuxNamespaceRuntime::new()),
-                network_provider: Arc::new(NoopNetwork::new()),
+                network_provider: native_network,
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
