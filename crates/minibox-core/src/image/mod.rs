@@ -8,6 +8,7 @@
 //! [`ImageStore`] is the main entry point.
 
 pub mod dockerfile;
+pub mod gc;
 pub mod layer;
 pub mod lease;
 pub mod manifest;
@@ -605,7 +606,9 @@ mod tests {
         // Seed a fake image dir
         let img_dir = tmp.path().join("alpine").join("latest");
         tokio::fs::create_dir_all(&img_dir).await.unwrap();
-        tokio::fs::write(img_dir.join("manifest.json"), b"{}").await.unwrap();
+        tokio::fs::write(img_dir.join("manifest.json"), b"{}")
+            .await
+            .unwrap();
 
         store.delete_image("alpine", "latest").await.unwrap();
 
@@ -618,9 +621,7 @@ mod tests {
         let store = ImageStore::new(tmp.path().join("images")).unwrap();
 
         let manifest = sample_manifest(&["sha256:layer1"]);
-        store
-            .store_manifest("alpine", "latest", &manifest)
-            .unwrap();
+        store.store_manifest("alpine", "latest", &manifest).unwrap();
 
         let size = store.image_size_bytes("alpine", "latest").await.unwrap();
         // Should include the manifest.json at least
