@@ -1,0 +1,163 @@
+project: minibox
+id: minibox
+updated: 2026-04-03
+branch: main
+state:
+  tests: unknown
+  build: clean
+  notes: null
+items:
+- id: minibox-1
+  doob_uuid: f44f7d5e-edc0-4cf6-b513-b9c84ae9276c
+  name: ci-3tier-enforcement
+  priority: P1
+  status: open
+  title: Enforce 3-tier git workflow with CI automation
+  description: |
+    Branch protections, PR target rules, tagging expectations. Currently prose-only in docs. main is 7 commits ahead of next — auto-promote blocked.
+  files:
+  - .github/workflows/phased-deployment.yml
+  extra: []
+- id: minibox-2
+  doob_uuid: dd089cb3-f848-49e5-aa49-e3ee20abe92f
+  name: bench-env-toggles
+  priority: P1
+  status: open
+  title: Add env-var toggles and fallbacks to bench/profiling pipeline
+  description: |
+    BROWSER=firefox is hardcoded in samply/cargo-flamegraph recipes — brittle across environments. Add MINIBOX_BENCH_BROWSER or similar toggle.
+  files:
+  - Justfile
+  - mise.toml
+  extra: []
+- id: minibox-3
+  doob_uuid: 42f599b4-7c12-4eb9-a54a-20372ff50701
+  name: phased-deployment-403-fix
+  priority: P1
+  status: open
+  title: Fix phased-deployment CI — HTTP 403 on gh run list
+  description: |
+    GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml. Run https://github.com/89jobrien/minibox/actions/runs/23622830548
+  files:
+  - .github/workflows/phased-deployment.yml
+  extra: []
+- id: minibox-4
+  doob_uuid: 8c8fe4d3-cd0e-4db3-a323-4351aa222454
+  name: handler-coverage-gap
+  priority: P1
+  status: open
+  title: Improve handler.rs coverage (currently 67.5% fn / 55% line)
+  description: |
+    Error paths in run/pull/stop/rm still undertested. Use mock builder patterns documented in CLAUDE.md. gauge drift in reaper task (line 844).
+  files:
+  - crates/daemonbox/src/handler.rs
+  - crates/daemonbox/tests/handler_tests.rs
+  extra: []
+- id: minibox-5
+  doob_uuid: 35f9fb44-8153-4231-8548-5c1e8df902ad
+  name: dual-license
+  priority: P2
+  status: open
+  title: Add dual MIT/Apache-2.0 license files
+  description: |
+    minibox has `license = "MIT"` but no LICENSE file. Upgrade to `MIT OR Apache-2.0` (workspace.package), add LICENSE-MIT and LICENSE-APACHE, update README. Reference notfiles repo for exact content.
+  files:
+  - Cargo.toml
+  - LICENSE-MIT
+  - LICENSE-APACHE
+  - README.md
+  extra: []
+- id: minibox-6
+  doob_uuid: 53634374-789c-4a6f-b7c9-e3bbd1cc35c1
+  name: e2e-serialization-ci
+  priority: P2
+  status: open
+  title: Enforce e2e serialization in CI runner config
+  description: |
+    Local dev and CI use different serial_test configs. Make identical so regressions surface in both.
+  files:
+  - .github/workflows/ci.yml
+  extra: []
+- id: minibox-7
+  doob_uuid: 313c09e5-4f8c-4b53-bbeb-0b0f1f75093c
+  name: vz-apple-bug-blocker
+  priority: P2
+  status: blocked
+  title: VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64
+  description: |
+    Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships a fix.
+  files: []
+  extra:
+  - date: 2026-04-01
+    type: blocker
+    note: |
+      VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
+- id: minibox-8
+  doob_uuid: 8cd6cb5b-3f4a-4346-ae80-a4ac45b263db
+  name: dashbox-sentinel-fixes
+  priority: P2
+  status: open
+  title: Fix 6 dashbox sentinel code quality issues
+  description: |
+    Terminal setup not panic-safe, doob/gh exit status not checked, rev-list unwrap_or_default silently masks detached HEAD, BackgroundCommand discards stderr, Sentinel thread spawns only to drop(tx).
+  files:
+  - crates/dashbox/src/main.rs
+  - crates/dashbox/src/data/todos.rs
+  - crates/dashbox/src/data/ci.rs
+  - crates/dashbox/src/data/git.rs
+  - crates/dashbox/src/command.rs
+  extra: []
+- id: minibox-9
+  doob_uuid: f8c493af-7e24-4fb6-89e7-925ceeb8730a
+  name: mbx-dagu-tier2-fixes
+  priority: P2
+  status: open
+  title: Tier 2 mbx-dagu fixes (#31,
+  description: |
+    Add .gitmodules or document nested repo (#31), Dockerfile use dagu base image not alpine (#35), executor.go pass Env/MemoryLimitBytes/CpuWeight (#36).
+  files: []
+  extra: []
+- id: minibox-10
+  doob_uuid: 70f8c19b-70f3-4b47-9adb-58c9caf29383
+  name: linux-tier3-tests
+  priority: P2
+  status: open
+  title: Tier 3 Linux-only adapter isolation and lifecycle failure tests
+  description: |
+    Native adapter isolation tests (#22), GKE adapter isolation tests (#23), Container lifecycle failure tests (#24). Run on VPS to verify.
+  files: []
+  extra: []
+- id: minibox-11
+  doob_uuid: c383b4b5-99ba-4e5f-817a-ea628c943576
+  name: auth-policy-gate
+  priority: P0
+  status: open
+  title: Add daemon-side policy gate for mounts and privileged containers
+  description: |
+    Council (2026-03-27, 68%): no policy check before granting bind mounts or privileged mode. Any connected root client can escalate. Needs an authorization layer in handler.rs before handle_run.
+  files:
+  - crates/daemonbox/src/handler.rs
+  - crates/daemonbox/src/server.rs
+  extra: []
+log:
+- date: 2026-04-03
+  summary: |
+    Session: bench timeout fix (5s→30s for Colima latency), daemonbox test dep fix (image_gc/image_store HandlerDependencies), backlog docs updated. Bootstrapped HANDOFF.yaml from HANDOFF.md.
+  commits:
+  - 2b6e0d9
+  - 4b644d2
+  - b1a2c27
+- date: 2026-04-02
+  summary: |
+    Tier 1 quick wins shipped; dashbox Metrics tab + Grafana dashboard; pause/resume, event bus, image GC, bridge networking all merged (41 commits).
+  commits:
+  - 1bbb60c
+- date: 2026-04-01
+  summary: |
+    test-linux dogfood infra merged; VZ isolation test harness complete; vsock dispatch-on-main fix; VZErrorInternal Apple bug confirmed and tracked.
+- date: 2026-03-29
+  summary: |
+    linuxbox→mbx rename; VZ.framework adapter suite complete (VzVm, VzProxy, VzRegistry/Runtime/Filesystem/Limiter); xtask modularised.
+- date: 2026-03-27
+  summary: |
+    e2e streaming regression fixed; bind mounts + privileged mode end-to-end; samply/flamegraph bench profiling wired.
