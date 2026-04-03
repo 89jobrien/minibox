@@ -2,8 +2,15 @@ use anyhow::{Context, Result};
 use std::{env, fs, path::Path};
 use xshell::{Shell, cmd};
 
-/// Pre-commit gate: fmt check → lint → release build (macOS-safe)
+/// Pre-commit gate: fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+    cmd!(
+        sh,
+        "cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
+    )
+    .run()
+    .context("clippy --fix failed")?;
     cmd!(sh, "cargo fmt --all --check")
         .run()
         .context("fmt-check failed")?;
