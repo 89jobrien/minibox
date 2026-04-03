@@ -20,7 +20,26 @@ fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(daemonbox::handler::HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -38,6 +57,8 @@ fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies>
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 

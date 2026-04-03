@@ -48,7 +48,25 @@ fn runtime_is_shared_not_per_call() {
 // Mock adapters always succeed. containers_base/run_containers_base are never
 // created or accessed in "unknown ID" tests because handlers return early on
 // ContainerNotFound before touching the filesystem.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
+    let image_store = Arc::new(minibox_core::image::ImageStore::new(tmp.join("images2")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -66,6 +84,8 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 

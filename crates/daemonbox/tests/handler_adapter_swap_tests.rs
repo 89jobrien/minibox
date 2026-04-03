@@ -50,6 +50,23 @@ async fn handle_run_once(
     rx.recv().await.expect("handler sent no response")
 }
 
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(
     registry: MockRegistry,
     filesystem: MockFilesystem,
@@ -57,6 +74,8 @@ fn make_deps(
     runtime: MockRuntime,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(registry),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -74,6 +93,8 @@ fn make_deps(
         image_builder: None,
         event_sink: Arc::new(minibox_core::events::NoopEventSink),
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 
