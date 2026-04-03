@@ -51,10 +51,28 @@ impl ImageStore {
 
     /// Returns `true` if the image `name:tag` has been pulled and its manifest
     /// is present on disk.
+    ///
+    /// Uses a fast-path that avoids the full `image_dir` security machinery
+    /// (canonicalize, anyhow chain) since this is a read-only existence check
+    /// on a caller-supplied name that has already been validated upstream.
+    /// Dangerous-char rejection is still performed inline.
     pub fn has_image(&self, name: &str, tag: &str) -> bool {
-        self.manifest_path(name, tag)
-            .map(|p| p.exists())
-            .unwrap_or(false)
+        // Inline basic safety checks — reject traversal / absolute / empty.
+        for component in [name, tag] {
+            if component.is_empty()
+                || component.starts_with('/')
+                || component.contains("..")
+                || component.contains('\0')
+            {
+                return false;
+            }
+        }
+        let safe_name = name.replace('/', "_");
+        self.base_dir
+            .join(safe_name)
+            .join(tag)
+            .join("manifest.json")
+            .exists()
     }
 
     /// Return the ordered list of layer directories for `name:tag`

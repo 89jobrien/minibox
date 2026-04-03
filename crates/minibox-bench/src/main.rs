@@ -844,7 +844,7 @@ fn main() {
         }
     };
 
-    let report = match run_benchmark(&cfg) {
+    let mut report = match run_benchmark(&cfg) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("error: {err}");
@@ -858,6 +858,17 @@ fn main() {
     if let Err(e) = std::fs::create_dir_all(&cfg.out_dir) {
         eprintln!("error: {e}");
         std::process::exit(1);
+    }
+    // Strip raw per-iteration vectors from the JSON unless BENCH_SAVE_RAW=1.
+    // Aggregates (stats: min/avg/p95) are always preserved.
+    let save_raw = std::env::var("BENCH_SAVE_RAW").as_deref() == Ok("1");
+    if !save_raw {
+        for suite in &mut report.suites {
+            for test in &mut suite.tests {
+                test.durations_micros.clear();
+                test.durations_nanos.clear();
+            }
+        }
     }
     if let Err(e) = write_json(&report, &json_path) {
         eprintln!("error: {e}");
