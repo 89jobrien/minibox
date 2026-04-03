@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-04-01
+**Last updated:** 2026-04-02
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -218,7 +218,7 @@ All items below are merged to `main`:
   - Smoke test: `macbox/tests/vz_adapter_smoke.rs`
   - Wired: `MINIBOX_ADAPTER=vz` + `--features vz`
 - [x] `xtask` modularised: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs (2026-03-29)
-- [x] `dashbox` Ratatui TUI dashboard with 6 tabs (2026-03-29)
+- [x] `dashbox` Ratatui TUI dashboard with 6 tabs (2026-03-29); Metrics tab + Grafana dashboard added (2026-04-02)
 - [x] VZ isolation test suite (`vz_isolation_tests.rs`) — 11 behavioral tests covering overlay, cgroups, namespaces, rootfs (2026-04-01, commit `b53c7c6`):
   - `harness = false` + custom `main()` calling `dispatch_main()` on OS main thread — fixes indefinite hang caused by VZ.framework completion handlers needing a live GCD main queue
   - `entitlements/vz-test.entitlements` (`com.apple.security.virtualization`) + codesign step in `just test-vz-isolation`
@@ -237,6 +237,48 @@ All items below are merged to `main`:
 
 ---
 
+## April 2: merged to main
+
+### Dashbox Metrics tab + Grafana dashboard
+
+- `crates/dashbox/src/data/metrics.rs` — `MetricsSource` polling miniboxd Prometheus endpoint; Prometheus text format hand-parsed
+- `crates/dashbox/src/tabs/metrics.rs` — `MetricsTab` rendering status bar + counters + duration tables
+- `Tab::Metrics` wired into `app.rs` as tab 8
+- `grafana/minibox-dashboard.json` — importable Grafana dashboard (4 panels)
+
+### 4 phases, 17 tasks (from plan — all verified in codebase)
+
+Phase 1: Container Freeze/Pause
+
+- CgroupManager::pause()/resume() via cgroup.freeze
+- ContainerState::Paused with validated state transitions
+- PauseContainer/ResumeContainer protocol + handle_pause/handle_resume handlers
+- minibox pause <id> / minibox resume <id> CLI commands
+
+Phase 2: Container Events
+
+- EventSink/EventSource ports + BroadcastEventBroker adapter (tokio broadcast, 1024-cap)
+- NoopEventSink for tests; DynEventSink/DynEventSource type aliases
+- Lifecycle events emitted: Created, Started, Stopped, OomKilled, Paused, Resumed
+- SubscribeEvents protocol + streaming handle_subscribe_events
+- minibox events CLI — streams JSON-lines to stdout
+
+Phase 3: Image GC + Leases
+
+- ImageStore::list_all_images(), delete_image(), image_size_bytes()
+- DiskLeaseService + ImageLeaseService trait (disk-persisted, TTL-based)
+- ImageGc + ImageGarbageCollector trait with dry-run support
+- Prune/RemoveImage protocol + handlers with in-use protection
+- minibox prune [--dry-run] / minibox rmi <image> CLI commands
+
+Phase 4: Bridge Networking
+
+- IpAllocator (BTreeSet-based, skips network+gateway, release/reuse)
+- BridgeNetwork adapter: setup() (veth pair, bridge, NAT), attach() (nsenter), cleanup(), stats()
+- Port mapping via iptables DNAT with idempotent add/remove
+- MINIBOX_NETWORK_MODE=bridge wiring in miniboxd
+- Ignored integration test for Linux root environments
+
 ## Issue backlog timeline
 
 All open issues in execution order. Update status as issues close.
@@ -246,12 +288,12 @@ All open issues in execution order. Update status as issues close.
 | #   | Title                                                | Size | Status |
 | --- | ---------------------------------------------------- | ---- | ------ |
 | #4  | GHA CI: add fmt+clippy gates                         | S    | closed |
-| #7  | save_bench_results: avoid full Value parse/serialize | S    | open   |
-| #8  | Adapter microbench: single tokio runtime per suite   | S    | open   |
-| #9  | VPS: replace sshpass with 1Password SSH agent        | S    | open   |
-| #10 | Bench artifacts: aggregates only, raw opt-in         | M    | open   |
-| #12 | has_image_sync: eliminate per-call String alloc      | XS   | open   |
-| #13 | Proptest DaemonState: avoid disk I/O per iteration   | S    | open   |
+| #7  | save_bench_results: avoid full Value parse/serialize | S    | closed |
+| #8  | Adapter microbench: single tokio runtime per suite   | S    | closed |
+| #9  | VPS: replace sshpass with 1Password SSH agent        | S    | closed |
+| #10 | Bench artifacts: aggregates only, raw opt-in         | M    | closed |
+| #12 | has_image_sync: eliminate per-call String alloc      | XS   | closed |
+| #13 | Proptest DaemonState: avoid disk I/O per iteration   | S    | closed |
 
 ### Tier 2 — mbx-dagu fixes
 
@@ -307,11 +349,23 @@ All open issues in execution order. Update status as issues close.
 Full flow: `cargo xtask test-linux` builds a cross-compiled `mbx-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged mbx-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
 
 Key new commands:
+
 - `cargo xtask build-test-image [--force]` — build + cache `mbx-tester.tar`
 - `cargo xtask test-linux` / `just test-linux` — full dogfood run
 - `minibox load <path> [--name <name>] [--tag <tag>]` — load local OCI tarball
 
-Pre-commit gate passing. All 21 unit tests passing. Ready to merge.
+### Open — dashbox sentinel items (low priority, no blockers)
+
+Six code quality issues flagged by sentinel, all in `crates/dashbox/`:
+
+| File | Issue |
+| ---- | ----- |
+| `main.rs:24-35` | Terminal setup not panic-safe — wrap in RAII drop guard |
+| `data/todos.rs:51-53` | `doob` exit status not checked before parsing stdout |
+| `data/ci.rs:56-58` | `gh run list` exit status not checked; stderr not captured |
+| `data/git.rs:62` | `rev-list .unwrap_or_default()` silently masks detached HEAD |
+| `src/command.rs:100-101` | `BackgroundCommand` discards stderr via `Stdio::null()` |
+| `src/command.rs:52-54` | Sentinel thread spawns only to `drop(tx)`; should drop inline |
 
 ### DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
 
@@ -338,14 +392,14 @@ More error scenarios can be added incrementally using existing mock builder patt
 
 macOS VZ.framework stack is **complete and merged** (2026-03-29). Remaining work:
 
-| Issue | Title                                                | Status                           |
-| ----- | ---------------------------------------------------- | -------------------------------- |
+| Issue | Title                                                | Status                              |
+| ----- | ---------------------------------------------------- | ----------------------------------- |
 | #44   | minibox owns the full stack on every OS              | done —macOS done                    |
 | #40   | Provision/boot VM via Apple Virtualization.Framework | done —Done — VzVm::boot             |
 | #41   | minibox-agent — in-VM daemon over vsock              | done —Done — miniboxd as musl agent |
 | #42   | vsock I/O bridge — stream stdout/stderr host↔VM      | done —Done — VzProxy                |
 | #43   | virtiofs mounts — share OCI layers + bind mounts     | done —Done — 3 virtiofs shares      |
-| #45   | Windows: Hyper-V / WSL2 kernel path                  | Open                             |
+| #45   | Windows: Hyper-V / WSL2 kernel path                  | Open                                |
 
 **VZ status (2026-04-01):** Test harness is complete and correct. Blocked by confirmed Apple OS bug — `VZErrorInternal(code=1)` on `startWithCompletionHandler` on macOS 26 ARM64. Affects all VZ.framework users (Podman, apple/container). Monitor [apple/container#1254](https://github.com/apple/container/issues/1254) for resolution. No code changes needed on our side when Apple ships the fix — `just test-vz-isolation` should pass as-is.
 
