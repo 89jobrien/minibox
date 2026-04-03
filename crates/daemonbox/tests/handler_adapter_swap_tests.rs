@@ -72,6 +72,8 @@ fn make_deps(
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
     })
 }
 

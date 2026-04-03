@@ -19,6 +19,7 @@ use minibox_core::domain::{
     DynFilesystemProvider, DynImageRegistry, DynMetricsRecorder, DynNetworkProvider,
     DynResourceLimiter, HookSpec, ResourceConfig,
 };
+use minibox_core::events::{ContainerEvent, EventSink};
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,7 +29,7 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::network_lifecycle::NetworkLifecycle;
-use crate::state::{ContainerRecord, DaemonState};
+use crate::state::{ContainerRecord, ContainerState, DaemonState};
 use async_trait::async_trait;
 
 // ─── Default adapters ────────────────────────────────────────────────────────
@@ -113,6 +114,14 @@ pub struct HandlerDependencies {
     /// Image builder for building images from a Dockerfile.
     /// `None` on platforms where build is not supported (macOS, Windows).
     pub image_builder: Option<minibox_core::domain::DynImageBuilder>,
+    /// Event sink for emitting container lifecycle events.
+    pub event_sink: Arc<dyn EventSink>,
+    /// Source for subscribing to the container event stream.
+    pub event_source: Arc<dyn minibox_core::events::EventSource>,
+    /// Image garbage collector for prune operations.
+    pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
+    /// Image store for direct image operations (e.g. RemoveImage).
+    pub image_store: Arc<minibox_core::image::ImageStore>,
 }
 
 impl HandlerDependencies {
@@ -255,6 +264,7 @@ async fn handle_run_streaming(
 
     // Build the container ID and rootfs via the shared inner setup, but we need
     // capture_output=true. We inline a variant of run_inner here.
+    let image_label = format!("{}:{}", image, tag.as_deref().unwrap_or("latest"));
     let result = run_inner_capture(
         image,
         tag,
@@ -288,6 +298,16 @@ async fn handle_run_streaming(
     // without waiting for the container to exit.  The protocol spec requires
     // ContainerCreated as the first streaming message (see protocol.rs §Ephemeral).
     debug!(pid = pid, "streaming: sending ContainerCreated");
+    deps.event_sink.emit(ContainerEvent::Created {
+        id: container_id.clone(),
+        image: image_label,
+        timestamp: std::time::SystemTime::now(),
+    });
+    deps.event_sink.emit(ContainerEvent::Started {
+        id: container_id.clone(),
+        pid,
+        timestamp: std::time::SystemTime::now(),
+    });
     let _ = tx
         .send(DaemonResponse::ContainerCreated {
             id: container_id.clone(),
@@ -352,9 +372,34 @@ async fn handle_run_streaming(
         .await;
     debug!(pid = pid, "streaming: network cleanup done");
 
+    // Grab cgroup path before removing state, for OOM detection.
+    let cgroup_path_opt = state
+        .get_container(&container_id)
+        .await
+        .map(|r| r.cgroup_path.clone());
+
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
     debug!(pid = pid, "streaming: container removed");
+
+    // Emit Stopped or OomKilled lifecycle event.
+    let oom = if let Some(ref cgroup_path) = cgroup_path_opt {
+        check_oom_killed(cgroup_path).await
+    } else {
+        false
+    };
+    if oom {
+        deps.event_sink.emit(ContainerEvent::OomKilled {
+            id: container_id.clone(),
+            timestamp: std::time::SystemTime::now(),
+        });
+    } else {
+        deps.event_sink.emit(ContainerEvent::Stopped {
+            id: container_id.clone(),
+            exit_code,
+            timestamp: std::time::SystemTime::now(),
+        });
+    }
 
     let _ = tx
         .send(DaemonResponse::ContainerStopped { exit_code })
@@ -766,6 +811,8 @@ async fn run_inner(
     let metrics_clone = Arc::clone(&deps.metrics);
     let net_clone = net.clone();
     let run_containers_base_clone = deps.run_containers_base.clone();
+    let event_sink_clone = Arc::clone(&deps.event_sink);
+    let image_label_clone = image_label.clone();
 
     tokio::task::spawn(async move {
         // Permit is held until this task completes (via _spawn_permit drop)
@@ -773,6 +820,17 @@ async fn run_inner(
             Ok(spawn_result) => {
                 let pid = spawn_result.pid;
                 info!("container {id_clone} started with PID {pid}");
+
+                event_sink_clone.emit(ContainerEvent::Created {
+                    id: id_clone.clone(),
+                    image: image_label_clone,
+                    timestamp: std::time::SystemTime::now(),
+                });
+                event_sink_clone.emit(ContainerEvent::Started {
+                    id: id_clone.clone(),
+                    pid,
+                    timestamp: std::time::SystemTime::now(),
+                });
 
                 metrics_clone.increment_counter(
                     "minibox_container_ops_total",
@@ -793,8 +851,18 @@ async fn run_inner(
                 let id_wait = id_clone.clone();
                 let rootfs_wait = spawn_config.rootfs.clone();
                 let hooks_wait = spawn_config.hooks.post_exit.clone();
+                let event_sink_wait = Arc::clone(&event_sink_clone);
+                let cgroup_path_wait = spawn_config.cgroup_path.clone();
                 tokio::task::spawn_blocking(move || {
-                    daemon_wait_for_exit(pid, &id_wait, state_wait, rootfs_wait, hooks_wait);
+                    daemon_wait_for_exit(
+                        pid,
+                        &id_wait,
+                        state_wait,
+                        rootfs_wait,
+                        hooks_wait,
+                        event_sink_wait,
+                        cgroup_path_wait,
+                    );
                 });
             }
             Err(e) => {
@@ -803,9 +871,12 @@ async fn run_inner(
                     "minibox_container_ops_total",
                     &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
                 );
-                state_clone
-                    .update_container_state(&id_clone, "Failed")
-                    .await;
+                if let Err(e) = state_clone
+                    .update_container_state(&id_clone, ContainerState::Failed)
+                    .await
+                {
+                    warn!(container_id = %id_clone, error = %e, "state: failed to mark container Failed");
+                }
             }
         }
     });
@@ -839,6 +910,35 @@ fn handler_wait_for_exit(pid: u32) -> Result<i32> {
     }
 }
 
+/// Check if a container was OOM-killed by reading cgroup v2 `memory.events`.
+///
+/// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
+/// the file cannot be read (e.g. cgroup already deleted, or non-Linux platform).
+async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
+    let events_path = cgroup_path.join("memory.events");
+    if let Ok(content) = tokio::fs::read_to_string(&events_path).await {
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("oom_kill ") {
+                return rest.trim().parse::<u64>().unwrap_or(0) > 0;
+            }
+        }
+    }
+    false
+}
+
+/// Synchronous variant of [`check_oom_killed`] for use inside `spawn_blocking` contexts.
+fn check_oom_killed_sync(cgroup_path: &std::path::Path) -> bool {
+    let events_path = cgroup_path.join("memory.events");
+    if let Ok(content) = std::fs::read_to_string(&events_path) {
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("oom_kill ") {
+                return rest.trim().parse::<u64>().unwrap_or(0) > 0;
+            }
+        }
+    }
+    false
+}
+
 /// Block the calling thread until the container process exits.
 ///
 /// This function must be called from a `tokio::task::spawn_blocking` context
@@ -858,11 +958,13 @@ fn daemon_wait_for_exit(
     state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    event_sink: Arc<dyn EventSink>,
+    cgroup_path: std::path::PathBuf,
 ) {
     use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::Pid;
     let nix_pid = Pid::from_raw(pid as i32);
-    let _exit_code = match waitpid(nix_pid, None) {
+    let exit_code = match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
             info!("container {id} exited with code {code}");
             code
@@ -884,22 +986,43 @@ fn daemon_wait_for_exit(
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
         use mbx::container::process::run_hooks;
-        if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(_exit_code)) {
+        if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
             warn!("container {id} post-exit hooks error: {e:#}");
         }
+    }
+
+    // Check OOM and emit lifecycle event (sync: read memory.events directly).
+    let oom = check_oom_killed_sync(&cgroup_path);
+    if oom {
+        event_sink.emit(ContainerEvent::OomKilled {
+            id: id.to_string(),
+            timestamp: std::time::SystemTime::now(),
+        });
+    } else {
+        event_sink.emit(ContainerEvent::Stopped {
+            id: id.to_string(),
+            exit_code,
+            timestamp: std::time::SystemTime::now(),
+        });
     }
 
     // Mark stopped; bridge async state update from sync context.
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
-            handle.block_on(state.update_container_state(id, "Stopped"));
+            if let Err(e) =
+                handle.block_on(state.update_container_state(id, ContainerState::Stopped))
+            {
+                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+            }
         }
         Err(_) => {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("one-shot runtime");
-            rt.block_on(state.update_container_state(id, "Stopped"));
+            if let Err(e) = rt.block_on(state.update_container_state(id, ContainerState::Stopped)) {
+                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+            }
         }
     }
 }
@@ -915,6 +1038,8 @@ fn daemon_wait_for_exit(
     _state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    _event_sink: Arc<dyn EventSink>,
+    _cgroup_path: std::path::PathBuf,
 ) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
@@ -927,6 +1052,8 @@ fn daemon_wait_for_exit(
     _state: Arc<DaemonState>,
     _rootfs: std::path::PathBuf,
     _post_exit_hooks: Vec<HookSpec>,
+    _event_sink: Arc<dyn EventSink>,
+    _cgroup_path: std::path::PathBuf,
 ) {
     // No-op on this platform.
 }
@@ -1031,7 +1158,12 @@ async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()> {
         }
     }
 
-    state.update_container_state(id, "Stopped").await;
+    if let Err(e) = state
+        .update_container_state(id, ContainerState::Stopped)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+    }
     Ok(())
 }
 
@@ -1051,6 +1183,100 @@ async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
 #[cfg(not(any(unix, windows)))]
 async fn stop_inner(id: &str, _state: &Arc<DaemonState>) -> Result<()> {
     anyhow::bail!("handle_stop not supported on this platform for container {id}")
+}
+
+// ─── Pause / Resume ─────────────────────────────────────────────────────────
+
+/// Freeze a running container by writing `1` to its `cgroup.freeze` file.
+///
+/// Returns `DaemonResponse::ContainerPaused` on success, `DaemonResponse::Error`
+/// if the container is not found, not running, or the cgroup write fails.
+pub async fn handle_pause(
+    id: String,
+    state: Arc<DaemonState>,
+    event_sink: Arc<dyn EventSink>,
+) -> DaemonResponse {
+    let record = state.get_container(&id).await;
+    let record = match record {
+        Some(r) => r,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container {id} not found"),
+            };
+        }
+    };
+    if record.info.state != ContainerState::Running.as_str() {
+        return DaemonResponse::Error {
+            message: format!(
+                "container {id} is not running (state: {})",
+                record.info.state
+            ),
+        };
+    }
+    let freeze_path = record.cgroup_path.join("cgroup.freeze");
+    if let Err(e) = tokio::fs::write(&freeze_path, "1\n").await {
+        return DaemonResponse::Error {
+            message: format!("pause failed: {e}"),
+        };
+    }
+    if let Err(e) = state
+        .update_container_state(&id, ContainerState::Paused)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark paused");
+    }
+    info!(container_id = %id, "container: paused");
+    event_sink.emit(ContainerEvent::Paused {
+        id: id.clone(),
+        timestamp: std::time::SystemTime::now(),
+    });
+    DaemonResponse::ContainerPaused { id }
+}
+
+/// Unfreeze a paused container by writing `0` to its `cgroup.freeze` file.
+///
+/// Returns `DaemonResponse::ContainerResumed` on success, `DaemonResponse::Error`
+/// if the container is not found, not paused, or the cgroup write fails.
+pub async fn handle_resume(
+    id: String,
+    state: Arc<DaemonState>,
+    event_sink: Arc<dyn EventSink>,
+) -> DaemonResponse {
+    let record = state.get_container(&id).await;
+    let record = match record {
+        Some(r) => r,
+        None => {
+            return DaemonResponse::Error {
+                message: format!("container {id} not found"),
+            };
+        }
+    };
+    if record.info.state != ContainerState::Paused.as_str() {
+        return DaemonResponse::Error {
+            message: format!(
+                "container {id} is not paused (state: {})",
+                record.info.state
+            ),
+        };
+    }
+    let freeze_path = record.cgroup_path.join("cgroup.freeze");
+    if let Err(e) = tokio::fs::write(&freeze_path, "0\n").await {
+        return DaemonResponse::Error {
+            message: format!("resume failed: {e}"),
+        };
+    }
+    if let Err(e) = state
+        .update_container_state(&id, ContainerState::Running)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark running after resume");
+    }
+    info!(container_id = %id, "container: resumed");
+    event_sink.emit(ContainerEvent::Resumed {
+        id: id.clone(),
+        timestamp: std::time::SystemTime::now(),
+    });
+    DaemonResponse::ContainerResumed { id }
 }
 
 // ─── Remove ─────────────────────────────────────────────────────────────────
@@ -1557,6 +1783,148 @@ pub async fn handle_build(
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: format!("build failed: {e}"),
+                })
+                .await;
+        }
+    }
+}
+
+// ─── Event subscription ──────────────────────────────────────────────────────
+
+/// Stream container lifecycle events to a client.
+///
+/// Subscribes to the event broker and forwards each [`ContainerEvent`] as a
+/// [`DaemonResponse::Event`] message until the client disconnects (channel
+/// send fails) or the broker is shut down.
+pub(crate) async fn handle_subscribe_events(
+    event_source: Arc<dyn minibox_core::events::EventSource>,
+    tx: tokio::sync::mpsc::Sender<minibox_core::protocol::DaemonResponse>,
+) {
+    let mut rx = event_source.subscribe();
+    loop {
+        match rx.recv().await {
+            Ok(event) => {
+                if tx
+                    .send(minibox_core::protocol::DaemonResponse::Event { event })
+                    .await
+                    .is_err()
+                {
+                    // Client disconnected.
+                    break;
+                }
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!(skipped = n, "events: subscriber lagged, skipping events");
+                // Continue — don't break on lag.
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
+}
+
+// ─── Prune ──────────────────────────────────────────────────────────────────
+
+/// Remove unused images from the image store.
+pub(crate) async fn handle_prune(
+    dry_run: bool,
+    state: Arc<DaemonState>,
+    image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
+    event_sink: Arc<dyn EventSink>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let in_use: Vec<String> = state
+        .list_containers()
+        .await
+        .into_iter()
+        .filter_map(|c| {
+            if c.state == "running" || c.state == "paused" {
+                Some(c.image.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    match image_gc.prune(dry_run, &in_use).await {
+        Ok(report) => {
+            let count = report.removed.len();
+            let freed = report.freed_bytes;
+            event_sink.emit(minibox_core::events::ContainerEvent::ImagePruned {
+                count,
+                freed_bytes: freed,
+                timestamp: std::time::SystemTime::now(),
+            });
+            let _ = tx
+                .send(DaemonResponse::Pruned {
+                    removed: report.removed,
+                    freed_bytes: freed,
+                    dry_run: report.dry_run,
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
+                })
+                .await;
+        }
+    }
+}
+
+// ─── RemoveImage ─────────────────────────────────────────────────────────────
+
+/// Remove a specific image by reference.
+pub(crate) async fn handle_remove_image(
+    image_ref: String,
+    state: Arc<DaemonState>,
+    image_store: Arc<minibox_core::image::ImageStore>,
+    event_sink: Arc<dyn EventSink>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let in_use = state
+        .list_containers()
+        .await
+        .into_iter()
+        .any(|c| (c.state == "running" || c.state == "paused") && c.image == image_ref);
+
+    if in_use {
+        let _ = tx
+            .send(DaemonResponse::Error {
+                message: format!("image {image_ref} is in use by a running container"),
+            })
+            .await;
+        return;
+    }
+
+    let (name, tag) = match image_ref.rsplit_once(':') {
+        Some(pair) => pair,
+        None => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("invalid image ref: {image_ref}"),
+                })
+                .await;
+            return;
+        }
+    };
+
+    match image_store.delete_image(name, tag).await {
+        Ok(()) => {
+            event_sink.emit(minibox_core::events::ContainerEvent::ImageRemoved {
+                image: image_ref.clone(),
+                timestamp: std::time::SystemTime::now(),
+            });
+            let _ = tx
+                .send(DaemonResponse::Success {
+                    message: format!("removed {image_ref}"),
+                })
+                .await;
+        }
+        Err(e) => {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: e.to_string(),
                 })
                 .await;
         }

@@ -116,6 +116,8 @@ use daemonbox::handler::HandlerDependencies;
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
+use mbx::adapters::network::BridgeNetwork;
+#[cfg(target_os = "linux")]
 use mbx::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
     OverlayFilesystem,
@@ -125,7 +127,13 @@ use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRunti
 #[cfg(target_os = "linux")]
 use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
+use minibox_core::events::BroadcastEventBroker;
+#[cfg(target_os = "linux")]
 use minibox_core::image::ImageStore;
+#[cfg(target_os = "linux")]
+use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
+#[cfg(target_os = "linux")]
+use minibox_core::image::lease::DiskLeaseService;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
@@ -376,6 +384,19 @@ async fn main() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── Image GC ─────────────────────────────────────────────────────────
+    let leases_path = data_dir.join("leases.json");
+    let lease_service = Arc::new(
+        DiskLeaseService::new(leases_path)
+            .await
+            .context("creating lease service")?,
+    );
+    let image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
+    // ── Event broker ─────────────────────────────────────────────────────
+    let event_broker = Arc::new(BroadcastEventBroker::new());
+
     // ── Metrics ─────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
     let metrics_recorder = {
@@ -398,6 +419,21 @@ async fn main() -> Result<()> {
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
+    // ── Network provider selection (Linux native only) ────────────────────
+    #[cfg(target_os = "linux")]
+    let native_network: Arc<dyn minibox_core::domain::NetworkProvider> = {
+        let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
+        match mode.as_str() {
+            "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
+            "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+            _ => Arc::new(NoopNetwork::new()),
+        }
+    };
+    info!(
+        network_mode = %std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string()),
+        "network provider selected"
+    );
+
     let deps = match suite {
         AdapterSuite::Native => {
             let registry = Arc::new(
@@ -414,12 +450,17 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(OverlayFilesystem::new()),
                 resource_limiter: Arc::new(CgroupV2Limiter::new()),
                 runtime: Arc::new(LinuxNamespaceRuntime::new()),
-                network_provider: Arc::new(NoopNetwork::new()),
+                network_provider: native_network,
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
         AdapterSuite::Gke => {
@@ -445,6 +486,11 @@ async fn main() -> Result<()> {
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
         AdapterSuite::Colima => {
@@ -464,6 +510,11 @@ async fn main() -> Result<()> {
                 metrics: metrics_recorder.clone(),
                 image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                 exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
             })
         }
     };

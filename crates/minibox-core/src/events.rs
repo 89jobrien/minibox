@@ -5,7 +5,6 @@
 //! `BroadcastEventBroker` is the single adapter implementing both ports.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::broadcast;
 
@@ -13,15 +12,47 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContainerEvent {
-    Created   { id: String, image: String,      timestamp: SystemTime },
-    Started   { id: String, pid: u32,           timestamp: SystemTime },
-    Stopped   { id: String, exit_code: i32,     timestamp: SystemTime },
-    Paused    { id: String,                     timestamp: SystemTime },
-    Resumed   { id: String,                     timestamp: SystemTime },
-    OomKilled { id: String,                     timestamp: SystemTime },
-    ImagePulled  { image: String, size_bytes: u64, timestamp: SystemTime },
-    ImageRemoved { image: String,                  timestamp: SystemTime },
-    ImagePruned  { count: usize, freed_bytes: u64, timestamp: SystemTime },
+    Created {
+        id: String,
+        image: String,
+        timestamp: SystemTime,
+    },
+    Started {
+        id: String,
+        pid: u32,
+        timestamp: SystemTime,
+    },
+    Stopped {
+        id: String,
+        exit_code: i32,
+        timestamp: SystemTime,
+    },
+    Paused {
+        id: String,
+        timestamp: SystemTime,
+    },
+    Resumed {
+        id: String,
+        timestamp: SystemTime,
+    },
+    OomKilled {
+        id: String,
+        timestamp: SystemTime,
+    },
+    ImagePulled {
+        image: String,
+        size_bytes: u64,
+        timestamp: SystemTime,
+    },
+    ImageRemoved {
+        image: String,
+        timestamp: SystemTime,
+    },
+    ImagePruned {
+        count: usize,
+        freed_bytes: u64,
+        timestamp: SystemTime,
+    },
 }
 
 /// Port: write-only event emission. Handlers depend on this.

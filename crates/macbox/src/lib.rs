@@ -30,6 +30,8 @@ use mbx::adapters::{
     NoopNetwork,
 };
 use minibox_core::image::ImageStore;
+use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
+use minibox_core::image::lease::DiskLeaseService;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UnixListener;
@@ -113,6 +115,15 @@ pub async fn start() -> Result<()> {
     state.load_from_disk().await;
     info!("state loaded from disk");
 
+    // ── Image GC ─────────────────────────────────────────────────────────
+    let lease_service = Arc::new(
+        DiskLeaseService::new(data_dir.join("leases.json"))
+            .await
+            .context("creating lease service")?,
+    );
+    let image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
     // ── VZ branch ────────────────────────────────────────────────────────
     #[cfg(feature = "vz")]
     if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz") {
@@ -180,6 +191,10 @@ pub async fn start() -> Result<()> {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::clone(&image_gc),
+        image_store: Arc::clone(&state.image_store),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -333,6 +348,19 @@ async fn start_vz(
         .context("vz: agent did not come up within 60 attempts")?;
     info!("vz: agent ready");
 
+    // Build a minimal GC for VZ — leases file lives next to images_dir.
+    let vz_image_store_ref = Arc::clone(&state.image_store);
+    let vz_lease_path = images_dir
+        .parent()
+        .unwrap_or(&images_dir)
+        .join("leases.json");
+    let vz_leases = Arc::new(
+        DiskLeaseService::new(vz_lease_path)
+            .await
+            .context("vz: creating lease service")?,
+    );
+    let vz_image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&vz_image_store_ref), vz_leases));
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
         ghcr_registry: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
@@ -348,6 +376,10 @@ async fn start_vz(
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: vz_image_gc,
+        image_store: vz_image_store_ref,
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

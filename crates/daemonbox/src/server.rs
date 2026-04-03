@@ -227,8 +227,9 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::BuildComplete { .. }
             | DaemonResponse::ContainerPaused { .. }
             | DaemonResponse::ContainerResumed { .. }
+            | DaemonResponse::Pruned { .. }
     )
-    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, and BuildOutput are non-terminal.
+    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and Event are non-terminal.
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -277,6 +278,14 @@ async fn dispatch(
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
+            let _ = tx.send(response).await;
+        }
+        DaemonRequest::PauseContainer { id } => {
+            let response = handler::handle_pause(id, state, Arc::clone(&deps.event_sink)).await;
+            let _ = tx.send(response).await;
+        }
+        DaemonRequest::ResumeContainer { id } => {
+            let response = handler::handle_resume(id, state, Arc::clone(&deps.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {
@@ -350,19 +359,29 @@ async fn dispatch(
             )
             .await;
         }
-        DaemonRequest::PauseContainer { id: _ } => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: "pause not yet implemented".to_string(),
-                })
-                .await;
+        DaemonRequest::SubscribeEvents => {
+            tokio::spawn(handler::handle_subscribe_events(
+                Arc::clone(&deps.event_source),
+                tx,
+            ));
         }
-        DaemonRequest::ResumeContainer { id: _ } => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: "resume not yet implemented".to_string(),
-                })
-                .await;
+        DaemonRequest::Prune { dry_run } => {
+            tokio::spawn(handler::handle_prune(
+                dry_run,
+                Arc::clone(&state),
+                Arc::clone(&deps.image_gc),
+                Arc::clone(&deps.event_sink),
+                tx,
+            ));
+        }
+        DaemonRequest::RemoveImage { image_ref } => {
+            tokio::spawn(handler::handle_remove_image(
+                image_ref,
+                Arc::clone(&state),
+                Arc::clone(&deps.image_store),
+                Arc::clone(&deps.event_sink),
+                tx,
+            ));
         }
     }
 }
@@ -379,6 +398,25 @@ mod tests {
     use tempfile::TempDir;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+    // ─── test-only no-op GC ─────────────────────────────────────────────────
+
+    struct NoopImageGc;
+
+    #[async_trait::async_trait]
+    impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+        async fn prune(
+            &self,
+            dry_run: bool,
+            _in_use: &[String],
+        ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+            Ok(minibox_core::image::gc::PruneReport {
+                removed: vec![],
+                freed_bytes: 0,
+                dry_run,
+            })
+        }
+    }
+
     // ─── helpers ────────────────────────────────────────────────────────────
 
     fn test_deps(
@@ -389,6 +427,10 @@ mod tests {
     ) {
         let store = ImageStore::new(tmp.path().join("images")).expect("create ImageStore");
         let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
+        let image_store =
+            Arc::new(ImageStore::new(tmp.path().join("images")).expect("create ImageStore"));
+        let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
+            Arc::new(NoopImageGc);
         let deps = Arc::new(crate::handler::HandlerDependencies {
             registry: Arc::new(MockRegistry::new()),
             ghcr_registry: Arc::new(MockRegistry::new()),
@@ -404,6 +446,10 @@ mod tests {
             image_pusher: None,
             commit_adapter: None,
             image_builder: None,
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            image_gc,
+            image_store,
         });
         (state, deps)
     }
@@ -519,6 +565,36 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::ContainerPaused {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerResumed {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::Event {
+                    event: minibox_core::events::ContainerEvent::Started {
+                        id: "abc".to_string(),
+                        pid: 1,
+                        timestamp: std::time::SystemTime::UNIX_EPOCH,
+                    },
+                },
+                false, // non-terminal: streaming
+            ),
+            (
+                DaemonResponse::Pruned {
+                    removed: vec![],
+                    freed_bytes: 0,
+                    dry_run: false,
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -545,6 +621,10 @@ mod tests {
                 DaemonResponse::PushProgress { .. } => false,
                 DaemonResponse::BuildOutput { .. } => false,
                 DaemonResponse::BuildComplete { .. } => true,
+                DaemonResponse::ContainerPaused { .. } => true,
+                DaemonResponse::ContainerResumed { .. } => true,
+                DaemonResponse::Event { .. } => false,
+                DaemonResponse::Pruned { .. } => true,
             };
         }
     }

@@ -195,6 +195,23 @@ pub enum DaemonRequest {
         #[serde(default)]
         no_cache: bool,
     },
+
+    /// Subscribe to the container event stream.
+    ///
+    /// The daemon will send `Event` responses until the connection closes.
+    SubscribeEvents,
+
+    /// Remove unused images (optionally dry-run).
+    Prune {
+        #[serde(default)]
+        dry_run: bool,
+    },
+
+    /// Remove a specific image by reference.
+    RemoveImage {
+        /// Image reference, e.g. `"alpine:latest"`.
+        image_ref: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +325,24 @@ pub enum DaemonResponse {
     BuildComplete {
         image_id: String,
         tag: String,
+    },
+
+    /// A container lifecycle event.
+    ///
+    /// Non-terminal: sent zero or more times until the connection closes.
+    Event {
+        /// The container lifecycle event payload.
+        event: minibox_core::events::ContainerEvent,
+    },
+
+    /// Result of a prune operation.
+    Pruned {
+        /// Image refs that were (or would be) removed.
+        removed: Vec<String>,
+        /// Bytes freed (or that would be freed in dry-run mode).
+        freed_bytes: u64,
+        /// True if this was a dry run.
+        dry_run: bool,
     },
 }
 

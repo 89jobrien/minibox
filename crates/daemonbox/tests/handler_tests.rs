@@ -4,7 +4,7 @@
 //! All tests run without real infrastructure (no Docker Hub, cgroups, or Linux).
 
 use daemonbox::handler::{self, HandlerDependencies};
-use daemonbox::state::DaemonState;
+use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::domain::NetworkMode;
 use minibox_core::protocol::DaemonResponse;
@@ -51,8 +51,28 @@ async fn handle_run_once(
     rx.recv().await.expect("handler sent no response")
 }
 
+/// No-op image GC for tests.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 /// Helper to create test dependencies with mocks.
 fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -68,6 +88,10 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 
@@ -147,6 +171,15 @@ async fn test_handle_pull_failure() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -182,6 +215,15 @@ async fn test_handle_run_with_cached_image() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -271,6 +313,15 @@ async fn test_handle_run_filesystem_setup_failure() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -312,6 +363,15 @@ async fn test_handle_run_resource_limiter_failure() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -353,6 +413,15 @@ async fn test_handle_run_runtime_spawn_failure() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -415,7 +484,10 @@ async fn test_handle_remove_success() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Mark it as stopped (handler requires this)
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Now remove it
     let remove_response =
@@ -489,7 +561,10 @@ async fn test_handle_remove_running_container() {
     };
 
     // Directly mark as Running (deterministic — no sleep/race with async spawn)
-    state.update_container_state(&container_id, "Running").await;
+    state
+        .update_container_state(&container_id, ContainerState::Running)
+        .await
+        .ok();
 
     // Try to remove while still running
     let response = handler::handle_remove(container_id, state, deps).await;
@@ -560,7 +635,10 @@ async fn test_full_container_lifecycle() {
 
     // 4. Stop container (simulated by updating state)
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // 5. Remove container
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
@@ -580,6 +658,8 @@ fn create_test_deps_with_network(
     temp_dir: &TempDir,
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).unwrap());
     Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -595,6 +675,10 @@ fn create_test_deps_with_network(
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
     })
 }
 
@@ -946,6 +1030,15 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -964,7 +1057,10 @@ async fn test_remove_with_filesystem_cleanup_failure() {
     let id = extract_container_id(&response);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Now toggle cleanup to fail.
     failable_fs.set_fail_cleanup(true);
@@ -1080,6 +1176,15 @@ async fn test_handle_run_empty_image_returns_error() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1180,6 +1285,15 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1198,7 +1312,10 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     let id = extract_container_id(&create_response);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Remove should succeed despite cgroup cleanup failure.
     let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
@@ -1303,6 +1420,15 @@ async fn test_handle_run_pull_failure_returns_error() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1419,6 +1545,15 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1468,6 +1603,15 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1517,6 +1661,15 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1559,6 +1712,15 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1656,7 +1818,10 @@ async fn test_handle_remove_triggers_network_cleanup() {
     .await;
     let id = extract_container_id(&response);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // network_provider.setup() was called during run (count=1).
     // After remove, cleanup should also be called.
@@ -1814,6 +1979,15 @@ async fn test_handle_remove_failed_container_succeeds() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1865,6 +2039,15 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2078,6 +2261,15 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2138,6 +2330,15 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2191,6 +2392,15 @@ async fn test_run_empty_image_no_layers() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2240,6 +2450,15 @@ async fn test_pull_registry_failure_with_tag() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2360,6 +2579,15 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         image_pusher: None,
         commit_adapter: None,
         image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::new(
+            minibox_core::image::ImageStore::new(
+                tempfile::TempDir::new().unwrap().into_path().join("img"),
+            )
+            .unwrap(),
+        ),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2643,5 +2871,43 @@ async fn test_load_image_failure() {
     assert!(
         matches!(response, DaemonResponse::Error { .. }),
         "expected Error, got: {response:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_pause / handle_resume Tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_pause_nonexistent_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_pause(
+        "doesnotexist".to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "got: {resp:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_resume_nonexistent_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_resume(
+        "doesnotexist".to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "got: {resp:?}"
     );
 }

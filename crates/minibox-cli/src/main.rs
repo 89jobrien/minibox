@@ -104,6 +104,18 @@ enum Commands {
         id: String,
     },
 
+    /// Pause a running container
+    Pause {
+        /// Container ID
+        id: String,
+    },
+
+    /// Resume a paused container
+    Resume {
+        /// Container ID
+        id: String,
+    },
+
     /// Remove a stopped container
     Rm {
         /// Container ID
@@ -118,6 +130,27 @@ enum Commands {
         /// Image tag (default: latest)
         #[arg(short, long, default_value = "latest")]
         tag: String,
+    },
+
+    /// Stream container lifecycle events as JSON-lines to stdout.
+    ///
+    /// Subscribes to the daemon event stream and prints each event as a
+    /// newline-delimited JSON object until the connection is closed.
+    Events,
+
+    /// Remove unused images from the image store.
+    ///
+    /// Images currently in use by running or paused containers are skipped.
+    Prune {
+        /// Show what would be removed without actually deleting anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Remove a specific image by reference (e.g. alpine:latest).
+    Rmi {
+        /// Image reference in name:tag format.
+        image_ref: String,
     },
 
     /// Load an image from a local OCI tar archive
@@ -181,6 +214,10 @@ async fn main() -> Result<()> {
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
+        Commands::Pause { id } => commands::pause::execute(id, socket_path).await,
+
+        Commands::Resume { id } => commands::resume::execute(id, socket_path).await,
+
         Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
 
         Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
@@ -189,6 +226,12 @@ async fn main() -> Result<()> {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
             commands::load::execute(path, name, tag, socket_path).await
         }
+
+        Commands::Events => commands::events::execute(socket_path).await,
+
+        Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
+
+        Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
     }
 }
 

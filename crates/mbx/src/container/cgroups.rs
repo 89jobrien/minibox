@@ -42,8 +42,10 @@ pub struct CgroupConfig {
 /// `/sys/fs/cgroup/minibox.slice/miniboxd.service`.
 #[derive(Debug)]
 pub struct CgroupManager {
+    /// Container ID used to derive the cgroup path and for log fields.
+    id: String,
     /// Absolute path to this container's cgroup directory.
-    pub cgroup_path: PathBuf,
+    cgroup_path: PathBuf,
     config: CgroupConfig,
 }
 
@@ -70,6 +72,7 @@ impl CgroupManager {
     pub fn new(container_id: &str, config: CgroupConfig) -> Self {
         let cgroup_path = cgroup_root().join(container_id);
         Self {
+            id: container_id.to_string(),
             cgroup_path,
             config,
         }
@@ -179,6 +182,35 @@ impl CgroupManager {
         Ok(())
     }
 
+    /// Returns the cgroup path for this container.
+    pub fn cgroup_path(&self) -> &std::path::Path {
+        &self.cgroup_path
+    }
+
+    /// Freeze all processes in this container's cgroup.
+    ///
+    /// Writes `"1"` to `cgroup.freeze`. Requires cgroups v2.
+    pub async fn pause(&self) -> anyhow::Result<()> {
+        let freeze_path = self.cgroup_path.join("cgroup.freeze");
+        tokio::fs::write(&freeze_path, "1\n")
+            .await
+            .with_context(|| format!("cgroup: write 1 to {}", freeze_path.display()))?;
+        info!(container_id = %self.id, "cgroup: container paused");
+        Ok(())
+    }
+
+    /// Thaw all processes in this container's cgroup.
+    ///
+    /// Writes `"0"` to `cgroup.freeze`. Requires cgroups v2.
+    pub async fn resume(&self) -> anyhow::Result<()> {
+        let freeze_path = self.cgroup_path.join("cgroup.freeze");
+        tokio::fs::write(&freeze_path, "0\n")
+            .await
+            .with_context(|| format!("cgroup: write 0 to {}", freeze_path.display()))?;
+        info!(container_id = %self.id, "cgroup: container resumed");
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
@@ -255,4 +287,20 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
 /// override logic as [`CgroupManager::new`].
 pub fn cgroup_path_for(container_id: &str) -> PathBuf {
     cgroup_root().join(container_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_cgroup_pause_resume_methods_exist() {
+        // Verify the methods compile. Real behavior requires root + cgroup mount.
+        let mgr = CgroupManager::new("test-pause-id", CgroupConfig::default());
+        let _ = mgr.cgroup_path();
+        // pause/resume are async; confirm they exist via function reference
+        let _: fn(&CgroupManager) -> _ = CgroupManager::pause;
+        let _: fn(&CgroupManager) -> _ = CgroupManager::resume;
+    }
 }

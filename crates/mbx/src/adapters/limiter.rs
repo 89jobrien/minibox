@@ -94,7 +94,7 @@ impl ResourceLimiter for CgroupV2Limiter {
         manager.create()?;
 
         // Return the cgroup path as a string
-        Ok(manager.cgroup_path.display().to_string())
+        Ok(manager.cgroup_path().display().to_string())
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {
