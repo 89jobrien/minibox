@@ -704,7 +704,7 @@ fn wait_for_container_presence(id: &str, should_exist: bool) -> Result<(), Strin
 }
 
 fn wait_for_container_running(id: &str) -> Result<(), String> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         let running = list_containers_sync()?
             .into_iter()
