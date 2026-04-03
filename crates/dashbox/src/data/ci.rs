@@ -53,6 +53,11 @@ impl DataSource for CiSource {
             .output()
             .context("failed to run gh")?;
 
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("gh exited with {}: {}", output.status, stderr.trim());
+        }
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let runs: Vec<CiRun> =
             serde_json::from_str(&stdout).context("failed to parse gh output")?;

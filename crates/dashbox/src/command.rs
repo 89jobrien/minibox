@@ -46,12 +46,9 @@ impl InlineCommand {
             });
         }
 
-        // Sentinel for completion — when stdout/stderr threads finish and drop
-        // their tx clones, this thread's drop of the last tx will disconnect the
-        // channel, signaling completion.
-        thread::spawn(move || {
-            drop(tx);
-        });
+        // Drop the last tx clone here so the channel disconnects once both
+        // stdout/stderr reader threads have finished and dropped their clones.
+        drop(tx);
 
         Ok(Self {
             lines: Vec::new(),
@@ -98,7 +95,7 @@ impl BackgroundCommand {
             let status = Command::new(&cmd)
                 .args(&args)
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
+                .stderr(Stdio::piped())
                 .status();
             let code = status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             let _ = tx.send(code);

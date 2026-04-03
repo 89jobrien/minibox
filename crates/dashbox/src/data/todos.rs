@@ -48,6 +48,11 @@ impl DataSource for TodosSource {
             .output()
             .context("failed to run doob")?;
 
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("doob exited with {}: {}", output.status, stderr.trim());
+        }
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let response: TodoListResponse =
             serde_json::from_str(&stdout).context("failed to parse doob output")?;

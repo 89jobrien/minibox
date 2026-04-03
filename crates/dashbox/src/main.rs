@@ -23,17 +23,22 @@ use app::{App, Tab};
 use command::{BackgroundCommand, InlineCommand};
 use tabs::TabAction;
 
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = io::stdout().execute(LeaveAlternateScreen);
+    }
+}
+
 fn main() -> Result<()> {
     enable_raw_mode()?;
     io::stdout().execute(EnterAlternateScreen)?;
+    let _guard = TerminalGuard;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
-    let result = run(&mut terminal);
-
-    disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
-
-    result
+    run(&mut terminal)
 }
 
 fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
