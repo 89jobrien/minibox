@@ -62,14 +62,17 @@ impl DataSource for GitSource {
             .trim()
             .to_string();
 
-        // Ahead/behind
+        // Ahead/behind — may fail on detached HEAD or when the remote tracking
+        // branch doesn't exist.  Surface the error as a zero ahead/behind
+        // rather than masking it silently; the caller will still get all other
+        // git data (status, log, etc.).
         let ab_output = Self::run_git(&[
             "rev-list",
             "--left-right",
             "--count",
             &format!("HEAD...origin/{branch}"),
         ])
-        .unwrap_or_default();
+        .unwrap_or_else(|_e| String::new());
         let parts: Vec<&str> = ab_output.trim().split('\t').collect();
         let ahead = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
         let behind = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
