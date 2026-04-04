@@ -156,6 +156,167 @@ items:
     Native adapter isolation tests (#22), GKE adapter isolation tests (#23), Container lifecycle failure tests (#24). Run on VPS to verify.
   files: []
   extra: []
+- id: minibox-13
+  doob_uuid: f3b89717-3dbb-400c-80dc-00882a4c933e
+  name: exec-into-containers
+  priority: P1
+  status: open
+  title: 'feat: exec into running containers (setns + output streaming) (#16)'
+  description: |
+    Add ExecContainer request/response to protocol. Implement setns(2) to enter existing
+    container PID/mount/net namespaces. Stream stdout/stderr via ContainerOutput messages.
+    CLI: minibox exec <container_id> -- <command>. Biggest gap blocking maestro Phase 1.
+  files:
+  - crates/mbx/src/container/
+  - crates/daemonbox/src/handler.rs
+  - crates/minibox-core/src/protocol.rs
+  extra: []
+- id: minibox-14
+  doob_uuid: 34b52390-b5b1-4953-a681-cd4cdb57c33a
+  name: named-containers
+  priority: P1
+  status: open
+  title: 'feat: named containers (#17)'
+  description: |
+    Add optional name field to RunContainer protocol message. Store name in DaemonState
+    alongside container ID. Allow name-based lookup in stop/rm/exec. Validate uniqueness.
+    Required for maestro Phase 1 integration.
+  files:
+  - crates/minibox-core/src/protocol.rs
+  - crates/daemonbox/src/state.rs
+  extra: []
+- id: minibox-15
+  doob_uuid: 86f14305-32d8-4984-9c71-d72e067435ea
+  name: container-log-capture
+  priority: P1
+  status: open
+  title: 'feat: container log capture and retrieval (#18)'
+  description: |
+    Capture stdout/stderr to log files in /var/lib/minibox/containers/{id}/. Add
+    ContainerLogs request/response to protocol. CLI: minibox logs <id> [--follow].
+    Support log rotation/size limits. Required for maestro Phase 1.
+  files:
+  - crates/daemonbox/src/handler.rs
+  - crates/minibox-core/src/protocol.rs
+  extra: []
+- id: minibox-16
+  doob_uuid: 695fa6c0-58b9-452b-97e5-9805d73b3c7b
+  name: pty-stdio-piping
+  priority: P2
+  status: open
+  title: 'feat: PTY/stdio piping for interactive containers (#19)'
+  description: |
+    PTY allocation inside container namespace. Binary framing protocol for multiplexed
+    stdin/stdout/stderr. Terminal resize (SIGWINCH) forwarding. CLI -it flag.
+    Maestro Phase 2 (depends on exec and named containers from Phase 1).
+  files:
+  - crates/mbx/src/container/
+  - crates/daemonbox/src/handler.rs
+  extra: []
+- id: minibox-17
+  doob_uuid: 39eb1bfa-8c6f-44b5-9d78-3ca6ec3e448c
+  name: container-networking
+  priority: P2
+  status: open
+  title: 'feat: container networking — veth/bridge (#20)'
+  description: |
+    Create minibox0 bridge device. veth pair per container (host side on bridge, container
+    side with IP). DHCP or static IP assignment. NAT/masquerade for outbound. DNS inside
+    containers. Maestro Phase 3 (depends on Phase 1+2).
+  files:
+  - crates/mbx/src/container/
+  extra: []
+- id: minibox-18
+  doob_uuid: a7596606-41c4-4a89-910c-2d54ff9fe10d
+  name: shared-oci-library
+  priority: P2
+  status: open
+  title: 'feat: shared OCI image-pulling library (#21)'
+  description: |
+    Extract minibox-lib/src/image/ into minibox-oci crate. Public API: pull(image_ref,
+    store_path, progress_callback). Keep Docker Hub + GHCR adapters, parallel layer
+    downloads, HashingReader, all security validation. Identified as low-hanging fruit
+    for maestro integration.
+  files:
+  - crates/minibox-core/src/image/
+  extra: []
+- id: minibox-19
+  doob_uuid: a0ade5b1-5abe-4c33-9867-a6271812658c
+  name: vz-provision-vm
+  priority: P2
+  status: open
+  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40)'
+  description: |
+    Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.
+    VM boots minimal Linux guest. VM state in MINIBOX_DATA_DIR/vm/. Expose start/stop/status
+    API consumed by macbox::start(). Blocked by VZErrorInternal Apple bug on macOS 26 ARM64.
+  files:
+  - crates/macbox/src/vz/
+  extra:
+  - date: 2026-04-04
+    type: blocker
+    note: |
+      VZErrorInternal(code=1) blocks VM start on macOS 26 ARM64. Tracking
+      https://github.com/apple/container/issues/1254 — same Apple OS bug as minibox-7.
+- id: minibox-20
+  doob_uuid: 3f36e12f-1318-4c2f-9e85-990036692bcd
+  name: vz-minibox-agent
+  priority: P2
+  status: blocked
+  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41)'
+  description: |
+    Small Rust binary (minibox-agent) inside the minibox Linux VM. Listens on AF_VSOCK CID 3,
+    accepts JSON requests (same protocol as miniboxd Unix socket), executes using mbx primitives.
+    Streams stdout/stderr as ContainerOutput frames. Depends on #40.
+  files:
+  - crates/macbox/src/vz/
+  extra:
+  - date: 2026-04-04
+    type: blocker
+    note: Depends on minibox-19 (VZ VM provisioning,
+- id: minibox-21
+  doob_uuid: 707aaac1-3853-4aea-9559-62feb34f67aa
+  name: vz-vsock-io-bridge
+  priority: P2
+  status: blocked
+  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42)'
+  description: |
+    Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr
+    forwarded as ContainerOutput protocol messages. ContainerStopped carries exit code.
+    Must support: arbitrary byte chunks, concurrent containers, clean EOF on exit.
+  files:
+  - crates/macbox/src/vz/
+  extra:
+  - date: 2026-04-04
+    type: blocker
+    note: Depends on minibox-20 (minibox-agent,
+- id: minibox-22
+  doob_uuid: f839efd2-ffe8-4d95-8f14-34e17e9d5ed4
+  name: vz-virtiofs-mounts
+  priority: P2
+  status: blocked
+  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43)'
+  description: |
+    Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into VM via virtiofs.
+    Allows in-VM minibox-agent to construct overlay FS from host-stored layers without
+    copying. Enables -v /host/path:/container/path on macOS.
+  files:
+  - crates/macbox/src/vz/
+  extra:
+  - date: 2026-04-04
+    type: blocker
+    note: Depends on minibox-19 (VZ VM provisioning,
+- id: minibox-23
+  doob_uuid: 12b0e2cb-fd90-43fe-beea-db6a379c27a1
+  name: full-stack-ownership
+  priority: P2
+  status: open
+  title: 'feat: minibox owns full container stack on every OS (#44)'
+  description: |
+    Tracking issue: Linux native done. macOS via VF+vsock planned (#40-43). Windows via
+    Hyper-V/WSL2 kernel TBD (#45). No external runtime (Docker, Colima, nerdctl, WSL).
+  files: []
+  extra: []
 - id: minibox-11
   doob_uuid: 09fd3b95-7a4b-4a85-be6b-ff65248f9f46
   name: auth-policy-gate
