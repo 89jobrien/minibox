@@ -1,45 +1,68 @@
 // dashbox/src/data/metrics.rs
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::DataSource;
 
 /// Parsed result from a single poll of the /metrics endpoint.
 #[derive(Debug, Clone)]
 pub enum MetricsData {
-    /// Daemon is unreachable.
+    /// Daemon is unreachable and no snapshot file exists.
     Offline,
-    /// Successfully parsed metrics.
+    /// Successfully parsed metrics from the live HTTP endpoint.
     Live(LiveMetrics),
+    /// Daemon is unreachable but a cached snapshot was loaded from disk.
+    /// The `SystemTime` is when the snapshot was written.
+    Stale(LiveMetrics, SystemTime),
 }
 
 /// Fully parsed live metrics snapshot.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LiveMetrics {
     /// Value of minibox_active_containers gauge.
     pub active_containers: f64,
     /// Ops counters keyed by (op, status) → count.
+    /// Serialized as a flat list because JSON requires string keys.
+    #[serde(
+        serialize_with = "serialize_ops_counters",
+        deserialize_with = "deserialize_ops_counters"
+    )]
     pub ops_counters: HashMap<(String, String), f64>,
     /// Duration p50/p95 keyed by op name.
     pub durations: HashMap<String, DurationSummary>,
 }
 
 /// p50 and p95 latency in seconds for a given op.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DurationSummary {
     pub p50: f64,
     pub p95: f64,
 }
 
+/// On-disk snapshot format.
+#[derive(Serialize, Deserialize)]
+struct MetricsSnapshot {
+    /// Unix timestamp (seconds) when the snapshot was written.
+    written_at: u64,
+    metrics: LiveMetrics,
+}
+
 pub struct MetricsSource {
     pub addr: String,
+    snapshot_path: std::path::PathBuf,
 }
 
 impl MetricsSource {
     pub fn new() -> Self {
         let addr =
             std::env::var("MINIBOX_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9090".to_string());
-        Self { addr }
+        let snapshot_path = snapshot_path();
+        Self {
+            addr,
+            snapshot_path,
+        }
     }
 }
 
@@ -48,15 +71,90 @@ impl DataSource for MetricsSource {
 
     fn load(&self) -> Result<MetricsData> {
         let url = format!("http://{}/metrics", self.addr);
-        let body = match ureq::get(&url).call() {
-            Ok(resp) => resp.into_string()?,
-            Err(ureq::Error::Transport(t)) if t.kind() == ureq::ErrorKind::ConnectionFailed => {
-                return Ok(MetricsData::Offline);
+        match ureq::get(&url).call() {
+            Ok(resp) => {
+                let body = resp.into_string()?;
+                let live = parse_metrics(&body);
+                // Write snapshot so it's available when daemon is offline.
+                let _ = write_snapshot(&self.snapshot_path, &live);
+                Ok(MetricsData::Live(live))
             }
-            Err(e) => return Err(e.into()),
-        };
-        Ok(MetricsData::Live(parse_metrics(&body)))
+            Err(ureq::Error::Transport(t)) if t.kind() == ureq::ErrorKind::ConnectionFailed => {
+                Ok(load_snapshot(&self.snapshot_path).unwrap_or(MetricsData::Offline))
+            }
+            Err(e) => Err(e.into()),
+        }
     }
+}
+
+/// Returns the path to the metrics snapshot file.
+fn snapshot_path() -> std::path::PathBuf {
+    let base = std::env::var("MINIBOX_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".mbx"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/minibox"))
+        });
+    base.join("metrics.json")
+}
+
+/// Write a `LiveMetrics` snapshot to disk as JSON.
+fn write_snapshot(path: &std::path::Path, metrics: &LiveMetrics) -> Result<()> {
+    let written_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let snap = MetricsSnapshot {
+        written_at,
+        metrics: metrics.clone(),
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string(&snap)?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+/// Attempt to load a snapshot from disk. Returns `None` if missing or unparseable.
+fn load_snapshot(path: &std::path::Path) -> Option<MetricsData> {
+    let bytes = std::fs::read(path).ok()?;
+    let snap: MetricsSnapshot = serde_json::from_slice(&bytes).ok()?;
+    let written_at = UNIX_EPOCH + std::time::Duration::from_secs(snap.written_at);
+    Some(MetricsData::Stale(snap.metrics, written_at))
+}
+
+// ---------------------------------------------------------------------------
+// Serde helpers for HashMap<(String,String), f64>
+// ---------------------------------------------------------------------------
+
+fn serialize_ops_counters<S>(
+    map: &HashMap<(String, String), f64>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::ser::SerializeSeq;
+    let mut seq = serializer.serialize_seq(Some(map.len()))?;
+    for ((op, status), count) in map {
+        seq.serialize_element(&(op, status, count))?;
+    }
+    seq.end()
+}
+
+fn deserialize_ops_counters<'de, D>(
+    deserializer: D,
+) -> std::result::Result<HashMap<(String, String), f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: Vec<(String, String, f64)> = Vec::deserialize(deserializer)?;
+    Ok(entries
+        .into_iter()
+        .map(|(op, status, count)| ((op, status), count))
+        .collect())
 }
 
 /// Parse Prometheus text exposition format into LiveMetrics.

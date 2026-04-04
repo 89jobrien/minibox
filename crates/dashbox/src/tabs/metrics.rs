@@ -5,6 +5,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use std::time::SystemTime;
 
 use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
@@ -47,7 +48,11 @@ impl TabRenderer for MetricsTab {
             }
             Some(Ok(MetricsData::Live(live))) => {
                 let addr = self.addr.clone();
-                render_live(frame, area, &addr, live);
+                render_live(frame, area, &addr, live, false, None);
+            }
+            Some(Ok(MetricsData::Stale(live, written_at))) => {
+                let addr = self.addr.clone();
+                render_live(frame, area, &addr, live, true, Some(*written_at));
             }
         }
     }
@@ -92,23 +97,59 @@ fn render_offline(frame: &mut Frame, area: Rect, addr: &str) {
     frame.render_widget(msg, chunks[1]);
 }
 
-fn render_live(frame: &mut Frame, area: Rect, addr: &str, live: &LiveMetrics) {
+fn render_live(
+    frame: &mut Frame,
+    area: Rect,
+    addr: &str,
+    live: &LiveMetrics,
+    stale: bool,
+    written_at: Option<SystemTime>,
+) {
     let chunks = Layout::vertical([
         Constraint::Length(1), // status bar
         Constraint::Min(0),    // content
     ])
     .split(area);
 
-    let status_line = Line::from(vec![
-        Span::styled(
-            "LIVE",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(addr, Style::default().fg(Color::DarkGray)),
-    ]);
+    let status_line = if stale {
+        let age = written_at
+            .and_then(|t| SystemTime::now().duration_since(t).ok())
+            .map(|d| {
+                let secs = d.as_secs();
+                if secs < 60 {
+                    format!("{secs}s ago")
+                } else {
+                    format!("{}m ago", secs / 60)
+                }
+            })
+            .unwrap_or_else(|| "unknown age".to_string());
+        Line::from(vec![
+            Span::styled(
+                "STALE",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(addr, Style::default().fg(Color::DarkGray)),
+            Span::raw("  "),
+            Span::styled(
+                format!("(snapshot from {age})"),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(
+                "LIVE",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  "),
+            Span::styled(addr, Style::default().fg(Color::DarkGray)),
+        ])
+    };
     frame.render_widget(Paragraph::new(status_line), chunks[0]);
 
     let content =
