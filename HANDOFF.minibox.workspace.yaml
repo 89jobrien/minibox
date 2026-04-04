@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-06
+updated: 2026-04-04
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -172,6 +172,7 @@ items:
   - crates/daemonbox/src/handler.rs
   - crates/minibox-core/src/protocol.rs
   extra: []
+  completed: 2026-04-04
 - id: minibox-14
   doob_uuid: 34b52390-b5b1-4953-a681-cd4cdb57c33a
   name: named-containers
@@ -186,6 +187,7 @@ items:
   - crates/minibox-core/src/protocol.rs
   - crates/daemonbox/src/state.rs
   extra: []
+  completed: 2026-04-04
 - id: minibox-15
   doob_uuid: 86f14305-32d8-4984-9c71-d72e067435ea
   name: container-log-capture
@@ -200,6 +202,7 @@ items:
   - crates/daemonbox/src/handler.rs
   - crates/minibox-core/src/protocol.rs
   extra: []
+  completed: 2026-04-04
 - id: minibox-16
   doob_uuid: 695fa6c0-58b9-452b-97e5-9805d73b3c7b
   name: pty-stdio-piping
@@ -332,6 +335,15 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-04
+  summary: |
+    Orca Strait session: exec into containers (minibox-13), named containers (minibox-14),
+    and container log capture (minibox-15) shipped. NativeExecRuntime (setns+fork+pipe),
+    --name flag on run, ps NAME column, minibox exec/logs CLI subcommands, ContainerLogs
+    protocol, handle_logs handler, log file writes in handle_run_streaming. 415 tests passing.
+  commits:
+  - 3dd424c
+  - db77537
 - date: 2026-04-06
   summary: |
     Orca Strait session: P0 auth-policy-gate shipped (ContainerPolicy deny-by-default, 5 tests),

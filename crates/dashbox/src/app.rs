@@ -180,7 +180,11 @@ impl App {
                 } else {
                     let stderr = cmd.stderr_tail.as_deref().unwrap_or("").trim();
                     if stderr.is_empty() {
-                        format!("{} failed (exit {})", cmd.label, cmd.exit_code.unwrap_or(-1))
+                        format!(
+                            "{} failed (exit {})",
+                            cmd.label,
+                            cmd.exit_code.unwrap_or(-1)
+                        )
                     } else {
                         format!(
                             "{} failed (exit {}): {}",

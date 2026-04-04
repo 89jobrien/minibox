@@ -263,7 +263,12 @@ mod tests {
         let open = items.iter().filter(|i| i.status == "open").count();
         let done = items.iter().filter(|i| i.status == "done").count();
         let blocked = items.iter().filter(|i| i.status == "blocked").count();
-        let data = ItemsData { items, open, done, blocked };
+        let data = ItemsData {
+            items,
+            open,
+            done,
+            blocked,
+        };
         let mut tab = ItemsTab::new();
         tab.cached_data = Some(data);
         tab.table_state.select(Some(0));
@@ -281,7 +286,10 @@ mod tests {
                 assert!(args.contains(&"done".to_string()), "args: {args:?}");
                 assert_eq!(label, "mark done");
             }
-            other => panic!("expected RunBackground, got {:?}", std::mem::discriminant(&other)),
+            other => panic!(
+                "expected RunBackground, got {:?}",
+                std::mem::discriminant(&other)
+            ),
         }
     }
 

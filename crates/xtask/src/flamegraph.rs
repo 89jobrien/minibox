@@ -46,8 +46,8 @@ pub fn flamegraph(sh: &Shell, extra_args: &[String]) -> Result<()> {
         .context("samply record failed")?;
 
         eprintln!("saved: {profile_path}");
-        let browser = std::env::var("MINIBOX_BENCH_BROWSER")
-            .unwrap_or_else(|_| "firefox".to_string());
+        let browser =
+            std::env::var("MINIBOX_BENCH_BROWSER").unwrap_or_else(|_| "firefox".to_string());
         eprintln!("opening in {browser}...");
         let _env = sh.push_env("BROWSER", &browser);
         cmd!(sh, "samply load {profile_path}")

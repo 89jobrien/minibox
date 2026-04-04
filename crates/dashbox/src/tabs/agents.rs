@@ -27,7 +27,12 @@ struct LogCache {
 
 impl LogCache {
     fn new(source: Box<dyn AutomationLogPort>, stale_secs: u64) -> Self {
-        Self { source, cached: None, last_load: None, stale_secs }
+        Self {
+            source,
+            cached: None,
+            last_load: None,
+            stale_secs,
+        }
     }
 
     fn is_stale(&self) -> bool {
@@ -74,7 +79,9 @@ impl AgentsTab {
         let line = Line::from(vec![
             Span::styled(
                 "Agents",
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
             Span::styled(

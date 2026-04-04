@@ -200,10 +200,7 @@ mod tests {
         let action = tab.handle_key(make_key(KeyCode::Char('o')));
         match action {
             TabAction::OpenUrl(u) => assert_eq!(u, url),
-            other => panic!(
-                "expected OpenUrl, got {:?}",
-                std::mem::discriminant(&other)
-            ),
+            other => panic!("expected OpenUrl, got {:?}", std::mem::discriminant(&other)),
         }
     }
 }

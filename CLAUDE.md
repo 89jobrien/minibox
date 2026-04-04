@@ -442,6 +442,9 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 - **Two `DaemonRequest` definitions** — `crates/minibox-core/src/protocol.rs` AND `crates/mbx/src/protocol.rs` both define `DaemonRequest` independently (mbx has its own test suite). When adding a field, update **both** files and all their construction sites.
 - **`handle_run` param chain** — Adding a parameter requires updating in order: `server.rs` dispatch pattern match → `handle_run` → `handle_run_streaming` → `run_inner_capture`; and separately `run_inner`. All five sites must change together.
 - **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
+- **Silent channel-send discards are a bug** — never use `let _ = tx.send(...).await` in handler
+  code. Use `if tx.send(...).await.is_err() { warn!("handle_run: client disconnected before
+  <context> could be sent"); }` so dropped connections are observable in logs.
 - **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
 
 ### macbox/vz gotchas (relevant when modifying `crates/macbox/src/vz/` or merging the vz branch)
