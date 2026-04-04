@@ -12,31 +12,32 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
-| `crates/minibox-core/src/protocol.rs` | Add `LoadImage` request + `ImageLoaded` response |
-| `crates/mbx/src/protocol.rs` | Same (two protocol files must stay in sync) |
-| `crates/minibox-core/src/domain.rs` | Add `ImageLoader` trait + `DynImageLoader` |
-| `crates/mbx/src/adapters/image_loader.rs` | New: `NativeImageLoader` (extracts tarball into ImageStore) |
-| `crates/mbx/src/adapters/mod.rs` | Wire `pub mod image_loader` |
-| `crates/mbx/src/adapters/colima.rs` | Add `impl ImageLoader for ColimaRegistry` |
-| `crates/daemonbox/src/handler.rs` | Add `handle_load_image`, `image_loader` field on `HandlerDependencies` |
-| `crates/daemonbox/src/server.rs` | Wire `LoadImage` in `dispatch()` + `is_terminal_response()` |
-| `crates/daemonbox/tests/handler_tests.rs` | Add `test_load_image_success`, `test_load_image_missing_file` |
-| `crates/macbox/src/lib.rs` | Inject `ColimaRegistry` as `image_loader` in `HandlerDependencies` |
-| `crates/miniboxd/src/lib.rs` | Inject `NativeImageLoader` as `image_loader` in `HandlerDependencies` |
-| `crates/minibox-cli/src/commands/load.rs` | New: `execute()` for `minibox load <path>` |
-| `crates/minibox-cli/src/commands/mod.rs` | `pub mod load;` |
-| `crates/minibox-cli/src/main.rs` | Add `Load` variant + dispatch |
-| `crates/xtask/src/test_image.rs` | New: `build_test_image()` + OCI tarball assembly |
-| `crates/xtask/src/gates.rs` | Add `test_linux()` |
-| `crates/xtask/src/main.rs` | Wire `build-test-image` + `test-linux` |
+| File                                      | Change                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------- |
+| `crates/minibox-core/src/protocol.rs`     | Add `LoadImage` request + `ImageLoaded` response                       |
+| `crates/mbx/src/protocol.rs`              | Same (two protocol files must stay in sync)                            |
+| `crates/minibox-core/src/domain.rs`       | Add `ImageLoader` trait + `DynImageLoader`                             |
+| `crates/mbx/src/adapters/image_loader.rs` | New: `NativeImageLoader` (extracts tarball into ImageStore)            |
+| `crates/mbx/src/adapters/mod.rs`          | Wire `pub mod image_loader`                                            |
+| `crates/mbx/src/adapters/colima.rs`       | Add `impl ImageLoader for ColimaRegistry`                              |
+| `crates/daemonbox/src/handler.rs`         | Add `handle_load_image`, `image_loader` field on `HandlerDependencies` |
+| `crates/daemonbox/src/server.rs`          | Wire `LoadImage` in `dispatch()` + `is_terminal_response()`            |
+| `crates/daemonbox/tests/handler_tests.rs` | Add `test_load_image_success`, `test_load_image_missing_file`          |
+| `crates/macbox/src/lib.rs`                | Inject `ColimaRegistry` as `image_loader` in `HandlerDependencies`     |
+| `crates/miniboxd/src/lib.rs`              | Inject `NativeImageLoader` as `image_loader` in `HandlerDependencies`  |
+| `crates/minibox-cli/src/commands/load.rs` | New: `execute()` for `minibox load <path>`                             |
+| `crates/minibox-cli/src/commands/mod.rs`  | `pub mod load;`                                                        |
+| `crates/minibox-cli/src/main.rs`          | Add `Load` variant + dispatch                                          |
+| `crates/xtask/src/test_image.rs`          | New: `build_test_image()` + OCI tarball assembly                       |
+| `crates/xtask/src/gates.rs`               | Add `test_linux()`                                                     |
+| `crates/xtask/src/main.rs`                | Wire `build-test-image` + `test-linux`                                 |
 
 ---
 
 ## Task 1: Add `LoadImage`/`ImageLoaded` to both protocol files
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
 - Modify: `crates/mbx/src/protocol.rs`
 
@@ -90,6 +91,7 @@ git commit -m "feat(protocol): add LoadImage request and ImageLoaded response va
 ## Task 2: Add `ImageLoader` domain trait
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 
 - [ ] **Step 1: Write a failing test**
@@ -174,6 +176,7 @@ git commit -m "feat(domain): add ImageLoader trait port for local OCI tarball lo
 ## Task 3: `NativeImageLoader` adapter
 
 **Files:**
+
 - Create: `crates/mbx/src/adapters/image_loader.rs`
 - Modify: `crates/mbx/src/adapters/mod.rs`
 
@@ -286,6 +289,7 @@ async fn load_image(&self, path: &Path, name: &str, tag: &str) -> Result<()> {
 ```
 
 Add imports at the top of the file:
+
 ```rust
 use minibox_core::image::manifest::OciManifest;
 ```
@@ -312,6 +316,7 @@ git commit -m "feat(adapters): NativeImageLoader — extract OCI tarball into Im
 ## Task 4: `ColimaRegistry` implements `ImageLoader`
 
 **Files:**
+
 - Modify: `crates/mbx/src/adapters/colima.rs`
 
 - [ ] **Step 1: Write the failing test**
@@ -406,6 +411,7 @@ git commit -m "feat(adapters): impl ImageLoader for ColimaRegistry via nerdctl l
 ## Task 5: Wire `ImageLoader` into `HandlerDependencies` + `handle_load_image`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 - Modify: `crates/daemonbox/tests/handler_tests.rs`
@@ -453,6 +459,7 @@ impl minibox_core::domain::ImageLoader for NoopImageLoader {
 ```
 
 Update `create_test_deps_with_dir` in `crates/daemonbox/tests/handler_tests.rs` to add:
+
 ```rust
 image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
 ```
@@ -596,11 +603,13 @@ pub async fn handle_load_image(
 In `crates/daemonbox/src/server.rs`:
 
 Add to `is_terminal_response()` match:
+
 ```rust
 | DaemonResponse::ImageLoaded { .. }
 ```
 
 Add to `dispatch()` match:
+
 ```rust
 DaemonRequest::LoadImage { path, name, tag } => {
     let response = handler::handle_load_image(path, name, tag, deps).await;
@@ -617,6 +626,7 @@ cargo test -p daemonbox --test handler_tests test_load_image
 Expected: 2 passed.
 
 Also run:
+
 ```bash
 cargo test -p daemonbox server::tests::test_is_terminal_response_all_variants
 ```
@@ -635,6 +645,7 @@ git commit -m "feat(handler): handle_load_image + wire LoadImage into dispatch a
 ## Task 6: Wire `image_loader` in composition roots
 
 **Files:**
+
 - Modify: `crates/macbox/src/lib.rs`
 - Modify: `crates/miniboxd/src/lib.rs` (check exact file with `grep -rn "HandlerDependencies {" crates/miniboxd/`)
 
@@ -691,6 +702,7 @@ git commit -m "feat(wiring): inject ImageLoader into HandlerDependencies for mac
 ## Task 7: `minibox load` CLI subcommand
 
 **Files:**
+
 - Create: `crates/minibox-cli/src/commands/load.rs`
 - Modify: `crates/minibox-cli/src/commands/mod.rs`
 - Modify: `crates/minibox-cli/src/main.rs`
@@ -762,6 +774,7 @@ mod tests {
 - [ ] **Step 2: Wire module**
 
 In `crates/minibox-cli/src/commands/mod.rs`:
+
 ```rust
 pub mod load;
 ```
@@ -902,6 +915,7 @@ git diff --quiet || git add -A && git commit -m "chore: cargo fmt after LoadImag
 ## Task 9: `cargo xtask build-test-image`
 
 **Files:**
+
 - Create: `crates/xtask/src/test_image.rs`
 - Modify: `crates/xtask/src/main.rs`
 - Modify: `crates/xtask/Cargo.toml` (if `walkdir` not already present)
@@ -913,6 +927,7 @@ grep -E "walkdir|sha2|flate2|^tar" crates/xtask/Cargo.toml
 ```
 
 Add any missing ones:
+
 ```toml
 walkdir = "2"
 sha2 = "0.10"
@@ -959,11 +974,13 @@ mod tests {
 - [ ] **Step 3: Wire in `main.rs`**
 
 Add to `crates/xtask/src/main.rs`:
+
 ```rust
 mod test_image;
 ```
 
 Add to `match` block:
+
 ```rust
 Some("build-test-image") => {
     let force = env::args().any(|a| a == "--force");
@@ -974,6 +991,7 @@ Some("test-linux") => gates::test_linux(&sh),
 ```
 
 Add to help text:
+
 ```rust
 eprintln!("  build-test-image build mbx-tester OCI tarball (cross-compile aarch64-musl)");
 eprintln!("  test-linux       run Linux tests via minibox on macOS (Colima)");
@@ -1194,6 +1212,7 @@ fn assemble_oci_tarball(bins: &ImageBinaries, tarball: &Path) -> Result<()> {
 ```
 
 Add imports at top of `test_image.rs`:
+
 ```rust
 use flate2::Compression;
 use flate2::write::GzEncoder;
@@ -1220,6 +1239,7 @@ git commit -m "feat(xtask): build-test-image — cross-compile + assemble mbx-te
 ## Task 10: `cargo xtask test-linux`
 
 **Files:**
+
 - Modify: `crates/xtask/src/gates.rs`
 
 - [ ] **Step 1: Add `test_linux` function**
@@ -1309,6 +1329,7 @@ cargo xtask test-linux
 ```
 
 Expected output (streamed from container):
+
 ```
 === cgroup_tests ===
 test cgroup_create ... ok
@@ -1325,6 +1346,7 @@ Exit code: 0.
 - [ ] **Step 5: Verify cache works**
 
 Run again without `--force`:
+
 ```bash
 cargo xtask test-linux
 ```

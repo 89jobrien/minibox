@@ -3,7 +3,7 @@ id: minibox
 updated: 2026-04-03
 items:
 - id: minibox-1
-  doob_uuid: f44f7d5e-edc0-4cf6-b513-b9c84ae9276c
+  doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
   name: ci-3tier-enforcement
   priority: P1
   status: open
@@ -14,7 +14,7 @@ items:
   - .github/workflows/phased-deployment.yml
   extra: []
 - id: minibox-2
-  doob_uuid: dd089cb3-f848-49e5-aa49-e3ee20abe92f
+  doob_uuid: 15ffd27d-9697-4766-800e-75d24b969db3
   name: bench-env-toggles
   priority: P1
   status: open
@@ -26,7 +26,7 @@ items:
   - mise.toml
   extra: []
 - id: minibox-3
-  doob_uuid: 42f599b4-7c12-4eb9-a54a-20372ff50701
+  doob_uuid: 3acc7d2e-c2a1-4598-bee0-34d23c883d96
   name: phased-deployment-403-fix
   priority: P1
   status: open
@@ -37,7 +37,7 @@ items:
   - .github/workflows/phased-deployment.yml
   extra: []
 - id: minibox-4
-  doob_uuid: 8c8fe4d3-cd0e-4db3-a323-4351aa222454
+  doob_uuid: 9cb93dd3-3eeb-472f-a16a-14d0d0d8b453
   name: handler-coverage-gap
   priority: P1
   status: open
@@ -49,7 +49,7 @@ items:
   - crates/daemonbox/tests/handler_tests.rs
   extra: []
 - id: minibox-5
-  doob_uuid: 35f9fb44-8153-4231-8548-5c1e8df902ad
+  doob_uuid: 6ba2dc0b-255a-4d62-a0a1-5dbd71d8cdcf
   name: dual-license
   priority: P2
   status: open
@@ -63,7 +63,7 @@ items:
   - README.md
   extra: []
 - id: minibox-6
-  doob_uuid: 53634374-789c-4a6f-b7c9-e3bbd1cc35c1
+  doob_uuid: b2f92bf0-ed5c-46a7-be3e-9f1847baf506
   name: e2e-serialization-ci
   priority: P2
   status: open
@@ -74,7 +74,7 @@ items:
   - .github/workflows/ci.yml
   extra: []
 - id: minibox-7
-  doob_uuid: 313c09e5-4f8c-4b53-bbeb-0b0f1f75093c
+  doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
   name: vz-apple-bug-blocker
   priority: P2
   status: blocked
@@ -88,7 +88,7 @@ items:
     note: |
       VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
 - id: minibox-8
-  doob_uuid: 8cd6cb5b-3f4a-4346-ae80-a4ac45b263db
+  doob_uuid: 7bc85740-19b3-4d13-a542-9b7b3968c7e7
   name: dashbox-sentinel-fixes
   priority: P2
   status: open
@@ -103,7 +103,7 @@ items:
   - crates/dashbox/src/command.rs
   extra: []
 - id: minibox-9
-  doob_uuid: f8c493af-7e24-4fb6-89e7-925ceeb8730a
+  doob_uuid: 03e96b75-1982-4da1-bf70-5207c23bcab1
   name: mbx-dagu-tier2-fixes
   priority: P2
   status: open
@@ -113,7 +113,7 @@ items:
   files: []
   extra: []
 - id: minibox-10
-  doob_uuid: 70f8c19b-70f3-4b47-9adb-58c9caf29383
+  doob_uuid: d579a03b-9e93-4bf9-b3c0-ec89b27b563e
   name: linux-tier3-tests
   priority: P2
   status: open
@@ -123,7 +123,7 @@ items:
   files: []
   extra: []
 - id: minibox-11
-  doob_uuid: c383b4b5-99ba-4e5f-817a-ea628c943576
+  doob_uuid: 09fd3b95-7a4b-4a85-be6b-ff65248f9f46
   name: auth-policy-gate
   priority: P0
   status: open

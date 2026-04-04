@@ -688,10 +688,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // JSON format validation tests (security)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_request_json_has_type_tag() {
         let req = DaemonRequest::Run {
@@ -773,10 +769,6 @@ mod tests {
         let result = decode_request(missing_field);
         assert!(result.is_err());
     }
-
-    // -----------------------------------------------------------------------
-    // Edge cases and boundary tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_run_request_empty_command() {
@@ -929,10 +921,6 @@ mod tests {
         assert_eq!(stdout, r#""stdout""#);
         assert_eq!(stderr, r#""stderr""#);
     }
-
-    // -----------------------------------------------------------------------
-    // Network mode protocol tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn run_request_with_network_mode_roundtrip() {

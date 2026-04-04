@@ -203,6 +203,10 @@ ENDSSH
 description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
 run = "cargo xtask bench-vps"
 
+[tasks."all:test-e2e-vps"]
+description = "Run e2e suite on VPS — pulls latest main, runs as root"
+run = "ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH=\"/home/dev/.cargo/bin:$PATH\" cargo xtask test-e2e-suite'"
+
 [tasks."all:ssh-vps"]
 description = "SSH into jobrien-vm and cd into ~/minibox (key auth via 1Password agent)"
 run = "ssh -t jobrien-vm 'cd ~/minibox && exec $SHELL -l'"

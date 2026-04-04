@@ -122,6 +122,8 @@ pub struct HandlerDependencies {
     pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
     /// Image store for direct image operations (e.g. RemoveImage).
     pub image_store: Arc<minibox_core::image::ImageStore>,
+    /// Policy controlling which container capabilities are permitted.
+    pub policy: ContainerPolicy,
 }
 
 impl HandlerDependencies {
@@ -130,6 +132,67 @@ impl HandlerDependencies {
         self.image_loader = loader;
         self
     }
+}
+
+// ─── Container Policy ────────────────────────────────────────────────────────
+
+/// Policy rules applied to every `RunContainer` request before any container
+/// creation logic executes.  Defaults to deny-all: both bind mounts and
+/// privileged mode are blocked unless explicitly enabled.
+///
+/// Construct with specific overrides for tests or operator-controlled config:
+/// ```rust,ignore
+/// let policy = ContainerPolicy { allow_bind_mounts: true, ..ContainerPolicy::default() };
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct ContainerPolicy {
+    /// Allow containers to mount host directories (bind mounts).
+    /// Default: `false` (deny).
+    pub allow_bind_mounts: bool,
+    /// Allow containers to run in privileged mode.
+    /// Default: `false` (deny).
+    pub allow_privileged: bool,
+}
+
+/// Validate a container run request against the active policy.
+///
+/// Returns `Ok(())` if the request is permitted; returns an error string
+/// describing the first policy violation found.
+///
+/// # Errors
+///
+/// Returns `Err(String)` with a human-readable description when the request
+/// violates `policy`.
+pub fn validate_policy(
+    mounts: &[minibox_core::domain::BindMount],
+    privileged: bool,
+    policy: &ContainerPolicy,
+) -> Result<(), String> {
+    if !mounts.is_empty() && !policy.allow_bind_mounts {
+        return Err("policy violation: bind mount requested but bind mounts are not allowed".into());
+    }
+    if privileged && !policy.allow_privileged {
+        return Err(
+            "policy violation: privileged mode requested but privileged containers are not allowed"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+// ─── Container ID Generation ────────────────────────────────────────────────
+
+/// Generate a 16-char hex container ID from a UUID v4.
+///
+/// 16 hex chars = 64 bits. Birthday-paradox collision after ~4 billion containers —
+/// callers must still check for collisions against the existing container state.
+fn generate_container_id() -> String {
+    Uuid::new_v4()
+        .to_string()
+        .replace('-', "")
+        .chars()
+        .take(16)
+        .collect()
 }
 
 // ─── Registry Selection ─────────────────────────────────────────────────────
@@ -174,6 +237,15 @@ pub async fn handle_run(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
+    if let Err(msg) = validate_policy(&mounts, privileged, &deps.policy) {
+        warn!(message = %msg, "handle_run: policy violation");
+        let _ = tx
+            .send(DaemonResponse::Error { message: msg })
+            .await;
+        return;
+    }
+
     // Reject duplicate names eagerly before doing any work.
     // Two-guard pattern: Option check then async check (cannot be written as
     // a single `if let ... && await` in stable Rust).
@@ -446,9 +518,9 @@ async fn run_inner_capture(
         Some(t) => format!("{image}:{t}"),
         None => image.clone(),
     };
-    let image_ref = ImageRef::parse(&ref_str).map_err(|e| {
-        DomainError::InvalidConfig(format!("invalid image reference {ref_str:?}: {e}"))
-    })?;
+    let image_ref = ImageRef::parse(&ref_str)
+        .with_context(|| format!("invalid image reference {ref_str:?}"))
+        .map_err(|e| DomainError::InvalidConfig(e.to_string()))?;
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
@@ -480,12 +552,7 @@ async fn run_inner_capture(
         .into());
     }
 
-    let id = Uuid::new_v4()
-        .to_string()
-        .replace('-', "")
-        .chars()
-        .take(16)
-        .collect::<String>();
+    let id = generate_container_id();
 
     if state.get_container(&id).await.is_some() {
         return Err(DomainError::InvalidConfig(format!(
@@ -601,7 +668,13 @@ async fn run_inner_capture(
 
     // Write PID file and update state.
     let pid_file = deps.run_containers_base.join(&id).join("pid");
-    let _ = std::fs::write(&pid_file, pid.to_string());
+    if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
+        warn!(
+            pid_file = %pid_file.display(),
+            error = %e,
+            "container: failed to write pid file"
+        );
+    }
     state.set_container_pid(&id, pid).await;
 
     Ok((id, pid, output_reader))
@@ -646,9 +719,9 @@ async fn run_inner(
         Some(t) => format!("{image}:{t}"),
         None => image.clone(),
     };
-    let image_ref = ImageRef::parse(&ref_str).map_err(|e| {
-        DomainError::InvalidConfig(format!("invalid image reference {ref_str:?}: {e}"))
-    })?;
+    let image_ref = ImageRef::parse(&ref_str)
+        .with_context(|| format!("invalid image reference {ref_str:?}"))
+        .map_err(|e| DomainError::InvalidConfig(e.to_string()))?;
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
@@ -681,15 +754,7 @@ async fn run_inner(
         .into());
     }
 
-    // SECURITY: Generate a 16-char container ID from UUID to prevent collisions.
-    // 16 hex chars = 64 bits, birthday paradox collision after ~4 billion containers.
-    // We also check for collisions below.
-    let id = Uuid::new_v4()
-        .to_string()
-        .replace('-', "")
-        .chars()
-        .take(16)
-        .collect::<String>();
+    let id = generate_container_id();
 
     // SECURITY: Verify no collision with existing containers
     if state.get_container(&id).await.is_some() {
@@ -819,7 +884,7 @@ async fn run_inner(
         match runtime_clone.spawn_process(&spawn_config).await {
             Ok(spawn_result) => {
                 let pid = spawn_result.pid;
-                info!("container {id_clone} started with PID {pid}");
+                info!(container_id = %id_clone, pid = pid, "container: process started");
 
                 event_sink_clone.emit(ContainerEvent::Created {
                     id: id_clone.clone(),
@@ -836,13 +901,21 @@ async fn run_inner(
                     "minibox_container_ops_total",
                     &[("op", "run"), ("adapter", "daemon"), ("status", "ok")],
                 );
+                let active = state_clone.list_containers().await.len() as f64;
+                metrics_clone.set_gauge("minibox_active_containers", active, &[]);
 
                 // ── Network attach ─────────────────────────────────────
                 net_clone.attach(&id_clone, pid).await.ok();
 
                 // Write PID file.
                 let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
-                let _ = std::fs::write(&pid_file, pid.to_string());
+                if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
+                    warn!(
+                        pid_file = %pid_file.display(),
+                        error = %e,
+                        "container: failed to write pid file"
+                    );
+                }
 
                 state_clone.set_container_pid(&id_clone, pid).await;
 
@@ -966,19 +1039,19 @@ fn daemon_wait_for_exit(
     let nix_pid = Pid::from_raw(pid as i32);
     let exit_code = match waitpid(nix_pid, None) {
         Ok(WaitStatus::Exited(_, code)) => {
-            info!("container {id} exited with code {code}");
+            info!(container_id = %id, exit_code = code, "container: exited");
             code
         }
         Ok(WaitStatus::Signaled(_, sig, _)) => {
-            info!("container {id} killed by signal {sig}");
+            info!(container_id = %id, signal = %sig, "container: killed by signal");
             -(sig as i32)
         }
         Ok(other) => {
-            info!("container {id} wait status: {other:?}");
+            info!(container_id = %id, status = ?other, "container: unexpected wait status");
             -1
         }
         Err(e) => {
-            warn!("waitpid for container {id} error: {e}");
+            warn!(container_id = %id, error = %e, "container: waitpid error");
             -1
         }
     };
@@ -987,7 +1060,7 @@ fn daemon_wait_for_exit(
     if !_post_exit_hooks.is_empty() {
         use mbx::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
-            warn!("container {id} post-exit hooks error: {e:#}");
+            warn!(container_id = %id, error = %e, "container: post-exit hooks error");
         }
     }
 
@@ -1088,9 +1161,14 @@ pub async fn handle_stop(
     );
 
     match result {
-        Ok(()) => DaemonResponse::Success {
-            message: format!("container {id} stopped"),
-        },
+        Ok(()) => {
+            let active = state.list_containers().await.len() as f64;
+            deps.metrics
+                .set_gauge("minibox_active_containers", active, &[]);
+            DaemonResponse::Success {
+                message: format!("container {id} stopped"),
+            }
+        }
         Err(e) => {
             error!("handle_stop error: {e:#}");
             DaemonResponse::Error {
@@ -1304,9 +1382,14 @@ pub async fn handle_remove(
     );
 
     match result {
-        Ok(()) => DaemonResponse::Success {
-            message: format!("container {id} removed"),
-        },
+        Ok(()) => {
+            let active = state.list_containers().await.len() as f64;
+            deps.metrics
+                .set_gauge("minibox_active_containers", active, &[]);
+            DaemonResponse::Success {
+                message: format!("container {id} removed"),
+            }
+        }
         Err(e) => {
             error!("handle_remove error: {e:#}");
             DaemonResponse::Error {
@@ -1450,24 +1533,45 @@ pub async fn handle_load_image(
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     let image_path = std::path::Path::new(&path);
-    match deps.image_loader.load_image(image_path, &name, &tag).await {
+    let start = std::time::Instant::now();
+    let (status, response) = match deps.image_loader.load_image(image_path, &name, &tag).await {
         Ok(()) => {
             info!(
                 path = %path,
                 image = %format!("{name}:{tag}"),
                 "load_image: loaded successfully"
             );
-            DaemonResponse::ImageLoaded {
-                image: format!("{name}:{tag}"),
-            }
+            (
+                "ok",
+                DaemonResponse::ImageLoaded {
+                    image: format!("{name}:{tag}"),
+                },
+            )
         }
         Err(e) => {
             error!(error = %e, "load_image: failed");
-            DaemonResponse::Error {
-                message: format!("{e:#}"),
-            }
+            (
+                "error",
+                DaemonResponse::Error {
+                    message: format!("{e:#}"),
+                },
+            )
         }
-    }
+    };
+    deps.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[
+            ("op", "load_image"),
+            ("adapter", "daemon"),
+            ("status", status),
+        ],
+    );
+    deps.metrics.record_histogram(
+        "minibox_container_op_duration_seconds",
+        start.elapsed().as_secs_f64(),
+        &[("op", "load_image"), ("adapter", "daemon")],
+    );
+    response
 }
 
 // ---------------------------------------------------------------------------
@@ -1490,7 +1594,12 @@ pub async fn handle_exec(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let start = std::time::Instant::now();
     let Some(ref exec_rt) = deps.exec_runtime else {
+        deps.metrics.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
+        );
         let _ = tx
             .send(DaemonResponse::Error {
                 message: "exec not supported on this platform".to_string(),
@@ -1529,11 +1638,29 @@ pub async fn handle_exec(
                 exec_id = %handle.id,
                 "exec: started"
             );
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "exec"), ("adapter", "daemon"), ("status", "ok")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "exec"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::ExecStarted { exec_id: handle.id })
                 .await;
         }
         Err(e) => {
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "exec"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: format!("exec failed: {e:#}"),
@@ -1555,7 +1682,12 @@ pub async fn handle_push(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let start = std::time::Instant::now();
     let Some(ref pusher) = deps.image_pusher else {
+        deps.metrics.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
+        );
         let _ = tx
             .send(DaemonResponse::Error {
                 message: "push not supported on this platform".to_string(),
@@ -1613,6 +1745,15 @@ pub async fn handle_push(
                 size_bytes = result.size_bytes,
                 "push: completed"
             );
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "push"), ("adapter", "daemon"), ("status", "ok")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "push"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Success {
                     message: format!("pushed {} digest:{}", image_ref_str, result.digest),
@@ -1620,6 +1761,15 @@ pub async fn handle_push(
                 .await;
         }
         Err(e) => {
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "push"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: e.to_string(),
@@ -1641,7 +1791,12 @@ pub async fn handle_commit(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let start = std::time::Instant::now();
     let Some(ref committer) = deps.commit_adapter else {
+        deps.metrics.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
+        );
         let _ = tx
             .send(DaemonResponse::Error {
                 message: "commit not supported on this platform".to_string(),
@@ -1677,6 +1832,15 @@ pub async fn handle_commit(
                 layers = meta.layers.len(),
                 "commit: completed"
             );
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "commit"), ("adapter", "daemon"), ("status", "ok")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "commit"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Success {
                     message: format!(
@@ -1691,6 +1855,15 @@ pub async fn handle_commit(
                 .await;
         }
         Err(e) => {
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "commit"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: e.to_string(),
@@ -1718,7 +1891,12 @@ pub async fn handle_build(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let start = std::time::Instant::now();
     let Some(ref builder) = deps.image_builder else {
+        deps.metrics.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
+        );
         let _ = tx
             .send(DaemonResponse::Error {
                 message: "build not supported on this platform".to_string(),
@@ -1727,8 +1905,31 @@ pub async fn handle_build(
         return;
     };
 
-    // Write Dockerfile content to a temp file inside context_path.
-    let context_dir = std::path::PathBuf::from(&context_path);
+    // SECURITY: context_path comes from the protocol request. SO_PEERCRED restricts
+    // who can connect (UID 0 only), but not what paths they may name. We canonicalize
+    // to resolve symlinks and reject relative paths before touching the filesystem.
+    let context_dir = {
+        let raw = std::path::PathBuf::from(&context_path);
+        if !raw.is_absolute() {
+            let _ = tx
+                .send(DaemonResponse::Error {
+                    message: format!("build context_path must be absolute: {context_path:?}"),
+                })
+                .await;
+            return;
+        }
+        match raw.canonicalize() {
+            Ok(p) => p,
+            Err(e) => {
+                let _ = tx
+                    .send(DaemonResponse::Error {
+                        message: format!("build context_path invalid: {e}"),
+                    })
+                    .await;
+                return;
+            }
+        }
+    };
     let dockerfile_path = context_dir.join("Dockerfile.mbx-build");
     if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
         let _ = tx
@@ -1770,6 +1971,15 @@ pub async fn handle_build(
                 layers = meta.layers.len(),
                 "build: complete"
             );
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "build"), ("adapter", "daemon"), ("status", "ok")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "build"), ("adapter", "daemon")],
+            );
             let image_id = meta
                 .layers
                 .first()
@@ -1780,6 +1990,15 @@ pub async fn handle_build(
                 .await;
         }
         Err(e) => {
+            deps.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
+            );
+            deps.metrics.record_histogram(
+                "minibox_container_op_duration_seconds",
+                start.elapsed().as_secs_f64(),
+                &[("op", "build"), ("adapter", "daemon")],
+            );
             let _ = tx
                 .send(DaemonResponse::Error {
                     message: format!("build failed: {e}"),

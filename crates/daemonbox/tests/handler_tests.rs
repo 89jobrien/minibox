@@ -92,6 +92,10 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: Arc::new(NoopImageGc),
         image_store,
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -180,6 +184,10 @@ async fn test_handle_pull_failure() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -224,6 +232,10 @@ async fn test_handle_run_with_cached_image() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -322,6 +334,10 @@ async fn test_handle_run_filesystem_setup_failure() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -372,6 +388,10 @@ async fn test_handle_run_resource_limiter_failure() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -422,6 +442,10 @@ async fn test_handle_run_runtime_spawn_failure() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -679,6 +703,10 @@ fn create_test_deps_with_network(
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: Arc::new(NoopImageGc),
         image_store,
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -1039,6 +1067,10 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1185,6 +1217,10 @@ async fn test_handle_run_empty_image_returns_error() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1294,6 +1330,10 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1429,6 +1469,10 @@ async fn test_handle_run_pull_failure_returns_error() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1554,6 +1598,10 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1612,6 +1660,10 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1670,6 +1722,10 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1721,6 +1777,10 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1988,6 +2048,10 @@ async fn test_handle_remove_failed_container_succeeds() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2048,6 +2112,10 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2270,6 +2338,10 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2339,6 +2411,10 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2401,6 +2477,10 @@ async fn test_run_empty_image_no_layers() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2459,6 +2539,10 @@ async fn test_pull_registry_failure_with_tag() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2588,6 +2672,10 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             )
             .unwrap(),
         ),
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2910,4 +2998,408 @@ async fn test_resume_nonexistent_container_returns_error() {
         matches!(resp, DaemonResponse::Error { .. }),
         "got: {resp:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Task 1: ContainerPolicy tests (auth-policy-gate)
+// ---------------------------------------------------------------------------
+
+use daemonbox::handler::ContainerPolicy;
+use minibox_core::domain::BindMount;
+
+fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).unwrap());
+    Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers_pol"),
+        run_containers_base: temp_dir.path().join("run_pol"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy,
+    })
+}
+
+/// Default policy denies bind mounts.
+#[tokio::test]
+async fn test_policy_denies_bind_mount_by_default() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let bind_mount = BindMount {
+        host_path: std::path::PathBuf::from("/tmp/host"),
+        container_path: std::path::PathBuf::from("/mnt/host"),
+        read_only: false,
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![bind_mount],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("bind mount") || message.contains("policy"),
+                "expected policy error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// Default policy denies privileged containers.
+#[tokio::test]
+async fn test_policy_denies_privileged_by_default() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        true, // privileged
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("privileged") || message.contains("policy"),
+                "expected policy error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// Default policy allows plain containers (no mounts, not privileged).
+#[tokio::test]
+async fn test_policy_allows_plain_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "plain container should pass policy, got {resp:?}"
+    );
+}
+
+/// Policy configured with allow_bind_mounts=true permits bind mounts.
+#[tokio::test]
+async fn test_policy_can_be_configured_to_allow_mounts() {
+    let temp_dir = TempDir::new().unwrap();
+    let policy = ContainerPolicy {
+        allow_bind_mounts: true,
+        allow_privileged: false,
+    };
+    let deps = make_deps_with_policy(&temp_dir, policy);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let bind_mount = BindMount {
+        host_path: std::path::PathBuf::from("/tmp/host"),
+        container_path: std::path::PathBuf::from("/mnt/host"),
+        read_only: false,
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![bind_mount],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "policy with allow_bind_mounts should permit bind mounts, got {resp:?}"
+    );
+}
+
+/// Policy configured with allow_privileged=true permits privileged containers.
+#[tokio::test]
+async fn test_policy_can_be_configured_to_allow_privileged() {
+    let temp_dir = TempDir::new().unwrap();
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: true,
+    };
+    let deps = make_deps_with_policy(&temp_dir, policy);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        true, // privileged
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "policy with allow_privileged should permit privileged, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Task 2: handler coverage gap tests
+// ---------------------------------------------------------------------------
+
+/// handle_run with a registry that fails pull → Error response.
+#[tokio::test]
+async fn test_handle_run_image_pull_failure() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap(),
+    );
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers_pf"),
+        run_containers_base: temp_dir.path().join("run_pf"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "pull failure should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_run with an image that has no layers → Error response.
+#[tokio::test]
+async fn test_handle_run_empty_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap(),
+    );
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_empty_layers()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers_el"),
+        run_containers_base: temp_dir.path().join("run_el"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "empty layers should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_pull for a non-existent image (pull failure) → Error response.
+#[tokio::test]
+async fn test_handle_pull_nonexistent_image() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap(),
+    );
+    let deps = Arc::new(HandlerDependencies {
+        registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        ghcr_registry: Arc::new(MockRegistry::new()),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers_ni"),
+        run_containers_base: temp_dir.path().join("run_ni"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_pull(
+        "does-not-exist".to_string(),
+        Some("latest".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "nonexistent image pull should return Error, got {resp:?}"
+    );
+}
+
+/// handle_stop with an unknown container ID → Error response.
+#[tokio::test]
+async fn test_handle_stop_nonexistent_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_stop("nonexistent-id-xyz".to_string(), state, deps).await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// handle_remove with an unknown container ID → Error response.
+#[tokio::test]
+async fn test_handle_rm_nonexistent_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_remove("nonexistent-id-xyz".to_string(), state, deps).await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
 }

@@ -354,18 +354,57 @@ Key new commands:
 - `cargo xtask test-linux` / `just test-linux` — full dogfood run
 - `minibox load <path> [--name <name>] [--tag <tag>]` — load local OCI tarball
 
-### Open — dashbox sentinel items (low priority, no blockers)
+### Open — doob tasks (2026-04-03)
+
+#### P1 — Act on soon
+
+| Tags        | Task                                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ci,workflow | Enforce 3-tier git workflow (main→next→stable) with CI automation: branch protections, PR target rules, tagging expectations. Currently prose-only.  |
+| bench       | Add env-var toggles + fallbacks to bench/profiling pipeline (samply/cargo-flamegraph). `BROWSER=firefox` is hardcoded — brittle across environments. |
+| ci          | `main` is 7 commits ahead of `next` — phased-deployment auto-promote blocked. Trigger once CI is green.                                              |
+
+#### P2
+
+| Tags          | Task                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ci,e2e        | Enforce e2e serialization explicitly in CI runner config so local dev and CI are identical.                                |
+| ci,e2e        | Add e2e regression test for `minibox run` streaming failure mode — prevent CI job removal under pressure again.            |
+| observability | Harden OTEL/Prometheus telemetry boundary: add a thin telemetry module, document integration points and cardinality rules. |
+
+#### P3
+
+| Tags             | Task                                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ci,**blocking**  | Fix phased-deployment CI: HTTP 403 on `gh run list` — `GITHUB_TOKEN` needs `actions: read` permission in `phased-deployment.yml`. Run: https://github.com/89jobrien/minibox/actions/runs/23622830548 |
+| ci,security      | Remove `\|\| true` from `cargo geiger` in stable CI gate — makes unsafe audit informational-only.                                                                                                    |
+| ci               | Add unit tests to `main` branch CI gate — currently only run on `next`+`stable`; regressions land silently.                                                                                          |
+| e2e,**blocking** | Fix `minibox run` e2e regression — CI job removed to unblock but underlying failure unresolved. Reproduces on Linux+root via `just test-e2e`.                                                        |
+| minibox-llm      | Document `invoke!`/`ainvoke!` macros with examples in README or crate docs.                                                                                                                          |
+
+### Open — sentinel items (2026-04-03)
+
+#### handler.rs suggestions (no blockers)
+
+| Location                | Issue                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----------------------------------------------------------------------------------------- |
+| `handler.rs:464–466`    | `with_context(…).map_err(                                                                                                                        | e   | e.to_string())`discards the anyhow chain — use`map_err` directly with a formatted message |
+| `handler.rs` — metrics  | `exec`/`push`/`commit`/`load_image` handlers duplicate increment-counter + record-histogram pair in ok and error arms; extract an inline helper  |
+| `handler.rs:844`        | `minibox_active_containers` gauge not updated in the reaper task — will drift stale on unattended container exit                                 |
+| `handler.rs` — coverage | New metrics paths in `handle_exec`, `handle_push`, `handle_commit`, `handle_load_image` have no tests; widens the existing 55% line coverage gap |
+
+#### dashbox sentinel items (low priority, no blockers)
 
 Six code quality issues flagged by sentinel, all in `crates/dashbox/`:
 
-| File | Issue |
-| ---- | ----- |
-| `main.rs:24-35` | Terminal setup not panic-safe — wrap in RAII drop guard |
-| `data/todos.rs:51-53` | `doob` exit status not checked before parsing stdout |
-| `data/ci.rs:56-58` | `gh run list` exit status not checked; stderr not captured |
-| `data/git.rs:62` | `rev-list .unwrap_or_default()` silently masks detached HEAD |
-| `src/command.rs:100-101` | `BackgroundCommand` discards stderr via `Stdio::null()` |
-| `src/command.rs:52-54` | Sentinel thread spawns only to `drop(tx)`; should drop inline |
+| File                     | Issue                                                         |
+| ------------------------ | ------------------------------------------------------------- |
+| `main.rs:24-35`          | Terminal setup not panic-safe — wrap in RAII drop guard       |
+| `data/todos.rs:51-53`    | `doob` exit status not checked before parsing stdout          |
+| `data/ci.rs:56-58`       | `gh run list` exit status not checked; stderr not captured    |
+| `data/git.rs:62`         | `rev-list .unwrap_or_default()` silently masks detached HEAD  |
+| `src/command.rs:100-101` | `BackgroundCommand` discards stderr via `Stdio::null()`       |
+| `src/command.rs:52-54`   | Sentinel thread spawns only to `drop(tx)`; should drop inline |
 
 ### DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
 

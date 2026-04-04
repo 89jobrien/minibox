@@ -114,6 +114,10 @@ test-sandbox:
 test-linux:
     cargo xtask test-linux
 
+# Run e2e suite on VPS (pulls latest main, runs as root, streams output)
+test-e2e-vps:
+    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-e2e-suite'
+
 # Full pipeline: clean state → doctor → all tests → clean state
 test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
 

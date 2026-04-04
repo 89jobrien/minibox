@@ -86,6 +86,10 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: Arc::new(NoopImageGc),
         image_store,
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 

@@ -195,6 +195,7 @@ pub async fn start() -> Result<()> {
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: Arc::clone(&image_gc),
         image_store: Arc::clone(&state.image_store),
+        policy: daemonbox::handler::ContainerPolicy::default(),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

@@ -450,6 +450,10 @@ mod tests {
             event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
             image_gc,
             image_store,
+            policy: crate::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
         });
         (state, deps)
     }

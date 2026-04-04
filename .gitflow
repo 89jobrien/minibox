@@ -1,0 +1,15 @@
+[gitflow "branch"]
+	main = main
+	develop = next
+
+[gitflow "prefix"]
+	feature = feature/
+	bugfix = bugfix/
+	release = release/
+	hotfix = hotfix/
+	support = support/
+	chore = chore/
+	versiontag = v
+
+[gitflow "path"]
+	hooks = .git/hooks
