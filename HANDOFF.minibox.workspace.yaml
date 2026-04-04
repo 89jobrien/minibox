@@ -1,11 +1,6 @@
 project: minibox
 id: minibox
 updated: 2026-04-03
-branch: main
-state:
-  tests: unknown
-  build: clean
-  notes: null
 items:
 - id: minibox-1
   doob_uuid: f44f7d5e-edc0-4cf6-b513-b9c84ae9276c

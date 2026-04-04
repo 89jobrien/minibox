@@ -104,3 +104,4 @@ __pycache__/
 *.venv/
 *.pytest_cache/
 .firecrawl/
+.ctx/
