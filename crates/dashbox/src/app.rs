@@ -2,8 +2,8 @@
 use std::time::Instant;
 
 use crate::command::{BackgroundCommand, InlineCommand};
-use crate::tabs::TabRenderer;
 use crate::data::agents::{JsonlFileSource, MultiSourceLog};
+use crate::tabs::TabRenderer;
 use crate::tabs::agents::AgentsTab;
 use crate::tabs::bench::BenchTab;
 use crate::tabs::ci::CiTab;
@@ -178,11 +178,17 @@ impl App {
                 let msg = if success {
                     format!("{} complete", cmd.label)
                 } else {
-                    format!(
-                        "{} failed (exit {})",
-                        cmd.label,
-                        cmd.exit_code.unwrap_or(-1)
-                    )
+                    let stderr = cmd.stderr_tail.as_deref().unwrap_or("").trim();
+                    if stderr.is_empty() {
+                        format!("{} failed (exit {})", cmd.label, cmd.exit_code.unwrap_or(-1))
+                    } else {
+                        format!(
+                            "{} failed (exit {}): {}",
+                            cmd.label,
+                            cmd.exit_code.unwrap_or(-1),
+                            stderr
+                        )
+                    }
                 };
                 self.notification = Some((msg, Instant::now()));
                 if success {

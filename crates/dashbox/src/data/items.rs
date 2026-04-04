@@ -109,4 +109,50 @@ mod tests {
         let item: HandoffItem = serde_json::from_str(json).expect("parse");
         assert_eq!(item.doob_uuid, "abc-123");
     }
+
+    #[test]
+    fn test_handoff_item_optional_fields_absent() {
+        // description, files, and uuid are all optional — must not fail to parse
+        let json = r#"{
+            "handoff_id": "minibox-2",
+            "title": "Minimal item",
+            "priority": "P2",
+            "status": "open"
+        }"#;
+        let item: HandoffItem = serde_json::from_str(json).expect("parse");
+        assert!(item.description.is_none());
+        assert!(item.files.is_empty());
+        assert_eq!(item.doob_uuid, "");
+    }
+
+    #[test]
+    fn test_handoff_item_empty_uuid_is_empty_string() {
+        // empty doob_uuid means the key handler should return TabAction::None
+        let json = r#"{
+            "handoff_id": "minibox-3",
+            "title": "No uuid",
+            "priority": "P1",
+            "status": "open",
+            "uuid": ""
+        }"#;
+        let item: HandoffItem = serde_json::from_str(json).expect("parse");
+        assert_eq!(item.doob_uuid, "");
+    }
+
+    #[test]
+    fn test_handoff_item_unknown_fields_ignored() {
+        // doob may add fields in future — unknown fields must not break parsing
+        let json = r#"{
+            "handoff_id": "minibox-4",
+            "title": "Future item",
+            "priority": "P0",
+            "status": "blocked",
+            "uuid": "xyz-999",
+            "unknown_future_field": true,
+            "another_field": 42
+        }"#;
+        let item: HandoffItem = serde_json::from_str(json).expect("parse");
+        assert_eq!(item.handoff_id, "minibox-4");
+        assert_eq!(item.doob_uuid, "xyz-999");
+    }
 }

@@ -140,6 +140,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
                     }
                     TabAction::RunBackground { cmd, args, label } => {
                         if app.bg_cmd.is_none() {
+                            app.notification =
+                                Some((format!("{label}..."), std::time::Instant::now()));
                             app.bg_cmd = BackgroundCommand::spawn(&cmd, &args, label).ok();
                         }
                     }
