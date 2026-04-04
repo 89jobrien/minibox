@@ -161,7 +161,7 @@ items:
   doob_uuid: f3b89717-3dbb-400c-80dc-00882a4c933e
   name: exec-into-containers
   priority: P1
-  status: open
+  status: done
   title: 'feat: exec into running containers (setns + output streaming) (#16)'
   description: |
     Add ExecContainer request/response to protocol. Implement setns(2) to enter existing
@@ -171,13 +171,18 @@ items:
   - crates/mbx/src/container/
   - crates/daemonbox/src/handler.rs
   - crates/minibox-core/src/protocol.rs
-  extra: []
+  extra:
+  - date: 2026-04-04
+    type: human-edit
+    field: status
+    value: done
+    note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-14
   doob_uuid: 34b52390-b5b1-4953-a681-cd4cdb57c33a
   name: named-containers
   priority: P1
-  status: open
+  status: done
   title: 'feat: named containers (#17)'
   description: |
     Add optional name field to RunContainer protocol message. Store name in DaemonState
@@ -186,13 +191,18 @@ items:
   files:
   - crates/minibox-core/src/protocol.rs
   - crates/daemonbox/src/state.rs
-  extra: []
+  extra:
+  - date: 2026-04-04
+    type: human-edit
+    field: status
+    value: done
+    note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-15
   doob_uuid: 86f14305-32d8-4984-9c71-d72e067435ea
   name: container-log-capture
   priority: P1
-  status: open
+  status: done
   title: 'feat: container log capture and retrieval (#18)'
   description: |
     Capture stdout/stderr to log files in /var/lib/minibox/containers/{id}/. Add
@@ -201,7 +211,12 @@ items:
   files:
   - crates/daemonbox/src/handler.rs
   - crates/minibox-core/src/protocol.rs
-  extra: []
+  extra:
+  - date: 2026-04-04
+    type: human-edit
+    field: status
+    value: done
+    note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-16
   doob_uuid: 695fa6c0-58b9-452b-97e5-9805d73b3c7b
