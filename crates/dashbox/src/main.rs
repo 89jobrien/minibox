@@ -144,8 +144,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
                         }
                     }
                     TabAction::Quit => app.should_quit = true,
-                    TabAction::OpenUrl(_url) => {
-                        // Future: open in browser
+                    TabAction::OpenUrl(url) => {
+                        let opener = if std::env::consts::OS == "macos" {
+                            "open"
+                        } else {
+                            "xdg-open"
+                        };
+                        let _ = std::process::Command::new(opener).arg(&url).spawn();
                     }
                     TabAction::None => {}
                 }

@@ -8,11 +8,12 @@ use ratatui::widgets::{Cell, Paragraph, Row, Table, TableState};
 
 use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
-use crate::data::ci::CiSource;
+use crate::data::ci::{CiData, CiSource};
 
 pub struct CiTab {
     source: CachedSource<CiSource>,
     table_state: TableState,
+    pub cached_data: Option<CiData>,
 }
 
 impl CiTab {
@@ -20,6 +21,7 @@ impl CiTab {
         Self {
             source: CachedSource::new(CiSource::new(), 10),
             table_state: TableState::default(),
+            cached_data: None,
         }
     }
 }
@@ -38,6 +40,7 @@ impl TabRenderer for CiTab {
             }
             None => return,
         };
+        self.cached_data = Some(data.clone());
 
         let chunks = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
@@ -127,6 +130,23 @@ impl TabRenderer for CiTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
+            KeyCode::Char('o') => {
+                let idx = match self.table_state.selected() {
+                    Some(i) => i,
+                    None => return TabAction::None,
+                };
+                let url = self
+                    .cached_data
+                    .as_ref()
+                    .and_then(|d| d.runs.get(idx))
+                    .map(|r| r.url.clone())
+                    .unwrap_or_default();
+                if url.is_empty() {
+                    TabAction::None
+                } else {
+                    TabAction::OpenUrl(url)
+                }
+            }
             _ => TabAction::None,
         }
     }
@@ -136,6 +156,54 @@ impl TabRenderer for CiTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  r:refresh"
+        "j/k:scroll  o:open  r:refresh"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::data::ci::{CiData, CiRun};
+
+    fn make_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn run_with_url(url: &str) -> CiRun {
+        CiRun {
+            name: "CI".into(),
+            head_branch: "main".into(),
+            status: "completed".into(),
+            conclusion: "success".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            database_id: 1,
+            url: url.into(),
+        }
+    }
+
+    fn tab_with_run(run: CiRun) -> CiTab {
+        let mut tab = CiTab::new();
+        tab.cached_data = Some(CiData {
+            runs: vec![run],
+            success_rate: 100.0,
+        });
+        tab.table_state.select(Some(0));
+        tab
+    }
+
+    #[test]
+    fn test_ci_tab_o_key_emits_open_url() {
+        let url = "https://github.com/89jobrien/minibox/actions/runs/1";
+        let mut tab = tab_with_run(run_with_url(url));
+        let action = tab.handle_key(make_key(KeyCode::Char('o')));
+        match action {
+            TabAction::OpenUrl(u) => assert_eq!(u, url),
+            other => panic!(
+                "expected OpenUrl, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
     }
 }

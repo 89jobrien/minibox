@@ -21,6 +21,8 @@ pub struct CiRun {
     #[serde(default)]
     #[allow(dead_code)]
     pub database_id: u64,
+    #[serde(default)]
+    pub url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +48,7 @@ impl DataSource for CiSource {
                 "run",
                 "list",
                 "--json",
-                "conclusion,status,headBranch,createdAt,name,databaseId",
+                "conclusion,status,headBranch,createdAt,name,databaseId,url",
                 "--limit",
                 "15",
             ])
