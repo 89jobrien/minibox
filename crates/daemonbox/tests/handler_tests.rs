@@ -3400,3 +3400,85 @@ async fn test_handle_rm_nonexistent_container() {
         _ => panic!("expected Error, got {resp:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// handle_logs Tests
+// ---------------------------------------------------------------------------
+
+/// handle_logs for unknown container_id → Error response.
+#[tokio::test]
+async fn test_handle_logs_unknown_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_logs("nonexistent-id".to_string(), false, state, deps, tx).await;
+
+    let resp = rx.recv().await.expect("handle_logs sent no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// handle_logs for known container with log files → LogLine + Success.
+#[tokio::test]
+async fn test_handle_logs_reads_log_files() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Register a container in state.
+    let container_id = "logtest001logtest001";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake"),
+        post_exit_hooks: vec![],
+        overlay_upper: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    // Write log files to the expected path.
+    let container_dir = temp_dir.path().join("containers").join(container_id);
+    std::fs::create_dir_all(&container_dir).unwrap();
+    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n").unwrap();
+    std::fs::write(container_dir.join("stderr.log"), "err line\n").unwrap();
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
+    handler::handle_logs(container_id.to_string(), false, state, deps, tx).await;
+
+    let mut log_lines = Vec::new();
+    let mut got_success = false;
+    while let Some(resp) = rx.recv().await {
+        match resp {
+            DaemonResponse::LogLine { stream: _, line } => log_lines.push(line),
+            DaemonResponse::Success { .. } => {
+                got_success = true;
+                break;
+            }
+            other => panic!("unexpected response: {other:?}"),
+        }
+    }
+
+    assert!(got_success, "expected terminal Success");
+    assert!(log_lines.contains(&"line one".to_string()));
+    assert!(log_lines.contains(&"line two".to_string()));
+    assert!(log_lines.contains(&"err line".to_string()));
+}

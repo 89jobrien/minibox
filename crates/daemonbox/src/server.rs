@@ -229,7 +229,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerResumed { .. }
             | DaemonResponse::Pruned { .. }
     )
-    // ContainerOutput, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and Event are non-terminal.
+    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
+    // Event are non-terminal.
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -382,6 +383,12 @@ async fn dispatch(
                 Arc::clone(&deps.event_sink),
                 tx,
             ));
+        }
+        DaemonRequest::ContainerLogs {
+            container_id,
+            follow,
+        } => {
+            handler::handle_logs(container_id, follow, state, deps, tx).await;
         }
     }
 }
@@ -599,6 +606,13 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::LogLine {
+                    stream: minibox_core::protocol::OutputStreamKind::Stdout,
+                    line: "hello".to_string(),
+                },
+                false, // non-terminal: more lines may follow
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -629,6 +643,7 @@ mod tests {
                 DaemonResponse::ContainerResumed { .. } => true,
                 DaemonResponse::Event { .. } => false,
                 DaemonResponse::Pruned { .. } => true,
+                DaemonResponse::LogLine { .. } => false,
             };
         }
     }

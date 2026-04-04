@@ -212,6 +212,15 @@ pub enum DaemonRequest {
         /// Image reference, e.g. `"alpine:latest"`.
         image_ref: String,
     },
+
+    /// Retrieve stored log output for a container.
+    ContainerLogs {
+        /// Container ID or name.
+        container_id: String,
+        /// Stream new output as it arrives (reserved for future use).
+        #[serde(default)]
+        follow: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------

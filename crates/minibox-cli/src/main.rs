@@ -132,6 +132,20 @@ enum Commands {
         tag: String,
     },
 
+    /// Execute a command inside a running container.
+    ///
+    /// Sends a `DaemonRequest::Exec` to the daemon, then streams
+    /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped` is
+    /// received.  Exits with the exec process exit code.
+    Exec {
+        /// Container ID or name.
+        container_id: String,
+
+        /// Command and arguments to run (everything after --)
+        #[arg(last = true, required = true)]
+        cmd: Vec<String>,
+    },
+
     /// Stream container lifecycle events as JSON-lines to stdout.
     ///
     /// Subscribes to the daemon event stream and prints each event as a
@@ -211,6 +225,10 @@ async fn main() -> Result<()> {
         }
 
         Commands::Ps => commands::ps::execute(socket_path).await,
+
+        Commands::Exec { container_id, cmd } => {
+            commands::exec::execute(container_id, cmd, socket_path).await
+        }
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
@@ -326,6 +344,50 @@ mod tests {
         match cli.unwrap().command {
             Commands::Run { volumes, .. } => assert_eq!(volumes.len(), 2),
             _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_exec_subcommand() {
+        let cli = Cli::try_parse_from([
+            "minibox", "exec", "abc123", "--", "/bin/sh", "-c", "echo hi",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Exec { container_id, cmd } => {
+                assert_eq!(container_id, "abc123");
+                assert_eq!(cmd, vec!["/bin/sh", "-c", "echo hi"]);
+            }
+            _ => panic!("expected Exec"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_name_flag() {
+        let cli = Cli::try_parse_from([
+            "minibox",
+            "run",
+            "--name",
+            "my-container",
+            "alpine",
+            "--",
+            "/bin/sh",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { name, .. } => {
+                assert_eq!(name, Some("my-container".to_string()));
+            }
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_run_without_name_is_none() {
+        let cli = Cli::try_parse_from(["minibox", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        match cli.command {
+            Commands::Run { name, .. } => assert_eq!(name, None),
+            _ => panic!("expected Run"),
         }
     }
 

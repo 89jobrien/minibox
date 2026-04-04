@@ -223,6 +223,19 @@ pub enum DaemonRequest {
         /// Image reference, e.g. `"alpine:latest"`.
         image_ref: String,
     },
+
+    /// Retrieve stored log output for a container.
+    ///
+    /// The daemon will send zero or more `LogLine` responses followed by
+    /// `Success { message: "end of log" }` (when `follow: false`).
+    ContainerLogs {
+        /// Container ID or name to retrieve logs for.
+        container_id: String,
+        /// If `true`, keep the connection open and stream new output as it
+        /// arrives (not yet implemented — reserved for future use).
+        #[serde(default)]
+        follow: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +380,17 @@ pub enum DaemonResponse {
         freed_bytes: u64,
         /// True if this was a dry run.
         dry_run: bool,
+    },
+
+    /// A single line of stored log output.
+    ///
+    /// Non-terminal: sent zero or more times before the terminal `Success`
+    /// (or `Error`) response from a [`DaemonRequest::ContainerLogs`] request.
+    LogLine {
+        /// Which stream the line originated from.
+        stream: OutputStreamKind,
+        /// The log line content (without trailing newline).
+        line: String,
     },
 }
 
@@ -1018,6 +1042,54 @@ mod tests {
                 assert!(mounts.is_empty());
             }
             _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn container_logs_request_roundtrip() {
+        let req = DaemonRequest::ContainerLogs {
+            container_id: "abc123".to_string(),
+            follow: false,
+        };
+        let encoded = encode_request(&req).expect("encode");
+        let decoded = decode_request(&encoded).expect("decode");
+        match decoded {
+            DaemonRequest::ContainerLogs {
+                container_id,
+                follow,
+            } => {
+                assert_eq!(container_id, "abc123");
+                assert!(!follow);
+            }
+            _ => panic!("expected ContainerLogs"),
+        }
+    }
+
+    #[test]
+    fn container_logs_request_follow_defaults_false() {
+        let json = r#"{"type":"ContainerLogs","container_id":"abc"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::ContainerLogs { follow, .. } => assert!(!follow),
+            _ => panic!("expected ContainerLogs"),
+        }
+    }
+
+    #[test]
+    fn log_line_response_roundtrip() {
+        let resp = DaemonResponse::LogLine {
+            stream: OutputStreamKind::Stderr,
+            line: "error: something bad".to_string(),
+        };
+        let json = serde_json::to_string(&resp).expect("serialize");
+        assert!(json.contains("\"type\":\"LogLine\""));
+        let back: DaemonResponse = serde_json::from_str(&json).expect("deserialize");
+        match back {
+            DaemonResponse::LogLine { stream, line } => {
+                assert_eq!(stream, OutputStreamKind::Stderr);
+                assert_eq!(line, "error: something bad");
+            }
+            _ => panic!("expected LogLine"),
         }
     }
 

@@ -6,11 +6,67 @@ use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Column widths for the table output.
 const COL_ID: usize = 14;
+const COL_NAME: usize = 16;
 const COL_IMAGE: usize = 20;
 const COL_COMMAND: usize = 20;
 const COL_STATE: usize = 10;
 const COL_CREATED: usize = 25;
 const COL_PID: usize = 8;
+
+/// Format the table header line.
+pub fn format_header() -> String {
+    format!(
+        "{:<width_id$}  {:<width_name$}  {:<width_image$}  {:<width_cmd$}  \
+         {:<width_state$}  {:<width_created$}  {:<width_pid$}",
+        "CONTAINER ID",
+        "NAME",
+        "IMAGE",
+        "COMMAND",
+        "STATE",
+        "CREATED",
+        "PID",
+        width_id = COL_ID,
+        width_name = COL_NAME,
+        width_image = COL_IMAGE,
+        width_cmd = COL_COMMAND,
+        width_state = COL_STATE,
+        width_created = COL_CREATED,
+        width_pid = COL_PID,
+    )
+}
+
+/// Format a single container row.
+pub fn format_row(c: &minibox_core::protocol::ContainerInfo) -> String {
+    let pid_str = c
+        .pid
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let name_str = c.name.as_deref().unwrap_or("-").to_string();
+
+    let name = truncate(&name_str, COL_NAME);
+    let image = truncate(&c.image, COL_IMAGE);
+    let command = truncate(&c.command, COL_COMMAND);
+    let created = truncate(&c.created_at, COL_CREATED);
+
+    format!(
+        "{:<width_id$}  {:<width_name$}  {:<width_image$}  {:<width_cmd$}  \
+         {:<width_state$}  {:<width_created$}  {:<width_pid$}",
+        c.id,
+        name,
+        image,
+        command,
+        c.state,
+        created,
+        pid_str,
+        width_id = COL_ID,
+        width_name = COL_NAME,
+        width_image = COL_IMAGE,
+        width_cmd = COL_COMMAND,
+        width_state = COL_STATE,
+        width_created = COL_CREATED,
+        width_pid = COL_PID,
+    )
+}
 
 /// Execute the `ps` subcommand.
 ///
@@ -28,56 +84,25 @@ pub async fn execute(socket_path: &std::path::Path) -> anyhow::Result<()> {
         match response {
             DaemonResponse::ContainerList { containers } => {
                 // Header
-                println!(
-                    "{:<width_id$}  {:<width_image$}  {:<width_cmd$}  {:<width_state$}  {:<width_created$}  {:<width_pid$}",
-                    "CONTAINER ID",
-                    "IMAGE",
-                    "COMMAND",
-                    "STATE",
-                    "CREATED",
-                    "PID",
-                    width_id = COL_ID,
-                    width_image = COL_IMAGE,
-                    width_cmd = COL_COMMAND,
-                    width_state = COL_STATE,
-                    width_created = COL_CREATED,
-                    width_pid = COL_PID,
-                );
+                println!("{}", format_header());
 
                 // Separator
                 println!(
                     "{}",
                     "-".repeat(
-                        COL_ID + COL_IMAGE + COL_COMMAND + COL_STATE + COL_CREATED + COL_PID + 10
+                        COL_ID
+                            + COL_NAME
+                            + COL_IMAGE
+                            + COL_COMMAND
+                            + COL_STATE
+                            + COL_CREATED
+                            + COL_PID
+                            + 12
                     )
                 );
 
                 for c in &containers {
-                    let pid_str = c
-                        .pid
-                        .map(|p| p.to_string())
-                        .unwrap_or_else(|| "-".to_string());
-
-                    // Truncate long fields to keep the table tidy.
-                    let image = truncate(&c.image, COL_IMAGE);
-                    let command = truncate(&c.command, COL_COMMAND);
-                    let created = truncate(&c.created_at, COL_CREATED);
-
-                    println!(
-                        "{:<width_id$}  {:<width_image$}  {:<width_cmd$}  {:<width_state$}  {:<width_created$}  {:<width_pid$}",
-                        c.id,
-                        image,
-                        command,
-                        c.state,
-                        created,
-                        pid_str,
-                        width_id = COL_ID,
-                        width_image = COL_IMAGE,
-                        width_cmd = COL_COMMAND,
-                        width_state = COL_STATE,
-                        width_created = COL_CREATED,
-                        width_pid = COL_PID,
-                    );
+                    println!("{}", format_row(c));
                 }
 
                 if containers.is_empty() {
@@ -189,6 +214,56 @@ mod tests {
         assert!(
             result.is_ok(),
             "execute should succeed with one container: {result:?}"
+        );
+    }
+
+    /// Verify that the NAME column header is present in ps output.
+    /// This test checks the format_header function produces the NAME column.
+    #[test]
+    fn ps_header_contains_name_column() {
+        let header = format_header();
+        assert!(
+            header.contains("NAME"),
+            "ps header should contain NAME column, got: {header}"
+        );
+    }
+
+    /// Verify that a container with a name shows it in the formatted row.
+    #[test]
+    fn ps_row_shows_container_name() {
+        let info = ContainerInfo {
+            id: "abc123".to_string(),
+            name: Some("my-web".to_string()),
+            image: "nginx".to_string(),
+            command: "/bin/nginx".to_string(),
+            state: "running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99),
+        };
+        let row = format_row(&info);
+        assert!(
+            row.contains("my-web"),
+            "row should contain the container name, got: {row}"
+        );
+    }
+
+    /// Verify that a container without a name shows '-' in the NAME column.
+    #[test]
+    fn ps_row_shows_dash_when_no_name() {
+        let info = ContainerInfo {
+            id: "abc123".to_string(),
+            name: None,
+            image: "alpine".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(1),
+        };
+        let row = format_row(&info);
+        // The NAME column should contain '-' for unnamed containers.
+        assert!(
+            row.contains('-'),
+            "row should contain '-' for unnamed container, got: {row}"
         );
     }
 

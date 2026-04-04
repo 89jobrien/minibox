@@ -281,7 +281,12 @@ pub async fn handle_run(
     #[allow(clippy::collapsible_if)]
     if let Some(ref n) = name {
         if state.name_in_use(n).await {
-            send_error(&tx, "handle_run", format!("container name {n:?} is already in use")).await;
+            send_error(
+                &tx,
+                "handle_run",
+                format!("container name {n:?} is already in use"),
+            )
+            .await;
             return;
         }
     }
@@ -419,17 +424,41 @@ async fn handle_run_streaming(
     // The OwnedFd is consumed by into_raw_fd() (no drop), and from_raw_fd() inside the
     // closure takes sole ownership. No other code touches reader_raw after this point.
     let reader_raw = output_reader.into_raw_fd();
+    let stdout_log_path = deps.containers_base.join(&container_id).join("stdout.log");
     let drain_handle = tokio::task::spawn_blocking(move || {
-        use std::io::Read;
+        use std::io::{Read, Write};
         use std::os::fd::FromRawFd;
 
         // SAFETY: we own this fd from the pipe created in spawn_container_process.
         let mut file = unsafe { std::fs::File::from_raw_fd(reader_raw) };
+        // Best-effort log file: open for append (create if missing).
+        let mut log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stdout_log_path)
+            .map_err(|e| {
+                warn!(
+                    path = %stdout_log_path.display(),
+                    error = %e,
+                    "streaming: failed to open stdout.log for writing"
+                );
+            })
+            .ok();
         let mut buf = [0u8; 4096];
         loop {
             match file.read(&mut buf) {
                 Ok(0) => break, // EOF — child exited and closed its write end.
                 Ok(n) => {
+                    // Best-effort write to log file.
+                    if let Some(ref mut lf) = log_file
+                        && let Err(e) = lf.write_all(&buf[..n])
+                    {
+                        warn!(
+                            path = %stdout_log_path.display(),
+                            error = %e,
+                            "streaming: stdout.log write error"
+                        );
+                    }
                     use base64::Engine;
                     let encoded = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
                     let _ = tx_clone.blocking_send(DaemonResponse::ContainerOutput {
@@ -1478,6 +1507,99 @@ pub async fn handle_list(state: Arc<DaemonState>) -> DaemonResponse {
     DaemonResponse::ContainerList { containers }
 }
 
+// ─── Logs ───────────────────────────────────────────────────────────────────
+
+/// Retrieve stored log output for a container.
+///
+/// Reads `{containers_base}/{id}/stdout.log` and `stderr.log`, emitting one
+/// [`DaemonResponse::LogLine`] per line.  Terminates with
+/// [`DaemonResponse::Success`] when `follow` is `false` (the only supported
+/// mode for now).  Sends [`DaemonResponse::Error`] when the container is not
+/// found.
+pub async fn handle_logs(
+    name_or_id: String,
+    _follow: bool,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    use anyhow::Context as _;
+    use minibox_core::protocol::OutputStreamKind;
+    use std::io::{BufRead, BufReader};
+
+    let id = match state.resolve_id(&name_or_id).await {
+        Some(id) => id,
+        None => {
+            send_error(
+                &tx,
+                "handle_logs",
+                format!("container not found: {name_or_id}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    // Read stdout.log then stderr.log; missing files are silently skipped.
+    let log_dir = deps.containers_base.join(&id);
+    let log_pairs: &[(&str, OutputStreamKind)] = &[
+        ("stdout.log", OutputStreamKind::Stdout),
+        ("stderr.log", OutputStreamKind::Stderr),
+    ];
+
+    for (filename, stream) in log_pairs {
+        let path = log_dir.join(filename);
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                warn!(
+                    container_id = %id,
+                    path = %path.display(),
+                    error = %e,
+                    "handle_logs: failed to open log file"
+                );
+                continue;
+            }
+        };
+
+        let reader = BufReader::new(file);
+        for line_result in reader.lines() {
+            let line = match line_result.context("reading log line") {
+                Ok(l) => l,
+                Err(e) => {
+                    warn!(container_id = %id, error = %e, "handle_logs: read error");
+                    break;
+                }
+            };
+            if tx
+                .send(DaemonResponse::LogLine {
+                    stream: stream.clone(),
+                    line,
+                })
+                .await
+                .is_err()
+            {
+                warn!(
+                    container_id = %id,
+                    "handle_logs: client disconnected mid-stream"
+                );
+                return;
+            }
+        }
+    }
+
+    if tx
+        .send(DaemonResponse::Success {
+            message: "end of log".to_string(),
+        })
+        .await
+        .is_err()
+    {
+        warn!(container_id = %id, "handle_logs: client disconnected before Success");
+    }
+}
+
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
 /// Pull an image from the appropriate registry and cache it locally.
@@ -1623,7 +1745,12 @@ pub async fn handle_exec(
             "minibox_container_ops_total",
             &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
         );
-        send_error(&tx, "handle_exec", "exec not supported on this platform".to_string()).await;
+        send_error(
+            &tx,
+            "handle_exec",
+            "exec not supported on this platform".to_string(),
+        )
+        .await;
         return;
     };
 
@@ -1699,7 +1826,12 @@ pub async fn handle_push(
             "minibox_container_ops_total",
             &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
         );
-        send_error(&tx, "handle_push", "push not supported on this platform".to_string()).await;
+        send_error(
+            &tx,
+            "handle_push",
+            "push not supported on this platform".to_string(),
+        )
+        .await;
         return;
     };
 
@@ -1796,7 +1928,12 @@ pub async fn handle_commit(
             "minibox_container_ops_total",
             &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
         );
-        send_error(&tx, "handle_commit", "commit not supported on this platform".to_string()).await;
+        send_error(
+            &tx,
+            "handle_commit",
+            "commit not supported on this platform".to_string(),
+        )
+        .await;
         return;
     };
 
@@ -1884,7 +2021,12 @@ pub async fn handle_build(
             "minibox_container_ops_total",
             &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
         );
-        send_error(&tx, "handle_build", "build not supported on this platform".to_string()).await;
+        send_error(
+            &tx,
+            "handle_build",
+            "build not supported on this platform".to_string(),
+        )
+        .await;
         return;
     };
 
@@ -1894,13 +2036,23 @@ pub async fn handle_build(
     let context_dir = {
         let raw = std::path::PathBuf::from(&context_path);
         if !raw.is_absolute() {
-            send_error(&tx, "handle_build", format!("build context_path must be absolute: {context_path:?}")).await;
+            send_error(
+                &tx,
+                "handle_build",
+                format!("build context_path must be absolute: {context_path:?}"),
+            )
+            .await;
             return;
         }
         match raw.canonicalize() {
             Ok(p) => p,
             Err(e) => {
-                send_error(&tx, "handle_build", format!("build context_path invalid: {e}")).await;
+                send_error(
+                    &tx,
+                    "handle_build",
+                    format!("build context_path invalid: {e}"),
+                )
+                .await;
                 return;
             }
         }
@@ -2071,14 +2223,24 @@ pub(crate) async fn handle_remove_image(
         .any(|c| (c.state == "running" || c.state == "paused") && c.image == image_ref);
 
     if in_use {
-        send_error(&tx, "handle_build", format!("image {image_ref} is in use by a running container")).await;
+        send_error(
+            &tx,
+            "handle_build",
+            format!("image {image_ref} is in use by a running container"),
+        )
+        .await;
         return;
     }
 
     let (name, tag) = match image_ref.rsplit_once(':') {
         Some(pair) => pair,
         None => {
-            send_error(&tx, "handle_build", format!("invalid image ref: {image_ref}")).await;
+            send_error(
+                &tx,
+                "handle_build",
+                format!("invalid image ref: {image_ref}"),
+            )
+            .await;
             return;
         }
     };
