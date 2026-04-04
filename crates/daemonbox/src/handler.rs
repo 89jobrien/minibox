@@ -169,7 +169,9 @@ pub fn validate_policy(
     policy: &ContainerPolicy,
 ) -> Result<(), String> {
     if !mounts.is_empty() && !policy.allow_bind_mounts {
-        return Err("policy violation: bind mount requested but bind mounts are not allowed".into());
+        return Err(
+            "policy violation: bind mount requested but bind mounts are not allowed".into(),
+        );
     }
     if privileged && !policy.allow_privileged {
         return Err(
@@ -240,9 +242,9 @@ pub async fn handle_run(
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
     if let Err(msg) = validate_policy(&mounts, privileged, &deps.policy) {
         warn!(message = %msg, "handle_run: policy violation");
-        let _ = tx
-            .send(DaemonResponse::Error { message: msg })
-            .await;
+        if tx.send(DaemonResponse::Error { message: msg }).await.is_err() {
+            warn!("handle_run: client disconnected before policy error could be sent");
+        }
         return;
     }
 
@@ -307,7 +309,9 @@ pub async fn handle_run(
             }
         }
     };
-    let _ = tx.send(response).await;
+    if tx.send(response).await.is_err() {
+        warn!("handle_run: client disconnected before response could be sent");
+    }
 }
 
 /// Streaming ephemeral run: sends `ContainerOutput` chunks then `ContainerStopped`.

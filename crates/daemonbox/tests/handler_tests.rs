@@ -3228,9 +3228,8 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
 #[tokio::test]
 async fn test_handle_run_image_pull_failure() {
     let temp_dir = TempDir::new().unwrap();
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap());
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_pull_failure()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -3276,9 +3275,8 @@ async fn test_handle_run_image_pull_failure() {
 #[tokio::test]
 async fn test_handle_run_empty_layers() {
     let temp_dir = TempDir::new().unwrap();
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap());
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_empty_layers()),
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -3324,9 +3322,8 @@ async fn test_handle_run_empty_layers() {
 #[tokio::test]
 async fn test_handle_pull_nonexistent_image() {
     let temp_dir = TempDir::new().unwrap();
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap());
     let deps = Arc::new(HandlerDependencies {
         registry: Arc::new(MockRegistry::new().with_pull_failure()),
         ghcr_registry: Arc::new(MockRegistry::new()),

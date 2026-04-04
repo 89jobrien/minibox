@@ -118,10 +118,7 @@ impl BackgroundCommand {
                 })
             });
 
-            let code = child
-                .wait()
-                .map(|s| s.code().unwrap_or(-1))
-                .unwrap_or(-1);
+            let code = child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
 
             let stderr_output = stderr_handle
                 .and_then(|h| h.join().ok())
@@ -213,12 +210,9 @@ mod tests {
     /// BackgroundCommand returns exit_code -1 when the binary doesn't exist.
     #[test]
     fn background_command_spawn_failure_sets_exit_code() {
-        let mut cmd = BackgroundCommand::spawn(
-            "this_binary_does_not_exist_ever",
-            &[],
-            "test".to_string(),
-        )
-        .expect("BackgroundCommand::spawn should return Ok even on missing binary");
+        let mut cmd =
+            BackgroundCommand::spawn("this_binary_does_not_exist_ever", &[], "test".to_string())
+                .expect("BackgroundCommand::spawn should return Ok even on missing binary");
 
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while !cmd.finished && std::time::Instant::now() < deadline {
