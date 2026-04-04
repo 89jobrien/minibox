@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-05
+updated: 2026-04-06
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -332,6 +332,19 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-06
+  summary: |
+    Orca Strait session: P0 auth-policy-gate shipped (ContainerPolicy deny-by-default, 5 tests),
+    handler coverage gap closed (5 error-path tests, 162 total), dashbox sentinel fixes landed,
+    dashbox Items/Todos/CI tabs made actionable with full doob integration (c/o/b keys, auto-refresh,
+    o:open in CI tab). Sprint plan documented: Sprint 1A (named containers, log capture), Sprint 2
+    (Linux tests on VPS), Sprint 3 (Maestro integration). 29 dashbox tests, 650 workspace tests passing.
+  commits:
+  - dd0fc04
+  - ac0d705
+  - 4607a6e
+  - 201498b
+  - 9a2c98e
 - date: 2026-04-05
   summary: |
     Sentinel watch session (round 2): dashbox Items tab list view added (minibox-8 done in prior
