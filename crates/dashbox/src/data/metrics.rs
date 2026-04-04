@@ -1,5 +1,4 @@
 // dashbox/src/data/metrics.rs
-#![allow(dead_code)]
 use anyhow::Result;
 use std::collections::HashMap;
 

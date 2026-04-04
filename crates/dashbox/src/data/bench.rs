@@ -98,7 +98,7 @@ pub struct BenchSource {
 impl BenchSource {
     pub fn new() -> Self {
         let base = std::env::current_dir()
-            .unwrap_or_default()
+            .expect("cannot determine current directory")
             .join("bench/results");
         Self {
             latest_path: base.join("latest.json"),

@@ -136,6 +136,6 @@ impl TabRenderer for CiTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  o:open in browser  r:refresh"
+        "j/k:scroll  r:refresh"
     }
 }

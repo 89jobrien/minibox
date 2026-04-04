@@ -1,5 +1,4 @@
 // dashbox/src/tabs/metrics.rs
-#![allow(dead_code)]
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};

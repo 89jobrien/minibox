@@ -34,7 +34,7 @@ pub struct AgentsSource {
 impl AgentsSource {
     pub fn new() -> Self {
         let path = dirs::home_dir()
-            .unwrap_or_default()
+            .expect("cannot determine home directory")
             .join(".mbx/agent-runs.jsonl");
         Self { path }
     }
