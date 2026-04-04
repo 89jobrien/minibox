@@ -1,12 +1,13 @@
 project: minibox
 id: minibox
-updated: 2026-04-03
+updated: 2026-04-04
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
   name: ci-3tier-enforcement
   priority: P1
-  status: open
+  status: done
+  completed: 2026-04-04
   title: Enforce 3-tier git workflow with CI automation
   description: |
     Branch protections, PR target rules, tagging expectations. Currently prose-only in docs. main is 7 commits ahead of next — auto-promote blocked.
@@ -17,22 +18,23 @@ items:
   doob_uuid: 15ffd27d-9697-4766-800e-75d24b969db3
   name: bench-env-toggles
   priority: P1
-  status: open
+  status: done
+  completed: 2026-04-04
   title: Add env-var toggles and fallbacks to bench/profiling pipeline
   description: |
     BROWSER=firefox is hardcoded in samply/cargo-flamegraph recipes — brittle across environments. Add MINIBOX_BENCH_BROWSER or similar toggle.
   files:
-  - Justfile
-  - mise.toml
+  - crates/xtask/src/flamegraph.rs
   extra: []
 - id: minibox-3
   doob_uuid: 3acc7d2e-c2a1-4598-bee0-34d23c883d96
   name: phased-deployment-403-fix
   priority: P1
-  status: open
+  status: done
+  completed: 2026-04-04
   title: Fix phased-deployment CI — HTTP 403 on gh run list
   description: |
-    GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml. Run https://github.com/89jobrien/minibox/actions/runs/23622830548
+    GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml. Already present in current file — 403 was from stale run (2026-03-26) before the permission was added. Verified workflow file has actions:read at top-level permissions block.
   files:
   - .github/workflows/phased-deployment.yml
   extra: []
@@ -40,7 +42,8 @@ items:
   doob_uuid: 9cb93dd3-3eeb-472f-a16a-14d0d0d8b453
   name: handler-coverage-gap
   priority: P1
-  status: open
+  status: done
+  completed: 2026-04-04
   title: Improve handler.rs coverage (currently 67.5% fn / 55% line)
   description: |
     Error paths in run/pull/stop/rm still undertested. Use mock builder patterns documented in CLAUDE.md. gauge drift in reaper task (line 844).
@@ -126,7 +129,8 @@ items:
   doob_uuid: 09fd3b95-7a4b-4a85-be6b-ff65248f9f46
   name: auth-policy-gate
   priority: P0
-  status: open
+  status: done
+  completed: 2026-04-04
   title: Add daemon-side policy gate for mounts and privileged containers
   description: |
     Council (2026-03-27, 68%): no policy check before granting bind mounts or privileged mode. Any connected root client can escalate. Needs an authorization layer in handler.rs before handle_run.
@@ -135,6 +139,14 @@ items:
   - crates/daemonbox/src/server.rs
   extra: []
 log:
+- date: 2026-04-04
+  summary: |
+    hand:on session: all P1s closed. minibox-1: next/stable branch protections enforced via GitHub API
+    (compile+lint required, no force-push). minibox-2: MINIBOX_BENCH_BROWSER env toggle in flamegraph.rs.
+    minibox-3: verified actions:read already present — 403 was stale run. minibox-4: 5 coverage-gap tests
+    already landed in auth-policy commit. P0 minibox-11 marked done.
+  commits:
+  - 57b59ec
 - date: 2026-04-03
   summary: |
     Session: bench timeout fix (5s→30s for Colima latency), daemonbox test dep fix (image_gc/image_store HandlerDependencies), backlog docs updated. Bootstrapped HANDOFF.yaml from HANDOFF.md.
