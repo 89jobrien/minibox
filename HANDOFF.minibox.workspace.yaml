@@ -350,6 +350,11 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-07
+  summary: |
+    dashbox metrics tab: added MetricsData::Stale variant; MetricsSource now writes
+    ~/.mbx/metrics.json snapshot on every live poll, falls back to snapshot when daemon
+    offline. Tab renders yellow STALE badge with age. Build clean.
 - date: 2026-04-04
   summary: |
     Orca Strait session: exec into containers (minibox-13), named containers (minibox-14),
