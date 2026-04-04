@@ -1,24 +1,71 @@
 // dashbox/src/tabs/agents.rs
+//
+// AgentsTab depends on AutomationLogPort (the port), not on any concrete file
+// path or JSONL parsing logic. The composition root in app.rs injects the
+// adapter (MultiSourceLog or JsonlFileSource).
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
+use std::time::Instant;
 
 use super::{TabAction, TabRenderer};
-use crate::data::CachedSource;
-use crate::data::agents::{AgentsData, AgentsSource};
+use crate::data::agents::{AgentsData, AutomationLogPort};
+
+// ---------------------------------------------------------------------------
+// Cache wrapper (inline — avoids making AutomationLogPort a DataSource)
+// ---------------------------------------------------------------------------
+
+struct LogCache {
+    source: Box<dyn AutomationLogPort>,
+    cached: Option<Result<AgentsData, String>>,
+    last_load: Option<Instant>,
+    stale_secs: u64,
+}
+
+impl LogCache {
+    fn new(source: Box<dyn AutomationLogPort>, stale_secs: u64) -> Self {
+        Self { source, cached: None, last_load: None, stale_secs }
+    }
+
+    fn is_stale(&self) -> bool {
+        self.last_load
+            .map(|t| t.elapsed().as_secs() >= self.stale_secs)
+            .unwrap_or(true)
+    }
+
+    fn refresh(&mut self) {
+        self.cached = Some(self.source.load_runs().map_err(|e| e.to_string()));
+        self.last_load = Some(Instant::now());
+    }
+
+    fn ensure_fresh(&mut self) {
+        if self.is_stale() {
+            self.refresh();
+        }
+    }
+
+    fn get(&self) -> Option<&Result<AgentsData, String>> {
+        self.cached.as_ref()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tab
+// ---------------------------------------------------------------------------
 
 pub struct AgentsTab {
-    source: CachedSource<AgentsSource>,
+    cache: LogCache,
     table_state: TableState,
 }
 
 impl AgentsTab {
-    pub fn new() -> Self {
+    /// Inject any AutomationLogPort implementation.
+    pub fn new(source: Box<dyn AutomationLogPort>) -> Self {
         Self {
-            source: CachedSource::new(AgentsSource::new(), 10),
+            cache: LogCache::new(source, 10),
             table_state: TableState::default(),
         }
     }
@@ -27,9 +74,7 @@ impl AgentsTab {
         let line = Line::from(vec![
             Span::styled(
                 "Agents",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
             Span::styled(
@@ -64,8 +109,8 @@ impl AgentsTab {
 
 impl TabRenderer for AgentsTab {
     fn render(&mut self, frame: &mut Frame, area: Rect) {
-        self.source.ensure_fresh();
-        let data = match self.source.get() {
+        self.cache.ensure_fresh();
+        let data = match self.cache.get() {
             Some(Ok(d)) => d,
             Some(Err(e)) => {
                 let msg = Paragraph::new(format!("Error: {e}"))
@@ -153,7 +198,7 @@ impl TabRenderer for AgentsTab {
     }
 
     fn refresh(&mut self) {
-        self.source.refresh();
+        self.cache.refresh();
     }
 
     fn status_keys(&self) -> &'static str {

@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use crate::command::{BackgroundCommand, InlineCommand};
 use crate::tabs::TabRenderer;
+use crate::data::agents::{JsonlFileSource, MultiSourceLog};
 use crate::tabs::agents::AgentsTab;
 use crate::tabs::bench::BenchTab;
 use crate::tabs::ci::CiTab;
@@ -91,7 +92,16 @@ impl App {
             should_quit: false,
             last_refresh: Instant::now(),
             tabs: vec![
-                Box::new(AgentsTab::new()),
+                Box::new(AgentsTab::new(Box::new(MultiSourceLog::new(vec![
+                    // Primary: Claude agent runs (meta-agent, council, ai-review, etc.)
+                    Box::new(JsonlFileSource::default_agent_log()),
+                    // Secondary: hook/skill run log (protocol-drift, vps-health, etc.)
+                    Box::new(JsonlFileSource::new(
+                        dirs::home_dir()
+                            .expect("home dir")
+                            .join(".mbx/automation-runs.jsonl"),
+                    )),
+                ])))),
                 Box::new(BenchTab::new()),
                 Box::new(HistoryTab::new()),
                 Box::new(GitTab::new()),
@@ -137,8 +147,7 @@ mod tests {
     #[test]
     fn test_poll_commands_sets_pending_refresh_on_success() {
         let mut app = App::new();
-        let cmd =
-            BackgroundCommand::spawn("true", &[], "test op".to_string()).expect("spawn true");
+        let cmd = BackgroundCommand::spawn("true", &[], "test op".to_string()).expect("spawn true");
         app.bg_cmd = Some(cmd);
 
         for _ in 0..50 {
@@ -158,7 +167,6 @@ mod tests {
 }
 
 impl App {
-
     pub fn poll_commands(&mut self) {
         if let Some(ref mut cmd) = self.inline_cmd {
             cmd.poll();
