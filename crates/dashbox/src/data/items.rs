@@ -15,6 +15,9 @@ pub struct HandoffItem {
     pub status: String,
     #[serde(default)]
     pub files: Vec<String>,
+    #[serde(default, rename = "uuid")]
+    #[allow(dead_code)]
+    pub doob_uuid: String,
 }
 
 #[derive(Debug, Clone)]
@@ -57,10 +60,7 @@ impl DataSource for ItemsSource {
 
         let mut items: Vec<HandoffItem> = all
             .into_iter()
-            .filter(|i| {
-                i.handoff_id
-                    .starts_with(&format!("{}-", self.project))
-            })
+            .filter(|i| i.handoff_id.starts_with(&format!("{}-", self.project)))
             .collect();
 
         // Sort: P0 first, then P1, P2; within priority: open before done/parked/blocked
@@ -91,5 +91,23 @@ impl DataSource for ItemsSource {
             done,
             blocked,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_handoff_item_deserializes_doob_uuid() {
+        let json = r#"{
+            "handoff_id": "minibox-1",
+            "title": "Test item",
+            "priority": "P1",
+            "status": "open",
+            "uuid": "abc-123"
+        }"#;
+        let item: HandoffItem = serde_json::from_str(json).expect("parse");
+        assert_eq!(item.doob_uuid, "abc-123");
     }
 }
