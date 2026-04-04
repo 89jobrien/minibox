@@ -9,10 +9,20 @@ use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
 use crate::data::bench::BenchSource;
 
+fn local_hostname() -> String {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
 pub struct HistoryTab {
     source: CachedSource<BenchSource>,
     table_state: TableState,
     selected_test: Option<(String, String)>,
+    hostname: String,
 }
 
 impl HistoryTab {
@@ -21,6 +31,7 @@ impl HistoryTab {
             source: CachedSource::new(BenchSource::new(), 10),
             table_state: TableState::default().with_selected(Some(0)),
             selected_test: None,
+            hostname: local_hostname(),
         }
     }
 }
@@ -43,7 +54,7 @@ impl TabRenderer for HistoryTab {
         let vps_runs: Vec<_> = data
             .history
             .iter()
-            .filter(|r| r.metadata.hostname == "jobrien")
+            .filter(|r| r.metadata.hostname == self.hostname)
             .collect();
 
         if vps_runs.is_empty() {

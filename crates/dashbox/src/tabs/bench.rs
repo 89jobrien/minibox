@@ -10,9 +10,19 @@ use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
 use crate::data::bench::BenchSource;
 
+fn local_hostname() -> String {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
 pub struct BenchTab {
     source: CachedSource<BenchSource>,
     table_state: TableState,
+    hostname: String,
 }
 
 impl BenchTab {
@@ -20,6 +30,7 @@ impl BenchTab {
         Self {
             source: CachedSource::new(BenchSource::new(), 10),
             table_state: TableState::default(),
+            hostname: local_hostname(),
         }
     }
 }
@@ -99,7 +110,7 @@ impl TabRenderer for BenchTab {
                     "{} VPS runs",
                     data.history
                         .iter()
-                        .filter(|r| r.metadata.hostname == "jobrien")
+                        .filter(|r| r.metadata.hostname == self.hostname)
                         .count()
                 ),
                 Style::default().fg(Color::DarkGray),
@@ -111,7 +122,7 @@ impl TabRenderer for BenchTab {
         let vps_runs: Vec<_> = data
             .history
             .iter()
-            .filter(|r| r.metadata.hostname == "jobrien")
+            .filter(|r| r.metadata.hostname == self.hostname)
             .collect();
         let prev = if vps_runs.len() >= 2 {
             Some(&vps_runs[vps_runs.len() - 2])

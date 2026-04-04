@@ -8,11 +8,12 @@ use ratatui::widgets::{Cell, Paragraph, Row, Table, TableState};
 
 use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
-use crate::data::todos::TodosSource;
+use crate::data::todos::{TodosData, TodosSource};
 
 pub struct TodosTab {
     source: CachedSource<TodosSource>,
     table_state: TableState,
+    pub cached_data: Option<TodosData>,
 }
 
 impl TodosTab {
@@ -20,6 +21,7 @@ impl TodosTab {
         Self {
             source: CachedSource::new(TodosSource::new(), 10),
             table_state: TableState::default(),
+            cached_data: None,
         }
     }
 }
@@ -38,6 +40,7 @@ impl TabRenderer for TodosTab {
             }
             None => return,
         };
+        self.cached_data = Some(data.clone());
 
         let chunks = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
@@ -108,6 +111,52 @@ impl TabRenderer for TodosTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
+            KeyCode::Char('c') => {
+                let idx = match self.table_state.selected() {
+                    Some(i) => i,
+                    None => return TabAction::None,
+                };
+                // Visible rows are pending todos only — find the idx-th pending todo.
+                let uuid = self.cached_data.as_ref().and_then(|d| {
+                    d.todos
+                        .iter()
+                        .filter(|t| t.status == "pending")
+                        .nth(idx)
+                        .map(|t| t.doob_uuid.clone())
+                });
+                match uuid {
+                    Some(u) if !u.is_empty() => TabAction::RunBackground {
+                        cmd: "doob".into(),
+                        args: vec!["todo".into(), "complete".into(), u],
+                        label: "complete todo".into(),
+                    },
+                    _ => TabAction::None,
+                }
+            }
+            KeyCode::Char('o') => {
+                let idx = match self.table_state.selected() {
+                    Some(i) => i,
+                    None => return TabAction::None,
+                };
+                let tag = self.cached_data.as_ref().and_then(|d| {
+                    d.todos
+                        .iter()
+                        .filter(|t| t.status == "pending")
+                        .nth(idx)
+                        .and_then(|t| t.tags.first().cloned())
+                });
+                match tag {
+                    Some(t) if !t.is_empty() => TabAction::RunBackground {
+                        cmd: "open".into(),
+                        args: vec![format!(
+                            "https://github.com/89jobrien/minibox/issues/{}",
+                            t.trim_start_matches("minibox-")
+                        )],
+                        label: "open in browser".into(),
+                    },
+                    _ => TabAction::None,
+                }
+            }
             _ => TabAction::None,
         }
     }
@@ -117,6 +166,6 @@ impl TabRenderer for TodosTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  r:refresh"
+        "j/k:scroll  c:complete  o:open-browser  r:refresh"
     }
 }

@@ -8,7 +8,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap};
 use std::time::Instant;
 
 use super::{TabAction, TabRenderer};
@@ -64,6 +64,7 @@ impl LogCache {
 pub struct AgentsTab {
     cache: LogCache,
     table_state: TableState,
+    detail_pane: bool,
 }
 
 impl AgentsTab {
@@ -72,6 +73,7 @@ impl AgentsTab {
         Self {
             cache: LogCache::new(source, 10),
             table_state: TableState::default(),
+            detail_pane: false,
         }
     }
 
@@ -133,6 +135,20 @@ impl TabRenderer for AgentsTab {
 
         frame.render_widget(self.render_header(data), chunks[0]);
 
+        let selected = self.table_state.selected().unwrap_or(0);
+        let has_detail = self.detail_pane
+            && data
+                .runs
+                .get(selected)
+                .and_then(|r| r.output.as_deref())
+                .is_some();
+
+        let content_chunks = if has_detail {
+            Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)]).split(chunks[1])
+        } else {
+            Layout::horizontal([Constraint::Fill(1)]).split(chunks[1])
+        };
+
         let header = Row::new(["Time", "Script", "Status", "Dur", "Output"])
             .style(Style::default().fg(Color::DarkGray));
         let widths = [
@@ -187,7 +203,33 @@ impl TabRenderer for AgentsTab {
         let table = Table::new(rows, widths)
             .header(header)
             .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        frame.render_stateful_widget(table, chunks[1], &mut self.table_state);
+        frame.render_stateful_widget(table, content_chunks[0], &mut self.table_state);
+
+        // Detail pane: full output of selected run
+        if has_detail {
+            if let Some(run) = data.runs.get(selected) {
+                let output = run.output.as_deref().unwrap_or("");
+                let mut lines: Vec<Line> = Vec::new();
+                lines.push(Line::from(Span::styled(
+                    format!("{} — {}", run.script, run.run_id.replace('T', " ")),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                )));
+                lines.push(Line::raw(""));
+                for line in output.lines() {
+                    lines.push(Line::raw(line.to_string()));
+                }
+                frame.render_widget(
+                    Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+                        Block::default()
+                            .borders(Borders::LEFT)
+                            .border_style(Style::default().fg(Color::DarkGray)),
+                    ),
+                    content_chunks[1],
+                );
+            }
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> TabAction {
@@ -200,6 +242,10 @@ impl TabRenderer for AgentsTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
+            KeyCode::Enter => {
+                self.detail_pane = !self.detail_pane;
+                TabAction::None
+            }
             _ => TabAction::None,
         }
     }
@@ -209,6 +255,6 @@ impl TabRenderer for AgentsTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  Enter:expand  r:refresh"
+        "j/k:scroll  Enter:toggle-detail  r:refresh"
     }
 }
