@@ -242,7 +242,11 @@ pub async fn handle_run(
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
     if let Err(msg) = validate_policy(&mounts, privileged, &deps.policy) {
         warn!(message = %msg, "handle_run: policy violation");
-        if tx.send(DaemonResponse::Error { message: msg }).await.is_err() {
+        if tx
+            .send(DaemonResponse::Error { message: msg })
+            .await
+            .is_err()
+        {
             warn!("handle_run: client disconnected before policy error could be sent");
         }
         return;
