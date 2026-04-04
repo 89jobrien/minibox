@@ -334,6 +334,13 @@ items:
 log:
 - date: 2026-04-05
   summary: |
+    Sentinel watch session (round 2): dashbox Items tab list view added (minibox-8 done in prior
+    session). AgentsSource legacy compat stub dropped — clean build. minibox-8 sentinel fixes
+    committed.
+  commits:
+  - 15e1605
+- date: 2026-04-05
+  summary: |
     Synced 11 GH issues (#16-23, #40-45) into handoff as minibox-13..minibox-23. Closed
     minibox-12: Items tab action feedback (immediate notification on keypress), stderr in
     failure message, 3 new HandoffItem serde tests (35 passing).

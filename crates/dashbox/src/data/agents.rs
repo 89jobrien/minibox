@@ -43,7 +43,13 @@ impl AgentsData {
         let complete = runs.iter().filter(|r| r.status == "complete").count();
         let running = runs.iter().filter(|r| r.status == "running").count();
         let crashed = runs.iter().filter(|r| r.status == "crashed").count();
-        Self { runs, total, complete, running, crashed }
+        Self {
+            runs,
+            total,
+            complete,
+            running,
+            crashed,
+        }
     }
 }
 
@@ -107,7 +113,9 @@ impl AutomationLogPort for MultiSourceLog {
 
         for source in &self.sources {
             // Ignore sources that fail to load (e.g. file not yet created)
-            let Ok(data) = source.load_runs() else { continue };
+            let Ok(data) = source.load_runs() else {
+                continue;
+            };
             for run in data.runs {
                 let id = run.run_id.clone();
                 let existing = by_id.get(&id);
@@ -135,7 +143,9 @@ fn parse_and_deduplicate<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<AgentR
         if line.is_empty() {
             continue;
         }
-        let Ok(run) = serde_json::from_str::<AgentRun>(line) else { continue };
+        let Ok(run) = serde_json::from_str::<AgentRun>(line) else {
+            continue;
+        };
         let id = run.run_id.clone();
         let existing = by_id.get(&id);
         if existing.is_none() || run.status == "complete" || run.status == "crashed" {
@@ -145,29 +155,6 @@ fn parse_and_deduplicate<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<AgentR
     let mut v: Vec<_> = by_id.into_values().collect();
     v.sort_by(|a, b| b.run_id.cmp(&a.run_id));
     v
-}
-
-// ---------------------------------------------------------------------------
-// Legacy DataSource impl — keeps CachedSource<AgentsSource> working during
-// transition if anything still references it directly.
-// ---------------------------------------------------------------------------
-
-use super::DataSource;
-
-/// Deprecated: prefer JsonlFileSource + AutomationLogPort.
-pub struct AgentsSource(JsonlFileSource);
-
-impl AgentsSource {
-    pub fn new() -> Self {
-        Self(JsonlFileSource::default_agent_log())
-    }
-}
-
-impl DataSource for AgentsSource {
-    type Data = AgentsData;
-    fn load(&self) -> Result<AgentsData> {
-        self.0.load_runs()
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +210,11 @@ mod tests {
         assert_eq!(data.total, 3);
         assert_eq!(data.complete, 2);
         assert_eq!(data.crashed, 1);
-        let id2 = data.runs.iter().find(|r| r.run_id.contains("00:02")).unwrap();
+        let id2 = data
+            .runs
+            .iter()
+            .find(|r| r.run_id.contains("00:02"))
+            .unwrap();
         assert_eq!(id2.status, "complete");
     }
 
