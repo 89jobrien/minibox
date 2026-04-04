@@ -95,16 +95,31 @@ items:
   name: dashbox-sentinel-fixes
   priority: P2
   status: open
-  title: Fix 6 dashbox sentinel code quality issues
+  title: Fix dashbox sentinel code quality issues
   description: |
     Terminal setup not panic-safe, doob/gh exit status not checked, rev-list unwrap_or_default silently masks detached HEAD, BackgroundCommand discards stderr, Sentinel thread spawns only to drop(tx).
+    2026-04-04 deeper sentinel scan added: home_dir/current_dir unwrap_or_default silent fallbacks
+    (agents.rs:38, bench.rs:101), BackgroundCommand stderr pipe never drained (command.rs:94),
+    git load() runs 4 sequential subprocesses on render tick (data/git.rs:61), CI tab advertises
+    'o:open in browser' with no handler (tabs/ci.rs:139), #![allow(dead_code)] at file level in
+    metrics.rs and tabs/metrics.rs.
   files:
   - crates/dashbox/src/main.rs
   - crates/dashbox/src/data/todos.rs
   - crates/dashbox/src/data/ci.rs
   - crates/dashbox/src/data/git.rs
   - crates/dashbox/src/command.rs
-  extra: []
+  - crates/dashbox/src/data/agents.rs
+  - crates/dashbox/src/data/bench.rs
+  - crates/dashbox/src/data/metrics.rs
+  - crates/dashbox/src/tabs/metrics.rs
+  extra:
+  - date: 2026-04-04
+    type: note
+    note: |
+      Sentinel deep scan: 3 blockers (home_dir fallback, current_dir fallback, stderr pipe never
+      drained), 4 suggestions (git-on-render-tick, CI 'o' key hint dead, debug_assert missing,
+      dead_code suppression). No new items — folded into this existing item.
 - id: minibox-9
   doob_uuid: 03e96b75-1982-4da1-bf70-5207c23bcab1
   name: mbx-dagu-tier2-fixes
@@ -139,6 +154,15 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-04
+  summary: |
+    Sentinel watch session: dashbox deep review (3 blockers + 4 suggestions folded into minibox-8).
+    handler.rs active_containers gauge metric name bug flagged. CLAUDE.md updated with silent
+    channel-send gotcha. fix(daemonbox): replace silent channel-send discards with logged send_error.
+  commits:
+  - 2e8cac4
+  - 66b5e44
+  - c4779e6
 - date: 2026-04-04
   summary: |
     hand:on session: all P1s closed. minibox-1: next/stable branch protections enforced via GitHub API
