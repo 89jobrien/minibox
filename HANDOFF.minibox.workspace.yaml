@@ -7,43 +7,42 @@ items:
   name: ci-3tier-enforcement
   priority: P1
   status: done
-  completed: 2026-04-04
   title: Enforce 3-tier git workflow with CI automation
   description: |
     Branch protections, PR target rules, tagging expectations. Currently prose-only in docs. main is 7 commits ahead of next — auto-promote blocked.
   files:
   - .github/workflows/phased-deployment.yml
   extra: []
+  completed: 2026-04-04
 - id: minibox-2
   doob_uuid: 15ffd27d-9697-4766-800e-75d24b969db3
   name: bench-env-toggles
   priority: P1
   status: done
-  completed: 2026-04-04
   title: Add env-var toggles and fallbacks to bench/profiling pipeline
   description: |
     BROWSER=firefox is hardcoded in samply/cargo-flamegraph recipes — brittle across environments. Add MINIBOX_BENCH_BROWSER or similar toggle.
   files:
   - crates/xtask/src/flamegraph.rs
   extra: []
+  completed: 2026-04-04
 - id: minibox-3
   doob_uuid: 3acc7d2e-c2a1-4598-bee0-34d23c883d96
   name: phased-deployment-403-fix
   priority: P1
   status: done
-  completed: 2026-04-04
   title: Fix phased-deployment CI — HTTP 403 on gh run list
   description: |
     GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml. Already present in current file — 403 was from stale run (2026-03-26) before the permission was added. Verified workflow file has actions:read at top-level permissions block.
   files:
   - .github/workflows/phased-deployment.yml
   extra: []
+  completed: 2026-04-04
 - id: minibox-4
   doob_uuid: 9cb93dd3-3eeb-472f-a16a-14d0d0d8b453
   name: handler-coverage-gap
   priority: P1
   status: done
-  completed: 2026-04-04
   title: Improve handler.rs coverage (currently 67.5% fn / 55% line)
   description: |
     Error paths in run/pull/stop/rm still undertested. Use mock builder patterns documented in CLAUDE.md. gauge drift in reaper task (line 844).
@@ -51,6 +50,7 @@ items:
   - crates/daemonbox/src/handler.rs
   - crates/daemonbox/tests/handler_tests.rs
   extra: []
+  completed: 2026-04-04
 - id: minibox-5
   doob_uuid: 6ba2dc0b-255a-4d62-a0a1-5dbd71d8cdcf
   name: dual-license
@@ -130,7 +130,6 @@ items:
   name: auth-policy-gate
   priority: P0
   status: done
-  completed: 2026-04-04
   title: Add daemon-side policy gate for mounts and privileged containers
   description: |
     Council (2026-03-27, 68%): no policy check before granting bind mounts or privileged mode. Any connected root client can escalate. Needs an authorization layer in handler.rs before handle_run.
@@ -138,6 +137,7 @@ items:
   - crates/daemonbox/src/handler.rs
   - crates/daemonbox/src/server.rs
   extra: []
+  completed: 2026-04-04
 log:
 - date: 2026-04-04
   summary: |
