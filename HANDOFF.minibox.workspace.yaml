@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-04
+updated: 2026-04-05
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -125,7 +125,7 @@ items:
   doob_uuid: fd407787-0c9c-444c-a13a-27e4c7bf0c78
   name: dashbox-items-tab-polish
   priority: P2
-  status: open
+  status: done
   title: dashbox Items tab — doob sync reliability and action key feedback
   description: |
     Items tab landed (8e78996): handoff list with detail pane, c/o/b action keys for doob status
@@ -136,6 +136,7 @@ items:
   - crates/dashbox/src/tabs/items.rs
   - crates/dashbox/src/data/todos.rs
   extra: []
+  completed: 2026-04-05
 - id: minibox-9
   doob_uuid: 03e96b75-1982-4da1-bf70-5207c23bcab1
   name: mbx-dagu-tier2-fixes
@@ -331,6 +332,14 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-05
+  summary: |
+    Synced 11 GH issues (#16-23, #40-45) into handoff as minibox-13..minibox-23. Closed
+    minibox-12: Items tab action feedback (immediate notification on keypress), stderr in
+    failure message, 3 new HandoffItem serde tests (35 passing).
+  commits:
+  - 773a8c6
+  - 970f288
 - date: 2026-04-04
   summary: |
     forge session: fixed handler.rs silent send_error discards (20 sites → send_error helper, 70
