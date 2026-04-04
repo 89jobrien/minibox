@@ -176,6 +176,7 @@ items:
     type: human-edit
     field: status
     value: done
+    reviewed: 2026-04-04
     note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-14
@@ -196,6 +197,7 @@ items:
     type: human-edit
     field: status
     value: done
+    reviewed: 2026-04-04
     note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-15
@@ -216,6 +218,7 @@ items:
     type: human-edit
     field: status
     value: done
+    reviewed: 2026-04-04
     note: "shipped in orca-strait session, commits 3dd424c db77537"
   completed: 2026-04-04
 - id: minibox-16
@@ -350,6 +353,8 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-04
+  summary: hand:on/off triage session — reviewed minibox-13/14/15 human-edits (all acknowledged), no code changes
 - date: 2026-04-07
   summary: |
     dashbox metrics tab: added MetricsData::Stale variant; MetricsSource now writes
