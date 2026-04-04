@@ -16,7 +16,6 @@ pub struct HandoffItem {
     #[serde(default)]
     pub files: Vec<String>,
     #[serde(default, rename = "uuid")]
-    #[allow(dead_code)]
     pub doob_uuid: String,
 }
 

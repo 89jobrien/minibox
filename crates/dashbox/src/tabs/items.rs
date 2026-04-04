@@ -8,11 +8,12 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, 
 
 use super::{TabAction, TabRenderer};
 use crate::data::CachedSource;
-use crate::data::items::ItemsSource;
+use crate::data::items::{ItemsData, ItemsSource};
 
 pub struct ItemsTab {
     source: CachedSource<ItemsSource>,
     table_state: TableState,
+    pub cached_data: Option<ItemsData>,
 }
 
 impl ItemsTab {
@@ -20,6 +21,7 @@ impl ItemsTab {
         let mut tab = Self {
             source: CachedSource::new(ItemsSource::new("minibox"), 30),
             table_state: TableState::default(),
+            cached_data: None,
         };
         tab.table_state.select(Some(0));
         tab
@@ -58,10 +60,10 @@ impl TabRenderer for ItemsTab {
             }
             None => return,
         };
+        self.cached_data = Some(data.clone());
 
         // Header + list + detail pane
-        let chunks =
-            Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
+        let chunks = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
         // Header summary
         let header_line = Line::from(vec![
@@ -91,7 +93,11 @@ impl TabRenderer for ItemsTab {
 
         // Split content area: list on left, detail on right
         let selected = self.table_state.selected().unwrap_or(0);
-        let has_detail = data.items.get(selected).and_then(|i| i.description.as_deref()).is_some();
+        let has_detail = data
+            .items
+            .get(selected)
+            .and_then(|i| i.description.as_deref())
+            .is_some();
         let content_chunks = if has_detail {
             Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1)]).split(chunks[1])
         } else {
@@ -99,8 +105,8 @@ impl TabRenderer for ItemsTab {
         };
 
         // Table
-        let col_header = Row::new(["ID", "P", "Status", "Title"])
-            .style(Style::default().fg(Color::DarkGray));
+        let col_header =
+            Row::new(["ID", "P", "Status", "Title"]).style(Style::default().fg(Color::DarkGray));
         let widths = [
             Constraint::Length(12),
             Constraint::Length(4),
@@ -108,18 +114,22 @@ impl TabRenderer for ItemsTab {
             Constraint::Fill(1),
         ];
 
-        let rows: Vec<Row> = data.items.iter().map(|item| {
-            let title: String = item.title.chars().take(80).collect();
-            Row::new([
-                Cell::from(item.handoff_id.as_str())
-                    .style(Style::default().fg(Color::DarkGray)),
-                Cell::from(item.priority.as_str())
-                    .style(Style::default().fg(priority_color(&item.priority))),
-                Cell::from(item.status.as_str())
-                    .style(Style::default().fg(status_color(&item.status))),
-                Cell::from(title),
-            ])
-        }).collect();
+        let rows: Vec<Row> = data
+            .items
+            .iter()
+            .map(|item| {
+                let title: String = item.title.chars().take(80).collect();
+                Row::new([
+                    Cell::from(item.handoff_id.as_str())
+                        .style(Style::default().fg(Color::DarkGray)),
+                    Cell::from(item.priority.as_str())
+                        .style(Style::default().fg(priority_color(&item.priority))),
+                    Cell::from(item.status.as_str())
+                        .style(Style::default().fg(status_color(&item.status))),
+                    Cell::from(title),
+                ])
+            })
+            .collect();
 
         let table = Table::new(rows, widths)
             .header(col_header)
@@ -134,7 +144,9 @@ impl TabRenderer for ItemsTab {
                 let mut lines: Vec<Line> = Vec::new();
                 lines.push(Line::from(Span::styled(
                     item.title.as_str(),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 )));
                 lines.push(Line::raw(""));
                 for line in desc.lines() {
@@ -154,13 +166,11 @@ impl TabRenderer for ItemsTab {
                     }
                 }
                 frame.render_widget(
-                    Paragraph::new(lines)
-                        .wrap(Wrap { trim: false })
-                        .block(
-                            Block::default()
-                                .borders(Borders::LEFT)
-                                .border_style(Style::default().fg(Color::DarkGray)),
-                        ),
+                    Paragraph::new(lines).wrap(Wrap { trim: false }).block(
+                        Block::default()
+                            .borders(Borders::LEFT)
+                            .border_style(Style::default().fg(Color::DarkGray)),
+                    ),
                     content_chunks[1],
                 );
             }
@@ -177,6 +187,42 @@ impl TabRenderer for ItemsTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
+            KeyCode::Char('c') | KeyCode::Char('o') | KeyCode::Char('b') => {
+                let new_status = match key.code {
+                    KeyCode::Char('c') => "done",
+                    KeyCode::Char('o') => "open",
+                    KeyCode::Char('b') => "blocked",
+                    _ => unreachable!(),
+                };
+                let label = match new_status {
+                    "done" => "mark done",
+                    "open" => "mark open",
+                    "blocked" => "mark blocked",
+                    _ => unreachable!(),
+                };
+                let idx = match self.table_state.selected() {
+                    Some(i) => i,
+                    None => return TabAction::None,
+                };
+                let uuid = self
+                    .cached_data
+                    .as_ref()
+                    .and_then(|d| d.items.get(idx))
+                    .map(|item| item.doob_uuid.clone());
+                match uuid {
+                    Some(u) if !u.is_empty() => TabAction::RunBackground {
+                        cmd: "doob".into(),
+                        args: vec![
+                            "handoff".into(),
+                            "update-status".into(),
+                            u,
+                            new_status.into(),
+                        ],
+                        label: label.into(),
+                    },
+                    _ => TabAction::None,
+                }
+            }
             _ => TabAction::None,
         }
     }
@@ -186,6 +232,64 @@ impl TabRenderer for ItemsTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  r:refresh"
+        "j/k:scroll  c:complete  o:open  b:block  r:refresh"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    use super::*;
+    use crate::data::items::{HandoffItem, ItemsData};
+
+    fn make_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn make_item(doob_uuid: &str, status: &str) -> HandoffItem {
+        HandoffItem {
+            handoff_id: format!("minibox-{doob_uuid}"),
+            title: "Test".into(),
+            description: None,
+            priority: "P1".into(),
+            status: status.into(),
+            files: vec![],
+            doob_uuid: doob_uuid.into(),
+        }
+    }
+
+    fn tab_with_data(items: Vec<HandoffItem>) -> ItemsTab {
+        let open = items.iter().filter(|i| i.status == "open").count();
+        let done = items.iter().filter(|i| i.status == "done").count();
+        let blocked = items.iter().filter(|i| i.status == "blocked").count();
+        let data = ItemsData { items, open, done, blocked };
+        let mut tab = ItemsTab::new();
+        tab.cached_data = Some(data);
+        tab.table_state.select(Some(0));
+        tab
+    }
+
+    #[test]
+    fn test_items_tab_c_key_emits_run_background() {
+        let mut tab = tab_with_data(vec![make_item("uuid-abc", "open")]);
+        let action = tab.handle_key(make_key(KeyCode::Char('c')));
+        match action {
+            TabAction::RunBackground { cmd, args, label } => {
+                assert_eq!(cmd, "doob");
+                assert!(args.contains(&"uuid-abc".to_string()), "args: {args:?}");
+                assert!(args.contains(&"done".to_string()), "args: {args:?}");
+                assert_eq!(label, "mark done");
+            }
+            other => panic!("expected RunBackground, got {:?}", std::mem::discriminant(&other)),
+        }
+    }
+
+    #[test]
+    fn test_items_tab_no_selection_c_key_is_noop() {
+        let mut tab = ItemsTab::new();
+        tab.table_state.select(None);
+        let action = tab.handle_key(make_key(KeyCode::Char('c')));
+        assert!(matches!(action, TabAction::None));
     }
 }
