@@ -32,6 +32,29 @@ use crate::network_lifecycle::NetworkLifecycle;
 use crate::state::{ContainerRecord, ContainerState, DaemonState};
 use async_trait::async_trait;
 
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/// Send a terminal `DaemonResponse::Error` on `tx`, logging a warning if the
+/// receiver has already been dropped.
+///
+/// Use this instead of `let _ = tx.send(...).await` so that dropped connections
+/// are observable in logs rather than silently swallowed.
+async fn send_error(tx: &mpsc::Sender<DaemonResponse>, context: &str, message: String) {
+    if tx
+        .send(DaemonResponse::Error {
+            message: message.clone(),
+        })
+        .await
+        .is_err()
+    {
+        warn!(
+            context,
+            error_message = %message,
+            "client disconnected before error response could be sent"
+        );
+    }
+}
+
 // ─── Default adapters ────────────────────────────────────────────────────────
 
 /// Production no-op image loader.
@@ -258,11 +281,7 @@ pub async fn handle_run(
     #[allow(clippy::collapsible_if)]
     if let Some(ref n) = name {
         if state.name_in_use(n).await {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("container name {n:?} is already in use"),
-                })
-                .await;
+            send_error(&tx, "handle_run", format!("container name {n:?} is already in use")).await;
             return;
         }
     }
@@ -365,11 +384,7 @@ async fn handle_run_streaming(
         Ok(triple) => triple,
         Err(e) => {
             error!("handle_run_streaming setup error: {e:#}");
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("{e:#}"),
-                })
-                .await;
+            send_error(&tx, "handle_run", format!("{e:#}")).await;
             return;
         }
     };
@@ -1608,22 +1623,14 @@ pub async fn handle_exec(
             "minibox_container_ops_total",
             &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
         );
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: "exec not supported on this platform".to_string(),
-            })
-            .await;
+        send_error(&tx, "handle_exec", "exec not supported on this platform".to_string()).await;
         return;
     };
 
     let cid = match minibox_core::domain::ContainerId::new(container_id.clone()) {
         Ok(id) => id,
         Err(e) => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("invalid container id: {e}"),
-                })
-                .await;
+            send_error(&tx, "handle_exec", format!("invalid container id: {e}")).await;
             return;
         }
     };
@@ -1669,11 +1676,7 @@ pub async fn handle_exec(
                 start.elapsed().as_secs_f64(),
                 &[("op", "exec"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("exec failed: {e:#}"),
-                })
-                .await;
+            send_error(&tx, "handle_exec", format!("exec failed: {e:#}")).await;
         }
     }
 }
@@ -1696,22 +1699,14 @@ pub async fn handle_push(
             "minibox_container_ops_total",
             &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
         );
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: "push not supported on this platform".to_string(),
-            })
-            .await;
+        send_error(&tx, "handle_push", "push not supported on this platform".to_string()).await;
         return;
     };
 
     let image_ref = match minibox_core::image::reference::ImageRef::parse(&image_ref_str) {
         Ok(r) => r,
         Err(e) => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("invalid image ref: {e}"),
-                })
-                .await;
+            send_error(&tx, "handle_push", format!("invalid image ref: {e}")).await;
             return;
         }
     };
@@ -1778,11 +1773,7 @@ pub async fn handle_push(
                 start.elapsed().as_secs_f64(),
                 &[("op", "push"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: e.to_string(),
-                })
-                .await;
+            send_error(&tx, "handle_push", e.to_string()).await;
         }
     }
 }
@@ -1805,22 +1796,14 @@ pub async fn handle_commit(
             "minibox_container_ops_total",
             &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
         );
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: "commit not supported on this platform".to_string(),
-            })
-            .await;
+        send_error(&tx, "handle_commit", "commit not supported on this platform".to_string()).await;
         return;
     };
 
     let cid = match minibox_core::domain::ContainerId::new(container_id.clone()) {
         Ok(id) => id,
         Err(e) => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("invalid container id: {e}"),
-                })
-                .await;
+            send_error(&tx, "handle_commit", format!("invalid container id: {e}")).await;
             return;
         }
     };
@@ -1872,11 +1855,7 @@ pub async fn handle_commit(
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: e.to_string(),
-                })
-                .await;
+            send_error(&tx, "handle_commit", e.to_string()).await;
         }
     }
 }
@@ -1905,11 +1884,7 @@ pub async fn handle_build(
             "minibox_container_ops_total",
             &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
         );
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: "build not supported on this platform".to_string(),
-            })
-            .await;
+        send_error(&tx, "handle_build", "build not supported on this platform".to_string()).await;
         return;
     };
 
@@ -1919,32 +1894,20 @@ pub async fn handle_build(
     let context_dir = {
         let raw = std::path::PathBuf::from(&context_path);
         if !raw.is_absolute() {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("build context_path must be absolute: {context_path:?}"),
-                })
-                .await;
+            send_error(&tx, "handle_build", format!("build context_path must be absolute: {context_path:?}")).await;
             return;
         }
         match raw.canonicalize() {
             Ok(p) => p,
             Err(e) => {
-                let _ = tx
-                    .send(DaemonResponse::Error {
-                        message: format!("build context_path invalid: {e}"),
-                    })
-                    .await;
+                send_error(&tx, "handle_build", format!("build context_path invalid: {e}")).await;
                 return;
             }
         }
     };
     let dockerfile_path = context_dir.join("Dockerfile.mbx-build");
     if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: format!("write Dockerfile: {e}"),
-            })
-            .await;
+        send_error(&tx, "handle_build", format!("write Dockerfile: {e}")).await;
         return;
     }
 
@@ -2007,11 +1970,7 @@ pub async fn handle_build(
                 start.elapsed().as_secs_f64(),
                 &[("op", "build"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("build failed: {e}"),
-                })
-                .await;
+            send_error(&tx, "handle_build", format!("build failed: {e}")).await;
         }
     }
 }
@@ -2090,11 +2049,7 @@ pub(crate) async fn handle_prune(
                 .await;
         }
         Err(e) => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: e.to_string(),
-                })
-                .await;
+            send_error(&tx, "handle_build", e.to_string()).await;
         }
     }
 }
@@ -2116,22 +2071,14 @@ pub(crate) async fn handle_remove_image(
         .any(|c| (c.state == "running" || c.state == "paused") && c.image == image_ref);
 
     if in_use {
-        let _ = tx
-            .send(DaemonResponse::Error {
-                message: format!("image {image_ref} is in use by a running container"),
-            })
-            .await;
+        send_error(&tx, "handle_build", format!("image {image_ref} is in use by a running container")).await;
         return;
     }
 
     let (name, tag) = match image_ref.rsplit_once(':') {
         Some(pair) => pair,
         None => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: format!("invalid image ref: {image_ref}"),
-                })
-                .await;
+            send_error(&tx, "handle_build", format!("invalid image ref: {image_ref}")).await;
             return;
         }
     };
@@ -2149,11 +2096,7 @@ pub(crate) async fn handle_remove_image(
                 .await;
         }
         Err(e) => {
-            let _ = tx
-                .send(DaemonResponse::Error {
-                    message: e.to_string(),
-                })
-                .await;
+            send_error(&tx, "handle_build", e.to_string()).await;
         }
     }
 }
