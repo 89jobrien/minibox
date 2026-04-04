@@ -81,6 +81,7 @@ pub struct App {
     pub inline_cmd: Option<InlineCommand>,
     pub bg_cmd: Option<BackgroundCommand>,
     pub notification: Option<(String, Instant)>,
+    pub pending_refresh: bool,
 }
 
 impl App {
@@ -105,6 +106,7 @@ impl App {
             inline_cmd: None,
             bg_cmd: None,
             notification: None,
+            pending_refresh: false,
         }
     }
 
@@ -125,6 +127,37 @@ impl App {
     pub fn active_tab_renderer(&mut self) -> &mut dyn TabRenderer {
         &mut *self.tabs[self.active_tab.index()]
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::BackgroundCommand;
+
+    #[test]
+    fn test_poll_commands_sets_pending_refresh_on_success() {
+        let mut app = App::new();
+        let cmd =
+            BackgroundCommand::spawn("true", &[], "test op".to_string()).expect("spawn true");
+        app.bg_cmd = Some(cmd);
+
+        for _ in 0..50 {
+            app.poll_commands();
+            if app.bg_cmd.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        assert!(app.bg_cmd.is_none(), "bg_cmd should be cleared");
+        assert!(
+            app.pending_refresh,
+            "pending_refresh should be true after exit 0"
+        );
+    }
+}
+
+impl App {
 
     pub fn poll_commands(&mut self) {
         if let Some(ref mut cmd) = self.inline_cmd {
@@ -133,7 +166,8 @@ impl App {
         if let Some(ref mut cmd) = self.bg_cmd {
             cmd.poll();
             if cmd.finished {
-                let msg = if cmd.exit_code == Some(0) {
+                let success = cmd.exit_code == Some(0);
+                let msg = if success {
                     format!("{} complete", cmd.label)
                 } else {
                     format!(
@@ -143,6 +177,9 @@ impl App {
                     )
                 };
                 self.notification = Some((msg, Instant::now()));
+                if success {
+                    self.pending_refresh = true;
+                }
                 self.bg_cmd = None;
             }
         }

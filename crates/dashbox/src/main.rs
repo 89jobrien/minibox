@@ -49,6 +49,11 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
 
         app.poll_commands();
 
+        if app.pending_refresh {
+            app.active_tab_renderer().refresh();
+            app.pending_refresh = false;
+        }
+
         if event::poll(Duration::from_millis(250))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind != KeyEventKind::Press {
