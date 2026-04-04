@@ -146,6 +146,19 @@ enum Commands {
         cmd: Vec<String>,
     },
 
+    /// Fetch or stream log output from a container.
+    ///
+    /// Sends a `DaemonRequest::ContainerLogs` to the daemon and prints each
+    /// log line to stdout (stdout stream) or stderr (stderr stream).
+    Logs {
+        /// Container ID or name.
+        id: String,
+
+        /// Keep the connection open and stream new output as it arrives.
+        #[arg(long)]
+        follow: bool,
+    },
+
     /// Stream container lifecycle events as JSON-lines to stdout.
     ///
     /// Subscribes to the daemon event stream and prints each event as a
@@ -245,11 +258,29 @@ async fn main() -> Result<()> {
             commands::load::execute(path, name, tag, socket_path).await
         }
 
+        Commands::Logs { id, follow } => commands::logs::execute(id, follow, socket_path).await,
+
         Commands::Events => commands::events::execute(socket_path).await,
 
         Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
 
         Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
+    }
+}
+
+/// Test-only helpers that expose parser internals for unit tests in submodules.
+#[cfg(test)]
+pub mod main_tests_shim {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    /// Parse a `logs` subcommand invocation and return `(id, follow)`.
+    pub fn parse_logs(args: &[&str]) -> (String, bool) {
+        let cli = Cli::try_parse_from(args).expect("parse failed");
+        match cli.command {
+            Commands::Logs { id, follow } => (id, follow),
+            _ => panic!("expected Logs command"),
+        }
     }
 }
 
