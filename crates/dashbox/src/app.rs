@@ -9,6 +9,7 @@ use crate::tabs::ci::CiTab;
 use crate::tabs::diagrams::DiagramsTab;
 use crate::tabs::git::GitTab;
 use crate::tabs::history::HistoryTab;
+use crate::tabs::items::ItemsTab;
 use crate::tabs::metrics::MetricsTab;
 use crate::tabs::todos::TodosTab;
 
@@ -19,18 +20,20 @@ pub enum Tab {
     History,
     Git,
     Todos,
+    Items,
     Ci,
     Diagrams,
     Metrics,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 9] = [
         Tab::Agents,
         Tab::Bench,
         Tab::History,
         Tab::Git,
         Tab::Todos,
+        Tab::Items,
         Tab::Ci,
         Tab::Diagrams,
         Tab::Metrics,
@@ -43,9 +46,10 @@ impl Tab {
             Tab::History => "3 History",
             Tab::Git => "4 Git",
             Tab::Todos => "5 Todos",
-            Tab::Ci => "6 CI",
-            Tab::Diagrams => "7 Diagrams",
-            Tab::Metrics => "8 Metrics",
+            Tab::Items => "6 Items",
+            Tab::Ci => "7 CI",
+            Tab::Diagrams => "8 Diagrams",
+            Tab::Metrics => "9 Metrics",
         }
     }
 
@@ -56,9 +60,10 @@ impl Tab {
             Tab::History => 2,
             Tab::Git => 3,
             Tab::Todos => 4,
-            Tab::Ci => 5,
-            Tab::Diagrams => 6,
-            Tab::Metrics => 7,
+            Tab::Items => 5,
+            Tab::Ci => 6,
+            Tab::Diagrams => 7,
+            Tab::Metrics => 8,
         }
     }
 
@@ -90,6 +95,7 @@ impl App {
                 Box::new(HistoryTab::new()),
                 Box::new(GitTab::new()),
                 Box::new(TodosTab::new()),
+                Box::new(ItemsTab::new()),
                 Box::new(CiTab::new()),
                 Box::new(DiagramsTab::new(
                     crate::diagram::source::load_user_diagrams(),

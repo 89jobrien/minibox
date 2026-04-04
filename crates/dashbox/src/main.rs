@@ -94,14 +94,18 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
                             continue;
                         }
                         KeyCode::Char('6') => {
-                            app.select_tab(Tab::Ci);
+                            app.select_tab(Tab::Items);
                             continue;
                         }
                         KeyCode::Char('7') => {
-                            app.select_tab(Tab::Diagrams);
+                            app.select_tab(Tab::Ci);
                             continue;
                         }
                         KeyCode::Char('8') => {
+                            app.select_tab(Tab::Diagrams);
+                            continue;
+                        }
+                        KeyCode::Char('9') => {
                             app.select_tab(Tab::Metrics);
                             continue;
                         }
