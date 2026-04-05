@@ -18,6 +18,7 @@ use xshell::Shell;
 
 mod bench;
 mod bench_types;
+mod bump;
 mod cleanup;
 mod flamegraph;
 mod gates;
@@ -37,6 +38,10 @@ fn main() -> Result<()> {
     sh.change_dir(root);
 
     match task.as_deref() {
+        Some("bump") => {
+            let level = env::args().nth(2).unwrap_or_else(|| "patch".to_string());
+            bump::bump(root, &level)
+        }
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -77,6 +82,7 @@ fn main() -> Result<()> {
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
+            eprintln!("  bump [patch|minor|major]  bump workspace version in Cargo.toml");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
