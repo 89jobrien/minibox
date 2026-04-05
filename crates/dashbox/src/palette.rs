@@ -21,10 +21,6 @@ impl CommandPalette {
         Self { entries, state }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
     pub fn select_next(&mut self) {
         self.state.select_next();
     }
@@ -36,7 +32,7 @@ impl CommandPalette {
     /// If `ch` matches any entry key, return that entry's action (consuming self).
     /// If Enter is pressed, fire the currently selected entry.
     /// Returns None if no match.
-    pub fn handle_key(mut self, ch: Option<char>, enter: bool) -> Option<TabAction> {
+    pub fn handle_key(self, ch: Option<char>, enter: bool) -> Option<TabAction> {
         if enter {
             if let Some(idx) = self.state.selected() {
                 if let Some(entry) = self.entries.into_iter().nth(idx) {
