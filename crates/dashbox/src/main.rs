@@ -4,6 +4,7 @@ mod command;
 mod data;
 mod diagram;
 mod diagrams;
+mod palette;
 mod tabs;
 mod ui;
 
