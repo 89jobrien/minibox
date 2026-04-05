@@ -2,8 +2,8 @@
 use std::time::Instant;
 
 use crate::command::{BackgroundCommand, InlineCommand};
-use crate::palette::CommandPalette;
 use crate::data::agents::{JsonlFileSource, MultiSourceLog};
+use crate::palette::CommandPalette;
 use crate::tabs::TabRenderer;
 use crate::tabs::agents::AgentsTab;
 use crate::tabs::bench::BenchTab;

@@ -88,7 +88,9 @@ impl CommandPalette {
                 Row::new([
                     Cell::from(Span::styled(
                         e.key.to_string(),
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
                     )),
                     Cell::from(e.label),
                 ])
@@ -114,7 +116,11 @@ mod tests {
     use super::*;
 
     fn entry(key: char, label: &'static str) -> PaletteEntry {
-        PaletteEntry { key, label, action: TabAction::None }
+        PaletteEntry {
+            key,
+            label,
+            action: TabAction::None,
+        }
     }
 
     #[test]

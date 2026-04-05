@@ -57,7 +57,11 @@ fn dispatch_action(app: &mut App, action: TabAction) {
         }
         TabAction::Quit => app.should_quit = true,
         TabAction::OpenUrl(url) => {
-            let opener = if std::env::consts::OS == "macos" { "open" } else { "xdg-open" };
+            let opener = if std::env::consts::OS == "macos" {
+                "open"
+            } else {
+                "xdg-open"
+            };
             let _ = std::process::Command::new(opener).arg(&url).spawn();
         }
         TabAction::None => {}
