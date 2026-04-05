@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-07
+updated: 2026-04-08
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -354,6 +354,21 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-08
+  summary: |
+    dashbox space-leader palette shipped: Space opens floating CommandPalette overlay,
+    all action keys (t/b/B/c/o/b/d/D/r) moved from handle_key to palette_actions().
+    10-task plan executed via subagent-driven-development. 39 tests passing, pre-commit clean.
+  commits:
+  - 36bba4d
+  - 1ef3d4a
+  - 983b4d9
+  - 12885ba
+  - 96ce0a2
+  - f7a06d7
+  - 3a93533
+  - 3294247
+  - e186311
 - date: 2026-04-08
   summary: |
     minibox-5 done: dual MIT/Apache-2.0 licensing. Added LICENSE-MIT, LICENSE-APACHE,
