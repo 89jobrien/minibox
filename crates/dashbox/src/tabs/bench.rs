@@ -214,21 +214,38 @@ impl TabRenderer for BenchTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
-            KeyCode::Char('t') => TabAction::RunInline {
-                cmd: "cargo".to_string(),
-                args: vec!["xtask".to_string(), "test-unit".to_string()],
-            },
-            KeyCode::Char('b') => TabAction::RunInline {
-                cmd: "cargo".to_string(),
-                args: vec!["xtask".to_string(), "bench".to_string()],
-            },
-            KeyCode::Char('B') => TabAction::RunBackground {
-                cmd: "cargo".to_string(),
-                args: vec!["xtask".to_string(), "bench-vps".to_string()],
-                label: "VPS bench".to_string(),
-            },
             _ => TabAction::None,
         }
+    }
+
+    fn palette_actions(&mut self) -> Vec<crate::tabs::PaletteEntry> {
+        vec![
+            crate::tabs::PaletteEntry {
+                key: 't',
+                label: "run tests",
+                action: TabAction::RunInline {
+                    cmd: "cargo".to_string(),
+                    args: vec!["xtask".to_string(), "test-unit".to_string()],
+                },
+            },
+            crate::tabs::PaletteEntry {
+                key: 'b',
+                label: "bench local",
+                action: TabAction::RunInline {
+                    cmd: "cargo".to_string(),
+                    args: vec!["xtask".to_string(), "bench".to_string()],
+                },
+            },
+            crate::tabs::PaletteEntry {
+                key: 'B',
+                label: "bench VPS",
+                action: TabAction::RunBackground {
+                    cmd: "cargo".to_string(),
+                    args: vec!["xtask".to_string(), "bench-vps".to_string()],
+                    label: "VPS bench".to_string(),
+                },
+            },
+        ]
     }
 
     fn refresh(&mut self) {
@@ -236,6 +253,6 @@ impl TabRenderer for BenchTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  t:test  b:bench  B:vps-bench  r:refresh"
+        "j/k:scroll  r:refresh"
     }
 }
