@@ -57,12 +57,19 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         app.tabs[idx].render(frame, chunks[1]);
     }
 
+    // Palette overlay — drawn on top of tab content
+    if let Some(ref mut palette) = app.palette {
+        palette.render(frame, chunks[1]);
+    }
+
     // Status bar
     let tab_keys = app.tabs[app.active_tab.index()].status_keys();
-    let left_text = if app.inline_cmd.is_some() {
+    let left_text = if app.palette.is_some() {
+        " j/k:select  Enter:run  Esc:close".to_string()
+    } else if app.inline_cmd.is_some() {
         format!(" Esc:close pane  {tab_keys}")
     } else {
-        format!(" q:quit  1-7:tab  r:refresh  {tab_keys}")
+        format!(" q:quit  1-9:tab  r:refresh  Space:actions  {tab_keys}")
     };
 
     let right_text = if let Some(ref cmd) = app.bg_cmd {
