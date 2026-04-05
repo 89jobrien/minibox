@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-04
+updated: 2026-04-07
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -55,7 +55,7 @@ items:
   doob_uuid: 6ba2dc0b-255a-4d62-a0a1-5dbd71d8cdcf
   name: dual-license
   priority: P2
-  status: open
+  status: done
   title: Add dual MIT/Apache-2.0 license files
   description: |
     minibox has `license = "MIT"` but no LICENSE file. Upgrade to `MIT OR Apache-2.0` (workspace.package), add LICENSE-MIT and LICENSE-APACHE, update README. Reference notfiles repo for exact content.
@@ -65,6 +65,7 @@ items:
   - LICENSE-APACHE
   - README.md
   extra: []
+  completed: 2026-04-08
 - id: minibox-6
   doob_uuid: b2f92bf0-ed5c-46a7-be3e-9f1847baf506
   name: e2e-serialization-ci
@@ -353,13 +354,20 @@ items:
   extra: []
   completed: 2026-04-04
 log:
-- date: 2026-04-04
-  summary: hand:on/off triage session — reviewed minibox-13/14/15 human-edits (all acknowledged), no code changes
+- date: 2026-04-08
+  summary: |
+    minibox-5 done: dual MIT/Apache-2.0 licensing. Added LICENSE-MIT, LICENSE-APACHE,
+    updated workspace Cargo.toml license field, migrated xtask/mbxctl to license.workspace = true.
+    deny.toml already allowed both. Build clean.
+  commits:
+  - (latest)
 - date: 2026-04-07
   summary: |
-    dashbox metrics tab: added MetricsData::Stale variant; MetricsSource now writes
-    ~/.mbx/metrics.json snapshot on every live poll, falls back to snapshot when daemon
-    offline. Tab renders yellow STALE badge with age. Build clean.
+    dashbox metrics tab: MetricsData::Stale variant, snapshot fallback to ~/.mbx/metrics.json
+    when daemon offline, STALE badge with age. hand:off session. Build clean, 727/729 tests
+    (2 pre-existing minibox-llm env-var failures).
+  commits:
+  - 3b597f8
 - date: 2026-04-04
   summary: |
     Orca Strait session: exec into containers (minibox-13), named containers (minibox-14),
