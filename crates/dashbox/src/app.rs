@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use crate::command::{BackgroundCommand, InlineCommand};
 use crate::data::agents::{JsonlFileSource, MultiSourceLog};
+use crate::palette::CommandPalette;
 use crate::tabs::TabRenderer;
 use crate::tabs::agents::AgentsTab;
 use crate::tabs::bench::BenchTab;
@@ -83,6 +84,7 @@ pub struct App {
     pub bg_cmd: Option<BackgroundCommand>,
     pub notification: Option<(String, Instant)>,
     pub pending_refresh: bool,
+    pub palette: Option<CommandPalette>,
 }
 
 impl App {
@@ -117,6 +119,7 @@ impl App {
             bg_cmd: None,
             notification: None,
             pending_refresh: false,
+            palette: None,
         }
     }
 
@@ -136,6 +139,20 @@ impl App {
 
     pub fn active_tab_renderer(&mut self) -> &mut dyn TabRenderer {
         &mut *self.tabs[self.active_tab.index()]
+    }
+
+    /// Open the command palette for the currently active tab.
+    /// Does nothing if the tab has no palette actions.
+    pub fn open_palette(&mut self) {
+        let actions = self.active_tab_renderer().palette_actions();
+        if !actions.is_empty() {
+            self.palette = Some(CommandPalette::new(actions));
+        }
+    }
+
+    /// Close the command palette without firing any action.
+    pub fn close_palette(&mut self) {
+        self.palette = None;
     }
 }
 

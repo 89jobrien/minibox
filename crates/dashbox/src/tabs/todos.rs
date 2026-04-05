@@ -111,54 +111,37 @@ impl TabRenderer for TodosTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
-            KeyCode::Char('c') => {
-                let idx = match self.table_state.selected() {
-                    Some(i) => i,
-                    None => return TabAction::None,
-                };
-                // Visible rows are pending todos only — find the idx-th pending todo.
-                let uuid = self.cached_data.as_ref().and_then(|d| {
-                    d.todos
-                        .iter()
-                        .filter(|t| t.status == "pending")
-                        .nth(idx)
-                        .map(|t| t.doob_uuid.clone())
-                });
-                match uuid {
-                    Some(u) if !u.is_empty() => TabAction::RunBackground {
-                        cmd: "doob".into(),
-                        args: vec!["todo".into(), "complete".into(), u],
-                        label: "complete todo".into(),
-                    },
-                    _ => TabAction::None,
-                }
-            }
-            KeyCode::Char('o') => {
-                let idx = match self.table_state.selected() {
-                    Some(i) => i,
-                    None => return TabAction::None,
-                };
-                let tag = self.cached_data.as_ref().and_then(|d| {
-                    d.todos
-                        .iter()
-                        .filter(|t| t.status == "pending")
-                        .nth(idx)
-                        .and_then(|t| t.tags.first().cloned())
-                });
-                match tag {
-                    Some(t) if !t.is_empty() => TabAction::RunBackground {
-                        cmd: "open".into(),
-                        args: vec![format!(
-                            "https://github.com/89jobrien/minibox/issues/{}",
-                            t.trim_start_matches("minibox-")
-                        )],
-                        label: "open in browser".into(),
-                    },
-                    _ => TabAction::None,
-                }
-            }
             _ => TabAction::None,
         }
+    }
+
+    fn palette_actions(&mut self) -> Vec<crate::tabs::PaletteEntry> {
+        let idx = match self.table_state.selected() {
+            Some(i) => i,
+            None => return vec![],
+        };
+        let pending: Vec<_> = self
+            .cached_data
+            .as_ref()
+            .map(|d| d.todos.iter().filter(|t| t.status == "pending").collect())
+            .unwrap_or_default();
+        let todo = match pending.get(idx) {
+            Some(t) => t,
+            None => return vec![],
+        };
+        let uuid = todo.doob_uuid.clone();
+        if uuid.is_empty() {
+            return vec![];
+        }
+        vec![crate::tabs::PaletteEntry {
+            key: 'c',
+            label: "complete",
+            action: TabAction::RunBackground {
+                cmd: "doob".into(),
+                args: vec!["todo".into(), "complete".into(), uuid],
+                label: "complete todo".into(),
+            },
+        }]
     }
 
     fn refresh(&mut self) {
@@ -166,6 +149,6 @@ impl TabRenderer for TodosTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  c:complete  o:open-browser  r:refresh"
+        "j/k:scroll  r:refresh"
     }
 }

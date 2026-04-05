@@ -1,5 +1,5 @@
 // dashbox/src/tabs/metrics.rs
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -57,14 +57,8 @@ impl TabRenderer for MetricsTab {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent) -> TabAction {
-        match key.code {
-            KeyCode::Char('r') => {
-                self.source.refresh();
-                TabAction::None
-            }
-            _ => TabAction::None,
-        }
+    fn handle_key(&mut self, _key: KeyEvent) -> TabAction {
+        TabAction::None
     }
 
     fn refresh(&mut self) {

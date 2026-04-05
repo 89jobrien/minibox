@@ -187,44 +187,68 @@ impl TabRenderer for ItemsTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
-            KeyCode::Char('c') | KeyCode::Char('o') | KeyCode::Char('b') => {
-                let new_status = match key.code {
-                    KeyCode::Char('c') => "done",
-                    KeyCode::Char('o') => "open",
-                    KeyCode::Char('b') => "blocked",
-                    _ => unreachable!(),
-                };
-                let label = match new_status {
-                    "done" => "mark done",
-                    "open" => "mark open",
-                    "blocked" => "mark blocked",
-                    _ => unreachable!(),
-                };
-                let idx = match self.table_state.selected() {
-                    Some(i) => i,
-                    None => return TabAction::None,
-                };
-                let uuid = self
-                    .cached_data
-                    .as_ref()
-                    .and_then(|d| d.items.get(idx))
-                    .map(|item| item.doob_uuid.clone());
-                match uuid {
-                    Some(u) if !u.is_empty() => TabAction::RunBackground {
-                        cmd: "doob".into(),
-                        args: vec![
-                            "handoff".into(),
-                            "update-status".into(),
-                            u,
-                            new_status.into(),
-                        ],
-                        label: label.into(),
-                    },
-                    _ => TabAction::None,
-                }
-            }
             _ => TabAction::None,
         }
+    }
+
+    fn palette_actions(&mut self) -> Vec<crate::tabs::PaletteEntry> {
+        let idx = match self.table_state.selected() {
+            Some(i) => i,
+            None => return vec![],
+        };
+        let uuid = self
+            .cached_data
+            .as_ref()
+            .and_then(|d| d.items.get(idx))
+            .map(|i| i.doob_uuid.clone())
+            .unwrap_or_default();
+        if uuid.is_empty() {
+            return vec![];
+        }
+        vec![
+            crate::tabs::PaletteEntry {
+                key: 'c',
+                label: "mark done",
+                action: TabAction::RunBackground {
+                    cmd: "doob".into(),
+                    args: vec![
+                        "handoff".into(),
+                        "update-status".into(),
+                        uuid.clone(),
+                        "done".into(),
+                    ],
+                    label: "mark done".into(),
+                },
+            },
+            crate::tabs::PaletteEntry {
+                key: 'o',
+                label: "mark open",
+                action: TabAction::RunBackground {
+                    cmd: "doob".into(),
+                    args: vec![
+                        "handoff".into(),
+                        "update-status".into(),
+                        uuid.clone(),
+                        "open".into(),
+                    ],
+                    label: "mark open".into(),
+                },
+            },
+            crate::tabs::PaletteEntry {
+                key: 'b',
+                label: "mark blocked",
+                action: TabAction::RunBackground {
+                    cmd: "doob".into(),
+                    args: vec![
+                        "handoff".into(),
+                        "update-status".into(),
+                        uuid,
+                        "blocked".into(),
+                    ],
+                    label: "mark blocked".into(),
+                },
+            },
+        ]
     }
 
     fn refresh(&mut self) {
@@ -232,7 +256,7 @@ impl TabRenderer for ItemsTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  c:complete  o:open  b:block  r:refresh"
+        "j/k:scroll  r:refresh"
     }
 }
 
@@ -276,10 +300,11 @@ mod tests {
     }
 
     #[test]
-    fn test_items_tab_c_key_emits_run_background() {
+    fn test_items_tab_palette_actions_mark_done() {
         let mut tab = tab_with_data(vec![make_item("uuid-abc", "open")]);
-        let action = tab.handle_key(make_key(KeyCode::Char('c')));
-        match action {
+        let actions = tab.palette_actions();
+        let done_entry = actions.iter().find(|e| e.key == 'c').expect("no 'c' entry");
+        match &done_entry.action {
             TabAction::RunBackground { cmd, args, label } => {
                 assert_eq!(cmd, "doob");
                 assert!(args.contains(&"uuid-abc".to_string()), "args: {args:?}");
@@ -288,16 +313,16 @@ mod tests {
             }
             other => panic!(
                 "expected RunBackground, got {:?}",
-                std::mem::discriminant(&other)
+                std::mem::discriminant(other)
             ),
         }
     }
 
     #[test]
-    fn test_items_tab_no_selection_c_key_is_noop() {
+    fn test_items_tab_no_selection_palette_actions_is_empty() {
         let mut tab = ItemsTab::new();
         tab.table_state.select(None);
-        let action = tab.handle_key(make_key(KeyCode::Char('c')));
-        assert!(matches!(action, TabAction::None));
+        let actions = tab.palette_actions();
+        assert!(actions.is_empty());
     }
 }

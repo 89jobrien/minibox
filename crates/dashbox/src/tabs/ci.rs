@@ -130,25 +130,29 @@ impl TabRenderer for CiTab {
                 self.table_state.select_previous();
                 TabAction::None
             }
-            KeyCode::Char('o') => {
-                let idx = match self.table_state.selected() {
-                    Some(i) => i,
-                    None => return TabAction::None,
-                };
-                let url = self
-                    .cached_data
-                    .as_ref()
-                    .and_then(|d| d.runs.get(idx))
-                    .map(|r| r.url.clone())
-                    .unwrap_or_default();
-                if url.is_empty() {
-                    TabAction::None
-                } else {
-                    TabAction::OpenUrl(url)
-                }
-            }
             _ => TabAction::None,
         }
+    }
+
+    fn palette_actions(&mut self) -> Vec<crate::tabs::PaletteEntry> {
+        let idx = match self.table_state.selected() {
+            Some(i) => i,
+            None => return vec![],
+        };
+        let url = self
+            .cached_data
+            .as_ref()
+            .and_then(|d| d.runs.get(idx))
+            .map(|r| r.url.clone())
+            .unwrap_or_default();
+        if url.is_empty() {
+            return vec![];
+        }
+        vec![crate::tabs::PaletteEntry {
+            key: 'o',
+            label: "open in browser",
+            action: TabAction::OpenUrl(url),
+        }]
     }
 
     fn refresh(&mut self) {
@@ -156,7 +160,7 @@ impl TabRenderer for CiTab {
     }
 
     fn status_keys(&self) -> &'static str {
-        "j/k:scroll  o:open  r:refresh"
+        "j/k:scroll  r:refresh"
     }
 }
 
@@ -194,13 +198,15 @@ mod tests {
     }
 
     #[test]
-    fn test_ci_tab_o_key_emits_open_url() {
+    fn test_ci_tab_palette_actions_open_url() {
         let url = "https://github.com/89jobrien/minibox/actions/runs/1";
         let mut tab = tab_with_run(run_with_url(url));
-        let action = tab.handle_key(make_key(KeyCode::Char('o')));
-        match action {
+        let actions = tab.palette_actions();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].key, 'o');
+        match &actions[0].action {
             TabAction::OpenUrl(u) => assert_eq!(u, url),
-            other => panic!("expected OpenUrl, got {:?}", std::mem::discriminant(&other)),
+            other => panic!("expected OpenUrl, got {:?}", std::mem::discriminant(other)),
         }
     }
 }

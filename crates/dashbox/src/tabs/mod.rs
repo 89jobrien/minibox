@@ -29,9 +29,24 @@ pub enum TabAction {
     OpenUrl(String),
 }
 
+/// One entry in the command palette for a tab.
+pub struct PaletteEntry {
+    /// Single character the user presses to trigger this action.
+    pub key: char,
+    /// Human-readable label shown in the palette overlay.
+    pub label: &'static str,
+    /// Action to fire when this entry is selected.
+    pub action: TabAction,
+}
+
 pub trait TabRenderer {
     fn render(&mut self, frame: &mut Frame, area: Rect);
     fn handle_key(&mut self, key: KeyEvent) -> TabAction;
     fn refresh(&mut self);
     fn status_keys(&self) -> &'static str;
+    /// Returns the actions available in the command palette for this tab.
+    /// Default: no actions.
+    fn palette_actions(&mut self) -> Vec<PaletteEntry> {
+        vec![]
+    }
 }
