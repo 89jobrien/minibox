@@ -417,7 +417,22 @@ impl TabRenderer for DiagramsTab {
         self.ci_source.refresh();
     }
 
+    fn palette_actions(&mut self) -> Vec<crate::tabs::PaletteEntry> {
+        vec![
+            crate::tabs::PaletteEntry {
+                key: 'd',
+                label: "next diagram",
+                action: TabAction::None,
+            },
+            crate::tabs::PaletteEntry {
+                key: 'D',
+                label: "prev diagram",
+                action: TabAction::None,
+            },
+        ]
+    }
+
     fn status_keys(&self) -> &'static str {
-        "h/l:move  j/k:row  Tab:next  d/D:diagram"
+        "h/j/k/l:navigate  Tab:next-node  d/D:diagram  r:refresh"
     }
 }
