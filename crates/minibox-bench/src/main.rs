@@ -738,6 +738,7 @@ fn create_background_container() -> Result<String, String> {
         privileged: false,
         env: vec![],
         name: None,
+        tty: false,
     };
 
     match send_daemon_request_sync(&request)? {
@@ -1716,6 +1717,7 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         privileged: false,
         env: vec![],
         name: None,
+        tty: false,
     };
     let large_run = DaemonRequest::Run {
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
@@ -1731,6 +1733,7 @@ fn bench_codec_suite(cfg: &BenchConfig) -> SuiteResult {
         privileged: false,
         env: vec![],
         name: None,
+        tty: false,
     };
     let small_pull = DaemonRequest::Pull {
         image: "alpine".to_string(),

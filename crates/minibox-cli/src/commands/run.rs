@@ -146,6 +146,7 @@ pub async fn execute(
         privileged,
         env: vec![],
         name,
+        tty: false,
     };
 
     let client = DaemonClient::with_socket(socket_path);

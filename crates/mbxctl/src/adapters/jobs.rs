@@ -34,6 +34,7 @@ impl JobAdapter {
             privileged: false,
             env: req.env,
             name: None,
+            tty: false,
         };
 
         let mut stream = self

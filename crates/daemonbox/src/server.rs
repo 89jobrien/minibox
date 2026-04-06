@@ -258,6 +258,7 @@ async fn dispatch(
             privileged,
             env,
             name,
+            tty: _,
         } => {
             handler::handle_run(
                 image,
@@ -389,6 +390,18 @@ async fn dispatch(
             follow,
         } => {
             handler::handle_logs(container_id, follow, state, deps, tx).await;
+        }
+        DaemonRequest::SendInput { .. } | DaemonRequest::ResizePty { .. } => {
+            // PTY stdin/resize not yet implemented — stub responds with an error.
+            if tx
+                .send(DaemonResponse::Error {
+                    message: "SendInput/ResizePty not yet implemented".to_string(),
+                })
+                .await
+                .is_err()
+            {
+                warn!("dispatch: client disconnected before SendInput/ResizePty error could be sent");
+            }
         }
     }
 }

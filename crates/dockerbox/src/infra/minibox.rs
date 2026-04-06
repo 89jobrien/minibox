@@ -142,6 +142,7 @@ impl ContainerRuntime for MiniboxAdapter {
                 mounts,
                 privileged: config.privileged,
                 name: None,
+                tty: false,
             })
             .await?;
 
