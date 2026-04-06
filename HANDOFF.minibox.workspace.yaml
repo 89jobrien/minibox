@@ -416,6 +416,10 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-06
+  summary: devkit council sweep — 6 issues filed (#51-#56). Critical: Cargo.lock version
+    skip 0.2.5→0.4.0 unverifiable, libc/nix added to minibox-cli with no platform guards.
+  commits: []
 - date: 2026-04-09
   summary: |
     PTY/stdio piping shipped (minibox-16 + minibox-24 done): feature/pty-stdio-piping
