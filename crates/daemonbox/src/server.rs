@@ -400,7 +400,9 @@ async fn dispatch(
                 .await
                 .is_err()
             {
-                warn!("dispatch: client disconnected before SendInput/ResizePty error could be sent");
+                warn!(
+                    "dispatch: client disconnected before SendInput/ResizePty error could be sent"
+                );
             }
         }
     }

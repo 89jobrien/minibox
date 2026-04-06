@@ -1762,18 +1762,16 @@ pub async fn handle_exec(
         }
     };
 
-    let config = minibox_core::domain::ExecConfig {
+    let spec = minibox_core::domain::ExecSpec {
         cmd,
         env,
         working_dir: working_dir.map(std::path::PathBuf::from),
         tty,
-        stdin_tx: None, // wired in Task 4
-        resize_rx: None, // wired in Task 4
     };
 
     match exec_rt
         .as_ref()
-        .run_in_container(&cid, &config, tx.clone())
+        .run_in_container(&cid, spec, tx.clone())
         .await
     {
         Ok(handle) => {

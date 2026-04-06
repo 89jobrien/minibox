@@ -8,9 +8,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use base64::Engine as _;
 use minibox_core::as_any;
-use minibox_core::domain::{
-    AsAny, ContainerId, DynExecRuntime, ExecConfig, ExecHandle, ExecRuntime,
-};
+use minibox_core::domain::{AsAny, ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
 use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
@@ -19,6 +17,19 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::daemonbox_state::StateHandle;
+
+/// Full exec configuration including async channels for stdin/resize relay.
+///
+/// Lives in `mbx` (infrastructure adapter layer), not `minibox-core` (domain).
+/// Channels are infrastructure concerns — the pure domain spec is [`ExecSpec`].
+#[derive(Debug)]
+pub struct ExecConfig {
+    pub spec: ExecSpec,
+    /// Stdin bytes channel (handler → exec adapter). `None` = no stdin relay.
+    pub stdin_tx: Option<mpsc::Sender<Vec<u8>>>,
+    /// PTY resize events (handler → exec adapter). `None` = no resize relay.
+    pub resize_rx: Option<mpsc::Receiver<(u16, u16)>>,
+}
 
 pub struct NativeExecRuntime {
     state: StateHandle,
@@ -37,7 +48,7 @@ impl ExecRuntime for NativeExecRuntime {
     async fn run_in_container(
         &self,
         container_id: &ContainerId,
-        config: &ExecConfig,
+        spec: ExecSpec,
         tx: mpsc::Sender<DaemonResponse>,
     ) -> Result<ExecHandle> {
         let id = container_id.as_str().to_string();
@@ -49,27 +60,25 @@ impl ExecRuntime for NativeExecRuntime {
 
         let exec_id = Uuid::new_v4().simple().to_string()[..16].to_string();
 
-        // ExecConfig is not Clone (holds channel receivers). Build an owned value
-        // from the shared reference; channel fields default to None since we cannot
-        // move out of &ExecConfig via the trait boundary.
-        let owned_config = ExecConfig {
-            cmd: config.cmd.clone(),
-            env: config.env.clone(),
-            working_dir: config.working_dir.clone(),
-            tty: config.tty,
+        let cmd_for_log = spec.cmd.clone();
+        // Construct an ExecConfig (infra layer) from the pure ExecSpec.
+        // Channel fields start as None at the trait boundary; Task 4 will wire
+        // stdin_tx/resize_rx by calling the adapter directly when channels are needed.
+        let config = ExecConfig {
+            spec,
             stdin_tx: None,
             resize_rx: None,
         };
         let exec_id_clone = exec_id.clone();
 
         tokio::task::spawn_blocking(move || {
-            run_exec_blocking(pid, &exec_id_clone, owned_config, tx);
+            run_exec_blocking(pid, &exec_id_clone, config, tx);
         });
 
         info!(
             container_id = %id,
             exec_id = %exec_id,
-            cmd = ?config.cmd,
+            cmd = ?cmd_for_log,
             "exec: process started"
         );
 
@@ -77,14 +86,14 @@ impl ExecRuntime for NativeExecRuntime {
     }
 }
 
-/// Dispatch to PTY or pipe execution based on `config.tty`.
+/// Dispatch to PTY or pipe execution based on `config.spec.tty`.
 fn run_exec_blocking(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    if config.tty {
+    if config.spec.tty {
         run_pty_exec(container_pid, exec_id, config, tx);
     } else {
         run_pipe_exec(container_pid, exec_id, config, tx);
@@ -164,16 +173,18 @@ fn run_pipe_exec(
                 libc::close(stderr_w);
             }
 
-            let cmd_cstr = match std::ffi::CString::new(config.cmd[0].clone()) {
+            let cmd_cstr = match std::ffi::CString::new(config.spec.cmd[0].clone()) {
                 Ok(c) => c,
                 Err(_) => unsafe { libc::_exit(127) },
             };
             let args: Vec<std::ffi::CString> = config
+                .spec
                 .cmd
                 .iter()
                 .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
                 .collect();
             let envp: Vec<std::ffi::CString> = config
+                .spec
                 .env
                 .iter()
                 .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
@@ -313,16 +324,18 @@ fn run_pty_exec(
                 }
                 libc::close(master_fd);
             }
-            let cmd_cstr = match std::ffi::CString::new(config.cmd[0].clone()) {
+            let cmd_cstr = match std::ffi::CString::new(config.spec.cmd[0].clone()) {
                 Ok(c) => c,
                 Err(_) => unsafe { libc::_exit(127) },
             };
             let args: Vec<std::ffi::CString> = config
+                .spec
                 .cmd
                 .iter()
                 .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
                 .collect();
             let envp: Vec<std::ffi::CString> = config
+                .spec
                 .env
                 .iter()
                 .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
@@ -425,16 +438,18 @@ mod tests {
     #[test]
     fn exec_config_fields() {
         let cfg = ExecConfig {
-            cmd: vec!["echo".to_string(), "hello".to_string()],
-            env: vec!["HOME=/root".to_string()],
-            working_dir: None,
-            tty: false,
+            spec: ExecSpec {
+                cmd: vec!["echo".to_string(), "hello".to_string()],
+                env: vec!["HOME=/root".to_string()],
+                working_dir: None,
+                tty: false,
+            },
             stdin_tx: None,
             resize_rx: None,
         };
-        assert_eq!(cfg.cmd[0], "echo");
-        assert_eq!(cfg.cmd[1], "hello");
-        assert_eq!(cfg.env[0], "HOME=/root");
+        assert_eq!(cfg.spec.cmd[0], "echo");
+        assert_eq!(cfg.spec.cmd[1], "hello");
+        assert_eq!(cfg.spec.env[0], "HOME=/root");
         assert!(cfg.stdin_tx.is_none());
         assert!(cfg.resize_rx.is_none());
     }
@@ -449,10 +464,12 @@ mod tests {
         let (tx, mut rx) = mpsc::channel::<DaemonResponse>(32);
         let (_resize_tx, resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
         let config = ExecConfig {
-            cmd: vec!["/bin/echo".to_string(), "pty-ok".to_string()],
-            env: vec![],
-            working_dir: None,
-            tty: true,
+            spec: ExecSpec {
+                cmd: vec!["/bin/echo".to_string(), "pty-ok".to_string()],
+                env: vec![],
+                working_dir: None,
+                tty: true,
+            },
             stdin_tx: None,
             resize_rx: Some(resize_rx),
         };
