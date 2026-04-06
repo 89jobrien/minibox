@@ -105,3 +105,4 @@ __pycache__/
 *.pytest_cache/
 .firecrawl/
 .ctx/
+.ctx/HANDOVER.md
