@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tracing::{debug, error, info, warn};
 
-use crate::handler::{self, HandlerDependencies};
+use crate::handler::{self, HandlerDependencies, handle_resize_pty, handle_send_input};
 use crate::state::DaemonState;
 
 // SECURITY: Maximum request size to prevent memory exhaustion
@@ -391,19 +391,23 @@ async fn dispatch(
         } => {
             handler::handle_logs(container_id, follow, state, deps, tx).await;
         }
-        DaemonRequest::SendInput { .. } | DaemonRequest::ResizePty { .. } => {
-            // PTY stdin/resize not yet implemented — stub responds with an error.
-            if tx
-                .send(DaemonResponse::Error {
-                    message: "SendInput/ResizePty not yet implemented".to_string(),
-                })
-                .await
-                .is_err()
-            {
-                warn!(
-                    "dispatch: client disconnected before SendInput/ResizePty error could be sent"
-                );
-            }
+        DaemonRequest::SendInput { session_id, data } => {
+            let deps = Arc::clone(&deps);
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                handle_send_input(session_id, data, deps, tx).await;
+            });
+        }
+        DaemonRequest::ResizePty {
+            session_id,
+            cols,
+            rows,
+        } => {
+            let deps = Arc::clone(&deps);
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                handle_resize_pty(session_id, cols, rows, deps, tx).await;
+            });
         }
     }
 }
@@ -476,6 +480,9 @@ mod tests {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                crate::handler::PtySessionRegistry::default(),
+            )),
         });
         (state, deps)
     }

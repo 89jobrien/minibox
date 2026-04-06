@@ -3,7 +3,7 @@
 //! These tests demonstrate the testability benefits of hexagonal architecture.
 //! All tests run without real infrastructure (no Docker Hub, cgroups, or Linux).
 
-use daemonbox::handler::{self, HandlerDependencies};
+use daemonbox::handler::{self, handle_resize_pty, handle_send_input, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::domain::NetworkMode;
@@ -96,6 +96,9 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     })
 }
 
@@ -188,6 +191,9 @@ async fn test_handle_pull_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -236,6 +242,9 @@ async fn test_handle_run_with_cached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -338,6 +347,9 @@ async fn test_handle_run_filesystem_setup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -392,6 +404,9 @@ async fn test_handle_run_resource_limiter_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -446,6 +461,9 @@ async fn test_handle_run_runtime_spawn_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -707,6 +725,9 @@ fn create_test_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     })
 }
 
@@ -1071,6 +1092,9 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1221,6 +1245,9 @@ async fn test_handle_run_empty_image_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1334,6 +1361,9 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1473,6 +1503,9 @@ async fn test_handle_run_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1602,6 +1635,9 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1664,6 +1700,9 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1726,6 +1765,9 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1781,6 +1823,9 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2052,6 +2097,9 @@ async fn test_handle_remove_failed_container_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2116,6 +2164,9 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2342,6 +2393,9 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2415,6 +2469,9 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2481,6 +2538,9 @@ async fn test_run_empty_image_no_layers() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2543,6 +2603,9 @@ async fn test_pull_registry_failure_with_tag() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2676,6 +2739,9 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3030,6 +3096,9 @@ fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<Han
         image_gc: Arc::new(NoopImageGc),
         image_store,
         policy,
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     })
 }
 
@@ -3250,6 +3319,9 @@ async fn test_handle_run_image_pull_failure() {
         image_gc: Arc::new(NoopImageGc),
         image_store,
         policy: ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3297,6 +3369,9 @@ async fn test_handle_run_empty_layers() {
         image_gc: Arc::new(NoopImageGc),
         image_store,
         policy: ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3344,6 +3419,9 @@ async fn test_handle_pull_nonexistent_image() {
         image_gc: Arc::new(NoopImageGc),
         image_store,
         policy: ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3481,4 +3559,49 @@ async fn test_handle_logs_reads_log_files() {
     assert!(log_lines.contains(&"line one".to_string()));
     assert!(log_lines.contains(&"line two".to_string()));
     assert!(log_lines.contains(&"err line".to_string()));
+}
+
+// ---------------------------------------------------------------------------
+// PtySessionRegistry — SendInput / ResizePty handler tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn send_input_unknown_session_returns_error() {
+    use base64::Engine as _;
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    let data = base64::engine::general_purpose::STANDARD.encode(b"hello");
+    handle_send_input(
+        minibox_core::domain::SessionId::from("no-such-session"),
+        data,
+        deps,
+        tx,
+    )
+    .await;
+    let resp = rx.recv().await.unwrap();
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for unknown session, got {resp:?}"
+    );
+}
+
+#[tokio::test]
+async fn resize_pty_unknown_session_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    handle_resize_pty(
+        minibox_core::domain::SessionId::from("no-such-session"),
+        80,
+        24,
+        deps,
+        tx,
+    )
+    .await;
+    let resp = rx.recv().await.unwrap();
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for unknown session, got {resp:?}"
+    );
 }
