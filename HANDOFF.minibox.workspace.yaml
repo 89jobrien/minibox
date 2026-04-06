@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-08
+updated: 2026-04-09
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -340,6 +340,27 @@ items:
     Hyper-V/WSL2 kernel TBD (#45). No external runtime (Docker, Colima, nerdctl, WSL).
   files: []
   extra: []
+- id: minibox-24
+  name: pty-stdio-piping
+  priority: P2
+  status: open
+  title: 'feat: PTY/stdio piping for interactive containers (#19)'
+  description: |
+    Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md
+    5 tasks: (1) protocol ResizePty+SendInput+tty-on-Run, (2) ExecConfig stdin_tx+resize_rx,
+    (3) NativeExecRuntime PTY branch (openpty+setsid+TIOCSCTTY), (4) handler PtySessionRegistry
+    + SendInput/ResizePty dispatch, (5) CLI -it flag + RawModeGuard + stdin relay + SIGWINCH.
+    No new crates — libc and nix already workspace deps.
+  files:
+  - crates/minibox-core/src/protocol.rs
+  - crates/minibox-core/src/domain.rs
+  - crates/mbx/src/adapters/exec.rs
+  - crates/daemonbox/src/handler.rs
+  - crates/daemonbox/src/server.rs
+  - crates/minibox-cli/src/terminal.rs
+  - crates/minibox-cli/src/commands/exec.rs
+  - crates/minibox-cli/src/commands/run.rs
+  extra: []
 - id: minibox-11
   doob_uuid: 09fd3b95-7a4b-4a85-be6b-ff65248f9f46
   name: auth-policy-gate
@@ -354,6 +375,13 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-09
+  summary: |
+    PTY/stdio piping plan written (minibox-24): 5-task plan covering protocol
+    (ResizePty+SendInput), ExecConfig channels, NativeExecRuntime openpty branch,
+    handler PtySessionRegistry, CLI -it raw-mode+stdin+SIGWINCH. Ready for
+    subagent-driven execution.
+  commits: []
 - date: 2026-04-08
   summary: |
     dashbox space-leader palette shipped: Space opens floating CommandPalette overlay,
