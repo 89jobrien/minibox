@@ -1767,6 +1767,8 @@ pub async fn handle_exec(
         env,
         working_dir: working_dir.map(std::path::PathBuf::from),
         tty,
+        stdin_tx: None, // wired in Task 4
+        resize_rx: None, // wired in Task 4
     };
 
     match exec_rt

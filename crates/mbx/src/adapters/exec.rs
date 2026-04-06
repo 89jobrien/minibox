@@ -238,9 +238,13 @@ mod tests {
             env: vec!["HOME=/root".to_string()],
             working_dir: None,
             tty: false,
+            stdin_tx: None,
+            resize_rx: None,
         };
         assert_eq!(cfg.cmd[0], "echo");
         assert_eq!(cfg.cmd[1], "hello");
         assert_eq!(cfg.env[0], "HOME=/root");
+        assert!(cfg.stdin_tx.is_none());
+        assert!(cfg.resize_rx.is_none());
     }
 }

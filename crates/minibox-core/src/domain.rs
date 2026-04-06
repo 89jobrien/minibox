@@ -763,12 +763,17 @@ impl AsRef<str> for ContainerId {
 // ---------------------------------------------------------------------------
 
 /// Configuration for running a command inside a running container.
-#[derive(Debug, Clone)]
+/// Not Clone — contains channel receivers.
+#[derive(Debug)]
 pub struct ExecConfig {
     pub cmd: Vec<String>,
     pub env: Vec<String>,
     pub working_dir: Option<std::path::PathBuf>,
     pub tty: bool,
+    /// Stdin bytes channel (handler → exec adapter). None = no stdin relay.
+    pub stdin_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
+    /// PTY resize events channel (handler → exec adapter). None = no resize.
+    pub resize_rx: Option<tokio::sync::mpsc::Receiver<(u16, u16)>>,
 }
 
 /// Handle representing a started exec instance.
