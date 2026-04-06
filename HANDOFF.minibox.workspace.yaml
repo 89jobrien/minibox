@@ -238,7 +238,7 @@ items:
   doob_uuid: 695fa6c0-58b9-452b-97e5-9805d73b3c7b
   name: pty-stdio-piping
   priority: P2
-  status: open
+  status: done
   title: 'feat: PTY/stdio piping for interactive containers (#19)'
   description: |
     PTY allocation inside container namespace. Binary framing protocol for multiplexed
@@ -251,6 +251,7 @@ items:
   - date: 2026-04-06
     type: note
     note: "captured in doob — todo id mkk1c2xb5q6xqcdrd58w"
+  completed: 2026-04-09
 - id: minibox-17
   doob_uuid: 39eb1bfa-8c6f-44b5-9d78-3ca6ec3e448c
   name: container-networking
@@ -379,7 +380,7 @@ items:
 - id: minibox-24
   name: pty-stdio-piping
   priority: P2
-  status: open
+  status: done
   title: 'feat: PTY/stdio piping for interactive containers (#19)'
   description: |
     Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md
@@ -400,6 +401,7 @@ items:
   - date: 2026-04-06
     type: note
     note: "captured in doob — todo id 9wg8qzrr5q1vfl9nrth6"
+  completed: 2026-04-09
 - id: minibox-11
   doob_uuid: 09fd3b95-7a4b-4a85-be6b-ff65248f9f46
   name: auth-policy-gate
@@ -414,6 +416,14 @@ items:
   extra: []
   completed: 2026-04-04
 log:
+- date: 2026-04-09
+  summary: |
+    PTY/stdio piping shipped (minibox-16 + minibox-24 done): feature/pty-stdio-piping
+    merged to main. ResizePty+SendInput protocol, ExecConfig channels, NativeExecRuntime
+    openpty branch, PtySessionRegistry in handler, CLI -it raw-mode+stdin+SIGWINCH.
+    Plan file committed.
+  commits:
+  - 89664da
 - date: 2026-04-09
   summary: |
     PTY/stdio piping plan written (minibox-24): 5-task plan covering protocol
