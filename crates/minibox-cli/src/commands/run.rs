@@ -25,7 +25,7 @@ use base64::Engine;
 use minibox_client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
-use std::io::Write;
+use std::io::{IsTerminal as _, Write};
 use std::path::PathBuf;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
@@ -112,6 +112,7 @@ pub async fn execute(
     volumes: Vec<String>,
     mount_specs: Vec<String>,
     name: Option<String>,
+    tty: bool,
     socket_path: &std::path::Path,
 ) -> Result<()> {
     let network_mode = match network.as_str() {
@@ -134,6 +135,8 @@ pub async fn execute(
         mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {:?}", m))?);
     }
 
+    let tty = tty && std::io::stdout().is_terminal();
+
     let request = DaemonRequest::Run {
         image,
         tag: Some(tag),
@@ -146,7 +149,7 @@ pub async fn execute(
         privileged,
         env: vec![],
         name,
-        tty: false,
+        tty,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -154,6 +157,9 @@ pub async fn execute(
         .call(request)
         .await
         .context("failed to call daemon")?;
+
+    #[cfg(unix)]
+    let mut raw_guard: Option<crate::terminal::RawModeGuard> = None;
 
     // Stream responses until ContainerStopped or an error.
     while let Some(response) = stream.next().await.context("stream error")? {
@@ -174,6 +180,8 @@ pub async fn execute(
                 }
             }
             DaemonResponse::ContainerStopped { exit_code } => {
+                #[cfg(unix)]
+                drop(raw_guard);
                 std::process::exit(exit_code);
             }
             DaemonResponse::ContainerCreated { id } => {
@@ -183,6 +191,19 @@ pub async fn execute(
                 // path the daemon closes the channel after this message, so
                 // the while-loop exits naturally.
                 println!("{id}");
+                #[cfg(unix)]
+                if tty {
+                    raw_guard =
+                        Some(crate::terminal::RawModeGuard::enter().context("raw mode enter")?);
+                    let (cols, rows) = crate::terminal::terminal_size();
+                    let _ = DaemonClient::with_socket(socket_path)
+                        .call(DaemonRequest::ResizePty {
+                            session_id: minibox_core::domain::SessionId::from(id),
+                            cols,
+                            rows,
+                        })
+                        .await;
+                }
             }
             DaemonResponse::Error { message } => {
                 eprintln!("error: {message}");
@@ -248,6 +269,7 @@ mod tests {
             vec![],
             vec![],
             None,
+            false,
             &socket_path,
         )
         .await;

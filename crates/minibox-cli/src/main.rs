@@ -20,6 +20,7 @@
 //! ```
 
 mod commands;
+pub(crate) mod terminal;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -93,6 +94,14 @@ enum Commands {
         /// Can be used instead of the ID in stop/rm commands.
         #[arg(long)]
         name: Option<String>,
+
+        /// Allocate a pseudo-TTY.
+        #[arg(long = "tty")]
+        tty: bool,
+
+        /// Keep stdin open (interactive mode).
+        #[arg(long = "interactive")]
+        interactive: bool,
     },
 
     /// List all containers
@@ -144,6 +153,14 @@ enum Commands {
         /// Command and arguments to run (everything after --)
         #[arg(last = true, required = true)]
         cmd: Vec<String>,
+
+        /// Allocate a pseudo-TTY.
+        #[arg(short = 't', long = "tty")]
+        tty: bool,
+
+        /// Keep stdin open (interactive mode).
+        #[arg(short = 'i', long = "interactive")]
+        interactive: bool,
     },
 
     /// Fetch or stream log output from a container.
@@ -220,6 +237,8 @@ async fn main() -> Result<()> {
             volumes,
             mounts,
             name,
+            tty,
+            interactive,
         } => {
             commands::run::execute(
                 image,
@@ -232,6 +251,7 @@ async fn main() -> Result<()> {
                 volumes,
                 mounts,
                 name,
+                tty || interactive,
                 socket_path,
             )
             .await
@@ -239,9 +259,12 @@ async fn main() -> Result<()> {
 
         Commands::Ps => commands::ps::execute(socket_path).await,
 
-        Commands::Exec { container_id, cmd } => {
-            commands::exec::execute(container_id, cmd, socket_path).await
-        }
+        Commands::Exec {
+            container_id,
+            cmd,
+            tty,
+            interactive,
+        } => commands::exec::execute(container_id, cmd, tty || interactive, socket_path).await,
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
@@ -385,7 +408,9 @@ mod tests {
         ]);
         assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
         match cli.unwrap().command {
-            Commands::Exec { container_id, cmd } => {
+            Commands::Exec {
+                container_id, cmd, ..
+            } => {
                 assert_eq!(container_id, "abc123");
                 assert_eq!(cmd, vec!["/bin/sh", "-c", "echo hi"]);
             }
