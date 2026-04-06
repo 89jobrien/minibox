@@ -101,6 +101,9 @@ pub enum DaemonRequest {
         /// commands in addition to its auto-generated ID.
         #[serde(default)]
         name: Option<String>,
+        /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
+        #[serde(default)]
+        tty: bool,
     },
 
     /// Stop a running container by ID.
@@ -158,6 +161,19 @@ pub enum DaemonRequest {
         working_dir: Option<String>,
         #[serde(default)]
         tty: bool,
+    },
+
+    /// Send raw bytes to a running exec or run session stdin (base64-encoded).
+    SendInput {
+        session_id: String,
+        data: String,
+    },
+
+    /// Notify the daemon the client terminal was resized.
+    ResizePty {
+        session_id: String,
+        cols: u16,
+        rows: u16,
     },
 
     /// Push a locally-stored image to a remote OCI registry.
@@ -444,6 +460,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -485,6 +503,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -686,6 +706,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -771,6 +793,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -797,6 +821,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -925,6 +951,8 @@ mod tests {
             mounts: vec![],
             privileged: false,
             env: vec![],
+            name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");

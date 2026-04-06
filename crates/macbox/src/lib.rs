@@ -196,6 +196,9 @@ pub async fn start() -> Result<()> {
         image_gc: Arc::clone(&image_gc),
         image_store: Arc::clone(&state.image_store),
         policy: daemonbox::handler::ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -381,6 +384,10 @@ async fn start_vz(
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: vz_image_gc,
         image_store: vz_image_store_ref,
+        policy: daemonbox::handler::ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────

@@ -28,14 +28,18 @@ use std::io::Write;
 pub async fn execute(
     container_id: String,
     cmd: Vec<String>,
+    tty: bool,
     socket_path: &std::path::Path,
 ) -> Result<()> {
+    use std::io::IsTerminal as _;
+    let tty = tty && std::io::stdout().is_terminal();
+
     let request = DaemonRequest::Exec {
         container_id,
         cmd,
         env: vec![],
         working_dir: None,
-        tty: false,
+        tty,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -44,10 +48,97 @@ pub async fn execute(
         .await
         .context("failed to call daemon")?;
 
+    #[cfg(unix)]
+    let _raw_guard = if tty {
+        Some(crate::terminal::RawModeGuard::enter().context("raw mode enter")?)
+    } else {
+        None
+    };
+
+    let sp = socket_path.to_path_buf();
+
     while let Some(response) = stream.next().await.context("stream error")? {
         match response {
-            DaemonResponse::ExecStarted { .. } => {
-                // Non-terminal: exec session established; output follows.
+            DaemonResponse::ExecStarted { exec_id } => {
+                if tty {
+                    // Stdin relay task.
+                    let sp2 = sp.clone();
+                    let sid = exec_id.clone();
+                    tokio::spawn(async move {
+                        use tokio::io::AsyncReadExt as _;
+                        let mut stdin = tokio::io::stdin();
+                        let mut buf = [0u8; 256];
+                        loop {
+                            match stdin.read(&mut buf).await {
+                                Ok(0) | Err(_) => break,
+                                Ok(n) => {
+                                    let data =
+                                        base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                                    let req = DaemonRequest::SendInput {
+                                        session_id: minibox_core::domain::SessionId::from(
+                                            sid.clone(),
+                                        ),
+                                        data,
+                                    };
+                                    let _ = DaemonClient::with_socket(&sp2).call(req).await;
+                                }
+                            }
+                        }
+                    });
+
+                    // Initial terminal size.
+                    #[cfg(unix)]
+                    {
+                        let (cols, rows) = crate::terminal::terminal_size();
+                        let _ = DaemonClient::with_socket(&sp)
+                            .call(DaemonRequest::ResizePty {
+                                session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
+                                cols,
+                                rows,
+                            })
+                            .await;
+                    }
+
+                    // SIGWINCH forwarding thread.
+                    #[cfg(unix)]
+                    {
+                        let sp3 = sp.clone();
+                        let sid2 = exec_id.clone();
+                        let rt_handle = tokio::runtime::Handle::current();
+                        std::thread::spawn(move || {
+                            use nix::sys::signal::{SigSet, Signal};
+                            let mut mask = SigSet::empty();
+                            mask.add(Signal::SIGWINCH);
+                            // SAFETY: sigprocmask blocks SIGWINCH for sigwait loop.
+                            unsafe {
+                                libc::sigprocmask(
+                                    libc::SIG_BLOCK,
+                                    mask.as_ref(),
+                                    std::ptr::null_mut(),
+                                );
+                            }
+                            let mut sig: libc::c_int = 0;
+                            loop {
+                                // SAFETY: sigwait blocks until a signal in mask arrives.
+                                if unsafe { libc::sigwait(mask.as_ref(), &mut sig) } != 0 {
+                                    break;
+                                }
+                                let (cols, rows) = crate::terminal::terminal_size();
+                                let sp4 = sp3.clone();
+                                let sid3 = sid2.clone();
+                                rt_handle.spawn(async move {
+                                    let _ = DaemonClient::with_socket(&sp4)
+                                        .call(DaemonRequest::ResizePty {
+                                            session_id: minibox_core::domain::SessionId::from(sid3),
+                                            cols,
+                                            rows,
+                                        })
+                                        .await;
+                                });
+                            }
+                        });
+                    }
+                }
             }
             DaemonResponse::ContainerOutput { stream, data } => {
                 let bytes = base64::engine::general_purpose::STANDARD
@@ -65,6 +156,8 @@ pub async fn execute(
                 }
             }
             DaemonResponse::ContainerStopped { exit_code } => {
+                #[cfg(unix)]
+                drop(_raw_guard);
                 std::process::exit(exit_code);
             }
             DaemonResponse::Error { message } => {
@@ -165,9 +258,11 @@ mod tests {
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        // tty=false: stdout is not a terminal in tests, so raw mode is never entered.
         let result = execute(
             "abc123".to_string(),
             vec!["/bin/sh".to_string()],
+            false,
             &socket_path,
         )
         .await;

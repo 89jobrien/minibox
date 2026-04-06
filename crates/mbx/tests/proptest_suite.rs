@@ -44,6 +44,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         privileged: false,
                         env: vec![],
                         name: None,
+                        tty: false,
                     }
                 }
             ),

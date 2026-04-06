@@ -63,6 +63,9 @@ fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies>
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     })
 }
 

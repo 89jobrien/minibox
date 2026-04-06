@@ -37,7 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::{BindMount, NetworkMode};
+use crate::domain::{BindMount, NetworkMode, SessionId};
 use serde::{Deserialize, Serialize};
 
 /// Serializable registry credentials for protocol transport.
@@ -105,6 +105,9 @@ pub enum DaemonRequest {
         /// if a container with the same name already exists the request fails.
         #[serde(default)]
         name: Option<String>,
+        /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
+        #[serde(default)]
+        tty: bool,
     },
 
     /// Stop a running container by ID.
@@ -167,6 +170,16 @@ pub enum DaemonRequest {
         /// If `true`, allocate a pseudo-TTY for the exec process.
         #[serde(default)]
         tty: bool,
+    },
+
+    /// Send raw bytes to a running exec or run session stdin (base64-encoded).
+    SendInput { session_id: SessionId, data: String },
+
+    /// Notify the daemon the client terminal was resized.
+    ResizePty {
+        session_id: SessionId,
+        cols: u16,
+        rows: u16,
     },
 
     /// Push a locally-stored image to a remote OCI registry.
@@ -484,6 +497,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -526,6 +540,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -726,6 +741,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -808,6 +824,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -835,6 +852,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -961,6 +979,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -1000,6 +1019,7 @@ mod tests {
             privileged: false,
             env: vec![],
             name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1031,6 +1051,7 @@ mod tests {
             privileged: true,
             env: vec![],
             name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1106,6 +1127,54 @@ mod tests {
                 assert!(!privileged);
             }
             _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn send_input_roundtrip() {
+        use base64::Engine as _;
+        let bytes = b"ls\n";
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let req = DaemonRequest::SendInput {
+            session_id: crate::domain::SessionId::from("sess1"),
+            data: data.clone(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"type\":\"SendInput\""), "{json}");
+        let back: DaemonRequest = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonRequest::SendInput { data: d, .. } => assert_eq!(d, data),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn resize_pty_roundtrip() {
+        let req = DaemonRequest::ResizePty {
+            session_id: crate::domain::SessionId::from("sess1"),
+            cols: 120,
+            rows: 40,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"type\":\"ResizePty\""), "{json}");
+        let back: DaemonRequest = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonRequest::ResizePty { cols, rows, .. } => {
+                assert_eq!(cols, 120);
+                assert_eq!(rows, 40);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn run_request_tty_defaults_false() {
+        // Old clients omitting `tty` must still deserialise cleanly.
+        let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run { tty, .. } => assert!(!tty),
+            _ => panic!("wrong variant"),
         }
     }
 }

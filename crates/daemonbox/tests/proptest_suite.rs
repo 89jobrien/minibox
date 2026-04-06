@@ -90,6 +90,9 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
     })
 }
 

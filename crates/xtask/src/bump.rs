@@ -2,7 +2,7 @@
 //!
 //! Usage: cargo xtask bump <patch|minor|major>
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::fs;
 use std::path::Path;
 
@@ -10,8 +10,9 @@ pub fn bump(root: &Path, level: &str) -> Result<()> {
     let manifest_path = root.join("Cargo.toml");
     let content = fs::read_to_string(&manifest_path)?;
 
-    let current = parse_workspace_version(&content)
-        .ok_or_else(|| anyhow::anyhow!("could not find [workspace.package] version in Cargo.toml"))?;
+    let current = parse_workspace_version(&content).ok_or_else(|| {
+        anyhow::anyhow!("could not find [workspace.package] version in Cargo.toml")
+    })?;
 
     let (major, minor, patch) = parse_semver(&current)?;
     let next = match level {

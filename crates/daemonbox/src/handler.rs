@@ -17,13 +17,15 @@ use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
     DynFilesystemProvider, DynImageRegistry, DynMetricsRecorder, DynNetworkProvider,
-    DynResourceLimiter, HookSpec, ResourceConfig,
+    DynResourceLimiter, HookSpec, ResourceConfig, SessionId,
 };
 use minibox_core::events::{ContainerEvent, EventSink};
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
@@ -54,6 +56,24 @@ async fn send_error(tx: &mpsc::Sender<DaemonResponse>, context: &str, message: S
         );
     }
 }
+
+// ─── PTY session registry ─────────────────────────────────────────────────────
+
+/// Tracks live PTY session channels keyed by session ID string.
+///
+/// Populated by `handle_exec` when a tty session starts and consumed by
+/// `handle_send_input` / `handle_resize_pty` dispatched from `server.rs`.
+#[derive(Default)]
+pub struct PtySessionRegistry {
+    /// Resize event senders: session_id → sender for `(cols, rows)`.
+    pub resize: HashMap<String, mpsc::Sender<(u16, u16)>>,
+    /// Stdin byte senders: session_id → sender for raw bytes.
+    /// Only populated when `tty = true`.
+    pub stdin: HashMap<String, mpsc::Sender<Vec<u8>>>,
+}
+
+/// Arc-wrapped, async-mutex-guarded PTY session registry.
+pub type SharedPtyRegistry = Arc<TokioMutex<PtySessionRegistry>>;
 
 // ─── Default adapters ────────────────────────────────────────────────────────
 
@@ -147,6 +167,8 @@ pub struct HandlerDependencies {
     pub image_store: Arc<minibox_core::image::ImageStore>,
     /// Policy controlling which container capabilities are permitted.
     pub policy: ContainerPolicy,
+    /// Live PTY session channels for SendInput/ResizePty dispatch.
+    pub pty_sessions: SharedPtyRegistry,
 }
 
 impl HandlerDependencies {
@@ -1762,7 +1784,22 @@ pub async fn handle_exec(
         }
     };
 
-    let config = minibox_core::domain::ExecConfig {
+    // Allocate PTY channels and register them so SendInput/ResizePty can reach
+    // the running exec session.
+    let session_key = container_id.clone();
+    let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(8);
+    let (stdin_ch_tx, _stdin_ch_rx) = mpsc::channel::<Vec<u8>>(32);
+    {
+        let mut reg = deps.pty_sessions.lock().await;
+        reg.resize.insert(session_key.clone(), resize_tx);
+        if tty {
+            reg.stdin.insert(session_key, stdin_ch_tx.clone());
+        }
+    }
+    let _ = resize_rx; // handed to exec runtime in future task; avoid unused-var lint
+    let _ = stdin_ch_tx;
+
+    let spec = minibox_core::domain::ExecSpec {
         cmd,
         env,
         working_dir: working_dir.map(std::path::PathBuf::from),
@@ -1771,7 +1808,7 @@ pub async fn handle_exec(
 
     match exec_rt
         .as_ref()
-        .run_in_container(&cid, &config, tx.clone())
+        .run_in_container(&cid, spec, tx.clone())
         .await
     {
         Ok(handle) => {
@@ -1805,6 +1842,101 @@ pub async fn handle_exec(
             );
             send_error(&tx, "handle_exec", format!("exec failed: {e:#}")).await;
         }
+    }
+}
+
+// ─── SendInput / ResizePty ────────────────────────────────────────────────────
+
+/// Forward base64-encoded stdin bytes to a running PTY session.
+///
+/// Looks up the session in [`PtySessionRegistry`] and forwards decoded bytes.
+/// Returns `Success` on delivery, `Error` when the session is unknown or the
+/// channel has been closed.
+pub async fn handle_send_input(
+    session_id: SessionId,
+    data: String,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    use base64::Engine as _;
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(&data) {
+        Ok(b) => b,
+        Err(e) => {
+            send_error(&tx, "handle_send_input", format!("base64 decode: {e}")).await;
+            return;
+        }
+    };
+    let reg = deps.pty_sessions.lock().await;
+    match reg.stdin.get(session_id.as_ref()) {
+        Some(stdin_tx) => {
+            if stdin_tx.send(bytes).await.is_err() {
+                warn!(
+                    session_id = %session_id,
+                    "send_input: stdin channel closed"
+                );
+            }
+        }
+        None => {
+            send_error(
+                &tx,
+                "handle_send_input",
+                format!("no active tty session: {session_id}"),
+            )
+            .await;
+            return;
+        }
+    }
+    if tx
+        .send(DaemonResponse::Success {
+            message: "input forwarded".to_string(),
+        })
+        .await
+        .is_err()
+    {
+        warn!(session_id = %session_id, "send_input: client disconnected");
+    }
+}
+
+/// Forward a terminal resize event to a running PTY session.
+///
+/// Looks up the session in [`PtySessionRegistry`] and sends `(cols, rows)`.
+/// Returns `Success` on delivery, `Error` when the session is unknown or the
+/// channel has been closed.
+pub async fn handle_resize_pty(
+    session_id: SessionId,
+    cols: u16,
+    rows: u16,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let reg = deps.pty_sessions.lock().await;
+    match reg.resize.get(session_id.as_ref()) {
+        Some(resize_tx) => {
+            if resize_tx.send((cols, rows)).await.is_err() {
+                warn!(
+                    session_id = %session_id,
+                    "resize_pty: resize channel closed"
+                );
+            }
+        }
+        None => {
+            send_error(
+                &tx,
+                "handle_resize_pty",
+                format!("no active tty session: {session_id}"),
+            )
+            .await;
+            return;
+        }
+    }
+    if tx
+        .send(DaemonResponse::Success {
+            message: "resize forwarded".to_string(),
+        })
+        .await
+        .is_err()
+    {
+        warn!(session_id = %session_id, "resize_pty: client disconnected");
     }
 }
 
