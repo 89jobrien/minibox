@@ -37,7 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::{BindMount, NetworkMode};
+use crate::domain::{BindMount, NetworkMode, SessionId};
 use serde::{Deserialize, Serialize};
 
 /// Serializable registry credentials for protocol transport.
@@ -173,14 +173,11 @@ pub enum DaemonRequest {
     },
 
     /// Send raw bytes to a running exec or run session stdin (base64-encoded).
-    SendInput {
-        session_id: String,
-        data: String,
-    },
+    SendInput { session_id: SessionId, data: String },
 
     /// Notify the daemon the client terminal was resized.
     ResizePty {
-        session_id: String,
+        session_id: SessionId,
         cols: u16,
         rows: u16,
     },
@@ -1139,7 +1136,7 @@ mod tests {
         let bytes = b"ls\n";
         let data = base64::engine::general_purpose::STANDARD.encode(bytes);
         let req = DaemonRequest::SendInput {
-            session_id: "sess1".to_string(),
+            session_id: crate::domain::SessionId::from("sess1"),
             data: data.clone(),
         };
         let json = serde_json::to_string(&req).unwrap();
@@ -1154,7 +1151,7 @@ mod tests {
     #[test]
     fn resize_pty_roundtrip() {
         let req = DaemonRequest::ResizePty {
-            session_id: "sess1".to_string(),
+            session_id: crate::domain::SessionId::from("sess1"),
             cols: 120,
             rows: 40,
         };

@@ -759,21 +759,68 @@ impl AsRef<str> for ContainerId {
 }
 
 // ---------------------------------------------------------------------------
+// Session ID — PTY / interactive exec sessions
+// ---------------------------------------------------------------------------
+
+/// Opaque identifier for a live PTY or interactive exec session.
+///
+/// Parallel to [`ContainerId`] but scoped to exec sessions rather than
+/// container lifecycle. A session is created when `Exec` or `Run` is invoked
+/// with `tty: true` and destroyed when the process exits.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct SessionId(String);
+
+impl SessionId {
+    /// Create a new session ID from a string.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// Get the ID as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for SessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for SessionId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for SessionId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for SessionId {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Exec Runtime Port
 // ---------------------------------------------------------------------------
 
-/// Configuration for running a command inside a running container.
-/// Not Clone — contains channel receivers.
-#[derive(Debug)]
-pub struct ExecConfig {
+/// Pure specification for running a command inside a container.
+///
+/// This is a domain value type — no channel fields, no tokio types.
+/// Channel wiring (stdin relay, PTY resize) belongs in the infrastructure
+/// adapter layer (`mbx::adapters::exec`).
+#[derive(Debug, Clone)]
+pub struct ExecSpec {
     pub cmd: Vec<String>,
     pub env: Vec<String>,
     pub working_dir: Option<std::path::PathBuf>,
     pub tty: bool,
-    /// Stdin bytes channel (handler → exec adapter). None = no stdin relay.
-    pub stdin_tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
-    /// PTY resize events channel (handler → exec adapter). None = no resize.
-    pub resize_rx: Option<tokio::sync::mpsc::Receiver<(u16, u16)>>,
 }
 
 /// Handle representing a started exec instance.
@@ -788,7 +835,7 @@ pub trait ExecRuntime: AsAny + Send + Sync {
     async fn run_in_container(
         &self,
         container_id: &ContainerId,
-        config: &ExecConfig,
+        spec: ExecSpec,
         tx: tokio::sync::mpsc::Sender<crate::protocol::DaemonResponse>,
     ) -> anyhow::Result<ExecHandle>;
 }
@@ -1128,6 +1175,25 @@ mod tests {
     }
 
     // --- ImageLoader tests ---
+
+    // --- ExecSpec purity test ---
+
+    /// Verify that ExecSpec is Clone and contains no channel fields.
+    /// This encodes the architecture contract: ExecSpec is a pure domain
+    /// value type that must not depend on tokio infrastructure.
+    #[test]
+    fn exec_spec_is_pure_domain() {
+        let spec = crate::domain::ExecSpec {
+            cmd: vec!["echo".to_string()],
+            env: vec![],
+            working_dir: None,
+            tty: false,
+        };
+        // Must be Clone — pure domain types are always Clone
+        let cloned = spec.clone();
+        assert_eq!(cloned.cmd, vec!["echo".to_string()]);
+        assert!(!cloned.tty);
+    }
 
     #[cfg(test)]
     mod image_loader_tests {
