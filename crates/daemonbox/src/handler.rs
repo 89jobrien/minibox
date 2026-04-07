@@ -72,6 +72,17 @@ pub struct PtySessionRegistry {
     pub stdin: HashMap<String, mpsc::Sender<Vec<u8>>>,
 }
 
+impl PtySessionRegistry {
+    /// Remove all channels associated with `session_id`.
+    ///
+    /// Called when an exec session ends (on `ContainerStopped` or error) to
+    /// prevent unbounded registry growth and avoid stale-sender warnings.
+    pub fn cleanup(&mut self, session_id: &str) {
+        self.resize.remove(session_id);
+        self.stdin.remove(session_id);
+    }
+}
+
 /// Arc-wrapped, async-mutex-guarded PTY session registry.
 pub type SharedPtyRegistry = Arc<TokioMutex<PtySessionRegistry>>;
 
@@ -1789,12 +1800,13 @@ pub async fn handle_exec(
     let session_key = container_id.clone();
     let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(8);
     let (stdin_ch_tx, _stdin_ch_rx) = mpsc::channel::<Vec<u8>>(32);
-    {
+    if tty {
+        // Only register PTY channels for tty sessions; non-tty execs have no
+        // use for resize or stdin channels. Registered entries are removed when
+        // the session ends (see cleanup call below).
         let mut reg = deps.pty_sessions.lock().await;
         reg.resize.insert(session_key.clone(), resize_tx);
-        if tty {
-            reg.stdin.insert(session_key, stdin_ch_tx.clone());
-        }
+        reg.stdin.insert(session_key.clone(), stdin_ch_tx.clone());
     }
     let _ = resize_rx; // handed to exec runtime in future task; avoid unused-var lint
     let _ = stdin_ch_tx;
@@ -1829,6 +1841,9 @@ pub async fn handle_exec(
             let _ = tx
                 .send(DaemonResponse::ExecStarted { exec_id: handle.id })
                 .await;
+            // Session ends when run_in_container's output stream closes; clean up
+            // PTY channels so the registry does not grow unboundedly.
+            deps.pty_sessions.lock().await.cleanup(&session_key);
         }
         Err(e) => {
             deps.metrics.increment_counter(
@@ -1840,6 +1855,7 @@ pub async fn handle_exec(
                 start.elapsed().as_secs_f64(),
                 &[("op", "exec"), ("adapter", "daemon")],
             );
+            deps.pty_sessions.lock().await.cleanup(&session_key);
             send_error(&tx, "handle_exec", format!("exec failed: {e:#}")).await;
         }
     }

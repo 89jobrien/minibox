@@ -16,7 +16,7 @@
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
-use minibox_client::DaemonClient;
+use minibox_client::{DaemonClient, DaemonWriter};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 
@@ -61,11 +61,14 @@ pub async fn execute(
         match response {
             DaemonResponse::ExecStarted { exec_id } => {
                 if tty {
-                    // Stdin relay task.
+                    // Stdin relay task — batches reads and sends one SendInput per
+                    // read() call via DaemonWriter (fire-and-forget, no per-call
+                    // response needed), avoiding the per-keypress connection cost.
                     let sp2 = sp.clone();
                     let sid = exec_id.clone();
                     tokio::spawn(async move {
                         use tokio::io::AsyncReadExt as _;
+                        let writer = DaemonWriter::with_socket(&sp2);
                         let mut stdin = tokio::io::stdin();
                         let mut buf = [0u8; 256];
                         loop {
@@ -80,7 +83,7 @@ pub async fn execute(
                                         ),
                                         data,
                                     };
-                                    let _ = DaemonClient::with_socket(&sp2).call(req).await;
+                                    let _ = writer.send(req).await;
                                 }
                             }
                         }
@@ -90,8 +93,8 @@ pub async fn execute(
                     #[cfg(unix)]
                     {
                         let (cols, rows) = crate::terminal::terminal_size();
-                        let _ = DaemonClient::with_socket(&sp)
-                            .call(DaemonRequest::ResizePty {
+                        let _ = DaemonWriter::with_socket(&sp)
+                            .send(DaemonRequest::ResizePty {
                                 session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
                                 cols,
                                 rows,
@@ -99,44 +102,37 @@ pub async fn execute(
                             .await;
                     }
 
-                    // SIGWINCH forwarding thread.
+                    // SIGWINCH forwarding — uses tokio's process-wide signal stream
+                    // so the signal is reliably received regardless of which Tokio
+                    // worker thread the OS delivers it to.  Per-thread sigprocmask
+                    // is not portable under a multi-threaded runtime.
                     #[cfg(unix)]
                     {
+                        use tokio::signal::unix::{SignalKind, signal};
                         let sp3 = sp.clone();
                         let sid2 = exec_id.clone();
-                        let rt_handle = tokio::runtime::Handle::current();
-                        std::thread::spawn(move || {
-                            use nix::sys::signal::{SigSet, Signal};
-                            let mut mask = SigSet::empty();
-                            mask.add(Signal::SIGWINCH);
-                            // SAFETY: sigprocmask blocks SIGWINCH for sigwait loop.
-                            unsafe {
-                                libc::sigprocmask(
-                                    libc::SIG_BLOCK,
-                                    mask.as_ref(),
-                                    std::ptr::null_mut(),
-                                );
-                            }
-                            let mut sig: libc::c_int = 0;
-                            loop {
-                                // SAFETY: sigwait blocks until a signal in mask arrives.
-                                if unsafe { libc::sigwait(mask.as_ref(), &mut sig) } != 0 {
-                                    break;
-                                }
-                                let (cols, rows) = crate::terminal::terminal_size();
-                                let sp4 = sp3.clone();
-                                let sid3 = sid2.clone();
-                                rt_handle.spawn(async move {
-                                    let _ = DaemonClient::with_socket(&sp4)
-                                        .call(DaemonRequest::ResizePty {
-                                            session_id: minibox_core::domain::SessionId::from(sid3),
-                                            cols,
-                                            rows,
-                                        })
-                                        .await;
+                        match signal(SignalKind::window_change()) {
+                            Ok(mut sigwinch) => {
+                                tokio::spawn(async move {
+                                    let writer = DaemonWriter::with_socket(&sp3);
+                                    while sigwinch.recv().await.is_some() {
+                                        let (cols, rows) = crate::terminal::terminal_size();
+                                        let _ = writer
+                                            .send(DaemonRequest::ResizePty {
+                                                session_id: minibox_core::domain::SessionId::from(
+                                                    sid2.clone(),
+                                                ),
+                                                cols,
+                                                rows,
+                                            })
+                                            .await;
+                                    }
                                 });
                             }
-                        });
+                            Err(e) => {
+                                eprintln!("exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}");
+                            }
+                        }
                     }
                 }
             }

@@ -27,7 +27,7 @@ pub mod error;
 pub mod socket;
 
 pub use error::{ClientError, Result};
-pub use socket::{DaemonClient, DaemonResponseStream};
+pub use socket::{DaemonClient, DaemonResponseStream, DaemonWriter};
 
 use std::path::PathBuf;
 
