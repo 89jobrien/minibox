@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-09
+updated: 2026-04-07
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -415,7 +415,45 @@ items:
   - crates/daemonbox/src/server.rs
   extra: []
   completed: 2026-04-04
+- id: minibox-25
+  name: ci-locked-build-gate
+  priority: P2
+  status: open
+  title: 'fix(ci): add cargo build --locked gate on PRs touching Cargo.lock/Cargo.toml (#55)'
+  description: |
+    No CI step currently verifies that the committed Cargo.lock is consistent with a
+    clean build. Add `cargo build --locked` to ci.yml so any lockfile drift or missing
+    manifest change fails the pipeline before merge. Council issue #55.
+  files:
+  - .github/workflows/ci.yml
+  extra: []
+- id: minibox-26
+  name: fork-after-runtime
+  priority: P2
+  status: open
+  title: 'bug(exec): fork() inside active Tokio runtime — POSIX undefined behaviour (#60)'
+  description: |
+    libc::fork() is called from spawn_blocking while background Tokio threads are live.
+    Any thread holding the allocator/Tokio/tracing mutex at fork time will deadlock the
+    child. Risk is load-dependent and non-deterministic — safe in single-developer use,
+    hazardous before any multi-user or concurrent-exec deployment.
+    Options: (A) minibox-pty helper binary via Command::new (preferred), (B) pre-Tokio
+    supervisor thread. No urgency until concurrent exec is needed.
+  files:
+  - crates/mbx/src/adapters/exec.rs
+  extra:
+  - date: 2026-04-07
+    type: note
+    note: "GitHub issue #60 open. Low urgency — latent, not triggered in current single-user use."
 log:
+- date: 2026-04-07
+  summary: |
+    devkit council analysis — fixed PTY bugs #57 #58 #59 (stdin fd exhaustion, registry
+    leak, SIGWINCH sigprocmask). Added minibox-25 (ci --locked gate) and minibox-26
+    (fork-after-runtime). Closed stale council issues #51 #52 #53 #54 #56 and shipped
+    issues #16 #17 #18 #19.
+  commits:
+  - 2ac4ee6
 - date: 2026-04-06
   summary: devkit council sweep — 6 issues filed (#51-#56). Critical: Cargo.lock version
     skip 0.2.5→0.4.0 unverifiable, libc/nix added to minibox-cli with no platform guards.
