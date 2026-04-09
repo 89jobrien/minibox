@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    AsAny, BuildConfig, BuildContext, BuildProgress, CommitConfig, ContainerId,
-    DynContainerCommitter, DynImageBuilder, ImageBuilder, ImageMetadata,
+    BuildConfig, BuildContext, BuildProgress, CommitConfig, ContainerId, DynContainerCommitter,
+    DynImageBuilder, ImageBuilder, ImageMetadata,
 };
 use minibox_core::image::ImageStore;
 use std::path::PathBuf;

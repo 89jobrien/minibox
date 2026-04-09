@@ -89,7 +89,7 @@ impl BridgeNetwork {
         let subnet: IpNet = DEFAULT_SUBNET.parse().context("parse default subnet")?;
         Ok(Self {
             bridge_name: DEFAULT_BRIDGE.to_string(),
-            subnet: subnet.clone(),
+            subnet,
             ip_alloc: Arc::new(Mutex::new(IpAllocator::new(subnet))),
         })
     }
@@ -414,6 +414,7 @@ impl NetworkProvider for BridgeNetwork {
         let ctx_path = Self::net_context_path(container_id);
 
         // Best-effort: read context to find veth name, delete it, and remove port mappings.
+        #[allow(clippy::collapsible_if)]
         if let Ok(ctx_raw) = std::fs::read_to_string(&ctx_path) {
             if let Ok(ctx) = serde_json::from_str::<serde_json::Value>(&ctx_raw) {
                 if let Some(veth) = ctx["veth"].as_str() {
@@ -427,10 +428,11 @@ impl NetworkProvider for BridgeNetwork {
                     }
                 }
                 // Release allocated IP back to the pool.
-                if let Some(ip_str) = ctx["container_ip"].as_str() {
-                    if let Ok(ip) = ip_str.parse::<IpAddr>() {
-                        self.ip_alloc.lock().unwrap().release(ip);
-                    }
+                if let Some(ip_str) = ctx["container_ip"]
+                    .as_str()
+                    .and_then(|s| s.parse::<IpAddr>().ok())
+                {
+                    self.ip_alloc.lock().unwrap().release(ip_str);
                 }
                 // Remove port mapping rules.
                 if let Some(mappings) = ctx["port_mappings"].as_array() {
@@ -462,14 +464,14 @@ impl NetworkProvider for BridgeNetwork {
             }
         }
 
-        if let Err(e) = std::fs::remove_file(&ctx_path) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                tracing::warn!(
-                    container_id = container_id,
-                    error = %e,
-                    "bridge: could not remove net context file"
-                );
-            }
+        if let Err(e) = std::fs::remove_file(&ctx_path)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!(
+                container_id = container_id,
+                error = %e,
+                "bridge: could not remove net context file"
+            );
         }
 
         tracing::info!(
