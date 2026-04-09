@@ -233,7 +233,6 @@ fn build_native_handler_dependencies(
     );
     let image_builder = mbx::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
-        Arc::clone(&commit_adapter),
         data_dir.to_path_buf(),
     );
     let image_pusher = mbx::adapters::push::oci_push_adapter(

@@ -29,6 +29,7 @@ use mbx::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
+use minibox_core::domain::{DynImageLoader, DynImageRegistry};
 use minibox_core::image::ImageStore;
 use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
 use minibox_core::image::lease::DiskLeaseService;
@@ -44,6 +45,65 @@ pub enum MacboxError {
     /// start Colima before running miniboxd on macOS.
     #[error("no container backend — install Colima (`brew install colima && colima start`)")]
     NoBackendAvailable,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_colima_handler_dependencies(
+    state: Arc<DaemonState>,
+    data_dir: PathBuf,
+    containers_dir: PathBuf,
+    run_containers_dir: PathBuf,
+    image_gc: Arc<dyn ImageGarbageCollector>,
+    executor: LimaExecutor,
+    spawner: LimaSpawner,
+) -> Result<Arc<HandlerDependencies>> {
+    let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
+    let registry_port: DynImageRegistry = registry.clone();
+    let image_loader: DynImageLoader = registry.clone();
+    let commit_adapter = mbx::adapters::commit::overlay_commit_adapter(
+        Arc::clone(&state.image_store),
+        Arc::clone(&state) as mbx::daemonbox_state::StateHandle,
+    );
+    let image_builder = mbx::adapters::builder::minibox_image_builder(
+        Arc::clone(&state.image_store),
+        data_dir.clone(),
+    );
+    let image_pusher = mbx::adapters::colima_image_pusher(
+        Arc::clone(&state.image_store),
+        Arc::clone(&image_loader),
+        data_dir.join("exports"),
+        executor.clone(),
+    );
+
+    Ok(Arc::new(HandlerDependencies {
+        registry: registry_port,
+        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
+        ghcr_registry: registry,
+        filesystem: Arc::new(ColimaFilesystem::new()),
+        resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
+        runtime: Arc::new(
+            ColimaRuntime::new()
+                .with_executor(executor.clone())
+                .with_spawner(spawner),
+        ),
+        network_provider: Arc::new(NoopNetwork::new()),
+        containers_base: containers_dir,
+        run_containers_base: run_containers_dir,
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader,
+        exec_runtime: None,
+        image_pusher: Some(image_pusher),
+        commit_adapter: Some(commit_adapter),
+        image_builder: Some(image_builder),
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc,
+        image_store: Arc::clone(&state.image_store),
+        policy: daemonbox::handler::ContainerPolicy::default(),
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
+    }))
 }
 
 /// Newtype wrapper around [`tokio::net::UnixListener`] that implements
@@ -170,36 +230,15 @@ pub async fn start() -> Result<()> {
             .map_err(|e| anyhow::anyhow!("colima ssh spawn failed: {e}"))
     });
 
-    let colima_image_loader = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
-    let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
-        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
-        ghcr_registry: Arc::new(ColimaRegistry::new().with_executor(executor.clone())),
-        filesystem: Arc::new(ColimaFilesystem::new()),
-        resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
-        runtime: Arc::new(
-            ColimaRuntime::new()
-                .with_executor(executor)
-                .with_spawner(spawner),
-        ),
-        network_provider: Arc::new(NoopNetwork::new()),
-        containers_base: containers_dir,
-        run_containers_base: run_containers_dir,
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: colima_image_loader as minibox_core::domain::DynImageLoader,
-        exec_runtime: None,
-        image_pusher: None,
-        commit_adapter: None,
-        image_builder: None,
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc: Arc::clone(&image_gc),
-        image_store: Arc::clone(&state.image_store),
-        policy: daemonbox::handler::ContainerPolicy::default(),
-        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
-        )),
-    });
+    let deps = build_colima_handler_dependencies(
+        Arc::clone(&state),
+        data_dir.clone(),
+        containers_dir,
+        run_containers_dir,
+        Arc::clone(&image_gc),
+        executor,
+        spawner,
+    )?;
 
     // ── Socket ───────────────────────────────────────────────────────────
     if socket_path.exists() {
@@ -434,6 +473,59 @@ async fn start_vz(
     }
     info!("miniboxd (macOS/vz) stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minibox_core::image::gc::ImageGc;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn colima_dependencies_wire_local_commit_build_and_push_adapters() {
+        let tmp = TempDir::new().unwrap();
+        let data_dir = tmp.path().join("data");
+        let containers_dir = data_dir.join("containers");
+        let run_containers_dir = tmp.path().join("run").join("containers");
+        std::fs::create_dir_all(&containers_dir).unwrap();
+        std::fs::create_dir_all(&run_containers_dir).unwrap();
+
+        let image_store = ImageStore::new(data_dir.join("images")).expect("image store");
+        let state = Arc::new(DaemonState::new(image_store, &data_dir));
+        let lease_service = Arc::new(
+            DiskLeaseService::new(data_dir.join("leases.json"))
+                .await
+                .expect("lease service"),
+        );
+        let image_gc: Arc<dyn ImageGarbageCollector> =
+            Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
+        let executor: LimaExecutor = Arc::new(|_args: &[&str]| Ok(String::new()));
+        let spawner: LimaSpawner = Arc::new(|_args: &[&str]| {
+            Err(anyhow::anyhow!("spawner should not run in structural test"))
+        });
+
+        let deps = build_colima_handler_dependencies(
+            Arc::clone(&state),
+            data_dir,
+            containers_dir,
+            run_containers_dir,
+            image_gc,
+            executor,
+            spawner,
+        )
+        .expect("colima deps");
+
+        assert!(
+            deps.commit_adapter.is_some(),
+            "commit adapter should be wired"
+        );
+        assert!(
+            deps.image_builder.is_some(),
+            "image builder should be wired"
+        );
+        assert!(deps.image_pusher.is_some(), "image pusher should be wired");
+    }
 }
 
 #[cfg(all(test, feature = "vz"))]

@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    BuildConfig, BuildContext, BuildProgress, CommitConfig, ContainerId, DynContainerCommitter,
-    DynImageBuilder, ImageBuilder, ImageMetadata,
+    BuildConfig, BuildContext, BuildProgress, CommitConfig, DynImageBuilder, ImageBuilder,
+    ImageMetadata,
 };
 use minibox_core::image::ImageStore;
 use std::path::PathBuf;
@@ -18,24 +18,18 @@ use tokio::sync::mpsc;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::adapters::commit::commit_upper_dir_to_image;
 use crate::image::dockerfile::{Instruction, ShellOrExec, parse};
 
 pub struct MiniboxImageBuilder {
-    #[allow(dead_code)]
     image_store: Arc<ImageStore>,
-    committer: DynContainerCommitter,
     data_dir: PathBuf,
 }
 
 impl MiniboxImageBuilder {
-    pub fn new(
-        image_store: Arc<ImageStore>,
-        committer: DynContainerCommitter,
-        data_dir: PathBuf,
-    ) -> Self {
+    pub fn new(image_store: Arc<ImageStore>, data_dir: PathBuf) -> Self {
         Self {
             image_store,
-            committer,
             data_dir,
         }
     }
@@ -132,9 +126,6 @@ impl ImageBuilder for MiniboxImageBuilder {
             .await
             .context("create build upper dir")?;
 
-        let cid = ContainerId::new(build_id.clone())
-            .with_context(|| format!("invalid build container id: {build_id}"))?;
-
         let commit_config = CommitConfig {
             author: None,
             message: Some(format!("built from {base_image}")),
@@ -142,23 +133,22 @@ impl ImageBuilder for MiniboxImageBuilder {
             cmd_override,
         };
 
-        let meta = self
-            .committer
-            .commit(&cid, &config.tag, &commit_config)
-            .await
-            .context("commit build result")?;
+        let image_store = Arc::clone(&self.image_store);
+        let target_tag = config.tag.clone();
+        let meta = tokio::task::spawn_blocking(move || {
+            commit_upper_dir_to_image(image_store, &upper_dir, &target_tag, &commit_config)
+        })
+        .await
+        .context("spawn_blocking build commit")?
+        .context("commit build result")?;
 
         info!(tag = %config.tag, "build: complete");
         Ok(meta)
     }
 }
 
-pub fn minibox_image_builder(
-    image_store: Arc<ImageStore>,
-    committer: DynContainerCommitter,
-    data_dir: PathBuf,
-) -> DynImageBuilder {
-    Arc::new(MiniboxImageBuilder::new(image_store, committer, data_dir))
+pub fn minibox_image_builder(image_store: Arc<ImageStore>, data_dir: PathBuf) -> DynImageBuilder {
+    Arc::new(MiniboxImageBuilder::new(image_store, data_dir))
 }
 
 #[cfg(test)]

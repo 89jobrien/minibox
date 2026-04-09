@@ -27,7 +27,7 @@ use crate::image::manifest::{
 use anyhow::Context;
 use bytes::Bytes;
 use futures::stream::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 use serde::Deserialize;
 use tracing::{Instrument, debug, info, instrument};
 
@@ -54,6 +54,13 @@ struct TokenResponse {
     token: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PushAuth {
+    None,
+    Basic { username: String, password: String },
+    Bearer(String),
+}
+
 // ---------------------------------------------------------------------------
 // RegistryClient
 // ---------------------------------------------------------------------------
@@ -65,6 +72,7 @@ struct TokenResponse {
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
     http: Client,
+    insecure_http: Client,
     auth_url: String,
     registry_base: String,
 }
@@ -84,8 +92,13 @@ impl RegistryClient {
             .min_tls_version(reqwest::tls::Version::TLS_1_2) // SECURITY: Minimum TLS 1.2
             .build()
             .map_err(RegistryError::Network)?;
+        let insecure_http = Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .build()
+            .map_err(RegistryError::Network)?;
         Ok(Self {
             http,
+            insecure_http,
             auth_url: AUTH_URL.to_owned(),
             registry_base: REGISTRY_BASE.to_owned(),
         })
@@ -101,6 +114,7 @@ impl RegistryClient {
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {
+            insecure_http: http.clone(),
             http,
             auth_url: auth_url.to_owned(),
             registry_base: registry_base.to_owned(),
@@ -475,17 +489,28 @@ impl RegistryClient {
     // Push support
     // -----------------------------------------------------------------------
 
-    /// Obtain a push-scoped token for `repo`.
+    /// Resolve the authentication mode for pushing to `registry_base`.
     ///
-    /// `username` / `password` are forwarded as HTTP Basic Auth when provided;
-    /// otherwise an anonymous token is requested (sufficient for public repos
-    /// that allow unauthenticated pushes, though rare in practice).
-    pub async fn get_push_token(
+    /// Docker Hub requires a bearer token from `auth.docker.io`, while local
+    /// anonymous registries can be used without auth. For non-Docker registries
+    /// with explicit credentials, reuse HTTP Basic Auth directly.
+    pub async fn resolve_push_auth(
         &self,
+        registry_base: &str,
         repo: &str,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<PushAuth> {
+        if registry_base != self.registry_base {
+            return Ok(match (username, password) {
+                (Some(username), Some(password)) => PushAuth::Basic {
+                    username: username.to_owned(),
+                    password: password.to_owned(),
+                },
+                _ => PushAuth::None,
+            });
+        }
+
         let url = format!(
             "{}?service=registry.docker.io&scope=repository:{repo}:push,pull",
             self.auth_url
@@ -519,7 +544,29 @@ impl RegistryClient {
             .map_err(RegistryError::Network)
             .with_context(|| "parsing push auth token response")?;
 
-        Ok(token_resp.token)
+        Ok(PushAuth::Bearer(token_resp.token))
+    }
+
+    fn with_push_auth(&self, req: RequestBuilder, auth: &PushAuth) -> RequestBuilder {
+        match auth {
+            PushAuth::None => req,
+            PushAuth::Basic { username, password } => req.basic_auth(username, Some(password)),
+            PushAuth::Bearer(token) => req.bearer_auth(token),
+        }
+    }
+
+    fn push_request(&self, method: reqwest::Method, url: &str, auth: &PushAuth) -> RequestBuilder {
+        let client = if url.starts_with("http://") {
+            &self.insecure_http
+        } else {
+            &self.http
+        };
+        self.with_push_auth(client.request(method, url), auth)
+    }
+
+    fn upload_url_with_digest(&self, upload_url: &str, digest: &str) -> String {
+        let separator = if upload_url.contains('?') { '&' } else { '?' };
+        format!("{upload_url}{separator}digest={digest}")
     }
 
     /// Check whether a blob already exists in the registry (HEAD request).
@@ -528,12 +575,10 @@ impl RegistryClient {
         registry_base: &str,
         repo: &str,
         digest: &str,
-        token: &str,
+        auth: &PushAuth,
     ) -> bool {
         let url = format!("{registry_base}/v2/{repo}/blobs/{digest}");
-        self.http
-            .head(&url)
-            .bearer_auth(token)
+        self.push_request(reqwest::Method::HEAD, &url, auth)
             .send()
             .await
             .map(|r| r.status().is_success())
@@ -545,13 +590,11 @@ impl RegistryClient {
         &self,
         registry_base: &str,
         repo: &str,
-        token: &str,
+        auth: &PushAuth,
     ) -> anyhow::Result<String> {
         let url = format!("{registry_base}/v2/{repo}/blobs/uploads/");
         let resp = self
-            .http
-            .post(&url)
-            .bearer_auth(token)
+            .push_request(reqwest::Method::POST, &url, auth)
             .send()
             .await
             .context("initiate blob upload")?;
@@ -570,13 +613,11 @@ impl RegistryClient {
         upload_url: &str,
         digest: &str,
         data: Bytes,
-        token: &str,
+        auth: &PushAuth,
     ) -> anyhow::Result<()> {
-        let url = format!("{upload_url}?digest={digest}");
+        let url = self.upload_url_with_digest(upload_url, digest);
         let resp = self
-            .http
-            .put(&url)
-            .bearer_auth(token)
+            .push_request(reqwest::Method::PUT, &url, auth)
             .header("Content-Type", "application/octet-stream")
             .body(data)
             .send()
@@ -600,14 +641,12 @@ impl RegistryClient {
         repo: &str,
         reference: &str,
         manifest: &crate::image::manifest::OciManifest,
-        token: &str,
+        auth: &PushAuth,
     ) -> anyhow::Result<String> {
         let url = format!("{registry_base}/v2/{repo}/manifests/{reference}");
         let body = serde_json::to_vec(manifest).context("serializing manifest")?;
         let resp = self
-            .http
-            .put(&url)
-            .bearer_auth(token)
+            .push_request(reqwest::Method::PUT, &url, auth)
             .header("Content-Type", "application/vnd.oci.image.manifest.v1+json")
             .body(body)
             .send()
@@ -689,6 +728,32 @@ mod tests {
         let client = RegistryClient::new().expect("RegistryClient::new() failed");
         let debug_str = format!("{client:?}");
         assert!(!debug_str.is_empty(), "Debug output should not be empty");
+    }
+
+    #[test]
+    fn upload_url_with_digest_appends_with_question_mark_when_no_query_exists() {
+        let client = RegistryClient::default();
+        let url = client.upload_url_with_digest(
+            "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id",
+            "sha256:abc",
+        );
+        assert_eq!(
+            url,
+            "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id?digest=sha256:abc"
+        );
+    }
+
+    #[test]
+    fn upload_url_with_digest_appends_with_ampersand_when_query_exists() {
+        let client = RegistryClient::default();
+        let url = client.upload_url_with_digest(
+            "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id?_state=token",
+            "sha256:abc",
+        );
+        assert_eq!(
+            url,
+            "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id?_state=token&digest=sha256:abc"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -797,6 +862,63 @@ mod tests {
 
             let result = test_client(&server).authenticate("library/alpine").await;
             assert!(result.is_err(), "should fail on invalid JSON token body");
+        }
+
+        #[tokio::test]
+        async fn resolve_push_auth_uses_bearer_for_docker_hub() {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .and(query_param("service", "registry.docker.io"))
+                .and(query_param("scope", "repository:library/alpine:push,pull"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "push_tok"})),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let auth = test_client(&server)
+                .resolve_push_auth(
+                    &format!("{}/v2", server.uri()),
+                    "library/alpine",
+                    None,
+                    None,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(auth, PushAuth::Bearer("push_tok".to_owned()));
+        }
+
+        #[tokio::test]
+        async fn resolve_push_auth_uses_none_for_non_docker_registry_without_credentials() {
+            let server = MockServer::start().await;
+
+            let auth = test_client(&server)
+                .resolve_push_auth("http://127.0.0.1:5001", "dogfood/mac-build", None, None)
+                .await
+                .unwrap();
+
+            assert_eq!(auth, PushAuth::None);
+        }
+
+        #[tokio::test]
+        async fn resolve_push_auth_uses_basic_for_non_docker_registry_with_credentials() {
+            let server = MockServer::start().await;
+
+            let auth = test_client(&server)
+                .resolve_push_auth("https://ghcr.io", "org/image", Some("joe"), Some("secret"))
+                .await
+                .unwrap();
+
+            assert_eq!(
+                auth,
+                PushAuth::Basic {
+                    username: "joe".to_owned(),
+                    password: "secret".to_owned(),
+                }
+            );
         }
 
         // ------------------------------------------------------------------

@@ -61,11 +61,12 @@ impl ImagePusher for OciPushAdapter {
         };
 
         let repo = image_ref.repository();
-        let registry_base = format!("https://{}", image_ref.registry_host());
+        let registry_host = image_ref.registry_host();
+        let registry_base = format!("{}://{}", registry_scheme(registry_host), registry_host);
 
-        let token = self
+        let auth = self
             .client
-            .get_push_token(&repo, username, password)
+            .resolve_push_auth(&registry_base, &repo, username, password)
             .await
             .with_context(|| format!("push auth for {repo}"))?;
 
@@ -92,10 +93,15 @@ impl ImagePusher for OciPushAdapter {
         for layer_desc in &manifest.layers {
             let digest_key = layer_desc.digest.replace(':', "_");
             let layer_dir = layers_dir.join(&digest_key);
+            let layer_tar = layers_dir.join(format!("{digest_key}.tar"));
 
-            // Re-tar the extracted layer directory.
-            let blob = retar_layer_dir(&layer_dir)
-                .with_context(|| format!("re-tar layer {}", layer_desc.digest))?;
+            let blob = if layer_tar.exists() {
+                std::fs::read(&layer_tar)
+                    .with_context(|| format!("read raw layer blob {}", layer_tar.display()))?
+            } else {
+                retar_layer_dir(&layer_dir)
+                    .with_context(|| format!("re-tar layer {}", layer_desc.digest))?
+            };
 
             let blob_size = blob.len() as u64;
             total_size += blob_size;
@@ -106,7 +112,7 @@ impl ImagePusher for OciPushAdapter {
             // Check if blob already exists in the registry.
             if self
                 .client
-                .blob_exists(&registry_base, &repo, &actual_digest, &token)
+                .blob_exists(&registry_base, &repo, &actual_digest, &auth)
                 .await
             {
                 info!(
@@ -128,12 +134,12 @@ impl ImagePusher for OciPushAdapter {
                 // Initiate and complete upload.
                 let upload_url = self
                     .client
-                    .initiate_blob_upload(&registry_base, &repo, &token)
+                    .initiate_blob_upload(&registry_base, &repo, &auth)
                     .await
                     .with_context(|| format!("initiate upload for {actual_digest}"))?;
 
                 self.client
-                    .upload_blob(&upload_url, &actual_digest, Bytes::from(blob), &token)
+                    .upload_blob(&upload_url, &actual_digest, Bytes::from(blob), &auth)
                     .await
                     .with_context(|| format!("upload blob {actual_digest}"))?;
 
@@ -161,7 +167,7 @@ impl ImagePusher for OciPushAdapter {
         // Push the manifest.
         let manifest_digest = self
             .client
-            .push_manifest(&registry_base, &repo, tag, &manifest, &token)
+            .push_manifest(&registry_base, &repo, tag, &manifest, &auth)
             .await
             .with_context(|| format!("push manifest for {repo}:{tag}"))?;
 
@@ -201,6 +207,14 @@ fn retar_layer_dir(dir: &std::path::Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn registry_scheme(registry_host: &str) -> &'static str {
+    match registry_host {
+        "localhost" | "127.0.0.1" => "http",
+        host if host.starts_with("localhost:") || host.starts_with("127.0.0.1:") => "http",
+        _ => "https",
+    }
+}
+
 /// Construct an [`OciPushAdapter`] as a [`DynImagePusher`].
 pub fn oci_push_adapter(client: RegistryClient, store: Arc<ImageStore>) -> DynImagePusher {
     Arc::new(OciPushAdapter::new(client, store))
@@ -217,5 +231,14 @@ mod tests {
         );
         let client = RegistryClient::new().unwrap();
         let _adapter = OciPushAdapter::new(client, store);
+    }
+
+    #[test]
+    fn registry_scheme_uses_http_for_localhost_targets() {
+        assert_eq!(registry_scheme("localhost"), "http");
+        assert_eq!(registry_scheme("localhost:5001"), "http");
+        assert_eq!(registry_scheme("127.0.0.1"), "http");
+        assert_eq!(registry_scheme("127.0.0.1:5001"), "http");
+        assert_eq!(registry_scheme("ghcr.io"), "https");
     }
 }

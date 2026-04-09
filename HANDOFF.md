@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-04-02
+**Last updated:** 2026-04-09 (EOD)
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -341,6 +341,44 @@ All open issues in execution order. Update status as issues close.
 ---
 
 ## Next up
+
+### In progress — commit/build/push conformance matrix (2026-04-09)
+
+Goal: extend the existing cross-platform conformance suite to verify
+`ContainerCommitter`, `ImageBuilder`, and `ImagePusher` across the two backends
+that currently share those ports: `linux-native` and `colima`.
+
+Execution order is now tracked in `doob` under project `minibox`:
+
+#### Phase 1 — shared test scaffolding
+
+| Priority | Task                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| 5        | Define the conformance boundary around commit/build/push for `linux-native` and `colima`.              |
+| 5        | Add a test-only backend descriptor with capability flags and adapter constructors.                       |
+| 5        | Add shared fixture helpers for minimal stored images, writable upper dirs, build contexts, and pushes.  |
+
+#### Phase 2 — backend-agnostic test bodies
+
+| Priority | Task                                                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 4        | Extract commit conformance tests: success, returned metadata, store artifacts, backend-consistent results.            |
+| 4        | Extract build conformance tests: minimal Dockerfile build, stored image result, metadata preservation, skip semantics. |
+| 4        | Extract push conformance tests: local test-registry push, reported digest, visible tag, transport hidden by port.     |
+| 4        | Add a serializable matrix result model: backend, capability, status (`pass`/`fail`/`skip`), optional message/path.   |
+
+#### Phase 3 — reporting, wiring, validation
+
+| Priority | Task                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------ |
+| 3        | Emit Markdown and JSON reports under `artifacts/conformance/`.                                        |
+| 3        | Wire the suite into the existing conformance entry point and `cargo xtask test-unit`.                 |
+| 2        | Validate on macOS Colima, then verify `linux-native` coverage on a real Linux host or in CI.         |
+
+Scope constraints:
+
+- Keep Linux-only namespace/cgroup/bridge/root tests separate as kernel-truth tests.
+- Do not add `vz` to the matrix until its commit/build/push path exists.
 
 ### DONE (2026-04-01) — test-linux dogfood infrastructure
 

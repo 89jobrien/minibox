@@ -106,3 +106,4 @@ __pycache__/
 .firecrawl/
 .ctx/
 .ctx/HANDOVER.md
+.tmp-dogfood/

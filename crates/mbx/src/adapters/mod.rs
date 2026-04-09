@@ -74,15 +74,11 @@
 //! );
 //! ```
 
-// Platform-native adapters (Linux only)
-#[cfg(target_os = "linux")]
+// Cross-platform adapters that operate on shared domain/state contracts.
 pub mod builder;
-#[cfg(target_os = "linux")]
 pub use builder::MiniboxImageBuilder;
 
-#[cfg(target_os = "linux")]
 pub mod commit;
-#[cfg(target_os = "linux")]
 pub use commit::OverlayCommitAdapter;
 
 #[cfg(target_os = "linux")]
@@ -103,6 +99,7 @@ mod gke;
 
 // Cross-platform adapters
 mod colima;
+mod colima_push;
 mod docker_desktop;
 mod hcs;
 mod vf;
@@ -146,6 +143,7 @@ pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
 };
+pub use colima_push::{ColimaImagePusher, colima_image_pusher};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
 pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
