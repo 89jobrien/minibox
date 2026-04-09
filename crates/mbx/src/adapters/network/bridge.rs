@@ -510,7 +510,7 @@ impl NetworkProvider for BridgeNetwork {
     }
 }
 
-adapt!(BridgeNetwork);
+minibox_core::as_any!(BridgeNetwork);
 
 #[cfg(test)]
 mod tests {

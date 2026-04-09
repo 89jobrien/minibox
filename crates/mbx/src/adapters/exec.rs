@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use base64::Engine as _;
 use minibox_core::as_any;
-use minibox_core::domain::{AsAny, ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
+use minibox_core::domain::{ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
 use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
