@@ -112,7 +112,9 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
-use daemonbox::handler::HandlerDependencies;
+use daemonbox::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
+#[cfg(target_os = "linux")]
+use tokio::sync::Mutex as TokioMutex;
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
@@ -463,6 +465,11 @@ async fn main() -> Result<()> {
                     as Arc<dyn minibox_core::events::EventSource>,
                 image_gc: Arc::clone(&image_gc),
                 image_store: Arc::clone(&state.image_store),
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+                policy: ContainerPolicy::default(),
+                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
         AdapterSuite::Gke => {
@@ -493,6 +500,11 @@ async fn main() -> Result<()> {
                     as Arc<dyn minibox_core::events::EventSource>,
                 image_gc: Arc::clone(&image_gc),
                 image_store: Arc::clone(&state.image_store),
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+                policy: ContainerPolicy::default(),
+                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
         AdapterSuite::Colima => {
@@ -517,6 +529,11 @@ async fn main() -> Result<()> {
                     as Arc<dyn minibox_core::events::EventSource>,
                 image_gc: Arc::clone(&image_gc),
                 image_store: Arc::clone(&state.image_store),
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+                policy: ContainerPolicy::default(),
+                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
     };
