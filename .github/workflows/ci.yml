@@ -54,7 +54,6 @@ jobs:
   test-unit:
     name: unit tests (Linux)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     needs: compile-check
     steps:
       - uses: actions/checkout@v4
