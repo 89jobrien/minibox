@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-07
+updated: 2026-04-09
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -446,6 +446,21 @@ items:
     type: note
     note: "GitHub issue #60 open. Low urgency — latent, not triggered in current single-user use."
 log:
+- date: 2026-04-09
+  summary: |
+    CI recovery session: 5 commits to get main green after pty-stdio-piping merge. Root
+    cause: adapt!(BridgeNetwork) incompatible with default_new! (new() returns Result).
+    Also wired 5 missing HandlerDependencies fields (image_pusher, commit_adapter,
+    image_builder, policy, pty_sessions) into all 3 adapter suites in miniboxd/main.rs.
+    Fixed Linux-only clippy lints (clone_on_copy, collapsible_if, unused imports) only
+    visible on Linux runners. Fixed git signing key mismatch (GPG ID vs SSH path).
+    CLAUDE.md updated with adapt!/as_any!, HandlerDependencies, Linux clippy gotchas.
+  commits:
+  - a02f229
+  - 1526d16
+  - 46dbcf8
+  - 92c8ea3
+  - c4a0044
 - date: 2026-04-07
   summary: |
     devkit council analysis — fixed PTY bugs #57 #58 #59 (stdin fd exhaustion, registry
