@@ -62,9 +62,7 @@ impl IpAllocator {
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use minibox_core::adapt;
 use minibox_core::domain::{NetworkConfig, NetworkProvider, NetworkStats};
-use std::net::IpAddr;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
