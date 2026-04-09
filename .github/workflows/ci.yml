@@ -57,9 +57,6 @@ jobs:
     needs: compile-check
     steps:
       - uses: actions/checkout@v4
-      - name: activate mise toolchain
-        run: echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
-      - uses: Swatinem/rust-cache@v2
       - name: cargo xtask test-unit
         run: ~/.local/bin/mise exec -- cargo xtask test-unit
 
@@ -96,8 +93,5 @@ jobs:
     needs: test-unit
     steps:
       - uses: actions/checkout@v4
-      - name: activate mise toolchain
-        run: echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
-      - uses: Swatinem/rust-cache@v2
       - name: cargo xtask test-e2e-suite
         run: ~/.local/bin/mise exec -- cargo xtask test-e2e-suite
