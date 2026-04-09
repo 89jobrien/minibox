@@ -446,7 +446,38 @@ items:
   - date: 2026-04-07
     type: note
     note: "GitHub issue #60 open. Low urgency — latent, not triggered in current single-user use."
+- id: minibox-27
+  name: e2e-ci-sudo
+  priority: P2
+  status: open
+  title: 'fix(ci): e2e job needs sudo/root — configure runner or skip on main'
+  description: |
+    test-e2e job runs cargo xtask test-e2e-suite which requires root (pivot_root, cgroups,
+    overlay). The self-hosted runner runs as dev (non-root). Options: (A) runner user gets
+    passwordless sudo for the test binary, (B) gate e2e to next/stable only (they ran fine
+    before minibox-6 removed the branch guard), (C) wrap with sudo -E in the CI step.
+    Currently e2e job is cancelled when it runs on main — acceptable for now.
+  files:
+  - .github/workflows/ci.yml
+  extra: []
 log:
+- date: 2026-04-09
+  summary: |
+    minibox-6 done: removed if-gate from test-unit CI job — unit tests now run on all
+    branches. Surfaced 3 Linux-only bugs: too_many_arguments clippy lint in main.rs,
+    async fn coercion in cgroups test, duplicate import in exec.rs. Fixed VPS rust
+    toolchain (rustup was missing — reinstalled). Removed rust-cache from self-hosted
+    jobs (runner has warm CARGO_TARGET_DIR). RootfsLayout commit + v0.4.13.
+    compile+lint ✓, unit tests ✓ (7m8s), e2e cancelled (needs root, separate concern).
+  commits:
+  - aa10546
+  - ba3d376
+  - b60f0ec
+  - c6432d2
+  - 0c72611
+  - 3964c74
+  - a8572be
+  - 0e9b770
 - date: 2026-04-09
   summary: |
     CI recovery session: 5 commits to get main green after pty-stdio-piping merge. Root
