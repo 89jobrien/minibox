@@ -208,6 +208,7 @@ fn resolve_data_dir_for_uid(uid: u32) -> std::path::PathBuf {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
 fn build_native_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: &Path,
