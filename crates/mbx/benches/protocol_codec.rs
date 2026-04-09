@@ -17,6 +17,7 @@ fn small_run_request() -> DaemonRequest {
         privileged: false,
         env: vec![],
         name: None,
+        tty: false,
     }
 }
 
@@ -36,6 +37,7 @@ fn large_run_request() -> DaemonRequest {
         privileged: false,
         env: vec![],
         name: None,
+        tty: false,
     }
 }
 
