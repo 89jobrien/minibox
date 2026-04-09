@@ -70,7 +70,7 @@ items:
   doob_uuid: b2f92bf0-ed5c-46a7-be3e-9f1847baf506
   name: e2e-serialization-ci
   priority: P2
-  status: open
+  status: done
   title: Enforce e2e serialization in CI runner config
   description: |
     Local dev and CI use different serial_test configs. Make identical so regressions surface in both.
@@ -80,6 +80,7 @@ items:
   - date: 2026-04-06
     type: note
     note: "captured in doob — todo id c7ugsnl8du0p05b8ufzn"
+  completed: 2026-04-09
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
   name: vz-apple-bug-blocker
