@@ -30,7 +30,7 @@ use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageLoader, ImageMetadata,
-    ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+    ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -410,7 +410,7 @@ impl FilesystemProvider for ColimaFilesystem {
     ///
     /// Returns an error if any `mkdir -p` or `mount -t overlay` command fails
     /// inside the VM (e.g. insufficient privileges or kernel module not loaded).
-    fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         // Concatenate all layer paths as colon-separated lowerdir value.
         let lower_dirs = layers
             .iter()
@@ -449,7 +449,11 @@ impl FilesystemProvider for ColimaFilesystem {
             &merged_dir.to_string_lossy(),
         ])?;
 
-        Ok(merged_dir)
+        Ok(RootfsLayout {
+            merged_dir,
+            overlay_upper: Some(upper_dir),
+            source_image_ref: None,
+        })
     }
 
     /// No-op: `pivot_root` is handled by the container runtime inside the VM.

@@ -435,17 +435,20 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 ### Macro and doctest gotchas
 
 - **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (mbx), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
+- **`adapt!` requires `new() -> Self`** — `adapt!` calls `default_new!` which implements `Default` via `Self::new()`. Any adapter whose `new()` returns `Result<Self>` must use `as_any!` only — do NOT use `adapt!` for it.
 - **Private fn doctests** — mark with ```` ```ignore ```` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
 
 ### Protocol gotchas (relevant when modifying `protocol.rs` or `handler.rs`)
 
 - **Two `DaemonRequest` definitions** — `crates/minibox-core/src/protocol.rs` AND `crates/mbx/src/protocol.rs` both define `DaemonRequest` independently (mbx has its own test suite). When adding a field, update **both** files and all their construction sites.
+- **`HandlerDependencies` construction sites** — Adding fields to `HandlerDependencies` in `handler.rs` requires updating all three adapter suites in `miniboxd/src/main.rs` (native, gke, colima). These are Linux-only (`#[cfg(target_os = "linux")]`) and won't fail on macOS `cargo check`.
 - **`handle_run` param chain** — Adding a parameter requires updating in order: `server.rs` dispatch pattern match → `handle_run` → `handle_run_streaming` → `run_inner_capture`; and separately `run_inner`. All five sites must change together.
 - **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
 - **Silent channel-send discards are a bug** — never use `let _ = tx.send(...).await` in handler
   code. Use `if tx.send(...).await.is_err() { warn!("handle_run: client disconnected before
   <context> could be sent"); }` so dropped connections are observable in logs.
 - **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
+- **Linux-only clippy lints** — Files under `#![cfg(target_os = "linux")]` (e.g. `bridge.rs`) are invisible to macOS clippy. Lints like `clone_on_copy` and `collapsible_if` only surface on Linux CI runners — always check CI after touching the adapter layer.
 
 ### macbox/vz gotchas (relevant when modifying `crates/macbox/src/vz/` or merging the vz branch)
 

@@ -221,7 +221,7 @@ mod conformance {
 
         let merged = result.unwrap();
         assert!(
-            merged.to_string_lossy().contains("merged"),
+            merged.merged_dir.to_string_lossy().contains("merged"),
             "Filesystem must return merged directory path"
         );
     }

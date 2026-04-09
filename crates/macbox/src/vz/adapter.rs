@@ -29,7 +29,8 @@ use async_trait::async_trait;
 use minibox_core::{
     domain::{
         AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-        ImageRegistry, ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities,
+        SpawnResult,
     },
     image::reference::ImageRef,
     protocol::{DaemonRequest, DaemonResponse},
@@ -229,14 +230,22 @@ impl AsAny for VzFilesystem {
 }
 
 impl FilesystemProvider for VzFilesystem {
-    fn setup_rootfs(&self, _image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(
+        &self,
+        _image_layers: &[PathBuf],
+        container_dir: &Path,
+    ) -> Result<RootfsLayout> {
         // The VM daemon handles overlay setup internally.  Return the
         // container_dir as a placeholder path — it is not used by the host.
         tracing::debug!(
             container_dir = %container_dir.display(),
             "vz: setup_rootfs delegated to in-VM daemon (no-op on host)"
         );
-        Ok(container_dir.to_path_buf())
+        Ok(RootfsLayout {
+            merged_dir: container_dir.to_path_buf(),
+            overlay_upper: None,
+            source_image_ref: None,
+        })
     }
 
     fn pivot_root(&self, new_root: &Path) -> Result<()> {

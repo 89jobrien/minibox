@@ -35,7 +35,7 @@ use minibox_core::adapt;
 use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
     LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
-    RuntimeCapabilities, SpawnResult,
+    RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -257,7 +257,7 @@ impl FilesystemProvider for MockFilesystem {
     ///
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let mut state = self.state.lock().unwrap();
         state.setup_count += 1;
 
@@ -265,7 +265,11 @@ impl FilesystemProvider for MockFilesystem {
             anyhow::bail!("mock filesystem setup failure");
         }
 
-        Ok(container_dir.join("merged"))
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            overlay_upper: None,
+            source_image_ref: None,
+        })
     }
 
     /// Simulate `pivot_root` — succeeds unless configured to fail.
@@ -675,12 +679,16 @@ impl FailableFilesystemMock {
 
 impl FilesystemProvider for FailableFilesystemMock {
     /// Simulate rootfs setup, honouring the current failure toggle.
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         self.setup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_setup.load(Ordering::SeqCst) {
             anyhow::bail!("injected setup failure");
         }
-        Ok(container_dir.join("merged"))
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            overlay_upper: None,
+            source_image_ref: None,
+        })
     }
 
     /// Always succeeds — `pivot_root` failure injection is not supported by this mock.

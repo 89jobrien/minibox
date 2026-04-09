@@ -52,11 +52,11 @@ fn overlay_setup_creates_merged_upper_work_dirs() {
         .setup_rootfs(&[layer], &container_dir)
         .expect("setup_rootfs failed");
 
-    assert!(merged.exists(), "merged dir must exist");
+    assert!(merged.merged_dir.exists(), "merged dir must exist");
     assert!(container_dir.join("upper").exists(), "upper dir must exist");
     assert!(container_dir.join("work").exists(), "work dir must exist");
     assert!(
-        merged.join("bin").join("sh").exists(),
+        merged.merged_dir.join("bin").join("sh").exists(),
         "layer content visible in merged"
     );
 }
@@ -79,7 +79,7 @@ fn overlay_write_goes_to_upper_not_lower() {
         .setup_rootfs(&[layer.clone()], &container_dir)
         .unwrap();
 
-    fs::write(merged.join("newfile"), b"hello").unwrap();
+    fs::write(merged.merged_dir.join("newfile"), b"hello").unwrap();
 
     assert!(
         container_dir.join("upper").join("newfile").exists(),
@@ -118,11 +118,16 @@ fn overlay_multiple_layers_all_visible_in_merged() {
         .unwrap();
 
     assert!(
-        merged.join("etc").join("os-release").exists(),
+        merged.merged_dir.join("etc").join("os-release").exists(),
         "layer0 content must be visible"
     );
     assert!(
-        merged.join("usr").join("bin").join("env").exists(),
+        merged
+            .merged_dir
+            .join("usr")
+            .join("bin")
+            .join("env")
+            .exists(),
         "layer1 content must be visible"
     );
 
@@ -144,13 +149,13 @@ fn overlay_cleanup_unmounts_merged() {
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter.setup_rootfs(&[layer], &container_dir).unwrap();
-    assert!(merged.exists());
+    assert!(merged.merged_dir.exists());
 
     fs_adapter.cleanup(&container_dir).unwrap();
 
     // After unmount the dir may still exist but must be empty (not mounted).
-    if merged.exists() {
-        let entries: Vec<_> = fs::read_dir(&merged).unwrap().collect();
+    if merged.merged_dir.exists() {
+        let entries: Vec<_> = fs::read_dir(&merged.merged_dir).unwrap().collect();
         assert!(entries.is_empty(), "merged must be empty after unmount");
     }
 }

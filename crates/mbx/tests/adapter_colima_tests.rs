@@ -460,7 +460,7 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
         .expect("setup_rootfs should succeed with injected executor");
 
     assert_eq!(
-        merged,
+        merged.merged_dir,
         PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
     );
 

@@ -63,7 +63,7 @@ use minibox_core::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -243,7 +243,7 @@ impl DockerDesktopFilesystem {
 }
 
 impl FilesystemProvider for DockerDesktopFilesystem {
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             "setting up rootfs via Docker Desktop: layers={:?}, dir={:?}",
             image_layers, container_dir
@@ -269,7 +269,11 @@ impl FilesystemProvider for DockerDesktopFilesystem {
         let response: DockerFilesystemSetupResponse = serde_json::from_str(&output)?;
 
         // Docker paths map directly back to macOS
-        Ok(PathBuf::from(response.merged_path))
+        Ok(RootfsLayout {
+            merged_dir: PathBuf::from(response.merged_path),
+            overlay_upper: None,
+            source_image_ref: None,
+        })
     }
 
     fn pivot_root(&self, _new_root: &Path) -> Result<()> {

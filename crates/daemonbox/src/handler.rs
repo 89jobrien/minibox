@@ -665,7 +665,8 @@ async fn run_inner_capture(
         std::fs::create_dir_all(&run_dir)?;
     }
 
-    let merged_dir = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let merged_dir = rootfs_layout.merged_dir.clone();
 
     let resource_config = ResourceConfig {
         memory_limit_bytes,
@@ -696,7 +697,7 @@ async fn run_inner_capture(
         info: ContainerInfo {
             id: id.clone(),
             name: name.clone(),
-            image: image_label,
+            image: image_label.clone(),
             command: command_str,
             state: "Created".to_string(),
             created_at: Utc::now().to_rfc3339(),
@@ -706,8 +707,11 @@ async fn run_inner_capture(
         rootfs_path: merged_dir.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
-        overlay_upper: None,
-        source_image_ref: None,
+        overlay_upper: rootfs_layout.overlay_upper.clone(),
+        source_image_ref: rootfs_layout
+            .source_image_ref
+            .clone()
+            .or_else(|| Some(image_label.clone())),
     };
     state.add_container(record).await;
 
@@ -872,7 +876,8 @@ async fn run_inner(
     }
 
     // Setup overlayfs (using injected filesystem trait).
-    let merged_dir_from_overlay = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let merged_dir_from_overlay = rootfs_layout.merged_dir.clone();
 
     // Setup cgroup (using injected resource limiter trait).
     let resource_config = ResourceConfig {
@@ -916,8 +921,11 @@ async fn run_inner(
         rootfs_path: merged_dir_from_overlay.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
-        overlay_upper: None,
-        source_image_ref: None,
+        overlay_upper: rootfs_layout.overlay_upper.clone(),
+        source_image_ref: rootfs_layout
+            .source_image_ref
+            .clone()
+            .or_else(|| Some(image_label.clone())),
     };
     state.add_container(record).await;
 

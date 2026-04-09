@@ -269,7 +269,8 @@ pub struct LayerInfo {
 /// - Mount filesystems with appropriate security flags (nosuid, nodev)
 /// - Properly clean up mounts to avoid resource leaks
 pub trait FilesystemProvider: AsAny + Send + Sync {
-    /// Setup the container rootfs and return the merged directory path.
+    /// Setup the container rootfs and return the merged directory plus any
+    /// backend metadata needed by follow-on operations such as commit/build.
     ///
     /// Creates the necessary directory structure and mounts (e.g., overlay)
     /// to provide a writable rootfs for the container.
@@ -281,7 +282,8 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     ///
     /// # Returns
     ///
-    /// Path to the merged/mounted rootfs that the container will use.
+    /// A [`RootfsLayout`] describing the merged rootfs and optional
+    /// backend-specific metadata.
     ///
     /// # Errors
     ///
@@ -294,7 +296,7 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     ///
     /// MUST validate that `image_layers` paths don't contain `..` or
     /// escape the allowed base directory.
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf>;
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout>;
 
     /// Pivot root inside the container process.
     ///
@@ -333,6 +335,17 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     ///
     /// Returns an error if unmount or directory removal fails.
     fn cleanup(&self, container_dir: &Path) -> Result<()>;
+}
+
+/// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootfsLayout {
+    /// Path to the merged/mounted rootfs that the runtime will use.
+    pub merged_dir: PathBuf,
+    /// Host-visible writable layer path when the backend exposes one.
+    pub overlay_upper: Option<PathBuf>,
+    /// Source image reference associated with this rootfs when known.
+    pub source_image_ref: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

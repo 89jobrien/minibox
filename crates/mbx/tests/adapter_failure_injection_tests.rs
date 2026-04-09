@@ -94,7 +94,7 @@ fn test_limiter_failure_after_successful_setup_requires_cleanup() {
     // Filesystem setup succeeds
     let rootfs = fs.setup_rootfs(&[], Path::new("/container")).unwrap();
     assert!(
-        rootfs.ends_with("merged"),
+        rootfs.merged_dir.ends_with("merged"),
         "rootfs path must end with 'merged'"
     );
 
@@ -126,7 +126,7 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         .unwrap();
 
     let config = ContainerSpawnConfig {
-        rootfs,
+        rootfs: rootfs.merged_dir,
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],

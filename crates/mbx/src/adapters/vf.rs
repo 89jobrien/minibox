@@ -18,7 +18,7 @@ use minibox_core::{
     adapt,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-        ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use std::path::{Path, PathBuf};
@@ -78,7 +78,11 @@ impl VfFilesystem {
 
 impl FilesystemProvider for VfFilesystem {
     /// Not yet implemented — always returns an error.
-    fn setup_rootfs(&self, _image_layers: &[PathBuf], _container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(
+        &self,
+        _image_layers: &[PathBuf],
+        _container_dir: &Path,
+    ) -> Result<RootfsLayout> {
         anyhow::bail!("VfFilesystem: not yet implemented (Phase 2)")
     }
 

@@ -63,7 +63,7 @@ use minibox_core::{
     as_any,
     domain::{
         ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -277,7 +277,7 @@ impl FilesystemProvider for Wsl2Filesystem {
     ///
     /// Returns an error if path translation fails, if the helper command fails,
     /// or if the JSON response cannot be parsed.
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             layers = ?image_layers,
             container_dir = ?container_dir,
@@ -304,7 +304,11 @@ impl FilesystemProvider for Wsl2Filesystem {
 
         let response: Wsl2FilesystemSetupResponse = serde_json::from_str(&output)?;
 
-        Ok(Path::new(&response.merged_path).to_path_buf())
+        Ok(RootfsLayout {
+            merged_dir: Path::new(&response.merged_path).to_path_buf(),
+            overlay_upper: None,
+            source_image_ref: None,
+        })
     }
 
     /// No-op: `pivot_root` is performed by the helper inside the container process.

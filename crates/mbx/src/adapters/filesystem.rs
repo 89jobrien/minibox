@@ -7,7 +7,7 @@
 use crate::container::filesystem;
 use anyhow::Result;
 use minibox_core::adapt;
-use minibox_core::domain::FilesystemProvider;
+use minibox_core::domain::{FilesystemProvider, RootfsLayout};
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -77,7 +77,7 @@ impl OverlayFilesystem {
 adapt!(OverlayFilesystem);
 
 impl FilesystemProvider for OverlayFilesystem {
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             "setting up overlay rootfs with {} layers at {:?}",
             image_layers.len(),
@@ -85,7 +85,14 @@ impl FilesystemProvider for OverlayFilesystem {
         );
 
         // Delegate to existing filesystem implementation
-        filesystem::setup_overlay_with_base(image_layers, container_dir, &self.images_base)
+        let merged_dir =
+            filesystem::setup_overlay_with_base(image_layers, container_dir, &self.images_base)?;
+
+        Ok(RootfsLayout {
+            merged_dir,
+            overlay_upper: Some(container_dir.join("upper")),
+            source_image_ref: None,
+        })
     }
 
     fn pivot_root(&self, new_root: &Path) -> Result<()> {

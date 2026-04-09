@@ -135,6 +135,8 @@ use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
 #[cfg(target_os = "linux")]
 use minibox_core::image::lease::DiskLeaseService;
 #[cfg(target_os = "linux")]
+use minibox_core::image::registry::RegistryClient;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
@@ -203,6 +205,65 @@ fn resolve_data_dir_for_uid(uid: u32) -> std::path::PathBuf {
             .map(|h| std::path::PathBuf::from(h).join(".mbx/cache"))
             .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/minibox"))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn build_native_handler_dependencies(
+    state: Arc<DaemonState>,
+    data_dir: &Path,
+    containers_dir: PathBuf,
+    run_containers_dir: PathBuf,
+    metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder>,
+    event_broker: Arc<BroadcastEventBroker>,
+    image_gc: Arc<dyn ImageGarbageCollector>,
+    native_network: Arc<dyn minibox_core::domain::NetworkProvider>,
+) -> Result<Arc<HandlerDependencies>> {
+    let registry = Arc::new(
+        DockerHubRegistry::new(Arc::clone(&state.image_store))
+            .context("creating Docker Hub registry adapter")?,
+    );
+    let ghcr_registry = Arc::new(
+        GhcrRegistry::new(Arc::clone(&state.image_store))
+            .context("creating GHCR registry adapter")?,
+    );
+    let commit_adapter = mbx::adapters::commit::overlay_commit_adapter(
+        Arc::clone(&state.image_store),
+        Arc::clone(&state) as mbx::daemonbox_state::StateHandle,
+    );
+    let image_builder = mbx::adapters::builder::minibox_image_builder(
+        Arc::clone(&state.image_store),
+        Arc::clone(&commit_adapter),
+        data_dir.to_path_buf(),
+    );
+    let image_pusher = mbx::adapters::push::oci_push_adapter(
+        RegistryClient::new().context("creating OCI push registry client")?,
+        Arc::clone(&state.image_store),
+    );
+
+    Ok(Arc::new(HandlerDependencies {
+        registry,
+        ghcr_registry,
+        filesystem: Arc::new(OverlayFilesystem::new()),
+        resource_limiter: Arc::new(CgroupV2Limiter::new()),
+        runtime: Arc::new(LinuxNamespaceRuntime::new()),
+        network_provider: native_network,
+        containers_base: containers_dir,
+        run_containers_base: run_containers_dir,
+        metrics: metrics_recorder,
+        image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+        exec_runtime: Some(mbx::adapters::exec::native_exec_runtime(
+            Arc::clone(&state) as mbx::daemonbox_state::StateHandle
+        )),
+        event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+        event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
+        image_gc,
+        image_store: Arc::clone(&state.image_store),
+        image_pusher: Some(image_pusher),
+        commit_adapter: Some(commit_adapter),
+        image_builder: Some(image_builder),
+        policy: ContainerPolicy::default(),
+        pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+    }))
 }
 
 /// Move the current daemon process into a `supervisor` leaf cgroup.
@@ -437,41 +498,16 @@ async fn main() -> Result<()> {
     );
 
     let deps = match suite {
-        AdapterSuite::Native => {
-            let registry = Arc::new(
-                DockerHubRegistry::new(Arc::clone(&state.image_store))
-                    .context("creating Docker Hub registry adapter")?,
-            );
-            let ghcr_registry = Arc::new(
-                GhcrRegistry::new(Arc::clone(&state.image_store))
-                    .context("creating GHCR registry adapter")?,
-            );
-            Arc::new(HandlerDependencies {
-                registry,
-                ghcr_registry,
-                filesystem: Arc::new(OverlayFilesystem::new()),
-                resource_limiter: Arc::new(CgroupV2Limiter::new()),
-                runtime: Arc::new(LinuxNamespaceRuntime::new()),
-                network_provider: native_network,
-                containers_base: containers_dir.clone(),
-                run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: metrics_recorder.clone(),
-                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-                exec_runtime: Some(mbx::adapters::exec::native_exec_runtime(
-                    Arc::clone(&state) as mbx::daemonbox_state::StateHandle
-                )),
-                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
-                event_source: Arc::clone(&event_broker)
-                    as Arc<dyn minibox_core::events::EventSource>,
-                image_gc: Arc::clone(&image_gc),
-                image_store: Arc::clone(&state.image_store),
-                image_pusher: None,
-                commit_adapter: None,
-                image_builder: None,
-                policy: ContainerPolicy::default(),
-                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
-            })
-        }
+        AdapterSuite::Native => build_native_handler_dependencies(
+            Arc::clone(&state),
+            &data_dir,
+            containers_dir.clone(),
+            PathBuf::from(&run_containers_dir),
+            metrics_recorder.clone(),
+            Arc::clone(&event_broker),
+            Arc::clone(&image_gc),
+            native_network,
+        )?,
         AdapterSuite::Gke => {
             let registry = Arc::new(
                 DockerHubRegistry::new(Arc::clone(&state.image_store))
@@ -619,6 +655,8 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use std::path::PathBuf;
+    #[cfg(target_os = "linux")]
+    use std::sync::Arc;
 
     // SAFETY: env var mutations are serialised with ENV_LOCK
     #[cfg(target_os = "linux")]
@@ -664,5 +702,54 @@ mod tests {
         }
         assert_eq!(dir_non_root, PathBuf::from("/custom/path"));
         assert_eq!(dir_root, PathBuf::from("/custom/path"));
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn native_suite_wires_local_push_commit_and_build_adapters() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let data_dir = temp_dir.path().to_path_buf();
+        let images_dir = data_dir.join("images");
+        std::fs::create_dir_all(&images_dir).unwrap();
+        let image_store = ImageStore::new(&images_dir).unwrap();
+        let state = Arc::new(DaemonState::new(image_store, &data_dir));
+
+        let lease_service = Arc::new(
+            DiskLeaseService::new(data_dir.join("leases.json"))
+                .await
+                .unwrap(),
+        );
+        let image_gc: Arc<dyn ImageGarbageCollector> =
+            Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+        let event_broker = Arc::new(BroadcastEventBroker::new());
+        let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
+            Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new());
+        let native_network: Arc<dyn minibox_core::domain::NetworkProvider> =
+            Arc::new(NoopNetwork::new());
+
+        let deps = build_native_handler_dependencies(
+            Arc::clone(&state),
+            &data_dir,
+            data_dir.join("containers"),
+            data_dir.join("run/containers"),
+            metrics_recorder,
+            event_broker,
+            image_gc,
+            native_network,
+        )
+        .unwrap();
+
+        assert!(
+            deps.image_pusher.is_some(),
+            "native suite should wire image push"
+        );
+        assert!(
+            deps.commit_adapter.is_some(),
+            "native suite should wire container commit"
+        );
+        assert!(
+            deps.image_builder.is_some(),
+            "native suite should wire image build"
+        );
     }
 }
