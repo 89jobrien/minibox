@@ -8,8 +8,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter, ImageMetadata,
-    LayerInfo,
+    CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter, ImageMetadata, LayerInfo,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::{Descriptor, OciManifest};

@@ -3,7 +3,7 @@
 //! These tests demonstrate the testability benefits of hexagonal architecture.
 //! All tests run without real infrastructure (no Docker Hub, cgroups, or Linux).
 
-use daemonbox::handler::{self, handle_resize_pty, handle_send_input, HandlerDependencies};
+use daemonbox::handler::{self, HandlerDependencies, handle_resize_pty, handle_send_input};
 use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::domain::NetworkMode;

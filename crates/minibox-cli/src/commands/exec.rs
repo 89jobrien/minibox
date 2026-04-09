@@ -130,7 +130,9 @@ pub async fn execute(
                                 });
                             }
                             Err(e) => {
-                                eprintln!("exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}");
+                                eprintln!(
+                                    "exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}"
+                                );
                             }
                         }
                     }

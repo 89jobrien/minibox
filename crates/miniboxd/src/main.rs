@@ -114,8 +114,6 @@ use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use daemonbox::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 #[cfg(target_os = "linux")]
-use tokio::sync::Mutex as TokioMutex;
-#[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
 use mbx::adapters::network::BridgeNetwork;
@@ -144,6 +142,8 @@ use std::sync::Arc;
 use tokio::net::UnixListener;
 #[cfg(target_os = "linux")]
 use tokio::signal::unix::{SignalKind, signal};
+#[cfg(target_os = "linux")]
+use tokio::sync::Mutex as TokioMutex;
 #[cfg(target_os = "linux")]
 use tracing::{info, warn};
 
