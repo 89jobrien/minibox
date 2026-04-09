@@ -457,7 +457,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn pty_exec_echo_roundtrip() {
-        use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
         use tokio::sync::mpsc;
 
         let rt = tokio::runtime::Runtime::new().unwrap();
