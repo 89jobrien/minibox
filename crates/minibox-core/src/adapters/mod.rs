@@ -21,4 +21,11 @@ pub mod mocks;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_fixtures;
 
+/// Conformance test infrastructure for commit/build/push adapter backends.
+///
+/// Provides [`conformance::BackendDescriptor`] and shared fixture helpers.
+/// Enabled via the `test-utils` Cargo feature.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod conformance;
+
 pub use registry::DockerHubRegistry;
