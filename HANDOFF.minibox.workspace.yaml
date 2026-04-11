@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-09
+updated: 2026-04-11
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -460,7 +460,50 @@ items:
   files:
   - .github/workflows/ci.yml
   extra: []
+- id: minibox-28
+  name: conformance-suite
+  priority: P1
+  status: done
+  title: Backend-agnostic conformance suite — Phases 1–3
+  description: |
+    Phase 1: BackendCapability enum, BackendCapabilitySet, BackendDescriptor with
+    constructor hooks, fixture helpers (MinimalStoredImage, WritableUpperDir,
+    BuildContext, LocalPushTarget). Phase 2: 13 conformance tests (commit×4,
+    build×4, push×5 with tiered registry opt-in). Phase 3: cargo xtask
+    test-conformance, Markdown+JSON report emission to artifacts/conformance/,
+    docs/conformance.md with capability matrix. All on feat/conformance-suite branch.
+    Push tests tiered: Tier 1 always runs, Tier 2 requires CONFORMANCE_PUSH_REGISTRY.
+  files:
+  - crates/minibox-core/src/domain.rs
+  - crates/minibox-core/src/adapters/conformance.rs
+  - crates/mbx/tests/conformance_commit.rs
+  - crates/mbx/tests/conformance_build.rs
+  - crates/mbx/tests/conformance_push.rs
+  - crates/mbx/tests/conformance_report.rs
+  - crates/xtask/src/gates.rs
+  - docs/conformance.md
+  - CLAUDE.md
+  extra: []
+  completed: 2026-04-11
 log:
+- date: 2026-04-11
+  summary: |
+    Conformance suite built from scratch (minibox-28 done): Phases 1–3 on
+    feat/conformance-suite. BackendCapability/BackendDescriptor/fixtures (Phase 1),
+    13 conformance tests commit/build/push (Phase 2), xtask test-conformance +
+    Markdown/JSON report emission + docs/conformance.md (Phase 3). commit_upper_dir_to_image
+    promoted pub for integration test access. CLAUDE.md updated with conformance entry
+    point and env vars. cargo check clean, 209+ tests pass.
+  commits:
+  - 851ca3e
+  - ee5cec1
+  - d465518
+  - 00615ca
+  - f8b1e1f
+  - 946e7b2
+  - ccf8566
+  - 3cb4b07
+  - cbad452
 - date: 2026-04-09
   summary: |
     minibox-6 done: removed if-gate from test-unit CI job — unit tests now run on all
