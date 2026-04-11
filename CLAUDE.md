@@ -524,6 +524,17 @@ Gate Linux-only deps with `[target.'cfg(target_os = "linux")'.dependencies]`, no
 
 `recipe.json` is a cargo-chef artifact that embeds crate names — update manually after any crate rename (or regenerate with `cargo chef prepare --recipe-path recipe.json`).
 
+## Conformance Suite
+
+Branch: `feat/conformance-suite` — Phases 1–3 complete as of 2026-04-11.
+
+- Entry point: `cargo xtask test-conformance` — runs suite, prints artifact paths
+- Reports written to `artifacts/conformance/` (gitignored; CI uploads as artifacts)
+- `CONFORMANCE_ARTIFACT_DIR` — override report output directory
+- `CONFORMANCE_PUSH_REGISTRY=localhost:5000` — enable Tier 2 push tests (requires live registry)
+- `CONFORMANCE_COLIMA=1` — enable Colima backend tests
+- See `docs/conformance.md` for capability matrix and full usage
+
 ## Environment Variables
 
 Override runtime paths (useful for testing and non-standard deployments):
