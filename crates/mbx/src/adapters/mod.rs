@@ -79,7 +79,7 @@ pub mod builder;
 pub use builder::MiniboxImageBuilder;
 
 pub mod commit;
-pub use commit::OverlayCommitAdapter;
+pub use commit::{OverlayCommitAdapter, commit_upper_dir_to_image};
 
 #[cfg(target_os = "linux")]
 pub mod exec;

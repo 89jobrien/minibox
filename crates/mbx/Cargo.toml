@@ -41,6 +41,10 @@ sha2 = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 hex = { workspace = true }
+tempfile = { workspace = true }
+async-trait = { workspace = true }
+# Enable conformance test infrastructure from minibox-core.
+minibox-core = { workspace = true, features = ["test-utils"] }
 
 [[bench]]
 name = "trait_overhead"

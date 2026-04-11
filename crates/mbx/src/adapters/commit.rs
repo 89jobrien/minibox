@@ -55,7 +55,7 @@ impl ContainerCommitter for OverlayCommitAdapter {
     }
 }
 
-pub(crate) fn commit_upper_dir_to_image(
+pub fn commit_upper_dir_to_image(
     image_store: Arc<ImageStore>,
     upper_dir: &std::path::Path,
     target_ref: &str,
