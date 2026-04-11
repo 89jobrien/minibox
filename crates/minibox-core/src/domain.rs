@@ -976,6 +976,84 @@ pub trait ImageBuilder: AsAny + Send + Sync {
 /// Type alias for a shared, dynamic [`ImageBuilder`] implementation.
 pub type DynImageBuilder = Arc<dyn ImageBuilder>;
 
+// ---------------------------------------------------------------------------
+// Conformance boundary — commit / build / push capabilities
+// ---------------------------------------------------------------------------
+
+/// An individual capability that a backend adapter may or may not support.
+///
+/// Used by [`BackendCapabilitySet`] to describe what a concrete backend can do.
+/// The conformance suite gates tests on these flags so that backend-specific
+/// tests are skipped rather than failed when a capability is absent.
+///
+/// # Backend support matrix
+///
+/// | Capability          | linux-native | Colima |
+/// |---------------------|:------------:|:------:|
+/// | `Commit`            | yes          | no     |
+/// | `BuildFromContext`  | yes          | no     |
+/// | `PushToRegistry`    | yes          | yes    |
+///
+/// **linux-native** — `OverlayCommitAdapter`, `MiniboxImageBuilder`,
+/// `OciPushAdapter`: all three traits are fully implemented; commit and build
+/// require root and Linux namespaces; push requires a reachable OCI registry.
+///
+/// **Colima** — `ColimaImagePusher` implements `ImagePusher`; there is no
+/// Colima-native `ContainerCommitter` or `ImageBuilder` implementation yet
+/// (Colima containers use the nerdctl/lima CLI, which does not expose an
+/// upperdir for overlay-style commit, and no Dockerfile build path has been
+/// wired into the adapter suite).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BackendCapability {
+    /// Backend can snapshot a running container's FS diff into a new image
+    /// via [`ContainerCommitter::commit`].
+    Commit,
+    /// Backend can build an image from a `BuildContext` + `BuildConfig` via
+    /// [`ImageBuilder::build_image`].
+    BuildFromContext,
+    /// Backend can push an image to an OCI-compliant registry via
+    /// [`ImagePusher::push_image`].
+    PushToRegistry,
+}
+
+/// The full set of [`BackendCapability`] flags declared by one backend.
+///
+/// Construct via [`BackendCapabilitySet::new`] and chain
+/// [`BackendCapabilitySet::with`] calls:
+///
+/// ```rust
+/// use minibox_core::domain::{BackendCapability, BackendCapabilitySet};
+///
+/// let caps = BackendCapabilitySet::new()
+///     .with(BackendCapability::Commit)
+///     .with(BackendCapability::PushToRegistry);
+///
+/// assert!(caps.supports(BackendCapability::Commit));
+/// assert!(!caps.supports(BackendCapability::BuildFromContext));
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct BackendCapabilitySet {
+    flags: std::collections::HashSet<BackendCapability>,
+}
+
+impl BackendCapabilitySet {
+    /// Create an empty capability set (no capabilities).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a capability to this set (builder-style).
+    pub fn with(mut self, cap: BackendCapability) -> Self {
+        self.flags.insert(cap);
+        self
+    }
+
+    /// Return `true` if this set includes `cap`.
+    pub fn supports(&self, cap: BackendCapability) -> bool {
+        self.flags.contains(&cap)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
