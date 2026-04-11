@@ -3,7 +3,7 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-04-09 (EOD)
+**Last updated:** 2026-04-11 (EOD)
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
@@ -341,6 +341,21 @@ All open issues in execution order. Update status as issues close.
 ---
 
 ## Next up
+
+### DONE (2026-04-11) — pre-push commit range resolver
+
+`.githooks/pre-push` created and executable. Ports the ref/range resolution logic
+from HashiCorp's vault pre-push hook, stripped of all enterprise checks. Reads git
+stdin refs and prints one resolved commit range per ref to stdout:
+
+- `local_oid == zero` → deletion, skip silently
+- `remote_oid == zero` → new branch: `merge-base(HEAD, main)..local_oid`
+- otherwise → existing branch: `remote_oid..local_oid`
+
+Merge-base fallback: `git rev-list --max-parents=0 HEAD` if `main` doesn't exist.
+Output is consumed by downstream tooling; obfsck integration is a follow-on.
+
+Spec: `docs/superpowers/specs/2026-04-11-pre-push-range-resolver-design.md`
 
 ### In progress — commit/build/push conformance matrix (2026-04-09)
 
