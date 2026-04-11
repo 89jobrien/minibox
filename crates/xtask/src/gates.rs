@@ -66,6 +66,72 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("conformance_tests failed")?;
+    // commit / build / push conformance (Phase 2+)
+    cmd!(sh, "cargo test --release -p mbx --test conformance_commit")
+        .run()
+        .context("conformance_commit tests failed")?;
+    cmd!(sh, "cargo test --release -p mbx --test conformance_build")
+        .run()
+        .context("conformance_build tests failed")?;
+    cmd!(sh, "cargo test --release -p mbx --test conformance_push")
+        .run()
+        .context("conformance_push tests failed")?;
+    Ok(())
+}
+
+/// Conformance suite: commit + build + push backends, then emit MD + JSON reports.
+///
+/// All three conformance test binaries must pass before the report is emitted.
+/// After a successful run this function prints the paths to:
+///   `artifacts/conformance/report.md`
+///   `artifacts/conformance/report.json`
+///
+/// Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` (and run a local OCI registry)
+/// to activate tier-2 push tests.
+pub fn test_conformance(sh: &Shell) -> Result<()> {
+    // --- Commit conformance ---
+    cmd!(sh, "cargo test --release -p mbx --test conformance_commit")
+        .run()
+        .context("conformance_commit tests failed")?;
+
+    // --- Build conformance ---
+    cmd!(sh, "cargo test --release -p mbx --test conformance_build")
+        .run()
+        .context("conformance_build tests failed")?;
+
+    // --- Push conformance ---
+    cmd!(sh, "cargo test --release -p mbx --test conformance_push")
+        .run()
+        .context("conformance_push tests failed")?;
+
+    // --- Emit reports ---
+    // Run the report emitter with `--nocapture` so the artifact paths are visible.
+    let output = cmd!(
+        sh,
+        "cargo test --release -p mbx --test conformance_report -- --nocapture"
+    )
+    .output()
+    .context("conformance_report failed")?;
+
+    // Surface conformance: lines from stdout.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if line.starts_with("conformance:") {
+            if let Some(rest) = line.strip_prefix("conformance:md=") {
+                eprintln!("  report.md   : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:json=") {
+                eprintln!("  report.json : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:summary ") {
+                eprintln!("  summary     : {rest}");
+            }
+        }
+    }
+
+    if !output.status.success() {
+        anyhow::bail!("conformance_report test failed");
+    }
+
+    eprintln!("conformance suite passed");
     Ok(())
 }
 

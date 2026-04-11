@@ -45,6 +45,7 @@ fn main() -> Result<()> {
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
+        Some("test-conformance") => gates::test_conformance(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-integration") => gates::test_integration(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),
@@ -86,6 +87,7 @@ fn main() -> Result<()> {
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
+            eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
