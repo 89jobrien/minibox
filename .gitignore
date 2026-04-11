@@ -14,6 +14,7 @@
 !docs/minibox-orch-design.md
 !docs/minibox-orch-handoff.md
 !docs/handoff-*.md
+!docs/conformance.md
 !docs/plans/*.md
 !docs/plans/
 !docs/superpowers/**/*.md
