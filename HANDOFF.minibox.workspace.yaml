@@ -485,6 +485,436 @@ items:
   - CLAUDE.md
   extra: []
   completed: 2026-04-11
+- id: minibox-29
+  name: shared-oci-lib
+  priority: P2
+  status: open
+  title: 'feat: shared OCI image-pulling library (#21)'
+  description: "GH #21: Extract minibox-lib/src/image/ into minibox-oci crate. Public API: pull(image_ref, store_path, progress_callback). Keep Docker Hub + GHCR adapters, parallel layer downloads, HashingReader, all security validation."
+  files: []
+  extra:
+  - type: github-issue
+    number: 21
+    url: "https://github.com/89jobrien/minibox/issues/21"
+- id: minibox-30
+  name: native-adapter-isolation-tests
+  priority: P2
+  status: open
+  title: 'test: native adapter isolation tests (Linux)'
+  description: "GH #22: Add isolation tests for the native Linux adapter with real namespaces, cgroups, and overlays. Test escape attempt detection and cgroup limits enforcement."
+  files: []
+  extra:
+  - type: github-issue
+    number: 22
+    url: "https://github.com/89jobrien/minibox/issues/22"
+- id: minibox-31
+  name: gke-adapter-isolation-tests
+  priority: P2
+  status: open
+  title: 'test: GKE adapter isolation tests (Linux)'
+  description: "GH #23: Add isolation tests for the GKE adapter using proot with copy filesystem and no cgroups."
+  files: []
+  extra:
+  - type: github-issue
+    number: 23
+    url: "https://github.com/89jobrien/minibox/issues/23"
+- id: minibox-32
+  name: container-lifecycle-failure-tests
+  priority: P2
+  status: open
+  title: 'test: container lifecycle failure tests (Linux+root)'
+  description: "GH #24: Test container init crash, OOM kill, signal handling, cleanup on failed pivot_root, permission denied on rootfs mount."
+  files: []
+  extra:
+  - type: github-issue
+    number: 24
+    url: "https://github.com/89jobrien/minibox/issues/24"
+- id: minibox-33
+  name: winbox-hyper-v-wsl2
+  priority: P2
+  status: open
+  title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
+  description: "GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter."
+  files: []
+  extra:
+  - type: github-issue
+    number: 45
+    url: "https://github.com/89jobrien/minibox/issues/45"
+- id: minibox-34
+  name: mbx-dagu-tier2
+  priority: P2
+  status: open
+  title: 'Tier 2 mbx-dagu fixes (#31, #35, #36)'
+  description: "GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight."
+  files: []
+  extra:
+  - type: github-issue
+    number: 31
+    url: "https://github.com/89jobrien/minibox/issues/31"
+- id: minibox-35
+  name: conformance-backend-descriptor
+  priority: P1
+  status: open
+  title: 'Define the commit/build/push conformance boundary'
+  description: "GH #82: Establish backend conformance specification for commit/build/push operations across native, GKE, Colima, and VZ adapters."
+  files: []
+  extra:
+  - type: github-issue
+    number: 82
+    url: "https://github.com/89jobrien/minibox/issues/82"
+- id: minibox-36
+  name: enforce-conformance-ci
+  priority: P2
+  status: open
+  title: 'Enforce e2e serialization in CI runner config'
+  description: "GH #73: Local dev and CI use different serial_test configs. Make identical so regressions surface in both."
+  files: []
+  extra:
+  - type: github-issue
+    number: 73
+    url: "https://github.com/89jobrien/minibox/issues/73"
+- id: minibox-37
+  name: conformance-markdown-report
+  priority: P2
+  status: open
+  title: 'Emit Markdown and JSON conformance reports under artifacts/conformance'
+  description: "GH #77: After conformance suite runs, generate human-readable markdown and machine-parseable JSON reports with backend capability matrix."
+  files: []
+  extra:
+  - type: github-issue
+    number: 77
+    url: "https://github.com/89jobrien/minibox/issues/77"
+- id: minibox-38
+  name: conformance-colima-validate
+  priority: P2
+  status: open
+  title: 'Validate the new conformance suite on macOS Colima'
+  description: "GH #79: Run conformance tests on Colima adapter to ensure commit/build/push work end-to-end with nerdctl."
+  files: []
+  extra:
+  - type: github-issue
+    number: 79
+    url: "https://github.com/89jobrien/minibox/issues/79"
+- id: minibox-39
+  name: conformance-fixtures
+  priority: P2
+  status: open
+  title: 'Add shared conformance fixture helpers'
+  description: "GH #92: Extract MinimalStoredImage, WritableUpperDir, BuildContext, LocalPushTarget helpers for reuse across conformance tests."
+  files: []
+  extra:
+  - type: github-issue
+    number: 92
+    url: "https://github.com/89jobrien/minibox/issues/92"
+- id: minibox-40
+  name: rootfs-metadata-contract
+  priority: P1
+  status: open
+  title: 'Define rootfs metadata contract for mac dogfooding'
+  description: "GH #72: Establish what metadata must be persisted alongside rootfs images for reliable Colima commit/build/push."
+  files: []
+  extra:
+  - type: github-issue
+    number: 72
+    url: "https://github.com/89jobrien/minibox/issues/72"
+- id: minibox-41
+  name: persist-rootfs-metadata
+  priority: P1
+  status: open
+  title: 'Persist rootfs metadata into ContainerRecord during create/run'
+  description: "GH #63: Store image ID, layer hashes, environment, and working directory in ContainerRecord so commit/build/push can access it."
+  files: []
+  extra:
+  - type: github-issue
+    number: 63
+    url: "https://github.com/89jobrien/minibox/issues/63"
+- id: minibox-42
+  name: colima-metadata-adapter
+  priority: P1
+  status: open
+  title: 'Implement Colima filesystem metadata for local commit/build/push'
+  description: "GH #64: Colima adapter must track image ID and layer history for integration with nerdctl."
+  files: []
+  extra:
+  - type: github-issue
+    number: 64
+    url: "https://github.com/89jobrien/minibox/issues/64"
+- id: minibox-43
+  name: vz-virtiofs-mounts
+  priority: P2
+  status: blocked
+  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
+  description: "GH #66, #75: Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into VM via virtiofs. Allows in-VM minibox-agent to construct overlay FS from host-stored layers without copying."
+  files: []
+  extra:
+  - type: github-issue
+    number: 66
+    url: "https://github.com/89jobrien/minibox/issues/66"
+- id: minibox-44
+  name: extract-conformance-commit
+  priority: P2
+  status: open
+  title: 'Extract backend-agnostic commit conformance tests'
+  description: "GH #67: Separate commit tests into a portable suite that runs against all backends (native, GKE, Colima, VZ)."
+  files: []
+  extra:
+  - type: github-issue
+    number: 67
+    url: "https://github.com/89jobrien/minibox/issues/67"
+- id: minibox-45
+  name: backend-descriptor-type
+  priority: P2
+  status: open
+  title: 'Add a test-only backend descriptor type'
+  description: "GH #69: Create BackendDescriptor with optional capability features for test selection and reporting."
+  files: []
+  extra:
+  - type: github-issue
+    number: 69
+    url: "https://github.com/89jobrien/minibox/issues/69"
+- id: minibox-46
+  name: pty-stdio-plan
+  priority: P2
+  status: open
+  title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
+  description: "GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md"
+  files: []
+  extra:
+  - type: github-issue
+    number: 70
+    url: "https://github.com/89jobrien/minibox/issues/70"
+- id: minibox-47
+  name: extract-conformance-push
+  priority: P2
+  status: open
+  title: 'Extract backend-agnostic push conformance tests'
+  description: "GH #62: Separate push tests into a portable suite with tiered registry requirements."
+  files: []
+  extra:
+  - type: github-issue
+    number: 62
+    url: "https://github.com/89jobrien/minibox/issues/62"
+- id: minibox-48
+  name: extract-conformance-build
+  priority: P2
+  status: open
+  title: 'Extract conformance entry point'
+  description: "GH #68: Create cargo xtask test-conformance entry point for running all conformance tests with Markdown/JSON report output."
+  files: []
+  extra:
+  - type: github-issue
+    number: 68
+    url: "https://github.com/89jobrien/minibox/issues/68"
+- id: minibox-49
+  name: filesystem-metadata-api
+  priority: P1
+  status: open
+  title: 'Extend filesystem API to return merged dir plus writable-layer/source-image metadata'
+  description: "GH #91: Expose merged rootfs path alongside layer metadata for commit/build/push adapters."
+  files: []
+  extra:
+  - type: github-issue
+    number: 91
+    url: "https://github.com/89jobrien/minibox/issues/91"
+- id: minibox-50
+  name: macbox-colima-path
+  priority: P1
+  status: open
+  title: 'Wire macbox Colima path to existing local commit/build/push adapters'
+  description: "GH #90: Integrate Colima adapter suite into macbox start function for local container development on macOS."
+  files: []
+  extra:
+  - type: github-issue
+    number: 90
+    url: "https://github.com/89jobrien/minibox/issues/90"
+- id: minibox-51
+  name: macbox-dogfood-flow
+  priority: P1
+  status: open
+  title: 'Dogfood mac create/commit/build/push flow end-to-end'
+  description: "GH #89: Test the full Colima workflow: create container → modify → commit → build → push to local registry."
+  files: []
+  extra:
+  - type: github-issue
+    number: 89
+    url: "https://github.com/89jobrien/minibox/issues/89"
+- id: minibox-52
+  name: vz-vm-provision
+  priority: P2
+  status: blocked
+  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
+  description: "GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox."
+  files: []
+  extra:
+  - type: github-issue
+    number: 76
+    url: "https://github.com/89jobrien/minibox/issues/76"
+- id: minibox-53
+  name: vz-minibox-agent
+  priority: P2
+  status: blocked
+  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
+  description: "GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests to local minibox primitives. Depends on VZ VM provisioning."
+  files: []
+  extra:
+  - type: github-issue
+    number: 78
+    url: "https://github.com/89jobrien/minibox/issues/78"
+- id: minibox-54
+  name: vz-vsock-bridge
+  priority: P2
+  status: blocked
+  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
+  description: "GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr forwarded as ContainerOutput protocol messages."
+  files: []
+  extra:
+  - type: github-issue
+    number: 81
+    url: "https://github.com/89jobrien/minibox/issues/81"
+- id: minibox-55
+  name: vz-full-stack
+  priority: P2
+  status: open
+  title: 'feat: minibox owns the full container stack on every OS'
+  description: "GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned. Windows via Hyper-V/WSL2 kernel TBD."
+  files: []
+  extra:
+  - type: github-issue
+    number: 87
+    url: "https://github.com/89jobrien/minibox/issues/87"
+- id: minibox-56
+  name: container-networking
+  priority: P2
+  status: open
+  title: 'feat: container networking — veth/bridge (#20) / (#65, #94)'
+  description: "GH #65, #94: Create minibox0 bridge device. veth pair per container (host side on bridge, container side with IP). DHCP or static IP assignment. NAT/masquerade for outbound."
+  files: []
+  extra:
+  - type: github-issue
+    number: 94
+    url: "https://github.com/89jobrien/minibox/issues/94"
+- id: minibox-57
+  name: vz-hci-platform-guard
+  priority: P1
+  status: open
+  title: '[bug] minibox-cli nix/libc usage lacks platform guards'
+  description: "GH #56: Platform-specific imports in minibox-cli/src/ are not guarded with #[cfg(target_os)]. This breaks compilation on non-Linux platforms."
+  files: []
+  extra:
+  - type: github-issue
+    number: 56
+    url: "https://github.com/89jobrien/minibox/issues/56"
+- id: minibox-58
+  name: release-ci-gate
+  priority: P2
+  status: open
+  title: '[bug] No CI evidence or passing pipeline required before merging release version bumps'
+  description: "GH #55: Version bumps in Cargo.toml can be merged without green CI. Add a GitHub check preventing main→next promotion until full test suite passes."
+  files: []
+  extra:
+  - type: github-issue
+    number: 55
+    url: "https://github.com/89jobrien/minibox/issues/55"
+- id: minibox-59
+  name: libc-nix-deps-added
+  priority: P1
+  status: open
+  title: '[bug] minibox-cli: libc and nix dependencies added with no source/safety comments'
+  description: "GH #52: libc and nix were added as workspace deps but lack documentation of why they are needed and security justification."
+  files: []
+  extra:
+  - type: github-issue
+    number: 52
+    url: "https://github.com/89jobrien/minibox/issues/52"
+- id: minibox-60
+  name: conformance-rootfs-meta
+  priority: P1
+  status: open
+  title: 'Add regression tests for rootfs metadata and mac adapter wiring'
+  description: "GH #80: Test that container metadata survives the full create/commit/build/push cycle with correct image ID and layer references."
+  files: []
+  extra:
+  - type: github-issue
+    number: 80
+    url: "https://github.com/89jobrien/minibox/issues/80"
+- id: minibox-61
+  name: pty-stdio-complete
+  priority: P2
+  status: done
+  title: 'feat: PTY/stdio piping for interactive containers (#19) / (#70, #83)'
+  completed: 2026-04-09
+  description: "GH #70, #83: Complete PTY/stdio piping implementation with ResizePty protocol, ExecConfig channels, handler PtySessionRegistry, and CLI -it flag."
+  files: []
+  extra:
+  - type: github-issue
+    number: 83
+    url: "https://github.com/89jobrien/minibox/issues/83"
+- id: minibox-62
+  name: conformance-ci-serialization
+  priority: P2
+  status: open
+  title: 'Enforce e2e serialization in CI runner config'
+  description: "GH #73: Ensure CI and local dev serial_test configs are identical for consistent regression detection."
+  files: []
+  extra:
+  - type: github-issue
+    number: 73
+    url: "https://github.com/89jobrien/minibox/issues/73"
+- id: minibox-63
+  name: conformance-build-tests
+  priority: P2
+  status: open
+  title: 'Extract backend-agnostic build conformance tests'
+  description: "GH #71: Separate build tests into a portable suite for all adapters."
+  files: []
+  extra:
+  - type: github-issue
+    number: 71
+    url: "https://github.com/89jobrien/minibox/issues/71"
+- id: minibox-64
+  name: tier3-linux-isolation
+  priority: P2
+  status: open
+  title: 'Tier 3 Linux-only adapter isolation and lifecycle failure tests'
+  description: "GH #74: Native, GKE, and container lifecycle failure tests for comprehensive isolation validation."
+  files: []
+  extra:
+  - type: github-issue
+    number: 74
+    url: "https://github.com/89jobrien/minibox/issues/74"
+- id: minibox-65
+  name: vz-virtiofs
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
+  description: "GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access."
+  files: []
+  extra:
+  - type: github-issue
+    number: 75
+    url: "https://github.com/89jobrien/minibox/issues/75"
+- id: minibox-66
+  name: vz-agent
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
+  description: "GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control."
+  files: []
+  extra:
+  - type: github-issue
+    number: 88
+    url: "https://github.com/89jobrien/minibox/issues/88"
+- id: minibox-67
+  name: vz-io-bridge
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
+  description: "GH #93: Blocked by minibox-agent and vsock bridge implementation."
+  files: []
+  extra:
+  - type: github-issue
+    number: 93
+    url: "https://github.com/89jobrien/minibox/issues/93"
 log:
 - date: 2026-04-11
   summary: |
