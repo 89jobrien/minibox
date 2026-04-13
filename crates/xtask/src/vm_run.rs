@@ -52,8 +52,6 @@ pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
         .args([
             "-append",
             "rdinit=/sbin/init console=ttyAMA0,115200 minibox.mode=shell",
-            "-serial",
-            "mon:stdio",
             "-nographic",
             "-no-reboot",
         ])

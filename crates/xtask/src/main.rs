@@ -75,8 +75,7 @@ fn main() -> Result<()> {
         Some("build-vm-image") => {
             let force = env::args().any(|a| a == "--force");
             let vm_dir = vm_image::default_vm_dir();
-            vm_image::build_vm_image(&vm_dir, force)?;
-            vm_image::create_initramfs(&vm_dir.join("rootfs"), &vm_dir.join("minibox-initramfs.img"), force)
+            vm_image::build_vm_image(&vm_dir, force)
         }
         Some("run-vm") => {
             let vm_dir = vm_image::default_vm_dir();

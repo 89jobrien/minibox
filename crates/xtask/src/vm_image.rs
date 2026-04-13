@@ -307,6 +307,7 @@ hostname minibox-vm 2>/dev/null || true
     std::fs::create_dir_all(&sbin).context("creating rootfs/sbin")?;
     let init_script = r#"#!/bin/sh
 # minibox PID-1 init — dispatches on minibox.mode= from /proc/cmdline
+mount -t proc proc /proc 2>/dev/null || true
 MODE=""
 for arg in $(cat /proc/cmdline 2>/dev/null); do
     case "$arg" in
