@@ -254,14 +254,13 @@ fn build_test_binary(
     // Parse JSON messages to find the executable path
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
-        if let Ok(msg) = serde_json::from_str::<serde_json::Value>(line) {
-            if msg.get("reason").and_then(|r| r.as_str()) == Some("compiler-artifact") {
-                if let Some(exe) = msg.get("executable").and_then(|e| e.as_str()) {
-                    let p = PathBuf::from(exe);
-                    if p.exists() {
-                        return Ok(p);
-                    }
-                }
+        if let Ok(msg) = serde_json::from_str::<serde_json::Value>(line)
+            && msg.get("reason").and_then(|r| r.as_str()) == Some("compiler-artifact")
+            && let Some(exe) = msg.get("executable").and_then(|e| e.as_str())
+        {
+            let p = PathBuf::from(exe);
+            if p.exists() {
+                return Ok(p);
             }
         }
     }

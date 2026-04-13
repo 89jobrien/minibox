@@ -232,7 +232,11 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
     // 6. Install init files for PID-1 bootstrap
     install_init_files(&rootfs_dir)?;
 
-    // 7. Get current git commit hash for manifest
+    // 7. Build initramfs
+    let our_initramfs = vm_dir.join("minibox-initramfs.img");
+    create_initramfs(&rootfs_dir, &our_initramfs, force)?;
+
+    // 8. Get current git commit hash for manifest
     let commit = {
         let out = std::process::Command::new("git")
             .args(["rev-parse", "--short", "HEAD"])
@@ -256,18 +260,22 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
 
     println!("VM image ready at {}", vm_dir.display());
     println!("  kernel    {}", kernel_dest.display());
-    println!("  initramfs {}", initramfs_dest.display());
+    println!("  initramfs {}", our_initramfs.display());
     println!("  rootfs    {}", rootfs_dir.display());
     Ok(())
 }
 
 /// Install minimal init files into rootfs so the agent boots correctly.
-/// This duplicates the logic from macbox::vz::agent_init to avoid a circular dependency.
+/// /sbin/init dispatches on `minibox.mode=<mode>` from /proc/cmdline:
+///   - default (no mode): exec minibox-agent (VZ backward compat)
+///   - shell: exec /bin/sh -i (interactive)
+///   - test: mount 9p target, run tests, poweroff
 #[allow(dead_code)]
 pub fn install_init_files(rootfs_dir: &Path) -> Result<()> {
     let etc = rootfs_dir.join("etc");
     std::fs::create_dir_all(&etc).context("creating rootfs/etc")?;
 
+    // inittab — kept for backward compat but /sbin/init is the real entry point
     let inittab = "::sysinit:/etc/init.d/rcS\n::once:/sbin/minibox-agent\n::ctrlaltdel:/sbin/reboot\n::shutdown:/bin/umount -a -r\n";
     std::fs::write(etc.join("inittab"), inittab).context("writing /etc/inittab")?;
 
@@ -293,7 +301,149 @@ hostname minibox-vm 2>/dev/null || true
         std::fs::set_permissions(&rcs_path, std::fs::Permissions::from_mode(0o755))
             .context("chmod rcS")?;
     }
-    println!("  init    rootfs/etc/inittab + etc/init.d/rcS");
+
+    // /sbin/init — mode-dispatching PID-1
+    let sbin = rootfs_dir.join("sbin");
+    std::fs::create_dir_all(&sbin).context("creating rootfs/sbin")?;
+    let init_script = r#"#!/bin/sh
+# minibox PID-1 init — dispatches on minibox.mode= from /proc/cmdline
+MODE=""
+for arg in $(cat /proc/cmdline 2>/dev/null); do
+    case "$arg" in
+        minibox.mode=*) MODE="${arg#minibox.mode=}" ;;
+    esac
+done
+
+case "$MODE" in
+    shell)
+        exec /bin/sh -i
+        ;;
+    test)
+        TARGET_DIR=/cargo-target/aarch64-unknown-linux-musl/debug
+        mkdir -p /cargo-target
+        mount -t 9p -o trans=virtio,version=9p2000.L mbx-tgt /cargo-target 2>/dev/null || true
+        echo "MINIBOX_VM_READY"
+        /sbin/run-tests.sh
+        RC=$?
+        echo "MINIBOX_TESTS_DONE rc=${RC}"
+        poweroff -f 2>/dev/null || reboot -f
+        ;;
+    *)
+        exec /sbin/minibox-agent
+        ;;
+esac
+"#;
+    let init_path = sbin.join("init");
+    // Remove old symlink if present
+    if init_path.symlink_metadata().is_ok() {
+        std::fs::remove_file(&init_path).context("removing old /sbin/init")?;
+    }
+    std::fs::write(&init_path, init_script).context("writing /sbin/init")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&init_path, std::fs::Permissions::from_mode(0o755))
+            .context("chmod /sbin/init")?;
+    }
+
+    // /sbin/run-tests.sh — test runner called by init in test mode
+    let run_tests_script = r#"#!/bin/sh
+# Run minibox test suites from the mounted cargo target directory.
+TARGET_DIR=/cargo-target/aarch64-unknown-linux-musl/debug
+DEPS_DIR="${TARGET_DIR}/deps"
+export MINIBOX_TEST_BIN_DIR="${TARGET_DIR}"
+export MINIBOX_ADAPTER=native
+
+PASS=0
+FAIL=0
+
+run_suite() {
+    SUITE="$1"
+    BIN=""
+    for f in "${DEPS_DIR}/${SUITE}"-*; do
+        [ -x "$f" ] && BIN="$f" && break
+    done
+    if [ -z "$BIN" ]; then
+        echo "  SKIP  ${SUITE} (binary not found in ${DEPS_DIR})"
+        return
+    fi
+    echo "  RUN   ${SUITE}"
+    if "$BIN" --test-threads=1 --nocapture; then
+        PASS=$((PASS + 1))
+        echo "  PASS  ${SUITE}"
+    else
+        FAIL=$((FAIL + 1))
+        echo "  FAIL  ${SUITE}"
+    fi
+}
+
+run_suite cgroup_tests
+run_suite e2e_tests
+run_suite integration_tests
+run_suite sandbox_tests
+
+echo "=== RESULTS: pass=${PASS} fail=${FAIL} ==="
+[ "$FAIL" -eq 0 ]
+"#;
+    let run_tests_path = sbin.join("run-tests.sh");
+    std::fs::write(&run_tests_path, run_tests_script).context("writing /sbin/run-tests.sh")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&run_tests_path, std::fs::Permissions::from_mode(0o755))
+            .context("chmod /sbin/run-tests.sh")?;
+    }
+
+    println!("  init    rootfs/sbin/init + sbin/run-tests.sh + etc/init.d/rcS");
+    Ok(())
+}
+
+/// Create a gzip-compressed cpio initramfs from `rootfs_dir` at `initramfs_path`.
+/// Skips if the file already exists and `force` is false.
+#[allow(dead_code)]
+pub fn create_initramfs(rootfs_dir: &Path, initramfs_path: &Path, force: bool) -> Result<()> {
+    if initramfs_path.exists() && !force {
+        println!("  cached  {}", initramfs_path.display());
+        return Ok(());
+    }
+    println!("  initramfs building from {}", rootfs_dir.display());
+    let abs_initramfs = initramfs_path
+        .canonicalize()
+        .unwrap_or_else(|_| initramfs_path.to_path_buf());
+    // Use absolute path: canonicalize may fail if file doesn't exist yet, so use parent + filename
+    let abs_initramfs = if abs_initramfs == initramfs_path {
+        // File didn't exist, build absolute from parent
+        let parent = initramfs_path
+            .parent()
+            .context("initramfs path has no parent")?;
+        let parent_abs = parent.canonicalize().with_context(|| {
+            format!("canonicalizing initramfs parent dir {}", parent.display())
+        })?;
+        parent_abs.join(
+            initramfs_path
+                .file_name()
+                .context("initramfs path has no filename")?,
+        )
+    } else {
+        abs_initramfs
+    };
+
+    let sh_cmd = format!(
+        "(cd {} && find . | cpio -o -H newc 2>/dev/null) | gzip -9 > {}",
+        rootfs_dir.display(),
+        abs_initramfs.display()
+    );
+    let status = std::process::Command::new("sh")
+        .args(["-c", &sh_cmd])
+        .status()
+        .context("running cpio | gzip for initramfs")?;
+    if !status.success() {
+        anyhow::bail!("initramfs creation failed");
+    }
+    let size_mib = std::fs::metadata(&abs_initramfs)
+        .map(|m| m.len() / (1024 * 1024))
+        .unwrap_or(0);
+    println!("  initramfs {} ({} MiB)", abs_initramfs.display(), size_mib);
     Ok(())
 }
 

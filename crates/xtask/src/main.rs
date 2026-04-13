@@ -11,6 +11,7 @@
 //! | `flamegraph`| Profiling: samply (macOS) / cargo-flamegraph (Linux)        |
 //! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
 //! | `vm_image`  | VM image build: Alpine kernel + minibox agent (macOS/vz)    |
+//! | `vm_run`    | VM boot: interactive shell or test execution under QEMU      |
 
 use anyhow::{Result, bail};
 use std::{env, path::Path};
@@ -24,6 +25,7 @@ mod flamegraph;
 mod gates;
 mod test_image;
 mod vm_image;
+mod vm_run;
 
 fn main() -> Result<()> {
     let task = env::args().nth(1);
@@ -73,7 +75,19 @@ fn main() -> Result<()> {
         Some("build-vm-image") => {
             let force = env::args().any(|a| a == "--force");
             let vm_dir = vm_image::default_vm_dir();
-            vm_image::build_vm_image(&vm_dir, force)
+            vm_image::build_vm_image(&vm_dir, force)?;
+            vm_image::create_initramfs(&vm_dir.join("rootfs"), &vm_dir.join("minibox-initramfs.img"), force)
+        }
+        Some("run-vm") => {
+            let vm_dir = vm_image::default_vm_dir();
+            vm_run::run_vm_interactive(&vm_dir)
+        }
+        Some("test-vm") => {
+            let vm_dir = vm_image::default_vm_dir();
+            let cargo_target = env::var("CARGO_TARGET_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
+            vm_run::test_vm(&vm_dir, &cargo_target)
         }
         Some("build-test-image") => {
             let force = env::args().any(|a| a == "--force");
@@ -106,7 +120,9 @@ fn main() -> Result<()> {
             eprintln!(
                 "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
             );
-            eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent");
+            eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent, build initramfs");
+            eprintln!("  run-vm           boot VM with interactive shell (QEMU HVF, Ctrl-A X to exit)");
+            eprintln!("  test-vm          build musl test binaries + run in VM, stream results");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
             eprintln!(
                 "  test-linux       build image + load into minibox + run tests in container"
