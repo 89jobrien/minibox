@@ -26,12 +26,29 @@ use mbx::adapters::{
 };
 use mbx::image::ImageStore;
 use mbx::protocol::DaemonResponse;
-use miniboxd::handler::{self, HandlerDependencies};
+use miniboxd::handler::{self, ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
+
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
 
 async fn handle_run_once(
     image: String,
@@ -82,6 +99,15 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         network_provider: Arc::new(NoopNetwork::new()),
         image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
         exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::clone(&state.image_store),
+        policy: ContainerPolicy::default(),
+        pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
@@ -308,7 +334,7 @@ async fn test_container_removal_cleanup() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Mark as stopped (normally done by reaper)
-    state.update_container_state(&container_id, "Stopped").await;
+    state.update_container_state(&container_id, daemonbox::state::ContainerState::Stopped).await;
 
     // Remove container
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
@@ -366,13 +392,13 @@ async fn test_overlay_filesystem_setup() {
         .expect("failed to setup rootfs");
 
     // Verify merged directory exists and contains expected files
-    assert!(rootfs.exists(), "rootfs should exist");
+    assert!(rootfs.merged_dir.exists(), "rootfs should exist");
     assert!(
-        rootfs.join("bin").exists(),
+        rootfs.merged_dir.join("bin").exists(),
         "bin directory should exist in rootfs"
     );
     assert!(
-        rootfs.join("etc").exists(),
+        rootfs.merged_dir.join("etc").exists(),
         "etc directory should exist in rootfs"
     );
 
@@ -444,7 +470,7 @@ async fn test_complete_container_lifecycle() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // 6. Mark as stopped and remove
-    state.update_container_state(&container_id, "Stopped").await;
+    state.update_container_state(&container_id, daemonbox::state::ContainerState::Stopped).await;
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
 
@@ -526,7 +552,7 @@ async fn test_multiple_concurrent_containers() {
     // Cleanup all containers
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
-        state.update_container_state(&id, "Stopped").await;
+        state.update_container_state(&id, daemonbox::state::ContainerState::Stopped).await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }
 }

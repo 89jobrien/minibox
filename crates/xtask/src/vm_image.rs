@@ -320,9 +320,6 @@ case "$MODE" in
         exec /bin/sh -i
         ;;
     test)
-        TARGET_DIR=/cargo-target/aarch64-unknown-linux-musl/debug
-        mkdir -p /cargo-target
-        mount -t 9p -o trans=virtio,version=9p2000.L mbx-tgt /cargo-target 2>/dev/null || true
         echo "MINIBOX_VM_READY"
         /sbin/run-tests.sh
         RC=$?
@@ -349,10 +346,9 @@ esac
 
     // /sbin/run-tests.sh — test runner called by init in test mode
     let run_tests_script = r#"#!/bin/sh
-# Run minibox test suites from the mounted cargo target directory.
-TARGET_DIR=/cargo-target/aarch64-unknown-linux-musl/debug
-DEPS_DIR="${TARGET_DIR}/deps"
-export MINIBOX_TEST_BIN_DIR="${TARGET_DIR}"
+# Run minibox test suites from the embedded /tests directory.
+DEPS_DIR="/tests"
+export MINIBOX_TEST_BIN_DIR="/tests"
 export MINIBOX_ADAPTER=native
 
 PASS=0
