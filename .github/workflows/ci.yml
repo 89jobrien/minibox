@@ -94,6 +94,7 @@ jobs:
     runs-on: [self-hosted, minibox]
     if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     needs: test-unit
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v4
       - name: cargo xtask test-e2e-suite
