@@ -146,11 +146,11 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 
     println!("  compile miniboxd → {target}");
     let status = std::process::Command::new("cargo")
-        .args(["build", "--release", "--target", target, "-p", "miniboxd"])
+        .args(["zigbuild", "--release", "--target", target, "-p", "miniboxd"])
         .status()
-        .context("cargo build for agent")?;
+        .context("cargo zigbuild for agent (is cargo-zigbuild installed?)")?;
     if !status.success() {
-        anyhow::bail!("cargo build failed for miniboxd/{target}");
+        anyhow::bail!("cargo zigbuild failed for miniboxd/{target}");
     }
 
     // Binary is at target/<target>/release/miniboxd
