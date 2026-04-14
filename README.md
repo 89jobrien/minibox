@@ -9,12 +9,25 @@
 
 ## Features
 
-- **Unified binary (`miniboxd`)** – Single entrypoint that selects platform‑specific backends behind compile‑time cfg gates.
+- **Unified binary (`miniboxd`)** – Single entrypoint that selects platform-specific backends behind compile-time cfg gates.
 - **Platform shims** – `macbox`, `winbox`, and `daemonbox` hide OS differences behind a stable interface.
-- **Core library (`mbx`)** – Platform‑agnostic crate shared by the daemon, CLI, and benchmark tooling.
-- **JSON CLI (`minibox-cli`)** – Thin, platform‑agnostic client that speaks JSON over pipes/sockets.
+- **Core library (`mbx`)** – Platform-agnostic crate shared by the daemon, CLI, and benchmark tooling.
+- **JSON CLI (`minibox-cli`)** – Thin client that speaks JSON over Unix sockets.
+- **OCI image pull** – Docker Hub v2 API with anonymous auth; parallel layer pulls; ghcr.io support.
+- **Container exec** – `minibox exec` runs commands in existing containers (`setns`); `-it` for interactive PTY.
+- **Named containers** – `--name` on `run`; name shown in `ps`; `exec` by name.
+- **Log capture** – `minibox logs <id>` retrieves stored stdout/stderr.
+- **Bridge networking** – veth pairs, NAT via iptables DNAT, IP allocator; `MINIBOX_NETWORK_MODE=bridge`.
+- **Container events** – `minibox events` streams lifecycle events.
+- **Image GC** – `minibox prune`/`minibox rmi`; lease-based GC.
+- **Bind mounts + privileged** – `-v`/`--mount`, `--privileged` on `run`.
+- **OCI push/commit/build** – `OciPushAdapter`, `ContainerCommitter`, `MiniboxImageBuilder` traits.
+- **Observability** – OpenTelemetry OTLP tracing, Prometheus `/metrics`, structured `tracing` fields.
+- **Dashbox TUI** – 8-tab Ratatui dashboard: containers, bench, git, todos, CI, diagrams, metrics.
+- **Agentbox** – Go orchestration agents (council, meta-agent, commit-msg) using Claude Agent SDK.
+- **Docker API shim** – `dockerboxd` translates Docker API calls to minibox protocol.
 - **Bench tooling (`minibox-bench`)** – Focused crate for performance exploration and regression tracking.
-- **Proc‑macros (`minibox-macros`)** – Ergonomic proc‑macros used by `mbx` for internal APIs.
+- **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
 
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
@@ -22,22 +35,23 @@
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
-**Status:** Development
+**Status:** Development (`v0.2.0`)
 
 ## Supported
 
-- Linux: native
-- Colima: mac/linux runtime, Docker alt
-- GKE: unprivileged deployment
+- Linux: native (namespaces + cgroups v2 + overlayfs)
+- Colima: macOS/Linux runtime, Docker alternative
+- GKE: unprivileged deployment (proot + copy-FS)
+- macOS VZ.framework: native VM via Apple Virtualization.framework (`MINIBOX_ADAPTER=vz`)
 
 ## On Deck
 
-- WSL2: Everything is wired or at least stubbed.
-- MacOS: Virtualization framework for native macos
+- WSL2: wired and stubbed; not yet wired into miniboxd dispatch
+- Docker parity: push/commit/build traits defined — adapters not yet wired end-to-end
 
 ## Backburner
 
-- Windows: WSL is best bet. I planned to do full native win
+- Windows: WSL2 is the best path; native HCS planned but deprioritized
 
 ---
 
@@ -82,20 +96,23 @@ sudo /usr/local/bin/minibox ps
 
 ## Crate Structure
 
-| Crate             | Type    | Description                                            |
-| ----------------- | ------- | ------------------------------------------------------ |
-| `minibox-core`    | Library | Protocol, domain traits, image types, error types      |
-| `mbx`             | Library | Linux primitives, adapters, image management           |
-| `daemonbox`       | Library | Handler, state, Unix socket server                     |
-| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch |
-| `minibox-cli`     | Binary  | CLI client                                             |
-| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`)                      |
-| `minibox-llm`     | Library | Multi-provider LLM client with structured output       |
-| `minibox-bench`   | Binary  | Benchmark harness                                      |
-| `minibox-client`  | Library | Low-level Unix socket client                           |
-| `minibox-secrets` | Library | Typed credential store with validation & audit hashes  |
-| `macbox`          | Library | macOS daemon implementation (Colima adapter suite)     |
-| `winbox`          | Library | Windows daemon implementation (stub)                   |
+| Crate             | Type    | Description                                                        |
+| ----------------- | ------- | ------------------------------------------------------------------ |
+| `minibox-core`    | Library | Protocol, domain traits, image types, error types                  |
+| `mbx`             | Library | Linux primitives, adapters, image management                       |
+| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle               |
+| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch             |
+| `minibox-cli`     | Binary  | CLI client                                                         |
+| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                  |
+| `minibox-llm`     | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback  |
+| `minibox-bench`   | Binary  | Benchmark harness (codec + adapter + parallel suites)              |
+| `minibox-client`  | Library | Low-level Unix socket client                                       |
+| `minibox-secrets` | Library | Typed credential store with validation & audit hashes              |
+| `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)         |
+| `winbox`          | Library | Windows daemon implementation (stub)                               |
+| `dockerbox`       | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox  |
+| `dashbox`         | Binary  | Ratatui TUI dashboard (8 tabs: containers, bench, git, CI, etc.)   |
+| `mbxctl`          | Binary  | SSE-based streaming CLI (dagu integration)                         |
 
 **Key modules in `mbx`:**
 
@@ -257,29 +274,53 @@ sudo minibox pull ubuntu -t 22.04
 # Run a container
 sudo minibox run alpine -- /bin/echo "Hello!"
 sudo minibox run alpine --memory 536870912 --cpu-weight 500 -- /bin/sh
+sudo minibox run --name mybox alpine -- /bin/sh   # named container
+sudo minibox run -it alpine -- /bin/sh            # interactive PTY
+sudo minibox run -v /host/path:/container/path alpine -- /bin/sh  # bind mount
 
 # List running containers
 sudo minibox ps
 
+# Exec into a running container
+sudo minibox exec <container_id> -- /bin/sh
+sudo minibox exec -it mybox -- /bin/bash          # interactive PTY
+
+# Retrieve logs
+sudo minibox logs <container_id>
+
+# Stream lifecycle events
+sudo minibox events
+
 # Stop / remove
 sudo minibox stop <container_id>
 sudo minibox rm <container_id>
+
+# Image management
+sudo minibox prune          # GC unused images
+sudo minibox rmi <image>    # remove specific image
 ```
 
 **Daemon flags:**
 
 ```bash
-sudo miniboxd                          # default (native adapter)
-RUST_LOG=debug sudo miniboxd           # verbose logging
-MINIBOX_ADAPTER=gke miniboxd          # GKE adapter
+sudo miniboxd                              # default (native adapter)
+RUST_LOG=debug sudo miniboxd              # verbose logging
+MINIBOX_ADAPTER=gke miniboxd             # GKE adapter
+MINIBOX_ADAPTER=vz miniboxd              # macOS VZ.framework
+MINIBOX_NETWORK_MODE=bridge miniboxd     # bridge networking
 ```
 
-**Resource limit flags:**
+**Run flags:**
 
-| Flag           | Type    | Default   | Notes                       |
-| -------------- | ------- | --------- | --------------------------- |
-| `--memory`     | bytes   | unlimited | e.g. `536870912` for 512 MB |
-| `--cpu-weight` | 1–10000 | 100       | relative CPU share          |
+| Flag              | Type    | Default   | Notes                            |
+| ----------------- | ------- | --------- | -------------------------------- |
+| `--memory`        | bytes   | unlimited | e.g. `536870912` for 512 MB      |
+| `--cpu-weight`    | 1–10000 | 100       | relative CPU share               |
+| `--name`          | string  | —         | assign a name to the container   |
+| `-it`             | flag    | false     | interactive PTY mode             |
+| `-v`/`--volume`   | string  | —         | bind mount (`host:container`)    |
+| `--mount`         | string  | —         | mount spec (long form)           |
+| `--privileged`    | flag    | false     | curated capability whitelist     |
 
 ---
 
@@ -307,7 +348,7 @@ cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
 cargo bench -p mbx         # Criterion HTML reports (local only)
 ```
 
-**Current counts:** 221 unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
+**Current counts:** 300+ unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
 
 See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile guards.
 
@@ -332,6 +373,7 @@ See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile g
 - Seccomp filters
 - User namespace remapping
 - Request rate limiting
+- Rootless support
 
 See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
@@ -339,28 +381,28 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 ## Current Limitations
 
-- **No networking** — containers get an isolated netns but no bridge/veth configuration
-- **No exec** — cannot run commands in existing containers
-- **No log capture** — container output not stored
 - **No persistent state** — daemon restart loses all container records
 - **Root required** — no rootless support
-- **No Dockerfile** — image-only workflow
+- **Docker parity incomplete** — push/commit/build traits defined but adapters not wired end-to-end into miniboxd
+- **VZ.framework blocked** — `VZErrorInternal(code=1)` on macOS 26 ARM64 (upstream Apple bug)
+- **No seccomp/capability dropping** — privileged mode uses curated whitelist, not full drop
 
 ---
 
 ## Extending
 
-Domain traits are already defined for upcoming features. Adding a capability means implementing the trait and wiring the adapter:
+Domain traits are defined as ports in `crates/mbx/src/domain.rs`. Adding a capability means
+implementing the trait and wiring the adapter into `HandlerDependencies`.
 
-| Trait              | Adapter needed      | Notes                      |
-| ------------------ | ------------------- | -------------------------- |
-| `BridgeNetworking` | Linux bridge + veth |                            |
-| `PseudoTerminal`   | `/dev/pts`          |                            |
-| `ContainerExec`    | `setns` syscall     |                            |
-| `LogStore`         | JSON-lines file     |                            |
-| `StateStore`       | SQLite / sled       | replaces in-memory HashMap |
-
-Trait definitions live in `crates/mbx/src/domain.rs`.
+| Trait                | Status   | Notes                                          |
+| -------------------- | -------- | ---------------------------------------------- |
+| `BridgeNetworking`   | Shipped  | veth + NAT, `MINIBOX_NETWORK_MODE=bridge`      |
+| `ExecRuntime`        | Shipped  | `setns`, PTY, stdin relay                      |
+| `NetworkProvider`    | Shipped  | None / Host / Bridge dispatch                  |
+| `ImagePusher`        | Partial  | OCI Distribution Spec — not wired in miniboxd  |
+| `ContainerCommitter` | Partial  | Overlay upperdir snapshot — not wired          |
+| `ImageBuilder`       | Partial  | Basic Dockerfile subset — not wired            |
+| `StateStore`         | Open     | SQLite / sled — replaces in-memory HashMap     |
 
 ---
 
