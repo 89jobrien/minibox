@@ -106,5 +106,9 @@ __pycache__/
 *.pytest_cache/
 .firecrawl/
 .ctx/
+!.ctx/HANDOFF.*.yaml
+!.ctx/HANDOFF.*.*.yaml
+.ctx/HANDOFF.state.yaml
+.ctx/HANDOFF.md
 .ctx/HANDOVER.md
 .tmp-dogfood/
