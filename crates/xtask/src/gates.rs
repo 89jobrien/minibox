@@ -66,24 +66,20 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("conformance_tests failed")?;
-    // commit / build / push conformance (Phase 2+)
-    cmd!(sh, "cargo test --release -p mbx --test conformance_commit")
-        .run()
-        .context("conformance_commit tests failed")?;
-    cmd!(sh, "cargo test --release -p mbx --test conformance_build")
-        .run()
-        .context("conformance_build tests failed")?;
-    cmd!(sh, "cargo test --release -p mbx --test conformance_push")
-        .run()
-        .context("conformance_push tests failed")?;
     // Colima adapter conformance tests
-    cmd!(sh, "cargo test --release -p mbx --test colima_conformance_tests")
-        .run()
-        .context("colima_conformance_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p mbx --test colima_conformance_tests"
+    )
+    .run()
+    .context("colima_conformance_tests failed")?;
     // GKE adapter isolation tests (platform-agnostic)
-    cmd!(sh, "cargo test --release -p mbx --test gke_adapter_isolation_tests")
-        .run()
-        .context("gke_adapter_isolation_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p mbx --test gke_adapter_isolation_tests"
+    )
+    .run()
+    .context("gke_adapter_isolation_tests failed")?;
     // Container lifecycle failure tests (daemonbox handler error paths)
     cmd!(
         sh,
@@ -91,6 +87,8 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("container_lifecycle_failure_tests failed")?;
+    // commit / build / push conformance + artifact report (wires #68)
+    test_conformance(sh)?;
     Ok(())
 }
 
