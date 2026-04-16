@@ -188,36 +188,6 @@ items:
   - crates/dashbox/src/data/todos.rs
   extra: []
   completed: 2026-04-05
-- id: minibox-9
-  doob_uuid: 03e96b75-1982-4da1-bf70-5207c23bcab1
-  name: mbx-dagu-tier2-fixes
-  priority: P2
-  status: open
-  title: Tier 2 mbx-dagu fixes (#31,
-  description: 'Add .gitmodules or document nested repo (#31), Dockerfile use dagu
-    base image not alpine (#35), executor.go pass Env/MemoryLimitBytes/CpuWeight (#36).
-
-    '
-  files: []
-  extra:
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id ppzder64e4p2eit00jfa
-- id: minibox-10
-  doob_uuid: d579a03b-9e93-4bf9-b3c0-ec89b27b563e
-  name: linux-tier3-tests
-  priority: P2
-  status: open
-  title: Tier 3 Linux-only adapter isolation and lifecycle failure tests
-  description: 'Native adapter isolation tests (#22), GKE adapter isolation tests
-    (#23), Container lifecycle failure tests (#24). Run on VPS to verify.
-
-    '
-  files: []
-  extra:
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id erkt4cau79w1ei3okmqd
 - id: minibox-13
   doob_uuid: f3b89717-3dbb-400c-80dc-00882a4c933e
   name: exec-into-containers
@@ -317,27 +287,6 @@ items:
     type: note
     note: captured in doob — todo id mkk1c2xb5q6xqcdrd58w
   completed: 2026-04-09
-- id: minibox-17
-  doob_uuid: 39eb1bfa-8c6f-44b5-9d78-3ca6ec3e448c
-  name: container-networking
-  priority: P2
-  status: open
-  title: 'feat: container networking — veth/bridge (#20)'
-  description: 'Create minibox0 bridge device. veth pair per container (host side
-    on bridge, container
-
-    side with IP). DHCP or static IP assignment. NAT/masquerade for outbound. DNS
-    inside
-
-    containers. Maestro Phase 3 (depends on Phase 1+2).
-
-    '
-  files:
-  - crates/mbx/src/container/
-  extra:
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id vy49dnpoelue2zfl3hyq
 - id: minibox-18
   doob_uuid: a7596606-41c4-4a89-910c-2d54ff9fe10d
   name: shared-oci-library
@@ -360,122 +309,6 @@ items:
   - date: 2026-04-06
     type: note
     note: captured in doob — todo id x2b0i0t9hrbprpj7vgf3
-- id: minibox-19
-  doob_uuid: a0ade5b1-5abe-4c33-9867-a6271812658c
-  name: vz-provision-vm
-  priority: P2
-  status: open
-  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40)'
-  description: 'Implement VM lifecycle (create disk image, configure VZ VM, start/stop)
-    inside macbox.
-
-    VM boots minimal Linux guest. VM state in MINIBOX_DATA_DIR/vm/. Expose start/stop/status
-
-    API consumed by macbox::start(). Blocked by VZErrorInternal Apple bug on macOS
-    26 ARM64.
-
-    '
-  files:
-  - crates/macbox/src/vz/
-  extra:
-  - date: 2026-04-04
-    type: blocker
-    note: 'VZErrorInternal(code=1) blocks VM start on macOS 26 ARM64. Tracking
-
-      https://github.com/apple/container/issues/1254 — same Apple OS bug as minibox-7.
-
-      '
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id grid6e3s9hfbj3zapwth
-- id: minibox-20
-  doob_uuid: 3f36e12f-1318-4c2f-9e85-990036692bcd
-  name: vz-minibox-agent
-  priority: P2
-  status: blocked
-  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41)'
-  description: 'Small Rust binary (minibox-agent) inside the minibox Linux VM. Listens
-    on AF_VSOCK CID 3,
-
-    accepts JSON requests (same protocol as miniboxd Unix socket), executes using
-    mbx primitives.
-
-    Streams stdout/stderr as ContainerOutput frames. Depends on #40.
-
-    '
-  files:
-  - crates/macbox/src/vz/
-  extra:
-  - date: 2026-04-04
-    type: blocker
-    note: Depends on minibox-19 (VZ VM provisioning,
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id iwiaqi2sqmiz5uz2xxy3
-- id: minibox-21
-  doob_uuid: 707aaac1-3853-4aea-9559-62feb34f67aa
-  name: vz-vsock-io-bridge
-  priority: P2
-  status: blocked
-  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42)'
-  description: 'Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container
-    stdout/stderr
-
-    forwarded as ContainerOutput protocol messages. ContainerStopped carries exit
-    code.
-
-    Must support: arbitrary byte chunks, concurrent containers, clean EOF on exit.
-
-    '
-  files:
-  - crates/macbox/src/vz/
-  extra:
-  - date: 2026-04-04
-    type: blocker
-    note: Depends on minibox-20 (minibox-agent,
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id vui8ef7sjkx2vg3rxckj
-- id: minibox-22
-  doob_uuid: f839efd2-ffe8-4d95-8f14-34e17e9d5ed4
-  name: vz-virtiofs-mounts
-  priority: P2
-  status: blocked
-  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43)'
-  description: 'Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into
-    VM via virtiofs.
-
-    Allows in-VM minibox-agent to construct overlay FS from host-stored layers without
-
-    copying. Enables -v /host/path:/container/path on macOS.
-
-    '
-  files:
-  - crates/macbox/src/vz/
-  extra:
-  - date: 2026-04-04
-    type: blocker
-    note: Depends on minibox-19 (VZ VM provisioning,
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id fuq8cvcbsgkspl9puggn
-- id: minibox-23
-  doob_uuid: 12b0e2cb-fd90-43fe-beea-db6a379c27a1
-  name: full-stack-ownership
-  priority: P2
-  status: open
-  title: 'feat: minibox owns full container stack on every OS (#44)'
-  description: 'Tracking issue: Linux native done. macOS via VF+vsock planned (#40-43).
-    Windows via
-
-    Hyper-V/WSL2 kernel TBD (#45). No external runtime (Docker, Colima, nerdctl, WSL).
-
-    '
-  files: []
-  extra:
-  - date: 2026-04-06
-    type: note
-    note: captured in doob — todo id pvmbh62ipbanf7trtem0
 - id: minibox-24
   name: pty-stdio-piping
   priority: P2
@@ -626,19 +459,6 @@ items:
   - CLAUDE.md
   extra: []
   completed: 2026-04-11
-- id: minibox-29
-  name: shared-oci-lib
-  priority: P2
-  status: open
-  title: 'feat: shared OCI image-pulling library (#21)'
-  description: 'GH #21: Extract minibox-lib/src/image/ into minibox-oci crate. Public
-    API: pull(image_ref, store_path, progress_callback). Keep Docker Hub + GHCR adapters,
-    parallel layer downloads, HashingReader, all security validation.'
-  files: []
-  extra:
-  - type: github-issue
-    number: 21
-    url: https://github.com/89jobrien/minibox/issues/21
 - id: minibox-30
   name: native-adapter-isolation-tests
   priority: P2
@@ -713,18 +533,6 @@ items:
     number: 82
     url: https://github.com/89jobrien/minibox/issues/82
   completed: '2026-04-16'
-- id: minibox-36
-  name: enforce-conformance-ci
-  priority: P2
-  status: open
-  title: Enforce e2e serialization in CI runner config
-  description: 'GH #73: Local dev and CI use different serial_test configs. Make identical
-    so regressions surface in both.'
-  files: []
-  extra:
-  - type: github-issue
-    number: 73
-    url: https://github.com/89jobrien/minibox/issues/73
 - id: minibox-37
   name: conformance-markdown-report
   priority: P2
@@ -1132,6 +940,10 @@ items:
   - crates/xtask/src/vm_image.rs
   extra: []
 log:
+- date: '2026-04-16'
+  summary: Pruned 10 duplicate HANDOFF items (minibox-9/10/17/19/20/21/22/23/29/36
+    — superseded by more detailed entries).
+  commits: []
 - date: '2026-04-16'
   summary: 'Session: installed QEMU via brew; designed VM rootfs overlay feature (minibox-68,
     not yet implemented).'
