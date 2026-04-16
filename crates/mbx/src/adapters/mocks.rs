@@ -267,7 +267,7 @@ impl FilesystemProvider for MockFilesystem {
 
         Ok(RootfsLayout {
             merged_dir: container_dir.join("merged"),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }
@@ -686,7 +686,7 @@ impl FilesystemProvider for FailableFilesystemMock {
         }
         Ok(RootfsLayout {
             merged_dir: container_dir.join("merged"),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }

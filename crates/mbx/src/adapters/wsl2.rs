@@ -306,7 +306,7 @@ impl FilesystemProvider for Wsl2Filesystem {
 
         Ok(RootfsLayout {
             merged_dir: Path::new(&response.merged_path).to_path_buf(),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }

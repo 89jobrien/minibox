@@ -287,13 +287,54 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     fn cleanup(&self, container_dir: &Path) -> Result<()>;
 }
 
+/// Backend-specific writable-layer metadata produced by
+/// [`FilesystemProvider::setup_rootfs`] and persisted into `ContainerRecord`
+/// so that commit/build logic can locate the writable layer without
+/// re-querying the container runtime.
+///
+/// Callers that only need the host-visible upper directory should use
+/// [`BackendRootfsMetadata::overlay_upper_dir`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BackendRootfsMetadata {
+    /// Linux native overlay filesystem.  `upper_dir` is visible from the host.
+    Overlay {
+        upper_dir: PathBuf,
+    },
+    /// Colima (Lima VM) overlay filesystem.  `upper_dir` is the guest-side
+    /// path accessible via Lima's `/Users` + `/tmp` bind mounts.  `instance`
+    /// is the Colima/Lima instance name for `limactl shell` commands.
+    ColimaOverlay {
+        upper_dir: PathBuf,
+        instance: String,
+    },
+}
+
+impl BackendRootfsMetadata {
+    /// Return the host-visible overlay upper directory, regardless of backend.
+    pub fn overlay_upper_dir(&self) -> &PathBuf {
+        match self {
+            Self::Overlay { upper_dir } | Self::ColimaOverlay { upper_dir, .. } => upper_dir,
+        }
+    }
+
+    /// Return the Lima instance name for `ColimaOverlay` backends, or `None`.
+    pub fn colima_instance(&self) -> Option<&str> {
+        match self {
+            Self::ColimaOverlay { instance, .. } => Some(instance.as_str()),
+            _ => None,
+        }
+    }
+}
+
 /// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootfsLayout {
     /// Path to the merged/mounted rootfs that the runtime will use.
     pub merged_dir: PathBuf,
-    /// Host-visible writable layer path when the backend exposes one.
-    pub overlay_upper: Option<PathBuf>,
+    /// Typed backend metadata for the writable layer, when the backend exposes
+    /// one.  `None` for copy-based (GKE/proot) and VZ (in-VM) backends.
+    pub rootfs_metadata: Option<BackendRootfsMetadata>,
     /// Source image reference associated with this rootfs when known.
     pub source_image_ref: Option<String>,
 }

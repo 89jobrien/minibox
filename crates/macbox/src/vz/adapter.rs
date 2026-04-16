@@ -243,7 +243,7 @@ impl FilesystemProvider for VzFilesystem {
         );
         Ok(RootfsLayout {
             merged_dir: container_dir.to_path_buf(),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }

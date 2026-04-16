@@ -115,7 +115,7 @@ impl FilesystemProvider for CopyFilesystem {
 
         Ok(RootfsLayout {
             merged_dir: merged,
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }

@@ -1308,7 +1308,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;
@@ -1567,7 +1567,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;
@@ -1883,7 +1883,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;
@@ -2048,7 +2048,7 @@ async fn test_handle_remove_created_container_succeeds() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;
@@ -2849,7 +2849,7 @@ async fn test_stop_dead_pid_exits_immediately() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;
@@ -2914,7 +2914,7 @@ async fn test_stop_container_no_pid_returns_error() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
         .await;

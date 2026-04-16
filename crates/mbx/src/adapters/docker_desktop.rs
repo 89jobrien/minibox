@@ -271,7 +271,7 @@ impl FilesystemProvider for DockerDesktopFilesystem {
         // Docker paths map directly back to macOS
         Ok(RootfsLayout {
             merged_dir: PathBuf::from(response.merged_path),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
     }

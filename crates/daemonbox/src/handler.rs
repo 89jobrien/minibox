@@ -707,7 +707,7 @@ async fn run_inner_capture(
         rootfs_path: merged_dir.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
-        overlay_upper: rootfs_layout.overlay_upper.clone(),
+        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
         source_image_ref: rootfs_layout
             .source_image_ref
             .clone()
@@ -921,7 +921,7 @@ async fn run_inner(
         rootfs_path: merged_dir_from_overlay.clone(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
-        overlay_upper: rootfs_layout.overlay_upper.clone(),
+        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
         source_image_ref: rootfs_layout
             .source_image_ref
             .clone()

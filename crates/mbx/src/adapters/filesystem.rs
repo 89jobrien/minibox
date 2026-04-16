@@ -90,7 +90,9 @@ impl FilesystemProvider for OverlayFilesystem {
 
         Ok(RootfsLayout {
             merged_dir,
-            overlay_upper: Some(container_dir.join("upper")),
+            rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
+                upper_dir: container_dir.join("upper"),
+            }),
             source_image_ref: None,
         })
     }

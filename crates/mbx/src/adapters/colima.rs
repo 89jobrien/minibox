@@ -451,7 +451,10 @@ impl FilesystemProvider for ColimaFilesystem {
 
         Ok(RootfsLayout {
             merged_dir,
-            overlay_upper: Some(upper_dir),
+            rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::ColimaOverlay {
+                upper_dir,
+                instance: self.instance.clone(),
+            }),
             source_image_ref: None,
         })
     }

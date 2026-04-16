@@ -119,7 +119,7 @@ fn make_record(id: &str) -> ContainerRecord {
         rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
-        overlay_upper: None,
+        rootfs_metadata: None,
         source_image_ref: None,
     }
 }

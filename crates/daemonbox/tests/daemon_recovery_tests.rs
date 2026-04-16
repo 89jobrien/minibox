@@ -84,7 +84,7 @@ fn make_record(id: &str) -> ContainerRecord {
         rootfs_path: PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/fake"),
         post_exit_hooks: vec![],
-        overlay_upper: None,
+        rootfs_metadata: None,
         source_image_ref: None,
     }
 }

@@ -63,10 +63,10 @@ pub struct ContainerRecord {
     /// Host-side commands to run after the container process exits.
     #[serde(default)]
     pub post_exit_hooks: Vec<HookSpec>,
-    /// Path to the container's overlay upper (writable) layer directory.
-    /// `None` for adapters that don't use an overlay filesystem.
+    /// Typed backend metadata for the writable layer.
+    /// `None` for adapters that don't expose an overlay filesystem (GKE, VZ).
     #[serde(default)]
-    pub overlay_upper: Option<PathBuf>,
+    pub rootfs_metadata: Option<minibox_core::domain::BackendRootfsMetadata>,
     /// Image reference used to create this container (e.g. `"alpine:latest"`).
     #[serde(default)]
     pub source_image_ref: Option<String>,
@@ -365,8 +365,9 @@ impl mbx::daemonbox_state::ContainerStateAccess for DaemonState {
             .get(container_id)
             .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
         record
-            .overlay_upper
-            .clone()
+            .rootfs_metadata
+            .as_ref()
+            .map(|m| m.overlay_upper_dir().clone())
             .ok_or_else(|| anyhow::anyhow!("container {container_id} has no overlay upper dir"))
     }
 
@@ -404,7 +405,7 @@ mod tests {
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         }
     }
