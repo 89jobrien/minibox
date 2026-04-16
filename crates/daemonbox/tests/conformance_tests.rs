@@ -79,39 +79,47 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 }
 
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+    );
     Arc::new(HandlerDependencies {
-        registry_router: Arc::new(HostnameRegistryRouter::new(
-            Arc::new(registry) as DynImageRegistry,
-            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
-        )),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
-        exec_runtime: None,
-        image_pusher: None,
-        commit_adapter: None,
-        image_builder: None,
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc: Arc::new(NoopImageGc),
-        image_store: Arc::new(
-            minibox_core::image::ImageStore::new(
-                tempfile::TempDir::new().unwrap().into_path().join("img"),
-            )
-            .unwrap(),
-        ),
+        image: daemonbox::handler::ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(registry) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
         policy: daemonbox::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
-        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
-        )),
     })
 }
 
@@ -119,40 +127,48 @@ fn mock_deps_with_network(
     network: std::sync::Arc<MockNetwork>,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+    );
     Arc::new(HandlerDependencies {
-        registry_router: Arc::new(HostnameRegistryRouter::new(
-            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
-                as DynImageRegistry,
-            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
-        )),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: network,
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
-        exec_runtime: None,
-        image_pusher: None,
-        commit_adapter: None,
-        image_builder: None,
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc: Arc::new(NoopImageGc),
-        image_store: Arc::new(
-            minibox_core::image::ImageStore::new(
-                tempfile::TempDir::new().unwrap().into_path().join("img"),
-            )
-            .unwrap(),
-        ),
+        image: daemonbox::handler::ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: network,
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
         policy: daemonbox::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
-        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
-        )),
     })
 }
 
