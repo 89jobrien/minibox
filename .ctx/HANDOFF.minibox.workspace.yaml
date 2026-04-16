@@ -895,7 +895,7 @@ items:
 - id: minibox-50
   name: macbox-colima-path
   priority: P1
-  status: open
+  status: done
   title: Wire macbox Colima path to existing local commit/build/push adapters
   description: 'GH #90: Integrate Colima adapter suite into macbox start function
     for local container development on macOS.'
@@ -904,10 +904,11 @@ items:
   - type: github-issue
     number: 90
     url: https://github.com/89jobrien/minibox/issues/90
+  completed: '2026-04-16'
 - id: minibox-51
   name: macbox-dogfood-flow
   priority: P1
-  status: open
+  status: done
   title: Dogfood mac create/commit/build/push flow end-to-end
   description: 'GH #89: Test the full Colima workflow: create container → modify →
     commit → build → push to local registry.'
@@ -916,6 +917,7 @@ items:
   - type: github-issue
     number: 89
     url: https://github.com/89jobrien/minibox/issues/89
+  completed: '2026-04-16'
 - id: minibox-52
   name: vz-vm-provision
   priority: P2
@@ -982,7 +984,7 @@ items:
 - id: minibox-57
   name: vz-hci-platform-guard
   priority: P1
-  status: open
+  status: done
   title: '[bug] minibox-cli nix/libc usage lacks platform guards'
   description: 'GH #56: Platform-specific imports in minibox-cli/src/ are not guarded
     with #[cfg(target_os)]. This breaks compilation on non-Linux platforms.'
@@ -991,6 +993,7 @@ items:
   - type: github-issue
     number: 56
     url: https://github.com/89jobrien/minibox/issues/56
+  completed: '2026-04-16'
 - id: minibox-58
   name: release-ci-gate
   priority: P2
@@ -1007,7 +1010,7 @@ items:
 - id: minibox-59
   name: libc-nix-deps-added
   priority: P1
-  status: open
+  status: done
   title: '[bug] minibox-cli: libc and nix dependencies added with no source/safety
     comments'
   description: 'GH #52: libc and nix were added as workspace deps but lack documentation
@@ -1017,10 +1020,11 @@ items:
   - type: github-issue
     number: 52
     url: https://github.com/89jobrien/minibox/issues/52
+  completed: '2026-04-16'
 - id: minibox-60
   name: conformance-rootfs-meta
   priority: P1
-  status: open
+  status: done
   title: Add regression tests for rootfs metadata and mac adapter wiring
   description: 'GH #80: Test that container metadata survives the full create/commit/build/push
     cycle with correct image ID and layer references.'
@@ -1029,6 +1033,7 @@ items:
   - type: github-issue
     number: 80
     url: https://github.com/89jobrien/minibox/issues/80
+  completed: '2026-04-16'
 - id: minibox-61
   name: pty-stdio-complete
   priority: P2
@@ -1115,6 +1120,13 @@ items:
     number: 93
     url: https://github.com/89jobrien/minibox/issues/93
 log:
+- date: '2026-04-16'
+  summary: 'P1 sprint: minibox-60 — 9 regression tests added (commit cycle metadata,
+    BackendRootfsMetadata serde round-trips, RootfsLayout accessor). minibox-50/57/59
+    verified already resolved in prior sessions. minibox-51 covered structurally by
+    macbox wiring test. All 5 P1s closed.'
+  commits:
+  - 6d6e6d8
 - date: '2026-04-16'
   summary: Implemented BackendRootfsMetadata typed contract (minibox-40/41/42/49);
     conformance boundary spec committed; dotenv provider + secret_env tooling added;
