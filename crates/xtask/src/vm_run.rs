@@ -15,8 +15,9 @@ use std::{
 };
 
 /// Common QEMU baseline flags shared by interactive and test-runner modes.
-const QEMU_BASE_ARGS: &[&str] =
-    &["-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4", "-kernel"];
+const QEMU_BASE_ARGS: &[&str] = &[
+    "-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4", "-kernel",
+];
 
 /// Boot the VM in interactive shell mode.  Blocks until QEMU exits.
 /// Exit QEMU with `Ctrl-A X`.

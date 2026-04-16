@@ -76,6 +76,21 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test --release -p mbx --test conformance_push")
         .run()
         .context("conformance_push tests failed")?;
+    // Colima adapter conformance tests
+    cmd!(sh, "cargo test --release -p mbx --test colima_conformance_tests")
+        .run()
+        .context("colima_conformance_tests failed")?;
+    // GKE adapter isolation tests (platform-agnostic)
+    cmd!(sh, "cargo test --release -p mbx --test gke_adapter_isolation_tests")
+        .run()
+        .context("gke_adapter_isolation_tests failed")?;
+    // Container lifecycle failure tests (daemonbox handler error paths)
+    cmd!(
+        sh,
+        "cargo test --release -p daemonbox --test container_lifecycle_failure_tests"
+    )
+    .run()
+    .context("container_lifecycle_failure_tests failed")?;
     Ok(())
 }
 

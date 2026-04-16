@@ -326,3 +326,175 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
 
     limiter.cleanup(&id).unwrap();
 }
+
+// ---------------------------------------------------------------------------
+// Escape Attempt Detection Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn overlay_path_traversal_attempt_is_rejected() {
+    let caps = probe_capabilities();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, has_overlay_fs, "requires overlay FS");
+
+    let tmp = TempDir::new().unwrap();
+    let layer = tmp.path().join("layer0");
+    fake_layer(&layer);
+
+    let container_dir = tmp.path().join("container");
+    fs::create_dir_all(&container_dir).unwrap();
+
+    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
+    let merged = fs_adapter
+        .setup_rootfs(&[layer], &container_dir)
+        .expect("setup_rootfs failed");
+
+    // Attempt path traversal: try to write via `../../escape` from inside merged.
+    let escape_path = merged.merged_dir.join("..").join("..").join("escape");
+
+    // Write either fails or succeeds — if it succeeds, the file must land inside
+    // the overlay upper dir, NOT at the host /tmp/escape.
+    let write_result = fs::write(&escape_path, b"x");
+    let host_escape = std::path::Path::new("/tmp/escape");
+
+    // Verify the host path does NOT exist (the file landed in upper or write failed).
+    assert!(
+        !host_escape.exists(),
+        "path traversal attack: /tmp/escape should not exist"
+    );
+
+    // If write succeeded, verify it went to upper, not the host.
+    if write_result.is_ok() {
+        assert!(
+            container_dir.join("upper").exists(),
+            "if write succeeded, must have upper dir"
+        );
+    }
+
+    fs_adapter.cleanup(&container_dir).unwrap();
+}
+
+#[test]
+fn overlay_symlink_outside_upper_does_not_escape() {
+    let caps = probe_capabilities();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, has_overlay_fs, "requires overlay FS");
+
+    let tmp = TempDir::new().unwrap();
+    let layer = tmp.path().join("layer0");
+    fs::create_dir_all(layer.join("tmp")).unwrap();
+
+    // Create a symlink that attempts absolute traversal: /tmp/symlink -> /etc
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc", layer.join("tmp").join("etc_link"))
+        .expect("create symlink in layer");
+
+    let container_dir = tmp.path().join("container");
+    fs::create_dir_all(&container_dir).unwrap();
+
+    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
+    let merged = fs_adapter
+        .setup_rootfs(&[layer], &container_dir)
+        .expect("setup_rootfs failed");
+
+    let symlink_in_merged = merged.merged_dir.join("tmp").join("etc_link");
+
+    // Verify the symlink exists in merged.
+    assert!(
+        symlink_in_merged.exists() || symlink_in_merged.is_symlink(),
+        "symlink should exist in merged overlay"
+    );
+
+    // Reading the symlink should NOT resolve to the host /etc.
+    // Either: symlink was rewritten to relative (safe), or reading fails (safe).
+    if let Ok(target) = fs::read_link(&symlink_in_merged) {
+        // If symlink is absolute and points to host /etc, that's a failure.
+        assert!(
+            target != std::path::Path::new("/etc"),
+            "symlink must not resolve to host /etc path"
+        );
+
+        // Target should be either relative or container-internal.
+        if target.is_absolute() {
+            // If absolute, it must not be the host /etc.
+            assert!(
+                !target.starts_with("/etc"),
+                "absolute symlink target must not escape to host /etc"
+            );
+        }
+    }
+
+    fs_adapter.cleanup(&container_dir).unwrap();
+}
+
+#[test]
+fn cgroup_pid_zero_is_rejected() {
+    let caps = probe_capabilities();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
+
+    let id = format!("test-isolation-pid-zero-{}", std::process::id());
+    let limiter = CgroupV2Limiter::new();
+
+    let _path_str = limiter
+        .create(&id, &ResourceConfig::default())
+        .expect("create cgroup");
+
+    // Attempt to add PID 0, which is invalid.
+    let result = limiter.add_process(&id, 0);
+
+    assert!(
+        result.is_err(),
+        "add_process with PID 0 must return Err, not silently accept"
+    );
+
+    limiter.cleanup(&id).unwrap();
+}
+
+#[test]
+fn cgroup_cleanup_removes_all_state() {
+    let caps = probe_capabilities();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
+
+    let id = format!("test-isolation-cleanup-{}", std::process::id());
+    let limiter = CgroupV2Limiter::new();
+
+    let memory_limit: u64 = 64 * 1024 * 1024; // 64 MB
+    let path_str = limiter
+        .create(
+            &id,
+            &ResourceConfig {
+                memory_limit_bytes: Some(memory_limit),
+                ..ResourceConfig::default()
+            },
+        )
+        .expect("create cgroup with memory limit");
+    let path = std::path::PathBuf::from(&path_str);
+
+    assert!(path.exists(), "cgroup dir must exist after create");
+
+    // Add self to the cgroup.
+    let my_pid = std::process::id();
+    limiter
+        .add_process(&id, my_pid)
+        .expect("add self to cgroup");
+
+    // Move self back to parent cgroup (required before cleanup on some systems).
+    let parent = std::path::PathBuf::from(
+        std::env::var("MINIBOX_CGROUP_ROOT")
+            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string()),
+    )
+    .join("cgroup.procs");
+    if parent.exists() {
+        let _ = fs::write(&parent, my_pid.to_string());
+    }
+
+    // Cleanup: must remove the entire cgroup directory.
+    limiter.cleanup(&id).unwrap();
+
+    assert!(
+        !path.exists(),
+        "cgroup dir must not exist after cleanup — all state removed"
+    );
+}

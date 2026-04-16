@@ -3528,7 +3528,7 @@ async fn test_handle_logs_reads_log_files() {
         rootfs_path: std::path::PathBuf::from("/tmp/fake"),
         cgroup_path: std::path::PathBuf::from("/tmp/fake"),
         post_exit_hooks: vec![],
-        overlay_upper: None,
+        rootfs_metadata: None,
         source_image_ref: None,
     };
     state.add_container(record).await;
