@@ -545,6 +545,13 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, `colima`, or `vz`
 
+### Committing `.ctx/HANDOFF.*.*.yaml`
+
+Use `git add -f .ctx/HANDOFF.minibox.workspace.yaml` — the directory is gitignored and negation
+exceptions don't auto-apply without `-f`. The global obfsck hook must have `:!.ctx/HANDOFF.*.*.yaml`
+(bare path) alongside `:!**/.ctx/HANDOFF.*.*.yaml` — the `**/` form alone does not match top-level
+dirs. If obfsck blocks the commit, add the bare exclusion to `~/.config/git/hooks/pre-commit`.
+
 ## Git Workflow (3-tier stability pipeline)
 
 ```
