@@ -155,14 +155,10 @@ fn run_pipe_exec_command(
         let _ = rt.block_on(tx.send(DaemonResponse::Error { message: msg }));
     };
 
-    let mut child = match build_nsenter_command(
-        container_pid,
-        &config.spec.cmd,
-        &config.spec.env,
-    )
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped())
-    .spawn()
+    let mut child = match build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
     {
         Ok(c) => c,
         Err(e) => {
@@ -544,10 +540,7 @@ mod tests {
             .collect();
 
         assert_eq!(prog, "nsenter");
-        assert!(
-            args.contains(&"--target".to_string()),
-            "must pass --target"
-        );
+        assert!(args.contains(&"--target".to_string()), "must pass --target");
         assert!(
             args.contains(&"1234".to_string()),
             "must pass container pid"

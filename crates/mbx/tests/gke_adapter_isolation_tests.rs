@@ -98,9 +98,7 @@ fn copy_filesystem_merges_single_layer() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs
-        .setup_rootfs(&[layer.clone()], &container_dir)
-        .unwrap();
+    let merged = fs.setup_rootfs(&[layer.clone()], &container_dir).unwrap();
 
     assert!(
         merged.merged_dir.join("bin/sh").exists(),
@@ -126,9 +124,7 @@ fn copy_filesystem_later_layer_overwrites_earlier() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs
-        .setup_rootfs(&[layer0, layer1], &container_dir)
-        .unwrap();
+    let merged = fs.setup_rootfs(&[layer0, layer1], &container_dir).unwrap();
 
     // layer1 (later) should overwrite layer0 (earlier)
     let content = std::fs::read_to_string(merged.merged_dir.join("etc/os-release")).unwrap();
@@ -173,7 +169,10 @@ fn copy_filesystem_cleanup_removes_container_dir() {
     std::fs::create_dir_all(container_dir.join("merged/etc")).unwrap();
     std::fs::write(container_dir.join("merged/etc/test"), "data").unwrap();
 
-    assert!(container_dir.exists(), "container dir should exist before cleanup");
+    assert!(
+        container_dir.exists(),
+        "container dir should exist before cleanup"
+    );
 
     let fs = CopyFilesystem::new();
     fs.cleanup(&container_dir).unwrap();
@@ -199,9 +198,7 @@ fn copy_filesystem_preserves_symlinks() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs
-        .setup_rootfs(&[layer], &container_dir)
-        .unwrap();
+    let merged = fs.setup_rootfs(&[layer], &container_dir).unwrap();
 
     // Verify symlink was copied and preserved
     let link_target = std::fs::read_link(merged.merged_dir.join("bin/sh")).unwrap();
@@ -228,18 +225,14 @@ fn copy_filesystem_handles_directory_permissions() {
 
         let container_dir = dir.path().join("container");
         let fs = CopyFilesystem::new();
-        let merged = fs
-            .setup_rootfs(&[layer], &container_dir)
-            .unwrap();
+        let merged = fs.setup_rootfs(&[layer], &container_dir).unwrap();
 
         let mode = std::fs::metadata(merged.merged_dir.join("app"))
             .unwrap()
             .permissions()
-            .mode() & 0o777;
-        assert_eq!(
-            mode, 0o755,
-            "directory permissions should be preserved"
-        );
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o755, "directory permissions should be preserved");
     }
 
     #[cfg(not(unix))]
@@ -251,9 +244,7 @@ fn copy_filesystem_handles_directory_permissions() {
 
         let container_dir = dir.path().join("container");
         let fs = CopyFilesystem::new();
-        let merged = fs
-            .setup_rootfs(&[layer], &container_dir)
-            .unwrap();
+        let merged = fs.setup_rootfs(&[layer], &container_dir).unwrap();
 
         assert!(merged.merged_dir.join("app").is_dir());
     }
@@ -355,8 +346,12 @@ fn adapters_can_be_used_simultaneously() {
     // All adapters should work in parallel
     let c1 = limiter1.create("c1", &config).unwrap();
     let c2 = limiter2.create("c2", &config).unwrap();
-    let merged1 = fs1.setup_rootfs(&[layer1.clone()], &container_dir1).unwrap();
-    let merged2 = fs2.setup_rootfs(&[layer1.clone()], &container_dir2).unwrap();
+    let merged1 = fs1
+        .setup_rootfs(&[layer1.clone()], &container_dir1)
+        .unwrap();
+    let merged2 = fs2
+        .setup_rootfs(&[layer1.clone()], &container_dir2)
+        .unwrap();
 
     assert_eq!(c1, "noop:c1");
     assert_eq!(c2, "noop:c2");

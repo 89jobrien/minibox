@@ -43,20 +43,21 @@ fn colima_backend_descriptor() -> BackendDescriptor {
 fn colima_backend_declares_expected_capabilities() {
     let backend = colima_backend_descriptor();
 
-    assert_eq!(
-        backend.name, "colima",
-        "backend name must be 'colima'"
-    );
+    assert_eq!(backend.name, "colima", "backend name must be 'colima'");
     assert!(
         !backend.capabilities.supports(BackendCapability::Commit),
         "Colima does not support Commit (no overlay upperdir from nerdctl)"
     );
     assert!(
-        !backend.capabilities.supports(BackendCapability::BuildFromContext),
+        !backend
+            .capabilities
+            .supports(BackendCapability::BuildFromContext),
         "Colima does not support BuildFromContext (no Dockerfile support wired)"
     );
     assert!(
-        !backend.capabilities.supports(BackendCapability::PushToRegistry),
+        !backend
+            .capabilities
+            .supports(BackendCapability::PushToRegistry),
         "Colima does not support PushToRegistry (no direct push implementation)"
     );
 }
@@ -90,9 +91,7 @@ async fn colima_registry_pull_failure_propagates() {
     }));
 
     let result = registry
-        .pull_image(
-            &mbx::image::reference::ImageRef::parse("alpine:3.18").expect("parse"),
-        )
+        .pull_image(&mbx::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
         .await;
 
     assert!(
@@ -137,8 +136,5 @@ fn colima_runtime_capabilities_excludes_privileged() {
 #[test]
 fn colima_backend_descriptor_name_is_colima() {
     let backend = colima_backend_descriptor();
-    assert_eq!(
-        backend.name, "colima",
-        "backend.name must equal 'colima'"
-    );
+    assert_eq!(backend.name, "colima", "backend.name must equal 'colima'");
 }

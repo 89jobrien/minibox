@@ -142,8 +142,9 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
     let filesystem = Arc::new(MockFilesystem::new());
     let registry = Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter")).unwrap(),
+    );
     let deps = Arc::new(daemonbox::handler::HandlerDependencies {
         registry: registry.clone() as Arc<dyn minibox_core::domain::ImageRegistry>,
         ghcr_registry: Arc::new(MockRegistry::new()),
@@ -221,10 +222,7 @@ async fn test_handle_run_filesystem_failure_returns_error_response() {
 
     match response {
         DaemonResponse::Error { message } => {
-            assert!(
-                !message.is_empty(),
-                "error message should not be empty"
-            );
+            assert!(!message.is_empty(), "error message should not be empty");
         }
         other => panic!("expected Error response for filesystem failure, got {other:?}"),
     }
@@ -256,10 +254,7 @@ async fn test_handle_run_registry_pull_failure_returns_error_response() {
 
     match response {
         DaemonResponse::Error { message } => {
-            assert!(
-                !message.is_empty(),
-                "error message should not be empty"
-            );
+            assert!(!message.is_empty(), "error message should not be empty");
         }
         other => panic!("expected Error response for registry pull failure, got {other:?}"),
     }
@@ -388,9 +383,8 @@ async fn test_concurrent_stop_calls_are_safe() {
         let state_clone = Arc::clone(&state);
         let deps_clone = Arc::clone(&deps);
         let id = container_id.to_string();
-        let handle = tokio::spawn(async move {
-            handler::handle_stop(id, state_clone, deps_clone).await
-        });
+        let handle =
+            tokio::spawn(async move { handler::handle_stop(id, state_clone, deps_clone).await });
         handles.push(handle);
     }
 

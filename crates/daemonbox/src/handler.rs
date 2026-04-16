@@ -16,7 +16,7 @@ use mbx::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
-    DynFilesystemProvider, DynImageRegistry, DynMetricsRecorder, DynNetworkProvider,
+    DynFilesystemProvider, DynMetricsRecorder, DynNetworkProvider, DynRegistryRouter,
     DynResourceLimiter, HookSpec, ResourceConfig, SessionId,
 };
 use minibox_core::events::{ContainerEvent, EventSink};
@@ -126,7 +126,7 @@ impl minibox_core::domain::ImageLoader for NoopImageLoader {
 /// use mbx::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
 ///
 /// let deps = Arc::new(HandlerDependencies {
-///     registry: Arc::new(DockerHubRegistry::new(store)?),
+///     registry_router: Arc::new(HostnameRegistryRouter::new(docker_hub, [("ghcr.io", ghcr)])),
 ///     filesystem: Arc::new(OverlayFilesystem),
 ///     resource_limiter: Arc::new(CgroupV2Limiter),
 ///     runtime: Arc::new(LinuxNamespaceRuntime),
@@ -136,10 +136,8 @@ impl minibox_core::domain::ImageLoader for NoopImageLoader {
 /// ```
 #[derive(Clone)]
 pub struct HandlerDependencies {
-    /// Image registry for pulling Docker Hub images.
-    pub registry: DynImageRegistry,
-    /// Image registry for pulling GHCR images.
-    pub ghcr_registry: DynImageRegistry,
+    /// Registry router that selects the appropriate image registry for a given image reference.
+    pub registry_router: DynRegistryRouter,
     /// Filesystem provider for setting up container rootfs.
     pub filesystem: DynFilesystemProvider,
     /// Resource limiter for enforcing cgroup limits.
@@ -251,24 +249,6 @@ fn generate_container_id() -> String {
         .chars()
         .take(16)
         .collect()
-}
-
-// ─── Registry Selection ─────────────────────────────────────────────────────
-
-/// Choose the registry adapter based on the image reference's registry hostname.
-///
-/// - `ghcr.io` → `ghcr` adapter
-/// - everything else → `docker` (Docker Hub) adapter
-fn select_registry<'a>(
-    image_ref: &ImageRef,
-    docker: &'a dyn minibox_core::domain::ImageRegistry,
-    ghcr: &'a dyn minibox_core::domain::ImageRegistry,
-) -> &'a dyn minibox_core::domain::ImageRegistry {
-    if image_ref.registry.to_lowercase() == "ghcr.io" {
-        ghcr
-    } else {
-        docker
-    }
 }
 
 // ─── Run ────────────────────────────────────────────────────────────────────
@@ -610,11 +590,7 @@ async fn run_inner_capture(
     let full_image = image_ref.cache_name();
 
     // Select registry based on image reference hostname.
-    let registry = select_registry(
-        &image_ref,
-        deps.registry.as_ref(),
-        deps.ghcr_registry.as_ref(),
-    );
+    let registry = deps.registry_router.route(&image_ref);
 
     if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
@@ -815,11 +791,7 @@ async fn run_inner(
     let full_image = image_ref.cache_name();
 
     // Select registry based on image reference hostname.
-    let registry = select_registry(
-        &image_ref,
-        deps.registry.as_ref(),
-        deps.ghcr_registry.as_ref(),
-    );
+    let registry = deps.registry_router.route(&image_ref);
 
     // Pull image if not cached (using injected registry trait).
     if !registry.has_image(&full_image, &tag).await {
@@ -1668,11 +1640,7 @@ pub async fn handle_pull(
     let tag = image_ref.tag.clone();
 
     // Select registry based on image reference hostname.
-    let registry = select_registry(
-        &image_ref,
-        deps.registry.as_ref(),
-        deps.ghcr_registry.as_ref(),
-    );
+    let registry = deps.registry_router.route(&image_ref);
 
     // Pull image (using selected registry trait).
     let start = std::time::Instant::now();
@@ -2433,65 +2401,62 @@ mod run_inner_tests {
 }
 
 #[cfg(test)]
-mod select_registry_tests {
-    use super::*;
+mod registry_router_tests {
     use mbx::ImageRef;
     use mbx::adapters::{DockerHubRegistry, GhcrRegistry};
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::{DynImageRegistry, RegistryRouter};
     use minibox_core::image::ImageStore;
     use std::sync::Arc;
 
-    #[test]
-    fn select_registry_routes_ghcr() {
-        let temp = tempfile::TempDir::new().unwrap();
-        let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
-        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
-        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+    fn make_router(store: &Arc<ImageStore>) -> (HostnameRegistryRouter, *const (), *const ()) {
+        let docker: DynImageRegistry = Arc::new(DockerHubRegistry::new(Arc::clone(store)).unwrap());
+        let ghcr: DynImageRegistry = Arc::new(GhcrRegistry::new(Arc::clone(store)).unwrap());
 
-        let ghcr_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
-        let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
+        let docker_ptr = Arc::as_ptr(&docker) as *const ();
+        let ghcr_ptr = Arc::as_ptr(&ghcr) as *const ();
 
-        assert!(std::ptr::eq(
-            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
-            ghcr.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
-        ));
+        let router = HostnameRegistryRouter::new(docker, [("ghcr.io", ghcr)]);
+        (router, docker_ptr, ghcr_ptr)
     }
 
     #[test]
-    fn select_registry_routes_ghcr_case_insensitive() {
+    fn routes_ghcr() {
         let temp = tempfile::TempDir::new().unwrap();
         let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
-        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
-        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+        let (router, _, ghcr_ptr) = make_router(&store);
+
+        let image_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
+        let selected =
+            router.route(&image_ref) as *const dyn minibox_core::domain::ImageRegistry as *const ();
+
+        assert_eq!(selected, ghcr_ptr);
+    }
+
+    #[test]
+    fn routes_ghcr_case_insensitive() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
+        let (router, _, ghcr_ptr) = make_router(&store);
 
         // GHCR.IO (uppercase) must still route to the ghcr adapter
-        let ghcr_ref = ImageRef::parse("GHCR.IO/org/image:tag").unwrap();
-        let selected = select_registry(&ghcr_ref, docker.as_ref(), ghcr.as_ref());
+        let image_ref = ImageRef::parse("GHCR.IO/org/image:tag").unwrap();
+        let selected =
+            router.route(&image_ref) as *const dyn minibox_core::domain::ImageRegistry as *const ();
 
-        assert!(std::ptr::eq(
-            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
-            ghcr.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
-        ));
+        assert_eq!(selected, ghcr_ptr);
     }
 
     #[test]
-    fn select_registry_routes_docker() {
+    fn routes_docker_hub_as_default() {
         let temp = tempfile::TempDir::new().unwrap();
         let store = Arc::new(ImageStore::new(temp.path().join("images")).unwrap());
-        let docker: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(DockerHubRegistry::new(Arc::clone(&store)).unwrap());
-        let ghcr: Arc<dyn minibox_core::domain::ImageRegistry> =
-            Arc::new(GhcrRegistry::new(Arc::clone(&store)).unwrap());
+        let (router, docker_ptr, _) = make_router(&store);
 
-        let docker_ref = ImageRef::parse("alpine").unwrap();
-        let selected = select_registry(&docker_ref, docker.as_ref(), ghcr.as_ref());
+        let image_ref = ImageRef::parse("alpine").unwrap();
+        let selected =
+            router.route(&image_ref) as *const dyn minibox_core::domain::ImageRegistry as *const ();
 
-        assert!(std::ptr::eq(
-            selected as *const dyn minibox_core::domain::ImageRegistry as *const (),
-            docker.as_ref() as *const dyn minibox_core::domain::ImageRegistry as *const ()
-        ));
+        assert_eq!(selected, docker_ptr);
     }
 }

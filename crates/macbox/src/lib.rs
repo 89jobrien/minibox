@@ -29,6 +29,7 @@ use mbx::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
+use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageLoader, DynImageRegistry};
 use minibox_core::image::ImageStore;
 use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
@@ -76,9 +77,12 @@ fn build_colima_handler_dependencies(
     );
 
     Ok(Arc::new(HandlerDependencies {
-        registry: registry_port,
-        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
-        ghcr_registry: registry,
+        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter,
+        // so we use it as the default with no hostname overrides.
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            registry_port,
+            std::iter::empty::<(&str, DynImageRegistry)>(),
+        )),
         filesystem: Arc::new(ColimaFilesystem::new()),
         resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
         runtime: Arc::new(

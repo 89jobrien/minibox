@@ -418,6 +418,7 @@ mod tests {
     use mbx::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
+    use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::image::ImageStore;
     use minibox_core::protocol::{DaemonRequest, DaemonResponse};
     use std::sync::Arc;
@@ -458,8 +459,13 @@ mod tests {
         let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
             Arc::new(NoopImageGc);
         let deps = Arc::new(crate::handler::HandlerDependencies {
-            registry: Arc::new(MockRegistry::new()),
-            ghcr_registry: Arc::new(MockRegistry::new()),
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()),
+                [(
+                    "ghcr.io",
+                    Arc::new(MockRegistry::new()) as minibox_core::domain::DynImageRegistry,
+                )],
+            )),
             filesystem: Arc::new(MockFilesystem::new()),
             resource_limiter: Arc::new(MockLimiter::new()),
             runtime: Arc::new(MockRuntime::new()),

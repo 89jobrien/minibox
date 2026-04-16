@@ -467,7 +467,9 @@ async fn test_container_state_is_domain_type() {
     let state = make_state(&tmp);
 
     let id = "paused-type-check";
-    state.add_container(make_record(id, "Running", Some(99))).await;
+    state
+        .add_container(make_record(id, "Running", Some(99)))
+        .await;
 
     // This must compile: DomainState passed where daemonbox ContainerState expected.
     state

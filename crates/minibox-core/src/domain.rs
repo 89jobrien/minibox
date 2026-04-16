@@ -103,6 +103,8 @@ pub type DynMetricsRecorder = Arc<dyn MetricsRecorder>;
 pub type DynEventSink = Arc<dyn crate::events::EventSink>;
 /// Type alias for a shared, dynamic [`EventSource`] implementation.
 pub type DynEventSource = Arc<dyn crate::events::EventSource>;
+/// Type alias for a shared, dynamic [`RegistryRouter`] implementation.
+pub type DynRegistryRouter = Arc<dyn RegistryRouter>;
 
 // ---------------------------------------------------------------------------
 // Downcasting support for testing
@@ -218,6 +220,36 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     ///
     /// Returns an error if the image is not cached locally.
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>>;
+}
+
+// ---------------------------------------------------------------------------
+// Registry Router Port
+// ---------------------------------------------------------------------------
+
+/// Port for routing an image reference to the appropriate [`ImageRegistry`] adapter.
+///
+/// Implementations select the registry based on the image's hostname (or any
+/// other criteria) and return a reference to the corresponding adapter.
+///
+/// # Implementations
+///
+/// - [`minibox_core::adapters::HostnameRegistryRouter`]: routes by lowercase hostname;
+///   falls back to a default registry for unrecognised hostnames.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use minibox_core::domain::{DynRegistryRouter, RegistryRouter};
+///
+/// let router: DynRegistryRouter = Arc::new(HostnameRegistryRouter::new(
+///     docker_hub_registry,
+///     [("ghcr.io", ghcr_registry)],
+/// ));
+/// let registry = router.route(&image_ref);
+/// ```
+pub trait RegistryRouter: Send + Sync {
+    /// Return the registry adapter that should handle `image_ref`.
+    fn route(&self, image_ref: &crate::image::reference::ImageRef) -> &dyn ImageRegistry;
 }
 
 /// Port for loading a local OCI image tarball into the image store.

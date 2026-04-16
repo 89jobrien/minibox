@@ -6,7 +6,8 @@
 use daemonbox::handler::{self, HandlerDependencies, handle_resize_pty, handle_send_input};
 use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
-use minibox_core::domain::NetworkMode;
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{DynImageRegistry, NetworkMode};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -74,8 +75,10 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -164,8 +167,10 @@ async fn test_handle_pull_with_library_prefix() {
 async fn test_handle_pull_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -215,8 +220,11 @@ async fn test_handle_pull_failure() {
 async fn test_handle_run_with_cached_image() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -320,8 +328,11 @@ async fn test_handle_run_pulls_uncached_image() {
 async fn test_handle_run_filesystem_setup_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -377,8 +388,11 @@ async fn test_handle_run_filesystem_setup_failure() {
 async fn test_handle_run_resource_limiter_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
         runtime: Arc::new(MockRuntime::new()),
@@ -434,8 +448,11 @@ async fn test_handle_run_resource_limiter_failure() {
 async fn test_handle_run_runtime_spawn_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
@@ -703,8 +720,10 @@ fn create_test_deps_with_network(
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1065,8 +1084,10 @@ async fn test_remove_with_filesystem_cleanup_failure() {
 
     // Build deps with the failable mock (setup succeeds by default).
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: failable_fs.clone(),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1214,12 +1235,14 @@ async fn test_handle_run_empty_image_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
         // Image is "pre-cached" so the pull is skipped, but get_image_layers returns empty.
-        registry: Arc::new(
-            MockRegistry::new()
-                .with_cached_image("library/alpine", "latest")
-                .with_empty_layers(),
-        ),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(
+                MockRegistry::new()
+                    .with_cached_image("library/alpine", "latest")
+                    .with_empty_layers(),
+            ) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1334,8 +1357,10 @@ async fn test_handle_stop_container_without_pid_returns_error() {
 async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new().with_cleanup_failure()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1476,8 +1501,10 @@ async fn test_handle_run_pull_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
         // Not cached + pull always fails → ImagePullFailed domain error.
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1608,8 +1635,10 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
     let docker_registry = Arc::new(MockRegistry::new());
     let ghcr_registry = Arc::new(MockRegistry::new());
     let deps = Arc::new(HandlerDependencies {
-        registry: docker_registry.clone(),
-        ghcr_registry: ghcr_registry.clone(),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            docker_registry.clone() as DynImageRegistry,
+            [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1673,8 +1702,10 @@ async fn test_handle_run_routes_to_ghcr_registry() {
     let docker_registry = Arc::new(MockRegistry::new());
     let ghcr_registry = Arc::new(MockRegistry::new());
     let deps = Arc::new(HandlerDependencies {
-        registry: docker_registry.clone(),
-        ghcr_registry: ghcr_registry.clone(),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            docker_registry.clone() as DynImageRegistry,
+            [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1738,8 +1769,10 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
     let ghcr_registry =
         Arc::new(MockRegistry::new().with_cached_image("ghcr.io/org/myimage", "latest"));
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: ghcr_registry.clone(),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -1796,8 +1829,10 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
 async fn test_handle_run_ghcr_pull_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2070,8 +2105,10 @@ async fn test_handle_remove_created_container_succeeds() {
 async fn test_handle_remove_failed_container_succeeds() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
@@ -2137,8 +2174,10 @@ async fn test_handle_remove_failed_container_succeeds() {
 async fn test_handle_pull_ghcr_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2366,8 +2405,11 @@ async fn test_daemon_wait_for_exit_multiple_containers() {
 async fn test_handle_run_ephemeral_dispatches_streaming_path() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()), // returns output_reader=None
@@ -2442,8 +2484,10 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
 async fn test_handle_run_ephemeral_pull_failure_sends_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2511,8 +2555,10 @@ async fn test_run_empty_image_no_layers() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new().with_empty_layers());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::clone(&mock_registry) as Arc<dyn mbx::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn mbx::domain::ImageRegistry>,
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2576,8 +2622,10 @@ async fn test_pull_registry_failure_with_tag() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new().with_pull_failure());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::clone(&mock_registry) as Arc<dyn mbx::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()) as Arc<dyn mbx::domain::ImageRegistry>,
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -2710,8 +2758,11 @@ async fn test_handle_run_streaming_emits_container_created_first() {
     let payload = b"hello from container\n";
     let temp_dir = TempDir::new().expect("tempdir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(PipedMockRuntime {
@@ -3077,8 +3128,10 @@ fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<Han
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -3300,8 +3353,10 @@ async fn test_handle_run_image_pull_failure() {
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -3350,8 +3405,10 @@ async fn test_handle_run_empty_layers() {
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_empty_layers()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_empty_layers()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -3400,8 +3457,10 @@ async fn test_handle_pull_nonexistent_image() {
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
