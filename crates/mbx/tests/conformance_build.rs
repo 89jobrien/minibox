@@ -19,9 +19,7 @@
 use anyhow::Result;
 use mbx::adapters::MiniboxImageBuilder;
 use minibox_core::adapters::conformance::{BackendDescriptor, BuildContextFixture};
-use minibox_core::domain::{
-    BackendCapability, BuildConfig, BuildContext, DynImageBuilder,
-};
+use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext, DynImageBuilder};
 use minibox_core::image::ImageStore;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -34,10 +32,8 @@ fn minibox_build_backend(
     image_store: Arc<ImageStore>,
     data_dir: std::path::PathBuf,
 ) -> (BackendDescriptor, DynImageBuilder) {
-    let builder: DynImageBuilder = Arc::new(MiniboxImageBuilder::new(
-        Arc::clone(&image_store),
-        data_dir,
-    ));
+    let builder: DynImageBuilder =
+        Arc::new(MiniboxImageBuilder::new(Arc::clone(&image_store), data_dir));
     let builder_for_descriptor = Arc::clone(&builder);
     let descriptor = BackendDescriptor::new("minibox-native-build")
         .with_builder(move || Arc::clone(&builder_for_descriptor));
@@ -71,10 +67,12 @@ async fn build_minimal_dockerfile_succeeds() -> Result<()> {
     let store = make_image_store(&tmp);
     let ctx_fixture = BuildContextFixture::new()?;
 
-    let (backend, builder) =
-        minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+    let (backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
 
-    if !backend.capabilities.supports(BackendCapability::BuildFromContext) {
+    if !backend
+        .capabilities
+        .supports(BackendCapability::BuildFromContext)
+    {
         return Ok(()); // skip
     }
 
@@ -95,8 +93,14 @@ async fn build_minimal_dockerfile_succeeds() -> Result<()> {
         progress_count += 1;
     }
 
-    assert!(progress_count > 0, "builder must emit at least one progress update");
-    assert!(!meta.name.is_empty(), "build result must have a non-empty image name");
+    assert!(
+        progress_count > 0,
+        "builder must emit at least one progress update"
+    );
+    assert!(
+        !meta.name.is_empty(),
+        "build result must have a non-empty image name"
+    );
 
     Ok(())
 }
@@ -108,10 +112,12 @@ async fn build_result_is_present_in_store() -> Result<()> {
     let store = make_image_store(&tmp);
     let ctx_fixture = BuildContextFixture::new()?;
 
-    let (backend, builder) =
-        minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+    let (backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
 
-    if !backend.capabilities.supports(BackendCapability::BuildFromContext) {
+    if !backend
+        .capabilities
+        .supports(BackendCapability::BuildFromContext)
+    {
         return Ok(()); // skip
     }
 
@@ -140,10 +146,12 @@ async fn build_metadata_reflects_config_tag() -> Result<()> {
     let store = make_image_store(&tmp);
     let ctx_fixture = BuildContextFixture::new()?;
 
-    let (backend, builder) =
-        minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+    let (backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
 
-    if !backend.capabilities.supports(BackendCapability::BuildFromContext) {
+    if !backend
+        .capabilities
+        .supports(BackendCapability::BuildFromContext)
+    {
         return Ok(()); // skip
     }
 
@@ -174,7 +182,9 @@ async fn build_metadata_reflects_config_tag() -> Result<()> {
 async fn build_skipped_for_backend_without_capability() {
     let descriptor = BackendDescriptor::new("no-build-backend");
     assert!(
-        !descriptor.capabilities.supports(BackendCapability::BuildFromContext),
+        !descriptor
+            .capabilities
+            .supports(BackendCapability::BuildFromContext),
         "backend must not claim BuildFromContext capability"
     );
     assert!(

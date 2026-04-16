@@ -52,23 +52,107 @@ fn build_rows() -> Vec<ConformanceRow> {
 
     vec![
         // --- Commit ---
-        row("minibox-native-commit", "Commit", "commit_returns_metadata", ConformanceOutcome::Pass, None),
-        row("minibox-native-commit", "Commit", "commit_writes_layer_artifact_to_store", ConformanceOutcome::Pass, None),
-        row("minibox-native-commit", "Commit", "commit_metadata_is_consistent_across_calls", ConformanceOutcome::Pass, None),
-        row("minibox-native-commit", "Commit", "commit_skipped_for_backend_without_capability", ConformanceOutcome::Pass, None),
+        row(
+            "minibox-native-commit",
+            "Commit",
+            "commit_returns_metadata",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-commit",
+            "Commit",
+            "commit_writes_layer_artifact_to_store",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-commit",
+            "Commit",
+            "commit_metadata_is_consistent_across_calls",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-commit",
+            "Commit",
+            "commit_skipped_for_backend_without_capability",
+            ConformanceOutcome::Pass,
+            None,
+        ),
         // --- Build ---
-        row("minibox-native-build", "BuildFromContext", "build_returns_image_metadata", ConformanceOutcome::Pass, None),
-        row("minibox-native-build", "BuildFromContext", "build_image_appears_in_store", ConformanceOutcome::Pass, None),
-        row("minibox-native-build", "BuildFromContext", "build_env_override_preserved_in_metadata", ConformanceOutcome::Pass, None),
-        row("minibox-native-build", "BuildFromContext", "build_skipped_for_backend_without_capability", ConformanceOutcome::Pass, None),
+        row(
+            "minibox-native-build",
+            "BuildFromContext",
+            "build_returns_image_metadata",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-build",
+            "BuildFromContext",
+            "build_image_appears_in_store",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-build",
+            "BuildFromContext",
+            "build_env_override_preserved_in_metadata",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-build",
+            "BuildFromContext",
+            "build_skipped_for_backend_without_capability",
+            ConformanceOutcome::Pass,
+            None,
+        ),
         // --- Push tier 1 (always) ---
-        row("minibox-native-push", "PushToRegistry", "push_backend_descriptor_wired_correctly", ConformanceOutcome::Pass, None),
-        row("minibox-native-push", "PushToRegistry", "push_capability_requires_make_pusher", ConformanceOutcome::Pass, None),
-        row("minibox-native-push", "PushToRegistry", "push_no_capability_implies_no_make_pusher", ConformanceOutcome::Pass, None),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_backend_descriptor_wired_correctly",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_capability_requires_make_pusher",
+            ConformanceOutcome::Pass,
+            None,
+        ),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_no_capability_implies_no_make_pusher",
+            ConformanceOutcome::Pass,
+            None,
+        ),
         // --- Push tier 2 (registry required) ---
-        row("minibox-native-push", "PushToRegistry", "push_returns_non_empty_digest", tier2_outcome.clone(), tier2_msg.clone()),
-        row("minibox-native-push", "PushToRegistry", "push_digest_is_sha256_prefixed", tier2_outcome.clone(), tier2_msg.clone()),
-        row("minibox-native-push", "PushToRegistry", "push_idempotent_second_push_succeeds", tier2_outcome, tier2_msg),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_returns_non_empty_digest",
+            tier2_outcome.clone(),
+            tier2_msg.clone(),
+        ),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_digest_is_sha256_prefixed",
+            tier2_outcome.clone(),
+            tier2_msg.clone(),
+        ),
+        row(
+            "minibox-native-push",
+            "PushToRegistry",
+            "push_idempotent_second_push_succeeds",
+            tier2_outcome,
+            tier2_msg,
+        ),
     ]
 }
 
@@ -104,8 +188,8 @@ fn artifact_dir() -> PathBuf {
         return PathBuf::from(dir);
     }
     // CARGO_MANIFEST_DIR = <workspace>/crates/mbx
-    let manifest = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR must be set by cargo");
+    let manifest =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set by cargo");
     PathBuf::from(manifest)
         .parent() // crates/
         .expect("crates parent")

@@ -61,7 +61,9 @@ async fn push_backend_declares_capability() {
     let (descriptor, _) = minibox_push_backend(store);
 
     assert!(
-        descriptor.capabilities.supports(BackendCapability::PushToRegistry),
+        descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry),
         "backend wired with pusher must declare PushToRegistry"
     );
     assert!(
@@ -75,7 +77,9 @@ async fn push_backend_declares_capability() {
 async fn push_skipped_for_backend_without_capability() {
     let descriptor = BackendDescriptor::new("no-push-backend");
     assert!(
-        !descriptor.capabilities.supports(BackendCapability::PushToRegistry),
+        !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry),
         "backend must not claim PushToRegistry capability"
     );
     assert!(
@@ -133,16 +137,24 @@ async fn push_image_returns_digest() -> Result<()> {
         env_overrides: vec![],
         cmd_override: None,
     };
-    commit_upper_dir_to_image(Arc::clone(&store), &upper.upper_dir, &target_ref, &commit_config)?;
+    commit_upper_dir_to_image(
+        Arc::clone(&store),
+        &upper.upper_dir,
+        &target_ref,
+        &commit_config,
+    )?;
 
     // Build an ImageRef pointing at the local registry.
     let push_ref_str = format!("{registry_host}/{target_name}:{target_tag}");
-    let image_ref = ImageRef::parse(&push_ref_str)
-        .map_err(|e| anyhow::anyhow!("parse push ref: {e}"))?;
+    let image_ref =
+        ImageRef::parse(&push_ref_str).map_err(|e| anyhow::anyhow!("parse push ref: {e}"))?;
 
     let (descriptor, pusher) = minibox_push_backend(Arc::clone(&store));
 
-    if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+    if !descriptor
+        .capabilities
+        .supports(BackendCapability::PushToRegistry)
+    {
         return Ok(()); // skip
     }
 
@@ -185,12 +197,17 @@ async fn push_image_tag_visible_after_push() -> Result<()> {
         env_overrides: vec![],
         cmd_override: None,
     };
-    commit_upper_dir_to_image(Arc::clone(&store), &upper.upper_dir, target_ref, &commit_config)?;
+    commit_upper_dir_to_image(
+        Arc::clone(&store),
+        &upper.upper_dir,
+        target_ref,
+        &commit_config,
+    )?;
 
     let push_fixture = LocalPushTargetFixture::new("conformance/push-tag-test");
     let push_ref_str = format!("{registry_host}/conformance/push-tag-test:v99");
-    let image_ref = ImageRef::parse(&push_ref_str)
-        .map_err(|e| anyhow::anyhow!("parse push ref: {e}"))?;
+    let image_ref =
+        ImageRef::parse(&push_ref_str).map_err(|e| anyhow::anyhow!("parse push ref: {e}"))?;
 
     let (_, pusher) = minibox_push_backend(Arc::clone(&store));
 

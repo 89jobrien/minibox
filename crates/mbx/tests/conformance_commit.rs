@@ -124,9 +124,15 @@ async fn commit_returns_metadata() -> Result<()> {
         .commit(&cid, "conformance/test-image:v1", &default_commit_config())
         .await?;
 
-    assert_eq!(meta.name, "conformance/test-image", "metadata name mismatch");
+    assert_eq!(
+        meta.name, "conformance/test-image",
+        "metadata name mismatch"
+    );
     assert_eq!(meta.tag, "v1", "metadata tag mismatch");
-    assert!(!meta.layers.is_empty(), "commit result must have at least one layer");
+    assert!(
+        !meta.layers.is_empty(),
+        "commit result must have at least one layer"
+    );
 
     Ok(())
 }
@@ -146,7 +152,11 @@ async fn commit_writes_layer_artifact_to_store() -> Result<()> {
 
     let cid = ContainerId::new("conformancecommit02".to_string()).expect("ContainerId");
     let meta = committer
-        .commit(&cid, "conformance/artifact-test:latest", &default_commit_config())
+        .commit(
+            &cid,
+            "conformance/artifact-test:latest",
+            &default_commit_config(),
+        )
         .await?;
 
     // The layer digest reported in metadata must be a sha256 digest.

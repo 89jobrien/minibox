@@ -177,8 +177,8 @@ impl MinimalStoredImageFixture {
         let name = image_name.unwrap_or("conformance-base").to_string();
         // Use a deterministic but clearly fake digest so tests that check digest
         // values get a predictable string without requiring SHA computation.
-        let digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-            .to_string();
+        let digest =
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string();
         let stripped = digest.strip_prefix("sha256:").unwrap_or(&digest);
 
         let dir = TempDir::new()?;
@@ -290,10 +290,7 @@ impl BuildContextFixture {
         let context_dir = dir.path().to_path_buf();
         let dockerfile = context_dir.join("Dockerfile");
 
-        std::fs::write(
-            &dockerfile,
-            b"FROM scratch\nCOPY hello.txt /hello.txt\n",
-        )?;
+        std::fs::write(&dockerfile, b"FROM scratch\nCOPY hello.txt /hello.txt\n")?;
         std::fs::write(context_dir.join("hello.txt"), b"conformance\n")?;
 
         Ok(Self {
@@ -456,7 +453,11 @@ pub fn write_conformance_reports(
         let msg = row.message.as_deref().unwrap_or("");
         md.push_str(&format!(
             "| {} | {} | {} | {} | {} |\n",
-            row.backend, row.capability, row.test_name, row.outcome.as_str(), msg
+            row.backend,
+            row.capability,
+            row.test_name,
+            row.outcome.as_str(),
+            msg
         ));
     }
     std::fs::write(&md_path, md.as_bytes())?;
@@ -549,10 +550,7 @@ mod tests {
     #[test]
     fn local_push_target_fixture_formats_ref_correctly() {
         let f = LocalPushTargetFixture::new("conformance/push-test");
-        assert_eq!(
-            f.image_ref,
-            "localhost:5000/conformance/push-test:latest"
-        );
+        assert_eq!(f.image_ref, "localhost:5000/conformance/push-test:latest");
         assert_eq!(f.registry_host, "localhost:5000");
         assert_eq!(f.tag, "latest");
     }
