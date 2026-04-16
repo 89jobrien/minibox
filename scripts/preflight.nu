@@ -21,7 +21,10 @@ let results = [
     (check "rustup on PATH" ((which rustup | length) > 0)),
     (check "Rust toolchain active" ((do { cargo --version } | complete | get exit_code) == 0)),
     (check "CARGO_TARGET_DIR set" ($env | get -i CARGO_TARGET_DIR | is-not-empty)),
-    (check "xtask available" ((do { cargo xtask --help } | complete | get exit_code) == 0)),
+    (check "xtask available" (
+        ((do { cargo metadata --no-deps --format-version 1 } | complete | get exit_code) == 0)
+        and ("crates/xtask/Cargo.toml" | path exists)
+    )),
     (check "op on PATH" ((which op | length) > 0)),
     (check "1Password authed" ((do { op account list } | complete | get exit_code) == 0)),
     (check "git repo clean" (do { git status --porcelain } | complete | get stdout | str trim | is-empty)),
