@@ -745,6 +745,8 @@ pub enum ContainerState {
     Created,
     /// Container process is running.
     Running,
+    /// Container is frozen (cgroup.freeze = 1).
+    Paused,
     /// Container process has exited.
     Stopped,
     /// Container failed to start or crashed.
@@ -754,13 +756,14 @@ pub enum ContainerState {
 impl ContainerState {
     /// Return the canonical string representation of this state.
     ///
-    /// The returned strings (`"Created"`, `"Running"`, `"Stopped"`, `"Failed"`)
+    /// The returned strings (`"Created"`, `"Running"`, `"Paused"`, `"Stopped"`, `"Failed"`)
     /// are used directly in [`crate::protocol::ContainerInfo::state`] list
     /// responses sent to the CLI.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",
             Self::Running => "Running",
+            Self::Paused => "Paused",
             Self::Stopped => "Stopped",
             Self::Failed => "Failed",
         }
@@ -1202,6 +1205,7 @@ mod tests {
     fn test_container_state_as_str() {
         assert_eq!(ContainerState::Created.as_str(), "Created");
         assert_eq!(ContainerState::Running.as_str(), "Running");
+        assert_eq!(ContainerState::Paused.as_str(), "Paused");
         assert_eq!(ContainerState::Stopped.as_str(), "Stopped");
         assert_eq!(ContainerState::Failed.as_str(), "Failed");
     }
@@ -1210,6 +1214,7 @@ mod tests {
     fn test_container_state_display() {
         assert_eq!(format!("{}", ContainerState::Created), "Created");
         assert_eq!(format!("{}", ContainerState::Running), "Running");
+        assert_eq!(format!("{}", ContainerState::Paused), "Paused");
         assert_eq!(format!("{}", ContainerState::Stopped), "Stopped");
         assert_eq!(format!("{}", ContainerState::Failed), "Failed");
     }
