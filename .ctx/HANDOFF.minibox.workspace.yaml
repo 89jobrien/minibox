@@ -1119,7 +1119,23 @@ items:
   - type: github-issue
     number: 93
     url: https://github.com/89jobrien/minibox/issues/93
+- id: minibox-68
+  name: vm-image-overlay
+  priority: P2
+  status: open
+  title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
+  description: Add install_overlay() to vm_image.rs that copies ~/.mbx/vm/overlay/
+    into rootfs before initramfs build. Called between extract_rootfs_if_needed and
+    install_init_files in build_vm_image(). Skips silently if overlay dir absent.
+    Prints file count summary.
+  files:
+  - crates/xtask/src/vm_image.rs
+  extra: []
 log:
+- date: '2026-04-16'
+  summary: 'Session: installed QEMU via brew; designed VM rootfs overlay feature (minibox-68,
+    not yet implemented).'
+  commits: []
 - date: '2026-04-16'
   summary: 'P1 sprint: minibox-60 — 9 regression tests added (commit cycle metadata,
     BackendRootfsMetadata serde round-trips, RootfsLayout accessor). minibox-50/57/59
