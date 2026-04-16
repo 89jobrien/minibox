@@ -101,14 +101,15 @@ items:
   name: vz-apple-bug-blocker
   priority: P2
   status: blocked
-  title: VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64
-  description: 'Confirmed Apple OS bug. test-vz-isolation harness is complete and
-    correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation
-    should pass as-is once Apple ships a fix.
-
-    '
+  title: 'bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64'
+  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete
+    and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation
+    should pass as-is once Apple ships a fix.'
   files: []
   extra:
+  - type: github-issue
+    number: 61
+    url: https://github.com/89jobrien/minibox/issues/61
   - date: 2026-04-01
     type: blocker
     note: 'VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64.
@@ -381,8 +382,8 @@ items:
   status: open
   title: 'bug(exec): fork() inside active Tokio runtime — POSIX undefined behaviour
     (#60)'
-  description: 'libc::fork() is called from spawn_blocking while background Tokio
-    threads are live.
+  description: 'GH #60: libc::fork() is called from spawn_blocking while background
+    Tokio threads are live.
 
     Any thread holding the allocator/Tokio/tracing mutex at fork time will deadlock
     the
@@ -394,12 +395,13 @@ items:
 
     Options: (A) minibox-pty helper binary via Command::new (preferred), (B) pre-Tokio
 
-    supervisor thread. No urgency until concurrent exec is needed.
-
-    '
+    supervisor thread. No urgency until concurrent exec is needed.'
   files:
   - crates/mbx/src/adapters/exec.rs
   extra:
+  - type: github-issue
+    number: 60
+    url: https://github.com/89jobrien/minibox/issues/60
   - date: 2026-04-07
     type: note
     note: 'GitHub issue #60 open. Low urgency — latent, not triggered in current single-user
@@ -817,8 +819,7 @@ items:
   name: release-ci-gate
   priority: P2
   status: open
-  title: '[bug] No CI evidence or passing pipeline required before merging release
-    version bumps'
+  title: 'bug(ci): no CI gate required before merging release version bumps (#55)'
   description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI.
     Add a GitHub check preventing main→next promotion until full test suite passes.'
   files: []
@@ -949,33 +950,40 @@ items:
   name: paused-state-migration
   priority: P2
   status: open
-  title: 'fix: migrate ContainerState::Paused to daemonbox — remove local duplicate (#104)'
-  description: 'Sentinel #104: daemonbox::state::ContainerState still has its own
-    Paused variant after domain type was promoted in 92578fd. 3 call sites in
-    integration_tests.rs need migration to minibox_core::domain::ContainerState::Paused.'
+  title: 'fix: migrate ContainerState::Paused to daemonbox — remove local duplicate
+    (#104)'
+  description: 'GH #104: Sentinel #104: daemonbox::state::ContainerState still has
+    its own Paused variant after domain type was promoted in 92578fd. 3 call sites
+    in integration_tests.rs need migration to minibox_core::domain::ContainerState::Paused.'
   files:
   - crates/daemonbox/src/state.rs
   - crates/miniboxd/tests/integration_tests.rs
-  extra: []
+  extra:
+  - type: github-issue
+    number: 104
+    url: https://github.com/89jobrien/minibox/issues/104
 - id: minibox-68
   name: vm-image-overlay
   priority: P2
   status: open
   title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
-  description: Add install_overlay() to vm_image.rs that copies ~/.mbx/vm/overlay/
+  description: 'GH #107: Add install_overlay() to vm_image.rs that copies ~/.mbx/vm/overlay/
     into rootfs before initramfs build. Called between extract_rootfs_if_needed and
     install_init_files in build_vm_image(). Skips silently if overlay dir absent.
-    Prints file count summary.
+    Prints file count summary.'
   files:
   - crates/xtask/src/vm_image.rs
-  extra: []
+  extra:
+  - type: github-issue
+    number: 107
+    url: https://github.com/89jobrien/minibox/issues/107
 log:
 - date: '2026-04-17'
   summary: 'Test coverage sprint: minibox-30/31/32/37/38/62/63/64 closed — escape
     detection (4 tests), GKE adapter suite (18 tests), lifecycle failures (7 tests),
     Colima conformance (5 tests); CI serial parity verified. minibox-18 closed: minibox-oci
-    crate extracted (b3c8b5f). Paused state OCP fix (92578fd, partial — migration tracked
-    as minibox-69). [a4ccf4c, b3c8b5f, 92578fd]'
+    crate extracted (b3c8b5f). Paused state OCP fix (92578fd, partial — migration
+    tracked as minibox-69). [a4ccf4c, b3c8b5f, 92578fd]'
   commits:
   - a4ccf4c
   - b3c8b5f
