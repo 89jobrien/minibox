@@ -12,9 +12,10 @@
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, FilesystemProvider,
+    ImageRegistry, NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
 };
 use minibox_core::protocol::DaemonResponse;
 use std::path::PathBuf;
@@ -79,8 +80,10 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
-        registry: Arc::new(registry),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),
@@ -117,8 +120,11 @@ fn mock_deps_with_network(
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: Arc::new(MockRuntime::new()),

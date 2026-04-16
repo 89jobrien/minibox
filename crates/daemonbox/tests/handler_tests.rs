@@ -118,14 +118,46 @@ fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
 #[tokio::test]
 async fn test_handle_pull_success() {
     let temp_dir = TempDir::new().unwrap();
-    let deps = create_test_deps_with_dir(&temp_dir);
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap(),
+    );
+    let deps = Arc::new(HandlerDependencies {
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            mock_registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
+    });
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
         state,
-        deps.clone(),
+        deps,
     )
     .await;
 
@@ -137,12 +169,7 @@ async fn test_handle_pull_success() {
         _ => panic!("expected Success response, got {response:?}"),
     }
 
-    // Verify pull was called
-    let registry = deps.registry.clone();
-    let mock_registry = registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .expect("should be MockRegistry");
+    // Verify pull was called via the locally retained mock reference
     assert_eq!(mock_registry.pull_count(), 1);
 }
 
@@ -219,10 +246,10 @@ async fn test_handle_pull_failure() {
 #[tokio::test]
 async fn test_handle_run_with_cached_image() {
     let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
     let deps = Arc::new(HandlerDependencies {
         registry_router: Arc::new(HostnameRegistryRouter::new(
-            Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
-                as DynImageRegistry,
+            mock_registry.clone() as DynImageRegistry,
             [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
         )),
         filesystem: Arc::new(MockFilesystem::new()),
@@ -282,18 +309,45 @@ async fn test_handle_run_with_cached_image() {
     }
 
     // Image was cached, so pull should NOT have been called
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
-    assert_eq!(registry.pull_count(), 0);
+    assert_eq!(mock_registry.pull_count(), 0);
 }
 
 #[tokio::test]
 async fn test_handle_run_pulls_uncached_image() {
     let temp_dir = TempDir::new().unwrap();
-    let deps = create_test_deps_with_dir(&temp_dir); // Image not cached
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap(),
+    );
+    let deps = Arc::new(HandlerDependencies {
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            mock_registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        filesystem: Arc::new(MockFilesystem::new()),
+        resource_limiter: Arc::new(MockLimiter::new()),
+        runtime: Arc::new(MockRuntime::new()),
+        network_provider: Arc::new(MockNetwork::new()),
+        containers_base: temp_dir.path().join("containers"),
+        run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store,
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+            daemonbox::handler::PtySessionRegistry::default(),
+        )),
+    }); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handle_run_once(
@@ -316,12 +370,7 @@ async fn test_handle_run_pulls_uncached_image() {
     }
 
     // Image was not cached, so pull SHOULD have been called
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
-    assert_eq!(registry.pull_count(), 1);
+    assert_eq!(mock_registry.pull_count(), 1);
 }
 
 #[tokio::test]
