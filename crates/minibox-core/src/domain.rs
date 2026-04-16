@@ -1076,6 +1076,98 @@ pub trait ImageBuilder: AsAny + Send + Sync {
 pub type DynImageBuilder = Arc<dyn ImageBuilder>;
 
 // ---------------------------------------------------------------------------
+// PTY Allocator Port (#83)
+// ---------------------------------------------------------------------------
+
+/// Configuration for allocating a pseudo-terminal (PTY) for interactive containers.
+///
+/// Passed to [`PtyAllocator::allocate`] to request a PTY pair with the given
+/// terminal dimensions. The caller is responsible for closing the returned file
+/// descriptors when no longer needed.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PtyConfig {
+    /// Whether PTY allocation is requested.
+    pub enabled: bool,
+    /// Terminal width in columns.
+    pub cols: u16,
+    /// Terminal height in rows.
+    pub rows: u16,
+}
+
+/// An allocated PTY pair — a master and a slave file descriptor.
+///
+/// The master fd is used by the host to read/write the terminal stream.
+/// The slave fd is handed to the container process as its controlling terminal.
+///
+/// # Ownership
+///
+/// The caller that calls [`PtyAllocator::allocate`] owns both fds and is
+/// responsible for closing them. Do NOT call `close()` on them from outside
+/// unless you also own the handle.
+#[derive(Debug)]
+pub struct PtyHandle {
+    /// File descriptor for the master side of the PTY.
+    pub master_fd: i32,
+    /// File descriptor for the slave side of the PTY.
+    pub slave_fd: i32,
+}
+
+/// Port for allocating a PTY pair.
+///
+/// Implementations live in the adapter layer. The domain layer never calls
+/// `posix_openpt` directly — all OS-level PTY operations go through this trait.
+pub trait PtyAllocator: Send + Sync {
+    /// Allocate a PTY pair with the terminal dimensions specified in `config`.
+    ///
+    /// Returns [`PtyHandle`] on success, or `Err` when PTY allocation is not
+    /// supported (e.g., [`NullPtyAllocator`]) or when the OS call fails.
+    fn allocate(&self, config: &PtyConfig) -> anyhow::Result<PtyHandle>;
+}
+
+/// Type alias for a shared, dynamic [`PtyAllocator`] implementation.
+pub type DynPtyAllocator = Arc<dyn PtyAllocator>;
+
+/// A no-op [`PtyAllocator`] that always returns `Err`.
+///
+/// Used as the default adapter when PTY support is not available (e.g., on
+/// macOS or in test environments that do not exercise the PTY path).
+pub struct NullPtyAllocator;
+
+impl PtyAllocator for NullPtyAllocator {
+    fn allocate(&self, _config: &PtyConfig) -> anyhow::Result<PtyHandle> {
+        anyhow::bail!("pty: PTY allocation is not supported in this environment")
+    }
+}
+
+/// A test double [`PtyAllocator`] that returns a pre-configured [`PtyHandle`].
+///
+/// Enabled only when the `test-utils` feature is active so production binaries
+/// do not pull in test scaffolding.
+#[cfg(feature = "test-utils")]
+pub struct MockPtyAllocator {
+    master_fd: i32,
+    slave_fd: i32,
+}
+
+#[cfg(feature = "test-utils")]
+impl MockPtyAllocator {
+    /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
+    pub fn new(master_fd: i32, slave_fd: i32) -> Self {
+        Self { master_fd, slave_fd }
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl PtyAllocator for MockPtyAllocator {
+    fn allocate(&self, _config: &PtyConfig) -> anyhow::Result<PtyHandle> {
+        Ok(PtyHandle {
+            master_fd: self.master_fd,
+            slave_fd: self.slave_fd,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Conformance boundary — commit / build / push capabilities
 // ---------------------------------------------------------------------------
 
@@ -1545,6 +1637,61 @@ mod tests {
             let json = serde_json::to_string(&meta).expect("serialize");
             let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(meta, restored);
+        }
+    }
+
+    mod pty_allocator_tests {
+        use super::*;
+
+        #[test]
+        fn pty_config_default_values() {
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
+            assert!(cfg.enabled);
+            assert_eq!(cfg.cols, 80);
+            assert_eq!(cfg.rows, 24);
+        }
+
+        #[test]
+        fn pty_config_serde_roundtrip() {
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 120,
+                rows: 40,
+            };
+            let json = serde_json::to_string(&cfg).expect("serialize");
+            let back: PtyConfig = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back.enabled, cfg.enabled);
+            assert_eq!(back.cols, cfg.cols);
+            assert_eq!(back.rows, cfg.rows);
+        }
+
+        #[test]
+        fn pty_config_json_missing_fields_use_serde_default() {
+            // When a JSON payload omits fields the struct must still deserialize.
+            let json = r#"{"enabled":false,"cols":80,"rows":24}"#;
+            let cfg: PtyConfig = serde_json::from_str(json).expect("deserialize");
+            assert!(!cfg.enabled);
+        }
+
+        #[test]
+        fn null_pty_allocator_returns_err() {
+            let alloc = NullPtyAllocator;
+            let cfg = PtyConfig { enabled: true, cols: 80, rows: 24 };
+            assert!(alloc.allocate(&cfg).is_err(), "NullPtyAllocator must always return Err");
+        }
+
+        #[cfg(feature = "test-utils")]
+        #[test]
+        fn mock_pty_allocator_returns_configured_handle() {
+            let alloc = MockPtyAllocator::new(5, 6);
+            let cfg = PtyConfig { enabled: true, cols: 80, rows: 24 };
+            let handle = alloc.allocate(&cfg).expect("MockPtyAllocator must succeed");
+            assert_eq!(handle.master_fd, 5);
+            assert_eq!(handle.slave_fd, 6);
         }
     }
 
