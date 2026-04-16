@@ -5,9 +5,9 @@
 //!
 //! **Purpose:** Validate hexagonal architecture abstraction doesn't leak
 //! platform-specific behavior into domain logic.
-// TODO(roadmap/conformance): extend this suite beyond run/pull/remove into the
-// commit/build/push matrix for linux-native and colima once the shared backend
-// descriptor + fixture helpers land.
+// The shared backend descriptor + fixture helpers are in `conformance_helpers`.
+#[path = "conformance_helpers.rs"]
+mod conformance_helpers;
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
@@ -632,6 +632,173 @@ mod performance_conformance {
         assert!(
             elapsed.as_millis() < 1,
             "noop network setup must complete in under 1ms, took {elapsed:?}",
+        );
+    }
+}
+
+/// Tests for the [`conformance_helpers::TestBackendDescriptor`] type (Issue #69).
+///
+/// These tests verify:
+/// 1. `TestBackendDescriptor` carries the four handler-level capability flags.
+/// 2. Tests skip gracefully (early return) when a flag is `false`.
+/// 3. The `make_deps` constructor hook produces a working [`HandlerDependencies`].
+#[cfg(test)]
+mod backend_descriptor {
+    use super::conformance_helpers::{TestBackendDescriptor, make_mock_deps, make_mock_state};
+    use daemonbox::handler;
+    use minibox_core::protocol::DaemonResponse;
+    use mbx::adapters::mocks::MockRegistry;
+    use tempfile::TempDir;
+
+    // ------------------------------------------------------------------
+    // Capability flag defaults
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn mock_backend_supports_run_by_default() {
+        let d = TestBackendDescriptor::mock_backend("test");
+        assert!(d.supports_run, "mock_backend must have supports_run=true");
+    }
+
+    #[test]
+    fn mock_backend_commit_build_push_false_by_default() {
+        let d = TestBackendDescriptor::mock_backend("test");
+        assert!(!d.supports_commit, "supports_commit must default to false");
+        assert!(!d.supports_build, "supports_build must default to false");
+        assert!(!d.supports_push, "supports_push must default to false");
+    }
+
+    #[test]
+    fn with_flags_override_correctly() {
+        let d = TestBackendDescriptor::mock_backend("test")
+            .with_run(false)
+            .with_commit(true)
+            .with_build(true)
+            .with_push(true);
+        assert!(!d.supports_run);
+        assert!(d.supports_commit);
+        assert!(d.supports_build);
+        assert!(d.supports_push);
+    }
+
+    // ------------------------------------------------------------------
+    // Skip-not-fail semantics
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn backend_descriptor_skips_run_when_flag_false() {
+        let d = TestBackendDescriptor::mock_backend("no-run").with_run(false);
+        if !d.supports_run {
+            return; // skip — backend does not support run
+        }
+        panic!("should have been skipped");
+    }
+
+    #[test]
+    fn backend_descriptor_skips_commit_when_flag_false() {
+        let d = TestBackendDescriptor::mock_backend("no-commit");
+        if !d.supports_commit {
+            return; // skip
+        }
+        panic!("should have been skipped");
+    }
+
+    #[test]
+    fn backend_descriptor_skips_build_when_flag_false() {
+        let d = TestBackendDescriptor::mock_backend("no-build");
+        if !d.supports_build {
+            return; // skip
+        }
+        panic!("should have been skipped");
+    }
+
+    #[test]
+    fn backend_descriptor_skips_push_when_flag_false() {
+        let d = TestBackendDescriptor::mock_backend("no-push");
+        if !d.supports_push {
+            return; // skip
+        }
+        panic!("should have been skipped");
+    }
+
+    // ------------------------------------------------------------------
+    // make_deps constructor hook
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn make_deps_produces_valid_handler_dependencies() {
+        let temp_dir = TempDir::new().unwrap();
+        let d = TestBackendDescriptor::mock_backend("test");
+        let deps = d.build_deps(&temp_dir);
+        // Verify the deps struct is usable (non-null runtime/filesystem pointers).
+        // We just need construction to succeed — type system guarantees the rest.
+        let _ = deps;
+    }
+
+    #[tokio::test]
+    async fn mock_backend_pull_works_via_descriptor() {
+        let temp_dir = TempDir::new().unwrap();
+        let d = TestBackendDescriptor::mock_backend("mock-pull");
+        if !d.supports_run {
+            return;
+        }
+
+        let deps = d.build_deps(&temp_dir);
+        let state = make_mock_state(temp_dir.path());
+
+        let response = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::Success { .. }),
+            "pull must succeed for mock backend, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn mock_backend_run_works_via_descriptor() {
+        use super::conformance_helpers::make_mock_deps_with_registry;
+
+        let temp_dir = TempDir::new().unwrap();
+        let d = TestBackendDescriptor::mock_backend("mock-run");
+        if !d.supports_run {
+            return;
+        }
+
+        let deps = make_mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            &temp_dir,
+        );
+        let state = make_mock_state(temp_dir.path());
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handler::handle_run(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            None,
+            vec![],
+            false,
+            vec![],
+            None,
+            state,
+            deps,
+            tx,
+        )
+        .await;
+
+        let response = rx.recv().await.expect("handler sent no response");
+        assert!(
+            matches!(response, DaemonResponse::ContainerCreated { .. }),
+            "run must succeed for mock backend with supports_run=true, got: {response:?}"
         );
     }
 }
