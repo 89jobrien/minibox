@@ -24,6 +24,7 @@ mod cas;
 mod cleanup;
 mod flamegraph;
 mod gates;
+mod preflight;
 mod test_image;
 mod vm_image;
 mod vm_run;
@@ -44,6 +45,12 @@ fn main() -> Result<()> {
         Some("bump") => {
             let level = env::args().nth(2).unwrap_or_else(|| "patch".to_string());
             bump::bump(root, &level)
+        }
+        Some("preflight") => {
+            preflight::require_tools(
+                &preflight::ProcessProbe,
+                &["cargo", "cargo-nextest", "gh"],
+            )
         }
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
@@ -118,6 +125,7 @@ fn main() -> Result<()> {
         None => {
             eprintln!("Available tasks:");
             eprintln!("  bump [patch|minor|major]  bump workspace version in Cargo.toml");
+            eprintln!("  preflight        check required tools are on PATH and functional");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
