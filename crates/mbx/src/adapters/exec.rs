@@ -96,8 +96,102 @@ fn run_exec_blocking(
     if config.spec.tty {
         run_pty_exec(container_pid, exec_id, config, tx);
     } else {
-        run_pipe_exec(container_pid, exec_id, config, tx);
+        run_pipe_exec_command(container_pid, exec_id, config, tx);
     }
+}
+
+/// Build an `nsenter` [`std::process::Command`] that joins the namespaces of
+/// `container_pid` and runs `cmd` with `env`.
+///
+/// Uses `nsenter(1)` (kernel >= 3.8, util-linux) so the caller never invokes
+/// `libc::fork()` while Tokio threads are live.  `std::process::Command` uses
+/// `posix_spawn(3)` internally, which is safe in a multi-threaded process.
+///
+/// Namespace flags: `--mount`, `--pid`, `--net`, `--uts`, `--ipc`.
+pub(crate) fn build_nsenter_command(
+    container_pid: u32,
+    cmd: &[String],
+    env: &[String],
+) -> std::process::Command {
+    let mut c = std::process::Command::new("nsenter");
+    c.args([
+        "--target",
+        &container_pid.to_string(),
+        "--mount",
+        "--pid",
+        "--net",
+        "--uts",
+        "--ipc",
+        "--",
+    ]);
+    if let Some((prog, rest)) = cmd.split_first() {
+        c.arg(prog);
+        c.args(rest);
+    }
+    // Clear inherited environment; apply only the container's env vars.
+    c.env_clear();
+    for kv in env {
+        if let Some((k, v)) = kv.split_once('=') {
+            c.env(k, v);
+        }
+    }
+    c
+}
+
+/// Execute a command inside a container using `nsenter(1)` + `std::process::Command`
+/// (tty=false, pipe mode).
+///
+/// Replaces the `libc::fork()` path (`run_pipe_exec`) to eliminate POSIX UB
+/// when forking inside a multi-threaded Tokio runtime.  `std::process::Command`
+/// uses `posix_spawn(3)` which is safe to call from any thread.
+fn run_pipe_exec_command(
+    container_pid: u32,
+    exec_id: &str,
+    config: ExecConfig,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let send_error = |msg: String| {
+        let rt = tokio::runtime::Handle::current();
+        let _ = rt.block_on(tx.send(DaemonResponse::Error { message: msg }));
+    };
+
+    let mut child = match build_nsenter_command(
+        container_pid,
+        &config.spec.cmd,
+        &config.spec.env,
+    )
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            send_error(format!("exec: nsenter spawn failed: {e}"));
+            return;
+        }
+    };
+
+    // Stream stdout and stderr pipes to the channel.
+    if let Some(stdout) = child.stdout.take() {
+        use std::os::fd::IntoRawFd;
+        stream_fd_to_channel(stdout.into_raw_fd(), OutputStreamKind::Stdout, &tx);
+    }
+    if let Some(stderr) = child.stderr.take() {
+        use std::os::fd::IntoRawFd;
+        stream_fd_to_channel(stderr.into_raw_fd(), OutputStreamKind::Stderr, &tx);
+    }
+
+    let exit_code = match child.wait() {
+        Ok(status) => status.code().unwrap_or(-1),
+        Err(e) => {
+            warn!(exec_id = %exec_id, error = %e, "exec: wait failed");
+            -1
+        }
+    };
+
+    let rt = tokio::runtime::Handle::current();
+    let _ = rt.block_on(tx.send(DaemonResponse::ContainerStopped { exit_code }));
+    info!(exec_id = %exec_id, exit_code = exit_code, "exec: process exited");
 }
 
 /// Execute a command inside a container using stdout/stderr pipes (tty=false).
@@ -434,6 +528,35 @@ pub fn native_exec_runtime(state: StateHandle) -> DynExecRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // minibox-26: pipe exec must use nsenter (Command) not libc::fork
+    #[test]
+    fn build_nsenter_command_constructs_correct_args() {
+        let cmd = build_nsenter_command(
+            1234,
+            &["/bin/echo".to_string(), "hello".to_string()],
+            &["HOME=/root".to_string()],
+        );
+        let prog = cmd.get_program().to_string_lossy().into_owned();
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(prog, "nsenter");
+        assert!(
+            args.contains(&"--target".to_string()),
+            "must pass --target"
+        );
+        assert!(
+            args.contains(&"1234".to_string()),
+            "must pass container pid"
+        );
+        assert!(
+            args.iter().any(|a| a == "/bin/echo"),
+            "must include command"
+        );
+    }
 
     #[test]
     fn exec_config_fields() {
