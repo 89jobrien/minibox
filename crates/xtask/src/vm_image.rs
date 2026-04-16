@@ -146,7 +146,14 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 
     println!("  compile miniboxd → {target}");
     let status = std::process::Command::new("cargo")
-        .args(["zigbuild", "--release", "--target", target, "-p", "miniboxd"])
+        .args([
+            "zigbuild",
+            "--release",
+            "--target",
+            target,
+            "-p",
+            "miniboxd",
+        ])
         .status()
         .context("cargo zigbuild for agent (is cargo-zigbuild installed?)")?;
     if !status.success() {
@@ -225,6 +232,9 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
 
     // 4. Extract rootfs
     extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
+
+    // 4b. Apply user overlay (~/.mbx/vm/overlay/ → rootfs)
+    install_overlay(&rootfs_dir, vm_dir)?;
 
     // 5. Cross-compile and install agent
     let rustc_ver = build_and_install_agent(&rootfs_dir, force)?;
@@ -395,6 +405,59 @@ echo "=== RESULTS: pass=${PASS} fail=${FAIL} ==="
     Ok(())
 }
 
+/// Copy `~/.mbx/vm/overlay/` into `rootfs_dir`, overwriting any existing files.
+/// Silently skips if the overlay directory is absent.
+/// Prints a count of files copied if any were found.
+#[allow(dead_code)]
+pub fn install_overlay(rootfs_dir: &Path, vm_dir: &Path) -> Result<()> {
+    let overlay_dir = vm_dir.join("overlay");
+    if !overlay_dir.exists() {
+        return Ok(());
+    }
+
+    let mut count = 0usize;
+    copy_dir_recursive(&overlay_dir, rootfs_dir, &mut count).with_context(|| {
+        format!(
+            "copying overlay {} → {}",
+            overlay_dir.display(),
+            rootfs_dir.display()
+        )
+    })?;
+
+    if count > 0 {
+        println!("  overlay {} file(s) → {}", count, rootfs_dir.display());
+    }
+    Ok(())
+}
+
+/// Recursively copy all files from `src` into `dst`, mirroring the directory structure.
+/// Creates destination directories as needed. Overwrites existing files.
+fn copy_dir_recursive(src: &Path, dst: &Path, count: &mut usize) -> Result<()> {
+    std::fs::create_dir_all(dst).with_context(|| format!("creating dir {}", dst.display()))?;
+
+    for entry in std::fs::read_dir(src).with_context(|| format!("reading dir {}", src.display()))? {
+        let entry = entry.with_context(|| format!("reading entry in {}", src.display()))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("file_type for {}", src_path.display()))?;
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path, count)?;
+        } else if file_type.is_file() {
+            std::fs::copy(&src_path, &dst_path).with_context(|| {
+                format!("copying {} → {}", src_path.display(), dst_path.display())
+            })?;
+            *count += 1;
+        }
+        // Symlinks in overlay are intentionally skipped — rootfs symlinks are managed by
+        // build_and_install_agent and install_init_files; user overlay is for plain files.
+    }
+    Ok(())
+}
+
 /// Create a gzip-compressed cpio initramfs from `rootfs_dir` at `initramfs_path`.
 /// Skips if the file already exists and `force` is false.
 #[allow(dead_code)]
@@ -413,9 +476,9 @@ pub fn create_initramfs(rootfs_dir: &Path, initramfs_path: &Path, force: bool) -
         let parent = initramfs_path
             .parent()
             .context("initramfs path has no parent")?;
-        let parent_abs = parent.canonicalize().with_context(|| {
-            format!("canonicalizing initramfs parent dir {}", parent.display())
-        })?;
+        let parent_abs = parent
+            .canonicalize()
+            .with_context(|| format!("canonicalizing initramfs parent dir {}", parent.display()))?;
         parent_abs.join(
             initramfs_path
                 .file_name()
@@ -583,6 +646,68 @@ mod tests {
         let dir = default_vm_dir();
         assert!(dir.is_absolute());
         assert!(dir.to_string_lossy().contains(".mbx"));
+    }
+
+    #[test]
+    fn overlay_skipped_when_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        // No overlay dir — should return Ok without touching rootfs.
+        let result = install_overlay(&rootfs_dir, &vm_dir);
+        assert!(
+            result.is_ok(),
+            "should silently skip absent overlay: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn overlay_applied_copies_files_into_rootfs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let overlay_dir = vm_dir.join("overlay");
+
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        std::fs::create_dir_all(overlay_dir.join("etc")).unwrap();
+        std::fs::write(overlay_dir.join("etc").join("motd"), b"hello overlay").unwrap();
+        std::fs::write(overlay_dir.join("custom-file"), b"top level").unwrap();
+
+        install_overlay(&rootfs_dir, &vm_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("etc").join("motd")).unwrap(),
+            b"hello overlay"
+        );
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("custom-file")).unwrap(),
+            b"top level"
+        );
+    }
+
+    #[test]
+    fn overlay_files_overwrite_existing_rootfs_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let overlay_dir = vm_dir.join("overlay");
+
+        // Pre-populate rootfs with an existing file.
+        std::fs::create_dir_all(rootfs_dir.join("etc")).unwrap();
+        std::fs::write(rootfs_dir.join("etc").join("hostname"), b"original").unwrap();
+
+        // Overlay with a replacement.
+        std::fs::create_dir_all(overlay_dir.join("etc")).unwrap();
+        std::fs::write(overlay_dir.join("etc").join("hostname"), b"overwritten").unwrap();
+
+        install_overlay(&rootfs_dir, &vm_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("etc").join("hostname")).unwrap(),
+            b"overwritten"
+        );
     }
 
     #[test]
