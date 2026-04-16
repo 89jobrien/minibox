@@ -379,7 +379,7 @@ items:
 - id: minibox-26
   name: fork-after-runtime
   priority: P2
-  status: open
+  status: done
   title: 'bug(exec): fork() inside active Tokio runtime — POSIX undefined behaviour
     (#60)'
   description: 'GH #60: libc::fork() is called from spawn_blocking while background
@@ -406,6 +406,7 @@ items:
     type: note
     note: 'GitHub issue #60 open. Low urgency — latent, not triggered in current single-user
       use.'
+  completed: '2026-04-17'
 - id: minibox-27
   name: e2e-ci-sudo
   priority: P2
@@ -792,7 +793,7 @@ items:
 - id: minibox-56
   name: container-networking
   priority: P2
-  status: open
+  status: done
   title: 'feat: container networking — veth/bridge (#20) / (#65, #94)'
   description: 'GH #65, #94: Create minibox0 bridge device. veth pair per container
     (host side on bridge, container side with IP). DHCP or static IP assignment. NAT/masquerade
@@ -802,6 +803,7 @@ items:
   - type: github-issue
     number: 94
     url: https://github.com/89jobrien/minibox/issues/94
+  completed: '2026-04-17'
 - id: minibox-57
   name: vz-hci-platform-guard
   priority: P1
@@ -949,7 +951,7 @@ items:
 - id: minibox-69
   name: paused-state-migration
   priority: P2
-  status: open
+  status: done
   title: 'fix: migrate ContainerState::Paused to daemonbox — remove local duplicate
     (#104)'
   description: 'GH #104: Sentinel #104: daemonbox::state::ContainerState still has
@@ -962,6 +964,7 @@ items:
   - type: github-issue
     number: 104
     url: https://github.com/89jobrien/minibox/issues/104
+  completed: '2026-04-17'
 - id: minibox-68
   name: vm-image-overlay
   priority: P2
@@ -978,6 +981,10 @@ items:
     number: 107
     url: https://github.com/89jobrien/minibox/issues/107
 log:
+- '- ''2026-04-17: minibox-69 (ContainerState type unification — re-export from minibox-core),
+  minibox-26 (exec pipe path ported to nsenter+Command, eliminates fork-in-Tokio UB),
+  minibox-56 confirmed complete (BridgeNetwork+CLI+protocol all wired). [2668537,
+  08e07f8]'''
 - date: '2026-04-17'
   summary: 'Test coverage sprint: minibox-30/31/32/37/38/62/63/64 closed — escape
     detection (4 tests), GKE adapter suite (18 tests), lifecycle failures (7 tests),
