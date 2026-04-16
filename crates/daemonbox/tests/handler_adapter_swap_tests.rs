@@ -76,36 +76,50 @@ fn make_deps(
     runtime: MockRuntime,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
+    use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry_router: Arc::new(HostnameRegistryRouter::new(
-            registry as DynImageRegistry,
-            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
-        )),
-        filesystem: Arc::new(filesystem),
-        resource_limiter: Arc::new(resource_limiter),
-        runtime: Arc::new(runtime),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: tmp.path().join("containers"),
-        run_containers_base: tmp.path().join("run"),
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
-        exec_runtime: None,
-        image_pusher: None,
-        commit_adapter: None,
-        image_builder: None,
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc: Arc::new(NoopImageGc),
-        image_store,
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                registry as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(filesystem),
+            resource_limiter: Arc::new(resource_limiter),
+            runtime: Arc::new(runtime),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers"),
+            run_containers_base: tmp.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
         policy: daemonbox::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
-        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
-        )),
     })
 }
 
@@ -120,15 +134,59 @@ fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
 
 #[tokio::test]
 async fn test_run_with_all_success_adapters() {
+    use minibox_core::domain::DynImageRegistry;
+
     let tmp = TempDir::new().unwrap();
-    let registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
-    let deps = make_deps(
-        Arc::clone(&registry),
-        MockFilesystem::new(),
-        MockLimiter::new(),
-        MockRuntime::new(),
-        &tmp,
+    // Keep an Arc to the mock registry so we can inspect pull_count() after the run.
+    let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
+
+    // Rebuild deps with the Arc we're holding so pull_count is observable.
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap(),
     );
+    let deps = {
+        use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+        use minibox_core::adapters::HostnameRegistryRouter;
+        Arc::new(daemonbox::handler::HandlerDependencies {
+            image: ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    mock_registry.clone() as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc),
+                image_store,
+            },
+            lifecycle: LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+        })
+    };
     let state = make_state(&tmp);
 
     let response = handle_run_once(
@@ -156,7 +214,7 @@ async fn test_run_with_all_success_adapters() {
     }
 
     // Image was pre-cached, so no pull should have been issued
-    assert_eq!(registry.pull_count(), 0);
+    assert_eq!(mock_registry.pull_count(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -344,16 +402,58 @@ async fn test_stop_unknown_container_returns_error() {
 #[tokio::test]
 async fn test_pull_success_then_pull_failure_different_deps() {
     let tmp = TempDir::new().unwrap();
-    let registry_ok = Arc::new(MockRegistry::new());
 
     // First request: registry succeeds (image not cached, pulled on demand).
-    let deps_ok = make_deps(
-        Arc::clone(&registry_ok), // no cached image, but pull succeeds
-        MockFilesystem::new(),
-        MockLimiter::new(),
-        MockRuntime::new(),
-        &tmp,
-    );
+    // Hold an Arc to the registry so we can inspect pull_count() after the run.
+    let mock_registry_ok = Arc::new(MockRegistry::new());
+    let deps_ok = {
+        use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+        use minibox_core::adapters::HostnameRegistryRouter;
+        use minibox_core::domain::DynImageRegistry;
+
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap(),
+        );
+        Arc::new(daemonbox::handler::HandlerDependencies {
+            image: ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    mock_registry_ok.clone() as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc),
+                image_store,
+            },
+            lifecycle: LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+        })
+    };
     let state = make_state(&tmp);
 
     let ok_response = handle_run_once(
@@ -374,7 +474,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     );
 
     assert_eq!(
-        registry_ok.pull_count(),
+        mock_registry_ok.pull_count(),
         1,
         "pull should have been called once"
     );

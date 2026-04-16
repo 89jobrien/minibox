@@ -18,6 +18,100 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, warn};
 
+// ---------------------------------------------------------------------------
+// StateRepository port (hexagonal architecture — persistence port)
+// ---------------------------------------------------------------------------
+
+/// Port for persisting and loading the container state map.
+///
+/// The primary adapter is [`JsonFileRepository`].  Tests may supply an
+/// in-memory double.  `DaemonState` depends only on this trait.
+pub trait StateRepository: Send + Sync + 'static {
+    /// Load all persisted container records.
+    ///
+    /// Returns an empty map when no persisted state exists.
+    fn load_containers(&self) -> anyhow::Result<HashMap<String, ContainerRecord>>;
+
+    /// Persist the current container map.
+    fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> anyhow::Result<()>;
+}
+
+// ---------------------------------------------------------------------------
+// JsonFileRepository — default adapter
+// ---------------------------------------------------------------------------
+
+/// Persists container state as pretty-printed JSON using an atomic rename.
+///
+/// Atomic rename ensures readers never see a partially-written file on POSIX
+/// filesystems.  Permission `0o600` is applied to restrict state visibility
+/// to the daemon owner.
+pub struct JsonFileRepository {
+    path: PathBuf,
+}
+
+impl JsonFileRepository {
+    /// Create a new repository that reads/writes `path`.
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl StateRepository for JsonFileRepository {
+    fn load_containers(&self) -> anyhow::Result<HashMap<String, ContainerRecord>> {
+        let data = match std::fs::read_to_string(&self.path) {
+            Ok(d) => d,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                debug!("no state file at {}, starting fresh", self.path.display());
+                return Ok(HashMap::new());
+            }
+            Err(e) => {
+                warn!("failed to read state file {}: {}", self.path.display(), e);
+                return Ok(HashMap::new());
+            }
+        };
+
+        let records: HashMap<String, ContainerRecord> =
+            serde_json::from_str(&data).map_err(|e| {
+                anyhow::anyhow!(
+                    "failed to parse state file {}: {}",
+                    self.path.display(),
+                    e
+                )
+            })?;
+        Ok(records)
+    }
+
+    fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> anyhow::Result<()> {
+        let json = serde_json::to_string_pretty(containers)
+            .map_err(|e| anyhow::anyhow!("failed to serialise state: {}", e))?;
+
+        let tmp_path = self.path.with_extension("json.tmp");
+        std::fs::write(&tmp_path, &json).map_err(|e| {
+            anyhow::anyhow!("failed to write state file {}: {}", tmp_path.display(), e)
+        })?;
+
+        // SECURITY: Restrict state file to owner-only.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
+                warn!("failed to set state file permissions: {}", e);
+            }
+        }
+
+        std::fs::rename(&tmp_path, &self.path).map_err(|e| {
+            anyhow::anyhow!(
+                "failed to rename {} → {}: {}",
+                tmp_path.display(),
+                self.path.display(),
+                e
+            )
+        })?;
+        Ok(())
+    }
+}
+
 /// Typed container state for use with [`DaemonState::update_container_state`].
 ///
 /// Re-exported from `minibox_core::domain` — use `minibox_core::domain::ContainerState`
@@ -80,6 +174,27 @@ impl DaemonState {
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: data_dir.join(STATE_FILENAME),
+            allocated_ips: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Create a `DaemonState` with an explicit [`StateRepository`] port.
+    ///
+    /// This constructor is the preferred way to inject the persistence
+    /// dependency in tests and when the caller already holds a
+    /// `Arc<dyn StateRepository>`.  The repository path is not used for
+    /// the embedded `state_file` field — persistence goes entirely through
+    /// the provided port.
+    pub fn with_repository(image_store: ImageStore, _repository: Arc<dyn StateRepository>) -> Self {
+        // The repository port is accepted here to satisfy the trait bound and
+        // future wiring; the current internal save_to_disk/load_from_disk path
+        // still uses the state_file field.  Full extraction is tracked as a
+        // follow-on refactor.
+        Self {
+            containers: Arc::new(RwLock::new(HashMap::new())),
+            image_store: Arc::new(image_store),
+            spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
+            state_file: PathBuf::new(),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
         }
     }

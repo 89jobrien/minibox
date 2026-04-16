@@ -108,36 +108,30 @@ impl minibox_core::domain::ImageLoader for NoopImageLoader {
 }
 
 // ---------------------------------------------------------------------------
-// Handler Dependencies (Dependency Injection)
+// Handler Dependencies — ISP-compliant sub-structs
 // ---------------------------------------------------------------------------
 
-/// Dependencies injected into request handlers.
+/// Image-related dependencies: registry routing, loading, GC, and local store.
 ///
-/// This struct bundles all infrastructure adapters (trait implementations)
-/// that handlers need to perform their operations. Following hexagonal
-/// architecture principles, handlers depend on trait abstractions rather
-/// than concrete implementations.
-///
-/// # Usage
-///
-/// Created once in the composition root (main.rs) and passed to all handlers:
-///
-/// ```rust,ignore
-/// use mbx::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
-///
-/// let deps = Arc::new(HandlerDependencies {
-///     registry_router: Arc::new(HostnameRegistryRouter::new(docker_hub, [("ghcr.io", ghcr)])),
-///     filesystem: Arc::new(OverlayFilesystem),
-///     resource_limiter: Arc::new(CgroupV2Limiter),
-///     runtime: Arc::new(LinuxNamespaceRuntime),
-///     containers_base: PathBuf::from("/var/lib/minibox/containers"),
-///     run_containers_base: PathBuf::from("/run/minibox/containers"),
-/// });
-/// ```
+/// Handlers that only pull or inspect images depend on this sub-struct rather
+/// than the full [`HandlerDependencies`].
 #[derive(Clone)]
-pub struct HandlerDependencies {
+pub struct ImageDeps {
     /// Registry router that selects the appropriate image registry for a given image reference.
     pub registry_router: DynRegistryRouter,
+    /// Loader for local OCI image tarballs.
+    pub image_loader: minibox_core::domain::DynImageLoader,
+    /// Image garbage collector for prune operations.
+    pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
+    /// Image store for direct image operations (e.g. RemoveImage).
+    pub image_store: Arc<minibox_core::image::ImageStore>,
+}
+
+/// Container lifecycle dependencies: filesystem, limits, runtime, network, and paths.
+///
+/// Handlers that create or destroy containers depend on this sub-struct.
+#[derive(Clone)]
+pub struct LifecycleDeps {
     /// Filesystem provider for setting up container rootfs.
     pub filesystem: DynFilesystemProvider,
     /// Resource limiter for enforcing cgroup limits.
@@ -150,13 +144,27 @@ pub struct HandlerDependencies {
     pub containers_base: PathBuf,
     /// Base directory for runtime container state (PID files).
     pub run_containers_base: PathBuf,
-    /// Metrics recorder for operational observability.
-    pub metrics: DynMetricsRecorder,
-    /// Loader for local OCI image tarballs.
-    pub image_loader: minibox_core::domain::DynImageLoader,
+}
+
+/// Exec and PTY dependencies for running commands inside containers.
+///
+/// Handlers that implement `exec` or PTY session management depend on this
+/// sub-struct.
+#[derive(Clone)]
+pub struct ExecDeps {
     /// Exec runtime for running commands inside containers.
     /// `None` on platforms where exec is not supported (macOS, Windows).
     pub exec_runtime: Option<minibox_core::domain::DynExecRuntime>,
+    /// Live PTY session channels for SendInput/ResizePty dispatch.
+    pub pty_sessions: SharedPtyRegistry,
+}
+
+/// Image build/push/commit dependencies.
+///
+/// Handlers that build, push, or commit images depend on this sub-struct.
+/// All fields are `Option` because these operations are platform-conditional.
+#[derive(Clone)]
+pub struct BuildDeps {
     /// Image pusher for pushing images to OCI registries.
     /// `None` on platforms or configurations where push is not supported.
     pub image_pusher: Option<minibox_core::domain::DynImagePusher>,
@@ -166,24 +174,71 @@ pub struct HandlerDependencies {
     /// Image builder for building images from a Dockerfile.
     /// `None` on platforms where build is not supported (macOS, Windows).
     pub image_builder: Option<minibox_core::domain::DynImageBuilder>,
+}
+
+/// Observability and event-bus dependencies.
+///
+/// Handlers that emit events or record metrics depend on this sub-struct.
+#[derive(Clone)]
+pub struct EventDeps {
     /// Event sink for emitting container lifecycle events.
     pub event_sink: Arc<dyn EventSink>,
     /// Source for subscribing to the container event stream.
     pub event_source: Arc<dyn minibox_core::events::EventSource>,
-    /// Image garbage collector for prune operations.
-    pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
-    /// Image store for direct image operations (e.g. RemoveImage).
-    pub image_store: Arc<minibox_core::image::ImageStore>,
+    /// Metrics recorder for operational observability.
+    pub metrics: DynMetricsRecorder,
+}
+
+// ---------------------------------------------------------------------------
+// Handler Dependencies (Dependency Injection)
+// ---------------------------------------------------------------------------
+
+/// Dependencies injected into request handlers.
+///
+/// Composed of focused sub-structs ([`ImageDeps`], [`LifecycleDeps`],
+/// [`ExecDeps`], [`BuildDeps`], [`EventDeps`]) so each handler can declare a
+/// dependency only on the slice of infrastructure it actually uses (ISP).
+///
+/// # Usage
+///
+/// Created once in the composition root (main.rs) and passed to all handlers:
+///
+/// ```rust,ignore
+/// use mbx::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+///
+/// let deps = Arc::new(HandlerDependencies {
+///     image: ImageDeps {
+///         registry_router: Arc::new(HostnameRegistryRouter::new(docker_hub, [("ghcr.io", ghcr)])),
+///         ..
+///     },
+///     lifecycle: LifecycleDeps {
+///         filesystem: Arc::new(OverlayFilesystem),
+///         containers_base: PathBuf::from("/var/lib/minibox/containers"),
+///         ..
+///     },
+///     ..
+/// });
+/// ```
+#[derive(Clone)]
+pub struct HandlerDependencies {
+    /// Image registry, loader, GC, and local store.
+    pub image: ImageDeps,
+    /// Container lifecycle: filesystem, limits, runtime, network, paths.
+    pub lifecycle: LifecycleDeps,
+    /// Exec and PTY session management.
+    pub exec: ExecDeps,
+    /// Image build, push, and commit.
+    pub build: BuildDeps,
+    /// Observability: events and metrics.
+    pub events: EventDeps,
     /// Policy controlling which container capabilities are permitted.
     pub policy: ContainerPolicy,
-    /// Live PTY session channels for SendInput/ResizePty dispatch.
-    pub pty_sessions: SharedPtyRegistry,
 }
 
 impl HandlerDependencies {
     /// Override the image loader (builder-style).
     pub fn with_image_loader(mut self, loader: minibox_core::domain::DynImageLoader) -> Self {
-        self.image_loader = loader;
+        self.image.image_loader = loader;
         self
     }
 }
@@ -411,12 +466,12 @@ async fn handle_run_streaming(
     // without waiting for the container to exit.  The protocol spec requires
     // ContainerCreated as the first streaming message (see protocol.rs §Ephemeral).
     debug!(pid = pid, "streaming: sending ContainerCreated");
-    deps.event_sink.emit(ContainerEvent::Created {
+    deps.events.event_sink.emit(ContainerEvent::Created {
         id: container_id.clone(),
         image: image_label,
         timestamp: std::time::SystemTime::now(),
     });
-    deps.event_sink.emit(ContainerEvent::Started {
+    deps.events.event_sink.emit(ContainerEvent::Started {
         id: container_id.clone(),
         pid,
         timestamp: std::time::SystemTime::now(),
@@ -437,7 +492,7 @@ async fn handle_run_streaming(
     // The OwnedFd is consumed by into_raw_fd() (no drop), and from_raw_fd() inside the
     // closure takes sole ownership. No other code touches reader_raw after this point.
     let reader_raw = output_reader.into_raw_fd();
-    let stdout_log_path = deps.containers_base.join(&container_id).join("stdout.log");
+    let stdout_log_path = deps.lifecycle.containers_base.join(&container_id).join("stdout.log");
     let drain_handle = tokio::task::spawn_blocking(move || {
         use std::io::{Read, Write};
         use std::os::fd::FromRawFd;
@@ -504,7 +559,7 @@ async fn handle_run_streaming(
     debug!(pid = pid, "streaming: drain complete");
 
     // ── Network cleanup (ephemeral) ────────────────────────────────────
-    NetworkLifecycle::new(deps.network_provider.clone())
+    NetworkLifecycle::new(deps.lifecycle.network_provider.clone())
         .cleanup(&container_id)
         .await;
     debug!(pid = pid, "streaming: network cleanup done");
@@ -526,12 +581,12 @@ async fn handle_run_streaming(
         false
     };
     if oom {
-        deps.event_sink.emit(ContainerEvent::OomKilled {
+        deps.events.event_sink.emit(ContainerEvent::OomKilled {
             id: container_id.clone(),
             timestamp: std::time::SystemTime::now(),
         });
     } else {
-        deps.event_sink.emit(ContainerEvent::Stopped {
+        deps.events.event_sink.emit(ContainerEvent::Stopped {
             id: container_id.clone(),
             exit_code,
             timestamp: std::time::SystemTime::now(),
@@ -590,7 +645,7 @@ async fn run_inner_capture(
     let full_image = image_ref.cache_name();
 
     // Select registry based on image reference hostname.
-    let registry = deps.registry_router.route(&image_ref);
+    let registry = deps.image.registry_router.route(&image_ref);
 
     if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
@@ -622,8 +677,8 @@ async fn run_inner_capture(
         .into());
     }
 
-    let container_dir = deps.containers_base.join(&id);
-    let run_dir = deps.run_containers_base.join(&id);
+    let container_dir = deps.lifecycle.containers_base.join(&id);
+    let run_dir = deps.lifecycle.run_containers_base.join(&id);
 
     #[cfg(unix)]
     {
@@ -641,7 +696,7 @@ async fn run_inner_capture(
         std::fs::create_dir_all(&run_dir)?;
     }
 
-    let rootfs_layout = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps.lifecycle.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir = rootfs_layout.merged_dir.clone();
 
     let resource_config = ResourceConfig {
@@ -650,7 +705,7 @@ async fn run_inner_capture(
         pids_max: Some(1024),
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir_str = deps.lifecycle.resource_limiter.create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
@@ -659,7 +714,7 @@ async fn run_inner_capture(
         mode: net_mode,
         ..NetworkConfig::default()
     };
-    let net = NetworkLifecycle::new(deps.network_provider.clone());
+    let net = NetworkLifecycle::new(deps.lifecycle.network_provider.clone());
     let _net_ns = net
         .setup(&id, &network_config)
         .await
@@ -721,7 +776,7 @@ async fn run_inner_capture(
         .await
         .expect("semaphore closed");
 
-    let spawn_result = deps.runtime.spawn_process(&spawn_config).await?;
+    let spawn_result = deps.lifecycle.runtime.spawn_process(&spawn_config).await?;
 
     let pid = spawn_result.pid;
     let output_reader = spawn_result.output_reader.ok_or_else(|| {
@@ -732,7 +787,7 @@ async fn run_inner_capture(
     net.attach(&id, pid).await.context("network attach")?;
 
     // Write PID file and update state.
-    let pid_file = deps.run_containers_base.join(&id).join("pid");
+    let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
         warn!(
             pid_file = %pid_file.display(),
@@ -791,7 +846,7 @@ async fn run_inner(
     let full_image = image_ref.cache_name();
 
     // Select registry based on image reference hostname.
-    let registry = deps.registry_router.route(&image_ref);
+    let registry = deps.image.registry_router.route(&image_ref);
 
     // Pull image if not cached (using injected registry trait).
     if !registry.has_image(&full_image, &tag).await {
@@ -825,8 +880,8 @@ async fn run_inner(
         .into());
     }
 
-    let container_dir = deps.containers_base.join(&id);
-    let run_dir = deps.run_containers_base.join(&id);
+    let container_dir = deps.lifecycle.containers_base.join(&id);
+    let run_dir = deps.lifecycle.run_containers_base.join(&id);
 
     // SECURITY: Create container directories with restricted permissions (0700)
     // to prevent unauthorized access to container data
@@ -848,7 +903,7 @@ async fn run_inner(
     }
 
     // Setup overlayfs (using injected filesystem trait).
-    let rootfs_layout = deps.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps.lifecycle.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir_from_overlay = rootfs_layout.merged_dir.clone();
 
     // Setup cgroup (using injected resource limiter trait).
@@ -858,7 +913,7 @@ async fn run_inner(
         pids_max: Some(1024), // Default PID limit for security
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir_str = deps.lifecycle.resource_limiter.create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
@@ -867,7 +922,7 @@ async fn run_inner(
         mode: net_mode,
         ..NetworkConfig::default()
     };
-    let net = NetworkLifecycle::new(deps.network_provider.clone());
+    let net = NetworkLifecycle::new(deps.lifecycle.network_provider.clone());
     let _net_ns = net
         .setup(&id, &network_config)
         .await
@@ -937,11 +992,11 @@ async fn run_inner(
     // Spawn the container process (using injected runtime trait).
     let id_clone = id.clone();
     let state_clone = Arc::clone(&state);
-    let runtime_clone = Arc::clone(&deps.runtime);
-    let metrics_clone = Arc::clone(&deps.metrics);
+    let runtime_clone = Arc::clone(&deps.lifecycle.runtime);
+    let metrics_clone = Arc::clone(&deps.events.metrics);
     let net_clone = net.clone();
-    let run_containers_base_clone = deps.run_containers_base.clone();
-    let event_sink_clone = Arc::clone(&deps.event_sink);
+    let run_containers_base_clone = deps.lifecycle.run_containers_base.clone();
+    let event_sink_clone = Arc::clone(&deps.events.event_sink);
     let image_label_clone = image_label.clone();
 
     tokio::task::spawn(async move {
@@ -1214,13 +1269,13 @@ pub async fn handle_stop(
     };
 
     // ── Network cleanup ────────────────────────────────────────────────
-    NetworkLifecycle::new(deps.network_provider.clone())
+    NetworkLifecycle::new(deps.lifecycle.network_provider.clone())
         .cleanup(&id)
         .await;
 
     let result = stop_inner(&id, &state).await;
     let status = if result.is_ok() { "ok" } else { "error" };
-    deps.metrics.increment_counter(
+    deps.events.metrics.increment_counter(
         "minibox_container_ops_total",
         &[("op", "stop"), ("adapter", "daemon"), ("status", status)],
     );
@@ -1228,7 +1283,7 @@ pub async fn handle_stop(
     match result {
         Ok(()) => {
             let active = state.list_containers().await.len() as f64;
-            deps.metrics
+            deps.events.metrics
                 .set_gauge("minibox_active_containers", active, &[]);
             DaemonResponse::Success {
                 message: format!("container {id} stopped"),
@@ -1441,7 +1496,7 @@ pub async fn handle_remove(
 
     let result = remove_inner(&id, &state, &deps).await;
     let status = if result.is_ok() { "ok" } else { "error" };
-    deps.metrics.increment_counter(
+    deps.events.metrics.increment_counter(
         "minibox_container_ops_total",
         &[("op", "remove"), ("adapter", "daemon"), ("status", status)],
     );
@@ -1449,7 +1504,7 @@ pub async fn handle_remove(
     match result {
         Ok(()) => {
             let active = state.list_containers().await.len() as f64;
-            deps.metrics
+            deps.events.metrics
                 .set_gauge("minibox_active_containers", active, &[]);
             DaemonResponse::Success {
                 message: format!("container {id} removed"),
@@ -1485,26 +1540,26 @@ async fn remove_inner(
     }
 
     // Unmount overlay (using injected filesystem trait).
-    let container_dir = deps.containers_base.join(id);
+    let container_dir = deps.lifecycle.containers_base.join(id);
     if container_dir.exists()
-        && let Err(e) = deps.filesystem.cleanup(&container_dir)
+        && let Err(e) = deps.lifecycle.filesystem.cleanup(&container_dir)
     {
         warn!("cleanup_mounts for {id}: {e}");
     }
 
     // Remove runtime state directory.
-    let run_dir = deps.run_containers_base.join(id);
+    let run_dir = deps.lifecycle.run_containers_base.join(id);
     if run_dir.exists() {
         std::fs::remove_dir_all(&run_dir).ok();
     }
 
     // Cleanup cgroup (using injected resource limiter trait).
-    if let Err(e) = deps.resource_limiter.cleanup(id) {
+    if let Err(e) = deps.lifecycle.resource_limiter.cleanup(id) {
         warn!("cleanup cgroup for {id}: {e}");
     }
 
     // ── Network cleanup ────────────────────────────────────────────────
-    NetworkLifecycle::new(deps.network_provider.clone())
+    NetworkLifecycle::new(deps.lifecycle.network_provider.clone())
         .cleanup(id)
         .await;
 
@@ -1554,7 +1609,7 @@ pub async fn handle_logs(
     };
 
     // Read stdout.log then stderr.log; missing files are silently skipped.
-    let log_dir = deps.containers_base.join(&id);
+    let log_dir = deps.lifecycle.containers_base.join(&id);
     let log_pairs: &[(&str, OutputStreamKind)] = &[
         ("stdout.log", OutputStreamKind::Stdout),
         ("stderr.log", OutputStreamKind::Stderr),
@@ -1640,7 +1695,7 @@ pub async fn handle_pull(
     let tag = image_ref.tag.clone();
 
     // Select registry based on image reference hostname.
-    let registry = deps.registry_router.route(&image_ref);
+    let registry = deps.image.registry_router.route(&image_ref);
 
     // Pull image (using selected registry trait).
     let start = std::time::Instant::now();
@@ -1662,11 +1717,11 @@ pub async fn handle_pull(
         }
     };
 
-    deps.metrics.increment_counter(
+    deps.events.metrics.increment_counter(
         "minibox_container_ops_total",
         &[("op", "pull"), ("adapter", "daemon"), ("status", status)],
     );
-    deps.metrics.record_histogram(
+    deps.events.metrics.record_histogram(
         "minibox_container_op_duration_seconds",
         start.elapsed().as_secs_f64(),
         &[("op", "pull"), ("adapter", "daemon")],
@@ -1688,7 +1743,7 @@ pub async fn handle_load_image(
 ) -> DaemonResponse {
     let image_path = std::path::Path::new(&path);
     let start = std::time::Instant::now();
-    let (status, response) = match deps.image_loader.load_image(image_path, &name, &tag).await {
+    let (status, response) = match deps.image.image_loader.load_image(image_path, &name, &tag).await {
         Ok(()) => {
             info!(
                 path = %path,
@@ -1712,7 +1767,7 @@ pub async fn handle_load_image(
             )
         }
     };
-    deps.metrics.increment_counter(
+    deps.events.metrics.increment_counter(
         "minibox_container_ops_total",
         &[
             ("op", "load_image"),
@@ -1720,7 +1775,7 @@ pub async fn handle_load_image(
             ("status", status),
         ],
     );
-    deps.metrics.record_histogram(
+    deps.events.metrics.record_histogram(
         "minibox_container_op_duration_seconds",
         start.elapsed().as_secs_f64(),
         &[("op", "load_image"), ("adapter", "daemon")],
@@ -1749,8 +1804,8 @@ pub async fn handle_exec(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     let start = std::time::Instant::now();
-    let Some(ref exec_rt) = deps.exec_runtime else {
-        deps.metrics.increment_counter(
+    let Some(ref exec_rt) = deps.exec.exec_runtime else {
+        deps.events.metrics.increment_counter(
             "minibox_container_ops_total",
             &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
         );
@@ -1780,7 +1835,7 @@ pub async fn handle_exec(
         // Only register PTY channels for tty sessions; non-tty execs have no
         // use for resize or stdin channels. Registered entries are removed when
         // the session ends (see cleanup call below).
-        let mut reg = deps.pty_sessions.lock().await;
+        let mut reg = deps.exec.pty_sessions.lock().await;
         reg.resize.insert(session_key.clone(), resize_tx);
         reg.stdin.insert(session_key.clone(), stdin_ch_tx.clone());
     }
@@ -1805,11 +1860,11 @@ pub async fn handle_exec(
                 exec_id = %handle.id,
                 "exec: started"
             );
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "exec"), ("adapter", "daemon"), ("status", "ok")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "exec"), ("adapter", "daemon")],
@@ -1819,19 +1874,19 @@ pub async fn handle_exec(
                 .await;
             // Session ends when run_in_container's output stream closes; clean up
             // PTY channels so the registry does not grow unboundedly.
-            deps.pty_sessions.lock().await.cleanup(&session_key);
+            deps.exec.pty_sessions.lock().await.cleanup(&session_key);
         }
         Err(e) => {
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "exec"), ("adapter", "daemon"), ("status", "error")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "exec"), ("adapter", "daemon")],
             );
-            deps.pty_sessions.lock().await.cleanup(&session_key);
+            deps.exec.pty_sessions.lock().await.cleanup(&session_key);
             send_error(&tx, "handle_exec", format!("exec failed: {e:#}")).await;
         }
     }
@@ -1858,7 +1913,7 @@ pub async fn handle_send_input(
             return;
         }
     };
-    let reg = deps.pty_sessions.lock().await;
+    let reg = deps.exec.pty_sessions.lock().await;
     match reg.stdin.get(session_id.as_ref()) {
         Some(stdin_tx) => {
             if stdin_tx.send(bytes).await.is_err() {
@@ -1901,7 +1956,7 @@ pub async fn handle_resize_pty(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    let reg = deps.pty_sessions.lock().await;
+    let reg = deps.exec.pty_sessions.lock().await;
     match reg.resize.get(session_id.as_ref()) {
         Some(resize_tx) => {
             if resize_tx.send((cols, rows)).await.is_err() {
@@ -1945,8 +2000,8 @@ pub async fn handle_push(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     let start = std::time::Instant::now();
-    let Some(ref pusher) = deps.image_pusher else {
-        deps.metrics.increment_counter(
+    let Some(ref pusher) = deps.build.image_pusher else {
+        deps.events.metrics.increment_counter(
             "minibox_container_ops_total",
             &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
         );
@@ -2004,11 +2059,11 @@ pub async fn handle_push(
                 size_bytes = result.size_bytes,
                 "push: completed"
             );
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "push"), ("adapter", "daemon"), ("status", "ok")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "push"), ("adapter", "daemon")],
@@ -2020,11 +2075,11 @@ pub async fn handle_push(
                 .await;
         }
         Err(e) => {
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "push"), ("adapter", "daemon"), ("status", "error")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "push"), ("adapter", "daemon")],
@@ -2047,8 +2102,8 @@ pub async fn handle_commit(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     let start = std::time::Instant::now();
-    let Some(ref committer) = deps.commit_adapter else {
-        deps.metrics.increment_counter(
+    let Some(ref committer) = deps.build.commit_adapter else {
+        deps.events.metrics.increment_counter(
             "minibox_container_ops_total",
             &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
         );
@@ -2084,11 +2139,11 @@ pub async fn handle_commit(
                 layers = meta.layers.len(),
                 "commit: completed"
             );
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "commit"), ("adapter", "daemon"), ("status", "ok")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
@@ -2107,11 +2162,11 @@ pub async fn handle_commit(
                 .await;
         }
         Err(e) => {
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "commit"), ("adapter", "daemon"), ("status", "error")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
@@ -2140,8 +2195,8 @@ pub async fn handle_build(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     let start = std::time::Instant::now();
-    let Some(ref builder) = deps.image_builder else {
-        deps.metrics.increment_counter(
+    let Some(ref builder) = deps.build.image_builder else {
+        deps.events.metrics.increment_counter(
             "minibox_container_ops_total",
             &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
         );
@@ -2218,11 +2273,11 @@ pub async fn handle_build(
                 layers = meta.layers.len(),
                 "build: complete"
             );
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "build"), ("adapter", "daemon"), ("status", "ok")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "build"), ("adapter", "daemon")],
@@ -2237,11 +2292,11 @@ pub async fn handle_build(
                 .await;
         }
         Err(e) => {
-            deps.metrics.increment_counter(
+            deps.events.metrics.increment_counter(
                 "minibox_container_ops_total",
                 &[("op", "build"), ("adapter", "daemon"), ("status", "error")],
             );
-            deps.metrics.record_histogram(
+            deps.events.metrics.record_histogram(
                 "minibox_container_op_duration_seconds",
                 start.elapsed().as_secs_f64(),
                 &[("op", "build"), ("adapter", "daemon")],
