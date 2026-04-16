@@ -42,6 +42,12 @@ pub struct ContainerConfig {
     pub mounts: Vec<minibox_core::domain::BindMount>,
     /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
     pub privileged: bool,
+    /// Optional PTY configuration for interactive containers.
+    ///
+    /// When `Some`, the daemon should attempt to allocate a PTY pair via the
+    /// [`PtyAllocator`] port before cloning the container process.  The actual
+    /// PTY fork/exec wiring is deferred to Linux-specific adapters.
+    pub pty: Option<minibox_core::domain::PtyConfig>,
 }
 
 /// Spawn the container init process.
