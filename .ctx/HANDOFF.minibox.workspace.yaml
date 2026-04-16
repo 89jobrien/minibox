@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '2026-04-16'
+updated: '2026-04-17'
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -291,7 +291,7 @@ items:
   doob_uuid: a7596606-41c4-4a89-910c-2d54ff9fe10d
   name: shared-oci-library
   priority: P2
-  status: open
+  status: done
   title: 'feat: shared OCI image-pulling library (#21)'
   description: 'Extract minibox-lib/src/image/ into minibox-oci crate. Public API:
     pull(image_ref,
@@ -304,11 +304,12 @@ items:
 
     '
   files:
-  - crates/minibox-core/src/image/
+  - crates/minibox-oci/src/
   extra:
   - date: 2026-04-06
     type: note
     note: captured in doob — todo id x2b0i0t9hrbprpj7vgf3
+  completed: '2026-04-17'
 - id: minibox-24
   name: pty-stdio-piping
   priority: P2
@@ -462,40 +463,46 @@ items:
 - id: minibox-30
   name: native-adapter-isolation-tests
   priority: P2
-  status: open
+  status: done
   title: 'test: native adapter isolation tests (Linux)'
   description: 'GH #22: Add isolation tests for the native Linux adapter with real
     namespaces, cgroups, and overlays. Test escape attempt detection and cgroup limits
     enforcement.'
-  files: []
+  files:
+  - crates/mbx/tests/native_adapter_isolation_tests.rs
   extra:
   - type: github-issue
     number: 22
     url: https://github.com/89jobrien/minibox/issues/22
+  completed: '2026-04-17'
 - id: minibox-31
   name: gke-adapter-isolation-tests
   priority: P2
-  status: open
+  status: done
   title: 'test: GKE adapter isolation tests (Linux)'
   description: 'GH #23: Add isolation tests for the GKE adapter using proot with copy
     filesystem and no cgroups.'
-  files: []
+  files:
+  - crates/mbx/tests/gke_adapter_isolation_tests.rs
   extra:
   - type: github-issue
     number: 23
     url: https://github.com/89jobrien/minibox/issues/23
+  completed: '2026-04-17'
 - id: minibox-32
   name: container-lifecycle-failure-tests
   priority: P2
-  status: open
+  status: done
   title: 'test: container lifecycle failure tests (Linux+root)'
   description: 'GH #24: Test container init crash, OOM kill, signal handling, cleanup
     on failed pivot_root, permission denied on rootfs mount.'
-  files: []
+  files:
+  - crates/daemonbox/tests/container_lifecycle_failure_tests.rs
   extra:
   - type: github-issue
     number: 24
     url: https://github.com/89jobrien/minibox/issues/24
+  completed: '2026-04-17'
 - id: minibox-33
   name: winbox-hyper-v-wsl2
   priority: P2
@@ -536,27 +543,31 @@ items:
 - id: minibox-37
   name: conformance-markdown-report
   priority: P2
-  status: open
+  status: done
   title: Emit Markdown and JSON conformance reports under artifacts/conformance
   description: 'GH #77: After conformance suite runs, generate human-readable markdown
     and machine-parseable JSON reports with backend capability matrix.'
-  files: []
+  files:
+  - crates/mbx/tests/conformance_report.rs
   extra:
   - type: github-issue
     number: 77
     url: https://github.com/89jobrien/minibox/issues/77
+  completed: '2026-04-17'
 - id: minibox-38
   name: conformance-colima-validate
   priority: P2
-  status: open
+  status: done
   title: Validate the new conformance suite on macOS Colima
   description: 'GH #79: Run conformance tests on Colima adapter to ensure commit/build/push
     work end-to-end with nerdctl.'
-  files: []
+  files:
+  - crates/mbx/tests/colima_conformance_tests.rs
   extra:
   - type: github-issue
     number: 79
     url: https://github.com/89jobrien/minibox/issues/79
+  completed: '2026-04-17'
 - id: minibox-39
   name: conformance-fixtures
   priority: P2
@@ -858,7 +869,7 @@ items:
 - id: minibox-62
   name: conformance-ci-serialization
   priority: P2
-  status: open
+  status: done
   title: Enforce e2e serialization in CI runner config
   description: 'GH #73: Ensure CI and local dev serial_test configs are identical
     for consistent regression detection.'
@@ -867,29 +878,36 @@ items:
   - type: github-issue
     number: 73
     url: https://github.com/89jobrien/minibox/issues/73
+  completed: '2026-04-17'
 - id: minibox-63
   name: conformance-build-tests
   priority: P2
-  status: open
+  status: done
   title: Extract backend-agnostic build conformance tests
   description: 'GH #71: Separate build tests into a portable suite for all adapters.'
-  files: []
+  files:
+  - crates/mbx/tests/conformance_build.rs
   extra:
   - type: github-issue
     number: 71
     url: https://github.com/89jobrien/minibox/issues/71
+  completed: '2026-04-17'
 - id: minibox-64
   name: tier3-linux-isolation
   priority: P2
-  status: open
+  status: done
   title: Tier 3 Linux-only adapter isolation and lifecycle failure tests
   description: 'GH #74: Native, GKE, and container lifecycle failure tests for comprehensive
     isolation validation.'
-  files: []
+  files:
+  - crates/mbx/tests/native_adapter_isolation_tests.rs
+  - crates/mbx/tests/gke_adapter_isolation_tests.rs
+  - crates/daemonbox/tests/container_lifecycle_failure_tests.rs
   extra:
   - type: github-issue
     number: 74
     url: https://github.com/89jobrien/minibox/issues/74
+  completed: '2026-04-17'
 - id: minibox-65
   name: vz-virtiofs
   priority: P2
@@ -927,6 +945,18 @@ items:
   - type: github-issue
     number: 93
     url: https://github.com/89jobrien/minibox/issues/93
+- id: minibox-69
+  name: paused-state-migration
+  priority: P2
+  status: open
+  title: 'fix: migrate ContainerState::Paused to daemonbox — remove local duplicate (#104)'
+  description: 'Sentinel #104: daemonbox::state::ContainerState still has its own
+    Paused variant after domain type was promoted in 92578fd. 3 call sites in
+    integration_tests.rs need migration to minibox_core::domain::ContainerState::Paused.'
+  files:
+  - crates/daemonbox/src/state.rs
+  - crates/miniboxd/tests/integration_tests.rs
+  extra: []
 - id: minibox-68
   name: vm-image-overlay
   priority: P2
@@ -940,6 +970,16 @@ items:
   - crates/xtask/src/vm_image.rs
   extra: []
 log:
+- date: '2026-04-17'
+  summary: 'Test coverage sprint: minibox-30/31/32/37/38/62/63/64 closed — escape
+    detection (4 tests), GKE adapter suite (18 tests), lifecycle failures (7 tests),
+    Colima conformance (5 tests); CI serial parity verified. minibox-18 closed: minibox-oci
+    crate extracted (b3c8b5f). Paused state OCP fix (92578fd, partial — migration tracked
+    as minibox-69). [a4ccf4c, b3c8b5f, 92578fd]'
+  commits:
+  - a4ccf4c
+  - b3c8b5f
+  - 92578fd
 - date: '2026-04-16'
   summary: Pruned 10 duplicate HANDOFF items (minibox-9/10/17/19/20/21/22/23/29/36
     — superseded by more detailed entries).
