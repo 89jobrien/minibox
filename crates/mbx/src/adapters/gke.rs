@@ -30,7 +30,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig, ResourceLimiter,
+    ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter,
     RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use minibox_core::{adapt, as_any};
@@ -91,7 +91,7 @@ impl CopyFilesystem {
     }
 }
 
-impl FilesystemProvider for CopyFilesystem {
+impl minibox_core::domain::RootfsSetup for CopyFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
@@ -120,18 +120,20 @@ impl FilesystemProvider for CopyFilesystem {
         })
     }
 
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        // proot handles the fake chroot — nothing to do here.
-        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
-        Ok(())
-    }
-
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
         debug!("copy filesystem: removing {:?}", container_dir);
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
                 .with_context(|| format!("removing container dir {container_dir:?}"))?;
         }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for CopyFilesystem {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        // proot handles the fake chroot — nothing to do here.
+        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
         Ok(())
     }
 }
@@ -341,6 +343,7 @@ as_any!(ProotRuntime);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::domain::{ChildInit, RootfsSetup};
     use tempfile::TempDir;
 
     // -- NoopLimiter tests --------------------------------------------------

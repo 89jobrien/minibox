@@ -7,7 +7,7 @@
 use crate::container::filesystem;
 use anyhow::Result;
 use minibox_core::adapt;
-use minibox_core::domain::{FilesystemProvider, RootfsLayout};
+use minibox_core::domain::RootfsLayout;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -76,7 +76,7 @@ impl OverlayFilesystem {
 
 adapt!(OverlayFilesystem);
 
-impl FilesystemProvider for OverlayFilesystem {
+impl minibox_core::domain::RootfsSetup for OverlayFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             "setting up overlay rootfs with {} layers at {:?}",
@@ -92,18 +92,10 @@ impl FilesystemProvider for OverlayFilesystem {
             merged_dir,
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
                 upper_dir: container_dir.join("upper"),
+                metadata: std::collections::HashMap::new(),
             }),
             source_image_ref: None,
         })
-    }
-
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        debug!("pivoting root to {:?}", new_root);
-
-        // Delegate to existing filesystem implementation
-        // IMPORTANT: This must be called from inside the container process
-        // after namespaces have been created
-        filesystem::pivot_root_to(new_root)
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
@@ -111,6 +103,17 @@ impl FilesystemProvider for OverlayFilesystem {
 
         // Delegate to existing filesystem implementation
         filesystem::cleanup_mounts(container_dir)
+    }
+}
+
+impl minibox_core::domain::ChildInit for OverlayFilesystem {
+    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+        debug!("pivoting root to {:?}", new_root);
+
+        // Delegate to existing filesystem implementation
+        // IMPORTANT: This must be called from inside the container process
+        // after namespaces have been created
+        filesystem::pivot_root_to(new_root)
     }
 }
 
