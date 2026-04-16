@@ -8,8 +8,8 @@ items:
   priority: P1
   status: done
   title: Enforce 3-tier git workflow with CI automation
-  description: 'Branch protections, PR target rules, tagging expectations. Currently prose-only in docs.
-    main is 7 commits ahead of next — auto-promote blocked.
+  description: 'Branch protections, PR target rules, tagging expectations. Currently
+    prose-only in docs. main is 7 commits ahead of next — auto-promote blocked.
 
     '
   files:
@@ -22,8 +22,8 @@ items:
   priority: P1
   status: done
   title: Add env-var toggles and fallbacks to bench/profiling pipeline
-  description: 'BROWSER=firefox is hardcoded in samply/cargo-flamegraph recipes — brittle across environments.
-    Add MINIBOX_BENCH_BROWSER or similar toggle.
+  description: 'BROWSER=firefox is hardcoded in samply/cargo-flamegraph recipes —
+    brittle across environments. Add MINIBOX_BENCH_BROWSER or similar toggle.
 
     '
   files:
@@ -36,9 +36,10 @@ items:
   priority: P1
   status: done
   title: Fix phased-deployment CI — HTTP 403 on gh run list
-  description: 'GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml. Already present
-    in current file — 403 was from stale run (2026-03-26) before the permission was added. Verified workflow
-    file has actions:read at top-level permissions block.
+  description: 'GITHUB_TOKEN needs `actions: read` permission in phased-deployment.yml.
+    Already present in current file — 403 was from stale run (2026-03-26) before the
+    permission was added. Verified workflow file has actions:read at top-level permissions
+    block.
 
     '
   files:
@@ -51,8 +52,8 @@ items:
   priority: P1
   status: done
   title: Improve handler.rs coverage (currently 67.5% fn / 55% line)
-  description: 'Error paths in run/pull/stop/rm still undertested. Use mock builder patterns documented
-    in CLAUDE.md. gauge drift in reaper task (line 844).
+  description: 'Error paths in run/pull/stop/rm still undertested. Use mock builder
+    patterns documented in CLAUDE.md. gauge drift in reaper task (line 844).
 
     '
   files:
@@ -66,8 +67,9 @@ items:
   priority: P2
   status: done
   title: Add dual MIT/Apache-2.0 license files
-  description: 'minibox has `license = "MIT"` but no LICENSE file. Upgrade to `MIT OR Apache-2.0` (workspace.package),
-    add LICENSE-MIT and LICENSE-APACHE, update README. Reference notfiles repo for exact content.
+  description: 'minibox has `license = "MIT"` but no LICENSE file. Upgrade to `MIT
+    OR Apache-2.0` (workspace.package), add LICENSE-MIT and LICENSE-APACHE, update
+    README. Reference notfiles repo for exact content.
 
     '
   files:
@@ -83,8 +85,8 @@ items:
   priority: P2
   status: done
   title: Enforce e2e serialization in CI runner config
-  description: 'Local dev and CI use different serial_test configs. Make identical so regressions surface
-    in both.
+  description: 'Local dev and CI use different serial_test configs. Make identical
+    so regressions surface in both.
 
     '
   files:
@@ -100,17 +102,17 @@ items:
   priority: P2
   status: blocked
   title: VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64
-  description: 'Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space
-    workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships
-    a fix.
+  description: 'Confirmed Apple OS bug. test-vz-isolation harness is complete and
+    correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation
+    should pass as-is once Apple ships a fix.
 
     '
   files: []
   extra:
   - date: 2026-04-01
     type: blocker
-    note: 'VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and
-      apple/container as well. Tracking https://github.com/apple/container/issues/1254
+    note: 'VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64.
+      Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
 
       '
   - date: 2026-04-06
@@ -122,16 +124,20 @@ items:
   priority: P2
   status: done
   title: Fix dashbox sentinel code quality issues
-  description: 'Terminal setup not panic-safe, doob/gh exit status not checked, rev-list unwrap_or_default
-    silently masks detached HEAD, BackgroundCommand discards stderr, Sentinel thread spawns only to drop(tx).
+  description: 'Terminal setup not panic-safe, doob/gh exit status not checked, rev-list
+    unwrap_or_default silently masks detached HEAD, BackgroundCommand discards stderr,
+    Sentinel thread spawns only to drop(tx).
 
-    2026-04-04 deeper sentinel scan added: home_dir/current_dir unwrap_or_default silent fallbacks
+    2026-04-04 deeper sentinel scan added: home_dir/current_dir unwrap_or_default
+    silent fallbacks
 
     (agents.rs:38, bench.rs:101), BackgroundCommand stderr pipe never drained (command.rs:94),
 
-    git load() runs 4 sequential subprocesses on render tick (data/git.rs:61), CI tab advertises
+    git load() runs 4 sequential subprocesses on render tick (data/git.rs:61), CI
+    tab advertises
 
-    ''o:open in browser'' with no handler (tabs/ci.rs:139), #![allow(dead_code)] at file level in
+    ''o:open in browser'' with no handler (tabs/ci.rs:139), #![allow(dead_code)] at
+    file level in
 
     metrics.rs and tabs/metrics.rs.
 
@@ -149,9 +155,11 @@ items:
   extra:
   - date: 2026-04-04
     type: note
-    note: 'Sentinel deep scan: 3 blockers (home_dir fallback, current_dir fallback, stderr pipe never
+    note: 'Sentinel deep scan: 3 blockers (home_dir fallback, current_dir fallback,
+      stderr pipe never
 
-      drained), 4 suggestions (git-on-render-tick, CI ''o'' key hint dead, debug_assert missing,
+      drained), 4 suggestions (git-on-render-tick, CI ''o'' key hint dead, debug_assert
+      missing,
 
       dead_code suppression). No new items — folded into this existing item.
 
@@ -163,12 +171,14 @@ items:
   priority: P2
   status: done
   title: dashbox Items tab — doob sync reliability and action key feedback
-  description: 'Items tab landed (8e78996): handoff list with detail pane, c/o/b action keys for doob
-    status
+  description: 'Items tab landed (8e78996): handoff list with detail pane, c/o/b action
+    keys for doob status
 
-    updates, doob_uuid wired, Todos source fixed to minibox- prefix, auto-refresh on command exit,
+    updates, doob_uuid wired, Todos source fixed to minibox- prefix, auto-refresh
+    on command exit,
 
-    CI tab o-key OpenUrl wired. Remaining: action key feedback (status change confirmation overlay),
+    CI tab o-key OpenUrl wired. Remaining: action key feedback (status change confirmation
+    overlay),
 
     error handling if doob CLI unavailable, test coverage for HandoffItem serde.
 
@@ -184,8 +194,8 @@ items:
   priority: P2
   status: open
   title: Tier 2 mbx-dagu fixes (#31,
-  description: 'Add .gitmodules or document nested repo (#31), Dockerfile use dagu base image not alpine
-    (#35), executor.go pass Env/MemoryLimitBytes/CpuWeight (#36).
+  description: 'Add .gitmodules or document nested repo (#31), Dockerfile use dagu
+    base image not alpine (#35), executor.go pass Env/MemoryLimitBytes/CpuWeight (#36).
 
     '
   files: []
@@ -199,8 +209,8 @@ items:
   priority: P2
   status: open
   title: Tier 3 Linux-only adapter isolation and lifecycle failure tests
-  description: 'Native adapter isolation tests (#22), GKE adapter isolation tests (#23), Container lifecycle
-    failure tests (#24). Run on VPS to verify.
+  description: 'Native adapter isolation tests (#22), GKE adapter isolation tests
+    (#23), Container lifecycle failure tests (#24). Run on VPS to verify.
 
     '
   files: []
@@ -214,11 +224,13 @@ items:
   priority: P1
   status: done
   title: 'feat: exec into running containers (setns + output streaming) (#16)'
-  description: 'Add ExecContainer request/response to protocol. Implement setns(2) to enter existing
+  description: 'Add ExecContainer request/response to protocol. Implement setns(2)
+    to enter existing
 
     container PID/mount/net namespaces. Stream stdout/stderr via ContainerOutput messages.
 
-    CLI: minibox exec <container_id> -- <command>. Biggest gap blocking maestro Phase 1.
+    CLI: minibox exec <container_id> -- <command>. Biggest gap blocking maestro Phase
+    1.
 
     '
   files:
@@ -239,7 +251,8 @@ items:
   priority: P1
   status: done
   title: 'feat: named containers (#17)'
-  description: 'Add optional name field to RunContainer protocol message. Store name in DaemonState
+  description: 'Add optional name field to RunContainer protocol message. Store name
+    in DaemonState
 
     alongside container ID. Allow name-based lookup in stop/rm/exec. Validate uniqueness.
 
@@ -263,7 +276,8 @@ items:
   priority: P1
   status: done
   title: 'feat: container log capture and retrieval (#18)'
-  description: 'Capture stdout/stderr to log files in /var/lib/minibox/containers/{id}/. Add
+  description: 'Capture stdout/stderr to log files in /var/lib/minibox/containers/{id}/.
+    Add
 
     ContainerLogs request/response to protocol. CLI: minibox logs <id> [--follow].
 
@@ -287,7 +301,8 @@ items:
   priority: P2
   status: done
   title: 'feat: PTY/stdio piping for interactive containers (#19)'
-  description: 'PTY allocation inside container namespace. Binary framing protocol for multiplexed
+  description: 'PTY allocation inside container namespace. Binary framing protocol
+    for multiplexed
 
     stdin/stdout/stderr. Terminal resize (SIGWINCH) forwarding. CLI -it flag.
 
@@ -308,9 +323,11 @@ items:
   priority: P2
   status: open
   title: 'feat: container networking — veth/bridge (#20)'
-  description: 'Create minibox0 bridge device. veth pair per container (host side on bridge, container
+  description: 'Create minibox0 bridge device. veth pair per container (host side
+    on bridge, container
 
-    side with IP). DHCP or static IP assignment. NAT/masquerade for outbound. DNS inside
+    side with IP). DHCP or static IP assignment. NAT/masquerade for outbound. DNS
+    inside
 
     containers. Maestro Phase 3 (depends on Phase 1+2).
 
@@ -327,7 +344,8 @@ items:
   priority: P2
   status: open
   title: 'feat: shared OCI image-pulling library (#21)'
-  description: 'Extract minibox-lib/src/image/ into minibox-oci crate. Public API: pull(image_ref,
+  description: 'Extract minibox-lib/src/image/ into minibox-oci crate. Public API:
+    pull(image_ref,
 
     store_path, progress_callback). Keep Docker Hub + GHCR adapters, parallel layer
 
@@ -348,11 +366,13 @@ items:
   priority: P2
   status: open
   title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40)'
-  description: 'Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.
+  description: 'Implement VM lifecycle (create disk image, configure VZ VM, start/stop)
+    inside macbox.
 
     VM boots minimal Linux guest. VM state in MINIBOX_DATA_DIR/vm/. Expose start/stop/status
 
-    API consumed by macbox::start(). Blocked by VZErrorInternal Apple bug on macOS 26 ARM64.
+    API consumed by macbox::start(). Blocked by VZErrorInternal Apple bug on macOS
+    26 ARM64.
 
     '
   files:
@@ -374,10 +394,11 @@ items:
   priority: P2
   status: blocked
   title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41)'
-  description: 'Small Rust binary (minibox-agent) inside the minibox Linux VM. Listens on AF_VSOCK CID
-    3,
+  description: 'Small Rust binary (minibox-agent) inside the minibox Linux VM. Listens
+    on AF_VSOCK CID 3,
 
-    accepts JSON requests (same protocol as miniboxd Unix socket), executes using mbx primitives.
+    accepts JSON requests (same protocol as miniboxd Unix socket), executes using
+    mbx primitives.
 
     Streams stdout/stderr as ContainerOutput frames. Depends on #40.
 
@@ -397,9 +418,11 @@ items:
   priority: P2
   status: blocked
   title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42)'
-  description: 'Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr
+  description: 'Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container
+    stdout/stderr
 
-    forwarded as ContainerOutput protocol messages. ContainerStopped carries exit code.
+    forwarded as ContainerOutput protocol messages. ContainerStopped carries exit
+    code.
 
     Must support: arbitrary byte chunks, concurrent containers, clean EOF on exit.
 
@@ -419,7 +442,8 @@ items:
   priority: P2
   status: blocked
   title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43)'
-  description: 'Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into VM via virtiofs.
+  description: 'Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into
+    VM via virtiofs.
 
     Allows in-VM minibox-agent to construct overlay FS from host-stored layers without
 
@@ -441,7 +465,8 @@ items:
   priority: P2
   status: open
   title: 'feat: minibox owns full container stack on every OS (#44)'
-  description: 'Tracking issue: Linux native done. macOS via VF+vsock planned (#40-43). Windows via
+  description: 'Tracking issue: Linux native done. macOS via VF+vsock planned (#40-43).
+    Windows via
 
     Hyper-V/WSL2 kernel TBD (#45). No external runtime (Docker, Colima, nerdctl, WSL).
 
@@ -462,7 +487,8 @@ items:
 
     (3) NativeExecRuntime PTY branch (openpty+setsid+TIOCSCTTY), (4) handler PtySessionRegistry
 
-    + SendInput/ResizePty dispatch, (5) CLI -it flag + RawModeGuard + stdin relay + SIGWINCH.
+    + SendInput/ResizePty dispatch, (5) CLI -it flag + RawModeGuard + stdin relay
+    + SIGWINCH.
 
     No new crates — libc and nix already workspace deps.
 
@@ -487,8 +513,9 @@ items:
   priority: P0
   status: done
   title: Add daemon-side policy gate for mounts and privileged containers
-  description: 'Council (2026-03-27, 68%): no policy check before granting bind mounts or privileged mode.
-    Any connected root client can escalate. Needs an authorization layer in handler.rs before handle_run.
+  description: 'Council (2026-03-27, 68%): no policy check before granting bind mounts
+    or privileged mode. Any connected root client can escalate. Needs an authorization
+    layer in handler.rs before handle_run.
 
     '
   files:
@@ -500,8 +527,10 @@ items:
   name: ci-locked-build-gate
   priority: P2
   status: done
-  title: 'fix(ci): add cargo build --locked gate on PRs touching Cargo.lock/Cargo.toml (#55)'
-  description: 'No CI step currently verifies that the committed Cargo.lock is consistent with a
+  title: 'fix(ci): add cargo build --locked gate on PRs touching Cargo.lock/Cargo.toml
+    (#55)'
+  description: 'No CI step currently verifies that the committed Cargo.lock is consistent
+    with a
 
     clean build. Add `cargo build --locked` to ci.yml so any lockfile drift or missing
 
@@ -516,12 +545,16 @@ items:
   name: fork-after-runtime
   priority: P2
   status: open
-  title: 'bug(exec): fork() inside active Tokio runtime — POSIX undefined behaviour (#60)'
-  description: 'libc::fork() is called from spawn_blocking while background Tokio threads are live.
+  title: 'bug(exec): fork() inside active Tokio runtime — POSIX undefined behaviour
+    (#60)'
+  description: 'libc::fork() is called from spawn_blocking while background Tokio
+    threads are live.
 
-    Any thread holding the allocator/Tokio/tracing mutex at fork time will deadlock the
+    Any thread holding the allocator/Tokio/tracing mutex at fork time will deadlock
+    the
 
-    child. Risk is load-dependent and non-deterministic — safe in single-developer use,
+    child. Risk is load-dependent and non-deterministic — safe in single-developer
+    use,
 
     hazardous before any multi-user or concurrent-exec deployment.
 
@@ -535,17 +568,21 @@ items:
   extra:
   - date: 2026-04-07
     type: note
-    note: 'GitHub issue #60 open. Low urgency — latent, not triggered in current single-user use.'
+    note: 'GitHub issue #60 open. Low urgency — latent, not triggered in current single-user
+      use.'
 - id: minibox-27
   name: e2e-ci-sudo
   priority: P2
   status: done
   title: 'fix(ci): e2e job needs sudo/root — configure runner or skip on main'
-  description: 'test-e2e job runs cargo xtask test-e2e-suite which requires root (pivot_root, cgroups,
+  description: 'test-e2e job runs cargo xtask test-e2e-suite which requires root (pivot_root,
+    cgroups,
 
-    overlay). The self-hosted runner runs as dev (non-root). Options: (A) runner user gets
+    overlay). The self-hosted runner runs as dev (non-root). Options: (A) runner user
+    gets
 
-    passwordless sudo for the test binary, (B) gate e2e to next/stable only (they ran fine
+    passwordless sudo for the test binary, (B) gate e2e to next/stable only (they
+    ran fine
 
     before minibox-6 removed the branch guard), (C) wrap with sudo -E in the CI step.
 
@@ -561,7 +598,8 @@ items:
   priority: P1
   status: done
   title: Backend-agnostic conformance suite — Phases 1–3
-  description: 'Phase 1: BackendCapability enum, BackendCapabilitySet, BackendDescriptor with
+  description: 'Phase 1: BackendCapability enum, BackendCapabilitySet, BackendDescriptor
+    with
 
     constructor hooks, fixture helpers (MinimalStoredImage, WritableUpperDir,
 
@@ -593,9 +631,9 @@ items:
   priority: P2
   status: open
   title: 'feat: shared OCI image-pulling library (#21)'
-  description: 'GH #21: Extract minibox-lib/src/image/ into minibox-oci crate. Public API: pull(image_ref,
-    store_path, progress_callback). Keep Docker Hub + GHCR adapters, parallel layer downloads, HashingReader,
-    all security validation.'
+  description: 'GH #21: Extract minibox-lib/src/image/ into minibox-oci crate. Public
+    API: pull(image_ref, store_path, progress_callback). Keep Docker Hub + GHCR adapters,
+    parallel layer downloads, HashingReader, all security validation.'
   files: []
   extra:
   - type: github-issue
@@ -606,8 +644,9 @@ items:
   priority: P2
   status: open
   title: 'test: native adapter isolation tests (Linux)'
-  description: 'GH #22: Add isolation tests for the native Linux adapter with real namespaces, cgroups,
-    and overlays. Test escape attempt detection and cgroup limits enforcement.'
+  description: 'GH #22: Add isolation tests for the native Linux adapter with real
+    namespaces, cgroups, and overlays. Test escape attempt detection and cgroup limits
+    enforcement.'
   files: []
   extra:
   - type: github-issue
@@ -618,8 +657,8 @@ items:
   priority: P2
   status: open
   title: 'test: GKE adapter isolation tests (Linux)'
-  description: 'GH #23: Add isolation tests for the GKE adapter using proot with copy filesystem and no
-    cgroups.'
+  description: 'GH #23: Add isolation tests for the GKE adapter using proot with copy
+    filesystem and no cgroups.'
   files: []
   extra:
   - type: github-issue
@@ -630,8 +669,8 @@ items:
   priority: P2
   status: open
   title: 'test: container lifecycle failure tests (Linux+root)'
-  description: 'GH #24: Test container init crash, OOM kill, signal handling, cleanup on failed pivot_root,
-    permission denied on rootfs mount.'
+  description: 'GH #24: Test container init crash, OOM kill, signal handling, cleanup
+    on failed pivot_root, permission denied on rootfs mount.'
   files: []
   extra:
   - type: github-issue
@@ -642,8 +681,8 @@ items:
   priority: P2
   status: open
   title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
-  description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home.
-    Parallel to macOS VZ adapter.'
+  description: 'GH #45: Implement Windows container support via Hyper-V for Windows
+    Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
   files: []
   extra:
   - type: github-issue
@@ -654,8 +693,8 @@ items:
   priority: P2
   status: open
   title: 'Tier 2 mbx-dagu fixes (#31, #35, #36)'
-  description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile use dagu base image
-    not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
+  description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile
+    use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
   files: []
   extra:
   - type: github-issue
@@ -664,22 +703,23 @@ items:
 - id: minibox-35
   name: conformance-backend-descriptor
   priority: P1
-  status: open
+  status: done
   title: Define the commit/build/push conformance boundary
-  description: 'GH #82: Establish backend conformance specification for commit/build/push operations across
-    native, GKE, Colima, and VZ adapters.'
+  description: 'GH #82: Establish backend conformance specification for commit/build/push
+    operations across native, GKE, Colima, and VZ adapters.'
   files: []
   extra:
   - type: github-issue
     number: 82
     url: https://github.com/89jobrien/minibox/issues/82
+  completed: '2026-04-16'
 - id: minibox-36
   name: enforce-conformance-ci
   priority: P2
   status: open
   title: Enforce e2e serialization in CI runner config
-  description: 'GH #73: Local dev and CI use different serial_test configs. Make identical so regressions
-    surface in both.'
+  description: 'GH #73: Local dev and CI use different serial_test configs. Make identical
+    so regressions surface in both.'
   files: []
   extra:
   - type: github-issue
@@ -690,8 +730,8 @@ items:
   priority: P2
   status: open
   title: Emit Markdown and JSON conformance reports under artifacts/conformance
-  description: 'GH #77: After conformance suite runs, generate human-readable markdown and machine-parseable
-    JSON reports with backend capability matrix.'
+  description: 'GH #77: After conformance suite runs, generate human-readable markdown
+    and machine-parseable JSON reports with backend capability matrix.'
   files: []
   extra:
   - type: github-issue
@@ -702,8 +742,8 @@ items:
   priority: P2
   status: open
   title: Validate the new conformance suite on macOS Colima
-  description: 'GH #79: Run conformance tests on Colima adapter to ensure commit/build/push work end-to-end
-    with nerdctl.'
+  description: 'GH #79: Run conformance tests on Colima adapter to ensure commit/build/push
+    work end-to-end with nerdctl.'
   files: []
   extra:
   - type: github-issue
@@ -712,57 +752,64 @@ items:
 - id: minibox-39
   name: conformance-fixtures
   priority: P2
-  status: open
+  status: done
   title: Add shared conformance fixture helpers
-  description: 'GH #92: Extract MinimalStoredImage, WritableUpperDir, BuildContext, LocalPushTarget helpers
-    for reuse across conformance tests.'
+  description: 'GH #92: Extract MinimalStoredImage, WritableUpperDir, BuildContext,
+    LocalPushTarget helpers for reuse across conformance tests.'
   files: []
   extra:
   - type: github-issue
     number: 92
     url: https://github.com/89jobrien/minibox/issues/92
+  completed: '2026-04-16'
 - id: minibox-40
   name: rootfs-metadata-contract
   priority: P1
-  status: open
+  status: done
   title: Define rootfs metadata contract for mac dogfooding
-  description: 'GH #72: Establish what metadata must be persisted alongside rootfs images for reliable
-    Colima commit/build/push.'
+  description: 'GH #72: Establish what metadata must be persisted alongside rootfs
+    images for reliable Colima commit/build/push.'
   files: []
   extra:
   - type: github-issue
     number: 72
     url: https://github.com/89jobrien/minibox/issues/72
+  completed: '2026-04-16'
 - id: minibox-41
   name: persist-rootfs-metadata
   priority: P1
-  status: open
+  status: done
   title: Persist rootfs metadata into ContainerRecord during create/run
-  description: 'GH #63: Store image ID, layer hashes, environment, and working directory in ContainerRecord
-    so commit/build/push can access it.'
+  description: 'GH #63: Store image ID, layer hashes, environment, and working directory
+    in ContainerRecord so commit/build/push can access it.'
   files: []
   extra:
   - type: github-issue
     number: 63
     url: https://github.com/89jobrien/minibox/issues/63
+  completed: '2026-04-16'
 - id: minibox-42
   name: colima-metadata-adapter
   priority: P1
-  status: open
+  status: done
   title: Implement Colima filesystem metadata for local commit/build/push
-  description: 'GH #64: Colima adapter must track image ID and layer history for integration with nerdctl.'
+  description: 'GH #64: Colima adapter must track image ID and layer history for integration
+    with nerdctl.'
   files: []
   extra:
   - type: github-issue
     number: 64
     url: https://github.com/89jobrien/minibox/issues/64
+  completed: '2026-04-16'
 - id: minibox-43
   name: vz-virtiofs-mounts
   priority: P2
   status: blocked
-  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
-  description: 'GH #66, #75: Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into VM via
-    virtiofs. Allows in-VM minibox-agent to construct overlay FS from host-stored layers without copying.'
+  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) /
+    (#66, #75)'
+  description: 'GH #66, #75: Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount
+    paths into VM via virtiofs. Allows in-VM minibox-agent to construct overlay FS
+    from host-stored layers without copying.'
   files: []
   extra:
   - type: github-issue
@@ -771,27 +818,29 @@ items:
 - id: minibox-44
   name: extract-conformance-commit
   priority: P2
-  status: open
+  status: done
   title: Extract backend-agnostic commit conformance tests
-  description: 'GH #67: Separate commit tests into a portable suite that runs against all backends (native,
-    GKE, Colima, VZ).'
+  description: 'GH #67: Separate commit tests into a portable suite that runs against
+    all backends (native, GKE, Colima, VZ).'
   files: []
   extra:
   - type: github-issue
     number: 67
     url: https://github.com/89jobrien/minibox/issues/67
+  completed: '2026-04-16'
 - id: minibox-45
   name: backend-descriptor-type
   priority: P2
-  status: open
+  status: done
   title: Add a test-only backend descriptor type
-  description: 'GH #69: Create BackendDescriptor with optional capability features for test selection
-    and reporting.'
+  description: 'GH #69: Create BackendDescriptor with optional capability features
+    for test selection and reporting.'
   files: []
   extra:
   - type: github-issue
     number: 69
     url: https://github.com/89jobrien/minibox/issues/69
+  completed: '2026-04-16'
 - id: minibox-46
   name: pty-stdio-plan
   priority: P2
@@ -806,44 +855,50 @@ items:
 - id: minibox-47
   name: extract-conformance-push
   priority: P2
-  status: open
+  status: done
   title: Extract backend-agnostic push conformance tests
-  description: 'GH #62: Separate push tests into a portable suite with tiered registry requirements.'
+  description: 'GH #62: Separate push tests into a portable suite with tiered registry
+    requirements.'
   files: []
   extra:
   - type: github-issue
     number: 62
     url: https://github.com/89jobrien/minibox/issues/62
+  completed: '2026-04-16'
 - id: minibox-48
   name: extract-conformance-build
   priority: P2
-  status: open
+  status: done
   title: Extract conformance entry point
-  description: 'GH #68: Create cargo xtask test-conformance entry point for running all conformance tests
-    with Markdown/JSON report output.'
+  description: 'GH #68: Create cargo xtask test-conformance entry point for running
+    all conformance tests with Markdown/JSON report output.'
   files: []
   extra:
   - type: github-issue
     number: 68
     url: https://github.com/89jobrien/minibox/issues/68
+  completed: '2026-04-16'
 - id: minibox-49
   name: filesystem-metadata-api
   priority: P1
-  status: open
-  title: Extend filesystem API to return merged dir plus writable-layer/source-image metadata
-  description: 'GH #91: Expose merged rootfs path alongside layer metadata for commit/build/push adapters.'
+  status: done
+  title: Extend filesystem API to return merged dir plus writable-layer/source-image
+    metadata
+  description: 'GH #91: Expose merged rootfs path alongside layer metadata for commit/build/push
+    adapters.'
   files: []
   extra:
   - type: github-issue
     number: 91
     url: https://github.com/89jobrien/minibox/issues/91
+  completed: '2026-04-16'
 - id: minibox-50
   name: macbox-colima-path
   priority: P1
   status: open
   title: Wire macbox Colima path to existing local commit/build/push adapters
-  description: 'GH #90: Integrate Colima adapter suite into macbox start function for local container
-    development on macOS.'
+  description: 'GH #90: Integrate Colima adapter suite into macbox start function
+    for local container development on macOS.'
   files: []
   extra:
   - type: github-issue
@@ -854,8 +909,8 @@ items:
   priority: P1
   status: open
   title: Dogfood mac create/commit/build/push flow end-to-end
-  description: 'GH #89: Test the full Colima workflow: create container → modify → commit → build → push
-    to local registry.'
+  description: 'GH #89: Test the full Colima workflow: create container → modify →
+    commit → build → push to local registry.'
   files: []
   extra:
   - type: github-issue
@@ -865,9 +920,10 @@ items:
   name: vz-vm-provision
   priority: P2
   status: blocked
-  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
-  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk
-    image, configure VZ VM, start/stop) inside macbox.'
+  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40)
+    / (#76, #84)'
+  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle
+    (create disk image, configure VZ VM, start/stop) inside macbox.'
   files: []
   extra:
   - type: github-issue
@@ -878,8 +934,8 @@ items:
   priority: P2
   status: blocked
   title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
-  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests
-    to local minibox primitives. Depends on VZ VM provisioning.'
+  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK,
+    forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
   files: []
   extra:
   - type: github-issue
@@ -889,9 +945,10 @@ items:
   name: vz-vsock-bridge
   priority: P2
   status: blocked
-  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
-  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr
-    forwarded as ContainerOutput protocol messages.'
+  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42)
+    / (#81, #93)'
+  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK.
+    Container stdout/stderr forwarded as ContainerOutput protocol messages.'
   files: []
   extra:
   - type: github-issue
@@ -902,8 +959,8 @@ items:
   priority: P2
   status: open
   title: 'feat: minibox owns the full container stack on every OS'
-  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned. Windows via
-    Hyper-V/WSL2 kernel TBD.'
+  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock
+    planned. Windows via Hyper-V/WSL2 kernel TBD.'
   files: []
   extra:
   - type: github-issue
@@ -914,8 +971,9 @@ items:
   priority: P2
   status: open
   title: 'feat: container networking — veth/bridge (#20) / (#65, #94)'
-  description: 'GH #65, #94: Create minibox0 bridge device. veth pair per container (host side on bridge,
-    container side with IP). DHCP or static IP assignment. NAT/masquerade for outbound.'
+  description: 'GH #65, #94: Create minibox0 bridge device. veth pair per container
+    (host side on bridge, container side with IP). DHCP or static IP assignment. NAT/masquerade
+    for outbound.'
   files: []
   extra:
   - type: github-issue
@@ -926,8 +984,8 @@ items:
   priority: P1
   status: open
   title: '[bug] minibox-cli nix/libc usage lacks platform guards'
-  description: 'GH #56: Platform-specific imports in minibox-cli/src/ are not guarded with #[cfg(target_os)].
-    This breaks compilation on non-Linux platforms.'
+  description: 'GH #56: Platform-specific imports in minibox-cli/src/ are not guarded
+    with #[cfg(target_os)]. This breaks compilation on non-Linux platforms.'
   files: []
   extra:
   - type: github-issue
@@ -937,9 +995,10 @@ items:
   name: release-ci-gate
   priority: P2
   status: open
-  title: '[bug] No CI evidence or passing pipeline required before merging release version bumps'
-  description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI. Add a GitHub check
-    preventing main→next promotion until full test suite passes.'
+  title: '[bug] No CI evidence or passing pipeline required before merging release
+    version bumps'
+  description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI.
+    Add a GitHub check preventing main→next promotion until full test suite passes.'
   files: []
   extra:
   - type: github-issue
@@ -949,9 +1008,10 @@ items:
   name: libc-nix-deps-added
   priority: P1
   status: open
-  title: '[bug] minibox-cli: libc and nix dependencies added with no source/safety comments'
-  description: 'GH #52: libc and nix were added as workspace deps but lack documentation of why they are
-    needed and security justification.'
+  title: '[bug] minibox-cli: libc and nix dependencies added with no source/safety
+    comments'
+  description: 'GH #52: libc and nix were added as workspace deps but lack documentation
+    of why they are needed and security justification.'
   files: []
   extra:
   - type: github-issue
@@ -962,8 +1022,8 @@ items:
   priority: P1
   status: open
   title: Add regression tests for rootfs metadata and mac adapter wiring
-  description: 'GH #80: Test that container metadata survives the full create/commit/build/push cycle
-    with correct image ID and layer references.'
+  description: 'GH #80: Test that container metadata survives the full create/commit/build/push
+    cycle with correct image ID and layer references.'
   files: []
   extra:
   - type: github-issue
@@ -975,8 +1035,8 @@ items:
   status: done
   title: 'feat: PTY/stdio piping for interactive containers (#19) / (#70, #83)'
   completed: 2026-04-09
-  description: 'GH #70, #83: Complete PTY/stdio piping implementation with ResizePty protocol, ExecConfig
-    channels, handler PtySessionRegistry, and CLI -it flag.'
+  description: 'GH #70, #83: Complete PTY/stdio piping implementation with ResizePty
+    protocol, ExecConfig channels, handler PtySessionRegistry, and CLI -it flag.'
   files: []
   extra:
   - type: github-issue
@@ -987,8 +1047,8 @@ items:
   priority: P2
   status: open
   title: Enforce e2e serialization in CI runner config
-  description: 'GH #73: Ensure CI and local dev serial_test configs are identical for consistent regression
-    detection.'
+  description: 'GH #73: Ensure CI and local dev serial_test configs are identical
+    for consistent regression detection.'
   files: []
   extra:
   - type: github-issue
@@ -1010,8 +1070,8 @@ items:
   priority: P2
   status: open
   title: Tier 3 Linux-only adapter isolation and lifecycle failure tests
-  description: 'GH #74: Native, GKE, and container lifecycle failure tests for comprehensive isolation
-    validation.'
+  description: 'GH #74: Native, GKE, and container lifecycle failure tests for comprehensive
+    isolation validation.'
   files: []
   extra:
   - type: github-issue
@@ -1021,9 +1081,10 @@ items:
   name: vz-virtiofs
   priority: P2
   status: blocked
-  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
-  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient
-    layer access.'
+  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts
+    (#43) / (#75)'
+  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via
+    virtiofs for efficient layer access.'
   files: []
   extra:
   - type: github-issue
@@ -1034,7 +1095,8 @@ items:
   priority: P2
   status: blocked
   title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
-  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control.'
+  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon
+    for container control.'
   files: []
   extra:
   - type: github-issue
@@ -1044,7 +1106,8 @@ items:
   name: vz-io-bridge
   priority: P2
   status: blocked
-  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
+  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from
+    VM (#42) / (#93)'
   description: 'GH #93: Blocked by minibox-agent and vsock bridge implementation.'
   files: []
   extra:
@@ -1053,11 +1116,16 @@ items:
     url: https://github.com/89jobrien/minibox/issues/93
 log:
 - date: '2026-04-16'
-  summary: 'Analyzed 50 open GH issues; prioritized 10 Maestro-wiring todos in doob (P5: rootfs contract/metadata,
-    P4: Colima commit/build/push, networking, fork-Tokio fix, P3: MCP surface). No code changes.'
+  summary: Implemented BackendRootfsMetadata typed contract (minibox-40/41/42/49);
+    conformance boundary spec committed; dotenv provider + secret_env tooling added;
+    issue graph written to docs/ and Obsidian; 30 GH issues labelled [49252f1, 7109826]
+- date: '2026-04-16'
+  summary: 'Analyzed 50 open GH issues; prioritized 10 Maestro-wiring todos in doob
+    (P5: rootfs contract/metadata, P4: Colima commit/build/push, networking, fork-Tokio
+    fix, P3: MCP surface). No code changes.'
 - date: '2026-04-14'
-  summary: fixed minibox-25 (cargo build --locked in CI) and minibox-27 (gate e2e to next/stable) in single
-    commit
+  summary: fixed minibox-25 (cargo build --locked in CI) and minibox-27 (gate e2e
+    to next/stable) in single commit
 - date: '2026-04-11'
   summary: 'Conformance suite built from scratch (minibox-28 done): Phases 1–3 on
 
@@ -1083,7 +1151,8 @@ log:
   - 3cb4b07
   - cbad452
 - date: '2026-04-09'
-  summary: 'minibox-6 done: removed if-gate from test-unit CI job — unit tests now run on all
+  summary: 'minibox-6 done: removed if-gate from test-unit CI job — unit tests now
+    run on all
 
     branches. Surfaced 3 Linux-only bugs: too_many_arguments clippy lint in main.rs,
 
@@ -1106,7 +1175,8 @@ log:
   - a8572be
   - 0e9b770
 - date: '2026-04-09'
-  summary: 'CI recovery session: 5 commits to get main green after pty-stdio-piping merge. Root
+  summary: 'CI recovery session: 5 commits to get main green after pty-stdio-piping
+    merge. Root
 
     cause: adapt!(BridgeNetwork) incompatible with default_new! (new() returns Result).
 
@@ -1114,7 +1184,8 @@ log:
 
     image_builder, policy, pty_sessions) into all 3 adapter suites in miniboxd/main.rs.
 
-    Fixed Linux-only clippy lints (clone_on_copy, collapsible_if, unused imports) only
+    Fixed Linux-only clippy lints (clone_on_copy, collapsible_if, unused imports)
+    only
 
     visible on Linux runners. Fixed git signing key mismatch (GPG ID vs SSH path).
 
@@ -1128,7 +1199,8 @@ log:
   - 92c8ea3
   - c4a0044
 - date: '2026-04-07'
-  summary: 'devkit council analysis — fixed PTY bugs #57 #58 #59 (stdin fd exhaustion, registry
+  summary: 'devkit council analysis — fixed PTY bugs #57 #58 #59 (stdin fd exhaustion,
+    registry
 
     leak, SIGWINCH sigprocmask). Added minibox-25 (ci --locked gate) and minibox-26
 
@@ -1140,9 +1212,11 @@ log:
   commits:
   - 2ac4ee6
 - date: '2026-04-06'
-  summary: 'devkit council sweep — 6 issues filed (#51-#56). Critical: Cargo.lock version
+  summary: 'devkit council sweep — 6 issues filed (#51-#56). Critical: Cargo.lock
+    version
 
-    skip 0.2.5→0.4.0 unverifiable, libc/nix added to minibox-cli with no platform guards.
+    skip 0.2.5→0.4.0 unverifiable, libc/nix added to minibox-cli with no platform
+    guards.
 
     '
   commits: []
@@ -1170,11 +1244,13 @@ log:
     '
   commits: []
 - date: '2026-04-08'
-  summary: 'dashbox space-leader palette shipped: Space opens floating CommandPalette overlay,
+  summary: 'dashbox space-leader palette shipped: Space opens floating CommandPalette
+    overlay,
 
     all action keys (t/b/B/c/o/b/d/D/r) moved from handle_key to palette_actions().
 
-    10-task plan executed via subagent-driven-development. 39 tests passing, pre-commit clean.
+    10-task plan executed via subagent-driven-development. 39 tests passing, pre-commit
+    clean.
 
     '
   commits:
@@ -1190,7 +1266,8 @@ log:
 - date: '2026-04-08'
   summary: 'minibox-5 done: dual MIT/Apache-2.0 licensing. Added LICENSE-MIT, LICENSE-APACHE,
 
-    updated workspace Cargo.toml license field, migrated xtask/mbxctl to license.workspace = true.
+    updated workspace Cargo.toml license field, migrated xtask/mbxctl to license.workspace
+    = true.
 
     deny.toml already allowed both. Build clean.
 
@@ -1198,9 +1275,11 @@ log:
   commits:
   - (latest)
 - date: '2026-04-07'
-  summary: 'dashbox metrics tab: MetricsData::Stale variant, snapshot fallback to ~/.mbx/metrics.json
+  summary: 'dashbox metrics tab: MetricsData::Stale variant, snapshot fallback to
+    ~/.mbx/metrics.json
 
-    when daemon offline, STALE badge with age. hand:off session. Build clean, 727/729 tests
+    when daemon offline, STALE badge with age. hand:off session. Build clean, 727/729
+    tests
 
     (2 pre-existing minibox-llm env-var failures).
 
@@ -1208,28 +1287,35 @@ log:
   commits:
   - 3b597f8
 - date: '2026-04-04'
-  summary: 'Orca Strait session: exec into containers (minibox-13), named containers (minibox-14),
+  summary: 'Orca Strait session: exec into containers (minibox-13), named containers
+    (minibox-14),
 
     and container log capture (minibox-15) shipped. NativeExecRuntime (setns+fork+pipe),
 
     --name flag on run, ps NAME column, minibox exec/logs CLI subcommands, ContainerLogs
 
-    protocol, handle_logs handler, log file writes in handle_run_streaming. 415 tests passing.
+    protocol, handle_logs handler, log file writes in handle_run_streaming. 415 tests
+    passing.
 
     '
   commits:
   - 3dd424c
   - db77537
 - date: '2026-04-06'
-  summary: 'Orca Strait session: P0 auth-policy-gate shipped (ContainerPolicy deny-by-default, 5 tests),
+  summary: 'Orca Strait session: P0 auth-policy-gate shipped (ContainerPolicy deny-by-default,
+    5 tests),
 
-    handler coverage gap closed (5 error-path tests, 162 total), dashbox sentinel fixes landed,
+    handler coverage gap closed (5 error-path tests, 162 total), dashbox sentinel
+    fixes landed,
 
-    dashbox Items/Todos/CI tabs made actionable with full doob integration (c/o/b keys, auto-refresh,
+    dashbox Items/Todos/CI tabs made actionable with full doob integration (c/o/b
+    keys, auto-refresh,
 
-    o:open in CI tab). Sprint plan documented: Sprint 1A (named containers, log capture), Sprint 2
+    o:open in CI tab). Sprint plan documented: Sprint 1A (named containers, log capture),
+    Sprint 2
 
-    (Linux tests on VPS), Sprint 3 (Maestro integration). 29 dashbox tests, 650 workspace tests passing.
+    (Linux tests on VPS), Sprint 3 (Maestro integration). 29 dashbox tests, 650 workspace
+    tests passing.
 
     '
   commits:
@@ -1239,9 +1325,11 @@ log:
   - 201498b
   - 9a2c98e
 - date: '2026-04-05'
-  summary: 'Sentinel watch session (round 2): dashbox Items tab list view added (minibox-8 done in prior
+  summary: 'Sentinel watch session (round 2): dashbox Items tab list view added (minibox-8
+    done in prior
 
-    session). AgentsSource legacy compat stub dropped — clean build. minibox-8 sentinel fixes
+    session). AgentsSource legacy compat stub dropped — clean build. minibox-8 sentinel
+    fixes
 
     committed.
 
@@ -1249,9 +1337,11 @@ log:
   commits:
   - 15e1605
 - date: '2026-04-05'
-  summary: 'Synced 11 GH issues (#16-23, #40-45) into handoff as minibox-13..minibox-23. Closed
+  summary: 'Synced 11 GH issues (#16-23, #40-45) into handoff as minibox-13..minibox-23.
+    Closed
 
-    minibox-12: Items tab action feedback (immediate notification on keypress), stderr in
+    minibox-12: Items tab action feedback (immediate notification on keypress), stderr
+    in
 
     failure message, 3 new HandoffItem serde tests (35 passing).
 
@@ -1260,12 +1350,14 @@ log:
   - 773a8c6
   - 970f288
 - date: '2026-04-04'
-  summary: 'forge session: fixed handler.rs silent send_error discards (20 sites → send_error helper,
-    70
+  summary: 'forge session: fixed handler.rs silent send_error discards (20 sites →
+    send_error helper, 70
 
-    tests passing). dashbox sprint: minibox-8 sentinel fixes landed, Items tab + CI o-key +
+    tests passing). dashbox sprint: minibox-8 sentinel fixes landed, Items tab + CI
+    o-key +
 
-    auto-refresh + Todos source fix shipped (7 commits). minibox-12 opened for Items tab polish.
+    auto-refresh + Todos source fix shipped (7 commits). minibox-12 opened for Items
+    tab polish.
 
     '
   commits:
@@ -1278,11 +1370,14 @@ log:
   - 008b9d7
   - 2e8cac4
 - date: '2026-04-04'
-  summary: 'Sentinel watch session: dashbox deep review (3 blockers + 4 suggestions folded into minibox-8).
+  summary: 'Sentinel watch session: dashbox deep review (3 blockers + 4 suggestions
+    folded into minibox-8).
 
-    handler.rs active_containers gauge metric name bug flagged. CLAUDE.md updated with silent
+    handler.rs active_containers gauge metric name bug flagged. CLAUDE.md updated
+    with silent
 
-    channel-send gotcha. fix(daemonbox): replace silent channel-send discards with logged send_error.
+    channel-send gotcha. fix(daemonbox): replace silent channel-send discards with
+    logged send_error.
 
     '
   commits:
@@ -1290,12 +1385,14 @@ log:
   - 66b5e44
   - c4779e6
 - date: '2026-04-04'
-  summary: 'hand:on session: all P1s closed. minibox-1: next/stable branch protections enforced via GitHub
-    API
+  summary: 'hand:on session: all P1s closed. minibox-1: next/stable branch protections
+    enforced via GitHub API
 
-    (compile+lint required, no force-push). minibox-2: MINIBOX_BENCH_BROWSER env toggle in flamegraph.rs.
+    (compile+lint required, no force-push). minibox-2: MINIBOX_BENCH_BROWSER env toggle
+    in flamegraph.rs.
 
-    minibox-3: verified actions:read already present — 403 was stale run. minibox-4: 5 coverage-gap tests
+    minibox-3: verified actions:read already present — 403 was stale run. minibox-4:
+    5 coverage-gap tests
 
     already landed in auth-policy commit. P0 minibox-11 marked done.
 
@@ -1303,8 +1400,9 @@ log:
   commits:
   - 57b59ec
 - date: '2026-04-03'
-  summary: 'Session: bench timeout fix (5s→30s for Colima latency), daemonbox test dep fix (image_gc/image_store
-    HandlerDependencies), backlog docs updated. Bootstrapped HANDOFF.yaml from HANDOFF.md.
+  summary: 'Session: bench timeout fix (5s→30s for Colima latency), daemonbox test
+    dep fix (image_gc/image_store HandlerDependencies), backlog docs updated. Bootstrapped
+    HANDOFF.yaml from HANDOFF.md.
 
     '
   commits:
@@ -1312,24 +1410,24 @@ log:
   - 4b644d2
   - b1a2c27
 - date: '2026-04-02'
-  summary: 'Tier 1 quick wins shipped; dashbox Metrics tab + Grafana dashboard; pause/resume, event bus,
-    image GC, bridge networking all merged (41 commits).
+  summary: 'Tier 1 quick wins shipped; dashbox Metrics tab + Grafana dashboard; pause/resume,
+    event bus, image GC, bridge networking all merged (41 commits).
 
     '
   commits:
   - 1bbb60c
 - date: '2026-04-01'
-  summary: 'test-linux dogfood infra merged; VZ isolation test harness complete; vsock dispatch-on-main
-    fix; VZErrorInternal Apple bug confirmed and tracked.
+  summary: 'test-linux dogfood infra merged; VZ isolation test harness complete; vsock
+    dispatch-on-main fix; VZErrorInternal Apple bug confirmed and tracked.
 
     '
 - date: '2026-03-29'
-  summary: 'linuxbox→mbx rename; VZ.framework adapter suite complete (VzVm, VzProxy, VzRegistry/Runtime/Filesystem/Limiter);
-    xtask modularised.
+  summary: 'linuxbox→mbx rename; VZ.framework adapter suite complete (VzVm, VzProxy,
+    VzRegistry/Runtime/Filesystem/Limiter); xtask modularised.
 
     '
 - date: '2026-03-27'
-  summary: 'e2e streaming regression fixed; bind mounts + privileged mode end-to-end; samply/flamegraph
-    bench profiling wired.
+  summary: 'e2e streaming regression fixed; bind mounts + privileged mode end-to-end;
+    samply/flamegraph bench profiling wired.
 
     '
