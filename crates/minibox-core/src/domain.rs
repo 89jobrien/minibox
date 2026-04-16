@@ -350,9 +350,7 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BackendRootfsMetadata {
     /// Linux native overlay filesystem.  `upper_dir` is visible from the host.
-    Overlay {
-        upper_dir: PathBuf,
-    },
+    Overlay { upper_dir: PathBuf },
     /// Colima (Lima VM) overlay filesystem.  The overlay is mounted inside the
     /// Lima VM; `upper_dir` is the guest-side path, accessible from the host
     /// via Lima's automatic `/Users` + `/tmp` bind mounts.  `instance` is the
@@ -1362,6 +1360,87 @@ mod tests {
                 .load_image(std::path::Path::new("/fake.tar"), "mbx-tester", "latest")
                 .await;
             assert!(result.is_ok());
+        }
+    }
+
+    mod backend_rootfs_metadata_tests {
+        use super::*;
+        use std::path::PathBuf;
+
+        #[test]
+        fn overlay_upper_dir_returns_path_for_native_variant() {
+            let path = PathBuf::from("/var/lib/minibox/containers/abc/upper");
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: path.clone(),
+            };
+            assert_eq!(meta.overlay_upper_dir(), &path);
+        }
+
+        #[test]
+        fn overlay_upper_dir_returns_path_for_colima_variant() {
+            let path = PathBuf::from("/Users/joe/.lima/colima/upper");
+            let meta = BackendRootfsMetadata::ColimaOverlay {
+                upper_dir: path.clone(),
+                instance: "colima".to_string(),
+            };
+            assert_eq!(meta.overlay_upper_dir(), &path);
+        }
+
+        #[test]
+        fn colima_instance_is_none_for_native_overlay() {
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/tmp/upper"),
+            };
+            assert_eq!(meta.colima_instance(), None);
+        }
+
+        #[test]
+        fn colima_instance_returns_name_for_colima_overlay() {
+            let meta = BackendRootfsMetadata::ColimaOverlay {
+                upper_dir: PathBuf::from("/tmp/upper"),
+                instance: "colima".to_string(),
+            };
+            assert_eq!(meta.colima_instance(), Some("colima"));
+        }
+
+        #[test]
+        fn backend_rootfs_metadata_roundtrips_serde_overlay() {
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+            };
+            let json = serde_json::to_string(&meta).expect("serialize");
+            let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(meta, restored);
+        }
+
+        #[test]
+        fn backend_rootfs_metadata_roundtrips_serde_colima_overlay() {
+            let meta = BackendRootfsMetadata::ColimaOverlay {
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                instance: "colima".to_string(),
+            };
+            let json = serde_json::to_string(&meta).expect("serialize");
+            let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(meta, restored);
+        }
+
+        #[test]
+        fn rootfs_layout_metadata_survives_commit_image_ref() {
+            // Verify that a ColimaOverlay metadata's upper_dir is unchanged
+            // after being stored and retrieved (simulates the commit path
+            // reading the upper_dir from the container record).
+            let upper = PathBuf::from("/Users/joe/.lima/colima/containers/abc/upper");
+            let meta = BackendRootfsMetadata::ColimaOverlay {
+                upper_dir: upper.clone(),
+                instance: "colima".to_string(),
+            };
+            let layout = RootfsLayout {
+                merged_dir: PathBuf::from("/tmp/merged"),
+                rootfs_metadata: Some(meta),
+                source_image_ref: Some("alpine:latest".to_string()),
+            };
+            let recovered_upper = layout.rootfs_metadata.as_ref().unwrap().overlay_upper_dir();
+            assert_eq!(recovered_upper, &upper);
         }
     }
 }
