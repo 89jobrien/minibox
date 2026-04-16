@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "daemonbox"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "dashbox"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "dockerbox"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1510,7 +1510,7 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "macbox"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1549,7 +1549,7 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mbx"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1626,7 +1626,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "minibox-bench"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "chrono",
  "mbx",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-cli"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1658,7 +1658,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-client"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "minibox-core",
  "serde_json",
@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-core"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1695,7 +1695,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-llm"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "async-trait",
  "minibox-macros",
@@ -1709,11 +1709,11 @@ dependencies = [
 
 [[package]]
 name = "minibox-macros"
-version = "0.12.2"
+version = "0.12.3"
 
 [[package]]
 name = "minibox-secrets"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1729,9 +1729,10 @@ dependencies = [
 
 [[package]]
 name = "miniboxd"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
+ "async-trait",
  "daemonbox",
  "libc",
  "macbox",
@@ -3589,7 +3590,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "winbox"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "daemonbox",
