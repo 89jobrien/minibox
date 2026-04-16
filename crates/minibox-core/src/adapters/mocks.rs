@@ -1051,3 +1051,229 @@ mod macro_contract_tests {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// MockContainerCommitter  (#67)
+// ---------------------------------------------------------------------------
+
+use crate::domain::{
+    CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter, ImagePusher,
+    PushProgress, PushResult, RegistryCredentials,
+};
+
+/// In-memory mock for [`ContainerCommitter`].
+///
+/// Parses the `name:tag` target ref and returns synthetic [`ImageMetadata`].
+/// Tracks commit call count for assertion.
+pub struct MockContainerCommitter {
+    call_count: AtomicUsize,
+}
+
+impl MockContainerCommitter {
+    /// Create a new, unconfigured mock committer.
+    pub fn new() -> Self {
+        Self {
+            call_count: AtomicUsize::new(0),
+        }
+    }
+
+    /// Number of times `commit` has been called.
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MockContainerCommitter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockContainerCommitter);
+
+#[async_trait]
+impl ContainerCommitter for MockContainerCommitter {
+    async fn commit(
+        &self,
+        _container_id: &ContainerId,
+        target_ref: &str,
+        _config: &CommitConfig,
+    ) -> anyhow::Result<ImageMetadata> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        // Parse "name:tag" — fall back to "name:latest" if no colon.
+        let (name, tag) = if let Some((n, t)) = target_ref.rsplit_once(':') {
+            (n.to_string(), t.to_string())
+        } else {
+            (target_ref.to_string(), "latest".to_string())
+        };
+        Ok(ImageMetadata {
+            name,
+            tag,
+            layers: vec![LayerInfo {
+                digest: "sha256:mock000000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
+                size: 1024,
+            }],
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockImageBuilder  (#71)
+// ---------------------------------------------------------------------------
+
+use crate::domain::{BuildConfig, BuildContext, BuildProgress, ImageBuilder};
+
+/// In-memory mock for [`ImageBuilder`].
+///
+/// Parses `config.tag` as `"name:tag"` and returns synthetic [`ImageMetadata`].
+pub struct MockImageBuilder {
+    call_count: AtomicUsize,
+}
+
+impl MockImageBuilder {
+    /// Create a new mock builder.
+    pub fn new() -> Self {
+        Self {
+            call_count: AtomicUsize::new(0),
+        }
+    }
+
+    /// Number of times `build_image` has been called.
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MockImageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockImageBuilder);
+
+#[async_trait]
+impl ImageBuilder for MockImageBuilder {
+    async fn build_image(
+        &self,
+        _context: &BuildContext,
+        config: &BuildConfig,
+        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+    ) -> anyhow::Result<ImageMetadata> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        let _ = progress_tx
+            .send(BuildProgress {
+                step: 1,
+                total_steps: 1,
+                message: "mock build step".to_string(),
+            })
+            .await;
+
+        let (name, tag) = if let Some((n, t)) = config.tag.rsplit_once(':') {
+            (n.to_string(), t.to_string())
+        } else {
+            (config.tag.clone(), "latest".to_string())
+        };
+        Ok(ImageMetadata {
+            name,
+            tag,
+            layers: vec![LayerInfo {
+                digest: "sha256:build00000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
+                size: 2048,
+            }],
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockImagePusher  (#62)
+// ---------------------------------------------------------------------------
+
+/// State shared between the mock pusher and test handles.
+struct MockImagePusherState {
+    /// Tags that have been "pushed" — keyed by the full image ref string.
+    pushed_tags: Vec<String>,
+    /// Digest returned by the most recent push.
+    last_digest: Option<String>,
+}
+
+/// In-memory mock for [`ImagePusher`].
+///
+/// Records all pushes; does not perform any network I/O.
+/// The owning test can hold an `Arc<MockImagePusher>` and observe recorded
+/// state via `has_tag` and `last_pushed_digest` after calls complete.
+pub struct MockImagePusher {
+    state: Mutex<MockImagePusherState>,
+}
+
+impl MockImagePusher {
+    /// Create a new mock pusher with no recorded state.
+    pub fn new() -> Self {
+        Self {
+            state: Mutex::new(MockImagePusherState {
+                pushed_tags: vec![],
+                last_digest: None,
+            }),
+        }
+    }
+
+    /// Returns `true` if `image_ref` has been pushed at least once.
+    pub fn has_tag(&self, image_ref: &str) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .pushed_tags
+            .contains(&image_ref.to_string())
+    }
+
+    /// Returns the digest reported by the most recent push, or `None`.
+    pub fn last_pushed_digest(&self) -> Option<String> {
+        self.state.lock().unwrap().last_digest.clone()
+    }
+}
+
+impl Default for MockImagePusher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockImagePusher);
+
+#[async_trait]
+impl ImagePusher for MockImagePusher {
+    async fn push_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+        _credentials: &RegistryCredentials,
+        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+    ) -> anyhow::Result<PushResult> {
+        let digest =
+            "sha256:push000000000000000000000000000000000000000000000000000000000000".to_string();
+        let ref_str = format!(
+            "{}/{}/{}:{}",
+            image_ref.registry, image_ref.namespace, image_ref.name, image_ref.tag
+        );
+
+        if let Some(tx) = progress_tx {
+            let _ = tx
+                .send(PushProgress {
+                    layer_digest: digest.clone(),
+                    bytes_uploaded: 1024,
+                    total_bytes: 1024,
+                })
+                .await;
+        }
+
+        let mut state = self.state.lock().unwrap();
+        state.pushed_tags.push(ref_str);
+        state.last_digest = Some(digest.clone());
+
+        Ok(PushResult {
+            digest,
+            size_bytes: 1024,
+        })
+    }
+}

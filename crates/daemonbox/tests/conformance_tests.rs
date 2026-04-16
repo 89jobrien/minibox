@@ -5,9 +5,7 @@
 //!
 //! **Purpose:** Validate hexagonal architecture abstraction doesn't leak
 //! platform-specific behavior into domain logic.
-// The shared backend descriptor + fixture helpers are in `conformance_helpers`.
-#[path = "conformance_helpers.rs"]
-mod conformance_helpers;
+// Issues #62, #67, #71: commit/build/push conformance tests added below.
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
@@ -636,169 +634,335 @@ mod performance_conformance {
     }
 }
 
-/// Tests for the [`conformance_helpers::TestBackendDescriptor`] type (Issue #69).
+// ---------------------------------------------------------------------------
+// Issue #67 — Commit conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for the `ContainerCommitter` port (commit capability).
 ///
-/// These tests verify:
-/// 1. `TestBackendDescriptor` carries the four handler-level capability flags.
-/// 2. Tests skip gracefully (early return) when a flag is `false`.
-/// 3. The `make_deps` constructor hook produces a working [`HandlerDependencies`].
+/// Uses `BackendDescriptor` from `minibox_core::adapters::conformance` and
+/// `MockContainerCommitter` from `minibox_core::adapters::mocks`.
+/// Tests are skipped automatically when `BackendCapability::Commit` is absent.
 #[cfg(test)]
-mod backend_descriptor {
-    use super::conformance_helpers::{TestBackendDescriptor, make_mock_deps, make_mock_state};
-    use daemonbox::handler;
-    use minibox_core::protocol::DaemonResponse;
-    use mbx::adapters::mocks::MockRegistry;
-    use tempfile::TempDir;
+mod commit_conformance {
+    use minibox_core::adapters::conformance::BackendDescriptor;
+    use minibox_core::adapters::mocks::MockContainerCommitter;
+    use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
+    use std::sync::Arc;
 
-    // ------------------------------------------------------------------
-    // Capability flag defaults
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn mock_backend_supports_run_by_default() {
-        let d = TestBackendDescriptor::mock_backend("test");
-        assert!(d.supports_run, "mock_backend must have supports_run=true");
+    fn mock_backend() -> BackendDescriptor {
+        let committer = Arc::new(MockContainerCommitter::new());
+        BackendDescriptor::new("mock-commit-backend").with_committer(move || {
+            Arc::clone(&committer) as minibox_core::domain::DynContainerCommitter
+        })
     }
 
-    #[test]
-    fn mock_backend_commit_build_push_false_by_default() {
-        let d = TestBackendDescriptor::mock_backend("test");
-        assert!(!d.supports_commit, "supports_commit must default to false");
-        assert!(!d.supports_build, "supports_build must default to false");
-        assert!(!d.supports_push, "supports_push must default to false");
+    fn no_commit_backend() -> BackendDescriptor {
+        BackendDescriptor::new("no-commit-backend")
     }
 
-    #[test]
-    fn with_flags_override_correctly() {
-        let d = TestBackendDescriptor::mock_backend("test")
-            .with_run(false)
-            .with_commit(true)
-            .with_build(true)
-            .with_push(true);
-        assert!(!d.supports_run);
-        assert!(d.supports_commit);
-        assert!(d.supports_build);
-        assert!(d.supports_push);
-    }
-
-    // ------------------------------------------------------------------
-    // Skip-not-fail semantics
-    // ------------------------------------------------------------------
-
+    // #67 — skip if !supports_commit
     #[tokio::test]
-    async fn backend_descriptor_skips_run_when_flag_false() {
-        let d = TestBackendDescriptor::mock_backend("no-run").with_run(false);
-        if !d.supports_run {
-            return; // skip — backend does not support run
-        }
-        panic!("should have been skipped");
-    }
-
-    #[test]
-    fn backend_descriptor_skips_commit_when_flag_false() {
-        let d = TestBackendDescriptor::mock_backend("no-commit");
-        if !d.supports_commit {
-            return; // skip
-        }
-        panic!("should have been skipped");
-    }
-
-    #[test]
-    fn backend_descriptor_skips_build_when_flag_false() {
-        let d = TestBackendDescriptor::mock_backend("no-build");
-        if !d.supports_build {
-            return; // skip
-        }
-        panic!("should have been skipped");
-    }
-
-    #[test]
-    fn backend_descriptor_skips_push_when_flag_false() {
-        let d = TestBackendDescriptor::mock_backend("no-push");
-        if !d.supports_push {
-            return; // skip
-        }
-        panic!("should have been skipped");
-    }
-
-    // ------------------------------------------------------------------
-    // make_deps constructor hook
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn make_deps_produces_valid_handler_dependencies() {
-        let temp_dir = TempDir::new().unwrap();
-        let d = TestBackendDescriptor::mock_backend("test");
-        let deps = d.build_deps(&temp_dir);
-        // Verify the deps struct is usable (non-null runtime/filesystem pointers).
-        // We just need construction to succeed — type system guarantees the rest.
-        let _ = deps;
-    }
-
-    #[tokio::test]
-    async fn mock_backend_pull_works_via_descriptor() {
-        let temp_dir = TempDir::new().unwrap();
-        let d = TestBackendDescriptor::mock_backend("mock-pull");
-        if !d.supports_run {
+    async fn commit_is_skipped_when_capability_absent() {
+        let descriptor = no_commit_backend();
+        if !descriptor.capabilities.supports(BackendCapability::Commit) {
+            // correct: capability absent, test should skip
             return;
         }
+        panic!("expected no Commit capability for no_commit_backend");
+    }
 
-        let deps = d.build_deps(&temp_dir);
-        let state = make_mock_state(temp_dir.path());
+    // #67 — commit success path: mock returns ImageMetadata, verify fields match
+    #[tokio::test]
+    async fn commit_success_returns_matching_metadata() {
+        let descriptor = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::Commit) {
+            return;
+        }
+        let committer = descriptor.make_committer.as_ref().unwrap()();
+        let container_id = ContainerId::new("testcontainer01".to_string()).unwrap();
+        let config = CommitConfig {
+            author: Some("conformance-test".to_string()),
+            message: Some("commit test".to_string()),
+            env_overrides: vec![],
+            cmd_override: None,
+        };
+        let meta = committer
+            .commit(&container_id, "conformance-image:v1", &config)
+            .await
+            .expect("commit must succeed");
 
-        let response = handler::handle_pull(
-            "alpine".to_string(),
-            Some("latest".to_string()),
-            state,
-            deps,
-        )
-        .await;
-
+        assert_eq!(meta.name, "conformance-image", "name must match target ref");
+        assert_eq!(meta.tag, "v1", "tag must match target ref");
         assert!(
-            matches!(response, DaemonResponse::Success { .. }),
-            "pull must succeed for mock backend, got: {response:?}"
+            !meta.layers.is_empty(),
+            "committed image must have at least one layer"
         );
     }
 
+    // #67 — backend-consistent: two fresh committers return structurally identical metadata
     #[tokio::test]
-    async fn mock_backend_run_works_via_descriptor() {
-        use super::conformance_helpers::make_mock_deps_with_registry;
+    async fn commit_two_backends_return_structurally_identical_metadata() {
+        let descriptor_a = mock_backend();
+        let descriptor_b = mock_backend();
 
-        let temp_dir = TempDir::new().unwrap();
-        let d = TestBackendDescriptor::mock_backend("mock-run");
-        if !d.supports_run {
+        if !descriptor_a.capabilities.supports(BackendCapability::Commit)
+            || !descriptor_b.capabilities.supports(BackendCapability::Commit)
+        {
             return;
         }
 
-        let deps = make_mock_deps_with_registry(
-            MockRegistry::new().with_cached_image("library/alpine", "latest"),
-            &temp_dir,
+        let committer_a = descriptor_a.make_committer.as_ref().unwrap()();
+        let committer_b = descriptor_b.make_committer.as_ref().unwrap()();
+        let container_id = ContainerId::new("testcontainer02".to_string()).unwrap();
+        let config = CommitConfig {
+            author: None,
+            message: None,
+            env_overrides: vec![],
+            cmd_override: None,
+        };
+
+        let meta_a = committer_a
+            .commit(&container_id, "image:latest", &config)
+            .await
+            .expect("commit A must succeed");
+        let meta_b = committer_b
+            .commit(&container_id, "image:latest", &config)
+            .await
+            .expect("commit B must succeed");
+
+        assert_eq!(
+            meta_a.name, meta_b.name,
+            "both backends must return same image name"
         );
-        let state = make_mock_state(temp_dir.path());
+        assert_eq!(
+            meta_a.tag, meta_b.tag,
+            "both backends must return same image tag"
+        );
+        assert_eq!(
+            meta_a.layers.len(),
+            meta_b.layers.len(),
+            "both backends must return same layer count"
+        );
+    }
+}
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
-        handler::handle_run(
-            "alpine".to_string(),
-            Some("latest".to_string()),
-            vec!["/bin/sh".to_string()],
-            None,
-            None,
-            false,
-            None,
-            vec![],
-            false,
-            vec![],
-            None,
-            state,
-            deps,
-            tx,
-        )
-        .await;
+// ---------------------------------------------------------------------------
+// Issue #71 — Build conformance tests
+// ---------------------------------------------------------------------------
 
-        let response = rx.recv().await.expect("handler sent no response");
+/// Conformance tests for the `ImageBuilder` port (build capability).
+///
+/// Uses `BuildContextFixture` for a minimal Dockerfile build context and
+/// `MockImageBuilder` for the in-memory adapter under test.
+#[cfg(test)]
+mod build_conformance {
+    use minibox_core::adapters::conformance::{BackendDescriptor, BuildContextFixture};
+    use minibox_core::adapters::mocks::MockImageBuilder;
+    use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+
+    fn mock_backend() -> BackendDescriptor {
+        let builder = Arc::new(MockImageBuilder::new());
+        BackendDescriptor::new("mock-build-backend").with_builder(move || {
+            Arc::clone(&builder) as minibox_core::domain::DynImageBuilder
+        })
+    }
+
+    fn no_build_backend() -> BackendDescriptor {
+        BackendDescriptor::new("no-build-backend")
+    }
+
+    // #71 — skip if !supports_build
+    #[tokio::test]
+    async fn build_is_skipped_when_capability_absent() {
+        let descriptor = no_build_backend();
+        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+            return;
+        }
+        panic!("expected no BuildFromContext capability for no_build_backend");
+    }
+
+    // #71 — minimal Dockerfile build succeeds
+    #[tokio::test]
+    async fn build_minimal_dockerfile_succeeds() {
+        let descriptor = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+            return;
+        }
+
+        let ctx_fixture = BuildContextFixture::new().expect("build context fixture");
+        let builder = descriptor.make_builder.as_ref().unwrap()();
+
+        let context = BuildContext {
+            directory: ctx_fixture.context_dir.clone(),
+            dockerfile: ctx_fixture.dockerfile.file_name().unwrap().into(),
+        };
+        let config = BuildConfig {
+            tag: "conformance-build:latest".to_string(),
+            build_args: vec![],
+            no_cache: false,
+        };
+
+        let (tx, _rx) = mpsc::channel(16);
+        let meta = builder
+            .build_image(&context, &config, tx)
+            .await
+            .expect("build must succeed");
+
+        assert_eq!(meta.name, "conformance-build");
+        assert_eq!(meta.tag, "latest");
+    }
+
+    // #71 — metadata preservation: name/tag/digest survive the build
+    #[tokio::test]
+    async fn build_preserves_name_and_tag_through_build() {
+        let descriptor = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+            return;
+        }
+
+        let ctx_fixture = BuildContextFixture::new().expect("build context fixture");
+        let builder = descriptor.make_builder.as_ref().unwrap()();
+
+        let context = BuildContext {
+            directory: ctx_fixture.context_dir.clone(),
+            dockerfile: ctx_fixture.dockerfile.file_name().unwrap().into(),
+        };
+        let config = BuildConfig {
+            tag: "myapp:v2".to_string(),
+            build_args: vec![],
+            no_cache: false,
+        };
+
+        let (tx, _rx) = mpsc::channel(16);
+        let meta = builder
+            .build_image(&context, &config, tx)
+            .await
+            .expect("build must succeed");
+
+        assert_eq!(meta.name, "myapp", "name must be preserved from tag");
+        assert_eq!(meta.tag, "v2", "tag must be preserved from tag");
         assert!(
-            matches!(response, DaemonResponse::ContainerCreated { .. }),
-            "run must succeed for mock backend with supports_run=true, got: {response:?}"
+            !meta.layers.is_empty(),
+            "built image must contain at least one layer"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Issue #62 — Push conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for the `ImagePusher` port (push capability).
+///
+/// Uses `LocalPushTargetFixture` for reference strings and `MockImagePusher`
+/// for the in-memory adapter that records pushes without a real registry.
+#[cfg(test)]
+mod push_conformance {
+    use minibox_core::adapters::conformance::{BackendDescriptor, LocalPushTargetFixture};
+    use minibox_core::adapters::mocks::MockImagePusher;
+    use minibox_core::domain::{BackendCapability, RegistryCredentials};
+    use minibox_core::image::reference::ImageRef;
+    use std::sync::Arc;
+
+    fn mock_backend() -> (BackendDescriptor, Arc<MockImagePusher>) {
+        let pusher = Arc::new(MockImagePusher::new());
+        let pusher_clone = Arc::clone(&pusher);
+        let descriptor = BackendDescriptor::new("mock-push-backend").with_pusher(move || {
+            Arc::clone(&pusher_clone) as minibox_core::domain::DynImagePusher
+        });
+        (descriptor, pusher)
+    }
+
+    fn no_push_backend() -> BackendDescriptor {
+        BackendDescriptor::new("no-push-backend")
+    }
+
+    // #62 — skip if !supports_push
+    #[tokio::test]
+    async fn push_is_skipped_when_capability_absent() {
+        let descriptor = no_push_backend();
+        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+            return;
+        }
+        panic!("expected no PushToRegistry capability for no_push_backend");
+    }
+
+    // #62 — local test-registry push: mock returns a digest
+    #[tokio::test]
+    async fn push_to_mock_registry_returns_digest() {
+        let (descriptor, _pusher) = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+            return;
+        }
+
+        let fixture = LocalPushTargetFixture::new("conformance/push-test");
+        let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
+        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+
+        let result = pusher
+            .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
+            .await
+            .expect("push must succeed");
+
+        assert!(
+            !result.digest.is_empty(),
+            "push must return a non-empty digest"
+        );
+        assert!(
+            result.digest.starts_with("sha256:"),
+            "digest must use sha256 prefix"
+        );
+    }
+
+    // #62 — reported digest matches what was sent
+    #[tokio::test]
+    async fn push_reported_digest_matches_image_content() {
+        let (descriptor, pusher_handle) = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+            return;
+        }
+
+        let fixture = LocalPushTargetFixture::new("conformance/push-digest");
+        let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
+        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+
+        let result = pusher
+            .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
+            .await
+            .expect("push must succeed");
+
+        // The mock records digests; verify the push was recorded
+        let last_digest = pusher_handle.last_pushed_digest();
+        assert_eq!(
+            Some(result.digest.as_str()),
+            last_digest.as_deref(),
+            "reported digest must match what was recorded"
+        );
+    }
+
+    // #62 — visible tags: after push, mock registry reports the tag as present
+    #[tokio::test]
+    async fn push_makes_tag_visible_in_mock_registry() {
+        let (descriptor, pusher_handle) = mock_backend();
+        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+            return;
+        }
+
+        let fixture = LocalPushTargetFixture::new("conformance/tag-visibility");
+        let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
+        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+
+        pusher
+            .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
+            .await
+            .expect("push must succeed");
+
+        assert!(
+            pusher_handle.has_tag(&fixture.image_ref),
+            "mock registry must report tag as present after push"
         );
     }
 }

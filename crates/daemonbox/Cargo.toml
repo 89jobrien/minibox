@@ -49,5 +49,5 @@ tempfile = { workspace = true }
 proptest = "1"
 reqwest = { workspace = true }
 tokio = { workspace = true }
-minibox-core = { workspace = true }
+minibox-core = { workspace = true, features = ["test-utils"] }
 async-trait = { workspace = true }
