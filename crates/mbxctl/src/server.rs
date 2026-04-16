@@ -273,6 +273,9 @@ fn build_router(state: AppState) -> Router {
         .route("/api/v1/jobs/{job_id}", get(get_job_status))
         .route("/api/v1/jobs/{job_id}", delete(delete_job))
         .route("/api/v1/jobs/{job_id}/logs", get(stream_logs))
+        // TODO(roadmap/mcp): add a thin raw-command/attach surface here so
+        // mbxctl can back the planned minibox MCP server instead of forcing all
+        // agent workflows through the job abstraction.
         .layer(DefaultBodyLimit::max(1024 * 1024)) // 1 MB
         .with_state(state)
 }

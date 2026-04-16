@@ -108,3 +108,11 @@ __pycache__/
 .ctx/
 .ctx/HANDOVER.md
 .tmp-dogfood/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.yaml
+!.ctx/handoff.*.config.toml.example
+.ctx/.initialized
+# handoff-end

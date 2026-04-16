@@ -22,6 +22,9 @@ impl JobAdapter {
         &self,
         req: CreateJobRequest,
     ) -> Result<(String, crate::client::ResponseStream), ControllerError> {
+        // TODO(roadmap/mcp): stop forcing one-shot ephemeral jobs once the daemon
+        // grows attach/resume primitives. MCP-driven agents and sandboxed code
+        // execution will need reconnectable sessions, not just fire-and-stream.
         let daemon_req = DaemonRequest::Run {
             image: req.image,
             tag: req.tag.or(Some("latest".to_string())),

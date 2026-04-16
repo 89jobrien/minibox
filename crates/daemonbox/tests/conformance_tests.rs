@@ -5,6 +5,9 @@
 //!
 //! **Purpose:** Validate hexagonal architecture abstraction doesn't leak
 //! platform-specific behavior into domain logic.
+// TODO(roadmap/conformance): extend this suite beyond run/pull/remove into the
+// commit/build/push matrix for linux-native and colima once the shared backend
+// descriptor + fixture helpers land.
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};

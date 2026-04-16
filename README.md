@@ -7,6 +7,8 @@
 
 `minibox` is a workspace of Rust crates that provide a unified daemon (`miniboxd`), platform shims, and a shared core library for building sandboxed development workflows.
 
+The project is currently pushing toward stronger dogfooding: agent-facing control surfaces, sandboxed code execution, and a self-hosted CI flow that uses minibox to manage its own test environments. See `docs/ROADMAP.md` for the active roadmap.
+
 ## Features
 
 - **Unified binary (`miniboxd`)** – Single entrypoint that selects platform-specific backends behind compile-time cfg gates.
@@ -44,14 +46,13 @@ A Docker-like container runtime written in Rust. Daemon/client architecture with
 - GKE: unprivileged deployment (proot + copy-FS)
 - macOS VZ.framework: native VM via Apple Virtualization.framework (`MINIBOX_ADAPTER=vz`)
 
-## On Deck
+## Near-Term Roadmap
 
-- WSL2: wired and stubbed; not yet wired into miniboxd dispatch
-- Docker parity: push/commit/build traits defined — adapters not yet wired end-to-end
-
-## Backburner
-
-- Windows: WSL2 is the best path; native HCS planned but deprioritized
+- Docker parity: wire commit/build/push end-to-end and validate the conformance matrix across `linux-native` and `colima`
+- MCP control surface: expose pull/run/ps/stop/rm cleanly enough for Claude-style agent workflows
+- Sandboxed AI execution: run generated scripts and tests inside disposable minibox containers instead of on the host
+- CI dogfooding: let the CI agent provision, stream, and tear down its own minibox-managed test environment
+- Windows: WSL2 remains the most practical path; native HCS is still secondary
 
 ---
 
@@ -90,6 +91,19 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 sudo ./ops/install-systemd.sh
 sudo systemctl enable --now miniboxd
 sudo /usr/local/bin/minibox ps
+```
+
+**Current dogfood path:**
+
+```bash
+# Build the Linux test image used for macOS/Colima dogfooding
+cargo xtask build-test-image
+
+# Load a local OCI tarball into minibox
+sudo ./target/release/minibox load ~/.mbx/test-image/mbx-tester.tar --name mbx-tester
+
+# Run the Linux suite inside minibox
+cargo xtask test-linux
 ```
 
 ---
@@ -246,11 +260,11 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
 
 ---
 
-### macOS (Colima) — Library only
+### macOS (Colima)
 
 `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter` are implemented, tested, and wired into the daemon.
 
-**Requirements (when wired):** `brew install colima`, `colima start`.
+**Requirements:** `brew install colima`, `colima start`.
 
 - `ColimaRegistry` — image ops via `nerdctl`, layers exported to Lima-shared `/tmp/minibox-layers/`
 - `ColimaRuntime` — container spawn via `limactl shell` + chroot
@@ -293,7 +307,12 @@ sudo minibox events
 
 # Stop / remove
 sudo minibox stop <container_id>
+sudo minibox pause <container_id>
+sudo minibox resume <container_id>
 sudo minibox rm <container_id>
+
+# Load local OCI tarball
+sudo minibox load ./mbx-tester.tar --name mbx-tester
 
 # Image management
 sudo minibox prune          # GC unused images
@@ -403,6 +422,18 @@ implementing the trait and wiring the adapter into `HandlerDependencies`.
 | `ContainerCommitter` | Partial  | Overlay upperdir snapshot — not wired          |
 | `ImageBuilder`       | Partial  | Basic Dockerfile subset — not wired            |
 | `StateStore`         | Open     | SQLite / sled — replaces in-memory HashMap     |
+
+---
+
+## Agent Direction
+
+Minibox is increasingly being shaped as infrastructure for agent workflows, not just a human CLI:
+
+- `mbxctl` is the first controller-shaped surface: a small HTTP/SSE wrapper over `miniboxd` for long-running job orchestration
+- the next layer is an MCP-friendly control surface so an agent can drive image pulls, container lifecycle, and log streaming directly
+- the longer-term dogfood goal is to run agent-generated code and CI jobs inside minibox-managed containers by default
+
+That work is tracked in `docs/ROADMAP.md` and the `minibox` doob backlog.
 
 ---
 
