@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "nu /Users/joe/dev/minibox/scripts/preflight.nu"
+            "command": "nu scripts/preflight.nu"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/joe/dev/minibox/.claude/hooks/protocol-drift-check.sh"
+            "command": ".claude/hooks/protocol-drift-check.sh"
           }
         ]
       }
