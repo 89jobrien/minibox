@@ -150,6 +150,52 @@ Near-term work is concentrated in a few areas:
 
 See `docs/ROADMAP.md` for the active roadmap.
 
+## VM Image CAS Overlay
+
+The VM image build supports a content-addressed overlay at `~/.mbx/vm/overlay/`. Files placed here
+are copied into the rootfs at build time. CAS (content-addressed storage) tracking lets you detect
+drift between what was installed and what is running.
+
+**Layout**
+
+```
+~/.mbx/vm/overlay/
+  cas/<sha256>   ← file content, named by sha256 of content
+  refs/<name>    ← text file containing a sha256, maps a name to a CAS object
+```
+
+**Adding a file to the CAS store**
+
+```bash
+# Add a file; optionally create a named ref
+cargo xtask cas-add /path/to/myconfig --ref myconfig
+# Output:
+#   cas: <sha256>  /path/to/myconfig
+#   ref: myconfig -> <sha256>
+```
+
+**Checking for drift**
+
+```bash
+cargo xtask cas-check
+# Output per ref:
+#   OK  myconfig
+#   DRIFT  other  expected=<hash>  got=<actual>
+```
+
+Exits non-zero if any drift is found.
+
+**In-VM drift check**
+
+After `cargo xtask build-vm-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
+per ref, tab-separated: `<name>\t<sha256>`). Run `/sbin/check-drift.sh` inside the VM to verify
+installed files match their expected hashes.
+
+```bash
+# Inside the Alpine VM shell
+/sbin/check-drift.sh
+```
+
 ## Benchmark
 
 ```bash
@@ -159,4 +205,64 @@ cargo xtask bench-vps                    # run on VPS, fetch results
 ./target/release/minibox-bench --suite adapter  # adapter overhead benchmarks
 ```
 
-Results are written to `bench/results/bench.jsonl` (append-only history) and `bench/results/latest.json`.
+> Results are written to `bench/results/bench.jsonl` (append-only history) and `bench/results/latest.json`.
+
+```mmd
+graph TD
+  subgraph BUGS ["Bugs"]
+      B60["#60 bug·p1\nfork() in Tokio runtime"]
+      B61["#61 bug·vz·blocked\nVZErrorInternal macOS 26"]
+  end
+
+  subgraph COLIMA ["Colima path"]
+      C90["#90 feat·colima·p1\nWire macbox Colima adapters"]
+      C89["#89 feat·colima·e2e·p2\nDogfood create→commit→push"]
+      C80["#80 testing·p2\nRegression tests rootfs metadata"]
+      C90 --> C89
+      C90 --> C80
+  end
+
+  subgraph VZ ["VZ / Virtualization.framework (all blocked on #61)"]
+      V84["#84 feat·vz·blocked\nProvision Linux VM via VF"]
+      V88["#88 feat·vz·blocked\nminibox-agent in-VM daemon"]
+      V93["#93 feat·vz·blocked\nvsock I/O bridge"]
+      V75["#75 feat·vz·blocked\nvirtiofs host-path mounts"]
+      V85["#85 feat·vz·p2\nEncode VZ commit/build/push behavior"]
+      B61 --> V84
+      V84 --> V88
+      V88 --> V93
+      V84 --> V75
+  end
+
+  subgraph CONFORMANCE ["Conformance suite"]
+      CF82["#82 ✓ closed\nConformance boundary spec"]
+      CF92["#92 ✓ closed\nFixture helpers"]
+      CF67["#67 ✓ closed\nCommit conformance tests"]
+      CF71["#71 testing·conformance\nBuild conformance tests"]
+      CF62["#62 testing·conformance\nPush conformance tests"]
+      CF79["#79 testing·conformance\nValidate on Colima + Linux CI"]
+      CF77["#77 feat·conformance\nMarkdown/JSON reports"]
+      CF82 --> CF67
+      CF82 --> CF71
+      CF82 --> CF62
+      CF92 --> CF67
+      CF92 --> CF71
+      CF92 --> CF62
+      CF67 --> CF79
+      CF71 --> CF79
+      CF62 --> CF79
+      C90 --> CF79
+  end
+
+  subgraph NET ["Networking"]
+      N94["#94 feat·networking·p2\nveth/bridge"]
+  end
+
+  subgraph PTY ["Interactive I/O"]
+      P83["#83 feat·p2\nPTY/stdio piping"]
+  end
+
+  subgraph DAGU ["Dagu"]
+      D86["#86 fix·dagu·p2\nTier 2 mbx-dagu fixes"]
+  end
+```

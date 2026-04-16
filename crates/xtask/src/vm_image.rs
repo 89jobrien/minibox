@@ -401,7 +401,48 @@ echo "=== RESULTS: pass=${PASS} fail=${FAIL} ==="
             .context("chmod /sbin/run-tests.sh")?;
     }
 
-    println!("  init    rootfs/sbin/init + sbin/run-tests.sh + etc/init.d/rcS");
+    // /sbin/check-drift.sh — CAS drift checker, reads /etc/minibox-cas-refs
+    let check_drift_script = r#"#!/bin/sh
+# check-drift.sh — verify CAS-tracked files match their expected hashes
+REFS=/etc/minibox-cas-refs
+[ -f "$REFS" ] || { echo "no cas refs installed"; exit 0; }
+
+PASS=0
+FAIL=0
+while IFS="$(printf '\t')" read -r name hash; do
+    [ -n "$name" ] && [ -n "$hash" ] || continue
+    # find the file by searching common locations
+    TARGET=$(find /etc /usr/local/bin /sbin /bin -name "$name" 2>/dev/null | head -1)
+    if [ -z "$TARGET" ]; then
+        echo "MISSING  $name  expected=$hash"
+        FAIL=$((FAIL+1))
+        continue
+    fi
+    GOT=$(sha256sum "$TARGET" 2>/dev/null | cut -d' ' -f1)
+    if [ "$GOT" = "$hash" ]; then
+        echo "OK  $name"
+        PASS=$((PASS+1))
+    else
+        echo "DRIFT  $name  expected=$hash  got=$GOT"
+        FAIL=$((FAIL+1))
+    fi
+done < "$REFS"
+echo "=== $PASS ok, $FAIL failed ==="
+[ "$FAIL" -eq 0 ]
+"#;
+    let check_drift_path = sbin.join("check-drift.sh");
+    std::fs::write(&check_drift_path, check_drift_script)
+        .context("writing /sbin/check-drift.sh")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&check_drift_path, std::fs::Permissions::from_mode(0o755))
+            .context("chmod /sbin/check-drift.sh")?;
+    }
+
+    println!(
+        "  init    rootfs/sbin/init + sbin/run-tests.sh + sbin/check-drift.sh + etc/init.d/rcS"
+    );
     Ok(())
 }
 
@@ -427,6 +468,10 @@ pub fn install_overlay(rootfs_dir: &Path, vm_dir: &Path) -> Result<()> {
     if count > 0 {
         println!("  overlay {} file(s) → {}", count, rootfs_dir.display());
     }
+
+    // Write /etc/minibox-cas-refs from overlay/refs/ if any refs exist.
+    crate::cas::write_cas_refs(rootfs_dir, &overlay_dir)?;
+
     Ok(())
 }
 

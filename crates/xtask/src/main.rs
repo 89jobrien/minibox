@@ -20,6 +20,7 @@ use xshell::Shell;
 mod bench;
 mod bench_types;
 mod bump;
+mod cas;
 mod cleanup;
 mod flamegraph;
 mod gates;
@@ -88,6 +89,26 @@ fn main() -> Result<()> {
                 .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
             vm_run::test_vm(&vm_dir, &cargo_target)
         }
+        Some("cas-add") => {
+            let file_path = env::args()
+                .nth(2)
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("usage: cargo xtask cas-add <file> [--ref <name>]")
+                })?;
+            let ref_name = {
+                let args: Vec<String> = env::args().collect();
+                args.windows(2)
+                    .find(|w| w[0] == "--ref")
+                    .map(|w| w[1].clone())
+            };
+            let overlay_dir = cas::default_overlay_dir();
+            cas::cas_add(&overlay_dir, &file_path, ref_name.as_deref()).map(|_| ())
+        }
+        Some("cas-check") => {
+            let overlay_dir = cas::default_overlay_dir();
+            cas::cas_check(&overlay_dir)
+        }
         Some("build-test-image") => {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
@@ -119,13 +140,21 @@ fn main() -> Result<()> {
             eprintln!(
                 "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
             );
-            eprintln!("  build-vm-image   download Alpine kernel/rootfs, cross-compile agent, build initramfs");
-            eprintln!("  run-vm           boot VM with interactive shell (QEMU HVF, Ctrl-A X to exit)");
+            eprintln!(
+                "  build-vm-image   download Alpine kernel/rootfs, cross-compile agent, build initramfs"
+            );
+            eprintln!(
+                "  run-vm           boot VM with interactive shell (QEMU HVF, Ctrl-A X to exit)"
+            );
             eprintln!("  test-vm          build musl test binaries + run in VM, stream results");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
             eprintln!(
                 "  test-linux       build image + load into minibox + run tests in container"
             );
+            eprintln!(
+                "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.mbx/vm/overlay/cas/)"
+            );
+            eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             Ok(())
         }
     }
