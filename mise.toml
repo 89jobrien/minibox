@@ -241,11 +241,11 @@ cargo xtask clean-artifacts
 """
 
 [tasks."all:standup"]
-description = "Automated standup from git activity + Claude session logs. Usage: mise run all:standup -- [hours]"
+description = "Automated standup via devkit. Usage: mise run all:standup -- [hours]"
 run = """
 #!/usr/bin/env bash
 HOURS="${1:-24}"
-uv run scripts/standup.py --hours "$HOURS"
+devkit standup --since "${HOURS}h"
 """
 
 [tasks."all:dash"]

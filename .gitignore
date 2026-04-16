@@ -108,6 +108,7 @@ __pycache__/
 .ctx/
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.*.*.yaml
+!.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.state.yaml
 .ctx/HANDOFF.md
 .ctx/HANDOVER.md
