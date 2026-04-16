@@ -19,28 +19,10 @@ use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, warn};
 
 /// Typed container state for use with [`DaemonState::update_container_state`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContainerState {
-    Created,
-    Running,
-    /// Container is frozen (cgroup.freeze = 1).
-    Paused,
-    Stopped,
-    Failed,
-}
-
-impl ContainerState {
-    /// Return the wire-format string for this state.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ContainerState::Created => "Created",
-            ContainerState::Running => "Running",
-            ContainerState::Paused => "Paused",
-            ContainerState::Stopped => "Stopped",
-            ContainerState::Failed => "Failed",
-        }
-    }
-}
+///
+/// Re-exported from `minibox_core::domain` — use `minibox_core::domain::ContainerState`
+/// directly in new code; this alias keeps existing call sites compiling unchanged.
+pub use minibox_core::domain::ContainerState;
 
 // SECURITY: Maximum concurrent container spawn operations to prevent fork bombs
 const MAX_CONCURRENT_SPAWNS: usize = 100;
