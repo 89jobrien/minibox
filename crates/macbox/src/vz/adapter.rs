@@ -30,7 +30,7 @@ use minibox_core::{
     domain::{
         AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
         ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities,
-        SpawnResult,
+        SpawnResult, RootfsSetup, ChildInit,
     },
     image::reference::ImageRef,
     protocol::{DaemonRequest, DaemonResponse},
@@ -229,7 +229,7 @@ impl AsAny for VzFilesystem {
     }
 }
 
-impl FilesystemProvider for VzFilesystem {
+impl minibox_core::domain::RootfsSetup for VzFilesystem {
     fn setup_rootfs(
         &self,
         _image_layers: &[PathBuf],
@@ -248,20 +248,22 @@ impl FilesystemProvider for VzFilesystem {
         })
     }
 
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        // pivot_root runs inside the VM's container process, not on the host.
-        tracing::debug!(
-            new_root = %new_root.display(),
-            "vz: pivot_root delegated to in-VM daemon (no-op on host)"
-        );
-        Ok(())
-    }
-
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
         // Cleanup is handled by the VM daemon on container exit.
         tracing::debug!(
             container_dir = %container_dir.display(),
             "vz: filesystem cleanup delegated to in-VM daemon (no-op on host)"
+        );
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for VzFilesystem {
+    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+        // pivot_root runs inside the VM's container process, not on the host.
+        tracing::debug!(
+            new_root = %new_root.display(),
+            "vz: pivot_root delegated to in-VM daemon (no-op on host)"
         );
         Ok(())
     }

@@ -33,7 +33,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
+    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry,
     LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
     RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
@@ -252,7 +252,7 @@ impl MockFilesystem {
     }
 }
 
-impl FilesystemProvider for MockFilesystem {
+impl minibox_core::domain::RootfsSetup for MockFilesystem {
     /// Simulate rootfs setup by returning `container_dir/merged`.
     ///
     /// Increments the setup counter. Returns an error if configured via
@@ -272,15 +272,6 @@ impl FilesystemProvider for MockFilesystem {
         })
     }
 
-    /// Simulate `pivot_root` — succeeds unless configured to fail.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        let state = self.state.lock().unwrap();
-        if !state.pivot_should_succeed {
-            anyhow::bail!("mock pivot_root failure");
-        }
-        Ok(())
-    }
-
     /// Simulate filesystem cleanup.
     ///
     /// Increments the cleanup counter. Returns an error if the mock is
@@ -291,6 +282,17 @@ impl FilesystemProvider for MockFilesystem {
 
         if !state.cleanup_should_succeed {
             anyhow::bail!("mock cleanup failure");
+        }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for MockFilesystem {
+    /// Simulate `pivot_root` — succeeds unless configured to fail.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        let state = self.state.lock().unwrap();
+        if !state.pivot_should_succeed {
+            anyhow::bail!("mock pivot_root failure");
         }
         Ok(())
     }
@@ -677,7 +679,7 @@ impl FailableFilesystemMock {
     }
 }
 
-impl FilesystemProvider for FailableFilesystemMock {
+impl minibox_core::domain::RootfsSetup for FailableFilesystemMock {
     /// Simulate rootfs setup, honouring the current failure toggle.
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         self.setup_count.fetch_add(1, Ordering::SeqCst);
@@ -691,17 +693,19 @@ impl FilesystemProvider for FailableFilesystemMock {
         })
     }
 
-    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        Ok(())
-    }
-
     /// Simulate filesystem cleanup, honouring the current failure toggle.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
         self.cleanup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_cleanup.load(Ordering::SeqCst) {
             anyhow::bail!("injected cleanup failure");
         }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for FailableFilesystemMock {
+    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         Ok(())
     }
 }
@@ -713,7 +717,7 @@ adapt!(FailableFilesystemMock);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_core::domain::ContainerHooks;
+    use minibox_core::domain::{ChildInit, ContainerHooks, RootfsSetup};
 
     #[test]
     fn mock_registry_has_image_sync_cached() {

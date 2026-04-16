@@ -29,8 +29,8 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageLoader, ImageMetadata,
-    ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry, ResourceConfig,
+    ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -399,7 +399,7 @@ impl ColimaFilesystem {
     }
 }
 
-impl FilesystemProvider for ColimaFilesystem {
+impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
     /// Create an overlay mount inside the Lima VM and return the merged directory path.
     ///
     /// Creates `upper/`, `work/`, and `merged/` subdirectories under
@@ -449,24 +449,17 @@ impl FilesystemProvider for ColimaFilesystem {
             &merged_dir.to_string_lossy(),
         ])?;
 
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("colima_instance".to_string(), self.instance.clone());
+
         Ok(RootfsLayout {
             merged_dir,
-            rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::ColimaOverlay {
+            rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
                 upper_dir,
-                instance: self.instance.clone(),
+                metadata,
             }),
             source_image_ref: None,
         })
-    }
-
-    /// No-op: `pivot_root` is handled by the container runtime inside the VM.
-    ///
-    /// In the Colima adapter the actual `pivot_root(2)` call is performed by
-    /// the `unshare`/`chroot` invocation in [`ColimaRuntime::spawn_process`],
-    /// not by the filesystem provider layer.
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        let _ = new_root;
-        Ok(())
     }
 
     /// Unmount the overlay and remove the container directory inside the VM.
@@ -481,6 +474,14 @@ impl FilesystemProvider for ColimaFilesystem {
         self.lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
         self.lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
 
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for ColimaFilesystem {
+    /// No-op: `pivot_root` is handled inside the Lima VM by the container runtime.
+    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+        let _ = new_root;
         Ok(())
     }
 }

@@ -7,8 +7,8 @@
 
 use mbx::adapters::{ColimaRegistry, ColimaRuntime};
 use mbx::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceLimiter,
+    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider,
+    ImageRegistry, ResourceLimiter, RootfsSetup,
 };
 use std::path::PathBuf;
 use std::sync::Arc;

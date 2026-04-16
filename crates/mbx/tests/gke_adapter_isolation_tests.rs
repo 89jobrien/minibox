@@ -6,7 +6,7 @@
 //! including macOS.
 
 use mbx::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
-use mbx::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter};
+use mbx::domain::{ChildInit, FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tempfile::TempDir;
