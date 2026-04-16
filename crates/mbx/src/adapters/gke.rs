@@ -234,7 +234,8 @@ impl ProotRuntime {
     /// Checks `MINIBOX_PROOT_PATH` first, then searches `PATH` for `proot`.
     pub fn from_env() -> Result<Self> {
         if let Ok(path) = std::env::var("MINIBOX_PROOT_PATH") {
-            return Self::new(path);
+            return Self::new(&path)
+                .with_context(|| format!("MINIBOX_PROOT_PATH points to invalid binary {path:?}"));
         }
 
         // Search PATH for proot

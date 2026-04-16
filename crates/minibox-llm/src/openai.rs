@@ -185,10 +185,22 @@ impl LlmProvider for OpenAiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialises environment-variable mutations across parallel tests.
+    // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. The Mutex
+    // ensures only one test modifies the environment at a time.
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn from_env_returns_none_without_key() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let prev = std::env::var("OPENAI_API_KEY").ok();
+        unsafe { std::env::remove_var("OPENAI_API_KEY") };
         let provider = OpenAiProvider::from_env();
+        if let Some(k) = prev {
+            unsafe { std::env::set_var("OPENAI_API_KEY", k) };
+        }
         assert!(provider.is_none());
     }
 
