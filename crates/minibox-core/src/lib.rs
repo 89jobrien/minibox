@@ -23,9 +23,12 @@ pub mod adapters;
 pub mod domain;
 pub mod error;
 pub mod events;
-pub mod image;
 pub mod preflight;
 pub mod protocol;
+
+// Image handling is provided by the standalone minibox-oci crate.
+// Re-export the full module so existing `minibox_core::image::*` paths continue to work.
+pub use minibox_oci::image;
 
 pub use error::MiniboxError;
 pub use minibox_macros::{adapt, as_any, default_new, require_capability};
