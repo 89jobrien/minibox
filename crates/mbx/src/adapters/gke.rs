@@ -30,8 +30,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter,
-    RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
+    RuntimeCapabilities, SpawnResult,
 };
 use minibox_core::{adapt, as_any};
 use std::path::{Path, PathBuf};

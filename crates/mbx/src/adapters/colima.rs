@@ -29,8 +29,8 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry, ResourceConfig,
-    ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry,
+    ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};

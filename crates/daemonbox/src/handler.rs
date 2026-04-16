@@ -492,7 +492,11 @@ async fn handle_run_streaming(
     // The OwnedFd is consumed by into_raw_fd() (no drop), and from_raw_fd() inside the
     // closure takes sole ownership. No other code touches reader_raw after this point.
     let reader_raw = output_reader.into_raw_fd();
-    let stdout_log_path = deps.lifecycle.containers_base.join(&container_id).join("stdout.log");
+    let stdout_log_path = deps
+        .lifecycle
+        .containers_base
+        .join(&container_id)
+        .join("stdout.log");
     let drain_handle = tokio::task::spawn_blocking(move || {
         use std::io::{Read, Write};
         use std::os::fd::FromRawFd;
@@ -696,7 +700,10 @@ async fn run_inner_capture(
         std::fs::create_dir_all(&run_dir)?;
     }
 
-    let rootfs_layout = deps.lifecycle.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps
+        .lifecycle
+        .filesystem
+        .setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir = rootfs_layout.merged_dir.clone();
 
     let resource_config = ResourceConfig {
@@ -705,7 +712,10 @@ async fn run_inner_capture(
         pids_max: Some(1024),
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps.lifecycle.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir_str = deps
+        .lifecycle
+        .resource_limiter
+        .create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
@@ -903,7 +913,10 @@ async fn run_inner(
     }
 
     // Setup overlayfs (using injected filesystem trait).
-    let rootfs_layout = deps.lifecycle.filesystem.setup_rootfs(&layer_dirs, &container_dir)?;
+    let rootfs_layout = deps
+        .lifecycle
+        .filesystem
+        .setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir_from_overlay = rootfs_layout.merged_dir.clone();
 
     // Setup cgroup (using injected resource limiter trait).
@@ -913,7 +926,10 @@ async fn run_inner(
         pids_max: Some(1024), // Default PID limit for security
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps.lifecycle.resource_limiter.create(&id, &resource_config)?;
+    let cgroup_dir_str = deps
+        .lifecycle
+        .resource_limiter
+        .create(&id, &resource_config)?;
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
@@ -1283,7 +1299,8 @@ pub async fn handle_stop(
     match result {
         Ok(()) => {
             let active = state.list_containers().await.len() as f64;
-            deps.events.metrics
+            deps.events
+                .metrics
                 .set_gauge("minibox_active_containers", active, &[]);
             DaemonResponse::Success {
                 message: format!("container {id} stopped"),
@@ -1504,7 +1521,8 @@ pub async fn handle_remove(
     match result {
         Ok(()) => {
             let active = state.list_containers().await.len() as f64;
-            deps.events.metrics
+            deps.events
+                .metrics
                 .set_gauge("minibox_active_containers", active, &[]);
             DaemonResponse::Success {
                 message: format!("container {id} removed"),
@@ -1743,7 +1761,12 @@ pub async fn handle_load_image(
 ) -> DaemonResponse {
     let image_path = std::path::Path::new(&path);
     let start = std::time::Instant::now();
-    let (status, response) = match deps.image.image_loader.load_image(image_path, &name, &tag).await {
+    let (status, response) = match deps
+        .image
+        .image_loader
+        .load_image(image_path, &name, &tag)
+        .await
+    {
         Ok(()) => {
             info!(
                 path = %path,

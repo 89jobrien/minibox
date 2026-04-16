@@ -33,9 +33,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry,
-    LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
-    RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, LayerInfo, NetworkConfig,
+    NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter, RootfsLayout,
+    RuntimeCapabilities, SpawnResult,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

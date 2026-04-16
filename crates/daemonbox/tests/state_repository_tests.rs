@@ -56,7 +56,10 @@ async fn json_file_repository_round_trips() {
 
     repo.save_containers(&map).expect("save must succeed");
     let loaded = repo.load_containers().expect("load must succeed");
-    assert!(loaded.contains_key("test-id"), "saved container must round-trip");
+    assert!(
+        loaded.contains_key("test-id"),
+        "saved container must round-trip"
+    );
 }
 
 /// `DaemonState` can be constructed with an `Arc<dyn StateRepository>`.

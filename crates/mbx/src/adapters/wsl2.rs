@@ -62,8 +62,8 @@ use async_trait::async_trait;
 use minibox_core::{
     as_any,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, ResourceConfig,
-        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
+        RuntimeCapabilities, SpawnResult,
     },
 };
 use serde::{Deserialize, Serialize};

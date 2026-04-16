@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use minibox_core::{
     adapt,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry,
-        ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, ResourceConfig,
+        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use std::path::{Path, PathBuf};

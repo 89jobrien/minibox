@@ -14,8 +14,8 @@ use daemonbox::state::{ContainerState, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, FilesystemProvider,
-    ImageRegistry, NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter,
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, ImageRegistry,
+    NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::protocol::DaemonResponse;
 use std::path::PathBuf;
@@ -79,9 +79,8 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 }
 
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
     Arc::new(HandlerDependencies {
         image: daemonbox::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -127,9 +126,8 @@ fn mock_deps_with_network(
     network: std::sync::Arc<MockNetwork>,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
     Arc::new(HandlerDependencies {
         image: daemonbox::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(

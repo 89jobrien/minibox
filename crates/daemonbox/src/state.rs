@@ -72,11 +72,7 @@ impl StateRepository for JsonFileRepository {
 
         let records: HashMap<String, ContainerRecord> =
             serde_json::from_str(&data).map_err(|e| {
-                anyhow::anyhow!(
-                    "failed to parse state file {}: {}",
-                    self.path.display(),
-                    e
-                )
+                anyhow::anyhow!("failed to parse state file {}: {}", self.path.display(), e)
             })?;
         Ok(records)
     }

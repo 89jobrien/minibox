@@ -283,11 +283,13 @@ async fn dispatch(
             let _ = tx.send(response).await;
         }
         DaemonRequest::PauseContainer { id } => {
-            let response = handler::handle_pause(id, state, Arc::clone(&deps.events.event_sink)).await;
+            let response =
+                handler::handle_pause(id, state, Arc::clone(&deps.events.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::ResumeContainer { id } => {
-            let response = handler::handle_resume(id, state, Arc::clone(&deps.events.event_sink)).await;
+            let response =
+                handler::handle_resume(id, state, Arc::clone(&deps.events.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {

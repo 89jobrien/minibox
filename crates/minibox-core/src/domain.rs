@@ -1521,10 +1521,7 @@ mod tests {
                 metadata: metadata.clone(),
             };
             assert_eq!(meta.overlay_upper_dir(), &upper);
-            assert_eq!(
-                meta.metadata_value("colima_instance"),
-                Some("colima")
-            );
+            assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
         }
 
         #[test]

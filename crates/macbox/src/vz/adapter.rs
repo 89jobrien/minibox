@@ -28,9 +28,9 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use minibox_core::{
     domain::{
-        AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-        ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities,
-        SpawnResult, RootfsSetup, ChildInit,
+        AsAny, ChildInit, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider,
+        ImageMetadata, ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RootfsSetup,
+        RuntimeCapabilities, SpawnResult,
     },
     image::reference::ImageRef,
     protocol::{DaemonRequest, DaemonResponse},

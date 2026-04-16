@@ -36,9 +36,8 @@ impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
 #[test]
 fn handler_deps_are_accessible_via_sub_structs() {
     let tmp = TempDir::new().unwrap();
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap());
 
     let image_deps = ImageDeps {
         registry_router: Arc::new(HostnameRegistryRouter::new(

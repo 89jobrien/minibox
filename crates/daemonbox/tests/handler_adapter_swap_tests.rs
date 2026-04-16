@@ -10,7 +10,7 @@ use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
-use minibox_core::domain::DynImageRegistry;
+use minibox_core::domain::{DynImageRegistry, DynNetworkProvider};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -141,9 +141,8 @@ async fn test_run_with_all_success_adapters() {
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
 
     // Rebuild deps with the Arc we're holding so pull_count is observable.
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
     let deps = {
         use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
         use minibox_core::adapters::HostnameRegistryRouter;
@@ -411,9 +410,8 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         use minibox_core::adapters::HostnameRegistryRouter;
         use minibox_core::domain::DynImageRegistry;
 
-        let image_store = Arc::new(
-            minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap(),
-        );
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
         Arc::new(daemonbox::handler::HandlerDependencies {
             image: ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(

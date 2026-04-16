@@ -196,9 +196,8 @@ fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
 async fn test_handle_pull_success() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             mock_registry.clone() as DynImageRegistry,
@@ -2042,7 +2041,10 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
                 Arc::new(MockRegistry::new()) as DynImageRegistry,
-                [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+                [(
+                    "ghcr.io",
+                    Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                )],
             )),
             image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
@@ -2401,7 +2403,10 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
                 Arc::new(MockRegistry::new()) as DynImageRegistry,
-                [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+                [(
+                    "ghcr.io",
+                    Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                )],
             )),
             image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
