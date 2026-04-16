@@ -334,7 +334,9 @@ async fn test_container_removal_cleanup() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Mark as stopped (normally done by reaper)
-    state.update_container_state(&container_id, daemonbox::state::ContainerState::Stopped).await;
+    state
+        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .await;
 
     // Remove container
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
@@ -470,7 +472,9 @@ async fn test_complete_container_lifecycle() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // 6. Mark as stopped and remove
-    state.update_container_state(&container_id, daemonbox::state::ContainerState::Stopped).await;
+    state
+        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .await;
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
 
@@ -552,7 +556,9 @@ async fn test_multiple_concurrent_containers() {
     // Cleanup all containers
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
-        state.update_container_state(&id, daemonbox::state::ContainerState::Stopped).await;
+        state
+            .update_container_state(&id, daemonbox::state::ContainerState::Stopped)
+            .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }
 }

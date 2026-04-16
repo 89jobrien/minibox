@@ -14,6 +14,10 @@ use std::{
     time::Duration,
 };
 
+/// Common QEMU baseline flags shared by interactive and test-runner modes.
+const QEMU_BASE_ARGS: &[&str] =
+    &["-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4", "-kernel"];
+
 /// Boot the VM in interactive shell mode.  Blocks until QEMU exits.
 /// Exit QEMU with `Ctrl-A X`.
 pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
@@ -38,14 +42,7 @@ pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
     println!();
 
     let status = Command::new("qemu-system-aarch64")
-        .args([
-            "-M", "virt",
-            "-cpu", "host",
-            "-accel", "hvf",
-            "-m", "2048",
-            "-smp", "4",
-            "-kernel",
-        ])
+        .args(QEMU_BASE_ARGS)
         .arg(&kernel)
         .arg("-initrd")
         .arg(&initrd)
@@ -81,14 +78,7 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
     let target = "aarch64-unknown-linux-musl";
     println!("Building test binaries for {target}...");
     let build_status = Command::new("cargo")
-        .args([
-            "zigbuild",
-            "--tests",
-            "-p",
-            "miniboxd",
-            "--target",
-            target,
-        ])
+        .args(["zigbuild", "--tests", "-p", "miniboxd", "--target", target])
         .status()
         .context("cargo zigbuild --tests (is cargo-zigbuild installed?)")?;
     if !build_status.success() {
@@ -97,7 +87,15 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
 
     // Also build miniboxd + minibox CLI binaries for MINIBOX_TEST_BIN_DIR
     let bin_status = Command::new("cargo")
-        .args(["zigbuild", "-p", "miniboxd", "-p", "minibox-cli", "--target", target])
+        .args([
+            "zigbuild",
+            "-p",
+            "miniboxd",
+            "-p",
+            "minibox-cli",
+            "--target",
+            target,
+        ])
         .status()
         .context("cargo zigbuild for miniboxd + minibox-cli")?;
     if !bin_status.success() {
@@ -112,17 +110,19 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
             .context("getting cwd")?
             .join(cargo_target)
     };
-    let deps_dir = cargo_target_abs
-        .join(target)
-        .join("debug")
-        .join("deps");
+    let deps_dir = cargo_target_abs.join(target).join("debug").join("deps");
 
     // 3. Copy test binaries into rootfs/tests/ and rebuild initramfs
     let tests_dir = rootfs_dir.join("tests");
     std::fs::create_dir_all(&tests_dir).context("creating rootfs/tests")?;
 
     // Copy each test binary (executable files matching suite-* in deps/)
-    let suites = ["cgroup_tests", "e2e_tests", "integration_tests", "sandbox_tests"];
+    let suites = [
+        "cgroup_tests",
+        "e2e_tests",
+        "integration_tests",
+        "sandbox_tests",
+    ];
     let mut copied = 0usize;
     for suite in &suites {
         if let Ok(entries) = std::fs::read_dir(&deps_dir) {
@@ -165,8 +165,7 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
         let src = bin_dir.join(bin_name);
         if src.exists() {
             let dest = tests_dir.join(bin_name);
-            std::fs::copy(&src, &dest)
-                .with_context(|| format!("copying {bin_name}"))?;
+            std::fs::copy(&src, &dest).with_context(|| format!("copying {bin_name}"))?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -193,8 +192,7 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
 
     // 6. Spawn QEMU
     let mut child = Command::new("qemu-system-aarch64")
-        .args(["-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4",
-               "-kernel"])
+        .args(QEMU_BASE_ARGS)
         .arg(&kernel)
         .arg("-initrd")
         .arg(&initrd)
@@ -224,7 +222,10 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
                 Err(e) => {
                     let _ = child.kill();
                     let _ = std::fs::remove_file(&sock_path);
-                    bail!("could not connect to VM serial socket after {}s: {e}", max_attempts / 5);
+                    bail!(
+                        "could not connect to VM serial socket after {}s: {e}",
+                        max_attempts / 5
+                    );
                 }
             }
         }
