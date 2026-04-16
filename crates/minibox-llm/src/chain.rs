@@ -339,6 +339,9 @@ mod tests {
     #[test]
     fn from_env_with_no_keys_creates_empty_chain() {
         let _guard = ENV_MUTEX.lock().unwrap();
+        let prev_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
+        let prev_openai = std::env::var("OPENAI_API_KEY").ok();
+        let prev_gemini = std::env::var("GEMINI_API_KEY").ok();
         // SAFETY: Rust 2024 requires unsafe for env mutation. ENV_MUTEX serializes access.
         unsafe {
             std::env::remove_var("ANTHROPIC_API_KEY");
@@ -347,6 +350,21 @@ mod tests {
         }
         let chain = FallbackChain::from_env();
         let result = chain.complete_sync(&request("test"));
+        // SAFETY: Rust 2024 requires unsafe for env mutation. ENV_MUTEX serializes access.
+        unsafe {
+            match prev_anthropic {
+                Some(key) => std::env::set_var("ANTHROPIC_API_KEY", key),
+                None => std::env::remove_var("ANTHROPIC_API_KEY"),
+            }
+            match prev_openai {
+                Some(key) => std::env::set_var("OPENAI_API_KEY", key),
+                None => std::env::remove_var("OPENAI_API_KEY"),
+            }
+            match prev_gemini {
+                Some(key) => std::env::set_var("GEMINI_API_KEY", key),
+                None => std::env::remove_var("GEMINI_API_KEY"),
+            }
+        }
         assert!(matches!(result, Err(LlmError::AllProvidersFailed(_))));
     }
 
