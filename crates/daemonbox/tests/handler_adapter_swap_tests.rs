@@ -9,6 +9,8 @@
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::DynImageRegistry;
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -68,7 +70,7 @@ impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
 }
 
 fn make_deps(
-    registry: MockRegistry,
+    registry: Arc<MockRegistry>,
     filesystem: MockFilesystem,
     resource_limiter: MockLimiter,
     runtime: MockRuntime,
@@ -77,8 +79,10 @@ fn make_deps(
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(registry),
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            registry as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: Arc::new(filesystem),
         resource_limiter: Arc::new(resource_limiter),
         runtime: Arc::new(runtime),
@@ -117,8 +121,9 @@ fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
 #[tokio::test]
 async fn test_run_with_all_success_adapters() {
     let tmp = TempDir::new().unwrap();
+    let registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
     let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+        Arc::clone(&registry),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -151,11 +156,6 @@ async fn test_run_with_all_success_adapters() {
     }
 
     // Image was pre-cached, so no pull should have been issued
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
     assert_eq!(registry.pull_count(), 0);
 }
 
@@ -168,7 +168,7 @@ async fn test_run_with_registry_pull_failure() {
     let tmp = TempDir::new().unwrap();
     // Registry has no cached image AND will fail on pull — handler must propagate the error.
     let deps = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -207,7 +207,7 @@ async fn test_run_with_registry_pull_failure() {
 async fn test_run_with_filesystem_setup_failure() {
     let tmp = TempDir::new().unwrap();
     let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+        Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new().with_setup_failure(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -246,7 +246,7 @@ async fn test_run_with_filesystem_setup_failure() {
 async fn test_run_with_limiter_create_failure() {
     let tmp = TempDir::new().unwrap();
     let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+        Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new(),
         MockLimiter::new().with_create_failure(),
         MockRuntime::new(),
@@ -287,7 +287,7 @@ async fn test_list_works_with_failing_adapters() {
     // All adapters configured to fail — list should still return an empty list
     // because it only touches DaemonState, not any infrastructure adapter.
     let _deps = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new().with_setup_failure(),
         MockLimiter::new().with_create_failure(),
         MockRuntime::new().with_spawn_failure(),
@@ -315,7 +315,7 @@ async fn test_stop_unknown_container_returns_error() {
     let state = make_state(&tmp);
 
     let deps = make_deps(
-        MockRegistry::new(),
+        Arc::new(MockRegistry::new()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -344,10 +344,11 @@ async fn test_stop_unknown_container_returns_error() {
 #[tokio::test]
 async fn test_pull_success_then_pull_failure_different_deps() {
     let tmp = TempDir::new().unwrap();
+    let registry_ok = Arc::new(MockRegistry::new());
 
     // First request: registry succeeds (image not cached, pulled on demand).
     let deps_ok = make_deps(
-        MockRegistry::new(), // no cached image, but pull succeeds
+        Arc::clone(&registry_ok), // no cached image, but pull succeeds
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -372,11 +373,6 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         "expected ContainerCreated for success deps, got {ok_response:?}"
     );
 
-    let registry_ok = deps_ok
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
     assert_eq!(
         registry_ok.pull_count(),
         1,
@@ -386,7 +382,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     // Second request: registry fails on pull — completely separate deps.
     let tmp2 = TempDir::new().unwrap();
     let deps_fail = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),

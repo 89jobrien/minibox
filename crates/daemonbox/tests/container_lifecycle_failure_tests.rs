@@ -6,6 +6,8 @@
 use daemonbox::handler;
 use daemonbox::state::{ContainerRecord, DaemonState};
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::DynImageRegistry;
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -46,8 +48,10 @@ fn make_deps(
     let image_store =
         Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(daemonbox::handler::HandlerDependencies {
-        registry: registry.clone() as Arc<dyn minibox_core::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: filesystem.clone() as Arc<dyn minibox_core::domain::FilesystemProvider>,
         resource_limiter: Arc::new(MockLimiter::new()),
         runtime: runtime.clone() as Arc<dyn minibox_core::domain::ContainerRuntime>,
@@ -146,8 +150,10 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
         minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter")).unwrap(),
     );
     let deps = Arc::new(daemonbox::handler::HandlerDependencies {
-        registry: registry.clone() as Arc<dyn minibox_core::domain::ImageRegistry>,
-        ghcr_registry: Arc::new(MockRegistry::new()),
+        registry_router: Arc::new(HostnameRegistryRouter::new(
+            registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
         filesystem: filesystem.clone() as Arc<dyn minibox_core::domain::FilesystemProvider>,
         resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
         runtime: runtime.clone() as Arc<dyn minibox_core::domain::ContainerRuntime>,

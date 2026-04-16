@@ -119,9 +119,8 @@ fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
 async fn test_handle_pull_success() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     let deps = Arc::new(HandlerDependencies {
         registry_router: Arc::new(HostnameRegistryRouter::new(
             mock_registry.clone() as DynImageRegistry,
@@ -316,9 +315,8 @@ async fn test_handle_run_with_cached_image() {
 async fn test_handle_run_pulls_uncached_image() {
     let temp_dir = TempDir::new().unwrap();
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     let deps = Arc::new(HandlerDependencies {
         registry_router: Arc::new(HostnameRegistryRouter::new(
             mock_registry.clone() as DynImageRegistry,
@@ -1880,7 +1878,10 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
     let deps = Arc::new(HandlerDependencies {
         registry_router: Arc::new(HostnameRegistryRouter::new(
             Arc::new(MockRegistry::new()) as DynImageRegistry,
-            [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+            [(
+                "ghcr.io",
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            )],
         )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
@@ -2225,7 +2226,10 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
     let deps = Arc::new(HandlerDependencies {
         registry_router: Arc::new(HostnameRegistryRouter::new(
             Arc::new(MockRegistry::new()) as DynImageRegistry,
-            [("ghcr.io", Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry)],
+            [(
+                "ghcr.io",
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+            )],
         )),
         filesystem: Arc::new(MockFilesystem::new()),
         resource_limiter: Arc::new(MockLimiter::new()),
