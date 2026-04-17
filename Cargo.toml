@@ -10,6 +10,7 @@ members = [
     "crates/minibox-macros",
     "crates/daemonbox",
     "crates/macbox",
+    "crates/tailbox",
     "crates/winbox",
     "crates/minibox-llm",
     "crates/minibox-secrets",
