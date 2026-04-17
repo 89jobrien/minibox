@@ -142,6 +142,8 @@ use minibox_core::image::registry::RegistryClient;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
+#[cfg(all(target_os = "linux", feature = "tailnet"))]
+use tailbox::{TailnetConfig, TailnetNetwork};
 #[cfg(target_os = "linux")]
 use tokio::net::UnixListener;
 #[cfg(target_os = "linux")]
@@ -495,6 +497,19 @@ async fn main() -> Result<()> {
         match mode.as_str() {
             "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
             "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+            #[cfg(feature = "tailnet")]
+            "tailnet" => {
+                let tailnet_cfg = TailnetConfig {
+                    auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
+                    key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
+                        .unwrap_or_else(|_| "tailscale-auth-key".to_string()),
+                };
+                Arc::new(
+                    TailnetNetwork::new(tailnet_cfg)
+                        .await
+                        .context("TailnetNetwork init failed")?,
+                )
+            }
             _ => Arc::new(NoopNetwork::new()),
         }
     };

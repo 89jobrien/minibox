@@ -16,8 +16,10 @@ path = "src/main.rs"
 default = ["metrics", "otel"]
 metrics = ["daemonbox/metrics"]
 otel    = ["daemonbox/otel"]
+tailnet = ["dep:tailbox"]
 
 [dependencies]
+tailbox = { path = "../tailbox", optional = true }
 daemonbox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
