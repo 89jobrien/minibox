@@ -1,5 +1,11 @@
-use anyhow::{bail, Result};
+use anyhow::{Context, Result, bail};
 use minibox_core::domain::NetworkConfig;
+use minibox_secrets::{
+    CredentialProvider, CredentialProviderChain,
+    domain::{Credential, CredentialRef},
+};
+use minibox_secrets::adapters::env::EnvProvider;
+use secrecy::ExposeSecret;
 
 /// Resolve a Tailscale auth key from the priority chain:
 ///
@@ -8,10 +14,7 @@ use minibox_core::domain::NetworkConfig;
 ///    `default_secret_name` (default `"tailscale-auth-key"`).
 /// 3. `TAILSCALE_AUTH_KEY` environment variable.
 /// 4. `Err(...)` — no key available.
-pub async fn resolve_auth_key(
-    config: &NetworkConfig,
-    default_secret_name: &str,
-) -> Result<String> {
+pub async fn resolve_auth_key(config: &NetworkConfig, default_secret_name: &str) -> Result<String> {
     // Step 1: inline key
     if let Some(key) = config.tailnet_auth_key.as_deref()
         && !key.is_empty()
@@ -45,8 +48,29 @@ pub async fn resolve_auth_key(
 }
 
 /// Look up a secret from the minibox-secrets provider chain.
+///
+/// Converts `name` to an env-var ref by uppercasing and replacing `-` with `_`,
+/// then queries an `EnvProvider`-backed `CredentialProviderChain`.
+///
+/// Example: `"tailscale-auth-key"` → `env:TAILSCALE_AUTH_KEY:api_key`
 async fn lookup_secret(name: &str) -> Result<String> {
-    // Full provider chain wired in Task 3. Stub: env-based lookup only.
-    let _ = name;
-    Err(anyhow::anyhow!("tailnet: secrets provider not yet configured"))
+    let env_var = name.to_uppercase().replace('-', "_");
+    let ref_str = format!("env:{env_var}:api_key");
+    let cred_ref = CredentialRef::parse(&ref_str)
+        .with_context(|| format!("tailnet: failed to build credential ref for '{name}'"))?;
+
+    let chain = CredentialProviderChain::new(vec![Box::new(EnvProvider)]);
+    let fetched = chain
+        .get(&cred_ref)
+        .await
+        .with_context(|| format!("tailnet: secret '{name}' not found in provider chain"))?;
+
+    match &fetched.credential {
+        Credential::ApiKey(k) => Ok(k.key.expose_secret().to_string()),
+        Credential::Token(t) => Ok(t.token.expose_secret().to_string()),
+        other => bail!(
+            "tailnet: unexpected credential kind {:?} for secret '{name}'",
+            std::mem::discriminant(other)
+        ),
+    }
 }
