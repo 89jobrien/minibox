@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::domain::{AsAny, NetworkConfig, NetworkProvider, NetworkStats, TailnetMode};
 use std::collections::HashMap;
@@ -21,7 +21,9 @@ pub struct TailnetNetwork {
     /// Per-container devices (PerContainer mode). Keyed by container_id.
     devices: Arc<Mutex<HashMap<String, tailscale::Device>>>,
     /// Shared gateway device (Gateway mode). Lazily initialised on first use.
-    gateway_device: Arc<Mutex<Option<tailscale::Device>>>,
+    /// The `Ipv4Addr` is cached alongside the device so subsequent calls to
+    /// `setup_gateway` can read the IP without holding the lock across an await.
+    gateway_device: Arc<Mutex<Option<(tailscale::Device, std::net::Ipv4Addr)>>>,
 }
 
 impl TailnetNetwork {
@@ -37,13 +39,19 @@ impl TailnetNetwork {
     /// Path to the per-container key file.
     fn container_key_path(id: &str) -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-        PathBuf::from(home).join(".mbx").join("tailnet").join(format!("{id}.json"))
+        PathBuf::from(home)
+            .join(".mbx")
+            .join("tailnet")
+            .join(format!("{id}.json"))
     }
 
     /// Path to the gateway key file.
     fn gateway_key_path() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-        PathBuf::from(home).join(".mbx").join("tailnet").join("gateway.json")
+        PathBuf::from(home)
+            .join(".mbx")
+            .join("tailnet")
+            .join("gateway.json")
     }
 
     /// Path to the net-context JSON written after setup.
@@ -58,36 +66,51 @@ impl TailnetNetwork {
         let mut guard = self.gateway_device.lock().await;
 
         if guard.is_none() {
+            tracing::info!("tailnet: starting gateway device");
             let key_path = Self::gateway_key_path();
-            // NOTE: tailscale-rs v0.2 load_key_file creates parent dirs automatically.
+            if let Some(parent) = key_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("create gateway key dir {}", parent.display()))?;
+            }
+            // NOTE: BadFormatBehavior::Overwrite — a stale or corrupted key file from a previous
+            // crashed run must not block startup; overwriting is safe because the key material
+            // is re-derived from the auth key on the next join.
             let key_state =
                 tailscale::load_key_file(&key_path, tailscale::BadFormatBehavior::Overwrite)
                     .await
-                    .map_err(|e| anyhow::anyhow!("tailnet: load_key_file failed: {e}"))?;
+                    .context("tailnet: load gateway key state")?;
 
             // NOTE: tailscale::Config has no auth_key field — auth key is the second
             // parameter to Device::new, not part of Config.
-            let cfg = tailscale::Config {
-                key_state,
-                ..Default::default()
-            };
-            let device = tailscale::Device::new(&cfg, Some(auth_key.to_string()))
-                .await
-                .map_err(|e| anyhow::anyhow!("tailnet: Device::new failed: {e}"))?;
+            let device = tailscale::Device::new(
+                &tailscale::Config {
+                    key_state,
+                    ..Default::default()
+                },
+                Some(auth_key.to_string()),
+            )
+            .await
+            .context("tailnet: gateway device init failed")?;
 
-            *guard = Some(device);
+            // Fetch IP while still initialising — holds lock, but only during first init.
+            let ip = device
+                .ipv4_addr()
+                .await
+                .context("tailnet: gateway ipv4_addr failed")?;
+            *guard = Some((device, ip));
         }
 
-        // SAFETY: we just ensured it is Some above.
-        let device = guard.as_ref().expect("gateway device must be Some");
-        let tailnet_ip = device
-            .ipv4_addr()
-            .await
-            .map_err(|e| anyhow::anyhow!("tailnet: ipv4_addr failed: {e}"))?;
+        // Read IP from stored state — no additional await needed, lock released after this block.
+        let tailnet_ip = guard
+            .as_ref()
+            .expect("just initialised")
+            .1
+            .to_string();
+        drop(guard); // explicitly release before JSON work
 
         let ctx = serde_json::json!({
             "mode": "gateway",
-            "tailnet_ip": tailnet_ip.to_string(),
+            "tailnet_ip": tailnet_ip,
             "container_id": container_id,
         });
         Ok(ctx.to_string())
@@ -98,7 +121,9 @@ impl TailnetNetwork {
     /// Returns the context JSON string.
     async fn setup_per_container(&self, container_id: &str, auth_key: &str) -> Result<String> {
         let key_path = Self::container_key_path(container_id);
-        // NOTE: tailscale-rs v0.2 load_key_file creates parent dirs automatically.
+        // NOTE: BadFormatBehavior::Overwrite — a stale or corrupted key file from a previous
+        // crashed run must not block startup; overwriting is safe because the key material
+        // is re-derived from the auth key on the next join.
         let key_state =
             tailscale::load_key_file(&key_path, tailscale::BadFormatBehavior::Overwrite)
                 .await
@@ -154,12 +179,8 @@ impl NetworkProvider for TailnetNetwork {
         let auth_key = resolve_auth_key(config, &self.config.key_secret_name).await?;
 
         let ctx_json = match config.tailnet_mode {
-            TailnetMode::Gateway => {
-                self.setup_gateway(container_id, &auth_key).await?
-            }
-            TailnetMode::PerContainer => {
-                self.setup_per_container(container_id, &auth_key).await?
-            }
+            TailnetMode::Gateway => self.setup_gateway(container_id, &auth_key).await?,
+            TailnetMode::PerContainer => self.setup_per_container(container_id, &auth_key).await?,
         };
 
         // Write context JSON to /run/minibox/net/{container_id}.json (best-effort).
