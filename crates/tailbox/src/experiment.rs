@@ -7,15 +7,18 @@ static TSRS_EXPERIMENT_SET: std::sync::Once = std::sync::Once::new();
 ///
 /// # Safety
 ///
-/// `SAFETY:` `set_var` is called inside a `Once` block. The only callers of
-/// `TailnetNetwork::setup()` are async tasks dispatched by `miniboxd` after
-/// tracing + adapter initialisation is complete. No other thread reads or
-/// writes `TS_RS_EXPERIMENT`. The `Once` guarantee prevents concurrent
-/// calls, satisfying the Rust 2024 requirement that `set_var` be called in
-/// a context where no other threads are reading the env.
+/// `set_var` is called inside a `Once` block, guaranteeing it runs exactly
+/// once. Callers of `TailnetNetwork::setup()` must not call `set_var` or
+/// `remove_var` on `TS_RS_EXPERIMENT` concurrently. Reads by tailscale-rs
+/// are safe concurrently with a completed `set_var` — the `Once::call_once`
+/// ensures the write is fully visible before any `Device` construction
+/// proceeds.
 pub fn ensure_tsrs_experiment() {
     TSRS_EXPERIMENT_SET.call_once(|| {
-        // SAFETY: called exactly once; no concurrent readers of TS_RS_EXPERIMENT.
+        // SAFETY: called exactly once via `Once`; no concurrent set_var/remove_var
+        // on TS_RS_EXPERIMENT. Reads by tailscale-rs are safe concurrently with a
+        // completed set_var — the Once::call_once ensures the write is fully visible
+        // before any Device construction proceeds.
         unsafe {
             std::env::set_var("TS_RS_EXPERIMENT", "this_is_unstable_software");
         }
