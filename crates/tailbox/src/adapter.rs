@@ -101,11 +101,7 @@ impl TailnetNetwork {
         }
 
         // Read IP from stored state — no additional await needed, lock released after this block.
-        let tailnet_ip = guard
-            .as_ref()
-            .expect("just initialised")
-            .1
-            .to_string();
+        let tailnet_ip = guard.as_ref().expect("just initialised").1.to_string();
         drop(guard); // explicitly release before JSON work
 
         let ctx = serde_json::json!({
@@ -127,7 +123,7 @@ impl TailnetNetwork {
         let key_state =
             tailscale::load_key_file(&key_path, tailscale::BadFormatBehavior::Overwrite)
                 .await
-                .map_err(|e| anyhow::anyhow!("tailnet: load_key_file failed: {e}"))?;
+                .context("tailnet: load_key_file failed")?;
 
         // NOTE: auth key passed as second arg to Device::new, not via Config.
         let cfg = tailscale::Config {
@@ -136,12 +132,12 @@ impl TailnetNetwork {
         };
         let device = tailscale::Device::new(&cfg, Some(auth_key.to_string()))
             .await
-            .map_err(|e| anyhow::anyhow!("tailnet: Device::new failed: {e}"))?;
+            .context("tailnet: Device::new failed")?;
 
         let tailnet_ip = device
             .ipv4_addr()
             .await
-            .map_err(|e| anyhow::anyhow!("tailnet: ipv4_addr failed: {e}"))?;
+            .context("tailnet: ipv4_addr failed")?;
 
         let tailnet_ip_str = tailnet_ip.to_string();
 
@@ -176,7 +172,12 @@ impl NetworkProvider for TailnetNetwork {
     async fn setup(&self, container_id: &str, config: &NetworkConfig) -> Result<String> {
         ensure_tsrs_experiment();
 
-        let auth_key = resolve_auth_key(config, &self.config.key_secret_name).await?;
+        let auth_key = resolve_auth_key(
+            config,
+            &self.config.key_secret_name,
+            self.config.auth_key.as_deref(),
+        )
+        .await?;
 
         let ctx_json = match config.tailnet_mode {
             TailnetMode::Gateway => self.setup_gateway(container_id, &auth_key).await?,

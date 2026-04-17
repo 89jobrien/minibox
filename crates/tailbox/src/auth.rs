@@ -10,11 +10,17 @@ use secrecy::ExposeSecret;
 /// Resolve a Tailscale auth key from the priority chain:
 ///
 /// 1. `config.tailnet_auth_key` — inline key in the `RunContainer` request.
-/// 2. `minibox-secrets` lookup via `config.tailnet_secret_name` (if set) or
+/// 2. `daemon_key` — daemon-level key from `TailnetConfig.auth_key` (e.g. `TAILSCALE_AUTH_KEY`
+///    set at daemon startup).
+/// 3. `minibox-secrets` lookup via `config.tailnet_secret_name` (if set) or
 ///    `default_secret_name` (default `"tailscale-auth-key"`).
-/// 3. `TAILSCALE_AUTH_KEY` environment variable.
-/// 4. `Err(...)` — no key available.
-pub async fn resolve_auth_key(config: &NetworkConfig, default_secret_name: &str) -> Result<String> {
+/// 4. `TAILSCALE_AUTH_KEY` environment variable.
+/// 5. `Err(...)` — no key available.
+pub async fn resolve_auth_key(
+    config: &NetworkConfig,
+    default_secret_name: &str,
+    daemon_key: Option<&str>,
+) -> Result<String> {
     // Step 1: inline key
     if let Some(key) = config.tailnet_auth_key.as_deref()
         && !key.is_empty()
@@ -22,7 +28,14 @@ pub async fn resolve_auth_key(config: &NetworkConfig, default_secret_name: &str)
         return Ok(key.to_string());
     }
 
-    // Step 2: minibox-secrets lookup
+    // Step 2: daemon-level config key (from TailnetConfig.auth_key)
+    if let Some(key) = daemon_key
+        && !key.is_empty()
+    {
+        return Ok(key.to_string());
+    }
+
+    // Step 3: minibox-secrets lookup
     let secret_name = config
         .tailnet_secret_name
         .as_deref()
@@ -39,7 +52,7 @@ pub async fn resolve_auth_key(config: &NetworkConfig, default_secret_name: &str)
         }
     }
 
-    // Step 3: environment variable
+    // Step 4: environment variable
     if let Ok(key) = std::env::var("TAILSCALE_AUTH_KEY")
         && !key.is_empty()
     {

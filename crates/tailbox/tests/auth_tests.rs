@@ -22,7 +22,9 @@ async fn inline_key_takes_precedence() {
     let mut cfg = tailnet_config();
     cfg.tailnet_auth_key = Some("tskey-inline".to_string());
 
-    let key = resolve_auth_key(&cfg, "tailscale-auth-key").await.unwrap();
+    let key = resolve_auth_key(&cfg, "tailscale-auth-key", None)
+        .await
+        .unwrap();
     assert_eq!(key, "tskey-inline");
 }
 
@@ -30,7 +32,9 @@ async fn inline_key_takes_precedence() {
 async fn env_var_fallback() {
     let _g = ENV_LOCK.lock().unwrap();
     // SAFETY: serialised by ENV_LOCK.
-    unsafe { std::env::remove_var("TAILSCALE_AUTH_KEY"); }
+    unsafe {
+        std::env::remove_var("TAILSCALE_AUTH_KEY");
+    }
     // SAFETY: serialised by ENV_LOCK.
     unsafe {
         std::env::set_var("TAILSCALE_AUTH_KEY", "tskey-from-env");
@@ -38,7 +42,9 @@ async fn env_var_fallback() {
 
     let cfg = tailnet_config(); // tailnet_auth_key = None
 
-    let key = resolve_auth_key(&cfg, "tailscale-auth-key").await.unwrap();
+    let key = resolve_auth_key(&cfg, "tailscale-auth-key", None)
+        .await
+        .unwrap();
     assert_eq!(key, "tskey-from-env");
 
     unsafe { std::env::remove_var("TAILSCALE_AUTH_KEY") };
@@ -53,7 +59,7 @@ async fn no_key_returns_error() {
     }
 
     let cfg = tailnet_config();
-    let result = resolve_auth_key(&cfg, "tailscale-auth-key").await;
+    let result = resolve_auth_key(&cfg, "tailscale-auth-key", None).await;
     assert!(result.is_err(), "expected error when no key available");
     let err = result.unwrap_err().to_string();
     assert!(

@@ -136,7 +136,8 @@ pub struct NetworkConfig {
 
     /// Inline Tailscale auth key. Takes precedence over secret lookup.
     /// Only used when `mode == NetworkMode::Tailnet`.
-    #[serde(default)]
+    /// `skip_serializing` prevents accidental key exposure in debug logs.
+    #[serde(default, skip_serializing)]
     pub tailnet_auth_key: Option<String>,
 
     /// minibox-secrets key name for Tailscale auth key lookup.
