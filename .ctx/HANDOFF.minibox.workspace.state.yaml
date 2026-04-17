@@ -1,0 +1,30 @@
+project: minibox
+branch: main
+build: IN PROGRESS — cargo check passed; cargo test blocked on macbox compile errors (3 errors in lib test)
+tests: BLOCKED — cargo test failed due to macbox compilation. 438 core tests passing in staging (nextest run --lib).
+touched_files:
+- Cargo.toml
+- crates/minibox-core/src/domain/networking.rs
+- crates/miniboxd/Cargo.toml
+- crates/miniboxd/src/main.rs
+- crates/tailbox/Cargo.toml
+- crates/tailbox/src/adapter.rs
+- crates/tailbox/src/auth.rs
+- crates/tailbox/src/config.rs
+- crates/tailbox/src/experiment.rs
+- crates/tailbox/src/lib.rs
+- crates/tailbox/tests/adapter_tests.rs
+- crates/tailbox/tests/auth_tests.rs
+- docs/superpowers/plans/2026-04-17-tailnet-integration.md
+- docs/superpowers/specs/2026-04-17-tailnet-integration-design.md
+- crates/daemonbox/tests/conformance_helpers.rs
+- crates/daemonbox/tests/conformance_tests.rs
+- crates/mbx/src/adapters/colima.rs
+- crates/minibox-core/src/domain.rs
+- crates/xtask/src/main.rs
+- crates/xtask/src/preflight.rs
+- Cargo.lock
+notes: 'Uncommitted changes in working tree (git status M): daemonbox conformance tests,
+  colima adapter, domain.rs, xtask preflight. macbox VZ adapter has 3 unresolved compile
+  errors. Run cargo xtask test-unit after fixing macbox to validate core suite (438 tests).'
+generated: '2026-04-17T'
