@@ -1,10 +1,10 @@
 use anyhow::{Context, Result, bail};
 use minibox_core::domain::NetworkConfig;
+use minibox_secrets::adapters::env::EnvProvider;
 use minibox_secrets::{
     CredentialProvider, CredentialProviderChain,
     domain::{Credential, CredentialRef},
 };
-use minibox_secrets::adapters::env::EnvProvider;
 use secrecy::ExposeSecret;
 
 /// Resolve a Tailscale auth key from the priority chain:
@@ -27,10 +27,16 @@ pub async fn resolve_auth_key(config: &NetworkConfig, default_secret_name: &str)
         .tailnet_secret_name
         .as_deref()
         .unwrap_or(default_secret_name);
-    if let Ok(key) = lookup_secret(secret_name).await
-        && !key.is_empty()
-    {
-        return Ok(key);
+    match lookup_secret(secret_name).await {
+        Ok(key) if !key.is_empty() => return Ok(key),
+        Ok(_) => {} // empty string — fall through
+        Err(e) => {
+            tracing::warn!(
+                secret_name = secret_name,
+                error = %e,
+                "tailnet: secrets lookup failed, falling through to env var"
+            );
+        }
     }
 
     // Step 3: environment variable

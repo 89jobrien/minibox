@@ -30,6 +30,8 @@ async fn inline_key_takes_precedence() {
 async fn env_var_fallback() {
     let _g = ENV_LOCK.lock().unwrap();
     // SAFETY: serialised by ENV_LOCK.
+    unsafe { std::env::remove_var("TAILSCALE_AUTH_KEY"); }
+    // SAFETY: serialised by ENV_LOCK.
     unsafe {
         std::env::set_var("TAILSCALE_AUTH_KEY", "tskey-from-env");
     }
@@ -54,5 +56,8 @@ async fn no_key_returns_error() {
     let result = resolve_auth_key(&cfg, "tailscale-auth-key").await;
     assert!(result.is_err(), "expected error when no key available");
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("no auth key"), "error should mention 'no auth key', got: {err}");
+    assert!(
+        err.contains("no auth key"),
+        "error should mention 'no auth key', got: {err}"
+    );
 }
