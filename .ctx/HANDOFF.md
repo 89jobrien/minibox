@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-04-17)
+# Handoff — minibox (2026-04-18)
 
 **Branch:** main | **Build:** ok | **Tests:** 438/438 pass (nextest)
 
@@ -24,17 +24,14 @@
 
 ## Log
 
+- 2026-04-18: fix(xtask) set_current_dir before Shell::new() — survives deleted worktree CWDs.
+  chore: bump 0.18.1→0.18.2, pushed. [6fb238e, bf580df]
 - 2026-04-17: tailbox crate: Tailscale networking integration — TailnetNetwork adapter,
   TailnetConfig, auth key chain (1Password/env/file), gateway caching, per-container
   setup/cleanup. miniboxd wired with tailnet feature flag. 11 commits (9bd9de8..67896ac).
-  Uncommitted: daemonbox, colima, domain, xtask changes remain in working tree.
-- 2026-04-17: orca-strait Wave 1+2 — TestBackendDescriptor (#69, 74bdabb), xtask ToolProbe
-  preflight (#95, 81be990), commit/build/push conformance tests (#62,#67,#71, a3dcf00),
-  PtyConfig+PtyAllocator port (#83, 64fe60e). Closed T-arch GH issues #101/#102/#105/#106.
-  438/438 tests pass.
-- 2026-04-17: minibox-69 (ContainerState unification), minibox-26 (nsenter exec, eliminates
-  fork-in-Tokio UB), minibox-56 confirmed complete. [2668537, 08e07f8]
+- 2026-04-17: orca-strait Wave 1+2 — TestBackendDescriptor (#69), xtask ToolProbe preflight
+  (#95), conformance tests commit/build/push (#62,#67,#71), PtyConfig+PtyAllocator (#83).
+  Closed T-arch GH issues #101/#102/#105/#106. 438/438 tests pass.
+- 2026-04-17: minibox-69 (ContainerState unification), minibox-26 (nsenter exec). [2668537, 08e07f8]
 - 2026-04-17: Test coverage sprint — escape detection, GKE adapter suite, lifecycle failures,
-  Colima conformance; minibox-oci extracted (b3c8b5f). [a4ccf4c, b3c8b5f, 92578fd]
-- 2026-04-16: P1 sprint — 9 regression tests, BackendRootfsMetadata contract, conformance
-  boundary spec, 30 GH issues labelled. [6d6e6d8, 49252f1, 7109826]
+  Colima conformance; minibox-oci extracted. [a4ccf4c, b3c8b5f, 92578fd]

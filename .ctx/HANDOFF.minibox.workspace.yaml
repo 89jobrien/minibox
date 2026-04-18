@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '2026-04-17'
+updated: '2026-04-18'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -221,6 +221,12 @@ items:
   - crates/xtask/src/preflight.rs
   extra: []
 log:
+- date: '2026-04-18'
+  summary: 'fix(xtask): set_current_dir(root) before Shell::new() — survives deleted
+    worktree CWDs. chore: bump 0.18.1→0.18.2. pushed to origin/main. (6fb238e, bf580df)'
+  commits:
+  - 6fb238e
+  - bf580df
 - date: '2026-04-17'
   summary: 'tailbox integration complete: TailnetNetwork adapter, TailnetConfig, auth
     chain (1Password→env→file fallback), gateway IP caching, per-container setup/cleanup.
