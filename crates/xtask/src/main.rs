@@ -31,14 +31,17 @@ mod vm_run;
 
 fn main() -> Result<()> {
     let task = env::args().nth(1);
-    let sh = Shell::new()?;
 
-    // Run from workspace root
+    // Set process CWD to workspace root before Shell::new() so xshell does not
+    // inherit a stale/missing directory (e.g. a deleted git worktree).
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap();
+    env::set_current_dir(root)?;
+
+    let sh = Shell::new()?;
     sh.change_dir(root);
 
     match task.as_deref() {
@@ -47,10 +50,7 @@ fn main() -> Result<()> {
             bump::bump(root, &level)
         }
         Some("preflight") => {
-            preflight::require_tools(
-                &preflight::ProcessProbe,
-                &["cargo", "cargo-nextest", "gh"],
-            )
+            preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
         }
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
