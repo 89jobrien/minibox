@@ -51,7 +51,10 @@ pub fn require_tools<P: ToolProbe>(probe: &P, tools: &[&str]) -> anyhow::Result<
     if failures.is_empty() {
         Ok(())
     } else {
-        anyhow::bail!("preflight failed — missing tools:\n  {}", failures.join("\n  "))
+        anyhow::bail!(
+            "preflight failed — missing tools:\n  {}",
+            failures.join("\n  ")
+        )
     }
 }
 

@@ -27,7 +27,10 @@ async fn stats_returns_default() {
 async fn cleanup_unknown_container_is_ok() {
     let net = TailnetNetwork::new(TailnetConfig::default()).await.unwrap();
     let result = net.cleanup("never-existed").await;
-    assert!(result.is_ok(), "cleanup of unknown container should be ok: {result:?}");
+    assert!(
+        result.is_ok(),
+        "cleanup of unknown container should be ok: {result:?}"
+    );
 }
 
 /// Gateway mode integration test — requires real tailnet.

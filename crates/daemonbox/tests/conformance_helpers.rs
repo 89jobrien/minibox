@@ -27,8 +27,8 @@
 //! adapter, and each invocation returns a fresh instance.
 
 use daemonbox::handler::{
-    BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
-    NoopImageLoader, PtySessionRegistry,
+    BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps, NoopImageLoader,
+    PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};

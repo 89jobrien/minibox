@@ -706,8 +706,12 @@ mod commit_conformance {
         let descriptor_a = mock_backend();
         let descriptor_b = mock_backend();
 
-        if !descriptor_a.capabilities.supports(BackendCapability::Commit)
-            || !descriptor_b.capabilities.supports(BackendCapability::Commit)
+        if !descriptor_a
+            .capabilities
+            .supports(BackendCapability::Commit)
+            || !descriptor_b
+                .capabilities
+                .supports(BackendCapability::Commit)
         {
             return;
         }
@@ -765,9 +769,8 @@ mod build_conformance {
 
     fn mock_backend() -> BackendDescriptor {
         let builder = Arc::new(MockImageBuilder::new());
-        BackendDescriptor::new("mock-build-backend").with_builder(move || {
-            Arc::clone(&builder) as minibox_core::domain::DynImageBuilder
-        })
+        BackendDescriptor::new("mock-build-backend")
+            .with_builder(move || Arc::clone(&builder) as minibox_core::domain::DynImageBuilder)
     }
 
     fn no_build_backend() -> BackendDescriptor {
@@ -778,7 +781,10 @@ mod build_conformance {
     #[tokio::test]
     async fn build_is_skipped_when_capability_absent() {
         let descriptor = no_build_backend();
-        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::BuildFromContext)
+        {
             return;
         }
         panic!("expected no BuildFromContext capability for no_build_backend");
@@ -788,7 +794,10 @@ mod build_conformance {
     #[tokio::test]
     async fn build_minimal_dockerfile_succeeds() {
         let descriptor = mock_backend();
-        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::BuildFromContext)
+        {
             return;
         }
 
@@ -819,7 +828,10 @@ mod build_conformance {
     #[tokio::test]
     async fn build_preserves_name_and_tag_through_build() {
         let descriptor = mock_backend();
-        if !descriptor.capabilities.supports(BackendCapability::BuildFromContext) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::BuildFromContext)
+        {
             return;
         }
 
@@ -870,9 +882,8 @@ mod push_conformance {
     fn mock_backend() -> (BackendDescriptor, Arc<MockImagePusher>) {
         let pusher = Arc::new(MockImagePusher::new());
         let pusher_clone = Arc::clone(&pusher);
-        let descriptor = BackendDescriptor::new("mock-push-backend").with_pusher(move || {
-            Arc::clone(&pusher_clone) as minibox_core::domain::DynImagePusher
-        });
+        let descriptor = BackendDescriptor::new("mock-push-backend")
+            .with_pusher(move || Arc::clone(&pusher_clone) as minibox_core::domain::DynImagePusher);
         (descriptor, pusher)
     }
 
@@ -884,7 +895,10 @@ mod push_conformance {
     #[tokio::test]
     async fn push_is_skipped_when_capability_absent() {
         let descriptor = no_push_backend();
-        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry)
+        {
             return;
         }
         panic!("expected no PushToRegistry capability for no_push_backend");
@@ -894,7 +908,10 @@ mod push_conformance {
     #[tokio::test]
     async fn push_to_mock_registry_returns_digest() {
         let (descriptor, _pusher) = mock_backend();
-        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry)
+        {
             return;
         }
 
@@ -921,7 +938,10 @@ mod push_conformance {
     #[tokio::test]
     async fn push_reported_digest_matches_image_content() {
         let (descriptor, pusher_handle) = mock_backend();
-        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry)
+        {
             return;
         }
 
@@ -947,7 +967,10 @@ mod push_conformance {
     #[tokio::test]
     async fn push_makes_tag_visible_in_mock_registry() {
         let (descriptor, pusher_handle) = mock_backend();
-        if !descriptor.capabilities.supports(BackendCapability::PushToRegistry) {
+        if !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry)
+        {
             return;
         }
 

@@ -1153,7 +1153,10 @@ pub struct MockPtyAllocator {
 impl MockPtyAllocator {
     /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
     pub fn new(master_fd: i32, slave_fd: i32) -> Self {
-        Self { master_fd, slave_fd }
+        Self {
+            master_fd,
+            slave_fd,
+        }
     }
 }
 
@@ -1680,15 +1683,26 @@ mod tests {
         #[test]
         fn null_pty_allocator_returns_err() {
             let alloc = NullPtyAllocator;
-            let cfg = PtyConfig { enabled: true, cols: 80, rows: 24 };
-            assert!(alloc.allocate(&cfg).is_err(), "NullPtyAllocator must always return Err");
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
+            assert!(
+                alloc.allocate(&cfg).is_err(),
+                "NullPtyAllocator must always return Err"
+            );
         }
 
         #[cfg(feature = "test-utils")]
         #[test]
         fn mock_pty_allocator_returns_configured_handle() {
             let alloc = MockPtyAllocator::new(5, 6);
-            let cfg = PtyConfig { enabled: true, cols: 80, rows: 24 };
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
             let handle = alloc.allocate(&cfg).expect("MockPtyAllocator must succeed");
             assert_eq!(handle.master_fd, 5);
             assert_eq!(handle.slave_fd, 6);

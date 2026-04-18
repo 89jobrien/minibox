@@ -799,7 +799,12 @@ pub(crate) fn validate_lima_paths(
 /// Build the shell snippet that mounts one bind mount inside the Lima VM.
 ///
 /// The snippet is injected into the spawn script before the `unshare` call.
-/// It targets rootfs-relative paths so after chroot the container sees them at container_path.
+/// It targets rootfs-relative paths so after chroot the container sees them at
+/// `container_path`.
+///
+/// The exported rootfs is read-only at this stage, so the target must already
+/// exist in the image. Creating it lazily with `mkdir -p` fails for paths like
+/// `/workspace` and obscures the real problem.
 pub(crate) fn bind_mount_shell_snippet(
     m: &minibox_core::domain::BindMount,
     rootfs: &std::path::Path,
@@ -811,13 +816,16 @@ pub(crate) fn bind_mount_shell_snippet(
         .unwrap_or(&m.container_path);
     let target = rootfs.join(container_rel);
     let target_display = target.display();
+    let target_check = format!(
+        "sudo test -e '{target_display}' || (echo 'bind mount target {target_display} does not exist in image rootfs' >&2; exit 1)"
+    );
 
     if m.read_only {
         format!(
-            "sudo mkdir -p '{target_display}' && sudo mount --bind '{host}' '{target_display}' && sudo mount -o remount,ro,bind '{target_display}'"
+            "{target_check} && sudo mount --bind '{host}' '{target_display}' && sudo mount -o remount,ro,bind '{target_display}'"
         )
     } else {
-        format!("sudo mkdir -p '{target_display}' && sudo mount --bind '{host}' '{target_display}'")
+        format!("{target_check} && sudo mount --bind '{host}' '{target_display}'")
     }
 }
 
@@ -1463,9 +1471,11 @@ mod bind_mount_tests {
             read_only: false,
         };
         let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("test -e"), "snippet: {snippet}");
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
         assert!(snippet.contains("/rootfs/guest"), "snippet: {snippet}");
+        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
     }
 
     #[test]
@@ -1476,10 +1486,12 @@ mod bind_mount_tests {
             read_only: true,
         };
         let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("test -e"), "snippet: {snippet}");
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(
             snippet.contains("remount,ro,bind") || snippet.contains("remount,bind,ro"),
             "snippet: {snippet}"
         );
+        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
     }
 }
