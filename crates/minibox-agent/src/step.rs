@@ -7,8 +7,8 @@
 //! `invoke()` would be unreachable through a bare `type CruxLlmStep = ...`. The
 //! newtype also hides the generic parameter from callers.
 
-use crux_agentic::provider::{LlmRequest, LlmResponse};
 use crux_agentic::LlmStep;
+use crux_agentic::provider::{LlmRequest, LlmResponse};
 use cruxai_core::context::Context;
 use cruxai_core::prelude::CruxErr;
 

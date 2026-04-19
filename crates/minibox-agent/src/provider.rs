@@ -9,8 +9,8 @@
 
 use std::sync::Arc;
 
-use crux_agentic::provider::{LlmRequest, LlmResponse};
 use crux_agentic::LlmProvider;
+use crux_agentic::provider::{LlmRequest, LlmResponse};
 use cruxai_core::prelude::CruxErr;
 use minibox_llm::{CompletionRequest, FallbackChain};
 
