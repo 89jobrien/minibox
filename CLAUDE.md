@@ -371,14 +371,31 @@ Image pulls enforce limits to prevent DoS:
 
 ## Current Limitations
 
-Understanding these helps prioritize feature development:
+See `docs/FEATURE_MATRIX.md` for the full per-platform breakdown. Key constraints as of
+2026-04-19:
 
-- **No networking setup**: Containers get isolated network namespace but no bridge/veth configuration
-- **No user namespace remapping**: Runs as root inside containers (no rootless support)
-- **No persistent state**: Daemon restart loses all container records
-- **No exec command**: Cannot run commands in existing containers
-- **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist in `mbx/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, `colima`, or `vz`.
+- **Networking is opt-in and experimental**: Bridge networking (`MINIBOX_NETWORK_MODE=bridge`)
+  is wired but has limited test coverage. Containers get an isolated network namespace by
+  default with no external connectivity. Port forwarding and in-container DNS are not
+  implemented.
+- **No user namespace remapping**: Runs as root inside containers (no rootless support).
+- **Container records persist across restarts, but running processes do not reattach**: State
+  is saved to disk and loaded at startup. Containers that were running when the daemon stopped
+  appear as records but are not reattached — their PIDs are gone.
+- **Exec is Linux native only**: `minibox exec` / `handle_exec` uses `setns` and is wired only
+  for the `native` adapter. GKE, Colima, and macOS adapters return an error.
+- **No Dockerfile parser**: `MiniboxImageBuilder` exists but there is no Dockerfile DSL. Build
+  support is experimental and native-only.
+- **Push/commit are experimental and native-only**: `OciPushAdapter` and `overlay_commit_adapter`
+  are wired in the native suite only and have limited test coverage.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist as
+  library code but are not wired into `miniboxd`. Passing unrecognized values to
+  `MINIBOX_ADAPTER` causes the daemon to exit at startup.
+- **Windows is a stub**: `winbox::start()` returns an error unconditionally. Phase 2 work
+  (Named Pipe server, HCS/WSL2 adapter wiring) has not started.
+- **Protocol type duplication**: `DaemonRequest` is defined independently in both
+  `minibox-core/src/protocol.rs` and `mbx/src/protocol.rs`. New variants must be added to
+  both files. See `docs/STABILITY_CHECKLIST.md`.
 
 ## Tracing Contract
 
