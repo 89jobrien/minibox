@@ -57,6 +57,12 @@
 //! - [`ColimaFilesystem`]: Colima-based filesystem provider
 //! - [`ColimaLimiter`]: Colima-based resource limiter
 //!
+//! **Cross-Platform (macOS via SmolVM):**
+//! - [`SmolVmRegistry`]: SmolVM implementation of [`ImageRegistry`]
+//! - [`SmolVmRuntime`]: SmolVM lightweight VM runtime
+//! - [`SmolVmFilesystem`]: SmolVM-based filesystem provider (no-op on host)
+//! - [`SmolVmLimiter`]: SmolVM-based resource limiter (no-op on host)
+//!
 //! # Usage
 //!
 //! Adapters are typically instantiated in the composition root (main.rs) and
@@ -102,6 +108,7 @@ mod colima;
 mod colima_push;
 mod docker_desktop;
 mod hcs;
+mod smolvm;
 mod vf;
 mod wsl2;
 
@@ -147,5 +154,6 @@ pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDe
 pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};
+pub use smolvm::{SmolVmExecutor, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
 pub use wsl2::{Wsl2Filesystem, Wsl2Limiter, Wsl2Runtime};

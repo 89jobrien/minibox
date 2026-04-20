@@ -122,8 +122,8 @@ fn test_all_response_variants_serde_roundtrip() {
 
         // Re-serialize the decoded value and compare byte-for-byte to verify
         // no data was silently dropped during the round-trip.
-        let json2 = serde_json::to_string(&decoded)
-            .unwrap_or_else(|e| panic!("re-serialize failed: {e}"));
+        let json2 =
+            serde_json::to_string(&decoded).unwrap_or_else(|e| panic!("re-serialize failed: {e}"));
 
         assert_eq!(
             json, json2,
@@ -176,8 +176,7 @@ fn test_request_run_backward_compat_omits_optional_fields() {
 /// correct defaults.
 #[test]
 fn test_request_exec_backward_compat_omits_optional_fields() {
-    let json =
-        r#"{"type":"Exec","container_id":"abc123","cmd":["/bin/sh"]}"#;
+    let json = r#"{"type":"Exec","container_id":"abc123","cmd":["/bin/sh"]}"#;
 
     let req: DaemonRequest =
         serde_json::from_str(json).expect("backward-compat Exec deserialization failed");
@@ -310,9 +309,7 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::Success {
             message: "ok".to_string(),
         },
-        DaemonResponse::ContainerList {
-            containers: vec![],
-        },
+        DaemonResponse::ContainerList { containers: vec![] },
         DaemonResponse::ImageLoaded {
             image: "x:latest".to_string(),
         },

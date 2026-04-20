@@ -127,6 +127,8 @@ use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRunti
 #[cfg(target_os = "linux")]
 use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
+use mbx::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+#[cfg(target_os = "linux")]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(target_os = "linux")]
 use minibox_core::events::BroadcastEventBroker;
@@ -170,6 +172,8 @@ enum AdapterSuite {
     Gke,
     /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
     Colima,
+    /// macOS via SmolVM: lightweight Linux VMs with subsecond boot.
+    SmolVm,
 }
 
 #[cfg(target_os = "linux")]
@@ -177,14 +181,16 @@ impl AdapterSuite {
     /// Parse the `MINIBOX_ADAPTER` environment variable into an [`AdapterSuite`].
     ///
     /// Accepted values: `"native"` (default when the variable is absent),
-    /// `"gke"`, `"colima"`.  Returns an error for any other value.
+    /// `"gke"`, `"colima"`, `"smolvm"`.  Returns an error for any other value.
     fn from_env() -> Result<Self> {
         match std::env::var("MINIBOX_ADAPTER").as_deref() {
             Ok("gke") => Ok(Self::Gke),
             Ok("colima") => Ok(Self::Colima),
+            Ok("smolvm") => Ok(Self::SmolVm),
             Ok("native") | Err(_) => Ok(Self::Native),
             Ok(other) => anyhow::bail!(
-                "unknown MINIBOX_ADAPTER value {:?} (expected \"native\", \"gke\", or \"colima\")",
+                "unknown MINIBOX_ADAPTER value {:?} \
+                 (expected \"native\", \"gke\", \"colima\", or \"smolvm\")",
                 other
             ),
         }
@@ -593,6 +599,40 @@ async fn main() -> Result<()> {
                 filesystem: Arc::new(ColimaFilesystem::new()),
                 resource_limiter: Arc::new(ColimaLimiter::new()),
                 runtime: Arc::new(ColimaRuntime::new()),
+                network_provider: Arc::new(NoopNetwork::new()),
+                containers_base: containers_dir.clone(),
+                run_containers_base: PathBuf::from(&run_containers_dir),
+                metrics: metrics_recorder.clone(),
+                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                exec_runtime: None,
+                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                event_source: Arc::clone(&event_broker)
+                    as Arc<dyn minibox_core::events::EventSource>,
+                image_gc: Arc::clone(&image_gc),
+                image_store: Arc::clone(&state.image_store),
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+                policy: ContainerPolicy::default(),
+                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+            })
+        }
+        AdapterSuite::SmolVm => {
+            let registry_router = Arc::new(HostnameRegistryRouter::new(
+                Arc::new(SmolVmRegistry::new()) as minibox_core::domain::DynImageRegistry,
+                [(
+                    "ghcr.io",
+                    Arc::new(
+                        GhcrRegistry::new(Arc::clone(&state.image_store))
+                            .context("creating GHCR registry adapter")?,
+                    ) as minibox_core::domain::DynImageRegistry,
+                )],
+            ));
+            Arc::new(HandlerDependencies {
+                registry_router,
+                filesystem: Arc::new(SmolVmFilesystem::new()),
+                resource_limiter: Arc::new(SmolVmLimiter::new()),
+                runtime: Arc::new(SmolVmRuntime::new()),
                 network_provider: Arc::new(NoopNetwork::new()),
                 containers_base: containers_dir.clone(),
                 run_containers_base: PathBuf::from(&run_containers_dir),
