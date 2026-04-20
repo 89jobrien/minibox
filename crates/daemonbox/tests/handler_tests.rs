@@ -3975,3 +3975,249 @@ async fn resize_pty_unknown_session_returns_error() {
         "expected Error for unknown session, got {resp:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Additional error-path tests for handle_pause / handle_resume (#116)
+// ---------------------------------------------------------------------------
+
+/// Pausing a stopped container returns an Error — the container must be Running.
+#[tokio::test]
+async fn test_pause_stopped_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let container_id = "pausetest001abc01";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not running") || message.contains("Stopped"),
+                "expected 'not running' error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error for stopped container, got {resp:?}"),
+    }
+}
+
+/// Resuming a running (non-paused) container returns an Error.
+///
+/// Only containers in state `Paused` can be resumed.
+#[tokio::test]
+async fn test_resume_running_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let container_id = "resumetest001abc0";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(12345),
+        },
+        pid: Some(12345),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not paused") || message.contains("Running"),
+                "expected 'not paused' error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error for non-paused container, got {resp:?}"),
+    }
+}
+
+/// Pausing a Running container whose cgroup directory does not exist returns an Error.
+///
+/// `handle_pause` writes `1` to `{cgroup_path}/cgroup.freeze`. If the cgroup
+/// dir is absent the write must fail gracefully rather than panic.
+#[tokio::test]
+async fn test_pause_missing_cgroup_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    // Point cgroup_path at a directory that does not exist.
+    let nonexistent_cgroup = tmp.path().join("no-such-cgroup-dir");
+
+    let container_id = "pausecgrouptest001";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99999),
+        },
+        pid: Some(99999),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: nonexistent_cgroup,
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("pause failed") || message.contains("No such file"),
+                "expected cgroup write error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error when cgroup path is absent, got {resp:?}"),
+    }
+}
+
+/// Resuming a Paused container whose cgroup directory does not exist returns an Error.
+///
+/// Mirrors `test_pause_missing_cgroup_returns_error` for the resume path.
+#[tokio::test]
+async fn test_resume_missing_cgroup_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let nonexistent_cgroup = tmp.path().join("no-such-cgroup-resume");
+
+    let container_id = "resumecgrouptest01";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Paused".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99998),
+        },
+        pid: Some(99998),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: nonexistent_cgroup,
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("resume failed") || message.contains("No such file"),
+                "expected cgroup write error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error when cgroup path is absent, got {resp:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// validate_policy unit tests (#116, #123)
+// ---------------------------------------------------------------------------
+
+/// Plain container (no mounts, not privileged) passes any policy configuration.
+#[test]
+fn test_validate_policy_plain_container_always_allowed() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+
+    let policy = ContainerPolicy::default(); // deny-all defaults
+    assert!(
+        validate_policy(&[], false, &policy).is_ok(),
+        "plain container must always pass policy"
+    );
+}
+
+/// `validate_policy` rejects bind mounts when `allow_bind_mounts` is false.
+#[test]
+fn test_validate_policy_denies_bind_mount() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+    use minibox_core::domain::BindMount;
+
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: false,
+    };
+    let mounts = vec![BindMount {
+        host_path: std::path::PathBuf::from("/tmp/data"),
+        container_path: std::path::PathBuf::from("/data"),
+        read_only: false,
+    }];
+    let err = validate_policy(&mounts, false, &policy).unwrap_err();
+    assert!(
+        err.contains("bind mount") || err.contains("policy"),
+        "expected bind-mount policy error, got: {err}"
+    );
+}
+
+/// `validate_policy` rejects privileged=true when `allow_privileged` is false.
+#[test]
+fn test_validate_policy_denies_privileged() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: false,
+    };
+    let err = validate_policy(&[], true, &policy).unwrap_err();
+    assert!(
+        err.contains("privileged") || err.contains("policy"),
+        "expected privileged policy error, got: {err}"
+    );
+}
