@@ -8,9 +8,10 @@ and platform surface grows.
 
 ## Runtime Integrity
 
-- [ ] **Protocol types have a single source of truth.** `DaemonRequest`/`DaemonResponse` are
-  currently duplicated between `minibox-core/src/protocol.rs` and `mbx/src/protocol.rs`.
-  New protocol variants must be added to both files until that duplication is resolved.
+- [x] **Protocol types have a single source of truth.** `DaemonRequest`/`DaemonResponse` are
+  defined only in `minibox-core/src/protocol.rs` (consolidated in #122). `mbx` re-exports
+  via `pub use minibox_core::protocol`. Wire format snapshot tests in `minibox-core` pin
+  serialization. Add new variants only to `minibox-core/src/protocol.rs`.
 
 - [ ] **Handler coverage >= 80% (function).** Current baseline: ~67.5% function / ~55% line
   in `daemonbox/src/handler.rs`. Run `cargo xtask prepush` for the llvm-cov report. Error
@@ -58,7 +59,7 @@ and platform surface grows.
 Agent-facing features (MCP control surface, sandboxed execution, CI dogfooding) must wait
 until **all** of the following are true:
 
-- [ ] Protocol types consolidated — single `DaemonRequest` source.
+- [x] Protocol types consolidated — single `DaemonRequest` source (minibox-core, #122/#128).
 - [ ] Handler coverage >= 80% (function coverage, measured by llvm-cov).
 - [ ] Auth policy gate implemented for privileged operations (bind mounts, privileged mode).
 - [ ] Conformance suite passes for the targeted adapter suite (`cargo xtask test-conformance`).
