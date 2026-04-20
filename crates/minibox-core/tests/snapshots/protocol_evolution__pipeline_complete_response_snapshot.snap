@@ -1,0 +1,14 @@
+---
+source: crates/minibox-core/tests/protocol_evolution.rs
+expression: resp
+---
+{
+  "type": "PipelineComplete",
+  "trace": {
+    "id": "01HYX-test-trace",
+    "result": "ok",
+    "steps": []
+  },
+  "container_id": "abc123def456",
+  "exit_code": 0
+}

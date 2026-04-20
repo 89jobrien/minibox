@@ -248,6 +248,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerPaused { .. }
             | DaemonResponse::ContainerResumed { .. }
             | DaemonResponse::Pruned { .. }
+            | DaemonResponse::PipelineComplete { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
     // Event are non-terminal.
@@ -439,7 +440,9 @@ async fn dispatch(
                 .await
                 .is_err()
             {
-                tracing::warn!("dispatch: client disconnected before RunPipeline error could be sent");
+                tracing::warn!(
+                    "dispatch: client disconnected before RunPipeline error could be sent"
+                );
             }
         }
     }
@@ -684,6 +687,14 @@ mod tests {
                 },
                 false, // non-terminal: more lines may follow
             ),
+            (
+                DaemonResponse::PipelineComplete {
+                    trace: serde_json::json!({"steps": [], "result": "ok"}),
+                    container_id: "abc123".to_string(),
+                    exit_code: 0,
+                },
+                true, // terminal: pipeline execution finished
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -715,6 +726,7 @@ mod tests {
                 DaemonResponse::Event { .. } => false,
                 DaemonResponse::Pruned { .. } => true,
                 DaemonResponse::LogLine { .. } => false,
+                DaemonResponse::PipelineComplete { .. } => true,
             };
         }
     }

@@ -104,6 +104,16 @@ fn all_response_variants() -> Vec<DaemonResponse> {
             stream: OutputStreamKind::Stderr,
             line: "error: oops".to_string(),
         },
+        // --- terminal variants ---
+        DaemonResponse::PipelineComplete {
+            trace: serde_json::json!({
+                "id": "01HYX-test-trace",
+                "steps": [],
+                "result": "ok"
+            }),
+            container_id: "abc123def456".into(),
+            exit_code: 0,
+        },
     ]
 }
 
@@ -285,7 +295,8 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::BuildComplete { .. }
         | DaemonResponse::ContainerPaused { .. }
         | DaemonResponse::ContainerResumed { .. }
-        | DaemonResponse::Pruned { .. } => true,
+        | DaemonResponse::Pruned { .. }
+        | DaemonResponse::PipelineComplete { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }
@@ -327,6 +338,11 @@ fn test_terminal_classification_is_exhaustive() {
             removed: vec![],
             freed_bytes: 0,
             dry_run: true,
+        },
+        DaemonResponse::PipelineComplete {
+            trace: serde_json::json!({"steps": [], "result": "ok"}),
+            container_id: "abc123def456".into(),
+            exit_code: 0,
         },
     ];
 
@@ -452,4 +468,22 @@ fn run_pipeline_request_minimal_snapshot() {
         max_depth: 3,
     };
     insta::assert_json_snapshot!(req);
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: PipelineComplete response snapshot
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pipeline_complete_response_snapshot() {
+    let resp = DaemonResponse::PipelineComplete {
+        trace: serde_json::json!({
+            "id": "01HYX-test-trace",
+            "steps": [],
+            "result": "ok"
+        }),
+        container_id: "abc123def456".into(),
+        exit_code: 0,
+    };
+    insta::assert_json_snapshot!(resp);
 }

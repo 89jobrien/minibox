@@ -434,6 +434,20 @@ pub enum DaemonResponse {
         /// The log line content (without trailing newline).
         line: String,
     },
+
+    /// Pipeline execution completed.
+    ///
+    /// Terminal response for `RunPipeline` requests. The `trace` field
+    /// contains the full execution trace serialized as JSON — consumers
+    /// deserialize into their concrete trace type.
+    PipelineComplete {
+        /// Serialized execution trace (crux-agnostic JSON).
+        trace: serde_json::Value,
+        /// Container ID that ran the pipeline.
+        container_id: String,
+        /// Exit code of the `crux run` process.
+        exit_code: i32,
+    },
 }
 
 // ---------------------------------------------------------------------------
