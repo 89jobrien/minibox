@@ -25,6 +25,7 @@ pub mod error;
 pub mod events;
 pub mod preflight;
 pub mod protocol;
+pub mod trace;
 
 // Image handling is provided by the standalone minibox-oci crate.
 // Re-export the full module so existing `minibox_core::image::*` paths continue to work.
