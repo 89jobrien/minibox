@@ -176,4 +176,68 @@ mod tests {
         let bytes = tar_directory(tmp.path()).unwrap();
         assert!(!bytes.is_empty());
     }
+
+    #[test]
+    fn commit_upper_dir_produces_correct_metadata() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let upper_dir = tmp.path().join("upper");
+        std::fs::create_dir_all(&upper_dir).unwrap();
+        std::fs::write(upper_dir.join("hello.txt"), b"hello").unwrap();
+
+        let images_dir = tmp.path().join("images");
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(&images_dir).expect("image store"));
+
+        let meta = commit_upper_dir_to_image(
+            image_store,
+            &upper_dir,
+            "myapp:v1",
+            &CommitConfig {
+                author: None,
+                message: None,
+                env_overrides: vec![],
+                cmd_override: None,
+            },
+        )
+        .expect("commit");
+
+        assert_eq!(meta.name, "myapp");
+        assert_eq!(meta.tag, "v1");
+        assert_eq!(meta.layers.len(), 1);
+        assert!(
+            meta.layers[0].digest.starts_with("sha256:"),
+            "digest should be sha256: prefixed"
+        );
+        assert!(meta.layers[0].size > 0, "layer size should be non-zero");
+    }
+
+    #[test]
+    fn commit_preserves_layer_digest_across_identical_contents() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let upper_dir = tmp.path().join("upper");
+        std::fs::create_dir_all(&upper_dir).unwrap();
+        std::fs::write(upper_dir.join("file.txt"), b"deterministic").unwrap();
+
+        let images_dir = tmp.path().join("images");
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(&images_dir).expect("image store"));
+        let config = CommitConfig {
+            author: None,
+            message: None,
+            env_overrides: vec![],
+            cmd_override: None,
+        };
+
+        let meta1 =
+            commit_upper_dir_to_image(Arc::clone(&image_store), &upper_dir, "app:a", &config)
+                .expect("commit 1");
+        let meta2 =
+            commit_upper_dir_to_image(Arc::clone(&image_store), &upper_dir, "app:b", &config)
+                .expect("commit 2");
+
+        assert_eq!(
+            meta1.layers[0].digest, meta2.layers[0].digest,
+            "identical content should produce identical layer digest"
+        );
+    }
 }

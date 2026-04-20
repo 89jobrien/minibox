@@ -204,23 +204,28 @@ cargo xtask test-unit
 
 Platform crates follow the `{platform}box` naming convention: `mbx` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
 
-Fourteen crates in cargo workspace:
+19 crates in cargo workspace:
 
 1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types, image management (`ImageStore`, `RegistryClient`), preflight; re-exported by mbx for macro compatibility
-2. **mbx** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside mbx
+2. **minibox-oci** (library): OCI image types and operations (extracted from mbx)
+3. **mbx** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside mbx
    (formerly `minibox-lib` — renamed 2026-03-23; git history before this date uses the old name)
-3. **minibox-macros** (proc-macro): Derive macros used by mbx
-4. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
-5. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
-6. **macbox** (library): macOS daemon implementation (Colima adapter suite)
-7. **winbox** (library): Windows daemon implementation (stub)
-8. **minibox-cli** (binary): CLI client sending commands to daemon
-9. **minibox-client** (library): Unix socket client — `DaemonClient`, `DaemonResponseStream`; extracted from minibox-cli for reuse by mbxctl and tests
-10. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
-11. **minibox-bench** (binary): Benchmark harness
-12. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
-13. **mbxctl** (binary): Alternative management CLI (axum-based, WIP) — in `mbxctl/` at workspace root
-14. **dashbox** (binary): Ratatui TUI dashboard — 6 tabs (Agents, Bench, History, Git, Todos, CI) with inline command pane and background task execution. Run via `just dash`.
+4. **minibox-macros** (proc-macro): Derive macros used by mbx
+5. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
+6. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
+7. **macbox** (library): macOS daemon implementation (Colima adapter suite + VZ backend)
+8. **winbox** (library): Windows daemon implementation (stub)
+9. **tailbox** (library): Tailscale/tailnet adapter — auth, config, experiments
+10. **dockerbox** (library+binary): Docker API shim — translates Docker API calls over Unix socket to minibox protocol (see top of this file for details)
+11. **minibox-cli** (binary): CLI client sending commands to daemon
+12. **minibox-client** (library): Unix socket client — `DaemonClient`, `DaemonResponseStream`; extracted from minibox-cli for reuse by mbxctl and tests
+13. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
+14. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
+15. **minibox-agent** (library): AI agent runtime — error types, LLM providers, agentic steps (wired to crux-agentic)
+16. **minibox-bench** (binary): Benchmark harness
+17. **mbxctl** (binary): Alternative management CLI (axum-based, WIP)
+18. **dashbox** (binary): Ratatui TUI dashboard — 6 tabs (Agents, Bench, History, Git, Todos, CI) with inline command pane and background task execution. Run via `just dash`.
+19. **agentbox** (Go module, not a Rust crate): AI agent tooling in `agentbox/` — `cmd/agentbox/` (council, meta-agent), `cmd/mbx-commit-msg/` (commit message generator). Build: `just agentbox-build`, test: `just agentbox-test`.
 
 (`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
 
@@ -234,9 +239,9 @@ Fourteen crates in cargo workspace:
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
-**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `mbx/src/protocol.rs` using serde with `#[serde(tag = "type")]` for tagged enums.
+**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `minibox-core/src/protocol.rs` (canonical source) using serde with `#[serde(tag = "type")]` for tagged enums. `mbx` re-exports via `pub use minibox_core::protocol`.
 
-**State Management**: In-memory HashMap in `miniboxd/src/state.rs` tracks containers. Not persisted - daemon restart loses all records. Container state machine: Created → Running → Stopped.
+**State Management**: `DaemonState` in `daemonbox/src/state.rs` tracks containers in a HashMap and persists to disk via `save_to_disk` on every add/remove (atomic rename, no fsync). State survives daemon restart; running processes are not reattached. See `docs/STATE_MODEL.md` for full persistence contract. Container state machine: Created → Running → Paused → Stopped.
 
 **CLI streaming** — `minibox run` uses `ephemeral: true` and streams stdout/stderr back to the terminal in real time via `ContainerOutput`/`ContainerStopped` protocol messages. The CLI exits with the container's exit code. Non-ephemeral runs (daemon-direct) still return immediately with a container ID.
 
@@ -371,14 +376,31 @@ Image pulls enforce limits to prevent DoS:
 
 ## Current Limitations
 
-Understanding these helps prioritize feature development:
+See `docs/FEATURE_MATRIX.md` for the full per-platform breakdown. Key constraints as of
+2026-04-19:
 
-- **No networking setup**: Containers get isolated network namespace but no bridge/veth configuration
-- **No user namespace remapping**: Runs as root inside containers (no rootless support)
-- **No persistent state**: Daemon restart loses all container records
-- **No exec command**: Cannot run commands in existing containers
-- **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist in `mbx/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, `colima`, or `vz`.
+- **Networking is opt-in and experimental**: Bridge networking (`MINIBOX_NETWORK_MODE=bridge`)
+  is wired but has limited test coverage. Containers get an isolated network namespace by
+  default with no external connectivity. Port forwarding and in-container DNS are not
+  implemented.
+- **No user namespace remapping**: Runs as root inside containers (no rootless support).
+- **Container records persist across restarts, but running processes do not reattach**: State
+  is saved to disk and loaded at startup. Containers that were running when the daemon stopped
+  appear as records but are not reattached — their PIDs are gone.
+- **Exec is Linux native only**: `minibox exec` / `handle_exec` uses `setns` and is wired only
+  for the `native` adapter. GKE, Colima, and macOS adapters return an error.
+- **No Dockerfile parser**: `MiniboxImageBuilder` exists but there is no Dockerfile DSL. Build
+  support is experimental and native-only.
+- **Push/commit are experimental and native-only**: `OciPushAdapter` and `overlay_commit_adapter`
+  are wired in the native suite only and have limited test coverage.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist as
+  library code but are not wired into `miniboxd`. Passing unrecognized values to
+  `MINIBOX_ADAPTER` causes the daemon to exit at startup.
+- **Windows is a stub**: `winbox::start()` returns an error unconditionally. Phase 2 work
+  (Named Pipe server, HCS/WSL2 adapter wiring) has not started.
+- **Protocol types**: `DaemonRequest`/`DaemonResponse` are defined in
+  `minibox-core/src/protocol.rs` (single source of truth). `mbx` re-exports via
+  `pub use minibox_core::protocol`. Consolidated in #122.
 
 ## Tracing Contract
 
@@ -440,7 +462,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 ### Protocol gotchas (relevant when modifying `protocol.rs` or `handler.rs`)
 
-- **Two `DaemonRequest` definitions** — `crates/minibox-core/src/protocol.rs` AND `crates/mbx/src/protocol.rs` both define `DaemonRequest` independently (mbx has its own test suite). When adding a field, update **both** files and all their construction sites.
+- **Single `DaemonRequest` definition** — canonical source is `crates/minibox-core/src/protocol.rs`. `mbx` re-exports it. Wire format snapshot tests in minibox-core pin serialization. When adding a field, update `minibox-core/src/protocol.rs` and add a snapshot test.
 - **`HandlerDependencies` construction sites** — Adding fields to `HandlerDependencies` in `handler.rs` requires updating all three adapter suites in `miniboxd/src/main.rs` (native, gke, colima). These are Linux-only (`#[cfg(target_os = "linux")]`) and won't fail on macOS `cargo check`.
 - **`handle_run` param chain** — Adding a parameter requires updating in order: `server.rs` dispatch pattern match → `handle_run` → `handle_run_streaming` → `run_inner_capture`; and separately `run_inner`. All five sites must change together.
 - **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
@@ -544,6 +566,13 @@ Override runtime paths (useful for testing and non-standard deployments):
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
 - `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, `colima`, or `vz`
+
+### Committing `.ctx/HANDOFF.*.*.yaml`
+
+Use `git add -f .ctx/HANDOFF.minibox.workspace.yaml` — the directory is gitignored and negation
+exceptions don't auto-apply without `-f`. The global obfsck hook must have `:!.ctx/HANDOFF.*.*.yaml`
+(bare path) alongside `:!**/.ctx/HANDOFF.*.*.yaml` — the `**/` form alone does not match top-level
+dirs. If obfsck blocks the commit, add the bare exclusion to `~/.config/git/hooks/pre-commit`.
 
 ## Git Workflow (3-tier stability pipeline)
 

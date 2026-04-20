@@ -30,7 +30,7 @@
 use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+    ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::protocol::{
     ContainerInfo, DAEMON_SOCKET_PATH, DaemonRequest, DaemonResponse, decode_request,

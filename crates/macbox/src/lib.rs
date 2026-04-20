@@ -29,6 +29,7 @@ use mbx::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
+use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageLoader, DynImageRegistry};
 use minibox_core::image::ImageStore;
 use minibox_core::image::gc::{ImageGarbageCollector, ImageGc};
@@ -76,33 +77,46 @@ fn build_colima_handler_dependencies(
     );
 
     Ok(Arc::new(HandlerDependencies {
-        registry: registry_port,
-        // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter.
-        ghcr_registry: registry,
-        filesystem: Arc::new(ColimaFilesystem::new()),
-        resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
-        runtime: Arc::new(
-            ColimaRuntime::new()
-                .with_executor(executor.clone())
-                .with_spawner(spawner),
-        ),
-        network_provider: Arc::new(NoopNetwork::new()),
-        containers_base: containers_dir,
-        run_containers_base: run_containers_dir,
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader,
-        exec_runtime: None,
-        image_pusher: Some(image_pusher),
-        commit_adapter: Some(commit_adapter),
-        image_builder: Some(image_builder),
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc,
-        image_store: Arc::clone(&state.image_store),
+        image: daemonbox::handler::ImageDeps {
+            // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter,
+            // so we use it as the default with no hostname overrides.
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                registry_port,
+                std::iter::empty::<(&str, DynImageRegistry)>(),
+            )),
+            image_loader,
+            image_gc,
+            image_store: Arc::clone(&state.image_store),
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(ColimaFilesystem::new()),
+            resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
+            runtime: Arc::new(
+                ColimaRuntime::new()
+                    .with_executor(executor.clone())
+                    .with_spawner(spawner),
+            ),
+            network_provider: Arc::new(NoopNetwork::new()),
+            containers_base: containers_dir,
+            run_containers_base: run_containers_dir,
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: Some(image_pusher),
+            commit_adapter: Some(commit_adapter),
+            image_builder: Some(image_builder),
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
         policy: daemonbox::handler::ContainerPolicy::default(),
-        pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
-        )),
     }))
 }
 

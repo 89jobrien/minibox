@@ -61,6 +61,7 @@ pub use networking::*;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -103,6 +104,8 @@ pub type DynMetricsRecorder = Arc<dyn MetricsRecorder>;
 pub type DynEventSink = Arc<dyn crate::events::EventSink>;
 /// Type alias for a shared, dynamic [`EventSource`] implementation.
 pub type DynEventSource = Arc<dyn crate::events::EventSource>;
+/// Type alias for a shared, dynamic [`RegistryRouter`] implementation.
+pub type DynRegistryRouter = Arc<dyn RegistryRouter>;
 
 // ---------------------------------------------------------------------------
 // Downcasting support for testing
@@ -220,6 +223,36 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>>;
 }
 
+// ---------------------------------------------------------------------------
+// Registry Router Port
+// ---------------------------------------------------------------------------
+
+/// Port for routing an image reference to the appropriate [`ImageRegistry`] adapter.
+///
+/// Implementations select the registry based on the image's hostname (or any
+/// other criteria) and return a reference to the corresponding adapter.
+///
+/// # Implementations
+///
+/// - [`minibox_core::adapters::HostnameRegistryRouter`]: routes by lowercase hostname;
+///   falls back to a default registry for unrecognised hostnames.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use minibox_core::domain::{DynRegistryRouter, RegistryRouter};
+///
+/// let router: DynRegistryRouter = Arc::new(HostnameRegistryRouter::new(
+///     docker_hub_registry,
+///     [("ghcr.io", ghcr_registry)],
+/// ));
+/// let registry = router.route(&image_ref);
+/// ```
+pub trait RegistryRouter: Send + Sync {
+    /// Return the registry adapter that should handle `image_ref`.
+    fn route(&self, image_ref: &crate::image::reference::ImageRef) -> &dyn ImageRegistry;
+}
+
 /// Port for loading a local OCI image tarball into the image store.
 ///
 /// Implementations:
@@ -259,6 +292,9 @@ pub struct LayerInfo {
 /// Abstraction for container filesystem operations.
 ///
 /// This trait defines the contract for filesystem implementations.
+/// Daemon-side filesystem lifecycle: setup container rootfs and cleanup after
+/// exit.
+///
 /// Implementations might include overlay filesystem, bind mounts, or
 /// other copy-on-write filesystems like ZFS or Btrfs.
 ///
@@ -268,7 +304,7 @@ pub struct LayerInfo {
 /// - Validate all paths to prevent traversal attacks
 /// - Mount filesystems with appropriate security flags (nosuid, nodev)
 /// - Properly clean up mounts to avoid resource leaks
-pub trait FilesystemProvider: AsAny + Send + Sync {
+pub trait RootfsSetup: AsAny + Send + Sync {
     /// Setup the container rootfs and return the merged directory plus any
     /// backend metadata needed by follow-on operations such as commit/build.
     ///
@@ -298,6 +334,27 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     /// escape the allowed base directory.
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout>;
 
+    /// Cleanup mounts after container exit.
+    ///
+    /// Unmounts the rootfs and removes the per-container directories.
+    ///
+    /// # Arguments
+    ///
+    /// * `container_dir` - Per-container directory to clean up
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if unmount or directory removal fails.
+    fn cleanup(&self, container_dir: &Path) -> Result<()>;
+}
+
+/// Child-process filesystem initialisation: pivot root inside the cloned
+/// container process.
+///
+/// This trait is received only by the container child process after
+/// `clone(2)`, keeping daemon-side setup (`RootfsSetup`) and child-side
+/// init (`ChildInit`) under separate ownership.
+pub trait ChildInit: Send + Sync {
     /// Pivot root inside the container process.
     ///
     /// This is called **inside the cloned child process** to switch the
@@ -322,19 +379,57 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
     /// - sys: rdonly, nosuid, nodev, noexec
     /// - dev: nosuid, noexec
     fn pivot_root(&self, new_root: &Path) -> Result<()>;
+}
 
-    /// Cleanup mounts after container exit.
-    ///
-    /// Unmounts the rootfs and removes the per-container directories.
-    ///
-    /// # Arguments
-    ///
-    /// * `container_dir` - Per-container directory to clean up
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if unmount or directory removal fails.
-    fn cleanup(&self, container_dir: &Path) -> Result<()>;
+/// Combined filesystem provider: supertrait alias that bundles [`RootfsSetup`]
+/// and [`ChildInit`] for adapters that implement both lifecycle phases.
+///
+/// Prefer using [`RootfsSetup`] or [`ChildInit`] directly at call sites that
+/// only need one half of the lifecycle.
+pub trait FilesystemProvider: RootfsSetup + ChildInit {}
+
+/// Blanket implementation: any type that implements both [`RootfsSetup`] and
+/// [`ChildInit`] automatically satisfies [`FilesystemProvider`].
+impl<T: RootfsSetup + ChildInit> FilesystemProvider for T {}
+
+/// Backend-specific writable-layer metadata produced by
+/// [`RootfsSetup::setup_rootfs`] and persisted into [`ContainerRecord`]
+/// so that commit/build logic can locate the writable layer without
+/// re-querying the container runtime.
+///
+/// The `metadata` map carries backend-specific key/value pairs so that new
+/// backends can encode their own data (e.g. `"colima_instance" => "colima"`)
+/// without adding new enum variants (OCP).  Callers that only need the
+/// host-visible upper directory should use
+/// [`BackendRootfsMetadata::overlay_upper_dir`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BackendRootfsMetadata {
+    /// Overlay filesystem backend.  `upper_dir` is the host-visible (or
+    /// guest-visible, for VM adapters) writable layer directory.
+    /// `metadata` carries adapter-specific key/value pairs, e.g.:
+    /// - `"colima_instance"` — Lima/Colima instance name
+    Overlay {
+        upper_dir: PathBuf,
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        metadata: HashMap<String, String>,
+    },
+}
+
+impl BackendRootfsMetadata {
+    /// Return the host-visible overlay upper directory.
+    pub fn overlay_upper_dir(&self) -> &PathBuf {
+        match self {
+            Self::Overlay { upper_dir, .. } => upper_dir,
+        }
+    }
+
+    /// Look up a backend-specific metadata value by key.
+    pub fn metadata_value(&self, key: &str) -> Option<&str> {
+        match self {
+            Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
+        }
+    }
 }
 
 /// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
@@ -342,8 +437,9 @@ pub trait FilesystemProvider: AsAny + Send + Sync {
 pub struct RootfsLayout {
     /// Path to the merged/mounted rootfs that the runtime will use.
     pub merged_dir: PathBuf,
-    /// Host-visible writable layer path when the backend exposes one.
-    pub overlay_upper: Option<PathBuf>,
+    /// Typed backend metadata for the writable layer, when the backend exposes
+    /// one.  `None` for copy-based (GKE/proot) and VZ (in-VM) backends.
+    pub rootfs_metadata: Option<BackendRootfsMetadata>,
     /// Source image reference associated with this rootfs when known.
     pub source_image_ref: Option<String>,
 }
@@ -697,6 +793,8 @@ pub enum ContainerState {
     Created,
     /// Container process is running.
     Running,
+    /// Container is frozen (cgroup.freeze = 1).
+    Paused,
     /// Container process has exited.
     Stopped,
     /// Container failed to start or crashed.
@@ -706,13 +804,14 @@ pub enum ContainerState {
 impl ContainerState {
     /// Return the canonical string representation of this state.
     ///
-    /// The returned strings (`"Created"`, `"Running"`, `"Stopped"`, `"Failed"`)
+    /// The returned strings (`"Created"`, `"Running"`, `"Paused"`, `"Stopped"`, `"Failed"`)
     /// are used directly in [`crate::protocol::ContainerInfo::state`] list
     /// responses sent to the CLI.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",
             Self::Running => "Running",
+            Self::Paused => "Paused",
             Self::Stopped => "Stopped",
             Self::Failed => "Failed",
         }
@@ -977,6 +1076,101 @@ pub trait ImageBuilder: AsAny + Send + Sync {
 pub type DynImageBuilder = Arc<dyn ImageBuilder>;
 
 // ---------------------------------------------------------------------------
+// PTY Allocator Port (#83)
+// ---------------------------------------------------------------------------
+
+/// Configuration for allocating a pseudo-terminal (PTY) for interactive containers.
+///
+/// Passed to [`PtyAllocator::allocate`] to request a PTY pair with the given
+/// terminal dimensions. The caller is responsible for closing the returned file
+/// descriptors when no longer needed.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PtyConfig {
+    /// Whether PTY allocation is requested.
+    pub enabled: bool,
+    /// Terminal width in columns.
+    pub cols: u16,
+    /// Terminal height in rows.
+    pub rows: u16,
+}
+
+/// An allocated PTY pair — a master and a slave file descriptor.
+///
+/// The master fd is used by the host to read/write the terminal stream.
+/// The slave fd is handed to the container process as its controlling terminal.
+///
+/// # Ownership
+///
+/// The caller that calls [`PtyAllocator::allocate`] owns both fds and is
+/// responsible for closing them. Do NOT call `close()` on them from outside
+/// unless you also own the handle.
+#[derive(Debug)]
+pub struct PtyHandle {
+    /// File descriptor for the master side of the PTY.
+    pub master_fd: i32,
+    /// File descriptor for the slave side of the PTY.
+    pub slave_fd: i32,
+}
+
+/// Port for allocating a PTY pair.
+///
+/// Implementations live in the adapter layer. The domain layer never calls
+/// `posix_openpt` directly — all OS-level PTY operations go through this trait.
+pub trait PtyAllocator: Send + Sync {
+    /// Allocate a PTY pair with the terminal dimensions specified in `config`.
+    ///
+    /// Returns [`PtyHandle`] on success, or `Err` when PTY allocation is not
+    /// supported (e.g., [`NullPtyAllocator`]) or when the OS call fails.
+    fn allocate(&self, config: &PtyConfig) -> anyhow::Result<PtyHandle>;
+}
+
+/// Type alias for a shared, dynamic [`PtyAllocator`] implementation.
+pub type DynPtyAllocator = Arc<dyn PtyAllocator>;
+
+/// A no-op [`PtyAllocator`] that always returns `Err`.
+///
+/// Used as the default adapter when PTY support is not available (e.g., on
+/// macOS or in test environments that do not exercise the PTY path).
+pub struct NullPtyAllocator;
+
+impl PtyAllocator for NullPtyAllocator {
+    fn allocate(&self, _config: &PtyConfig) -> anyhow::Result<PtyHandle> {
+        anyhow::bail!("pty: PTY allocation is not supported in this environment")
+    }
+}
+
+/// A test double [`PtyAllocator`] that returns a pre-configured [`PtyHandle`].
+///
+/// Enabled only when the `test-utils` feature is active so production binaries
+/// do not pull in test scaffolding.
+#[cfg(feature = "test-utils")]
+pub struct MockPtyAllocator {
+    master_fd: i32,
+    slave_fd: i32,
+}
+
+#[cfg(feature = "test-utils")]
+impl MockPtyAllocator {
+    /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
+    pub fn new(master_fd: i32, slave_fd: i32) -> Self {
+        Self {
+            master_fd,
+            slave_fd,
+        }
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl PtyAllocator for MockPtyAllocator {
+    fn allocate(&self, _config: &PtyConfig) -> anyhow::Result<PtyHandle> {
+        Ok(PtyHandle {
+            master_fd: self.master_fd,
+            slave_fd: self.slave_fd,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Conformance boundary — commit / build / push capabilities
 // ---------------------------------------------------------------------------
 
@@ -1154,6 +1348,7 @@ mod tests {
     fn test_container_state_as_str() {
         assert_eq!(ContainerState::Created.as_str(), "Created");
         assert_eq!(ContainerState::Running.as_str(), "Running");
+        assert_eq!(ContainerState::Paused.as_str(), "Paused");
         assert_eq!(ContainerState::Stopped.as_str(), "Stopped");
         assert_eq!(ContainerState::Failed.as_str(), "Failed");
     }
@@ -1162,6 +1357,7 @@ mod tests {
     fn test_container_state_display() {
         assert_eq!(format!("{}", ContainerState::Created), "Created");
         assert_eq!(format!("{}", ContainerState::Running), "Running");
+        assert_eq!(format!("{}", ContainerState::Paused), "Paused");
         assert_eq!(format!("{}", ContainerState::Stopped), "Stopped");
         assert_eq!(format!("{}", ContainerState::Failed), "Failed");
     }
@@ -1312,6 +1508,258 @@ mod tests {
                 .load_image(std::path::Path::new("/fake.tar"), "mbx-tester", "latest")
                 .await;
             assert!(result.is_ok());
+        }
+    }
+
+    mod backend_rootfs_metadata_tests {
+        use super::*;
+        use std::path::PathBuf;
+
+        #[test]
+        fn overlay_upper_dir_returns_path_for_native_variant() {
+            let path = PathBuf::from("/var/lib/minibox/containers/abc/upper");
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: path.clone(),
+                metadata: std::collections::HashMap::new(),
+            };
+            assert_eq!(meta.overlay_upper_dir(), &path);
+        }
+
+        #[test]
+        fn overlay_upper_dir_returns_path_for_colima_variant() {
+            let path = PathBuf::from("/Users/joe/.lima/colima/upper");
+            let mut kv = std::collections::HashMap::new();
+            kv.insert("colima_instance".to_string(), "colima".to_string());
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: path.clone(),
+                metadata: kv,
+            };
+            assert_eq!(meta.overlay_upper_dir(), &path);
+        }
+
+        #[test]
+        fn metadata_value_none_for_missing_key() {
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/tmp/upper"),
+                metadata: std::collections::HashMap::new(),
+            };
+            assert_eq!(meta.metadata_value("colima_instance"), None);
+        }
+
+        #[test]
+        fn metadata_value_returns_value_for_present_key() {
+            let mut kv = std::collections::HashMap::new();
+            kv.insert("colima_instance".to_string(), "colima".to_string());
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/tmp/upper"),
+                metadata: kv,
+            };
+            assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
+        }
+
+        #[test]
+        fn backend_rootfs_metadata_roundtrips_serde_overlay() {
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                metadata: std::collections::HashMap::new(),
+            };
+            let json = serde_json::to_string(&meta).expect("serialize");
+            let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(meta, restored);
+        }
+
+        #[test]
+        fn backend_rootfs_metadata_roundtrips_serde_with_kv() {
+            let mut kv = std::collections::HashMap::new();
+            kv.insert("colima_instance".to_string(), "colima".to_string());
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                metadata: kv,
+            };
+            let json = serde_json::to_string(&meta).expect("serialize");
+            let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(meta, restored);
+        }
+
+        #[test]
+        fn rootfs_layout_metadata_survives_commit_image_ref() {
+            // Verify that an Overlay metadata's upper_dir is unchanged
+            // after being stored and retrieved (simulates the commit path
+            // reading the upper_dir from the container record).
+            let upper = PathBuf::from("/Users/joe/.lima/colima/containers/abc/upper");
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert("colima_instance".to_string(), "colima".to_string());
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: upper.clone(),
+                metadata,
+            };
+            let layout = RootfsLayout {
+                merged_dir: PathBuf::from("/tmp/merged"),
+                rootfs_metadata: Some(meta),
+                source_image_ref: Some("alpine:latest".to_string()),
+            };
+            let recovered_upper = layout.rootfs_metadata.as_ref().unwrap().overlay_upper_dir();
+            assert_eq!(recovered_upper, &upper);
+        }
+
+        // --- Task 1: OCP fix tests ---
+
+        #[test]
+        fn overlay_variant_has_opaque_metadata_map() {
+            // BackendRootfsMetadata::Overlay must carry an opaque HashMap so
+            // backends can encode their own KVs without adding new variants.
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert("colima_instance".to_string(), "colima".to_string());
+            let upper = PathBuf::from("/Users/joe/.lima/colima/upper");
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: upper.clone(),
+                metadata: metadata.clone(),
+            };
+            assert_eq!(meta.overlay_upper_dir(), &upper);
+            assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
+        }
+
+        #[test]
+        fn overlay_variant_metadata_empty_for_native() {
+            // Native overlay encodes no extra KVs.
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                metadata: std::collections::HashMap::new(),
+            };
+            assert_eq!(meta.metadata_value("colima_instance"), None);
+        }
+
+        #[test]
+        fn backend_rootfs_metadata_roundtrips_serde_with_metadata_map() {
+            let mut kv = std::collections::HashMap::new();
+            kv.insert("colima_instance".to_string(), "colima".to_string());
+            let meta = BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                metadata: kv,
+            };
+            let json = serde_json::to_string(&meta).expect("serialize");
+            let restored: BackendRootfsMetadata = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(meta, restored);
+        }
+    }
+
+    mod pty_allocator_tests {
+        use super::*;
+
+        #[test]
+        fn pty_config_default_values() {
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
+            assert!(cfg.enabled);
+            assert_eq!(cfg.cols, 80);
+            assert_eq!(cfg.rows, 24);
+        }
+
+        #[test]
+        fn pty_config_serde_roundtrip() {
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 120,
+                rows: 40,
+            };
+            let json = serde_json::to_string(&cfg).expect("serialize");
+            let back: PtyConfig = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back.enabled, cfg.enabled);
+            assert_eq!(back.cols, cfg.cols);
+            assert_eq!(back.rows, cfg.rows);
+        }
+
+        #[test]
+        fn pty_config_json_missing_fields_use_serde_default() {
+            // When a JSON payload omits fields the struct must still deserialize.
+            let json = r#"{"enabled":false,"cols":80,"rows":24}"#;
+            let cfg: PtyConfig = serde_json::from_str(json).expect("deserialize");
+            assert!(!cfg.enabled);
+        }
+
+        #[test]
+        fn null_pty_allocator_returns_err() {
+            let alloc = NullPtyAllocator;
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
+            assert!(
+                alloc.allocate(&cfg).is_err(),
+                "NullPtyAllocator must always return Err"
+            );
+        }
+
+        #[cfg(feature = "test-utils")]
+        #[test]
+        fn mock_pty_allocator_returns_configured_handle() {
+            let alloc = MockPtyAllocator::new(5, 6);
+            let cfg = PtyConfig {
+                enabled: true,
+                cols: 80,
+                rows: 24,
+            };
+            let handle = alloc.allocate(&cfg).expect("MockPtyAllocator must succeed");
+            assert_eq!(handle.master_fd, 5);
+            assert_eq!(handle.slave_fd, 6);
+        }
+    }
+
+    mod isp_trait_split_tests {
+        use super::*;
+        use std::path::{Path, PathBuf};
+
+        // --- Task 2: ISP split tests ---
+
+        /// Verify that RootfsSetup is a standalone trait (not mixed with ChildInit).
+        struct OnlySetup;
+        impl AsAny for OnlySetup {
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+        }
+        impl RootfsSetup for OnlySetup {
+            fn setup_rootfs(
+                &self,
+                _layers: &[PathBuf],
+                _container_dir: &Path,
+            ) -> Result<RootfsLayout> {
+                Ok(RootfsLayout {
+                    merged_dir: PathBuf::from("/tmp/merged"),
+                    rootfs_metadata: None,
+                    source_image_ref: None,
+                })
+            }
+
+            fn cleanup(&self, _container_dir: &Path) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        /// Verify that ChildInit is a standalone trait for pivot_root.
+        struct OnlyChildInit;
+        impl ChildInit for OnlyChildInit {
+            fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn rootfs_setup_can_be_used_without_child_init() {
+            let setup = OnlySetup;
+            let result = setup.setup_rootfs(&[], Path::new("/tmp/container"));
+            assert!(result.is_ok());
+            assert!(setup.cleanup(Path::new("/tmp/container")).is_ok());
+        }
+
+        #[test]
+        fn child_init_can_be_used_without_rootfs_setup() {
+            let init = OnlyChildInit;
+            assert!(init.pivot_root(Path::new("/tmp/new_root")).is_ok());
         }
     }
 }

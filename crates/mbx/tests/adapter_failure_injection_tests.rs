@@ -7,8 +7,8 @@ use mbx::adapters::mocks::{
     FailableFilesystemMock, MockFilesystem, MockLimiter, MockRegistry, MockRuntime,
 };
 use mbx::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider,
+    ImageRegistry, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use std::path::{Path, PathBuf};
 

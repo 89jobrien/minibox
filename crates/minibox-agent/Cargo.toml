@@ -1,0 +1,23 @@
+[package]
+name = "minibox-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Crux-backed agent execution layer for minibox"
+
+[dependencies]
+# Published crux crates
+crux-agentic = "0.2.3"
+cruxai-core = "0.2.1"
+
+# Minibox internal
+minibox-llm = { path = "../minibox-llm" }
+
+# Shared
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

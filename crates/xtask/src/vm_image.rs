@@ -146,7 +146,14 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 
     println!("  compile miniboxd → {target}");
     let status = std::process::Command::new("cargo")
-        .args(["zigbuild", "--release", "--target", target, "-p", "miniboxd"])
+        .args([
+            "zigbuild",
+            "--release",
+            "--target",
+            target,
+            "-p",
+            "miniboxd",
+        ])
         .status()
         .context("cargo zigbuild for agent (is cargo-zigbuild installed?)")?;
     if !status.success() {
@@ -225,6 +232,9 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
 
     // 4. Extract rootfs
     extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
+
+    // 4b. Apply user overlay (~/.mbx/vm/overlay/ → rootfs)
+    install_overlay(&rootfs_dir, vm_dir)?;
 
     // 5. Cross-compile and install agent
     let rustc_ver = build_and_install_agent(&rootfs_dir, force)?;
@@ -391,7 +401,105 @@ echo "=== RESULTS: pass=${PASS} fail=${FAIL} ==="
             .context("chmod /sbin/run-tests.sh")?;
     }
 
-    println!("  init    rootfs/sbin/init + sbin/run-tests.sh + etc/init.d/rcS");
+    // /sbin/check-drift.sh — CAS drift checker, reads /etc/minibox-cas-refs
+    let check_drift_script = r#"#!/bin/sh
+# check-drift.sh — verify CAS-tracked files match their expected hashes
+REFS=/etc/minibox-cas-refs
+[ -f "$REFS" ] || { echo "no cas refs installed"; exit 0; }
+
+PASS=0
+FAIL=0
+while IFS="$(printf '\t')" read -r name hash; do
+    [ -n "$name" ] && [ -n "$hash" ] || continue
+    # find the file by searching common locations
+    TARGET=$(find /etc /usr/local/bin /sbin /bin -name "$name" 2>/dev/null | head -1)
+    if [ -z "$TARGET" ]; then
+        echo "MISSING  $name  expected=$hash"
+        FAIL=$((FAIL+1))
+        continue
+    fi
+    GOT=$(sha256sum "$TARGET" 2>/dev/null | cut -d' ' -f1)
+    if [ "$GOT" = "$hash" ]; then
+        echo "OK  $name"
+        PASS=$((PASS+1))
+    else
+        echo "DRIFT  $name  expected=$hash  got=$GOT"
+        FAIL=$((FAIL+1))
+    fi
+done < "$REFS"
+echo "=== $PASS ok, $FAIL failed ==="
+[ "$FAIL" -eq 0 ]
+"#;
+    let check_drift_path = sbin.join("check-drift.sh");
+    std::fs::write(&check_drift_path, check_drift_script)
+        .context("writing /sbin/check-drift.sh")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&check_drift_path, std::fs::Permissions::from_mode(0o755))
+            .context("chmod /sbin/check-drift.sh")?;
+    }
+
+    println!(
+        "  init    rootfs/sbin/init + sbin/run-tests.sh + sbin/check-drift.sh + etc/init.d/rcS"
+    );
+    Ok(())
+}
+
+/// Copy `~/.mbx/vm/overlay/` into `rootfs_dir`, overwriting any existing files.
+/// Silently skips if the overlay directory is absent.
+/// Prints a count of files copied if any were found.
+#[allow(dead_code)]
+pub fn install_overlay(rootfs_dir: &Path, vm_dir: &Path) -> Result<()> {
+    let overlay_dir = vm_dir.join("overlay");
+    if !overlay_dir.exists() {
+        return Ok(());
+    }
+
+    let mut count = 0usize;
+    copy_dir_recursive(&overlay_dir, rootfs_dir, &mut count).with_context(|| {
+        format!(
+            "copying overlay {} → {}",
+            overlay_dir.display(),
+            rootfs_dir.display()
+        )
+    })?;
+
+    if count > 0 {
+        println!("  overlay {} file(s) → {}", count, rootfs_dir.display());
+    }
+
+    // Write /etc/minibox-cas-refs from overlay/refs/ if any refs exist.
+    crate::cas::write_cas_refs(rootfs_dir, &overlay_dir)?;
+
+    Ok(())
+}
+
+/// Recursively copy all files from `src` into `dst`, mirroring the directory structure.
+/// Creates destination directories as needed. Overwrites existing files.
+fn copy_dir_recursive(src: &Path, dst: &Path, count: &mut usize) -> Result<()> {
+    std::fs::create_dir_all(dst).with_context(|| format!("creating dir {}", dst.display()))?;
+
+    for entry in std::fs::read_dir(src).with_context(|| format!("reading dir {}", src.display()))? {
+        let entry = entry.with_context(|| format!("reading entry in {}", src.display()))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("file_type for {}", src_path.display()))?;
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path, count)?;
+        } else if file_type.is_file() {
+            std::fs::copy(&src_path, &dst_path).with_context(|| {
+                format!("copying {} → {}", src_path.display(), dst_path.display())
+            })?;
+            *count += 1;
+        }
+        // Symlinks in overlay are intentionally skipped — rootfs symlinks are managed by
+        // build_and_install_agent and install_init_files; user overlay is for plain files.
+    }
     Ok(())
 }
 
@@ -413,9 +521,9 @@ pub fn create_initramfs(rootfs_dir: &Path, initramfs_path: &Path, force: bool) -
         let parent = initramfs_path
             .parent()
             .context("initramfs path has no parent")?;
-        let parent_abs = parent.canonicalize().with_context(|| {
-            format!("canonicalizing initramfs parent dir {}", parent.display())
-        })?;
+        let parent_abs = parent
+            .canonicalize()
+            .with_context(|| format!("canonicalizing initramfs parent dir {}", parent.display()))?;
         parent_abs.join(
             initramfs_path
                 .file_name()
@@ -583,6 +691,68 @@ mod tests {
         let dir = default_vm_dir();
         assert!(dir.is_absolute());
         assert!(dir.to_string_lossy().contains(".mbx"));
+    }
+
+    #[test]
+    fn overlay_skipped_when_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        // No overlay dir — should return Ok without touching rootfs.
+        let result = install_overlay(&rootfs_dir, &vm_dir);
+        assert!(
+            result.is_ok(),
+            "should silently skip absent overlay: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn overlay_applied_copies_files_into_rootfs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let overlay_dir = vm_dir.join("overlay");
+
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        std::fs::create_dir_all(overlay_dir.join("etc")).unwrap();
+        std::fs::write(overlay_dir.join("etc").join("motd"), b"hello overlay").unwrap();
+        std::fs::write(overlay_dir.join("custom-file"), b"top level").unwrap();
+
+        install_overlay(&rootfs_dir, &vm_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("etc").join("motd")).unwrap(),
+            b"hello overlay"
+        );
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("custom-file")).unwrap(),
+            b"top level"
+        );
+    }
+
+    #[test]
+    fn overlay_files_overwrite_existing_rootfs_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let overlay_dir = vm_dir.join("overlay");
+
+        // Pre-populate rootfs with an existing file.
+        std::fs::create_dir_all(rootfs_dir.join("etc")).unwrap();
+        std::fs::write(rootfs_dir.join("etc").join("hostname"), b"original").unwrap();
+
+        // Overlay with a replacement.
+        std::fs::create_dir_all(overlay_dir.join("etc")).unwrap();
+        std::fs::write(overlay_dir.join("etc").join("hostname"), b"overwritten").unwrap();
+
+        install_overlay(&rootfs_dir, &vm_dir).unwrap();
+
+        assert_eq!(
+            std::fs::read(rootfs_dir.join("etc").join("hostname")).unwrap(),
+            b"overwritten"
+        );
     }
 
     #[test]

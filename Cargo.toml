@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/minibox-oci",
     "crates/minibox-core",
     "crates/mbx",
     "crates/miniboxd",
@@ -9,6 +10,7 @@ members = [
     "crates/minibox-macros",
     "crates/daemonbox",
     "crates/macbox",
+    "crates/tailbox",
     "crates/winbox",
     "crates/minibox-llm",
     "crates/minibox-secrets",
@@ -17,10 +19,11 @@ members = [
     "crates/mbxctl",
     "crates/dashbox",
     "crates/dockerbox",
+    "crates/minibox-agent",
 ]
 
 [workspace.package]
-version = "0.12.3"
+version = "0.19.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -72,6 +75,7 @@ ipnet = "2"
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates
+minibox-oci = { path = "crates/minibox-oci" }
 minibox-core = { path = "crates/minibox-core" }
 mbx = { path = "crates/mbx" }
 minibox-macros = { path = "crates/minibox-macros" }

@@ -62,8 +62,8 @@ use async_trait::async_trait;
 use minibox_core::{
     as_any,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
+        RuntimeCapabilities, SpawnResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -242,7 +242,7 @@ impl DockerDesktopFilesystem {
     }
 }
 
-impl FilesystemProvider for DockerDesktopFilesystem {
+impl minibox_core::domain::RootfsSetup for DockerDesktopFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             "setting up rootfs via Docker Desktop: layers={:?}, dir={:?}",
@@ -271,15 +271,9 @@ impl FilesystemProvider for DockerDesktopFilesystem {
         // Docker paths map directly back to macOS
         Ok(RootfsLayout {
             merged_dir: PathBuf::from(response.merged_path),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
-    }
-
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        // Called inside container process, handled by helper
-        debug!("pivot_root delegated to Docker helper");
-        Ok(())
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
@@ -293,6 +287,14 @@ impl FilesystemProvider for DockerDesktopFilesystem {
         self.runtime
             .docker_exec(&["cleanup", &container_dir_docker], None)?;
 
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for DockerDesktopFilesystem {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        // Called inside container process, handled by helper
+        debug!("pivot_root delegated to Docker helper");
         Ok(())
     }
 }

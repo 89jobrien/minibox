@@ -28,9 +28,9 @@ use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use minibox_core::{
     domain::{
-        AsAny, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata,
-        ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities,
-        SpawnResult,
+        AsAny, ChildInit, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider,
+        ImageMetadata, ImageRegistry, ResourceConfig, ResourceLimiter, RootfsLayout, RootfsSetup,
+        RuntimeCapabilities, SpawnResult,
     },
     image::reference::ImageRef,
     protocol::{DaemonRequest, DaemonResponse},
@@ -229,7 +229,7 @@ impl AsAny for VzFilesystem {
     }
 }
 
-impl FilesystemProvider for VzFilesystem {
+impl minibox_core::domain::RootfsSetup for VzFilesystem {
     fn setup_rootfs(
         &self,
         _image_layers: &[PathBuf],
@@ -243,18 +243,9 @@ impl FilesystemProvider for VzFilesystem {
         );
         Ok(RootfsLayout {
             merged_dir: container_dir.to_path_buf(),
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
-    }
-
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        // pivot_root runs inside the VM's container process, not on the host.
-        tracing::debug!(
-            new_root = %new_root.display(),
-            "vz: pivot_root delegated to in-VM daemon (no-op on host)"
-        );
-        Ok(())
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
@@ -262,6 +253,17 @@ impl FilesystemProvider for VzFilesystem {
         tracing::debug!(
             container_dir = %container_dir.display(),
             "vz: filesystem cleanup delegated to in-VM daemon (no-op on host)"
+        );
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for VzFilesystem {
+    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+        // pivot_root runs inside the VM's container process, not on the host.
+        tracing::debug!(
+            new_root = %new_root.display(),
+            "vz: pivot_root delegated to in-VM daemon (no-op on host)"
         );
         Ok(())
     }

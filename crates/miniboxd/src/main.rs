@@ -127,6 +127,8 @@ use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRunti
 #[cfg(target_os = "linux")]
 use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
+use minibox_core::adapters::HostnameRegistryRouter;
+#[cfg(target_os = "linux")]
 use minibox_core::events::BroadcastEventBroker;
 #[cfg(target_os = "linux")]
 use minibox_core::image::ImageStore;
@@ -140,6 +142,8 @@ use minibox_core::image::registry::RegistryClient;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::Arc;
+#[cfg(all(target_os = "linux", feature = "tailnet"))]
+use tailbox::{TailnetConfig, TailnetNetwork};
 #[cfg(target_os = "linux")]
 use tokio::net::UnixListener;
 #[cfg(target_os = "linux")]
@@ -219,14 +223,19 @@ fn build_native_handler_dependencies(
     image_gc: Arc<dyn ImageGarbageCollector>,
     native_network: Arc<dyn minibox_core::domain::NetworkProvider>,
 ) -> Result<Arc<HandlerDependencies>> {
-    let registry = Arc::new(
-        DockerHubRegistry::new(Arc::clone(&state.image_store))
-            .context("creating Docker Hub registry adapter")?,
-    );
-    let ghcr_registry = Arc::new(
-        GhcrRegistry::new(Arc::clone(&state.image_store))
-            .context("creating GHCR registry adapter")?,
-    );
+    let registry_router = Arc::new(HostnameRegistryRouter::new(
+        Arc::new(
+            DockerHubRegistry::new(Arc::clone(&state.image_store))
+                .context("creating Docker Hub registry adapter")?,
+        ),
+        [(
+            "ghcr.io",
+            Arc::new(
+                GhcrRegistry::new(Arc::clone(&state.image_store))
+                    .context("creating GHCR registry adapter")?,
+            ) as minibox_core::domain::DynImageRegistry,
+        )],
+    ));
     let commit_adapter = mbx::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as mbx::daemonbox_state::StateHandle,
@@ -241,8 +250,7 @@ fn build_native_handler_dependencies(
     );
 
     Ok(Arc::new(HandlerDependencies {
-        registry,
-        ghcr_registry,
+        registry_router,
         filesystem: Arc::new(OverlayFilesystem::new()),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
@@ -421,6 +429,15 @@ async fn main() -> Result<()> {
     let socket_path_str =
         std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
 
+    // ── Startup diagnostics ──────────────────────────────────────────────
+    let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
+        .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
+    daemonbox::server::log_startup_info(
+        &socket_path_str,
+        &data_dir.display().to_string(),
+        &cgroup_root,
+    );
+
     // ── Directories ──────────────────────────────────────────────────────
     // Explicit 0700 keeps extracted layer/rootfs contents private on shared
     // hosts (matters for the per-user ~/.mbx/cache path; harmless for the
@@ -489,6 +506,19 @@ async fn main() -> Result<()> {
         match mode.as_str() {
             "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
             "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+            #[cfg(feature = "tailnet")]
+            "tailnet" => {
+                let tailnet_cfg = TailnetConfig {
+                    auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
+                    key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
+                        .unwrap_or_else(|_| "tailscale-auth-key".to_string()),
+                };
+                Arc::new(
+                    TailnetNetwork::new(tailnet_cfg)
+                        .await
+                        .context("TailnetNetwork init failed")?,
+                )
+            }
             _ => Arc::new(NoopNetwork::new()),
         }
     };
@@ -509,19 +539,23 @@ async fn main() -> Result<()> {
             native_network,
         )?,
         AdapterSuite::Gke => {
-            let registry = Arc::new(
-                DockerHubRegistry::new(Arc::clone(&state.image_store))
-                    .context("creating Docker Hub registry adapter")?,
-            );
-            let ghcr_registry = Arc::new(
-                GhcrRegistry::new(Arc::clone(&state.image_store))
-                    .context("creating GHCR registry adapter")?,
-            );
+            let registry_router = Arc::new(HostnameRegistryRouter::new(
+                Arc::new(
+                    DockerHubRegistry::new(Arc::clone(&state.image_store))
+                        .context("creating Docker Hub registry adapter")?,
+                ),
+                [(
+                    "ghcr.io",
+                    Arc::new(
+                        GhcrRegistry::new(Arc::clone(&state.image_store))
+                            .context("creating GHCR registry adapter")?,
+                    ) as minibox_core::domain::DynImageRegistry,
+                )],
+            ));
             let proot_runtime =
                 ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
             Arc::new(HandlerDependencies {
-                registry,
-                ghcr_registry,
+                registry_router,
                 filesystem: Arc::new(CopyFilesystem::new()),
                 resource_limiter: Arc::new(NoopLimiter::new()),
                 runtime: Arc::new(proot_runtime),
@@ -544,13 +578,18 @@ async fn main() -> Result<()> {
             })
         }
         AdapterSuite::Colima => {
-            let ghcr_registry = Arc::new(
-                GhcrRegistry::new(Arc::clone(&state.image_store))
-                    .context("creating GHCR registry adapter")?,
-            );
+            let registry_router = Arc::new(HostnameRegistryRouter::new(
+                Arc::new(ColimaRegistry::new()) as minibox_core::domain::DynImageRegistry,
+                [(
+                    "ghcr.io",
+                    Arc::new(
+                        GhcrRegistry::new(Arc::clone(&state.image_store))
+                            .context("creating GHCR registry adapter")?,
+                    ) as minibox_core::domain::DynImageRegistry,
+                )],
+            ));
             Arc::new(HandlerDependencies {
-                registry: Arc::new(ColimaRegistry::new()),
-                ghcr_registry,
+                registry_router,
                 filesystem: Arc::new(ColimaFilesystem::new()),
                 resource_limiter: Arc::new(ColimaLimiter::new()),
                 runtime: Arc::new(ColimaRuntime::new()),

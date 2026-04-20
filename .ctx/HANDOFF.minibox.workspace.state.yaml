@@ -1,0 +1,30 @@
+project: minibox
+branch: main
+build: ok (cargo check --workspace, 0 errors)
+tests: 438 passing (0 failed) — cargo nextest run --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox
+touched_files:
+- Cargo.toml
+- Cargo.lock
+- crates/xtask/src/main.rs
+- crates/xtask/src/preflight.rs
+- crates/minibox-core/src/domain/networking.rs
+- crates/miniboxd/Cargo.toml
+- crates/miniboxd/src/main.rs
+- crates/tailbox/Cargo.toml
+- crates/tailbox/src/adapter.rs
+- crates/tailbox/src/auth.rs
+- crates/tailbox/src/config.rs
+- crates/tailbox/src/experiment.rs
+- crates/tailbox/src/lib.rs
+- crates/tailbox/tests/adapter_tests.rs
+- crates/tailbox/tests/auth_tests.rs
+- crates/daemonbox/tests/conformance_helpers.rs
+- crates/daemonbox/tests/conformance_tests.rs
+- crates/mbx/src/adapters/colima.rs
+- crates/minibox-core/src/domain.rs
+- docs/superpowers/plans/2026-04-17-tailnet-integration.md
+- docs/superpowers/specs/2026-04-17-tailnet-integration-design.md
+notes: 'Tailbox integration work deferred pending macbox compile fix review. Remaining
+  working tree changes in daemonbox conformance tests, colima adapter, domain.rs,
+  xtask preflight.'
+generated: '2026-04-20'

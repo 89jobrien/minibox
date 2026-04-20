@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```rust,no_run
-//! use minibox_core::image::{ImageStore, registry::RegistryClient};
+//! use minibox_oci::image::{ImageStore, registry::RegistryClient};
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {

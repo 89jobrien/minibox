@@ -41,7 +41,7 @@ fn make_record(id: &str, state: &str, pid: Option<u32>) -> ContainerRecord {
         rootfs_path: PathBuf::from("/mock/rootfs"),
         cgroup_path: PathBuf::from("/mock/cgroup"),
         post_exit_hooks: vec![],
-        overlay_upper: None,
+        rootfs_metadata: None,
         source_image_ref: None,
     }
 }
@@ -450,4 +450,33 @@ async fn test_concurrent_read_during_writes_does_not_panic() {
         state.get_container("seed-container").await.is_some(),
         "seed container must survive concurrent writes"
     );
+}
+
+// ---------------------------------------------------------------------------
+// minibox-69: ContainerState type unification
+// ---------------------------------------------------------------------------
+
+/// `daemonbox::state::ContainerState` must be the same type as
+/// `minibox_core::domain::ContainerState` — callers must be able to pass
+/// the domain type directly without conversion.
+#[tokio::test]
+async fn test_container_state_is_domain_type() {
+    use minibox_core::domain::ContainerState as DomainState;
+
+    let tmp = TempDir::new().unwrap();
+    let state = make_state(&tmp);
+
+    let id = "paused-type-check";
+    state
+        .add_container(make_record(id, "Running", Some(99)))
+        .await;
+
+    // This must compile: DomainState passed where daemonbox ContainerState expected.
+    state
+        .update_container_state(id, DomainState::Paused)
+        .await
+        .expect("Running → Paused transition must succeed");
+
+    let record = state.get_container(id).await.expect("container must exist");
+    assert_eq!(record.info.state, "Paused");
 }

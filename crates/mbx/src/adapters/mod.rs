@@ -135,8 +135,7 @@ pub use registry::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
 
-// GKE unprivileged exports (Linux only at runtime, but compile-check everywhere)
-#[cfg(target_os = "linux")]
+// GKE unprivileged exports (available on all platforms for testing)
 pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 
 // Cross-platform exports (always available)

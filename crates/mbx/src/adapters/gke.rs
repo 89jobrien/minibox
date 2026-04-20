@@ -30,8 +30,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig, ResourceLimiter,
-    RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
+    RuntimeCapabilities, SpawnResult,
 };
 use minibox_core::{adapt, as_any};
 use std::path::{Path, PathBuf};
@@ -91,7 +91,7 @@ impl CopyFilesystem {
     }
 }
 
-impl FilesystemProvider for CopyFilesystem {
+impl minibox_core::domain::RootfsSetup for CopyFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
@@ -115,15 +115,9 @@ impl FilesystemProvider for CopyFilesystem {
 
         Ok(RootfsLayout {
             merged_dir: merged,
-            overlay_upper: None,
+            rootfs_metadata: None,
             source_image_ref: None,
         })
-    }
-
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        // proot handles the fake chroot — nothing to do here.
-        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
-        Ok(())
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
@@ -132,6 +126,14 @@ impl FilesystemProvider for CopyFilesystem {
             std::fs::remove_dir_all(container_dir)
                 .with_context(|| format!("removing container dir {container_dir:?}"))?;
         }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for CopyFilesystem {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        // proot handles the fake chroot — nothing to do here.
+        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
         Ok(())
     }
 }
@@ -234,7 +236,8 @@ impl ProotRuntime {
     /// Checks `MINIBOX_PROOT_PATH` first, then searches `PATH` for `proot`.
     pub fn from_env() -> Result<Self> {
         if let Ok(path) = std::env::var("MINIBOX_PROOT_PATH") {
-            return Self::new(path);
+            return Self::new(&path)
+                .with_context(|| format!("MINIBOX_PROOT_PATH points to invalid binary {path:?}"));
         }
 
         // Search PATH for proot
@@ -340,6 +343,7 @@ as_any!(ProotRuntime);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::domain::{ChildInit, RootfsSetup};
     use tempfile::TempDir;
 
     // -- NoopLimiter tests --------------------------------------------------

@@ -1177,4 +1177,239 @@ mod tests {
             _ => panic!("wrong variant"),
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Wire format snapshot tests — catch serialization drift
+    //
+    // Each test pins the exact JSON representation of a protocol variant.
+    // If the serde output changes (field renamed, tag changed, etc.) these
+    // tests fail immediately rather than silently breaking the wire protocol.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn wire_snapshot_run_request() {
+        let req = DaemonRequest::Run {
+            image: "library/alpine".to_string(),
+            tag: Some("3.18".to_string()),
+            command: vec!["sh".to_string(), "-c".to_string(), "echo hi".to_string()],
+            memory_limit_bytes: Some(134217728),
+            cpu_weight: Some(100),
+            ephemeral: true,
+            network: None,
+            env: vec!["FOO=bar".to_string()],
+            mounts: vec![],
+            privileged: false,
+            name: Some("my-container".to_string()),
+            tty: false,
+        };
+        let json = serde_json::to_string(&req).expect("serialize");
+        // Pin the type discriminant and required fields.
+        assert!(json.contains("\"type\":\"Run\""), "type tag: {json}");
+        assert!(
+            json.contains("\"image\":\"library/alpine\""),
+            "image: {json}"
+        );
+        assert!(json.contains("\"tag\":\"3.18\""), "tag: {json}");
+        assert!(json.contains("\"ephemeral\":true"), "ephemeral: {json}");
+        assert!(
+            json.contains("\"memory_limit_bytes\":134217728"),
+            "memory: {json}"
+        );
+        assert!(json.contains("\"cpu_weight\":100"), "cpu: {json}");
+        assert!(json.contains("\"name\":\"my-container\""), "name: {json}");
+        // Verify it round-trips back to the same JSON.
+        let decoded: DaemonRequest = serde_json::from_str(&json).expect("deserialize");
+        let re_encoded = serde_json::to_string(&decoded).expect("re-serialize");
+        assert_eq!(
+            json, re_encoded,
+            "wire format is not stable across roundtrip"
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_stop_request() {
+        let json = serde_json::to_string(&DaemonRequest::Stop {
+            id: "abc123def456".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Stop","id":"abc123def456"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_list_request() {
+        let json = serde_json::to_string(&DaemonRequest::List).expect("serialize");
+        assert_eq!(json, r#"{"type":"List"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_pull_request() {
+        let json = serde_json::to_string(&DaemonRequest::Pull {
+            image: "library/nginx".to_string(),
+            tag: Some("stable".to_string()),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"Pull","image":"library/nginx","tag":"stable"}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_created_response() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerCreated {
+            id: "deadbeef1234".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerCreated","id":"deadbeef1234"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_success_response() {
+        let json = serde_json::to_string(&DaemonResponse::Success {
+            message: "stopped".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Success","message":"stopped"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_error_response() {
+        let json = serde_json::to_string(&DaemonResponse::Error {
+            message: "container not found".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Error","message":"container not found"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_container_output_stdout() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: "aGVsbG8=".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"ContainerOutput","stream":"stdout","data":"aGVsbG8="}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_output_stderr() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stderr,
+            data: "ZXJyb3I=".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"ContainerOutput","stream":"stderr","data":"ZXJyb3I="}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_stopped_response() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 0 })
+            .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":0}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_container_stopped_nonzero_exit() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 137 })
+            .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":137}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_push_credentials_anonymous() {
+        let json = serde_json::to_string(&PushCredentials::Anonymous).expect("serialize");
+        assert_eq!(json, r#"{"type":"Anonymous"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_push_credentials_basic() {
+        let json = serde_json::to_string(&PushCredentials::Basic {
+            username: "user".to_string(),
+            password: "s3cr3t".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"Basic","username":"user","password":"s3cr3t"}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_send_input_request() {
+        use crate::domain::SessionId;
+        let json = serde_json::to_string(&DaemonRequest::SendInput {
+            session_id: SessionId::from("sess-abc"),
+            data: "bHMK".to_string(),
+        })
+        .expect("serialize");
+        assert!(json.contains("\"type\":\"SendInput\""), "{json}");
+        assert!(json.contains("\"session_id\":\"sess-abc\""), "{json}");
+        assert!(json.contains("\"data\":\"bHMK\""), "{json}");
+    }
+
+    #[test]
+    fn wire_snapshot_resize_pty_request() {
+        use crate::domain::SessionId;
+        let json = serde_json::to_string(&DaemonRequest::ResizePty {
+            session_id: SessionId::from("sess-abc"),
+            cols: 200,
+            rows: 50,
+        })
+        .expect("serialize");
+        assert!(json.contains("\"type\":\"ResizePty\""), "{json}");
+        assert!(json.contains("\"cols\":200"), "{json}");
+        assert!(json.contains("\"rows\":50"), "{json}");
+    }
+
+    /// Verify that all protocol field names have not changed since last known
+    /// good state. Any addition of a field with `#[serde(default)]` is fine
+    /// (old clients omitting it still decode). Renaming a field is a breaking
+    /// change and will cause this test to fail.
+    #[test]
+    fn wire_format_run_request_field_names_stable() {
+        let req = DaemonRequest::Run {
+            image: "i".to_string(),
+            tag: None,
+            command: vec![],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            env: vec![],
+            mounts: vec![],
+            privileged: false,
+            name: None,
+            tty: false,
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
+        let obj = v.as_object().expect("object");
+        // Check every field name that must exist in the wire format.
+        for field in &[
+            "type",
+            "image",
+            "tag",
+            "command",
+            "memory_limit_bytes",
+            "cpu_weight",
+            "ephemeral",
+            "network",
+            "env",
+            "mounts",
+            "privileged",
+            "name",
+            "tty",
+        ] {
+            assert!(
+                obj.contains_key(*field),
+                "missing field {field} in Run wire format"
+            );
+        }
+    }
 }

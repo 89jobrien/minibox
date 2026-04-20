@@ -44,6 +44,26 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Log resolved startup configuration at `info` level.
+///
+/// Call this once after path resolution is complete and before binding the socket.
+/// Structured fields follow the project tracing contract: `key = value`, lowercase
+/// verb-noun message, no embedded values in the message string.
+///
+/// # Arguments
+///
+/// * `socket_path` — resolved Unix socket path (after env-var expansion)
+/// * `data_dir` — resolved data directory for images and container state
+/// * `cgroup_root` — resolved cgroup root used for per-container cgroups
+pub fn log_startup_info(socket_path: &str, data_dir: &str, cgroup_root: &str) {
+    info!(
+        socket_path = socket_path,
+        data_dir = data_dir,
+        cgroup_root = cgroup_root,
+        "server: startup configuration resolved"
+    );
+}
+
 /// Run the daemon accept loop until `shutdown` resolves.
 ///
 /// For each accepted connection the following happens:
@@ -283,11 +303,13 @@ async fn dispatch(
             let _ = tx.send(response).await;
         }
         DaemonRequest::PauseContainer { id } => {
-            let response = handler::handle_pause(id, state, Arc::clone(&deps.event_sink)).await;
+            let response =
+                handler::handle_pause(id, state, Arc::clone(&deps.events.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::ResumeContainer { id } => {
-            let response = handler::handle_resume(id, state, Arc::clone(&deps.event_sink)).await;
+            let response =
+                handler::handle_resume(id, state, Arc::clone(&deps.events.event_sink)).await;
             let _ = tx.send(response).await;
         }
         DaemonRequest::Remove { id } => {
@@ -363,7 +385,7 @@ async fn dispatch(
         }
         DaemonRequest::SubscribeEvents => {
             tokio::spawn(handler::handle_subscribe_events(
-                Arc::clone(&deps.event_source),
+                Arc::clone(&deps.events.event_source),
                 tx,
             ));
         }
@@ -371,8 +393,8 @@ async fn dispatch(
             tokio::spawn(handler::handle_prune(
                 dry_run,
                 Arc::clone(&state),
-                Arc::clone(&deps.image_gc),
-                Arc::clone(&deps.event_sink),
+                Arc::clone(&deps.image.image_gc),
+                Arc::clone(&deps.events.event_sink),
                 tx,
             ));
         }
@@ -380,8 +402,8 @@ async fn dispatch(
             tokio::spawn(handler::handle_remove_image(
                 image_ref,
                 Arc::clone(&state),
-                Arc::clone(&deps.image_store),
-                Arc::clone(&deps.event_sink),
+                Arc::clone(&deps.image.image_store),
+                Arc::clone(&deps.events.event_sink),
                 tx,
             ));
         }
@@ -418,6 +440,7 @@ mod tests {
     use mbx::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
+    use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::image::ImageStore;
     use minibox_core::protocol::{DaemonRequest, DaemonResponse};
     use std::sync::Arc;
@@ -458,31 +481,46 @@ mod tests {
         let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
             Arc::new(NoopImageGc);
         let deps = Arc::new(crate::handler::HandlerDependencies {
-            registry: Arc::new(MockRegistry::new()),
-            ghcr_registry: Arc::new(MockRegistry::new()),
-            filesystem: Arc::new(MockFilesystem::new()),
-            resource_limiter: Arc::new(MockLimiter::new()),
-            runtime: Arc::new(MockRuntime::new()),
-            network_provider: Arc::new(MockNetwork::new()),
-            containers_base: tmp.path().join("containers"),
-            run_containers_base: tmp.path().join("run"),
-            metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
-            image_loader: Arc::new(crate::handler::NoopImageLoader),
-            exec_runtime: None,
-            image_pusher: None,
-            commit_adapter: None,
-            image_builder: None,
-            event_sink: Arc::new(minibox_core::events::NoopEventSink),
-            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            image_gc,
-            image_store,
+            image: crate::handler::ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    Arc::new(MockRegistry::new()),
+                    [(
+                        "ghcr.io",
+                        Arc::new(MockRegistry::new()) as minibox_core::domain::DynImageRegistry,
+                    )],
+                )),
+                image_loader: Arc::new(crate::handler::NoopImageLoader),
+                image_gc,
+                image_store,
+            },
+            lifecycle: crate::handler::LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: crate::handler::ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    crate::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: crate::handler::BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: crate::handler::EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
+            },
             policy: crate::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
-            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-                crate::handler::PtySessionRegistry::default(),
-            )),
         });
         (state, deps)
     }

@@ -6,6 +6,9 @@
 //! - `test_fixtures`: Shared test setup helpers (behind `test-utils` feature)
 
 mod registry;
+mod registry_router;
+
+pub use registry_router::HostnameRegistryRouter;
 
 /// Mock adapters for all domain traits, for use in tests.
 ///
