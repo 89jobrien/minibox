@@ -13,6 +13,8 @@
 !docs/cgroup-findings.md
 !docs/minibox-orch-design.md
 !docs/minibox-orch-handoff.md
+!docs/STATE_MODEL.md
+!docs/SOCKET_PATHS.md
 !docs/handoff-*.md
 !docs/conformance.md
 !docs/plans/*.md
