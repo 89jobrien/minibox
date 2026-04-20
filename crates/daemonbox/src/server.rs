@@ -44,6 +44,26 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Log resolved startup configuration at `info` level.
+///
+/// Call this once after path resolution is complete and before binding the socket.
+/// Structured fields follow the project tracing contract: `key = value`, lowercase
+/// verb-noun message, no embedded values in the message string.
+///
+/// # Arguments
+///
+/// * `socket_path` — resolved Unix socket path (after env-var expansion)
+/// * `data_dir` — resolved data directory for images and container state
+/// * `cgroup_root` — resolved cgroup root used for per-container cgroups
+pub fn log_startup_info(socket_path: &str, data_dir: &str, cgroup_root: &str) {
+    info!(
+        socket_path = socket_path,
+        data_dir = data_dir,
+        cgroup_root = cgroup_root,
+        "server: startup configuration resolved"
+    );
+}
+
 /// Run the daemon accept loop until `shutdown` resolves.
 ///
 /// For each accepted connection the following happens:

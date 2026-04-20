@@ -429,6 +429,15 @@ async fn main() -> Result<()> {
     let socket_path_str =
         std::env::var("MINIBOX_SOCKET_PATH").unwrap_or_else(|_| format!("{run_dir}/miniboxd.sock"));
 
+    // ── Startup diagnostics ──────────────────────────────────────────────
+    let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
+        .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
+    daemonbox::server::log_startup_info(
+        &socket_path_str,
+        &data_dir.display().to_string(),
+        &cgroup_root,
+    );
+
     // ── Directories ──────────────────────────────────────────────────────
     // Explicit 0700 keeps extracted layer/rootfs contents private on shared
     // hosts (matters for the per-user ~/.mbx/cache path; harmless for the
