@@ -398,9 +398,9 @@ See `docs/FEATURE_MATRIX.md` for the full per-platform breakdown. Key constraint
   `MINIBOX_ADAPTER` causes the daemon to exit at startup.
 - **Windows is a stub**: `winbox::start()` returns an error unconditionally. Phase 2 work
   (Named Pipe server, HCS/WSL2 adapter wiring) has not started.
-- **Protocol type duplication**: `DaemonRequest` is defined independently in both
-  `minibox-core/src/protocol.rs` and `mbx/src/protocol.rs`. New variants must be added to
-  both files. See `docs/STABILITY_CHECKLIST.md`.
+- **Protocol types**: `DaemonRequest`/`DaemonResponse` are defined in
+  `minibox-core/src/protocol.rs` (single source of truth). `mbx` re-exports via
+  `pub use minibox_core::protocol`. Consolidated in #122.
 
 ## Tracing Contract
 

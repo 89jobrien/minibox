@@ -9,8 +9,8 @@ and platform surface grows.
 ## Runtime Integrity
 
 - [x] **Protocol types have a single source of truth.** `DaemonRequest`/`DaemonResponse` are
-  defined only in `minibox-core/src/protocol.rs`. `mbx` re-exports via
-  `pub use minibox_core::protocol`. Wire format snapshot tests in `minibox-core` pin
+  defined only in `minibox-core/src/protocol.rs` (consolidated in #122). `mbx` re-exports
+  via `pub use minibox_core::protocol`. Wire format snapshot tests in `minibox-core` pin
   serialization. Add new variants only to `minibox-core/src/protocol.rs`.
 
 - [ ] **Handler coverage >= 80% (function).** Current baseline: ~67.5% function / ~55% line

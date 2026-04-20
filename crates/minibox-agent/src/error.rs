@@ -20,6 +20,14 @@ pub enum AgentError {
     /// [`CruxErr`](cruxai_core::types::error::CruxErr) is preserved.
     #[error("agent step failed")]
     Step(#[from] cruxai_core::types::error::CruxErr),
+
+    /// The agent exceeded its token/step/time budget.
+    #[error("budget exceeded: {0}")]
+    BudgetExceeded(String),
+
+    /// Catch-all for ad-hoc agent errors that don't fit other variants.
+    #[error("{0}")]
+    Other(String),
 }
 
 #[cfg(test)]
