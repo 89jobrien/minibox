@@ -1,0 +1,46 @@
+# CODEOWNERS
+#
+# GitHub uses this file to assign review requirements on PRs.
+# Format: <pattern> <owner>
+# Patterns are matched in order; last match wins.
+#
+# All crates and modules are owned by @89jobrien until additional
+# maintainers are added. Update this file when ownership changes.
+
+# Catch-all — everything not matched below
+*                                   @89jobrien
+
+# Core tier
+crates/minibox-core/                @89jobrien
+crates/mbx/                         @89jobrien
+crates/daemonbox/                   @89jobrien
+crates/miniboxd/                    @89jobrien
+crates/minibox-cli/                 @89jobrien
+crates/minibox-client/              @89jobrien
+
+# Platform tier
+crates/macbox/                      @89jobrien
+crates/winbox/                      @89jobrien
+crates/dockerbox/                   @89jobrien
+crates/tailbox/                     @89jobrien
+
+# Experimental tier
+crates/minibox-agent/               @89jobrien
+crates/minibox-llm/                 @89jobrien
+crates/minibox-secrets/             @89jobrien
+crates/mbxctl/                      @89jobrien
+crates/dashbox/                     @89jobrien
+crates/minibox-bench/               @89jobrien
+
+# Internal tier
+crates/xtask/                       @89jobrien
+crates/minibox-macros/              @89jobrien
+crates/minibox-oci/                 @89jobrien
+
+# External (Go module)
+agentbox/                           @89jobrien
+
+# Docs and policy files — require owner review
+docs/CRATE_TIERS.md                 @89jobrien
+docs/STABILITY_CHECKLIST.md         @89jobrien
+CODEOWNERS                          @89jobrien
