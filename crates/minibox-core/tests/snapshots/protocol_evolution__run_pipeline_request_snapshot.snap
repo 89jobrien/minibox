@@ -1,0 +1,20 @@
+---
+source: crates/minibox-core/tests/protocol_evolution.rs
+expression: req
+---
+{
+  "type": "RunPipeline",
+  "pipeline_path": "/workspace/.cruxx/pipelines/work.cruxx",
+  "input": {
+    "prompt": "hello"
+  },
+  "image": null,
+  "budget": null,
+  "env": [
+    [
+      "CRUX_LOG",
+      "debug"
+    ]
+  ],
+  "max_depth": 3
+}

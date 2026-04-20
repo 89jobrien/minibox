@@ -431,6 +431,17 @@ async fn dispatch(
                 handle_resize_pty(session_id, cols, rows, deps, tx).await;
             });
         }
+        DaemonRequest::RunPipeline { .. } => {
+            if tx
+                .send(DaemonResponse::Error {
+                    message: "RunPipeline is not yet implemented".to_string(),
+                })
+                .await
+                .is_err()
+            {
+                tracing::warn!("dispatch: client disconnected before RunPipeline error could be sent");
+            }
+        }
     }
 }
 

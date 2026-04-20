@@ -30,3 +30,4 @@ nix = { workspace = true }
 wiremock = { workspace = true }
 proptest = "1"
 base64 = { workspace = true }
+insta = { workspace = true }

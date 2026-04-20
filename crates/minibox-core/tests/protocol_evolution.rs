@@ -390,3 +390,66 @@ fn test_terminal_classification_is_exhaustive() {
          of the two lists above"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 4: RunPipeline backward compatibility
+// ---------------------------------------------------------------------------
+
+/// Verifies that a RunPipeline request omitting all optional fields still
+/// deserializes with the expected defaults.
+#[test]
+fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
+    let json = r#"{"type":"RunPipeline","pipeline_path":"work.cruxx"}"#;
+
+    let req: DaemonRequest =
+        serde_json::from_str(json).expect("backward-compat RunPipeline deserialization failed");
+
+    match req {
+        DaemonRequest::RunPipeline {
+            pipeline_path,
+            input,
+            image,
+            budget,
+            env,
+            max_depth,
+        } => {
+            assert_eq!(pipeline_path, "work.cruxx");
+            assert!(input.is_none(), "input should default to None");
+            assert!(image.is_none(), "image should default to None");
+            assert!(budget.is_none(), "budget should default to None");
+            assert!(env.is_empty(), "env should default to []");
+            assert_eq!(max_depth, 3, "max_depth should default to 3");
+        }
+        other => panic!("expected DaemonRequest::RunPipeline, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: RunPipeline snapshot tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn run_pipeline_request_snapshot() {
+    let req = DaemonRequest::RunPipeline {
+        pipeline_path: "/workspace/.cruxx/pipelines/work.cruxx".into(),
+        input: Some(serde_json::json!({"prompt": "hello"})),
+        image: None,
+        budget: None,
+        env: vec![("CRUX_LOG".into(), "debug".into())],
+        max_depth: 3,
+    };
+    insta::assert_json_snapshot!(req);
+}
+
+#[test]
+fn run_pipeline_request_minimal_snapshot() {
+    let req = DaemonRequest::RunPipeline {
+        pipeline_path: "work.cruxx".into(),
+        input: None,
+        image: None,
+        budget: None,
+        env: vec![],
+        max_depth: 3,
+    };
+    insta::assert_json_snapshot!(req);
+}

@@ -249,6 +249,35 @@ pub enum DaemonRequest {
         #[serde(default)]
         follow: bool,
     },
+
+    /// Run a crux pipeline inside a container.
+    ///
+    /// Higher-level than `Run` — bundles image pull + container create +
+    /// pipeline execution + trace collection.
+    RunPipeline {
+        /// Path to the `.cruxx` pipeline file (host-side).
+        pipeline_path: String,
+        /// Optional JSON input to the pipeline.
+        #[serde(default)]
+        input: Option<serde_json::Value>,
+        /// Container image to use. Defaults to `cruxx-runtime:latest`.
+        #[serde(default)]
+        image: Option<String>,
+        /// Token/step/time budget for the pipeline execution.
+        #[serde(default)]
+        budget: Option<serde_json::Value>,
+        /// Additional environment variables as (KEY, VALUE) pairs.
+        #[serde(default)]
+        env: Vec<(String, String)>,
+        /// Maximum container nesting depth (daemon-enforced).
+        /// Defaults to 3. Requests exceeding this are rejected.
+        #[serde(default = "default_max_depth")]
+        max_depth: u32,
+    },
+}
+
+fn default_max_depth() -> u32 {
+    3
 }
 
 // ---------------------------------------------------------------------------
