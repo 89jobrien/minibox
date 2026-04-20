@@ -17,7 +17,7 @@
 //! # Quick start
 //!
 //! ```ignore
-//! use minibox_agent::{CruxLlmStep, LlmRequest, CruxCtx};
+//! use minibox_agent::{AgentError, CruxLlmStep, LlmRequest, CruxCtx};
 //!
 //! async fn summarize(ctx: &mut CruxCtx, input: String) -> Result<String, AgentError> {
 //!     let step = CruxLlmStep::from_env();
@@ -43,4 +43,3 @@ pub use step::CruxLlmStep;
 
 // Re-export crux-core types for one-dep convenience.
 pub use cruxai_core::ctx::CruxCtx;
-pub use cruxai_core::types::error::CruxErr;

@@ -10,8 +10,8 @@
 use crux_agentic::LlmStep;
 use crux_agentic::provider::{LlmRequest, LlmResponse};
 use cruxai_core::context::Context;
-use cruxai_core::prelude::CruxErr;
 
+use crate::error::AgentError;
 use crate::provider::FallbackChainAdapter;
 
 /// Newtype wrapping `LlmStep<FallbackChainAdapter>`.
@@ -37,13 +37,16 @@ impl CruxLlmStep {
     ///
     /// The step name appears in the crux trace and is used as the replay key —
     /// pass a stable, descriptive name (e.g. `"diagnose.summarize"`).
+    ///
+    /// Returns [`AgentError`] (not raw `CruxErr`) so the domain boundary is
+    /// enforced at the public API surface.
     pub async fn invoke<C: Context>(
         &self,
         ctx: &mut C,
         step_name: &str,
         req: LlmRequest,
-    ) -> Result<LlmResponse, CruxErr> {
-        self.0.invoke(ctx, step_name, req).await
+    ) -> Result<LlmResponse, AgentError> {
+        self.0.invoke(ctx, step_name, req).await.map_err(Into::into)
     }
 }
 

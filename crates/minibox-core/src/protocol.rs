@@ -1205,16 +1205,25 @@ mod tests {
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
         assert!(json.contains("\"type\":\"Run\""), "type tag: {json}");
-        assert!(json.contains("\"image\":\"library/alpine\""), "image: {json}");
+        assert!(
+            json.contains("\"image\":\"library/alpine\""),
+            "image: {json}"
+        );
         assert!(json.contains("\"tag\":\"3.18\""), "tag: {json}");
         assert!(json.contains("\"ephemeral\":true"), "ephemeral: {json}");
-        assert!(json.contains("\"memory_limit_bytes\":134217728"), "memory: {json}");
+        assert!(
+            json.contains("\"memory_limit_bytes\":134217728"),
+            "memory: {json}"
+        );
         assert!(json.contains("\"cpu_weight\":100"), "cpu: {json}");
         assert!(json.contains("\"name\":\"my-container\""), "name: {json}");
         // Verify it round-trips back to the same JSON.
         let decoded: DaemonRequest = serde_json::from_str(&json).expect("deserialize");
         let re_encoded = serde_json::to_string(&decoded).expect("re-serialize");
-        assert_eq!(json, re_encoded, "wire format is not stable across roundtrip");
+        assert_eq!(
+            json, re_encoded,
+            "wire format is not stable across roundtrip"
+        );
     }
 
     #[test]
@@ -1269,10 +1278,7 @@ mod tests {
             message: "container not found".to_string(),
         })
         .expect("serialize");
-        assert_eq!(
-            json,
-            r#"{"type":"Error","message":"container not found"}"#
-        );
+        assert_eq!(json, r#"{"type":"Error","message":"container not found"}"#);
     }
 
     #[test]
@@ -1317,8 +1323,7 @@ mod tests {
 
     #[test]
     fn wire_snapshot_push_credentials_anonymous() {
-        let json =
-            serde_json::to_string(&PushCredentials::Anonymous).expect("serialize");
+        let json = serde_json::to_string(&PushCredentials::Anonymous).expect("serialize");
         assert_eq!(json, r#"{"type":"Anonymous"}"#);
     }
 
@@ -1382,10 +1387,8 @@ mod tests {
             name: None,
             tty: false,
         };
-        let v: serde_json::Value = serde_json::from_str(
-            &serde_json::to_string(&req).expect("serialize"),
-        )
-        .expect("parse");
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
         let obj = v.as_object().expect("object");
         // Check every field name that must exist in the wire format.
         for field in &[
@@ -1403,7 +1406,10 @@ mod tests {
             "name",
             "tty",
         ] {
-            assert!(obj.contains_key(*field), "missing field {field} in Run wire format");
+            assert!(
+                obj.contains_key(*field),
+                "missing field {field} in Run wire format"
+            );
         }
     }
 }
