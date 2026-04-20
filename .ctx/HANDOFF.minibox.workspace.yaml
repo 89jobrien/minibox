@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '2026-04-18'
+updated: '20260420:050814'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -19,9 +19,7 @@ items:
   - date: 2026-04-01
     type: blocker
     note: 'VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64.
-      Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
-
-      '
+      Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254'
   - date: 2026-04-06
     type: note
     note: captured in doob — todo id 34l16mxn2y29do1562s9
@@ -185,10 +183,8 @@ items:
   priority: P2
   status: open
   title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
-  description: 'GH #107: Add install_overlay() to vm_image.rs that copies ~/.mbx/vm/overlay/
-    into rootfs before initramfs build. Called between extract_rootfs_if_needed and
-    install_init_files in build_vm_image(). Skips silently if overlay dir absent.
-    Prints file count summary. Deferred this session — VZ stack blocked by #61.'
+  description: 'GH #107: Add install_overlay() to vm_image.rs. Deferred — VZ stack
+    blocked by #61.'
   files:
   - crates/xtask/src/vm_image.rs
   extra:
@@ -201,12 +197,10 @@ items:
   status: open
   title: 'feat(tailbox): complete tailnet integration wiring — miniboxd feature flag
     + auth chain + gateway routing'
-  description: 'tailbox crate implemented: TailnetNetwork adapter (NetworkConfig port),
-    TailnetConfig, auth key resolution chain (1Password → env → file), gateway IP
-    caching, per-container network setup/cleanup. miniboxd wired with tailnet feature
-    flag. Uncommitted changes remain in daemonbox conformance tests, colima adapter,
-    domain.rs, xtask preflight — need to be reviewed and committed. Spec at
-    docs/superpowers/specs/2026-04-17-tailnet-integration-design.md.'
+  description: 'tailbox crate implemented: TailnetNetwork adapter, TailnetConfig,
+    auth key resolution chain (1Password→env→file), gateway IP caching, per-container
+    network setup/cleanup. miniboxd wired with tailnet feature flag. Uncommitted changes
+    remain in daemonbox conformance tests, colima adapter, domain.rs, xtask preflight.'
   files:
   - crates/tailbox/src/adapter.rs
   - crates/tailbox/src/auth.rs
@@ -220,78 +214,137 @@ items:
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
   extra: []
+- id: minibox-70
+  name: handler-coverage-80pct
+  priority: P1
+  status: open
+  title: 'Increase daemonbox/handler.rs coverage to 80% function threshold'
+  description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Priority error
+    paths: pull failure, empty image, registry unreachable, channel send failures.'
+  files:
+  - crates/daemonbox/src/handler.rs
+  extra:
+  - type: github-issue
+    number: 129
+    url: https://github.com/89jobrien/minibox/issues/129
+- id: minibox-71
+  name: adapter-integration-tests
+  priority: P1
+  status: open
+  title: 'Add integration tests for every wired adapter path (native, gke, colima)'
+  description: 'GH #130: Every daemon-accepted adapter path needs at least one integration
+    test. Unit tests alone are insufficient per STABILITY_CHECKLIST.'
+  files: []
+  extra:
+  - type: github-issue
+    number: 130
+    url: https://github.com/89jobrien/minibox/issues/130
+- id: minibox-72
+  name: feature-matrix-sot
+  priority: P2
+  status: open
+  title: 'Make FEATURE_MATRIX.md single source of truth — trim README/CLAUDE to summaries'
+  description: 'GH #131: Centralize per-platform status in docs/FEATURE_MATRIX.md.
+    Reduce README/CLAUDE.md to summary-level statements with links.'
+  files:
+  - docs/FEATURE_MATRIX.md
+  - README.md
+  - CLAUDE.md
+  extra:
+  - type: github-issue
+    number: 131
+    url: https://github.com/89jobrien/minibox/issues/131
+- id: minibox-73
+  name: ci-stability-gates
+  priority: P2
+  status: open
+  title: 'Add CI enforcement for stability checklist gates'
+  description: 'GH #133: doc-sync validation, adapter integration test requirements,
+    handler coverage thresholds as CI checks.'
+  files: []
+  extra:
+  - type: github-issue
+    number: 133
+    url: https://github.com/89jobrien/minibox/issues/133
+- id: minibox-74
+  name: experimental-surface-tests
+  priority: P2
+  status: open
+  title: 'Add tests for experimental surfaces: bridge networking, exec, persistence'
+  description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence
+    semantics (records survive restart, processes do not reattach).'
+  files: []
+  extra:
+  - type: github-issue
+    number: 134
+    url: https://github.com/89jobrien/minibox/issues/134
 log:
+- date: '20260420:050814'
+  session: 9
+  summary: 'Session: fixed ANTHROPIC_API_KEY in ~/dev/.env (dotenvx re-encrypt with
+    correct key). Council report 271aaba → 10 GH issues (#128-#137). Forge agent closed
+    #128 (protocol already consolidated in #122). Review fixes: restored AgentError
+    variants, updated CLAUDE.md, fixed HANDOFF tailbox context, clarified checklist
+    attribution. Version bump 0.18.2→0.19.0, pushed 21 commits to origin/main. 452
+    tests passing.'
+  commits:
+  - sha: 96b026a
+    branch: main
+  - sha: 7fa04e5
+    branch: main
+  - sha: 87f6f20
+    branch: main
+  - sha: 2e62bf0
+    branch: main
+  - sha: 271aaba
+    branch: main
 - date: '2026-04-18'
+  session: 8
   summary: 'fix(xtask): set_current_dir(root) before Shell::new() — survives deleted
-    worktree CWDs. chore: bump 0.18.1→0.18.2. pushed to origin/main. (6fb238e, bf580df)'
+    worktree CWDs. chore: bump 0.18.1→0.18.2. pushed to origin/main.'
   commits:
-  - 6fb238e
-  - bf580df
+  - sha: 6fb238e
+    branch: main
+  - sha: bf580df
+    branch: main
 - date: '2026-04-17'
+  session: 7
   summary: 'tailbox integration complete: TailnetNetwork adapter, TailnetConfig, auth
-    chain (1Password→env→file fallback), gateway IP caching, per-container setup/cleanup.
-    miniboxd wired with tailnet feature flag and domain types. Uncommitted: conformance
-    test updates, colima adapter changes, xtask preflight enhancements. Spec at
-    docs/superpowers/specs/2026-04-17-tailnet-integration-design.md'
+    chain, gateway IP caching, per-container setup/cleanup. miniboxd wired with tailnet
+    feature flag. Spec at docs/superpowers/specs/2026-04-17-tailnet-integration-design.md'
   commits:
-  - 67896ac
-  - f719be5
-  - 18cea02
-  - 2b44e4b
-  - 6aa8175
+  - sha: 67896ac
+    branch: main
+  - sha: f719be5
+    branch: main
+  - sha: 18cea02
+    branch: main
+  - sha: 2b44e4b
+    branch: main
+  - sha: 6aa8175
+    branch: main
 - date: '2026-04-17'
-  summary: 'orca-strait Wave 1+2 completions: minibox-oci extracted (#21, b3c8b5f),
-    ContainerState unified (#104, 92578fd partial), fork/exec→nsenter refactor (#60
-    pending), RegistryRouter ported (#103), ISP HandlerDependencies (#101/#102),
-    OCP BackendRootfsMetadata (#106), FilesystemProvider (#105), conformance test
-    suite, xtask pre-commit gate. macbox VZ stack blocked by Apple VZErrorInternal
-    (#61).'
+  session: 6
+  summary: 'orca-strait Wave 1+2: BackendDescriptor capability flags, xtask ToolProbe
+    preflight, conformance tests, PtyConfig+PtyAllocator domain port. 438/438 tests
+    pass.'
   commits:
-  - a4ccf4c
-  - b3c8b5f
-  - 92578fd
-  - 74bdabb
-  - 81be990
-  - a3dcf00
-  - 64fe60e
+  - sha: 74bdabb
+    branch: main
+  - sha: 81be990
+    branch: main
+  - sha: a3dcf00
+    branch: main
+  - sha: 64fe60e
+    branch: main
 - date: '2026-04-17'
-  summary: 'tailbox crate: Tailscale/tailnet networking integration. TailnetNetwork
-    adapter, TailnetConfig, auth key chain (1Password/env/file), gateway IP caching,
-    per-container setup/cleanup. miniboxd wired with tailnet feature flag. Spec +
-    plan committed. 11 commits (9bd9de8..67896ac). 438/438 tests pass. Uncommitted:
-    daemonbox conformance tests, colima, domain, xtask changes.'
+  session: 5
+  summary: 'Test coverage sprint: escape detection, GKE adapter suite, lifecycle failures,
+    Colima conformance. minibox-oci extracted. Paused state OCP fix (partial).'
   commits:
-  - 9bd9de8
-  - 67896ac
-- date: '2026-04-17'
-  summary: 'orca-strait Wave 1+2: closed T-arch GH issues (#101,#102,#105,#106 —
-    already merged). Wave 1: TestBackendDescriptor capability flags (#69, 74bdabb),
-    xtask ToolProbe preflight port (#95, 81be990). Wave 2: commit/build/push conformance
-    tests + MockContainerCommitter/Builder/Pusher (#62,#67,#71, a3dcf00), PtyConfig
-    + PtyAllocator domain port + NullPtyAllocator + MockPtyAllocator (#83, 64fe60e).
-    438/438 tests pass. Deferred: #100 (tokio callback refactor), all T-vz issues
-    (blocked #61).'
-  commits:
-  - 74bdabb
-  - 81be990
-  - a3dcf00
-  - 64fe60e
-- date: '2026-04-17'
-  summary: 'Test coverage sprint: minibox-30/31/32/37/38/62/63/64 closed — escape
-    detection (4 tests), GKE adapter suite (18 tests), lifecycle failures (7 tests),
-    Colima conformance (5 tests); CI serial parity verified. minibox-18 closed: minibox-oci
-    crate extracted (b3c8b5f). Paused state OCP fix (92578fd, partial). [a4ccf4c,
-    b3c8b5f, 92578fd]'
-  commits:
-  - a4ccf4c
-  - b3c8b5f
-  - 92578fd
-- date: '2026-04-16'
-  summary: 'P1 sprint: minibox-60 — 9 regression tests added (commit cycle metadata,
-    BackendRootfsMetadata serde round-trips, RootfsLayout accessor). minibox-50/57/59
-    verified already resolved. [6d6e6d8]'
-  commits:
-  - 6d6e6d8
-- date: '2026-04-11'
-  summary: Conformance suite Phases 1-3 on feat/conformance-suite. [851ca3e...3cb4b07]
-  commits: []
+  - sha: a4ccf4c
+    branch: main
+  - sha: b3c8b5f
+    branch: main
+  - sha: 92578fd
+    branch: main
