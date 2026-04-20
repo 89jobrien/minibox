@@ -17,6 +17,8 @@
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
 !docs/conformance.md
+!docs/FEATURE_MATRIX.md
+!docs/STABILITY_CHECKLIST.md
 !docs/plans/*.md
 !docs/plans/
 !docs/superpowers/**/*.md

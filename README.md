@@ -11,25 +11,52 @@ The project is currently pushing toward stronger dogfooding: agent-facing contro
 
 ## Features
 
-- **Unified binary (`miniboxd`)** – Single entrypoint that selects platform-specific backends behind compile-time cfg gates.
-- **Platform shims** – `macbox`, `winbox`, and `daemonbox` hide OS differences behind a stable interface.
-- **Core library (`mbx`)** – Platform-agnostic crate shared by the daemon, CLI, and benchmark tooling.
-- **JSON CLI (`minibox-cli`)** – Thin client that speaks JSON over Unix sockets.
+### Shipped (Linux native)
+
+- **Unified binary (`miniboxd`)** – Single entrypoint; selects platform-specific backends behind
+  compile-time cfg gates.
 - **OCI image pull** – Docker Hub v2 API with anonymous auth; parallel layer pulls; ghcr.io support.
-- **Container exec** – `minibox exec` runs commands in existing containers (`setns`); `-it` for interactive PTY.
-- **Named containers** – `--name` on `run`; name shown in `ps`; `exec` by name.
-- **Log capture** – `minibox logs <id>` retrieves stored stdout/stderr.
-- **Bridge networking** – veth pairs, NAT via iptables DNAT, IP allocator; `MINIBOX_NETWORK_MODE=bridge`.
-- **Container events** – `minibox events` streams lifecycle events.
-- **Image GC** – `minibox prune`/`minibox rmi`; lease-based GC.
-- **Bind mounts + privileged** – `-v`/`--mount`, `--privileged` on `run`.
-- **OCI push/commit/build** – `OciPushAdapter`, `ContainerCommitter`, `MiniboxImageBuilder` traits.
-- **Observability** – OpenTelemetry OTLP tracing, Prometheus `/metrics`, structured `tracing` fields.
-- **Dashbox TUI** – 8-tab Ratatui dashboard: containers, bench, git, todos, CI, diagrams, metrics.
-- **Agentbox** – Go orchestration agents (council, meta-agent, commit-msg) using Claude Agent SDK.
-- **Docker API shim** – `dockerboxd` translates Docker API calls to minibox protocol.
-- **Bench tooling (`minibox-bench`)** – Focused crate for performance exploration and regression tracking.
+- **Run / stop / remove / list** – Full container lifecycle on Linux native and GKE adapter suites.
+- **Named containers** – `--name` on `run`; name shown in `ps`; `exec` accepts names.
+- **Container exec** – `minibox exec` / `-it` PTY — **Linux native only** (`setns`).
+- **Log capture** – `minibox logs <id>` — **Linux native only**; stored stdout/stderr.
+- **Image GC** – `minibox prune` / `minibox rmi`; lease-based GC; all adapter suites.
+- **Bind mounts + privileged** – `-v` / `--mount`, `--privileged` — **Linux native only**.
+- **Container events** – `minibox events` streams lifecycle events; all adapter suites.
+- **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub), `daemonbox` (shared
+  handler + server).
+- **Core library (`mbx`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
+- **JSON CLI (`minibox-cli`)** – Thin client over Unix socket.
 - **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
+- **Bench tooling (`minibox-bench`)** – Codec + adapter microbenchmarks.
+
+### Experimental (wired, limited coverage)
+
+- **Bridge networking** – veth pairs, NAT via iptables DNAT; `MINIBOX_NETWORK_MODE=bridge`;
+  Linux native only.
+- **OCI push / commit / build** – `OciPushAdapter`, `overlay_commit_adapter`,
+  `MiniboxImageBuilder`; Linux native only; no Dockerfile parser yet.
+- **macOS Colima adapter** – `MINIBOX_ADAPTER=colima`; run/stop/ps work; exec/logs limited.
+- **macOS VZ.framework adapter** – `MINIBOX_ADAPTER=vz`; requires `--features vz` and
+  `cargo xtask build-vm-image`.
+- **Observability** – OpenTelemetry OTLP (`feature = "otel"`); Prometheus `/metrics`
+  (`feature = "metrics"`); compile-time opt-in.
+- **Docker API shim** – `dockerboxd` translates Docker API calls to minibox protocol; log
+  streaming is a stub.
+
+### Tooling (not part of the runtime)
+
+- **Dashbox TUI** – Ratatui dashboard (`just dash`).
+- **Agentbox** – Go orchestration agents (council, meta-agent, commit-msg) using Claude Agent SDK.
+
+### Not yet implemented
+
+- Windows: `winbox` compiles but `start()` returns an error unconditionally.
+- Port forwarding, in-container DNS.
+- Rootless (user namespace remapping).
+- Dockerfile parser.
+
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform breakdown.
 
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
