@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-11
+updated: 2026-04-20
 items:
 - id: minibox-1
   doob_uuid: bf5f06ad-ba67-402c-bdb5-a1828f5cc834
@@ -1105,6 +1105,15 @@ items:
     number: 93
     url: https://github.com/89jobrien/minibox/issues/93
 log:
+- date: 2026-04-20
+  summary: 'README updated: fixed vf→vz adapter key, added QEMU as macOS test path,
+    surfaced VZ blocked status, added conformance suite and just test-vm to Testing
+    section, updated Near-Term Roadmap. Housekeeping: .gitignore (allow handoff config
+    examples), Justfile (run-vm/test-vm recipes), mise.toml (standup→devkit), STANDUP
+    append. Push resolved rebase conflicts (kept ours for HANDOFF + Cargo.lock).
+    Build clean, 385/423 tests pass (2 pre-existing minibox-llm env-var failures).'
+  commits:
+  - cd9663e
 - '2026-04-14: fixed minibox-25 (cargo build --locked in CI) and minibox-27 (gate
   e2e to next/stable) in single commit'
 - date: 2026-04-11
