@@ -71,11 +71,13 @@ A Docker-like container runtime written in Rust. Daemon/client architecture with
 - Linux: native (namespaces + cgroups v2 + overlayfs)
 - Colima: macOS/Linux runtime, Docker alternative
 - GKE: unprivileged deployment (proot + copy-FS)
-- macOS VZ.framework: native VM via Apple Virtualization.framework (`MINIBOX_ADAPTER=vz`)
+- macOS QEMU: cross-compile + boot Alpine VM with HVF acceleration (`cargo xtask test-vm`)
+- macOS VZ.framework: blocked upstream — `VZErrorInternal(code=1)` on macOS 26 ARM64
 
 ## Near-Term Roadmap
 
-- Docker parity: wire commit/build/push end-to-end and validate the conformance matrix across `linux-native` and `colima`
+- Docker API shim: wire remaining `dockerbox` exec endpoints (POST /exec, GET /exec/:id/json) to unblock Maestro Docker test suite
+- Docker parity: wire commit/build/push adapters end-to-end into `miniboxd` (conformance suite phases 1–3 shipped; adapter wiring is the remaining gap)
 - MCP control surface: expose pull/run/ps/stop/rm cleanly enough for Claude-style agent workflows
 - Sandboxed AI execution: run generated scripts and tests inside disposable minibox containers instead of on the host
 - CI dogfooding: let the CI agent provision, stream, and tear down its own minibox-managed test environment
@@ -227,7 +229,7 @@ miniboxd starts
       ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
       │    macbox::preflight()                                 │
-      │      ├── MINIBOX_ADAPTER=vf  OR  VF available  ───────►│ Virtualization.framework
+      │      ├── MINIBOX_ADAPTER=vz   OR  VZ available  ───────►│ Virtualization.framework (blocked)
       │      ├── MINIBOX_ADAPTER=colima  OR  Colima running ──►│ Colima delegate
       │      └── neither ──────────────────────────────────── ►│ FATAL: no backend
       │                                                        │
@@ -248,6 +250,7 @@ miniboxd starts
 | Native Linux         | `native` (default) | Yes               | Production   |
 | GKE unprivileged     | `gke`              | Yes               | Production   |
 | macOS Colima         | `colima`           | Yes               | Production   |
+| macOS VZ.framework   | `vz`               | Yes               | Blocked (Apple bug — VZErrorInternal code=1 on macOS 26 ARM64) |
 | macOS Docker Desktop | `docker-desktop`   | No                | Library only |
 | Windows WSL2         | `wsl`              | No                | Library only |
 
@@ -384,6 +387,12 @@ just test-integration
 
 # E2E daemon + CLI suite, requires Linux + root
 just test-e2e
+
+# VM suite — cross-compile aarch64-musl binaries + run inside QEMU Alpine VM (macOS)
+just test-vm
+
+# Conformance suite — backend-agnostic OCI commit/build/push matrix
+cargo xtask test-conformance     # reports written to artifacts/conformance/
 
 # Preflight check
 just doctor
