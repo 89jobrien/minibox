@@ -38,6 +38,10 @@ agentbox/mbx-commit-msg
 /target/
 **/*.rs.bk
 *.pdb
+*.rlib
+rust_out
+rust_out.*
+repro.rs
 
 # Cargo
 Cargo.lock is committed for binary projects
@@ -58,10 +62,14 @@ Cargo.lock is committed for binary projects
 /profile.json.gz
 /artifacts/
 
-# Benchmark output — track only the latest snapshot for devloop
+# Benchmark output — track only the canonical baseline files
 /bench/results/*.json
 /bench/results/*.txt
+/bench/results/*.html
 !/bench/results/latest.json
+!/bench/results/bench.jsonl
+# Timestamped result directories (history lives in bench.jsonl)
+/bench/results/*/
 
 # Profiling
 /bench/profiles/
