@@ -32,6 +32,9 @@
 pub mod error;
 pub mod provider;
 pub mod step;
+pub mod trace;
+
+pub use trace::FileTraceStore;
 
 // Re-export the crux-agentic public surface so consumers only need minibox-agent.
 pub use crux_agentic::{LlmProvider, LlmRequest, LlmResponse, LlmStep};
