@@ -236,7 +236,11 @@ Platform crates follow the `{platform}box` naming convention: `minibox` (Linux n
 
 **Core library split**: Cross-platform types live in `minibox-core`; minibox re-exports them. Prefer `use minibox_core::protocol::*` in new code outside minibox rather than going through the re-export.
 
-**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), `colima` (macOS via limactl/nerdctl), and `vz` (macOS Virtualization.framework; boots an Alpine Linux VM, forwards commands to in-VM miniboxd over vsock; requires `macbox` compiled with `--features vz` and VM image at `~/.minibox/vm/` — build with `cargo xtask build-vm-image`). Wired in `miniboxd/src/main.rs`.
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay
+FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and
+`colima` (macOS via limactl/nerdctl — experimental). The `vz` adapter is wired in `macbox` but
+blocked by a VZErrorInternal Apple bug on macOS 26 ARM64 (GH #61); `krun` is next (in progress).
+Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 

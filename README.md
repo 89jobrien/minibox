@@ -68,11 +68,13 @@ A Docker-like container runtime written in Rust. Daemon/client architecture with
 
 ## Supported
 
-- Linux: native (namespaces + cgroups v2 + overlayfs)
-- Colima: macOS/Linux runtime, Docker alternative
-- GKE: unprivileged deployment (proot + copy-FS)
-- macOS QEMU: cross-compile + boot Alpine VM with HVF acceleration (`cargo xtask test-vm`)
+- Linux: native (namespaces + cgroups v2 + overlayfs) — shipped
+- GKE: unprivileged deployment (proot + copy-FS) — shipped
+- macOS Colima: `MINIBOX_ADAPTER=colima` — experimental (exec/logs limited)
 - macOS VZ.framework: blocked upstream — `VZErrorInternal(code=1)` on macOS 26 ARM64
+- Windows: stub only — `winbox::start()` returns error unconditionally
+
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform breakdown.
 
 ## Near-Term Roadmap
 
@@ -249,10 +251,10 @@ miniboxd starts
 | -------------------- | ------------------ | ----------------- | -------------------------------------------------------------- |
 | Native Linux         | `native` (default) | Yes               | Production                                                     |
 | GKE unprivileged     | `gke`              | Yes               | Production                                                     |
-| macOS Colima         | `colima`           | Yes               | Production                                                     |
+| macOS Colima         | `colima`           | Yes               | Experimental (exec/logs limited)                               |
 | macOS VZ.framework   | `vz`               | Yes               | Blocked (Apple bug — VZErrorInternal code=1 on macOS 26 ARM64) |
-| macOS Docker Desktop | `docker-desktop`   | No                | Library only                                                   |
-| Windows WSL2         | `wsl`              | No                | Library only                                                   |
+| macOS Docker Desktop | `docker_desktop`   | No                | Library only                                                   |
+| Windows WSL2         | `wsl2`             | No                | Library only                                                   |
 
 Passing an unwired value causes the daemon to exit at startup with an error.
 
