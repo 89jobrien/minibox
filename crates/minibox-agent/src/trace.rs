@@ -39,6 +39,11 @@ struct TraceEnvelope {
 ///
 /// Each trace is persisted as an individual JSON file named `{id}.json` in
 /// the configured directory. Rotation is performed before every `store` call.
+///
+/// # Blocking I/O
+///
+/// All methods on this type perform synchronous filesystem I/O. Callers in an
+/// async context must wrap invocations in `tokio::task::spawn_blocking`.
 pub struct FileTraceStore {
     dir: PathBuf,
     retention_days: i64,
@@ -110,7 +115,14 @@ impl FileTraceStore {
                 if let Ok(modified) = meta.modified() {
                     let modified: chrono::DateTime<Utc> = modified.into();
                     if modified < cutoff {
-                        let _ = fs::remove_file(&e.path);
+                        match fs::remove_file(&e.path) {
+                            Ok(()) => {}
+                            Err(err) => tracing::warn!(
+                                path = %e.path.display(),
+                                error = %err,
+                                "trace: rotation delete failed"
+                            ),
+                        }
                         return false;
                     }
                 }
@@ -140,8 +152,7 @@ impl FileTraceStore {
 
 impl TraceStore for FileTraceStore {
     fn store(&self, id: &str, pipeline: &str, trace: &Value, exit_code: i32) -> Result<()> {
-        self.rotate()
-            .context("trace rotation before store")?;
+        self.rotate().context("trace rotation before store")?;
 
         let envelope = TraceEnvelope {
             id: id.to_owned(),
@@ -152,10 +163,8 @@ impl TraceStore for FileTraceStore {
         };
 
         let path = self.envelope_path(id);
-        let json =
-            serde_json::to_string_pretty(&envelope).context("serialize trace envelope")?;
-        fs::write(&path, json)
-            .with_context(|| format!("write trace file: {}", path.display()))?;
+        let json = serde_json::to_string_pretty(&envelope).context("serialize trace envelope")?;
+        fs::write(&path, json).with_context(|| format!("write trace file: {}", path.display()))?;
 
         Ok(())
     }
@@ -194,11 +203,7 @@ impl TraceStore for FileTraceStore {
                     }
                 }
 
-                let step_count = env
-                    .trace
-                    .as_array()
-                    .map(|a| a.len())
-                    .unwrap_or(0);
+                let step_count = env.trace.as_array().map(|a| a.len()).unwrap_or(0);
 
                 Some((
                     ts,
@@ -232,8 +237,8 @@ impl TraceStore for FileTraceStore {
         }
         let text =
             fs::read_to_string(&path).with_context(|| format!("read trace: {}", path.display()))?;
-        let env: TraceEnvelope =
-            serde_json::from_str(&text).with_context(|| format!("parse trace: {}", path.display()))?;
+        let env: TraceEnvelope = serde_json::from_str(&text)
+            .with_context(|| format!("parse trace: {}", path.display()))?;
         Ok(Some(env.trace))
     }
 }
@@ -289,8 +294,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn make_store(dir: &TempDir) -> FileTraceStore {
-        FileTraceStore::new(dir.path(), 7, 500 * 1024 * 1024)
-            .expect("create FileTraceStore")
+        FileTraceStore::new(dir.path(), 7, 500 * 1024 * 1024).expect("create FileTraceStore")
     }
 
     fn sample_trace() -> Value {

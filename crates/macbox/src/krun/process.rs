@@ -16,11 +16,7 @@ pub struct SmolvmProcess {
 
 impl SmolvmProcess {
     /// Spawn using the `smolvm` binary found on PATH.
-    pub async fn spawn(
-        image: &str,
-        command: &[String],
-        env: &[(String, String)],
-    ) -> Result<Self> {
+    pub async fn spawn(image: &str, command: &[String], env: &[(String, String)]) -> Result<Self> {
         let bin = which::which("smolvm").context("smolvm not found on PATH")?;
         Self::spawn_with_bin(&bin, image, command, env).await
     }
@@ -33,10 +29,7 @@ impl SmolvmProcess {
         env: &[(String, String)],
     ) -> Result<Self> {
         let mut cmd = Command::new(bin);
-        cmd.arg("machine")
-            .arg("run")
-            .arg("--image")
-            .arg(image);
+        cmd.arg("machine").arg("run").arg("--image").arg(image);
 
         for (k, v) in env {
             cmd.arg("--env").arg(format!("{k}={v}"));
@@ -64,16 +57,20 @@ impl SmolvmProcess {
             .wait()
             .await
             .context("smolvm process wait failed")?;
-        Ok(status.code().unwrap_or(-1))
+        use std::os::unix::process::ExitStatusExt;
+        match status.code() {
+            Some(code) => Ok(code),
+            None => {
+                let sig = status.signal().unwrap_or(0);
+                tracing::debug!(signal = sig, "smolvm: process killed by signal");
+                Ok(-(sig as i32))
+            }
+        }
     }
 
     /// Collect all stdout output, then wait for exit.
     pub async fn collect_stdout(&mut self) -> Result<String> {
-        let stdout = self
-            .child
-            .stdout
-            .take()
-            .context("stdout not piped")?;
+        let stdout = self.child.stdout.take().context("stdout not piped")?;
         let mut buf = String::new();
         let mut reader = tokio::io::BufReader::new(stdout);
         reader
