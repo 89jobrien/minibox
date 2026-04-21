@@ -4223,3 +4223,61 @@ fn test_validate_policy_denies_privileged() {
         "expected privileged policy error, got: {err}"
     );
 }
+
+/// handle_run rejects a second container that tries to claim an already-used name.
+#[tokio::test]
+async fn test_handle_run_duplicate_container_name_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // First run — claims name "mybox".
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mybox".to_string()),
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx1,
+    )
+    .await;
+    let first = rx1.recv().await.expect("first run: no response");
+    assert!(
+        matches!(first, DaemonResponse::ContainerCreated { .. }),
+        "first run should succeed, got {first:?}"
+    );
+
+    // Second run with the same name must be rejected.
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mybox".to_string()),
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx2,
+    )
+    .await;
+    let second = rx2.recv().await.expect("second run: no response");
+    assert!(
+        matches!(second, DaemonResponse::Error { .. }),
+        "duplicate name should produce Error, got {second:?}"
+    );
+}
