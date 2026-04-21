@@ -124,7 +124,10 @@ impl ContainerRuntime for MiniboxAdapter {
 
             // Reject any path with ".." components.
             if host_path.components().any(|c| {
-                matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::CurDir
+                )
             }) {
                 return Err(RuntimeError::Minibox(anyhow!(
                     "bind mount host path contains invalid components: {}",
@@ -132,7 +135,10 @@ impl ContainerRuntime for MiniboxAdapter {
                 )));
             }
             if container_path.components().any(|c| {
-                matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
+                matches!(
+                    c,
+                    std::path::Component::ParentDir | std::path::Component::CurDir
+                )
             }) {
                 return Err(RuntimeError::Minibox(anyhow!(
                     "bind mount container path contains invalid components: {}",

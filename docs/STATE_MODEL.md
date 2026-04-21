@@ -40,12 +40,12 @@ operation. Each `ContainerRecord` contains:
 
 `save_to_disk()` is called (as an async best-effort operation) after every state mutation:
 
-| Method | Trigger |
-|---|---|
-| `add_container` | New container registered |
-| `remove_container` | Container removed (`minibox rm`) |
+| Method                   | Trigger                                          |
+| ------------------------ | ------------------------------------------------ |
+| `add_container`          | New container registered                         |
+| `remove_container`       | Container removed (`minibox rm`)                 |
 | `update_container_state` | State transition (Running→Stopped, Paused, etc.) |
-| `set_container_pid` | PID recorded after fork |
+| `set_container_pid`      | PID recorded after fork                          |
 
 Writes are **not batched**. Each mutation causes one synchronous JSON serialisation and one
 filesystem write+rename cycle.
@@ -56,11 +56,11 @@ filesystem write+rename cycle.
 
 The state file is named `state.json` and lives in the data directory:
 
-| Context | Path |
-|---|---|
-| Root daemon (default) | `/var/lib/minibox/state.json` |
-| Non-root daemon (default) | `~/.mbx/cache/state.json` |
-| Explicit override | `$MINIBOX_DATA_DIR/state.json` |
+| Context                   | Path                           |
+| ------------------------- | ------------------------------ |
+| Root daemon (default)     | `/var/lib/minibox/state.json`  |
+| Non-root daemon (default) | `~/.minibox/cache/state.json`  |
+| Explicit override         | `$MINIBOX_DATA_DIR/state.json` |
 
 ---
 
@@ -69,10 +69,12 @@ The state file is named `state.json` and lives in the data directory:
 `DaemonState::load_from_disk()` is called during startup (see `miniboxd/src/main.rs`).
 
 **Survives restart:**
+
 - All container records (id, name, image, command, rootfs/cgroup paths, source image ref)
 - `Stopped` container records — visible in `minibox ps` after restart
 
 **Does not survive restart:**
+
 - Running/Created/Paused container state: all such containers are marked `Stopped` on load,
   because their processes are gone. The `pid` field is cleared to `None`.
 - Bridge-network IP allocations (`allocated_ips`)

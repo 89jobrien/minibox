@@ -9,50 +9,50 @@ and platform surface grows.
 ## Runtime Integrity
 
 - [x] **Protocol types have a single source of truth.** `DaemonRequest`/`DaemonResponse` are
-  defined only in `minibox-core/src/protocol.rs` (consolidated in #122). `mbx` re-exports
-  via `pub use minibox_core::protocol`. Wire format snapshot tests in `minibox-core` pin
-  serialization. Add new variants only to `minibox-core/src/protocol.rs`.
+      defined only in `minibox-core/src/protocol.rs` (consolidated in #122). `minibox` re-exports
+      via `pub use minibox_core::protocol`. Wire format snapshot tests in `minibox-core` pin
+      serialization. Add new variants only to `minibox-core/src/protocol.rs`.
 
 - [ ] **Handler coverage >= 80% (function).** Current baseline: ~67.5% function / ~55% line
-  in `daemonbox/src/handler.rs`. Run `cargo xtask prepush` for the llvm-cov report. Error
-  paths (pull failure, empty image, registry unreachable) have the highest ROI.
+      in `daemonbox/src/handler.rs`. Run `cargo xtask prepush` for the llvm-cov report. Error
+      paths (pull failure, empty image, registry unreachable) have the highest ROI.
 
 - [ ] **All wired adapters have at least one integration test.** Unit tests with mocks are
-  necessary but not sufficient — each `MINIBOX_ADAPTER` value accepted by the daemon must
-  have at least one test that exercises the real adapter path.
+      necessary but not sufficient — each `MINIBOX_ADAPTER` value accepted by the daemon must
+      have at least one test that exercises the real adapter path.
 
 - [ ] **`cargo xtask pre-commit` passes on macOS.** This gate runs `cargo fmt --check`,
-  clippy (all crates), and `cargo build --release`. No warnings allowed.
+      clippy (all crates), and `cargo build --release`. No warnings allowed.
 
 - [ ] **`cargo xtask test-unit` passes.** ~300+ unit + conformance tests via nextest.
 
 ## Security Gate
 
 - [ ] **Path validation is in place for all external inputs.** Any new code that touches the
-  filesystem using paths from user input, tar entries, or registry data must go through
-  `validate_layer_path()` or equivalent canonicalize + prefix-check.
+      filesystem using paths from user input, tar entries, or registry data must go through
+      `validate_layer_path()` or equivalent canonicalize + prefix-check.
 
 - [ ] **No `.unwrap()` in production code paths.** Use `.context("description")?` instead.
-  Test code may use `.expect("reason")`.
+      Test code may use `.expect("reason")`.
 
 - [ ] **`SO_PEERCRED` auth is unmodified.** The UID == 0 check in `daemonbox/server.rs` must
-  run before any request processing. Do not weaken or gate it behind a feature flag.
+      run before any request processing. Do not weaken or gate it behind a feature flag.
 
 - [ ] **`unsafe` blocks have documented SAFETY comments.** Every `unsafe {}` must explain
-  the invariant the caller upholds.
+      the invariant the caller upholds.
 
 - [ ] **`cargo deny check` passes.** License and advisory audit must be clean.
 
 ## Documentation Matches Reality
 
 - [ ] **CLAUDE.md "Current Limitations" section is accurate.** Update it whenever a listed
-  limitation is removed or a new one is introduced.
+      limitation is removed or a new one is introduced.
 
 - [ ] **README.md feature list matches `docs/FEATURE_MATRIX.md`.** Do not add a feature to
-  the README "Features" section until it appears as `✓` or `~` in the matrix.
+      the README "Features" section until it appears as `✓` or `~` in the matrix.
 
 - [ ] **`docs/FEATURE_MATRIX.md` is updated.** When a feature moves from stub to
-  experimental, or from experimental to shipped, update the matrix before merging.
+      experimental, or from experimental to shipped, update the matrix before merging.
 
 ## Agent Feature Gating
 

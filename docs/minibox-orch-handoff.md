@@ -1,13 +1,14 @@
 ---
 status: future
-note: Implementation spec for minibox-orch. Not started. See minibox-orch-design.md for full type definitions and architecture.
+note: Implementation spec for {App}-orch. Not started. See {App}-orch-design.md for full type definitions and architecture.
 ---
-# minibox-orch Implementation Handoff
+
+# {App}-orch Implementation Handoff
 
 ## What This Is
 
-Implementation spec for `minibox-orch`, a self-evolving container agent orchestrator.
-Read `docs/minibox-orch-design.md` first for the full type definitions and architecture.
+Implementation spec for `{App}-orch`, a self-evolving container agent orchestrator.
+Read `docs/{App}-orch-design.md` first for the full type definitions and architecture.
 
 ## Implementation Order
 
@@ -19,16 +20,16 @@ Create the crate skeleton and register it in the workspace.
 
 **Files to create:**
 
-- `crates/minibox-orch/Cargo.toml`
-- `crates/minibox-orch/src/lib.rs`
-- `crates/minibox-orch/src/main.rs` (stub)
+- `crates/{App}-orch/Cargo.toml`
+- `crates/{App}-orch/src/lib.rs`
+- `crates/{App}-orch/src/main.rs` (stub)
 
 **Files to modify:**
 
-- `Cargo.toml` (root) -- add `"crates/minibox-orch"` to workspace members, add `toml = "0.8"` and
+- `Cargo.toml` (root) -- add `"crates/{App}-orch"` to workspace members, add `toml = "0.8"` and
   `rusqlite = { version = "0.32", features = ["bundled"] }` to `[workspace.dependencies]`
 
-**Verify:** `cargo check -p minibox-orch`
+**Verify:** `cargo check -p {App}-orch`
 
 ### Step 2: Domain Layer
 
@@ -36,21 +37,21 @@ Write all traits, types, and errors. This is the foundation everything else depe
 
 **Files to create:**
 
-- `crates/minibox-orch/src/domain.rs` -- all 5 trait definitions, all domain types (see design doc),
+- `crates/{App}-orch/src/domain.rs` -- all 5 trait definitions, all domain types (see design doc),
   `OrchestratorError` enum, `AsAny` trait (local copy), `Dyn*` type aliases
-- `crates/minibox-orch/src/domain/safety.rs` -- `SafetyPolicy` struct, `HarnessDiff::validate()`,
+- `crates/{App}-orch/src/domain/safety.rs` -- `SafetyPolicy` struct, `HarnessDiff::validate()`,
   `HarnessDiff::requires_approval()`, `HarnessDiff::apply()`
 
 **Key decisions:**
 
-- Own `AsAny` trait -- do NOT depend on `minibox-macros`. The `adapt!()` macro resolves
-  `crate::domain::AsAny` at the call site, which would be minibox-orch's domain, but it's cleaner
+- Own `AsAny` trait -- do NOT depend on `{App}-macros`. The `adapt!()` macro resolves
+  `crate::domain::AsAny` at the call site, which would be {App}-orch's domain, but it's cleaner
   to just hand-write the 5-line impl for each adapter.
 - `HarnessProfile` derives `Serialize, Deserialize` (TOML-compatible via serde).
 - `CompletionRequest`, `ApprovalRequest`, `ContainerHandle` are NOT serializable -- they're
   in-process only.
 
-**Verify:** `cargo check -p minibox-orch`
+**Verify:** `cargo check -p {App}-orch`
 
 ### Step 3: Mock Adapters
 
@@ -58,8 +59,8 @@ Enables TDD for all subsequent steps.
 
 **Files to create:**
 
-- `crates/minibox-orch/src/adapters/mod.rs` -- re-exports
-- `crates/minibox-orch/src/adapters/mocks.rs` -- `MockDaemonClient`, `MockModelClient`,
+- `crates/{App}-orch/src/adapters/mod.rs` -- re-exports
+- `crates/{App}-orch/src/adapters/mocks.rs` -- `MockDaemonClient`, `MockModelClient`,
   `MockProfileStore`, `MockTelemetryStore`, `MockApprovalGate`
 
 **Pattern to follow:** `crates/mbx/src/adapters/mocks.rs`
@@ -69,7 +70,7 @@ Enables TDD for all subsequent steps.
 - Call-count accessors for assertions
 - Hand-written `impl AsAny for MockFoo`
 
-**Verify:** `cargo test -p minibox-orch`
+**Verify:** `cargo test -p {App}-orch`
 
 ### Step 4: Inner Loop
 
@@ -77,7 +78,7 @@ Core business logic -- run containers, collect metrics, ask model for critique, 
 
 **Files to create:**
 
-- `crates/minibox-orch/src/inner_loop.rs`
+- `crates/{App}-orch/src/inner_loop.rs`
 
 **Struct:**
 
@@ -104,7 +105,7 @@ pub struct TaskRunner {
 - OOM handling (model suggests memory bump)
 - Timeout handling
 
-**Verify:** `cargo test -p minibox-orch -- inner_loop`
+**Verify:** `cargo test -p {App}-orch -- inner_loop`
 
 ### Step 5: Outer Loop
 
@@ -112,7 +113,7 @@ Meta-agent proposes profile changes, canary eval, promote-or-discard.
 
 **Files to create:**
 
-- `crates/minibox-orch/src/outer_loop.rs`
+- `crates/{App}-orch/src/outer_loop.rs`
 
 **Struct:**
 
@@ -139,16 +140,16 @@ pub struct HarnessEvolver {
 - Approval gate blocks network escalation
 - Approval gate approves syscall change
 
-**Verify:** `cargo test -p minibox-orch -- outer_loop`
+**Verify:** `cargo test -p {App}-orch -- outer_loop`
 
 ### Step 6: SocketDaemonClient Adapter
 
 **Files to create:**
 
-- `crates/minibox-orch/src/adapters/daemon_client.rs`
+- `crates/{App}-orch/src/adapters/daemon_client.rs`
 
-**Reuse:** `mbx::protocol::{DaemonRequest, DaemonResponse, ContainerInfo, encode_request,
-decode_response}` and the `send_request` pattern from `crates/minibox-cli/src/commands/mod.rs:28`.
+**Reuse:** `{App}::protocol::{DaemonRequest, DaemonResponse, ContainerInfo, encode_request,
+decode_response}` and the `send_request` pattern from `crates/{App}-cli/src/commands/mod.rs:28`.
 
 **Key behavior:** `wait_container` polls `list_containers` every 500 ms until state is
 `Stopped`/`Failed` or timeout expires.
@@ -156,10 +157,6 @@ decode_response}` and the `send_request` pattern from `crates/minibox-cli/src/co
 **Tests:** Unit tests with a mock Unix socket (or just validate request serialization).
 
 ### Step 7: TomlProfileStore Adapter
-
-**Files to create:**
-
-- `crates/minibox-orch/src/adapters/toml_profile_store.rs`
 
 **Layout:**
 
@@ -174,10 +171,6 @@ profiles/
 
 ### Step 8: SqliteTelemetryStore Adapter
 
-**Files to create:**
-
-- `crates/minibox-orch/src/adapters/sqlite_telemetry.rs`
-
 **Schema:** See design doc. Auto-creates tables on first use.
 
 **`aggregate_metrics` impl:** SQL aggregation for counts. Percentiles computed in Rust
@@ -186,11 +179,6 @@ profiles/
 **Tests:** Use `tempfile::NamedTempFile` for DB path. Record, query, aggregate roundtrip.
 
 ### Step 9: Model Client Adapters
-
-**Files to create:**
-
-- `crates/minibox-orch/src/adapters/anthropic_model.rs`
-- `crates/minibox-orch/src/adapters/openai_model.rs`
 
 **Anthropic adapter:**
 
@@ -212,7 +200,7 @@ integration tests only.
 
 **Files to create:**
 
-- `crates/minibox-orch/src/adapters/terminal_approval.rs`
+- `crates/{App}-orch/src/adapters/terminal_approval.rs`
 
 Prints proposed change to stdout, reads `y/n` from stdin via `tokio::task::spawn_blocking`.
 
@@ -220,31 +208,31 @@ Prints proposed change to stdout, reads `y/n` from stdin via `tokio::task::spawn
 
 **Files to modify:**
 
-- `crates/minibox-orch/src/main.rs` -- clap CLI, adapter wiring
+- `crates/{App}-orch/src/main.rs` -- clap CLI, adapter wiring
 
 **Subcommands:** `run`, `evolve`, `init`, `stats`, `profile`
 
-**Adapter selection:** `MINIBOX_ORCH_MODEL` env var: `anthropic` (default) or `openai`.
+**Adapter selection:** `{App}_ORCH_MODEL` env var: `anthropic` (default) or `openai`.
 
 ### Step 12: Verification
 
 ```bash
-cargo check -p minibox-orch
-cargo clippy -p minibox-orch -- -D warnings
+cargo check -p {App}-orch
+cargo clippy -p {App}-orch -- -D warnings
 cargo fmt --all --check
-cargo test -p minibox-orch
-cargo build -p minibox-orch --release
+cargo test -p {App}-orch
+cargo build -p {App}-orch --release
 ```
 
 ## Key Files to Reuse
 
-| Existing file | What to reuse |
-|---|---|
-| `crates/mbx/src/protocol.rs` | `DaemonRequest`, `DaemonResponse`, `ContainerInfo`, encode/decode |
-| `crates/mbx/src/domain.rs` | `ResourceConfig` (map to/from `ResourceHints`) |
-| `crates/minibox-cli/src/commands/mod.rs:28` | `send_request()` Unix socket pattern |
-| `crates/mbx/src/adapters/mocks.rs` | Mock adapter pattern (`Arc<Mutex<State>>`, builders) |
-| `crates/miniboxd/src/handler.rs` | `HandlerDependencies` pattern for DI structs |
+| Existing file                             | What to reuse                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| `crates/mbx/src/protocol.rs`              | `DaemonRequest`, `DaemonResponse`, `ContainerInfo`, encode/decode |
+| `crates/mbx/src/domain.rs`                | `ResourceConfig` (map to/from `ResourceHints`)                    |
+| `crates/{App}-cli/src/commands/mod.rs:28` | `send_request()` Unix socket pattern                              |
+| `crates/mbx/src/adapters/mocks.rs`        | Mock adapter pattern (`Arc<Mutex<State>>`, builders)              |
+| `crates/{App}d/src/handler.rs`            | `HandlerDependencies` pattern for DI structs                      |
 
 ## Conventions to Follow
 
@@ -258,9 +246,9 @@ cargo build -p minibox-orch --release
 
 ## What NOT to Do
 
-- Do NOT add `minibox-macros` as a dependency. Hand-write `impl AsAny` for each adapter.
+- Do NOT add `{App}-macros` as a dependency. Hand-write `impl AsAny` for each adapter.
 - Do NOT add Linux-only deps (`nix`, `libc`). This crate must compile on macOS.
-- Do NOT add `compile_error!()` platform guards. Unlike `miniboxd`/`minibox-cli`, this crate
+- Do NOT add `compile_error!()` platform guards. Unlike `{App}d`/`{App}-cli`, this crate
   is cross-platform.
 - Do NOT put business logic in adapters. Adapters only translate between domain and infra.
 - Do NOT make the model client adapters call real APIs in unit tests. Use mocks.

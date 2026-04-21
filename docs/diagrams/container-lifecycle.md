@@ -19,9 +19,9 @@ manually stopped.
              RunContainer request
                      │
                      ▼
-               ┌──────────┐
-               │  Created │ ◄─── record inserted, overlay/rootfs set up
-               └────┬─────┘
+               ┌─────────┐
+               │ Created │ ◄─── record inserted, overlay/rootfs set up
+               └────┬────┘
                     │ spawn_process()
           ┌─────────┴──────────┐
           │ success            │ error
@@ -30,8 +30,8 @@ manually stopped.
      │ Running │          │ Failed │
      └────┬────┘          └───┬────┘
           │                   │
-          │ exit / SIGTERM     │
-          │ / SIGKILL          │
+          │ exit / SIGTERM    │
+          │ / SIGKILL         │
           ▼                   │
      ┌─────────┐              │
      │ Stopped │◄─────────────┘

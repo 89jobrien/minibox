@@ -67,10 +67,7 @@ pub fn router(state: AppState) -> Router {
             axum::routing::delete(containers::remove),
         )
         // exec
-        .route(
-            "/containers/{id}/exec",
-            axum::routing::post(exec::create),
-        )
+        .route("/containers/{id}/exec", axum::routing::post(exec::create))
         .route("/exec/{id}/start", axum::routing::post(exec::start))
         .route("/exec/{id}/json", axum::routing::get(exec::inspect))
         .with_state(state)

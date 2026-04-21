@@ -171,7 +171,10 @@ impl ContainerRuntime for VzRuntime {
                 .rootfs
                 .to_str()
                 .with_context(|| {
-                    format!("rootfs path is not valid UTF-8: {}", config.rootfs.display())
+                    format!(
+                        "rootfs path is not valid UTF-8: {}",
+                        config.rootfs.display()
+                    )
                 })?
                 .to_owned(),
             tag: None,
