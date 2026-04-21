@@ -109,22 +109,55 @@ impl ContainerRuntime for MiniboxAdapter {
             (config.image.clone(), None)
         };
 
-        // Convert binds ("host:container[:ro]") to BindMount structs
-        let mounts: Vec<minibox_core::domain::BindMount> = config
-            .binds
-            .iter()
-            .filter_map(|b| {
-                let parts: Vec<&str> = b.splitn(3, ':').collect();
-                if parts.len() < 2 {
-                    return None;
-                }
-                Some(minibox_core::domain::BindMount {
-                    host_path: parts[0].into(),
-                    container_path: parts[1].into(),
-                    read_only: parts.get(2).copied() == Some("ro"),
-                })
-            })
-            .collect();
+        // Convert binds ("host:container[:ro]") to BindMount structs.
+        // Security: reject paths containing ".." components to prevent path
+        // traversal attacks where docker-group users could mount arbitrary
+        // host paths (including "/") through the dockerbox→miniboxd bridge.
+        let mut mounts: Vec<minibox_core::domain::BindMount> = Vec::new();
+        for b in &config.binds {
+            let parts: Vec<&str> = b.splitn(3, ':').collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            let host_path = std::path::Path::new(parts[0]);
+            let container_path = std::path::Path::new(parts[1]);
+
+            // Reject any path with ".." components.
+            if host_path.components().any(|c| {
+                matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
+            }) {
+                return Err(RuntimeError::Minibox(anyhow!(
+                    "bind mount host path contains invalid components: {}",
+                    parts[0]
+                )));
+            }
+            if container_path.components().any(|c| {
+                matches!(c, std::path::Component::ParentDir | std::path::Component::CurDir)
+            }) {
+                return Err(RuntimeError::Minibox(anyhow!(
+                    "bind mount container path contains invalid components: {}",
+                    parts[1]
+                )));
+            }
+            // Require absolute paths on both sides.
+            if !host_path.is_absolute() {
+                return Err(RuntimeError::Minibox(anyhow!(
+                    "bind mount host path must be absolute: {}",
+                    parts[0]
+                )));
+            }
+            if !container_path.is_absolute() {
+                return Err(RuntimeError::Minibox(anyhow!(
+                    "bind mount container path must be absolute: {}",
+                    parts[1]
+                )));
+            }
+            mounts.push(minibox_core::domain::BindMount {
+                host_path: host_path.to_path_buf(),
+                container_path: container_path.to_path_buf(),
+                read_only: parts.get(2).copied() == Some("ro"),
+            });
+        }
 
         let network = match config.network_mode.as_deref() {
             Some("host") => Some(minibox_core::domain::NetworkMode::Host),
@@ -398,11 +431,9 @@ impl ContainerRuntime for MiniboxAdapter {
                         OutputStreamKind::Stdout => 1,
                     };
                     // data is base64-encoded
-                    let raw = base64::Engine::decode(
-                        &base64::engine::general_purpose::STANDARD,
-                        &data,
-                    )
-                    .unwrap_or_else(|_| data.into_bytes());
+                    let raw =
+                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &data)
+                            .unwrap_or_else(|_| data.into_bytes());
                     let _ = tx
                         .send(LogChunk {
                             stream: stream_type,
