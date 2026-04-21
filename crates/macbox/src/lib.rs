@@ -532,14 +532,14 @@ mod tests {
         .expect("colima deps");
 
         assert!(
-            deps.commit_adapter.is_some(),
+            deps.build.commit_adapter.is_some(),
             "commit adapter should be wired"
         );
         assert!(
-            deps.image_builder.is_some(),
+            deps.build.image_builder.is_some(),
             "image builder should be wired"
         );
-        assert!(deps.image_pusher.is_some(), "image pusher should be wired");
+        assert!(deps.build.image_pusher.is_some(), "image pusher should be wired");
     }
 }
 

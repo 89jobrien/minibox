@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260421:100543'
+updated: '20260421:070605'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -297,7 +297,57 @@ items:
   - type: note
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+- id: minibox-76
+  name: p0-consolidate-daemonrequest
+  priority: P0
+  status: open
+  title: 'P0: Consolidate duplicate DaemonRequest definitions into minibox-core'
+  description: 'GH #122: Single source of truth for DaemonRequest/DaemonResponse in
+    minibox-core. Eliminate any remaining duplicate definitions.'
+  files: []
+  extra:
+  - type: github-issue
+    number: 122
+    url: https://github.com/89jobrien/minibox/issues/122
+- id: minibox-77
+  name: p0-remove-committed-artifacts
+  priority: P0
+  status: open
+  title: 'P0: Remove committed build/test/runtime artifacts from version control'
+  description: 'GH #121: Build outputs, test fixtures, runtime state committed to
+    repo. Clean up and add appropriate .gitignore entries.'
+  files: []
+  extra:
+  - type: github-issue
+    number: 121
+    url: https://github.com/89jobrien/minibox/issues/121
+- id: minibox-78
+  name: p0-fix-docs-contradictions
+  priority: P0
+  status: open
+  title: 'P0: Fix docs/feature-status contradictions between CLAUDE.md and README.md'
+  description: 'GH #120: CLAUDE.md and README.md contradict each other on feature
+    status. Align both to FEATURE_MATRIX.md as single source of truth.'
+  files:
+  - CLAUDE.md
+  - README.md
+  - docs/FEATURE_MATRIX.md
+  extra:
+  - type: github-issue
+    number: 120
+    url: https://github.com/89jobrien/minibox/issues/120
 log:
+- date: '20260421:070605'
+  session: 12
+  summary: 'fix: macbox test stale HandlerDependencies field paths (deps.build.*).
+    Sentinel autofixer: 3 suggestions applied (SmolvmProcess signal exit, trace rotation
+    warn, FileTraceStore blocking I/O doc). Handjobs triage: 3 P0 GH issues captured
+    as HANDOFF items. doob dedup: 98→87 todos. 484 tests passing.'
+  commits:
+  - sha: 29b25ba
+    branch: main
+  - sha: c635285
+    branch: main
 - date: '20260421:100543'
   session: 11
   summary: 'feat(krun): SmolvmProcess adapter + 6 conformance tests (RED→GREEN TDD
