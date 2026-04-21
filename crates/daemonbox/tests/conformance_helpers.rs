@@ -31,7 +31,7 @@ use daemonbox::handler::{
     PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
-use minibox::adapters::mocks::{
+use minibox_testers::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -185,23 +185,4 @@ pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
     Arc::new(DaemonState::new(image_store, base))
 }
 
-// ---------------------------------------------------------------------------
-// NoopImageGc (local copy to avoid import from conformance_tests)
-// ---------------------------------------------------------------------------
-
-struct NoopImageGc;
-
-#[async_trait::async_trait]
-impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
-    async fn prune(
-        &self,
-        dry_run: bool,
-        _in_use: &[String],
-    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
-        Ok(minibox_core::image::gc::PruneReport {
-            removed: vec![],
-            freed_bytes: 0,
-            dry_run,
-        })
-    }
-}
+use minibox_testers::helpers::NoopImageGc;

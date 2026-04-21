@@ -19,7 +19,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use minibox::adapters::commit_upper_dir_to_image;
-use minibox_core::adapters::conformance::{BackendDescriptor, WritableUpperDirFixture};
+use minibox_testers::backend::BackendDescriptor;
+use minibox_testers::fixtures::WritableUpperDirFixture;
 use minibox_core::domain::{
     AsAny, BackendCapability, CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter,
     ImageMetadata,

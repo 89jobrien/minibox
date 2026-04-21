@@ -17,9 +17,8 @@
 
 use anyhow::Result;
 use minibox::adapters::{OciPushAdapter, commit_upper_dir_to_image};
-use minibox_core::adapters::conformance::{
-    BackendDescriptor, LocalPushTargetFixture, WritableUpperDirFixture,
-};
+use minibox_testers::backend::BackendDescriptor;
+use minibox_testers::fixtures::{LocalPushTargetFixture, WritableUpperDirFixture};
 use minibox_core::domain::{BackendCapability, DynImagePusher, RegistryCredentials};
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;

@@ -896,6 +896,7 @@ dependencies = [
  "dashmap",
  "minibox",
  "minibox-core",
+ "minibox-testers",
  "nix",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -2343,6 +2344,7 @@ dependencies = [
  "libc",
  "minibox-core",
  "minibox-macros",
+ "minibox-testers",
  "nix",
  "proptest",
  "reqwest",
@@ -2502,6 +2504,21 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "minibox-testers"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "daemonbox",
+ "minibox",
+ "minibox-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
-use minibox::adapters::mocks::{
+use minibox_testers::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -22,23 +22,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-/// No-op image GC for tests.
-struct NoopImageGc;
-
-#[async_trait::async_trait]
-impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
-    async fn prune(
-        &self,
-        dry_run: bool,
-        _in_use: &[String],
-    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
-        Ok(minibox_core::image::gc::PruneReport {
-            removed: vec![],
-            freed_bytes: 0,
-            dry_run,
-        })
-    }
-}
+use minibox_testers::helpers::NoopImageGc;
 
 /// Helper that wraps `handle_run` with a channel, returning the first response.
 #[allow(clippy::too_many_arguments)]
@@ -647,8 +631,8 @@ mod performance_conformance {
 /// Tests are skipped automatically when `BackendCapability::Commit` is absent.
 #[cfg(test)]
 mod commit_conformance {
-    use minibox_core::adapters::conformance::BackendDescriptor;
-    use minibox_core::adapters::mocks::MockContainerCommitter;
+    use minibox_testers::backend::BackendDescriptor;
+    use minibox_testers::mocks::MockContainerCommitter;
     use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
     use std::sync::Arc;
 
@@ -763,8 +747,9 @@ mod commit_conformance {
 /// `MockImageBuilder` for the in-memory adapter under test.
 #[cfg(test)]
 mod build_conformance {
-    use minibox_core::adapters::conformance::{BackendDescriptor, BuildContextFixture};
-    use minibox_core::adapters::mocks::MockImageBuilder;
+    use minibox_testers::backend::BackendDescriptor;
+    use minibox_testers::fixtures::BuildContextFixture;
+    use minibox_testers::mocks::MockImageBuilder;
     use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
     use std::sync::Arc;
     use tokio::sync::mpsc;
@@ -1031,8 +1016,9 @@ mod lifecycle_conformance {
 /// for the in-memory adapter that records pushes without a real registry.
 #[cfg(test)]
 mod push_conformance {
-    use minibox_core::adapters::conformance::{BackendDescriptor, LocalPushTargetFixture};
-    use minibox_core::adapters::mocks::MockImagePusher;
+    use minibox_testers::backend::BackendDescriptor;
+    use minibox_testers::fixtures::LocalPushTargetFixture;
+    use minibox_testers::mocks::MockImagePusher;
     use minibox_core::domain::{BackendCapability, RegistryCredentials};
     use minibox_core::image::reference::ImageRef;
     use std::sync::Arc;
