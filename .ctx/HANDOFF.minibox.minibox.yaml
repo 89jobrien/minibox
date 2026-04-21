@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260420:150353'
+updated: '20260421:100543'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -279,24 +279,33 @@ items:
     number: 134
     url: https://github.com/89jobrien/minibox/issues/134
 - id: minibox-75
-  name: smolvm-adapter
+  name: krun-adapter-full
   priority: P1
   status: open
-  title: 'feat(smolvm): SmolVM adapter suite + maestro integration'
-  description: 'SmolVM adapter suite added (SmolVmRegistry, SmolVmRuntime, SmolVmFilesystem,
-    SmolVmLimiter). Wired as MINIBOX_ADAPTER=smolvm. 15 tests pass. Observed use in
-    maestro hooktests (bats, ubuntu:24.04, <1s boot). Next: integrate with maestro
-    to reduce Docker dependency — replace Docker-based test backends with smolvm.'
+  title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring'
+  description: 'SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done
+    (5eb03e8). Next TDD cycle: implement KrunRuntime (ContainerRuntime), KrunFilesystem
+    (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter (ResourceLimiter
+    no-op), KrunRegistry (ImageRegistry). Wire start_krun() in macbox/src/lib.rs as
+    MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code.'
   files:
-  - crates/mbx/src/adapters/smolvm.rs
-  - crates/mbx/src/adapters/mod.rs
-  - crates/mbx/tests/smolvm_conformance_tests.rs
-  - crates/miniboxd/src/main.rs
+  - crates/macbox/src/krun/process.rs
+  - crates/macbox/src/krun/mod.rs
+  - crates/macbox/tests/krun_conformance_tests.rs
+  - crates/macbox/src/lib.rs
   extra:
   - type: note
-    note: 'smolvm CLI: brew install smolvm. API: smolvm machine run --net --image
-      <img> --timeout <t> -v H:G -e K=V -- cmd. Subsecond boot via Apple Virt.framework.'
+    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
+      required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
 log:
+- date: '20260421:100543'
+  session: 11
+  summary: 'feat(krun): SmolvmProcess adapter + 6 conformance tests (RED→GREEN TDD
+    loop). Brainstorm: replace vz with libkrun/smolvm, direct process model, subprocess
+    phase 1. cargo xtask test-krun-conformance wired.'
+  commits:
+  - sha: 5eb03e8
+    branch: main
 - date: '20260420:150353'
   session: 10
   summary: 'feat(smolvm): SmolVM adapter suite — 4 adapters (Registry, Runtime, Filesystem,
@@ -346,18 +355,4 @@ log:
   - sha: 2b44e4b
     branch: main
   - sha: 6aa8175
-    branch: main
-- date: '2026-04-17'
-  session: 6
-  summary: 'orca-strait Wave 1+2: BackendDescriptor capability flags, xtask ToolProbe
-    preflight, conformance tests, PtyConfig+PtyAllocator domain port. 438/438 tests
-    pass.'
-  commits:
-  - sha: 74bdabb
-    branch: main
-  - sha: 81be990
-    branch: main
-  - sha: a3dcf00
-    branch: main
-  - sha: 64fe60e
     branch: main
