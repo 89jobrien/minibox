@@ -20,8 +20,8 @@ use tower::ServiceExt as _;
 use dockerbox::{
     api::{AppState, router},
     domain::{
-        ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, LogChunk, PullProgress,
-        RuntimeError,
+        ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig, ExecDetails,
+        LogChunk, PullProgress, RuntimeError,
     },
     infra::state::StateStore,
 };
@@ -75,12 +75,15 @@ impl ContainerRuntime for MockRuntime {
     async fn create_container(&self, config: CreateConfig) -> Result<String, RuntimeError> {
         let id = uuid::Uuid::new_v4().to_string();
         let details = mock_details(&id, &config);
-        self.containers.lock().unwrap().insert(id.clone(), details);
+        self.containers
+            .lock()
+            .expect("MockRuntime mutex poisoned")
+            .insert(id.clone(), details);
         Ok(id)
     }
 
     async fn start_container(&self, id: &str) -> Result<(), RuntimeError> {
-        let mut containers = self.containers.lock().unwrap();
+        let mut containers = self.containers.lock().expect("MockRuntime mutex poisoned");
         if let Some(c) = containers.get_mut(id) {
             c.status = "running".to_string();
             Ok(())
@@ -92,14 +95,14 @@ impl ContainerRuntime for MockRuntime {
     async fn inspect_container(&self, id: &str) -> Result<ContainerDetails, RuntimeError> {
         self.containers
             .lock()
-            .unwrap()
+            .expect("MockRuntime mutex poisoned")
             .get(id)
             .cloned()
             .ok_or_else(|| RuntimeError::NotFound(id.to_string()))
     }
 
     async fn list_containers(&self, _all: bool) -> Result<Vec<ContainerSummary>, RuntimeError> {
-        let containers = self.containers.lock().unwrap();
+        let containers = self.containers.lock().expect("MockRuntime mutex poisoned");
         Ok(containers
             .values()
             .map(|c| ContainerSummary {
@@ -118,7 +121,12 @@ impl ContainerRuntime for MockRuntime {
         _follow: bool,
         _tx: mpsc::Sender<LogChunk>,
     ) -> Result<(), RuntimeError> {
-        if self.containers.lock().unwrap().contains_key(id) {
+        if self
+            .containers
+            .lock()
+            .expect("MockRuntime mutex poisoned")
+            .contains_key(id)
+        {
             Ok(())
         } else {
             Err(RuntimeError::NotFound(id.to_string()))
@@ -126,7 +134,7 @@ impl ContainerRuntime for MockRuntime {
     }
 
     async fn stop_container(&self, id: &str, _timeout_secs: u32) -> Result<(), RuntimeError> {
-        let mut containers = self.containers.lock().unwrap();
+        let mut containers = self.containers.lock().expect("MockRuntime mutex poisoned");
         if let Some(c) = containers.get_mut(id) {
             c.status = "exited".to_string();
             Ok(())
@@ -136,7 +144,12 @@ impl ContainerRuntime for MockRuntime {
     }
 
     async fn wait_container(&self, id: &str) -> Result<i64, RuntimeError> {
-        if self.containers.lock().unwrap().contains_key(id) {
+        if self
+            .containers
+            .lock()
+            .expect("MockRuntime mutex poisoned")
+            .contains_key(id)
+        {
             Ok(0)
         } else {
             Err(RuntimeError::NotFound(id.to_string()))
@@ -146,10 +159,39 @@ impl ContainerRuntime for MockRuntime {
     async fn remove_container(&self, id: &str) -> Result<(), RuntimeError> {
         self.containers
             .lock()
-            .unwrap()
+            .expect("MockRuntime mutex poisoned")
             .remove(id)
             .map(|_| ())
             .ok_or_else(|| RuntimeError::NotFound(id.to_string()))
+    }
+
+    async fn exec_create(
+        &self,
+        container_id: &str,
+        _config: ExecConfig,
+    ) -> Result<String, RuntimeError> {
+        if self
+            .containers
+            .lock()
+            .expect("MockRuntime mutex poisoned")
+            .contains_key(container_id)
+        {
+            Ok(uuid::Uuid::new_v4().to_string())
+        } else {
+            Err(RuntimeError::NotFound(container_id.to_string()))
+        }
+    }
+
+    async fn exec_start(
+        &self,
+        _exec_id: &str,
+        _tx: mpsc::Sender<LogChunk>,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
+    async fn exec_inspect(&self, exec_id: &str) -> Result<ExecDetails, RuntimeError> {
+        Err(RuntimeError::NotFound(exec_id.to_string()))
     }
 }
 
@@ -168,7 +210,7 @@ fn make_app() -> (axum::Router, Arc<MockRuntime>) {
 
 async fn body_json(resp: axum::response::Response) -> Value {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    serde_json::from_slice(&bytes).expect("response body is not valid JSON")
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +283,7 @@ async fn create_container_returns_id() {
 /// Full lifecycle: create → start → list → stop → remove.
 #[tokio::test]
 async fn container_lifecycle_roundtrip() {
-    let (app, runtime) = make_app();
+    let (app, _runtime) = make_app();
 
     // Create
     let body = serde_json::to_vec(&serde_json::json!({
@@ -322,12 +364,28 @@ async fn container_lifecycle_roundtrip() {
         "stop should return 204"
     );
 
-    // State should be exited in mock
-    let details = runtime.inspect_container(&id).await.unwrap();
-    assert_eq!(details.status, "exited");
+    // Verify state is exited via HTTP inspect
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/containers/{id}/json"))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let inspect_json = body_json(resp).await;
+    assert_eq!(
+        inspect_json["State"]["Status"].as_str().unwrap_or(""),
+        "exited",
+        "container status should be exited after stop"
+    );
 
     // Remove
     let resp = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("DELETE")
@@ -343,9 +401,21 @@ async fn container_lifecycle_roundtrip() {
         "remove should return 204"
     );
 
-    // Container should be gone
-    let result = runtime.inspect_container(&id).await;
-    assert!(result.is_err(), "container should be gone after remove");
+    // Container should be gone — 404 via HTTP
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/containers/{id}/json"))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::NOT_FOUND,
+        "container should be gone after remove"
+    );
 }
 
 /// `GET /containers/json` on an empty runtime returns an empty array.
