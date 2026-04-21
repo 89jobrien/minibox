@@ -100,12 +100,8 @@ impl ImageRegistry for VzRegistry {
             tag: Some(image_ref.tag.clone()),
         };
 
-        let handle = tokio::runtime::Handle::current();
         let vm = Arc::clone(&self.vm);
-        let responses = handle
-            .spawn(async move { call_agent(&vm, &req).await })
-            .await
-            .context("vsock: task join error")??;
+        let responses = call_agent(&vm, &req).await?;
 
         let resp = last_response(responses)?;
         match resp {
@@ -171,7 +167,13 @@ impl ContainerRuntime for VzRuntime {
         command.extend(config.args.clone());
 
         let req = DaemonRequest::Run {
-            image: config.rootfs.to_str().unwrap_or("unknown").to_owned(),
+            image: config
+                .rootfs
+                .to_str()
+                .with_context(|| {
+                    format!("rootfs path is not valid UTF-8: {}", config.rootfs.display())
+                })?
+                .to_owned(),
             tag: None,
             command,
             memory_limit_bytes: None,

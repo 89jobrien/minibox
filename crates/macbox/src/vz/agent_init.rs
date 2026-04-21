@@ -63,8 +63,7 @@ pub fn install_init_files(rootfs_dir: &Path) -> Result<()> {
             .with_context(|| format!("chmod rcS {}", rcs.display()))?;
     }
 
-    println!("  init    {}", rcs.display());
-    println!("  inittab {}", inittab.display());
+    tracing::info!(init = %rcs.display(), inittab = %inittab.display(), "agent_init: installed init files");
     Ok(())
 }
 

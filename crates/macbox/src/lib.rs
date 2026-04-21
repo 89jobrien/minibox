@@ -257,7 +257,7 @@ pub async fn start() -> Result<()> {
 
     // ── Socket ───────────────────────────────────────────────────────────
     if socket_path.exists() {
-        warn!("removing stale socket at {}", socket_path.display());
+        warn!(path = %socket_path.display(), "socket: removing stale socket");
         std::fs::remove_file(&socket_path)
             .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
     }
@@ -294,8 +294,8 @@ pub async fn start() -> Result<()> {
     )
     .await?;
 
-    if socket_path.exists() {
-        let _ = std::fs::remove_file(&socket_path);
+    if let Err(e) = std::fs::remove_file(&socket_path) {
+        warn!(error = %e, path = %socket_path.display(), "socket: cleanup on shutdown failed");
     }
     info!("miniboxd (macOS) stopped");
     Ok(())
@@ -446,7 +446,7 @@ async fn start_vz(
 
     // ── Socket ───────────────────────────────────────────────────────────
     if socket_path.exists() {
-        warn!("vz: removing stale socket at {}", socket_path.display());
+        warn!(path = %socket_path.display(), "socket: removing stale socket");
         std::fs::remove_file(&socket_path)
             .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
     }
@@ -483,8 +483,8 @@ async fn start_vz(
     )
     .await?;
 
-    if socket_path.exists() {
-        let _ = std::fs::remove_file(&socket_path);
+    if let Err(e) = std::fs::remove_file(&socket_path) {
+        warn!(error = %e, path = %socket_path.display(), "socket: cleanup on shutdown failed");
     }
     info!("miniboxd (macOS/vz) stopped");
     Ok(())
@@ -539,7 +539,10 @@ mod tests {
             deps.build.image_builder.is_some(),
             "image builder should be wired"
         );
-        assert!(deps.build.image_pusher.is_some(), "image pusher should be wired");
+        assert!(
+            deps.build.image_pusher.is_some(),
+            "image pusher should be wired"
+        );
     }
 }
 
