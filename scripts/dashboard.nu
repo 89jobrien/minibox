@@ -65,7 +65,7 @@ def agents-summary [] {
                 runs: ($entries | length)
                 avg_s: $avg_dur
                 last_run: (fmt-ts $last_run.run_id)
-                last_output: (preview ($last_run | get -o output | default ""))
+                last_output: (preview ($last_run | get output | default ""))
             }
         }
         | sort-by script
@@ -84,7 +84,7 @@ def agents-summary [] {
                 "crash"    => "CRASH"
                 _          => "live"
             }
-            let dur = if ($r | get -o duration_s | is-empty) { "" } else {
+            let dur = if ($r | get duration_s | is-empty) { "" } else {
                 fmt-dur $r.duration_s
             }
             {
@@ -92,7 +92,7 @@ def agents-summary [] {
                 script:  $r.script
                 status:  $status_str
                 dur:     $dur
-                output:  (preview ($r | get -o output | default ""))
+                output:  (preview ($r | get output | default ""))
             }
         }
     )
@@ -107,9 +107,9 @@ def bench-summary [] {
     }
 
     let latest = (open $latest_path)
-    let sha     = ($latest | get -o metadata.git_sha | default "?")
-    let host    = ($latest | get -o metadata.hostname  | default "?")
-    let ts      = ($latest | get -o metadata.timestamp | default "?" | into string | str substring 0..19)
+    let sha     = ($latest | get metadata.git_sha | default "?")
+    let host    = ($latest | get metadata.hostname  | default "?")
+    let ts      = ($latest | get metadata.timestamp | default "?" | into string | str substring 0..19)
 
     print $"=== Benchmarks — ($sha | str substring 0..8) @ ($host) ($ts) ==="
 
@@ -117,16 +117,16 @@ def bench-summary [] {
         $latest.suites
         | each { |suite|
             $suite.tests | each { |t|
-                let avg  = ($t | get -o stats.avg | default null)
-                let p95  = ($t | get -o stats.p95 | default null)
-                let unit = ($t | get -o unit | default "µs")
+                let avg  = ($t | get stats.avg | default null)
+                let p95  = ($t | get stats.p95 | default null)
+                let unit = ($t | get unit | default "µs")
                 let unit_str = if $unit == "nanos" { "ns" } else { "µs" }
                 {
                     suite: $suite.name
                     test:  $t.name
                     avg:   (if $avg != null { $"($avg | math round)($unit_str)" } else { "-" })
                     p95:   (if $p95 != null { $"($p95 | math round)($unit_str)" } else { "-" })
-                    iters: ($t | get -o iterations | default 0)
+                    iters: ($t | get iterations | default 0)
                 }
             }
         }

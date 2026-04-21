@@ -20,8 +20,8 @@ use tower::ServiceExt as _;
 use dockerbox::{
     api::{AppState, router},
     domain::{
-        ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig, ExecDetails,
-        LogChunk, PullProgress, RuntimeError,
+        ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig,
+        ExecDetails, LogChunk, PullProgress, RuntimeError,
     },
     infra::state::StateStore,
 };

@@ -7,8 +7,8 @@
 
 use minibox::adapters::{ColimaRegistry, ColimaRuntime};
 use minibox::domain::{
-    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig,
-    ImageRegistry, ResourceLimiter, RootfsSetup,
+    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, ImageRegistry,
+    ResourceLimiter, RootfsSetup,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
