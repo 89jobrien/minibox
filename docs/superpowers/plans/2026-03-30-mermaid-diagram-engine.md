@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace hand-coded Rust diagram constructors in dashbox with a Mermaid parser that produces the same navigable `OwnedDiagram` domain model, while also supporting user-defined `.mmd` files from `~/.mbx/diagrams/`.
+**Goal:** Replace hand-coded Rust diagram constructors in dashbox with a Mermaid parser that produces the same navigable `OwnedDiagram` domain model, while also supporting user-defined `.mmd` files from `~/.minibox/diagrams/`.
 
 **Architecture:** Add `OwnedDiagram`/`OwnedNode`/`OwnedEdge` types with owned `String` fields (replacing static-str `Diagram`/`Node`/`Edge`); add a `mermaid.rs` parser that converts `&str` → `OwnedDiagram`; add a `source.rs` loader for embedded statics and filesystem files; convert all 6 built-in diagrams to `.mmd` files; update `DiagramsTab` to hold `Vec<OwnedDiagram>` replacing the 6 named fields and hardcoded `View` enum.
 
@@ -12,28 +12,29 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Create | `crates/dashbox/src/diagram/mod.rs` | `OwnedNode`, `OwnedEdge`, `OwnedDiagram`, `NodeKind`, `EdgeStyle`, `NavDir`, navigation methods |
-| Create | `crates/dashbox/src/diagram/mermaid.rs` | `parse(&str) -> Result<OwnedDiagram, MermaidError>` |
-| Create | `crates/dashbox/src/diagram/source.rs` | `DiagramSource` enum, `load_user_diagrams()` |
-| Create | `crates/dashbox/src/diagrams/ci_flow.mmd` | CI Flow Mermaid source |
-| Create | `crates/dashbox/src/diagrams/dev_loop.mmd` | Dev Loop Mermaid source |
-| Create | `crates/dashbox/src/diagrams/container_lifecycle.mmd` | Container Lifecycle Mermaid source |
-| Create | `crates/dashbox/src/diagrams/image_pull.mmd` | Image Pull Mermaid source |
-| Create | `crates/dashbox/src/diagrams/adapter_suite.mmd` | Adapter Suite Mermaid source |
-| Create | `crates/dashbox/src/diagrams/workspace_deps.mmd` | Workspace Deps Mermaid source |
-| Delete | `crates/dashbox/src/diagram.rs` | Replaced by `diagram/mod.rs` |
-| Replace | `crates/dashbox/src/diagrams.rs` | Replaced by `built_in_diagrams()` function + `pub use` |
-| Modify | `crates/dashbox/src/tabs/diagrams.rs` | Use `Vec<OwnedDiagram>`, remove `View` enum, remove 6 named fields |
-| Modify | `crates/dashbox/src/app.rs` | Pass user diagrams into `DiagramsTab::new()` |
-| Modify | `crates/dashbox/src/main.rs` | No change needed (App::new() handles it) |
+| Action  | Path                                                  | Responsibility                                                                                  |
+| ------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Create  | `crates/dashbox/src/diagram/mod.rs`                   | `OwnedNode`, `OwnedEdge`, `OwnedDiagram`, `NodeKind`, `EdgeStyle`, `NavDir`, navigation methods |
+| Create  | `crates/dashbox/src/diagram/mermaid.rs`               | `parse(&str) -> Result<OwnedDiagram, MermaidError>`                                             |
+| Create  | `crates/dashbox/src/diagram/source.rs`                | `DiagramSource` enum, `load_user_diagrams()`                                                    |
+| Create  | `crates/dashbox/src/diagrams/ci_flow.mmd`             | CI Flow Mermaid source                                                                          |
+| Create  | `crates/dashbox/src/diagrams/dev_loop.mmd`            | Dev Loop Mermaid source                                                                         |
+| Create  | `crates/dashbox/src/diagrams/container_lifecycle.mmd` | Container Lifecycle Mermaid source                                                              |
+| Create  | `crates/dashbox/src/diagrams/image_pull.mmd`          | Image Pull Mermaid source                                                                       |
+| Create  | `crates/dashbox/src/diagrams/adapter_suite.mmd`       | Adapter Suite Mermaid source                                                                    |
+| Create  | `crates/dashbox/src/diagrams/workspace_deps.mmd`      | Workspace Deps Mermaid source                                                                   |
+| Delete  | `crates/dashbox/src/diagram.rs`                       | Replaced by `diagram/mod.rs`                                                                    |
+| Replace | `crates/dashbox/src/diagrams.rs`                      | Replaced by `built_in_diagrams()` function + `pub use`                                          |
+| Modify  | `crates/dashbox/src/tabs/diagrams.rs`                 | Use `Vec<OwnedDiagram>`, remove `View` enum, remove 6 named fields                              |
+| Modify  | `crates/dashbox/src/app.rs`                           | Pass user diagrams into `DiagramsTab::new()`                                                    |
+| Modify  | `crates/dashbox/src/main.rs`                          | No change needed (App::new() handles it)                                                        |
 
 ---
 
 ## Task 1: OwnedDiagram types + navigation
 
 **Files:**
+
 - Create: `crates/dashbox/src/diagram/mod.rs`
 - Delete: `crates/dashbox/src/diagram.rs` (after copy)
 
@@ -202,11 +203,13 @@ impl OwnedDiagram {
 - [ ] **Step 2: Add empty stub files for submodules (so it compiles)**
 
 Create `crates/dashbox/src/diagram/mermaid.rs`:
+
 ```rust
 // stub — implemented in Task 2
 ```
 
 Create `crates/dashbox/src/diagram/source.rs`:
+
 ```rust
 // stub — implemented in Task 3
 ```
@@ -218,19 +221,25 @@ In `crates/dashbox/src/main.rs`, the `mod diagram;` line currently refers to `di
 - [ ] **Step 4: Update all imports of old types throughout the codebase**
 
 In `crates/dashbox/src/tabs/diagrams.rs`, the import line:
+
 ```rust
 use crate::diagram::{Diagram, EdgeStyle, NavDir, NodeKind, NodeStatus};
 ```
+
 Change to:
+
 ```rust
 use crate::diagram::{EdgeStyle, NavDir, NodeKind, NodeStatus, OwnedDiagram};
 ```
 
 In `crates/dashbox/src/diagrams.rs`, the import:
+
 ```rust
 use crate::diagram::{Diagram, Edge, EdgeStyle, Node, NodeKind};
 ```
+
 Change to:
+
 ```rust
 use crate::diagram::{EdgeStyle, NodeKind, OwnedDiagram, OwnedEdge, OwnedNode};
 ```
@@ -256,6 +265,7 @@ git commit -m "feat(dashbox): add OwnedDiagram types with owned String fields"
 ## Task 2: Mermaid parser
 
 **Files:**
+
 - Modify: `crates/dashbox/src/diagram/mermaid.rs`
 
 - [ ] **Step 1: Write failing tests first**
@@ -770,6 +780,7 @@ git commit -m "feat(dashbox): add Mermaid parser producing OwnedDiagram"
 ## Task 3: DiagramSource and built_in_diagrams loader
 
 **Files:**
+
 - Modify: `crates/dashbox/src/diagram/source.rs`
 - Create: `crates/dashbox/src/diagrams/` directory (6 `.mmd` files)
 - Replace: `crates/dashbox/src/diagrams.rs`
@@ -781,6 +792,7 @@ Note: `include_str!` paths are relative to the source file. Since `source.rs` is
 is `"../diagrams/ci_flow.mmd"`.
 
 Create `crates/dashbox/src/diagrams/ci_flow.mmd`:
+
 ```
 graph LR
   feature([feature/*])
@@ -804,10 +816,11 @@ graph LR
 ```
 
 Create `crates/dashbox/src/diagrams/dev_loop.mmd`:
+
 ```
 graph LR
   edit[edit]
-  %% detail: Write Rust. Use bacon for fast watch-mode check. Shared CARGO_TARGET_DIR at ~/.mbx/cache/target/ across worktrees.
+  %% detail: Write Rust. Use bacon for fast watch-mode check. Shared CARGO_TARGET_DIR at ~/.minibox/cache/target/ across worktrees.
   chk[cargo chk]
   %% detail: Fast type-check pass, no codegen. Catches most errors in <1s. Run via bacon or directly.
   precommit[pre-commit]
@@ -834,6 +847,7 @@ graph LR
 ```
 
 Create `crates/dashbox/src/diagrams/container_lifecycle.mmd`:
+
 ```
 graph LR
   runreq[run req]
@@ -864,6 +878,7 @@ graph LR
 ```
 
 Create `crates/dashbox/src/diagrams/image_pull.mmd`:
+
 ```
 graph LR
   imageref[ImageRef]
@@ -894,6 +909,7 @@ graph LR
 ```
 
 Create `crates/dashbox/src/diagrams/adapter_suite.mmd`:
+
 ```
 graph LR
   adapter[ADAPTER]
@@ -918,59 +934,60 @@ graph LR
 ```
 
 Create `crates/dashbox/src/diagrams/workspace_deps.mmd`:
+
 ```
 graph LR
   miniboxd>miniboxd<
-  %% detail: Unified daemon binary. Unconditional: daemonbox. Linux: mbx+minibox-core+nix. macOS: macbox. Windows: winbox.
+  %% detail: Unified daemon binary. Unconditional: daemonbox. Linux: minibox+minibox-core+nix. macOS: macbox. Windows: winbox.
   miniboxcli>minibox-cli<
-  %% detail: Platform-agnostic CLI binary. Deps: minibox-core + minibox-client. No direct mbx dependency.
-  mbxbench>mbx-bench<
-  %% detail: Benchmark harness binary. Deps: minibox-core + mbx.
+  %% detail: Platform-agnostic CLI binary. Deps: minibox-core + minibox-client. No direct minibox dependency.
+  miniboxbench>minibox-bench<
+  %% detail: Benchmark harness binary. Deps: minibox-core + minibox.
   dockerboxd>dockerboxd<
   %% detail: Docker API shim (axum HTTP over Unix socket). Translates Docker API to minibox protocol. Deps: minibox-client + minibox-core.
   macbox{macbox}
-  %% detail: macOS daemon: Colima + vz adapters. Deps: daemonbox + minibox-core + mbx. Optional: objc2 + Virtualization.framework.
+  %% detail: macOS daemon: Colima + vz adapters. Deps: daemonbox + minibox-core + minibox. Optional: objc2 + Virtualization.framework.
   winbox{winbox}
-  %% detail: Windows daemon stub (HCS planned). Deps: daemonbox + mbx.
+  %% detail: Windows daemon stub (HCS planned). Deps: daemonbox + minibox.
   daemonbox{daemonbox}
-  %% detail: Platform-agnostic handler/state/server. Deps: minibox-core + mbx. Unix: nix for SO_PEERCRED auth.
-  mbxclient{mbx-client}
+  %% detail: Platform-agnostic handler/state/server. Deps: minibox-core + minibox. Unix: nix for SO_PEERCRED auth.
+  miniboxclient{minibox-client}
   %% detail: Unix socket client: DaemonClient + DaemonResponseStream. Deps: minibox-core only.
-  mbx{mbx}
+  minibox{minibox}
   %% detail: Linux container primitives: namespaces, cgroups v2, overlay FS, image pull, adapters. Deps: minibox-core + minibox-macros + nix.
-  mbxcore{mbx-core}
+  miniboxcore{minibox-core}
   %% detail: Cross-platform types: protocol, domain traits, image management, preflight. Deps: minibox-macros. Unix: nix.
-  mbxmacros[mbx-macros]
-  %% detail: Proc-macro crate: as_any! and adapt! macros used by mbx and minibox-core. True leaf — no workspace deps.
+  miniboxmacros[minibox-macros]
+  %% detail: Proc-macro crate: as_any! and adapt! macros used by minibox and minibox-core. True leaf — no workspace deps.
 
   miniboxd --> daemonbox
-  miniboxd -->|linux| mbxcore
-  miniboxd -->|linux| mbx
+  miniboxd -->|linux| miniboxcore
+  miniboxd -->|linux| minibox
   miniboxd -.->|macos| macbox
   miniboxd -.->|windows| winbox
-  miniboxcli --> mbxcore
-  miniboxcli --> mbxclient
-  mbxbench --> mbxcore
-  mbxbench --> mbx
-  dockerboxd --> mbxclient
-  dockerboxd --> mbxcore
+  miniboxcli --> miniboxcore
+  miniboxcli --> miniboxclient
+  miniboxbench --> miniboxcore
+  miniboxbench --> minibox
+  dockerboxd --> miniboxclient
+  dockerboxd --> miniboxcore
   macbox --> daemonbox
-  macbox --> mbxcore
-  macbox --> mbx
+  macbox --> miniboxcore
+  macbox --> minibox
   winbox --> daemonbox
-  winbox --> mbx
-  daemonbox --> mbxcore
-  daemonbox --> mbx
-  mbxclient --> mbxcore
-  mbx --> mbxcore
-  mbx --> mbxmacros
-  mbxcore --> mbxmacros
+  winbox --> minibox
+  daemonbox --> miniboxcore
+  daemonbox --> minibox
+  miniboxclient --> miniboxcore
+  minibox --> miniboxcore
+  minibox --> miniboxmacros
+  miniboxcore --> miniboxmacros
 
 %% name: Workspace Deps
-%% layout: miniboxd miniboxcli mbxbench dockerboxd
-%% layout: macbox winbox daemonbox mbxclient
-%% layout: mbx mbxcore
-%% layout: mbxmacros
+%% layout: miniboxd miniboxcli miniboxbench dockerboxd
+%% layout: macbox winbox daemonbox miniboxclient
+%% layout: minibox miniboxcore
+%% layout: miniboxmacros
 ```
 
 - [ ] **Step 2: Implement `source.rs`**
@@ -1021,11 +1038,11 @@ pub fn built_in_diagrams() -> Vec<OwnedDiagram> {
         .collect()
 }
 
-/// Load all `.mmd` files from `~/.mbx/diagrams/`, sorted by filename.
+/// Load all `.mmd` files from `~/.minibox/diagrams/`, sorted by filename.
 /// Files that fail to parse produce single error-node diagrams (never panics).
 pub fn load_user_diagrams() -> Vec<OwnedDiagram> {
     let dir = match dirs::home_dir() {
-        Some(h) => h.join(".mbx").join("diagrams"),
+        Some(h) => h.join(".minibox").join("diagrams"),
         None => return Vec::new(),
     };
     if !dir.exists() {
@@ -1076,6 +1093,7 @@ git commit -m "feat(dashbox): add DiagramSource, built-in .mmd files, user diagr
 ## Task 4: Migrate DiagramsTab to Vec<OwnedDiagram>
 
 **Files:**
+
 - Modify: `crates/dashbox/src/tabs/diagrams.rs`
 
 This is the largest migration task. We replace the 6 named `Diagram` fields and the `View` enum
@@ -1498,11 +1516,13 @@ impl TabRenderer for DiagramsTab {
 In `crates/dashbox/src/app.rs`, change the `DiagramsTab::new()` call:
 
 Find:
+
 ```rust
 Box::new(DiagramsTab::new()),
 ```
 
 Replace with:
+
 ```rust
 Box::new(DiagramsTab::new(crate::diagram::source::load_user_diagrams())),
 ```
@@ -1545,6 +1565,7 @@ git commit -m "feat(dashbox): migrate DiagramsTab to Vec<OwnedDiagram> from Merm
 ## Task 5: Delete dead code and verify end-to-end
 
 **Files:**
+
 - The old static-str `Diagram`/`Node`/`Edge` types were in `diagram.rs` (already deleted in Task 1).
 - The old `diagrams.rs` functions (`ci_flow()`, etc.) are replaced in Task 3.
 - Any remaining dead imports.
@@ -1564,6 +1585,7 @@ cargo test -p dashbox 2>&1
 ```
 
 Expected output includes lines like:
+
 ```
 test diagram::mermaid::tests::test_parse_node_count ... ok
 test diagram::mermaid::tests::test_parse_detail ... ok
@@ -1585,6 +1607,7 @@ Expected: builds cleanly.
 ```
 
 Press `7` to go to the Diagrams tab. Verify:
+
 - Title bar shows `CI Flow (1/6)` (or similar count including user diagrams if any exist)
 - Nodes render with boxes
 - Arrow-key navigation moves the selection highlight
@@ -1605,29 +1628,31 @@ git commit -m "feat(dashbox): mermaid diagram engine complete — parser + .mmd 
 
 ### Spec coverage check
 
-| Spec requirement | Covered by |
-|---|---|
-| Mermaid is source of truth | Task 3 (6 `.mmd` files) |
-| `Diagram` model stays navigable | Task 1 (`OwnedDiagram` with identical nav methods) |
-| Embedded statics (built-ins) | Task 3 (`include_str!` + `built_in_diagrams()`) |
-| File loading (`~/.mbx/diagrams/`) | Task 3 (`load_user_diagrams()`) |
-| Navigation preserved | Task 4 (same key handlers, `OwnedDiagram` nav methods) |
-| No new runtime deps | All tasks (hand-rolled parser) |
-| `%% detail:` comment convention | Task 2 (parser) |
-| `%% layout:` hints + BFS fallback | Task 2 (parser) |
-| `%% kind:` override | Task 2 (parser) |
-| `%% name:` override | Task 2 (parser) |
-| Node shapes → `NodeKind` mapping | Task 2 (parser) |
-| Edge styles (`-->`, `-.->`, `==>`) | Task 2 (parser) |
-| Parse errors → error-node diagram | Task 2 (`error_diagram()`) |
-| `View` enum removed | Task 4 |
-| Unit tests for parser | Task 2 (12 tests) |
-| File loader test | Not explicitly — covered by `load_user_diagrams()` returning empty vec gracefully |
+| Spec requirement                      | Covered by                                                                        |
+| ------------------------------------- | --------------------------------------------------------------------------------- |
+| Mermaid is source of truth            | Task 3 (6 `.mmd` files)                                                           |
+| `Diagram` model stays navigable       | Task 1 (`OwnedDiagram` with identical nav methods)                                |
+| Embedded statics (built-ins)          | Task 3 (`include_str!` + `built_in_diagrams()`)                                   |
+| File loading (`~/.minibox/diagrams/`) | Task 3 (`load_user_diagrams()`)                                                   |
+| Navigation preserved                  | Task 4 (same key handlers, `OwnedDiagram` nav methods)                            |
+| No new runtime deps                   | All tasks (hand-rolled parser)                                                    |
+| `%% detail:` comment convention       | Task 2 (parser)                                                                   |
+| `%% layout:` hints + BFS fallback     | Task 2 (parser)                                                                   |
+| `%% kind:` override                   | Task 2 (parser)                                                                   |
+| `%% name:` override                   | Task 2 (parser)                                                                   |
+| Node shapes → `NodeKind` mapping      | Task 2 (parser)                                                                   |
+| Edge styles (`-->`, `-.->`, `==>`)    | Task 2 (parser)                                                                   |
+| Parse errors → error-node diagram     | Task 2 (`error_diagram()`)                                                        |
+| `View` enum removed                   | Task 4                                                                            |
+| Unit tests for parser                 | Task 2 (12 tests)                                                                 |
+| File loader test                      | Not explicitly — covered by `load_user_diagrams()` returning empty vec gracefully |
 
 ### Placeholder scan
+
 None found — all steps contain actual code.
 
 ### Type consistency
+
 - `OwnedDiagram`, `OwnedNode`, `OwnedEdge` — defined in Task 1, used consistently in Tasks 2–4.
 - `mermaid::parse()` returns `OwnedDiagram` — used in `DiagramSource::load()` in Task 3.
 - `DiagramsTab::new(extra: Vec<OwnedDiagram>)` — defined in Task 4, called in Task 4 (`app.rs`).

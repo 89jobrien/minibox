@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `cargo xtask test-linux` runs the full minibox Linux test suite on macOS by cross-compiling test binaries into an OCI image (`mbx-tester`), loading it via `minibox load`, and running it with `minibox run --privileged`.
+**Goal:** `cargo xtask test-linux` runs the full minibox Linux test suite on macOS by cross-compiling test binaries into an OCI image (`minibox-tester`), loading it via `minibox load`, and running it with `minibox run --privileged`.
 
 **Architecture:** Three sequential layers: (1) protocol + handler + CLI for `LoadImage`, (2) xtask `build-test-image` that cross-compiles and assembles the OCI tarball, (3) xtask `test-linux` that orchestrates load + run. The outer `miniboxd` uses `MINIBOX_ADAPTER=colima`; the inner `miniboxd` inside the container uses `MINIBOX_ADAPTER=native`.
 
@@ -12,25 +12,25 @@
 
 ## File Map
 
-| File                                      | Change                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------- |
-| `crates/minibox-core/src/protocol.rs`     | Add `LoadImage` request + `ImageLoaded` response                       |
-| `crates/mbx/src/protocol.rs`              | Same (two protocol files must stay in sync)                            |
-| `crates/minibox-core/src/domain.rs`       | Add `ImageLoader` trait + `DynImageLoader`                             |
-| `crates/mbx/src/adapters/image_loader.rs` | New: `NativeImageLoader` (extracts tarball into ImageStore)            |
-| `crates/mbx/src/adapters/mod.rs`          | Wire `pub mod image_loader`                                            |
-| `crates/mbx/src/adapters/colima.rs`       | Add `impl ImageLoader for ColimaRegistry`                              |
-| `crates/daemonbox/src/handler.rs`         | Add `handle_load_image`, `image_loader` field on `HandlerDependencies` |
-| `crates/daemonbox/src/server.rs`          | Wire `LoadImage` in `dispatch()` + `is_terminal_response()`            |
-| `crates/daemonbox/tests/handler_tests.rs` | Add `test_load_image_success`, `test_load_image_missing_file`          |
-| `crates/macbox/src/lib.rs`                | Inject `ColimaRegistry` as `image_loader` in `HandlerDependencies`     |
-| `crates/miniboxd/src/lib.rs`              | Inject `NativeImageLoader` as `image_loader` in `HandlerDependencies`  |
-| `crates/minibox-cli/src/commands/load.rs` | New: `execute()` for `minibox load <path>`                             |
-| `crates/minibox-cli/src/commands/mod.rs`  | `pub mod load;`                                                        |
-| `crates/minibox-cli/src/main.rs`          | Add `Load` variant + dispatch                                          |
-| `crates/xtask/src/test_image.rs`          | New: `build_test_image()` + OCI tarball assembly                       |
-| `crates/xtask/src/gates.rs`               | Add `test_linux()`                                                     |
-| `crates/xtask/src/main.rs`                | Wire `build-test-image` + `test-linux`                                 |
+| File                                          | Change                                                                 |
+| --------------------------------------------- | ---------------------------------------------------------------------- |
+| `crates/minibox-core/src/protocol.rs`         | Add `LoadImage` request + `ImageLoaded` response                       |
+| `crates/minibox/src/protocol.rs`              | Same (two protocol files must stay in sync)                            |
+| `crates/minibox-core/src/domain.rs`           | Add `ImageLoader` trait + `DynImageLoader`                             |
+| `crates/minibox/src/adapters/image_loader.rs` | New: `NativeImageLoader` (extracts tarball into ImageStore)            |
+| `crates/minibox/src/adapters/mod.rs`          | Wire `pub mod image_loader`                                            |
+| `crates/minibox/src/adapters/colima.rs`       | Add `impl ImageLoader for ColimaRegistry`                              |
+| `crates/daemonbox/src/handler.rs`             | Add `handle_load_image`, `image_loader` field on `HandlerDependencies` |
+| `crates/daemonbox/src/server.rs`              | Wire `LoadImage` in `dispatch()` + `is_terminal_response()`            |
+| `crates/daemonbox/tests/handler_tests.rs`     | Add `test_load_image_success`, `test_load_image_missing_file`          |
+| `crates/macbox/src/lib.rs`                    | Inject `ColimaRegistry` as `image_loader` in `HandlerDependencies`     |
+| `crates/miniboxd/src/lib.rs`                  | Inject `NativeImageLoader` as `image_loader` in `HandlerDependencies`  |
+| `crates/minibox-cli/src/commands/load.rs`     | New: `execute()` for `minibox load <path>`                             |
+| `crates/minibox-cli/src/commands/mod.rs`      | `pub mod load;`                                                        |
+| `crates/minibox-cli/src/main.rs`              | Add `Load` variant + dispatch                                          |
+| `crates/xtask/src/test_image.rs`              | New: `build_test_image()` + OCI tarball assembly                       |
+| `crates/xtask/src/gates.rs`                   | Add `test_linux()`                                                     |
+| `crates/xtask/src/main.rs`                    | Wire `build-test-image` + `test-linux`                                 |
 
 ---
 
@@ -39,7 +39,7 @@
 **Files:**
 
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 
 - [ ] **Step 1: Add variants to `minibox-core/src/protocol.rs`**
 
@@ -50,7 +50,7 @@ In `crates/minibox-core/src/protocol.rs`, add after the `Pull` variant in `Daemo
 LoadImage {
     /// Absolute path to the OCI tarball on the host filesystem.
     path: String,
-    /// Image name to register (e.g. `"mbx-tester"`).
+    /// Image name to register (e.g. `"minibox-tester"`).
     name: String,
     /// Image tag to register (e.g. `"latest"`).
     tag: String,
@@ -62,19 +62,19 @@ Add to `DaemonResponse` after the `ContainerList` variant:
 ```rust
 /// Confirmation that a local image tarball was loaded successfully.
 ImageLoaded {
-    /// The image reference that was registered, e.g. `"mbx-tester:latest"`.
+    /// The image reference that was registered, e.g. `"minibox-tester:latest"`.
     image: String,
 },
 ```
 
-- [ ] **Step 2: Apply the same additions to `crates/mbx/src/protocol.rs`**
+- [ ] **Step 2: Apply the same additions to `crates/minibox/src/protocol.rs`**
 
-Identical additions to `DaemonRequest` and `DaemonResponse` in `crates/mbx/src/protocol.rs`. The two files are independent definitions that must stay in sync (see CLAUDE.md protocol gotchas).
+Identical additions to `DaemonRequest` and `DaemonResponse` in `crates/minibox/src/protocol.rs`. The two files are independent definitions that must stay in sync (see CLAUDE.md protocol gotchas).
 
 - [ ] **Step 3: Run cargo check**
 
 ```bash
-cargo check -p minibox-core -p mbx
+cargo check -p minibox-core -p minibox
 ```
 
 Expected: no errors.
@@ -82,7 +82,7 @@ Expected: no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs
+git add crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs
 git commit -m "feat(protocol): add LoadImage request and ImageLoaded response variants"
 ```
 
@@ -117,7 +117,7 @@ mod image_loader_tests {
     async fn image_loader_trait_is_object_safe() {
         let loader: Box<dyn ImageLoader> = Box::new(AlwaysOkLoader);
         let result = loader
-            .load_image(std::path::Path::new("/fake.tar"), "mbx-tester", "latest")
+            .load_image(std::path::Path::new("/fake.tar"), "minibox-tester", "latest")
             .await;
         assert!(result.is_ok());
     }
@@ -177,8 +177,8 @@ git commit -m "feat(domain): add ImageLoader trait port for local OCI tarball lo
 
 **Files:**
 
-- Create: `crates/mbx/src/adapters/image_loader.rs`
-- Modify: `crates/mbx/src/adapters/mod.rs`
+- Create: `crates/minibox/src/adapters/image_loader.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 - [ ] **Step 1: Create `image_loader.rs` with failing test**
 
@@ -229,7 +229,7 @@ mod tests {
 
 - [ ] **Step 2: Wire in `mod.rs`**
 
-Add to `crates/mbx/src/adapters/mod.rs`:
+Add to `crates/minibox/src/adapters/mod.rs`:
 
 ```rust
 pub mod image_loader;
@@ -239,7 +239,7 @@ pub use image_loader::NativeImageLoader;
 - [ ] **Step 3: Run test to confirm `todo!` panics**
 
 ```bash
-cargo test -p mbx adapters::image_loader::tests::load_image_rejects_nonexistent_path 2>&1 | head -20
+cargo test -p minibox adapters::image_loader::tests::load_image_rejects_nonexistent_path 2>&1 | head -20
 ```
 
 Expected: test panics with `not yet implemented`.
@@ -294,12 +294,12 @@ Add imports at the top of the file:
 use minibox_core::image::manifest::OciManifest;
 ```
 
-Ensure `tar` and `tempfile` are in `crates/mbx/Cargo.toml` dev/regular deps (check first).
+Ensure `tar` and `tempfile` are in `crates/minibox/Cargo.toml` dev/regular deps (check first).
 
 - [ ] **Step 5: Run test**
 
 ```bash
-cargo test -p mbx adapters::image_loader::tests
+cargo test -p minibox adapters::image_loader::tests
 ```
 
 Expected: 1 passed (`load_image_rejects_nonexistent_path`).
@@ -307,7 +307,7 @@ Expected: 1 passed (`load_image_rejects_nonexistent_path`).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/image_loader.rs crates/mbx/src/adapters/mod.rs
+git add crates/minibox/src/adapters/image_loader.rs crates/minibox/src/adapters/mod.rs
 git commit -m "feat(adapters): NativeImageLoader — extract OCI tarball into ImageStore"
 ```
 
@@ -317,11 +317,11 @@ git commit -m "feat(adapters): NativeImageLoader — extract OCI tarball into Im
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/colima.rs`
+- Modify: `crates/minibox/src/adapters/colima.rs`
 
 - [ ] **Step 1: Write the failing test**
 
-In the `#[cfg(test)]` block at the bottom of `crates/mbx/src/adapters/colima.rs`, add:
+In the `#[cfg(test)]` block at the bottom of `crates/minibox/src/adapters/colima.rs`, add:
 
 ```rust
 #[tokio::test]
@@ -339,7 +339,7 @@ async fn colima_load_image_calls_nerdctl_load() {
     }));
 
     let result = loader
-        .load_image(std::path::Path::new("/tmp/mbx-tester.tar"), "mbx-tester", "latest")
+        .load_image(std::path::Path::new("/tmp/minibox-tester.tar"), "minibox-tester", "latest")
         .await;
     assert!(result.is_ok(), "load_image failed: {result:?}");
 
@@ -358,7 +358,7 @@ async fn colima_load_image_calls_nerdctl_load() {
 - [ ] **Step 2: Run to confirm it fails**
 
 ```bash
-cargo test -p mbx adapters::colima::colima_load_image_calls_nerdctl_load 2>&1 | head -20
+cargo test -p minibox adapters::colima::colima_load_image_calls_nerdctl_load 2>&1 | head -20
 ```
 
 Expected: compile error — `ImageLoader` not implemented for `ColimaRegistry`.
@@ -374,7 +374,7 @@ impl minibox_core::domain::ImageLoader for ColimaRegistry {
     ///
     /// The tarball path must be reachable from inside the Lima VM.
     /// Lima automatically shares `/tmp` and `$HOME`, so place the tarball
-    /// under `~/.mbx/` (which is in `$HOME`) for guaranteed access.
+    /// under `~/.minibox/` (which is in `$HOME`) for guaranteed access.
     async fn load_image(
         &self,
         path: &std::path::Path,
@@ -394,7 +394,7 @@ impl minibox_core::domain::ImageLoader for ColimaRegistry {
 - [ ] **Step 4: Run test**
 
 ```bash
-cargo test -p mbx adapters::colima::colima_load_image_calls_nerdctl_load
+cargo test -p minibox adapters::colima::colima_load_image_calls_nerdctl_load
 ```
 
 Expected: 1 passed.
@@ -402,7 +402,7 @@ Expected: 1 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/colima.rs
+git add crates/minibox/src/adapters/colima.rs
 git commit -m "feat(adapters): impl ImageLoader for ColimaRegistry via nerdctl load"
 ```
 
@@ -492,7 +492,7 @@ async fn test_load_image_success() {
     let state = create_test_state_with_dir(tmp.path());
     let response = handle_load_image_once(
         "/tmp/fake.tar".to_string(),
-        "mbx-tester".to_string(),
+        "minibox-tester".to_string(),
         "latest".to_string(),
         state,
         Arc::new(deps),
@@ -528,7 +528,7 @@ async fn test_load_image_failure() {
     let state = create_test_state_with_dir(tmp.path());
     let response = handle_load_image_once(
         "/nonexistent/fake.tar".to_string(),
-        "mbx-tester".to_string(),
+        "minibox-tester".to_string(),
         "latest".to_string(),
         state,
         Arc::new(deps),
@@ -662,7 +662,7 @@ Read the matching file(s) to understand the exact struct literal pattern.
 `ColimaRegistry` is already instantiated as the registry adapter. Create a second instance (or share via `Arc`) for the loader:
 
 ```rust
-use mbx::adapters::ColimaRegistry;
+use minibox::adapters::ColimaRegistry;
 
 let image_loader = Arc::new(ColimaRegistry::new()) as minibox_core::domain::DynImageLoader;
 ```
@@ -674,7 +674,7 @@ Add `image_loader` to the `HandlerDependencies { ... }` struct literal.
 In the Linux composition root, the `ImageStore` is already created as `Arc<ImageStore>`. Add:
 
 ```rust
-use mbx::adapters::NativeImageLoader;
+use minibox::adapters::NativeImageLoader;
 
 let image_loader = Arc::new(NativeImageLoader::new(Arc::clone(&image_store)))
     as minibox_core::domain::DynImageLoader;
@@ -753,15 +753,15 @@ mod tests {
             serve_once(
                 &sp,
                 DaemonResponse::ImageLoaded {
-                    image: "mbx-tester:latest".to_string(),
+                    image: "minibox-tester:latest".to_string(),
                 },
             )
             .await;
         });
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let result = execute(
-            "/tmp/mbx-tester.tar".to_string(),
-            "mbx-tester".to_string(),
+            "/tmp/minibox-tester.tar".to_string(),
+            "minibox-tester".to_string(),
             "latest".to_string(),
             &socket_path,
         )
@@ -835,7 +835,7 @@ pub async fn execute(
 ```rust
 /// Load a local OCI image tarball into the daemon's image store.
 Load {
-    /// Path to the OCI tarball (e.g. ~/.mbx/test-image/mbx-tester.tar)
+    /// Path to the OCI tarball (e.g. ~/.minibox/test-image/minibox-tester.tar)
     path: String,
     /// Image name to register (default: derived from filename stem)
     #[arg(short, long)]
@@ -942,7 +942,7 @@ tar = "0.4"
 Create `crates/xtask/src/test_image.rs`:
 
 ```rust
-//! Build the `mbx-tester` OCI image tarball for Linux test dogfooding.
+//! Build the `minibox-tester` OCI image tarball for Linux test dogfooding.
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -950,7 +950,7 @@ use xshell::{Shell, cmd};
 
 pub fn default_test_image_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".mbx").join("test-image")
+    PathBuf::from(home).join(".minibox").join("test-image")
 }
 
 pub fn build_test_image(sh: &Shell, out_dir: &Path, force: bool) -> Result<()> {
@@ -962,10 +962,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_test_image_dir_under_mbx() {
+    fn default_test_image_dir_under_minibox() {
         let dir = default_test_image_dir();
         let s = dir.to_string_lossy();
-        assert!(s.contains(".mbx"), "expected .mbx in path: {s}");
+        assert!(s.contains(".minibox"), "expected .minibox in path: {s}");
         assert!(s.contains("test-image"), "expected test-image in path: {s}");
     }
 }
@@ -993,7 +993,7 @@ Some("test-linux") => gates::test_linux(&sh),
 Add to help text:
 
 ```rust
-eprintln!("  build-test-image build mbx-tester OCI tarball (cross-compile aarch64-musl)");
+eprintln!("  build-test-image build minibox-tester OCI tarball (cross-compile aarch64-musl)");
 eprintln!("  test-linux       run Linux tests via minibox on macOS (Colima)");
 ```
 
@@ -1014,7 +1014,7 @@ Replace `todo!` with the full implementation. This is the longest step — take 
 ```rust
 pub fn build_test_image(sh: &Shell, out_dir: &Path, force: bool) -> Result<()> {
     let target = "aarch64-unknown-linux-musl";
-    let tarball = out_dir.join("mbx-tester.tar");
+    let tarball = out_dir.join("minibox-tester.tar");
 
     if !force && tarball.exists() && tarball_is_fresh(&tarball)? {
         eprintln!("[build-test-image] cached: {}", tarball.display());
@@ -1041,7 +1041,7 @@ pub fn build_test_image(sh: &Shell, out_dir: &Path, force: bool) -> Result<()> {
     let bins = collect_binaries(&target_dir, &deps_dir)?;
 
     // 3. Assemble OCI tarball
-    eprintln!("[build-test-image] assembling mbx-tester.tar...");
+    eprintln!("[build-test-image] assembling minibox-tester.tar...");
     assemble_oci_tarball(&bins, &tarball)?;
 
     eprintln!("[build-test-image] done: {}", tarball.display());
@@ -1185,7 +1185,7 @@ fn assemble_oci_tarball(bins: &ImageBinaries, tarball: &Path) -> Result<()> {
         "manifests": [{"mediaType": "application/vnd.oci.image.manifest.v1+json",
                        "digest": manifest_digest,
                        "size": manifest_bytes.len(),
-                       "annotations": {"org.opencontainers.image.ref.name": "mbx-tester:latest"}}]
+                       "annotations": {"org.opencontainers.image.ref.name": "minibox-tester:latest"}}]
     });
 
     // Write outer tarball
@@ -1231,7 +1231,7 @@ Expected: no errors.
 
 ```bash
 git add crates/xtask/src/test_image.rs crates/xtask/src/main.rs crates/xtask/Cargo.toml
-git commit -m "feat(xtask): build-test-image — cross-compile + assemble mbx-tester OCI tarball"
+git commit -m "feat(xtask): build-test-image — cross-compile + assemble minibox-tester OCI tarball"
 ```
 
 ---
@@ -1255,7 +1255,7 @@ In `crates/xtask/src/gates.rs`, add:
 /// - aarch64-linux-musl-gcc cross-compiler on PATH
 pub fn test_linux(sh: &Shell) -> Result<()> {
     let out_dir = crate::test_image::default_test_image_dir();
-    let tarball = out_dir.join("mbx-tester.tar");
+    let tarball = out_dir.join("minibox-tester.tar");
     let force = std::env::args().any(|a| a == "--force");
 
     // Step 1: build image (cached unless --force)
@@ -1264,12 +1264,12 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 
     // Step 2: load into minibox daemon
     let tarball_str = tarball.to_str().context("non-UTF-8 tarball path")?;
-    cmd!(sh, "minibox load {tarball_str} --name mbx-tester --tag latest")
+    cmd!(sh, "minibox load {tarball_str} --name minibox-tester --tag latest")
         .run()
         .context("minibox load failed -- is miniboxd running with MINIBOX_ADAPTER=colima?")?;
 
     // Step 3: run tests in privileged container, stream output
-    cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh")
+    cmd!(sh, "minibox run --privileged minibox-tester -- /run-tests.sh")
         .run()
         .context("minibox run failed")?;
 
@@ -1320,7 +1320,7 @@ Wait 2 seconds for the socket to appear.
 cargo xtask build-test-image
 ```
 
-Expected: cross-compiles for `aarch64-unknown-linux-musl`, outputs `~/.mbx/test-image/mbx-tester.tar`.
+Expected: cross-compiles for `aarch64-unknown-linux-musl`, outputs `~/.minibox/test-image/minibox-tester.tar`.
 
 - [ ] **Step 4: Run test-linux**
 
@@ -1356,7 +1356,7 @@ Expected: `[build-test-image] cached: ...` — skips cross-compile, goes straigh
 - [ ] **Step 6: Update HANDOFF.md**
 
 - Add `cargo xtask test-linux` to the quality gates section
-- Add `~/.mbx/test-image/mbx-tester.tar` to the runtime paths table
+- Add `~/.minibox/test-image/minibox-tester.tar` to the runtime paths table
 - Mark the three test-linux dogfood todos as done in Next up
 
 ```bash

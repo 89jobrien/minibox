@@ -16,7 +16,7 @@
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `crates/daemonbox/tests/proptest_suite.rs` | Replace `make_rt()` per-case with a shared static `OnceLock<Runtime>`                                        |
 | `crates/minibox-bench/src/main.rs`         | Fix `bench_adapter_suite` — move `rt` creation outside `nano_test` closures; add sync helpers for mock calls |
-| `crates/mbx/src/adapters/mocks.rs`         | Add sync test-helper methods `has_image_sync` and `spawn_process_sync` (or expose existing sync internals)   |
+| `crates/minibox/src/adapters/mocks.rs`     | Add sync test-helper methods `has_image_sync` and `spawn_process_sync` (or expose existing sync internals)   |
 
 ---
 
@@ -135,12 +135,12 @@ git commit -m "perf(proptest): replace per-case make_rt() with shared OnceLock<R
 
 **Files:**
 
-- Read: `crates/mbx/src/adapters/mocks.rs`
+- Read: `crates/minibox/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Inspect mock implementations**
 
 ```bash
-grep -A 10 "fn has_image\|fn spawn_process" crates/mbx/src/adapters/mocks.rs
+grep -A 10 "fn has_image\|fn spawn_process" crates/minibox/src/adapters/mocks.rs
 ```
 
 Expected: both return a simple `async { ... }` with no `.await` inside — they are trivially synchronous futures wrapped in async.
@@ -155,7 +155,7 @@ If `has_image` returns `async { true }` and `spawn_process` returns `async { Ok(
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/mocks.rs`
+- Modify: `crates/minibox/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Write failing test**
 
@@ -173,7 +173,7 @@ fn mock_registry_has_image_sync_available() {
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-cargo test -p mbx mock_registry_has_image_sync
+cargo test -p minibox mock_registry_has_image_sync
 ```
 
 Expected: FAIL — `has_image_sync` does not exist.
@@ -218,7 +218,7 @@ pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnRes
 - [ ] **Step 5: Run tests**
 
 ```bash
-cargo test -p mbx mock_registry_has_image_sync
+cargo test -p minibox mock_registry_has_image_sync
 ```
 
 Expected: pass.
@@ -226,7 +226,7 @@ Expected: pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/mocks.rs
+git add crates/minibox/src/adapters/mocks.rs
 git commit -m "feat(mocks): add has_image_sync and spawn_process_sync test helpers"
 ```
 

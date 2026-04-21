@@ -1081,7 +1081,7 @@ Expected: PASS
 
 - [ ] **Step 6: Run macOS quality gates**
 
-Run: `cargo fmt --all --check && cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
+Run: `cargo fmt --all --check && cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
 Expected: PASS
 
 - [ ] **Step 7: Commit**

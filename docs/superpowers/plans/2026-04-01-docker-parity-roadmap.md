@@ -4,7 +4,7 @@
 
 **Goal:** Add Exec, Image Push, Container Commit, and Image Build to minibox so that the dockerbox shim provides full Docker API coverage, enabling maestro to drop its Docker dependency.
 
-**Architecture:** Four new focused domain traits (`ExecRuntime`, `ImagePusher`, `ContainerCommitter`, `ImageBuilder`) added to `minibox-core`. Each trait has one Linux adapter in `mbx/src/adapters/`. Protocol variants added to both `minibox-core/src/protocol.rs` and `mbx/src/protocol.rs`. New handlers in `daemonbox/src/handler.rs`. Dockerbox gets new HTTP endpoints forwarding to these handlers via `DaemonClient`.
+**Architecture:** Four new focused domain traits (`ExecRuntime`, `ImagePusher`, `ContainerCommitter`, `ImageBuilder`) added to `minibox-core`. Each trait has one Linux adapter in `minibox/src/adapters/`. Protocol variants added to both `minibox-core/src/protocol.rs` and `minibox/src/protocol.rs`. New handlers in `daemonbox/src/handler.rs`. Dockerbox gets new HTTP endpoints forwarding to these handlers via `DaemonClient`.
 
 **Tech Stack:** Rust 2024 edition, `async_trait`, `nix` crate (setns/clone), `tokio::task::spawn_blocking` for all blocking ops, `reqwest` (already used by RegistryClient), `flate2` + `tar` (already used by layer extraction), thiserror.
 
@@ -12,27 +12,27 @@
 
 ## File Map
 
-| File | Action | Purpose |
-|---|---|---|
-| `crates/minibox-core/src/domain.rs` | Modify | Add 4 new traits + domain types |
-| `crates/minibox-core/src/error.rs` | Modify | Add ExecError, PushError, CommitError, BuildError |
-| `crates/minibox-core/src/protocol.rs` | Modify | Add Exec/Push/Commit/Build request+response variants |
-| `crates/mbx/src/protocol.rs` | Modify | Mirror protocol changes |
-| `crates/mbx/src/adapters/exec.rs` | Create | NativeExecRuntime (nsenter) |
-| `crates/mbx/src/adapters/push.rs` | Create | OciPushAdapter |
-| `crates/mbx/src/adapters/commit.rs` | Create | OverlayCommitAdapter |
-| `crates/mbx/src/image/dockerfile.rs` | Create | DockerfileParser + Instruction enum |
-| `crates/mbx/src/adapters/builder.rs` | Create | MiniboxImageBuilder |
-| `crates/mbx/src/adapters/mod.rs` | Modify | Re-export new adapters |
-| `crates/daemonbox/src/handler.rs` | Modify | Add handle_exec, handle_push, handle_commit, handle_build; extend HandlerDependencies |
-| `crates/daemonbox/src/server.rs` | Modify | Add dispatch arms for new variants |
-| `crates/daemonbox/src/state.rs` | Modify | Add overlay_paths + image_ref to ContainerRecord |
-| `crates/miniboxd/src/main.rs` | Modify | Wire new adapters into native suite |
-| `crates/dockerbox/src/domain/mod.rs` | Modify | Add exec/push/commit/build to ContainerRuntime trait |
-| `crates/dockerbox/src/infra/minibox.rs` | Modify | Implement new trait methods via DaemonClient |
-| `crates/dockerbox/src/api/containers.rs` | Modify | Add exec endpoints |
-| `crates/dockerbox/src/api/images.rs` | Modify | Add push/tag/build endpoints |
-| `crates/dockerbox/src/api/mod.rs` | Modify | Register new routes |
+| File                                     | Action | Purpose                                                                               |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `crates/minibox-core/src/domain.rs`      | Modify | Add 4 new traits + domain types                                                       |
+| `crates/minibox-core/src/error.rs`       | Modify | Add ExecError, PushError, CommitError, BuildError                                     |
+| `crates/minibox-core/src/protocol.rs`    | Modify | Add Exec/Push/Commit/Build request+response variants                                  |
+| `crates/minibox/src/protocol.rs`         | Modify | Mirror protocol changes                                                               |
+| `crates/minibox/src/adapters/exec.rs`    | Create | NativeExecRuntime (nsenter)                                                           |
+| `crates/minibox/src/adapters/push.rs`    | Create | OciPushAdapter                                                                        |
+| `crates/minibox/src/adapters/commit.rs`  | Create | OverlayCommitAdapter                                                                  |
+| `crates/minibox/src/image/dockerfile.rs` | Create | DockerfileParser + Instruction enum                                                   |
+| `crates/minibox/src/adapters/builder.rs` | Create | MiniboxImageBuilder                                                                   |
+| `crates/minibox/src/adapters/mod.rs`     | Modify | Re-export new adapters                                                                |
+| `crates/daemonbox/src/handler.rs`        | Modify | Add handle_exec, handle_push, handle_commit, handle_build; extend HandlerDependencies |
+| `crates/daemonbox/src/server.rs`         | Modify | Add dispatch arms for new variants                                                    |
+| `crates/daemonbox/src/state.rs`          | Modify | Add overlay_paths + image_ref to ContainerRecord                                      |
+| `crates/miniboxd/src/main.rs`            | Modify | Wire new adapters into native suite                                                   |
+| `crates/dockerbox/src/domain/mod.rs`     | Modify | Add exec/push/commit/build to ContainerRuntime trait                                  |
+| `crates/dockerbox/src/infra/minibox.rs`  | Modify | Implement new trait methods via DaemonClient                                          |
+| `crates/dockerbox/src/api/containers.rs` | Modify | Add exec endpoints                                                                    |
+| `crates/dockerbox/src/api/images.rs`     | Modify | Add push/tag/build endpoints                                                          |
+| `crates/dockerbox/src/api/mod.rs`        | Modify | Register new routes                                                                   |
 
 ---
 
@@ -41,6 +41,7 @@
 ### Task 1: Domain trait + types for Exec
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 - Modify: `crates/minibox-core/src/error.rs`
 
@@ -61,6 +62,7 @@ mod exec_trait_tests {
 ```bash
 cargo check -p minibox-core 2>&1 | grep "ExecRuntime"
 ```
+
 Expected: `error[E0412]: cannot find type \`ExecRuntime\``
 
 - [ ] **Step 3: Add ExecError to `crates/minibox-core/src/error.rs`**
@@ -147,6 +149,7 @@ Note: `DynExecRuntime` requires `use std::sync::Arc;` which is already imported.
 ```bash
 cargo check -p minibox-core
 ```
+
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
@@ -161,8 +164,9 @@ git commit -m "feat(domain): add ExecRuntime trait and ExecConfig types"
 ### Task 2: Protocol variants for Exec
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 
 - [ ] **Step 1: Add Exec request variant to `crates/minibox-core/src/protocol.rs`**
 
@@ -211,25 +215,26 @@ grep -n "is_terminal\|ContainerOutput" /Users/joe/dev/minibox/crates/daemonbox/s
 
 If found, add `DaemonResponse::ExecStarted { .. } => false,` to the non-terminal arm.
 
-- [ ] **Step 4: Mirror changes in `crates/mbx/src/protocol.rs`**
+- [ ] **Step 4: Mirror changes in `crates/minibox/src/protocol.rs`**
 
-Open `crates/mbx/src/protocol.rs`. Add the identical `Exec` request variant and `ExecStarted` response variant. The mbx protocol file is a separate copy — both must stay in sync.
+Open `crates/minibox/src/protocol.rs`. Add the identical `Exec` request variant and `ExecStarted` response variant. The minibox protocol file is a separate copy — both must stay in sync.
 
 ```bash
-grep -n "LoadImage\|DaemonRequest\|DaemonResponse" /Users/joe/dev/minibox/crates/mbx/src/protocol.rs | head -20
+grep -n "LoadImage\|DaemonRequest\|DaemonResponse" /Users/joe/dev/minibox/crates/minibox/src/protocol.rs | head -20
 ```
 
 - [ ] **Step 5: Verify**
 
 ```bash
-cargo check -p minibox-core -p mbx
+cargo check -p minibox-core -p minibox
 ```
+
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs crates/daemonbox/src/server.rs
+git add crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs crates/daemonbox/src/server.rs
 git commit -m "feat(protocol): add Exec request and ExecStarted response variants"
 ```
 
@@ -238,12 +243,13 @@ git commit -m "feat(protocol): add Exec request and ExecStarted response variant
 ### Task 3: NativeExecRuntime adapter
 
 **Files:**
-- Create: `crates/mbx/src/adapters/exec.rs`
-- Modify: `crates/mbx/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/exec.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write the failing test first**
 
-Create `crates/mbx/src/adapters/exec.rs` with just the test:
+Create `crates/minibox/src/adapters/exec.rs` with just the test:
 
 ```rust
 //! Linux namespace exec adapter — joins running container namespaces via setns(2).
@@ -268,13 +274,14 @@ mod tests {
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-cargo test -p mbx adapters::exec 2>&1 | head -20
+cargo test -p minibox adapters::exec 2>&1 | head -20
 ```
+
 Expected: compile error — `ExecConfig` not found.
 
 - [ ] **Step 3: Implement NativeExecRuntime**
 
-Replace the contents of `crates/mbx/src/adapters/exec.rs` with:
+Replace the contents of `crates/minibox/src/adapters/exec.rs` with:
 
 ```rust
 //! Linux namespace exec adapter.
@@ -515,7 +522,7 @@ mod tests {
 
 **Note on `StateHandle`:** This is a type alias you'll add to `daemonbox/src/state.rs` in Task 5. For now, use `Arc<DaemonState>` as the concrete type — we'll refine when wiring.
 
-- [ ] **Step 4: Export from `crates/mbx/src/adapters/mod.rs`**
+- [ ] **Step 4: Export from `crates/minibox/src/adapters/mod.rs`**
 
 Add to the pub re-exports in `mod.rs`:
 
@@ -527,12 +534,13 @@ pub use exec::NativeExecRuntime;
 - [ ] **Step 5: Check compile**
 
 ```bash
-cargo check -p mbx 2>&1 | head -30
+cargo check -p minibox 2>&1 | head -30
 ```
-Fix any import errors. Common: `base64` crate — check if it's already in `mbx/Cargo.toml`:
+
+Fix any import errors. Common: `base64` crate — check if it's already in `minibox/Cargo.toml`:
 
 ```bash
-grep "base64" /Users/joe/dev/minibox/crates/mbx/Cargo.toml
+grep "base64" /Users/joe/dev/minibox/crates/minibox/Cargo.toml
 ```
 
 If missing, add to `[dependencies]`: `base64 = "0.22"`.
@@ -540,15 +548,16 @@ If missing, add to `[dependencies]`: `base64 = "0.22"`.
 - [ ] **Step 6: Run unit test**
 
 ```bash
-cargo test -p mbx adapters::exec::tests
+cargo test -p minibox adapters::exec::tests
 ```
+
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/exec.rs crates/mbx/src/adapters/mod.rs crates/mbx/Cargo.toml
-git commit -m "feat(mbx): add NativeExecRuntime adapter (nsenter + fork + stream)"
+git add crates/minibox/src/adapters/exec.rs crates/minibox/src/adapters/mod.rs crates/minibox/Cargo.toml
+git commit -m "feat(minibox): add NativeExecRuntime adapter (nsenter + fork + stream)"
 ```
 
 ---
@@ -556,6 +565,7 @@ git commit -m "feat(mbx): add NativeExecRuntime adapter (nsenter + fork + stream
 ### Task 4: Exec handler + server dispatch
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 
@@ -703,6 +713,7 @@ In the `#[cfg(test)]` block at the bottom of `handler.rs`, add:
 ```bash
 cargo test -p daemonbox handle_exec_no_runtime_returns_error
 ```
+
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -717,6 +728,7 @@ git commit -m "feat(daemonbox): add handle_exec + server dispatch for Exec"
 ### Task 5: Dockerbox exec endpoints
 
 **Files:**
+
 - Modify: `crates/dockerbox/src/domain/mod.rs`
 - Modify: `crates/dockerbox/src/infra/minibox.rs`
 - Modify: `crates/dockerbox/src/api/containers.rs`
@@ -936,6 +948,7 @@ git commit -m "feat(dockerbox): add exec endpoints (create_exec, start_exec, ins
 ### Task 6: Domain trait + error types for Push
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 - Modify: `crates/minibox-core/src/error.rs`
 
@@ -1032,8 +1045,9 @@ git commit -m "feat(domain): add ImagePusher trait and PushError types"
 ### Task 7: Protocol variants for Push
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 
 - [ ] **Step 1: Add serializable credentials type**
 
@@ -1079,15 +1093,15 @@ In `DaemonResponse`, add after `ExecStarted`:
     },
 ```
 
-- [ ] **Step 4: Mirror in `crates/mbx/src/protocol.rs`**
+- [ ] **Step 4: Mirror in `crates/minibox/src/protocol.rs`**
 
 Add identical `PushCredentials`, `Push` variant, and `PushProgress` variant.
 
 - [ ] **Step 5: Compile check + commit**
 
 ```bash
-cargo check -p minibox-core -p mbx
-git add crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs
+cargo check -p minibox-core -p minibox
+git add crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs
 git commit -m "feat(protocol): add Push request and PushProgress response variants"
 ```
 
@@ -1096,8 +1110,9 @@ git commit -m "feat(protocol): add Push request and PushProgress response varian
 ### Task 8: OciPushAdapter
 
 **Files:**
-- Create: `crates/mbx/src/adapters/push.rs`
-- Modify: `crates/mbx/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/push.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 - Modify: `crates/minibox-core/src/image/registry.rs`
 
 - [ ] **Step 1: Add push methods to RegistryClient**
@@ -1233,7 +1248,7 @@ In `crates/minibox-core/src/image/registry.rs`, add after `pull_image`:
 
 - [ ] **Step 2: Write failing test**
 
-Create `crates/mbx/src/adapters/push.rs`:
+Create `crates/minibox/src/adapters/push.rs`:
 
 ```rust
 #[cfg(test)]
@@ -1249,14 +1264,16 @@ mod tests {
 ```
 
 Run:
+
 ```bash
-cargo test -p mbx adapters::push 2>&1 | head -10
+cargo test -p minibox adapters::push 2>&1 | head -10
 ```
+
 Expected: compile error.
 
 - [ ] **Step 3: Implement OciPushAdapter**
 
-Replace `crates/mbx/src/adapters/push.rs`:
+Replace `crates/minibox/src/adapters/push.rs`:
 
 ```rust
 //! OCI Distribution Spec push adapter.
@@ -1510,22 +1527,23 @@ If `load_manifest`, `layer_blob_path`, or `load_config_blob` are missing from `I
 
 - [ ] **Step 5: Export and compile**
 
-In `crates/mbx/src/adapters/mod.rs` add:
+In `crates/minibox/src/adapters/mod.rs` add:
+
 ```rust
 pub mod push;
 pub use push::OciPushAdapter;
 ```
 
 ```bash
-cargo check -p mbx
-cargo test -p mbx adapters::push::tests
+cargo check -p minibox
+cargo test -p minibox adapters::push::tests
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/push.rs crates/mbx/src/adapters/mod.rs crates/minibox-core/src/image/mod.rs crates/minibox-core/src/image/registry.rs
-git commit -m "feat(mbx): add OciPushAdapter with OCI Distribution Spec push support"
+git add crates/minibox/src/adapters/push.rs crates/minibox/src/adapters/mod.rs crates/minibox-core/src/image/mod.rs crates/minibox-core/src/image/registry.rs
+git commit -m "feat(minibox): add OciPushAdapter with OCI Distribution Spec push support"
 ```
 
 ---
@@ -1533,6 +1551,7 @@ git commit -m "feat(mbx): add OciPushAdapter with OCI Distribution Spec push sup
 ### Task 9: Push handler + dockerbox endpoint
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 - Modify: `crates/dockerbox/src/domain/mod.rs`
@@ -1561,7 +1580,7 @@ pub async fn handle_push(
         return;
     };
 
-    let image_ref = match mbx::ImageRef::parse(&image_ref_str) {
+    let image_ref = match minibox::ImageRef::parse(&image_ref_str) {
         Ok(r) => r,
         Err(e) => {
             let _ = tx.send(DaemonResponse::Error { message: format!("invalid image ref: {e}") }).await;
@@ -1689,6 +1708,7 @@ pub async fn tag_image(
 ```
 
 Register in `api/mod.rs`:
+
 ```rust
     .route("/images/:name/push", post(images::push_image))
     .route("/images/:name/tag", post(images::tag_image))
@@ -1709,10 +1729,11 @@ git commit -m "feat(daemonbox,dockerbox): add push handler and push/tag endpoint
 ### Task 10: Domain trait + protocol for Commit
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
 - Modify: `crates/minibox-core/src/error.rs`
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 - Modify: `crates/daemonbox/src/state.rs`
 
 - [ ] **Step 1: Add CommitError to `error.rs`**
@@ -1803,13 +1824,13 @@ In `crates/minibox-core/src/protocol.rs`, add to `DaemonRequest`:
     },
 ```
 
-Mirror in `crates/mbx/src/protocol.rs`.
+Mirror in `crates/minibox/src/protocol.rs`.
 
 - [ ] **Step 5: Compile check + commit**
 
 ```bash
-cargo check -p minibox-core -p daemonbox -p mbx
-git add crates/minibox-core/src/ crates/daemonbox/src/state.rs crates/mbx/src/protocol.rs
+cargo check -p minibox-core -p daemonbox -p minibox
+git add crates/minibox-core/src/ crates/daemonbox/src/state.rs crates/minibox/src/protocol.rs
 git commit -m "feat(domain,protocol): add ContainerCommitter trait and Commit protocol variant"
 ```
 
@@ -1818,12 +1839,13 @@ git commit -m "feat(domain,protocol): add ContainerCommitter trait and Commit pr
 ### Task 11: OverlayCommitAdapter
 
 **Files:**
-- Create: `crates/mbx/src/adapters/commit.rs`
-- Modify: `crates/mbx/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/commit.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write failing test**
 
-Create `crates/mbx/src/adapters/commit.rs`:
+Create `crates/minibox/src/adapters/commit.rs`:
 
 ```rust
 #[cfg(test)]
@@ -1837,7 +1859,7 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p mbx adapters::commit 2>&1 | head -5` — expect compile error.
+Run: `cargo test -p minibox adapters::commit 2>&1 | head -5` — expect compile error.
 
 - [ ] **Step 2: Implement OverlayCommitAdapter**
 
@@ -2076,10 +2098,11 @@ mod tests {
 - [ ] **Step 3: Add `sha2` and `tar` dependencies if missing**
 
 ```bash
-grep "sha2\|^tar" /Users/joe/dev/minibox/crates/mbx/Cargo.toml
+grep "sha2\|^tar" /Users/joe/dev/minibox/crates/minibox/Cargo.toml
 ```
 
-If missing, add to `[dependencies]` in `mbx/Cargo.toml`:
+If missing, add to `[dependencies]` in `minibox/Cargo.toml`:
+
 ```toml
 sha2 = "0.10"
 tar = "0.4"
@@ -2094,8 +2117,9 @@ pub use commit::OverlayCommitAdapter;
 ```
 
 ```bash
-cargo test -p mbx adapters::commit::tests
+cargo test -p minibox adapters::commit::tests
 ```
+
 Expected: 3 tests pass.
 
 - [ ] **Step 5: Commit handler wiring**
@@ -2148,6 +2172,7 @@ pub async fn handle_commit(
 ```
 
 Add dispatch arm in `server.rs`:
+
 ```rust
         DaemonRequest::Commit { container_id, target_image, author, message, env_overrides, cmd_override } => {
             handler::handle_commit(container_id, target_image, author, message, env_overrides, cmd_override, state, deps, tx).await;
@@ -2160,8 +2185,8 @@ Dockerbox: add `POST /containers/{id}/commit` in `containers.rs` that calls `rt.
 
 ```bash
 cargo check --workspace
-git add crates/mbx/src/adapters/commit.rs crates/mbx/src/adapters/mod.rs crates/mbx/Cargo.toml crates/daemonbox/src/handler.rs crates/daemonbox/src/server.rs crates/dockerbox/src/
-git commit -m "feat(mbx,daemonbox,dockerbox): add OverlayCommitAdapter and commit endpoint"
+git add crates/minibox/src/adapters/commit.rs crates/minibox/src/adapters/mod.rs crates/minibox/Cargo.toml crates/daemonbox/src/handler.rs crates/daemonbox/src/server.rs crates/dockerbox/src/
+git commit -m "feat(minibox,daemonbox,dockerbox): add OverlayCommitAdapter and commit endpoint"
 ```
 
 ---
@@ -2171,12 +2196,13 @@ git commit -m "feat(mbx,daemonbox,dockerbox): add OverlayCommitAdapter and commi
 ### Task 12: DockerfileParser
 
 **Files:**
-- Create: `crates/mbx/src/image/dockerfile.rs`
-- Modify: `crates/mbx/src/image/mod.rs`
+
+- Create: `crates/minibox/src/image/dockerfile.rs`
+- Modify: `crates/minibox/src/image/mod.rs`
 
 - [ ] **Step 1: Write failing tests first**
 
-Create `crates/mbx/src/image/dockerfile.rs` with just tests:
+Create `crates/minibox/src/image/dockerfile.rs` with just tests:
 
 ```rust
 #[cfg(test)]
@@ -2246,7 +2272,7 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p mbx image::dockerfile 2>&1 | head -5` — expect compile error.
+Run: `cargo test -p minibox image::dockerfile 2>&1 | head -5` — expect compile error.
 
 - [ ] **Step 2: Implement the parser**
 
@@ -2539,12 +2565,14 @@ fn parse_user(s: &str) -> Result<Instruction> {
 ```
 
 **Note:** This uses `regex_lite`. Check:
+
 ```bash
-grep "regex" /Users/joe/dev/minibox/crates/mbx/Cargo.toml
+grep "regex" /Users/joe/dev/minibox/crates/minibox/Cargo.toml
 ```
+
 If missing, add `regex-lite = "0.1"` to `[dependencies]`.
 
-- [ ] **Step 3: Add to `crates/mbx/src/image/mod.rs`**
+- [ ] **Step 3: Add to `crates/minibox/src/image/mod.rs`**
 
 ```rust
 pub mod dockerfile;
@@ -2553,15 +2581,16 @@ pub mod dockerfile;
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo test -p mbx image::dockerfile::tests
+cargo test -p minibox image::dockerfile::tests
 ```
+
 Expected: all 10 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/image/dockerfile.rs crates/mbx/src/image/mod.rs crates/mbx/Cargo.toml
-git commit -m "feat(mbx): add DockerfileParser with 13-instruction subset"
+git add crates/minibox/src/image/dockerfile.rs crates/minibox/src/image/mod.rs crates/minibox/Cargo.toml
+git commit -m "feat(minibox): add DockerfileParser with 13-instruction subset"
 ```
 
 ---
@@ -2569,10 +2598,11 @@ git commit -m "feat(mbx): add DockerfileParser with 13-instruction subset"
 ### Task 13: MiniboxImageBuilder + protocol + handler + dockerbox
 
 **Files:**
-- Create: `crates/mbx/src/adapters/builder.rs`
-- Modify: `crates/mbx/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/builder.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 - Modify: `crates/minibox-core/src/domain.rs`
-- Modify: `crates/minibox-core/src/protocol.rs` + `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox-core/src/protocol.rs` + `crates/minibox/src/protocol.rs`
 - Modify: `crates/daemonbox/src/handler.rs` + `server.rs`
 - Modify: `crates/dockerbox/src/` (domain, infra, api)
 
@@ -2694,11 +2724,11 @@ Add to `DaemonResponse`:
     },
 ```
 
-Mirror both in `crates/mbx/src/protocol.rs`.
+Mirror both in `crates/minibox/src/protocol.rs`.
 
 - [ ] **Step 3: Implement MiniboxImageBuilder**
 
-Create `crates/mbx/src/adapters/builder.rs`:
+Create `crates/minibox/src/adapters/builder.rs`:
 
 ```rust
 //! Minibox image builder — executes a Dockerfile instruction-by-instruction.
@@ -3001,6 +3031,7 @@ pub async fn handle_build(
 ```
 
 Add dispatch arm:
+
 ```rust
         DaemonRequest::Build { context_tar, dockerfile, tag, build_args, no_cache } => {
             handler::handle_build(context_tar, dockerfile, tag, build_args, no_cache, state, deps, tx).await;
@@ -3067,14 +3098,14 @@ Register: `.route("/build", post(build::build_image))` (new `build.rs` file, or 
 
 ```bash
 cargo check --workspace
-cargo test -p mbx adapters::builder::tests
+cargo test -p minibox adapters::builder::tests
 ```
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/builder.rs crates/mbx/src/adapters/mod.rs crates/minibox-core/src/domain.rs crates/minibox-core/src/error.rs crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs crates/daemonbox/src/ crates/dockerbox/src/
-git commit -m "feat(mbx,daemonbox,dockerbox): add MiniboxImageBuilder, Build protocol, and /build endpoint"
+git add crates/minibox/src/adapters/builder.rs crates/minibox/src/adapters/mod.rs crates/minibox-core/src/domain.rs crates/minibox-core/src/error.rs crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs crates/daemonbox/src/ crates/dockerbox/src/
+git commit -m "feat(minibox,daemonbox,dockerbox): add MiniboxImageBuilder, Build protocol, and /build endpoint"
 ```
 
 ---
@@ -3084,6 +3115,7 @@ git commit -m "feat(mbx,daemonbox,dockerbox): add MiniboxImageBuilder, Build pro
 ### Task 14: Wire all new adapters in miniboxd + run full pre-commit gate
 
 **Files:**
+
 - Modify: `crates/miniboxd/src/main.rs`
 
 - [ ] **Step 1: Check current native adapter wiring**
@@ -3098,23 +3130,23 @@ In `crates/miniboxd/src/main.rs`, find the block that constructs `HandlerDepende
 
 ```rust
     // Exec runtime (Linux only).
-    let exec_runtime = mbx::adapters::exec::native_exec_runtime(Arc::clone(&state));
+    let exec_runtime = minibox::adapters::exec::native_exec_runtime(Arc::clone(&state));
 
     // Image pusher.
     let registry_client = minibox_core::image::registry::RegistryClient::new()?;
-    let image_pusher = mbx::adapters::push::oci_push_adapter(
+    let image_pusher = minibox::adapters::push::oci_push_adapter(
         registry_client,
         Arc::clone(&state.image_store),
     );
 
     // Container committer.
-    let committer = mbx::adapters::commit::overlay_commit_adapter(
+    let committer = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
         state.clone(), // StateHandle
     );
 
     // Image builder (composes exec + commit).
-    let image_builder = mbx::adapters::builder::minibox_image_builder(
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         Arc::clone(&exec_runtime),
         Arc::clone(&committer),
@@ -3187,6 +3219,7 @@ cargo xtask pre-commit
 ```
 
 Fix any remaining compile errors. Common issues:
+
 - Missing `use` imports in new files
 - `DynExecRuntime`/`DynImagePusher`/`DynContainerCommitter`/`DynImageBuilder` not in scope — add `use minibox_core::domain::*`
 - `StateHandle` not in scope in adapter files — add `use daemonbox::state::StateHandle` or use `Arc<DaemonState>` directly
@@ -3196,6 +3229,7 @@ Fix any remaining compile errors. Common issues:
 ```bash
 cargo xtask test-unit
 ```
+
 Expected: all existing tests pass + new tests added in Tasks 3, 4, 12, 13.
 
 - [ ] **Step 7: Final commit**
@@ -3210,6 +3244,7 @@ git commit -m "feat(miniboxd): wire exec/push/commit/build adapters into native 
 ## Self-Review
 
 **Spec coverage check:**
+
 - ✅ ExecRuntime trait → Tasks 1-5
 - ✅ ImagePusher trait → Tasks 6-9
 - ✅ ContainerCommitter trait → Tasks 10-11

@@ -12,7 +12,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use mbx::ImageRef;
+use minibox::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
@@ -204,7 +204,7 @@ pub struct EventDeps {
 /// Created once in the composition root (main.rs) and passed to all handlers:
 ///
 /// ```rust,ignore
-/// use mbx::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+/// use minibox::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
 ///
 /// let deps = Arc::new(HandlerDependencies {
 ///     image: ImageDeps {
@@ -1096,7 +1096,7 @@ async fn run_inner(
 /// Wait for a process to exit and return its exit code.
 ///
 /// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `mbx::container::process::wait_for_exit` variant is only
+/// The `minibox::container::process::wait_for_exit` variant is only
 /// available on Linux (the `container` module is gated
 /// `#[cfg(target_os = "linux")]`). This local version provides the same
 /// functionality for the macOS streaming path.
@@ -1156,7 +1156,7 @@ fn check_oom_killed_sync(cgroup_path: &std::path::Path) -> bool {
 ///
 /// After the process exits:
 /// 1. Any post-exit hooks registered on the container are executed
-///    (Linux only, via `mbx::container::process::run_hooks`).
+///    (Linux only, via `minibox::container::process::run_hooks`).
 /// 2. The container state is updated to `"Stopped"` in `DaemonState`.
 ///    Because this runs in a blocking thread, the state update bridges back
 ///    to the async runtime via `Handle::try_current` or a one-shot runtime.
@@ -1194,7 +1194,7 @@ fn daemon_wait_for_exit(
 
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
-        use mbx::container::process::run_hooks;
+        use minibox::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
             warn!(container_id = %id, error = %e, "container: post-exit hooks error");
         }
@@ -2259,7 +2259,7 @@ pub async fn handle_build(
             }
         }
     };
-    let dockerfile_path = context_dir.join("Dockerfile.mbx-build");
+    let dockerfile_path = context_dir.join("Dockerfile.minibox-build");
     if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
         send_error(&tx, "handle_build", format!("write Dockerfile: {e}")).await;
         return;
@@ -2267,7 +2267,7 @@ pub async fn handle_build(
 
     let context = minibox_core::domain::BuildContext {
         directory: context_dir,
-        dockerfile: std::path::PathBuf::from("Dockerfile.mbx-build"),
+        dockerfile: std::path::PathBuf::from("Dockerfile.minibox-build"),
     };
     let config = minibox_core::domain::BuildConfig {
         tag: tag.clone(),
@@ -2480,8 +2480,8 @@ mod run_inner_tests {
 
 #[cfg(test)]
 mod registry_router_tests {
-    use mbx::ImageRef;
-    use mbx::adapters::{DockerHubRegistry, GhcrRegistry};
+    use minibox::ImageRef;
+    use minibox::adapters::{DockerHubRegistry, GhcrRegistry};
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::{DynImageRegistry, RegistryRouter};
     use minibox_core::image::ImageStore;

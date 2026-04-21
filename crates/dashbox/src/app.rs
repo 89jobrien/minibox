@@ -101,7 +101,7 @@ impl App {
                     Box::new(JsonlFileSource::new(
                         dirs::home_dir()
                             .expect("home dir")
-                            .join(".mbx/automation-runs.jsonl"),
+                            .join(".minibox/automation-runs.jsonl"),
                     )),
                 ])))),
                 Box::new(BenchTab::new()),

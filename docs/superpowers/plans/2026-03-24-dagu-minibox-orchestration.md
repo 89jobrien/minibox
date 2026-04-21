@@ -8,8 +8,8 @@
 
 - Phase 1: Build `dagu:minibox` container image with pre-installed plugin
 - Phase 2: Extract socket communication into reusable `minibox-client` library
-- Phase 3: Create `mbxctl` HTTP controller wrapping the client
-- Phase 4: Develop `mbx-dagu` Go plugin for dagu executor interface
+- Phase 3: Create `miniboxctl` HTTP controller wrapping the client
+- Phase 4: Develop `minibox-dagu` Go plugin for dagu executor interface
 
 **Tech Stack:** Rust (phases 2-3), Go (phase 4), Docker (phase 1), Tokio async, axum HTTP, Server-Sent Events for streaming
 
@@ -19,21 +19,21 @@
 
 ## Phase 1: Dagu Container Image
 
-### Task 1: Create mbx-dagu Repository Structure
+### Task 1: Create minibox-dagu Repository Structure
 
 **Files:**
 
-- Create: `mbx-dagu/Dockerfile`
-- Create: `mbx-dagu/dagu-config.yaml`
-- Create: `mbx-dagu/go.mod`
-- Create: `mbx-dagu/.gitignore`
-- Create: `mbx-dagu/README.md`
+- Create: `minibox-dagu/Dockerfile`
+- Create: `minibox-dagu/dagu-config.yaml`
+- Create: `minibox-dagu/go.mod`
+- Create: `minibox-dagu/.gitignore`
+- Create: `minibox-dagu/README.md`
 
 - [ ] **Step 1: Create directory structure**
 
 ```bash
-mkdir -p mbx-dagu/{cmd/plugin,executor,tests}
-cd mbx-dagu
+mkdir -p minibox-dagu/{cmd/plugin,executor,tests}
+cd minibox-dagu
 git init
 ```
 
@@ -43,18 +43,18 @@ git init
 # Multi-stage: build Go plugin, then add to dagu image
 
 FROM golang:1.23-alpine AS plugin-builder
-WORKDIR /src/mbx-dagu
+WORKDIR /src/minibox-dagu
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd cmd
 COPY executor executor
-RUN CGO_ENABLED=0 GOOS=linux go build -o /tmp/mbx-dagu-plugin ./cmd/plugin
+RUN CGO_ENABLED=0 GOOS=linux go build -o /tmp/minibox-dagu-plugin ./cmd/plugin
 
 FROM ghcr.io/dagu-org/dagu:latest
 RUN apk add --no-cache ca-certificates
 
 # Copy compiled plugin
-COPY --from=plugin-builder /tmp/mbx-dagu-plugin /usr/local/bin/
+COPY --from=plugin-builder /tmp/minibox-dagu-plugin /usr/local/bin/
 
 # Dagu configuration to register the plugin
 COPY dagu-config.yaml /etc/dagu/
@@ -69,7 +69,7 @@ ENTRYPOINT ["/dagu", "server", "--host", "0.0.0.0", "--port", "8080"]
 ```yaml
 executors:
   minibox:
-    binary: /usr/local/bin/mbx-dagu-plugin
+    binary: /usr/local/bin/minibox-dagu-plugin
     env:
       MINIBOX_CONTROLLER: http://localhost:9999
 ```
@@ -77,7 +77,7 @@ executors:
 - [ ] **Step 4: Write go.mod**
 
 ```
-module github.com/dagu-org/mbx-dagu
+module github.com/dagu-org/minibox-dagu
 
 go 1.23
 
@@ -100,7 +100,7 @@ vendor/
 - [ ] **Step 6: Create README.md**
 
 ```markdown
-# mbx-dagu
+# minibox-dagu
 
 Dagu executor plugin for minibox container runtime.
 
@@ -128,7 +128,7 @@ minibox run dagu:minibox -e MINIBOX_CONTROLLER=http://localhost:9999 -- /dagu se
 
 ```bash
 git add .
-git commit -m "build: initialize mbx-dagu repo with Dockerfile and config"
+git commit -m "build: initialize minibox-dagu repo with Dockerfile and config"
 ```
 
 ---
@@ -137,9 +137,9 @@ git commit -m "build: initialize mbx-dagu repo with Dockerfile and config"
 
 **Files:**
 
-- Create: `mbx-dagu/cmd/plugin/main.go`
-- Create: `mbx-dagu/executor/executor.go`
-- Create: `mbx-dagu/executor/models.go`
+- Create: `minibox-dagu/cmd/plugin/main.go`
+- Create: `minibox-dagu/executor/executor.go`
+- Create: `minibox-dagu/executor/models.go`
 
 - [ ] **Step 1: Write main.go (minimal)**
 
@@ -150,7 +150,7 @@ import (
     "encoding/json"
     "os"
     "context"
-    "github.com/dagu-org/mbx-dagu/executor"
+    "github.com/dagu-org/minibox-dagu/executor"
 )
 
 func main() {
@@ -239,12 +239,12 @@ git commit -m "feat(plugin): add Go plugin entry point and executor skeleton"
 
 **Files:**
 
-- Modify: `mbx-dagu/.github/workflows/build.yml` (if using GHA)
+- Modify: `minibox-dagu/.github/workflows/build.yml` (if using GHA)
 
 - [ ] **Step 1: Build Docker image locally**
 
 ```bash
-cd mbx-dagu
+cd minibox-dagu
 docker build -t dagu:minibox .
 ```
 
@@ -261,7 +261,7 @@ Expected: Output shows dagu version.
 - [ ] **Step 3: Verify plugin is present**
 
 ```bash
-docker run --rm dagu:minibox ls -la /usr/local/bin/mbx-dagu-plugin
+docker run --rm dagu:minibox ls -la /usr/local/bin/minibox-dagu-plugin
 ```
 
 Expected: Plugin binary exists.
@@ -328,7 +328,7 @@ rust-version.workspace = true
 [dependencies]
 tokio = { workspace = true, features = ["net", "io-util"] }
 serde_json = { workspace = true }
-mbx = { workspace = true }
+minibox = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 base64 = { workspace = true }
@@ -384,7 +384,7 @@ pub mod socket;
 pub use error::{ClientError, Result};
 pub use socket::{DaemonClient, DaemonResponseStream};
 
-use mbx::protocol::DAEMON_SOCKET_PATH;
+use minibox::protocol::DAEMON_SOCKET_PATH;
 use std::path::PathBuf;
 
 pub fn default_socket_path() -> PathBuf {
@@ -410,7 +410,7 @@ mod tests {
 
 ```rust
 use crate::error::{ClientError, Result};
-use mbx::protocol::{DaemonRequest, DaemonResponse, decode_response};
+use minibox::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -635,33 +635,33 @@ git commit -m "refactor(cli): use minibox-client library for socket communicatio
 
 ---
 
-## Phase 3: mbxctl HTTP Controller
+## Phase 3: miniboxctl HTTP Controller
 
-### Task 6: Create mbxctl Crate Structure
+### Task 6: Create miniboxctl Crate Structure
 
 **Files:**
 
-- Create: `mbxctl/Cargo.toml`
-- Create: `mbxctl/src/main.rs`
-- Create: `mbxctl/src/server.rs`
-- Create: `mbxctl/src/error.rs`
-- Create: `mbxctl/src/models.rs`
-- Create: `mbxctl/src/adapters/mod.rs`
-- Create: `mbxctl/src/adapters/jobs.rs`
+- Create: `miniboxctl/Cargo.toml`
+- Create: `miniboxctl/src/main.rs`
+- Create: `miniboxctl/src/server.rs`
+- Create: `miniboxctl/src/error.rs`
+- Create: `miniboxctl/src/models.rs`
+- Create: `miniboxctl/src/adapters/mod.rs`
+- Create: `miniboxctl/src/adapters/jobs.rs`
 
 - [ ] **Step 1: Create directory structure**
 
 ```bash
-mkdir -p mbxctl/src/adapters
-cd mbxctl
-cargo init --name mbxctl
+mkdir -p miniboxctl/src/adapters
+cd miniboxctl
+cargo init --name miniboxctl
 ```
 
 - [ ] **Step 2: Write Cargo.toml**
 
 ```toml
 [package]
-name = "mbxctl"
+name = "miniboxctl"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -678,7 +678,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 minibox-client = { path = "../minibox/crates/minibox-client" }
-mbx = { path = "../minibox/crates/mbx" }
+minibox = { path = "../minibox/crates/minibox" }
 futures = "0.3"
 
 [dev-dependencies]
@@ -873,7 +873,7 @@ mod server;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "mbxctl")]
+#[command(name = "miniboxctl")]
 #[command(about = "Minibox orchestration controller")]
 struct Args {
     #[arg(long, default_value = "localhost:9999")]
@@ -888,13 +888,13 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("mbxctl=debug".parse()?),
+                .add_directive("miniboxctl=debug".parse()?),
         )
         .init();
 
     let args = Args::parse();
 
-    tracing::info!("Starting mbxctl on {}", args.listen);
+    tracing::info!("Starting miniboxctl on {}", args.listen);
     server::run(&args.listen).await?;
 
     Ok(())
@@ -913,7 +913,7 @@ Expected: No errors (skeleton compiles).
 
 ```bash
 git add .
-git commit -m "feat: initialize mbxctl HTTP server skeleton"
+git commit -m "feat: initialize miniboxctl HTTP server skeleton"
 ```
 
 ---
@@ -922,15 +922,15 @@ git commit -m "feat: initialize mbxctl HTTP server skeleton"
 
 **Files:**
 
-- Modify: `mbxctl/src/adapters/jobs.rs`
-- Modify: `mbxctl/src/server.rs`
+- Modify: `miniboxctl/src/adapters/jobs.rs`
+- Modify: `miniboxctl/src/server.rs`
 
 - [ ] **Step 1: Implement job creation (jobs.rs)**
 
 ```rust
 use crate::error::{ControllerError, Result};
 use crate::models::{CreateJobRequest, JobStatus};
-use mbx::protocol::DaemonRequest;
+use minibox::protocol::DaemonRequest;
 use minibox_client::DaemonClient;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -970,8 +970,8 @@ impl JobAdapter {
             match stream.next().await
                 .map_err(|e| ControllerError::Internal(e.to_string()))?
             {
-                Some(mbx::protocol::DaemonResponse::ContainerCreated { id }) => break id,
-                Some(mbx::protocol::DaemonResponse::Error { message }) => {
+                Some(minibox::protocol::DaemonResponse::ContainerCreated { id }) => break id,
+                Some(minibox::protocol::DaemonResponse::Error { message }) => {
                     return Err(ControllerError::ContainerFailed { message });
                 }
                 _ => continue,
@@ -1084,14 +1084,14 @@ Expected: Compiles.
 
 - [ ] **Step 4: Write integration test**
 
-Create `mbxctl/tests/integration.rs`:
+Create `miniboxctl/tests/integration.rs`:
 
 ```rust
 #[tokio::test]
 #[ignore]  // Requires miniboxd running
 async fn test_create_job_request() {
     // Mock test (real test would need running miniboxd)
-    let req = mbxctl::models::CreateJobRequest {
+    let req = miniboxctl::models::CreateJobRequest {
         image: "alpine".to_string(),
         tag: Some("latest".to_string()),
         command: vec!["echo".to_string(), "hello".to_string()],
@@ -1127,8 +1127,8 @@ git commit -m "feat: implement job creation and HTTP endpoints (create_job, get_
 
 **Files:**
 
-- Modify: `mbxctl/src/adapters/jobs.rs`
-- Modify: `mbxctl/src/server.rs`
+- Modify: `miniboxctl/src/adapters/jobs.rs`
+- Modify: `miniboxctl/src/server.rs`
 
 (Due to length, implementation would follow same pattern as Task 7 with streaming, SSE, timeout enforcement using `tokio::time::timeout`)
 
@@ -1158,7 +1158,7 @@ git commit -m "feat: add log streaming (SSE) and timeout enforcement"
 
 **Files:**
 
-- Create: `mbxctl/install.sh`
+- Create: `miniboxctl/install.sh`
 
 - [ ] **Step 1: Write install.sh**
 
@@ -1170,29 +1170,29 @@ VERSION="${1:-v0.1.0}"
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m | sed 's/x86_64/amd64/g; s/aarch64/arm64/g')
 
-echo "Installing mbxctl $VERSION for $OS/$ARCH..."
+echo "Installing miniboxctl $VERSION for $OS/$ARCH..."
 
 # Download binary
-RELEASE_URL="https://releases.example.com/mbxctl/${VERSION}/mbxctl-${OS}-${ARCH}"
-curl -L "$RELEASE_URL" -o /tmp/mbxctl || {
+RELEASE_URL="https://releases.example.com/miniboxctl/${VERSION}/miniboxctl-${OS}-${ARCH}"
+curl -L "$RELEASE_URL" -o /tmp/miniboxctl || {
     echo "Failed to download from $RELEASE_URL"
     exit 1
 }
 
-chmod +x /tmp/mbxctl
+chmod +x /tmp/miniboxctl
 
 # Install
 if [[ -d /etc/systemd/system && $EUID -eq 0 ]]; then
     echo "Installing as systemd service..."
-    mv /tmp/mbxctl /usr/local/bin/
-    cat > /etc/systemd/system/mbxctl.service <<'EOF'
+    mv /tmp/miniboxctl /usr/local/bin/
+    cat > /etc/systemd/system/miniboxctl.service <<'EOF'
 [Unit]
 Description=Minibox Controller
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/mbxctl --listen 0.0.0.0:9999
+ExecStart=/usr/local/bin/miniboxctl --listen 0.0.0.0:9999
 Restart=on-failure
 RestartSec=5s
 Environment=MINIBOX_SOCKET_PATH=/run/minibox/miniboxd.sock
@@ -1201,44 +1201,44 @@ Environment=MINIBOX_SOCKET_PATH=/run/minibox/miniboxd.sock
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    systemctl enable mbxctl
-    systemctl start mbxctl
-    echo "✓ Installed and started. Check status: systemctl status mbxctl"
+    systemctl enable miniboxctl
+    systemctl start miniboxctl
+    echo "✓ Installed and started. Check status: systemctl status miniboxctl"
 else
     echo "Installing to ~/.local/bin..."
     mkdir -p ~/.local/bin
-    mv /tmp/mbxctl ~/.local/bin/
-    echo "✓ Installed to ~/.local/bin/mbxctl"
-    echo "  Start manually: ~/.local/bin/mbxctl --listen localhost:9999"
+    mv /tmp/miniboxctl ~/.local/bin/
+    echo "✓ Installed to ~/.local/bin/miniboxctl"
+    echo "  Start manually: ~/.local/bin/miniboxctl --listen localhost:9999"
 fi
 ```
 
 - [ ] **Step 2: Make executable**
 
 ```bash
-chmod +x mbxctl/install.sh
+chmod +x miniboxctl/install.sh
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add install.sh
-git commit -m "build: add installation script for mbxctl"
+git commit -m "build: add installation script for miniboxctl"
 ```
 
 **END PHASE 3**
 
 ---
 
-## Phase 4: mbx-dagu Go Plugin (Complete Implementation)
+## Phase 4: minibox-dagu Go Plugin (Complete Implementation)
 
 ### Task 10: Implement Go Plugin Executor Logic
 
 **Files:**
 
-- Modify: `mbx-dagu/executor/executor.go`
-- Create: `mbx-dagu/executor/http_client.go`
-- Modify: `mbx-dagu/cmd/plugin/main.go`
+- Modify: `minibox-dagu/executor/executor.go`
+- Create: `minibox-dagu/executor/http_client.go`
+- Modify: `minibox-dagu/cmd/plugin/main.go`
 
 - [ ] **Step 1: Write executor/http_client.go**
 
@@ -1467,7 +1467,7 @@ import (
     "encoding/json"
     "os"
     "context"
-    "github.com/dagu-org/mbx-dagu/executor"
+    "github.com/dagu-org/minibox-dagu/executor"
 )
 
 func main() {
@@ -1496,7 +1496,7 @@ func main() {
 - [ ] **Step 4: Build plugin**
 
 ```bash
-go build -o /tmp/mbx-dagu-plugin ./cmd/plugin
+go build -o /tmp/minibox-dagu-plugin ./cmd/plugin
 ```
 
 Expected: Binary created successfully.
@@ -1504,10 +1504,10 @@ Expected: Binary created successfully.
 - [ ] **Step 5: Test plugin binary**
 
 ```bash
-echo '{"command":["alpine","echo","hello"],"env":{},"cwd":"/","timeout":10}' | /tmp/mbx-dagu-plugin
+echo '{"command":["alpine","echo","hello"],"env":{},"cwd":"/","timeout":10}' | /tmp/minibox-dagu-plugin
 ```
 
-(Requires mbxctl running for real test)
+(Requires miniboxctl running for real test)
 
 - [ ] **Step 6: Commit**
 
@@ -1522,7 +1522,7 @@ git commit -m "feat: implement complete Go executor plugin for dagu"
 
 **Files:**
 
-- Create: `mbx-dagu/tests/e2e_test.go`
+- Create: `minibox-dagu/tests/e2e_test.go`
 
 - [ ] **Step 1: Write E2E test setup**
 
@@ -1533,13 +1533,13 @@ import (
     "context"
     "os"
     "testing"
-    "github.com/dagu-org/mbx-dagu/executor"
+    "github.com/dagu-org/minibox-dagu/executor"
 )
 
 func TestExecutorE2E(t *testing.T) {
     // Requires:
     // - miniboxd running (sudo ./target/release/miniboxd)
-    // - mbxctl running (./mbxctl --listen localhost:9999)
+    // - miniboxctl running (./miniboxctl --listen localhost:9999)
 
     if os.Getenv("MINIBOX_CONTROLLER") == "" {
         os.Setenv("MINIBOX_CONTROLLER", "http://localhost:9999")
@@ -1575,7 +1575,7 @@ export MINIBOX_CONTROLLER=http://localhost:9999
 go test -v ./tests/...
 ```
 
-Expected: Pass (if miniboxd + mbxctl running).
+Expected: Pass (if miniboxd + miniboxctl running).
 
 - [ ] **Step 3: Commit**
 
@@ -1595,7 +1595,7 @@ git commit -m "test: add end-to-end integration test for executor plugin"
 - [ ] **Step 1: Build image with complete plugin**
 
 ```bash
-cd mbx-dagu
+cd minibox-dagu
 docker build -t dagu:minibox .
 ```
 
@@ -1647,11 +1647,11 @@ cd minibox
 sudo ./target/release/miniboxd
 ```
 
-- [ ] **Step 2: Start mbxctl (Terminal 2)**
+- [ ] **Step 2: Start miniboxctl (Terminal 2)**
 
 ```bash
-cd mbxctl
-./target/release/mbxctl --listen localhost:9999
+cd miniboxctl
+./target/release/miniboxctl --listen localhost:9999
 ```
 
 - [ ] **Step 3: Run dagu in minibox (Terminal 3)**
@@ -1683,7 +1683,7 @@ Check that:
 
 ```bash
 git add .
-git commit -m "test: verify full stack integration (dagu+minibox+mbxctl)"
+git commit -m "test: verify full stack integration (dagu+minibox+miniboxctl)"
 ```
 
 ---
@@ -1703,8 +1703,8 @@ git commit -m "test: verify full stack integration (dagu+minibox+mbxctl)"
 
 - [ ] Phase 1: Docker image builds
 - [ ] Phase 2: minibox-client library + CLI refactor
-- [ ] Phase 3: mbxctl HTTP server + endpoints
-- [ ] Phase 4: mbx-dagu plugin + E2E test
+- [ ] Phase 3: miniboxctl HTTP server + endpoints
+- [ ] Phase 4: minibox-dagu plugin + E2E test
 - [ ] Integration: Full stack test
 
 ---
@@ -1712,7 +1712,7 @@ git commit -m "test: verify full stack integration (dagu+minibox+mbxctl)"
 ## Notes for Implementation
 
 1. **Workspace:** All minibox work happens in existing repo
-2. **Separate Repos:** mbxctl and mbx-dagu are separate GitHub repos (created by you)
+2. **Separate Repos:** miniboxctl and minibox-dagu are separate GitHub repos (created by you)
 3. **Testing:** Run tests after each task; use `cargo test` for Rust, `go test` for Go
 4. **Debugging:** Use `RUST_LOG=debug` and `MINIBOX_CONTROLLER` env var for troubleshooting
 5. **TDD Discipline:** Always write test first, then implementation

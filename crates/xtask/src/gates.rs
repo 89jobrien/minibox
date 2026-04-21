@@ -7,7 +7,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     cmd!(
         sh,
-        "cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
+        "cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
@@ -16,12 +16,12 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
+        "cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings"
     )
     .run()
     .context("lint failed")?;
     cmd!(sh,
-        "cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
+        "cargo build --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
     ).run().context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
@@ -31,13 +31,13 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox"
+        "cargo nextest run --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox"
     )
     .run()
     .context("nextest failed")?;
     cmd!(
         sh,
-        "cargo llvm-cov nextest -p mbx -p minibox-macros -p minibox-cli -p daemonbox --html"
+        "cargo llvm-cov nextest -p minibox -p minibox-macros -p minibox-cli -p daemonbox --html"
     )
     .run()
     .context("coverage failed")?;
@@ -53,7 +53,7 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox --lib"
+        "cargo test --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox --lib"
     )
     .run()
     .context("lib tests failed")?;
@@ -69,14 +69,14 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     // Colima adapter conformance tests
     cmd!(
         sh,
-        "cargo test --release -p mbx --test colima_conformance_tests"
+        "cargo test --release -p minibox --test colima_conformance_tests"
     )
     .run()
     .context("colima_conformance_tests failed")?;
     // GKE adapter isolation tests (platform-agnostic)
     cmd!(
         sh,
-        "cargo test --release -p mbx --test gke_adapter_isolation_tests"
+        "cargo test --release -p minibox --test gke_adapter_isolation_tests"
     )
     .run()
     .context("gke_adapter_isolation_tests failed")?;
@@ -103,17 +103,17 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 /// to activate tier-2 push tests.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
     // --- Commit conformance ---
-    cmd!(sh, "cargo test --release -p mbx --test conformance_commit")
+    cmd!(sh, "cargo test --release -p minibox --test conformance_commit")
         .run()
         .context("conformance_commit tests failed")?;
 
     // --- Build conformance ---
-    cmd!(sh, "cargo test --release -p mbx --test conformance_build")
+    cmd!(sh, "cargo test --release -p minibox --test conformance_build")
         .run()
         .context("conformance_build tests failed")?;
 
     // --- Push conformance ---
-    cmd!(sh, "cargo test --release -p mbx --test conformance_push")
+    cmd!(sh, "cargo test --release -p minibox --test conformance_push")
         .run()
         .context("conformance_push tests failed")?;
 
@@ -121,7 +121,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     // Run the report emitter with `--nocapture` so the artifact paths are visible.
     let output = cmd!(
         sh,
-        "cargo test --release -p mbx --test conformance_report -- --nocapture"
+        "cargo test --release -p minibox --test conformance_report -- --nocapture"
     )
     .output()
     .context("conformance_report failed")?;
@@ -164,9 +164,9 @@ pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
 
 /// Property-based tests (proptest)
 pub fn test_property(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo test --release -p mbx --test proptest_suite")
+    cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
         .run()
-        .context("mbx property tests failed")?;
+        .context("minibox property tests failed")?;
     cmd!(
         sh,
         "cargo test --release -p daemonbox --test proptest_suite"

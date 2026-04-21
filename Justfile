@@ -18,13 +18,13 @@ fmt-check:
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+    cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
+    cargo build --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
 
 build:
     cargo build --release
@@ -57,7 +57,7 @@ prepush:
 # fmt-check + lint + test-unit
 ci:
     cargo fmt --all --check
-    cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+    cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
     just test-unit
 
 # ── Testing ──────────────────────────────────────────────────────────────────
@@ -68,26 +68,26 @@ test-unit:
 
 # Adapter isolation tests (any platform)
 test-adapters:
-    cargo test -p mbx --test adapter_colima_tests
+    cargo test -p minibox --test adapter_colima_tests
     cargo test -p daemonbox --test handler_adapter_swap_tests
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox
+    cargo nextest run --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p mbx -p minibox-macros -p minibox-cli -p daemonbox --html
+    cargo llvm-cov nextest -p minibox -p minibox-macros -p minibox-cli -p daemonbox --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
-# VZ isolation tests (macOS, requires VM image at ~/.mbx/vm/)
+# VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
 # Builds the test binary, codesigns it with the virtualization entitlement,
 # then runs it directly (bypasses cargo test runner to preserve dispatch_main harness).
 test-vz-isolation:
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build -p macbox --features vz --test vz_isolation_tests
-    BIN=$(ls -t "$HOME/.mbx/cache/target/debug/deps/vz_isolation_tests-"* | head -1)
+    BIN=$(ls -t "$HOME/.minibox/cache/target/debug/deps/vz_isolation_tests-"* | head -1)
     codesign --force --sign - --entitlements entitlements/vz-test.entitlements "$BIN"
     "$BIN"
 
@@ -101,7 +101,7 @@ test-cli-subprocess:
 test-integration:
     sudo -E bash scripts/run-cgroup-tests.sh
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
-    sudo -E cargo test -p mbx --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
+    sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
 
 # Lifecycle e2e (Linux, root, Docker Hub)
 test-e2e:
@@ -162,10 +162,10 @@ bench-agent *args:
 # ── Daemon ───────────────────────────────────────────────────────────────────
 
 doctor:
-    @cargo test -p mbx preflight::tests -- --nocapture 2>&1 || true
+    @cargo test -p minibox preflight::tests -- --nocapture 2>&1 || true
     @echo ""
     @echo "--- Host Capabilities Report ---"
-    @cargo test -p mbx preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+    @cargo test -p minibox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
 
 # Trace miniboxd with uftrace.
 # macOS: cross-compiles Linux binary, runs it inside minibox via Colima.
@@ -314,7 +314,7 @@ metrics-report:
 
 # Build all agentbox binaries
 agentbox-build:
-    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/mbx-commit-msg/
+    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/minibox-commit-msg/
 
 # Run agentbox tests
 agentbox-test:
@@ -330,4 +330,4 @@ agentbox-meta-agent *ARGS:
 
 # Generate commit message (Go)
 agentbox-commit-msg *ARGS:
-    cd agentbox && go run ./cmd/mbx-commit-msg/ {{ARGS}}
+    cd agentbox && go run ./cmd/minibox-commit-msg/ {{ARGS}}

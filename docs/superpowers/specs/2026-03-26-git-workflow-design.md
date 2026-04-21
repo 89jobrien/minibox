@@ -8,7 +8,7 @@
 
 ## Overview
 
-Three-tier stability pipeline for minibox: `main` (develop) → `next` (validated) → `stable` (release). Every commit on every branch must compile. Designed to support future Maestro integration (mbx as Cargo dependency) and self-hosted CI via minibox containers.
+Three-tier stability pipeline for minibox: `main` (develop) → `next` (validated) → `stable` (release). Every commit on every branch must compile. Designed to support future Maestro integration (minibox as Cargo dependency) and self-hosted CI via minibox containers.
 
 ## Branch Model
 
@@ -22,14 +22,14 @@ chore/*    ──┴──► main (develop) ──auto──► next (validated
 
 ### Branch Purposes
 
-| Branch      | Role                                                                | Who commits                | Deletion policy                      |
-| ----------- | ------------------------------------------------------------------- | -------------------------- | ------------------------------------ |
-| `main`      | Active R&D. All feature work merges here.                           | Direct push or PR merge    | Never deleted                        |
-| `next`      | Validated accumulator. Auto-promoted from `main` when CI green.     | GitHub Actions only        | Never deleted                        |
-| `stable`    | Maestro-consumable. API-stable mbx crate. Tagged releases cut here. | Manual promote from `next` | Never deleted                        |
-| `feature/*` | Short-lived topic branches                                          | Developer                  | Deleted after merge                  |
-| `hotfix/*`  | Emergency fixes targeting `stable`                                  | Developer                  | Deleted after merge; backmerged down |
-| `chore/*`   | Non-functional changes (docs, CI, deps)                             | Developer                  | Deleted after merge                  |
+| Branch      | Role                                                                    | Who commits                | Deletion policy                      |
+| ----------- | ----------------------------------------------------------------------- | -------------------------- | ------------------------------------ |
+| `main`      | Active R&D. All feature work merges here.                               | Direct push or PR merge    | Never deleted                        |
+| `next`      | Validated accumulator. Auto-promoted from `main` when CI green.         | GitHub Actions only        | Never deleted                        |
+| `stable`    | Maestro-consumable. API-stable minibox crate. Tagged releases cut here. | Manual promote from `next` | Never deleted                        |
+| `feature/*` | Short-lived topic branches                                              | Developer                  | Deleted after merge                  |
+| `hotfix/*`  | Emergency fixes targeting `stable`                                      | Developer                  | Deleted after merge; backmerged down |
+| `chore/*`   | Non-functional changes (docs, CI, deps)                                 | Developer                  | Deleted after merge                  |
 
 ### Invariant
 
@@ -164,7 +164,7 @@ Jobs:
 ### Shared target directory
 
 - Runner: `CARGO_TARGET_DIR=/var/lib/minibox/cache/target/`
-- Local dev: `CARGO_TARGET_DIR=~/.mbx/cache/target/`
+- Local dev: `CARGO_TARGET_DIR=~/.minibox/cache/target/`
 - Worktrees share the same `target/` — no per-worktree duplication
 - Phase 2: minibox containers mount the shared dir as a volume
 
@@ -198,9 +198,9 @@ When a commit with `[hotfix]` lands on `stable`:
 
 ## Maestro Integration (future)
 
-Maestro will consume minibox as a **Cargo library** (`mbx` crate). The `stable` branch represents API stability:
+Maestro will consume minibox as a **Cargo library** (`minibox` crate). The `stable` branch represents API stability:
 
-- Semver on `stable` tags: breaking changes to `mbx` public API require a minor version bump (pre-1.0) or major bump (post-1.0)
+- Semver on `stable` tags: breaking changes to `minibox` public API require a minor version bump (pre-1.0) or major bump (post-1.0)
 - Maestro's `maestro-cli` Cargo.toml would pin to a minibox release tag or git rev on `stable`
 - No binary distribution needed for Maestro integration — direct crate dependency
 

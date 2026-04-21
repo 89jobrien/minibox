@@ -1,7 +1,7 @@
 # Conformance Suite
 
 The conformance suite validates that every backend adapter (commit, build, push) honours the
-contracts defined by its domain trait. Tests live in `crates/mbx/tests/conformance_*.rs` and
+contracts defined by its domain trait. Tests live in `crates/minibox/tests/conformance_*.rs` and
 use the fixture infrastructure from `minibox_core::adapters::conformance`.
 
 ## Running the suite
@@ -22,22 +22,22 @@ artifacts/conformance/report.json — machine-readable JSON
 ### Individual test files
 
 ```bash
-cargo test --release -p mbx --test conformance_commit
-cargo test --release -p mbx --test conformance_build
-cargo test --release -p mbx --test conformance_push
+cargo test --release -p minibox --test conformance_commit
+cargo test --release -p minibox --test conformance_build
+cargo test --release -p minibox --test conformance_push
 ```
 
 ### Emitting reports only (after tests pass)
 
 ```bash
-cargo test --release -p mbx --test conformance_report -- --nocapture
+cargo test --release -p minibox --test conformance_report -- --nocapture
 ```
 
 Override the output directory:
 
 ```bash
 CONFORMANCE_ARTIFACT_DIR=/tmp/my-reports \
-  cargo test --release -p mbx --test conformance_report -- --nocapture
+  cargo test --release -p minibox --test conformance_report -- --nocapture
 ```
 
 ## Running with Colima (macOS)
@@ -58,9 +58,9 @@ running daemon. To validate the Colima adapter:
 
 Push conformance is split into two tiers:
 
-| Tier | Condition | What runs |
-|------|-----------|-----------|
-| 1    | always    | Descriptor wiring, capability checks |
+| Tier | Condition                       | What runs                                       |
+| ---- | ------------------------------- | ----------------------------------------------- |
+| 1    | always                          | Descriptor wiring, capability checks            |
 | 2    | `CONFORMANCE_PUSH_REGISTRY` set | Full push roundtrip against a real OCI registry |
 
 To activate tier 2:
@@ -77,13 +77,13 @@ The `LocalPushTargetFixture` always targets `localhost:5000`. The env var must m
 
 ## Capability matrix
 
-| Backend | Commit | BuildFromContext | PushToRegistry |
-|---------|--------|-----------------|----------------|
-| `minibox-native-commit` | yes | no | no |
-| `minibox-native-build`  | no  | yes | no |
-| `minibox-native-push`   | no  | no  | yes |
-| `linux-native` (future) | yes | yes | yes |
-| `colima` (future)       | yes | yes | yes |
+| Backend                 | Commit | BuildFromContext | PushToRegistry |
+| ----------------------- | ------ | ---------------- | -------------- |
+| `minibox-native-commit` | yes    | no               | no             |
+| `minibox-native-build`  | no     | yes              | no             |
+| `minibox-native-push`   | no     | no               | yes            |
+| `linux-native` (future) | yes    | yes              | yes            |
+| `colima` (future)       | yes    | yes              | yes            |
 
 Backends that do not declare a capability have their corresponding conformance tests skipped
 (not failed). The skip is recorded in the report matrix.

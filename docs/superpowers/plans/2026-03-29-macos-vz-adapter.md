@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust, `tokio` (vsock via `tokio-vsock` crate), `serde_json`, `objc2` VZ.framework bindings (from Plan A), existing minibox JSON protocol.
 
-**Prerequisite:** Plan A (`2026-03-29-macos-vz-vm-image-pipeline.md`) must be complete — VM image directory must exist at `~/.mbx/vm/`.
+**Prerequisite:** Plan A (`2026-03-29-macos-vz-vm-image-pipeline.md`) must be complete — VM image directory must exist at `~/.minibox/vm/`.
 
 ---
 
@@ -344,7 +344,7 @@ Each adapter holds `Arc<VzVm>` and opens a fresh vsock connection per call. For 
 mod tests {
     // Structural tests — verify adapters implement the right traits.
     use super::*;
-    use mbx::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use minibox::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
 
     fn assert_image_registry<T: ImageRegistry>() {}
     fn assert_container_runtime<T: ContainerRuntime>() {}
@@ -415,7 +415,7 @@ impl VzRegistry {
     }
 }
 
-impl mbx::domain::ImageRegistry for VzRegistry {
+impl minibox::domain::ImageRegistry for VzRegistry {
     fn pull_image(&self, image_ref: &str) -> Result<()> {
         // Split image_ref into name and optional tag (e.g. "alpine:3.21" → "alpine", "3.21")
         let (image, tag) = match image_ref.split_once(':') {
@@ -451,7 +451,7 @@ impl VzFilesystem {
     }
 }
 
-impl mbx::domain::FilesystemProvider for VzFilesystem {
+impl minibox::domain::FilesystemProvider for VzFilesystem {
     fn create_container_fs(&self, _container_id: &str, _image_ref: &str) -> Result<std::path::PathBuf> {
         // The in-VM agent handles all filesystem setup; the host side doesn't
         // need to do anything. Return a placeholder path that is never used.
@@ -476,7 +476,7 @@ impl VzLimiter {
     }
 }
 
-impl mbx::domain::ResourceLimiter for VzLimiter {
+impl minibox::domain::ResourceLimiter for VzLimiter {
     fn apply_limits(
         &self,
         _container_id: &str,
@@ -503,7 +503,7 @@ impl VzRuntime {
     }
 }
 
-impl mbx::domain::ContainerRuntime for VzRuntime {
+impl minibox::domain::ContainerRuntime for VzRuntime {
     fn create_container(
         &self,
         config: &minibox_core::domain::ContainerConfig,
@@ -583,7 +583,7 @@ impl mbx::domain::ContainerRuntime for VzRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mbx::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
+    use minibox::domain::{ContainerRuntime, FilesystemProvider, ImageRegistry, ResourceLimiter};
 
     fn assert_image_registry<T: ImageRegistry>() {}
     fn assert_container_runtime<T: ContainerRuntime>() {}
@@ -706,8 +706,8 @@ mount -t tmpfs tmpfs /tmp 2>/dev/null || true
 
 # Mount virtiofs shares
 mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
-mount -t virtiofs mbx-images /var/lib/minibox/images 2>/dev/null || true
-mount -t virtiofs mbx-containers /var/lib/minibox/containers 2>/dev/null || true
+mount -t virtiofs minibox-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs minibox-containers /var/lib/minibox/containers 2>/dev/null || true
 
 # Loopback interface
 ip link set lo up 2>/dev/null || true
@@ -772,8 +772,8 @@ mod tests {
     fn rc_local_mounts_virtiofs_shares() {
         let content = generate_rc_local();
         assert!(content.contains("virtiofs"));
-        assert!(content.contains("mbx-images"));
-        assert!(content.contains("mbx-containers"));
+        assert!(content.contains("minibox-images"));
+        assert!(content.contains("minibox-containers"));
     }
 }
 ```
@@ -803,8 +803,8 @@ mount -t sysfs sys /sys 2>/dev/null || true
 mount -t devtmpfs dev /dev 2>/dev/null || true
 mount -t tmpfs tmpfs /tmp 2>/dev/null || true
 mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
-mount -t virtiofs mbx-images /var/lib/minibox/images 2>/dev/null || true
-mount -t virtiofs mbx-containers /var/lib/minibox/containers 2>/dev/null || true
+mount -t virtiofs minibox-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs minibox-containers /var/lib/minibox/containers 2>/dev/null || true
 ip link set lo up 2>/dev/null || true
 hostname minibox-vm 2>/dev/null || true
 "#;
@@ -910,7 +910,7 @@ async fn start_vz(
     use vz::{VzFilesystem, VzLimiter, VzRegistry, VzRuntime};
 
     let vm_dir = vz::vm::default_vm_dir()
-        .unwrap_or_else(|| dirs::home_dir().unwrap().join(".mbx").join("vm"));
+        .unwrap_or_else(|| dirs::home_dir().unwrap().join(".minibox").join("vm"));
 
     info!("vz: booting Linux VM from {}", vm_dir.display());
 
@@ -988,7 +988,7 @@ Add `default_vm_dir` helper to `vz/vm.rs`:
 
 ```rust
 pub fn default_vm_dir() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|h| h.join(".mbx").join("vm"))
+    dirs::home_dir().map(|h| h.join(".minibox").join("vm"))
 }
 ```
 
@@ -1034,7 +1034,7 @@ This test only runs on macOS when the VM image exists. It boots the VM, sends a 
 //!
 //! Requires:
 //!   - macOS + Apple Silicon (or x86 Mac with VZ.framework)
-//!   - VM image at ~/.mbx/vm/ (run `cargo xtask build-vm-image` first)
+//!   - VM image at ~/.minibox/vm/ (run `cargo xtask build-vm-image` first)
 //!   - `vz` feature compiled in
 //!
 //! Skipped automatically if VM image is absent.
@@ -1047,7 +1047,7 @@ use macbox::vz::proxy::VzProxy;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 fn vm_dir() -> std::path::PathBuf {
-    dirs::home_dir().unwrap().join(".mbx").join("vm")
+    dirs::home_dir().unwrap().join(".minibox").join("vm")
 }
 
 fn vm_image_available() -> bool {
@@ -1059,7 +1059,7 @@ fn vm_image_available() -> bool {
 #[tokio::test]
 async fn vz_smoke_list_containers_returns_empty() {
     if !vm_image_available() {
-        eprintln!("SKIP: VM image not found at ~/.mbx/vm/ — run `cargo xtask build-vm-image`");
+        eprintln!("SKIP: VM image not found at ~/.minibox/vm/ — run `cargo xtask build-vm-image`");
         return;
     }
 
@@ -1151,7 +1151,7 @@ In the "Adapter Suites" section, update:
 
 ```
 **Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native`, `gke`, `colima`, and `vz`.
-- `vz`: macOS Apple Silicon — boots an Alpine Linux VM via Virtualization.framework, forwards commands to in-VM miniboxd over vsock. Requires `macbox` compiled with `--features vz` and VM image at `~/.mbx/vm/` (run `cargo xtask build-vm-image`).
+- `vz`: macOS Apple Silicon — boots an Alpine Linux VM via Virtualization.framework, forwards commands to in-VM miniboxd over vsock. Requires `macbox` compiled with `--features vz` and VM image at `~/.minibox/vm/` (run `cargo xtask build-vm-image`).
 ```
 
 In the "Current Limitations" section, remove or update:
@@ -1174,7 +1174,7 @@ After all tasks complete, verify the full stack:
 ```bash
 # 1. Build VM image (if not already done)
 cargo xtask build-vm-image
-ls ~/.mbx/vm/manifest.json  # Should exist
+ls ~/.minibox/vm/manifest.json  # Should exist
 
 # 2. Build macbox with vz feature
 cargo build --release -p miniboxd --features macbox/vz

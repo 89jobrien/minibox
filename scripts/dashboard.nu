@@ -1,6 +1,6 @@
 #!/usr/bin/env nu
 # Agent run history and benchmark dashboard — native Nu tables.
-# Reads ~/.mbx/agent-runs.jsonl and bench/results/.
+# Reads ~/.minibox/agent-runs.jsonl and bench/results/.
 
 def fmt-ts [iso: string] {
     $iso | str substring 0..15 | str replace "T" " "
@@ -27,7 +27,7 @@ def preview [text] {
 }
 
 def load-runs [] {
-    let log_file = ($env.HOME | path join ".mbx" "agent-runs.jsonl")
+    let log_file = ($env.HOME | path join ".minibox" "agent-runs.jsonl")
     if not ($log_file | path exists) { return [] }
 
     # Parse JSONL, deduplicate by run_id (latest entry wins)
@@ -46,7 +46,7 @@ def load-runs [] {
 def agents-summary [] {
     let runs = (load-runs)
     if ($runs | length) == 0 {
-        print "no agent runs found in ~/.mbx/agent-runs.jsonl"
+        print "no agent runs found in ~/.minibox/agent-runs.jsonl"
         return
     }
 

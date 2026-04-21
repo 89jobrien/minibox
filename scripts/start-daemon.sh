@@ -42,7 +42,7 @@ EOF
   esac
 done
 
-target_dir="${CARGO_TARGET_DIR:-$HOME/.mbx/cache/target}"
+target_dir="${CARGO_TARGET_DIR:-$HOME/.minibox/cache/target}"
 binary="$target_dir/release/miniboxd"
 
 if [[ ! -x "$binary" ]]; then

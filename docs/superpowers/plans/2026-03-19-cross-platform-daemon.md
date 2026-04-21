@@ -19,30 +19,30 @@ note: Platform dispatch, macbox/winbox, ServerListener all shipped
 
 ## File Map
 
-| Action | File                                          | Responsibility                                                                                        |
-| ------ | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Modify | `Cargo.toml`                                  | Add `macbox`, `winbox` workspace members + `dirs` dep                                                 |
-| Modify | `crates/daemonbox/Cargo.toml`                 | Move `nix` to `cfg(unix)` dep                                                                         |
-| Modify | `crates/daemonbox/src/lib.rs`                 | Fix stale `macboxd` doc comment                                                                       |
-| Modify | `crates/daemonbox/src/server.rs`              | Add `ServerListener` + `PeerCreds`; `run_server<L, F>`; generic `handle_connection<S>`                |
-| Modify | `crates/daemonbox/src/handler.rs`             | Gate `nix` with `#[cfg(unix)]`; add `#[cfg(windows)]` stubs for `stop_inner` + `daemon_wait_for_exit` |
-| Rename | `crates/mbx/src/adapters/wsl.rs` to `wsl2.rs` | Rename `Wsl*` types to `Wsl2*`                                                                        |
-| Modify | `crates/mbx/src/adapters/mod.rs`              | Gate wsl2/docker_desktop by platform; add vf, hcs under cfg                                           |
-| Create | `crates/mbx/src/adapters/vf.rs`               | `VfRuntime`, `VfFilesystem`, `VfRegistry` stubs (`cfg(macos)`)                                        |
-| Create | `crates/mbx/src/adapters/hcs.rs`              | `HcsRuntime`, `HcsFilesystem`, `HcsRegistry`, `JobObjectLimiter` stubs (`cfg(windows)`)               |
-| Create | `crates/macbox/Cargo.toml`                    | macOS-only crate manifest                                                                             |
-| Create | `crates/macbox/src/lib.rs`                    | `start()`, `MacboxError`, `colima_deps()`, `UnixServerListener`                                       |
-| Create | `crates/macbox/src/preflight.rs`              | `MacboxStatus`, `preflight()`, `start_colima()`, injectable `Executor`                                |
-| Create | `crates/macbox/src/paths.rs`                  | `data_dir()`, `run_dir()`, `socket_path()`                                                            |
-| Create | `crates/winbox/Cargo.toml`                    | Windows-only crate manifest                                                                           |
-| Create | `crates/winbox/src/lib.rs`                    | `start()`, `WinboxError`                                                                              |
-| Create | `crates/winbox/src/preflight.rs`              | `WinboxStatus`, `preflight()`, injectable `Executor`                                                  |
-| Create | `crates/winbox/src/paths.rs`                  | `data_dir()`, `run_dir()`, `pipe_name()`                                                              |
-| Create | `crates/winbox/src/hcs.rs`                    | `hcs_deps()` stub                                                                                     |
-| Create | `crates/winbox/src/wsl2.rs`                   | `wsl2_deps()` stub                                                                                    |
-| Modify | `crates/miniboxd/Cargo.toml`                  | Platform-gated deps: `macbox` on macOS, `winbox` on Windows                                           |
-| Modify | `crates/miniboxd/src/main.rs`                 | Remove `compile_error!`; add macOS + Windows `main`; replace inline loop with `run_server`            |
-| Modify | `crates/minibox-cli/src/main.rs`              | Platform-aware `default_socket_path()` + `connect()`                                                  |
+| Action | File                                              | Responsibility                                                                                        |
+| ------ | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Modify | `Cargo.toml`                                      | Add `macbox`, `winbox` workspace members + `dirs` dep                                                 |
+| Modify | `crates/daemonbox/Cargo.toml`                     | Move `nix` to `cfg(unix)` dep                                                                         |
+| Modify | `crates/daemonbox/src/lib.rs`                     | Fix stale `macboxd` doc comment                                                                       |
+| Modify | `crates/daemonbox/src/server.rs`                  | Add `ServerListener` + `PeerCreds`; `run_server<L, F>`; generic `handle_connection<S>`                |
+| Modify | `crates/daemonbox/src/handler.rs`                 | Gate `nix` with `#[cfg(unix)]`; add `#[cfg(windows)]` stubs for `stop_inner` + `daemon_wait_for_exit` |
+| Rename | `crates/minibox/src/adapters/wsl.rs` to `wsl2.rs` | Rename `Wsl*` types to `Wsl2*`                                                                        |
+| Modify | `crates/minibox/src/adapters/mod.rs`              | Gate wsl2/docker_desktop by platform; add vf, hcs under cfg                                           |
+| Create | `crates/minibox/src/adapters/vf.rs`               | `VfRuntime`, `VfFilesystem`, `VfRegistry` stubs (`cfg(macos)`)                                        |
+| Create | `crates/minibox/src/adapters/hcs.rs`              | `HcsRuntime`, `HcsFilesystem`, `HcsRegistry`, `JobObjectLimiter` stubs (`cfg(windows)`)               |
+| Create | `crates/macbox/Cargo.toml`                        | macOS-only crate manifest                                                                             |
+| Create | `crates/macbox/src/lib.rs`                        | `start()`, `MacboxError`, `colima_deps()`, `UnixServerListener`                                       |
+| Create | `crates/macbox/src/preflight.rs`                  | `MacboxStatus`, `preflight()`, `start_colima()`, injectable `Executor`                                |
+| Create | `crates/macbox/src/paths.rs`                      | `data_dir()`, `run_dir()`, `socket_path()`                                                            |
+| Create | `crates/winbox/Cargo.toml`                        | Windows-only crate manifest                                                                           |
+| Create | `crates/winbox/src/lib.rs`                        | `start()`, `WinboxError`                                                                              |
+| Create | `crates/winbox/src/preflight.rs`                  | `WinboxStatus`, `preflight()`, injectable `Executor`                                                  |
+| Create | `crates/winbox/src/paths.rs`                      | `data_dir()`, `run_dir()`, `pipe_name()`                                                              |
+| Create | `crates/winbox/src/hcs.rs`                        | `hcs_deps()` stub                                                                                     |
+| Create | `crates/winbox/src/wsl2.rs`                       | `wsl2_deps()` stub                                                                                    |
+| Modify | `crates/miniboxd/Cargo.toml`                      | Platform-gated deps: `macbox` on macOS, `winbox` on Windows                                           |
+| Modify | `crates/miniboxd/src/main.rs`                     | Remove `compile_error!`; add macOS + Windows `main`; replace inline loop with `run_server`            |
+| Modify | `crates/minibox-cli/src/main.rs`                  | Platform-aware `default_socket_path()` + `connect()`                                                  |
 
 ---
 
@@ -124,7 +124,7 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
   //! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
 
   use anyhow::{Context, Result};
-  use mbx::protocol::{DaemonRequest, DaemonResponse};
+  use minibox::protocol::{DaemonRequest, DaemonResponse};
   use std::future::Future;
   use std::sync::Arc;
   use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -398,7 +398,7 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
   ```toml
   [target.'cfg(target_os = "linux")'.dependencies]
-  mbx = { workspace = true }
+  minibox = { workspace = true }
   nix = { workspace = true }
   ```
 
@@ -482,23 +482,23 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
 ---
 
-## Task 5: `mbx` — adapter scaffolding
+## Task 5: `minibox` — adapter scaffolding
 
 **Files:** `wsl.rs`→`wsl2.rs`, `mod.rs`, new `vf.rs`, `hcs.rs`
 
 - [ ] **Step 1: Rename wsl.rs to wsl2.rs**
 
-  Run: `git mv crates/mbx/src/adapters/wsl.rs crates/mbx/src/adapters/wsl2.rs`
+  Run: `git mv crates/minibox/src/adapters/wsl.rs crates/minibox/src/adapters/wsl2.rs`
 
   In `wsl2.rs`, rename `WslRuntime`→`Wsl2Runtime`, `WslFilesystem`→`Wsl2Filesystem`, `WslLimiter`→`Wsl2Limiter` (struct names and impl blocks).
 
 - [ ] **Step 2: Create `vf.rs` macOS stubs**
 
-  Create `crates/mbx/src/adapters/vf.rs`. Use `colima.rs` as a template for trait impl structure. Implement every method body as `Err(anyhow::anyhow!("VfRuntime: not yet implemented (Phase 2)"))`.
+  Create `crates/minibox/src/adapters/vf.rs`. Use `colima.rs` as a template for trait impl structure. Implement every method body as `Err(anyhow::anyhow!("VfRuntime: not yet implemented (Phase 2)"))`.
 
   Types to create: `VfRuntime` (impl `ContainerRuntime`), `VfFilesystem` (impl `FilesystemProvider`), `VfRegistry` (impl `ImageRegistry`).
 
-  Check exact trait method signatures in `crates/mbx/src/domain.rs` before writing.
+  Check exact trait method signatures in `crates/minibox/src/domain.rs` before writing.
 
 - [ ] **Step 3: Create `hcs.rs` Windows stubs**
 
@@ -534,15 +534,15 @@ The `SO_PEERCRED` auth is lifted into the `ServerListener::accept` return value 
 
 - [ ] **Step 5: Check and test**
 
-  Run: `cargo check -p mbx && cargo test -p mbx`
+  Run: `cargo check -p minibox && cargo test -p minibox`
 
   Fix any method signature mismatches by comparing against `domain.rs` and existing adapter impls.
 
 - [ ] **Step 6: Commit**
 
   ```
-  git add crates/mbx/src/adapters/
-  git commit -m "feat(mbx): vf/hcs stubs, wsl→wsl2 rename, platform-gate adapters"
+  git add crates/minibox/src/adapters/
+  git commit -m "feat(minibox): vf/hcs stubs, wsl→wsl2 rename, platform-gate adapters"
   ```
 
 ---
@@ -564,7 +564,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
 
   [dependencies]
   daemonbox = { workspace = true }
-  mbx = { workspace = true }
+  minibox = { workspace = true }
   anyhow = { workspace = true }
   thiserror = { workspace = true }
   tokio = { workspace = true }
@@ -701,8 +701,8 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
   use anyhow::{Context, Result};
   use daemonbox::handler::HandlerDependencies;
   use daemonbox::server::{PeerCreds, ServerListener};
-  use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
-  use mbx::image::ImageStore;
+  use minibox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+  use minibox::image::ImageStore;
   use preflight::{MacboxStatus, default_executor};
   use std::path::PathBuf;
   use std::sync::Arc;
@@ -778,7 +778,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
           std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
       }
 
-      // Check ImageStore::new signature in mbx/src/image/store.rs — adjust as needed.
+      // Check ImageStore::new signature in minibox/src/image/store.rs — adjust as needed.
       let image_store = Arc::new(ImageStore::new(&data_dir.join("images")).context("image store")?);
       // Check DaemonState::new signature in daemonbox/src/state.rs — adjust as needed.
       let state = Arc::new(daemonbox::state::DaemonState::new(Arc::clone(&image_store), &data_dir));
@@ -811,7 +811,7 @@ Phase 1: Colima only. `preflight()` never returns `VirtualizationFramework`.
   }
   ```
 
-  > **Before building:** check `ImageStore::new` in `mbx/src/image/` and `DaemonState::new` in `daemonbox/src/state.rs` for exact signatures. Adjust the constructor calls in `start()` to match.
+  > **Before building:** check `ImageStore::new` in `minibox/src/image/` and `DaemonState::new` in `daemonbox/src/state.rs` for exact signatures. Adjust the constructor calls in `start()` to match.
 
 - [ ] **Step 11: Build (on macOS)**
 
@@ -845,7 +845,7 @@ Phase 1: all adapter wiring returns `Err`. Crate must compile on Windows.
 
   [dependencies]
   daemonbox = { workspace = true }
-  mbx = { workspace = true }
+  minibox = { workspace = true }
   anyhow = { workspace = true }
   thiserror = { workspace = true }
   tokio = { workspace = true }

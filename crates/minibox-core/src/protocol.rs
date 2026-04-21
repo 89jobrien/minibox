@@ -149,7 +149,7 @@ pub enum DaemonRequest {
     LoadImage {
         /// Absolute path to the OCI tarball on the host filesystem.
         path: String,
-        /// Image name to register (e.g. `"mbx-tester"`).
+        /// Image name to register (e.g. `"minibox-tester"`).
         name: String,
         /// Image tag to register (e.g. `"latest"`).
         tag: String,
@@ -333,7 +333,7 @@ pub enum DaemonResponse {
 
     /// Confirmation that a local image tarball was loaded successfully.
     ImageLoaded {
-        /// The image reference that was registered, e.g. `"mbx-tester:latest"`.
+        /// The image reference that was registered, e.g. `"minibox-tester:latest"`.
         image: String,
     },
 

@@ -21,23 +21,24 @@ TIOCSWINSZ, fork, setns), `tokio` (async channels), `serde_json` (protocol), `te
 
 ## File Map
 
-| File | Change |
-|------|--------|
-| `crates/minibox-core/src/protocol.rs` | Add `ResizePty` + `SendInput` request variants; add `tty` field to `Run` |
-| `crates/minibox-core/src/domain.rs` | Add `stdin_tx` channel field to `ExecConfig` |
-| `crates/mbx/src/adapters/exec.rs` | PTY branch in `run_exec_blocking`; stdin relay task |
-| `crates/daemonbox/src/handler.rs` | Wire `SendInput`/`ResizePty` dispatch; pass stdin channel |
-| `crates/daemonbox/src/server.rs` | Add `SendInput`/`ResizePty` to dispatch |
-| `crates/minibox-cli/src/terminal.rs` | New: raw-mode guard + terminal_size() |
-| `crates/minibox-cli/src/commands/exec.rs` | `-it` flag, raw mode, stdin task, SIGWINCH forwarding |
-| `crates/minibox-cli/src/commands/run.rs` | `-it` flag, same terminal setup as exec |
-| `crates/minibox-cli/src/main.rs` | Add `-i`/`-t` flags to `Exec` and `Run` subcommands |
+| File                                      | Change                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
+| `crates/minibox-core/src/protocol.rs`     | Add `ResizePty` + `SendInput` request variants; add `tty` field to `Run` |
+| `crates/minibox-core/src/domain.rs`       | Add `stdin_tx` channel field to `ExecConfig`                             |
+| `crates/minibox/src/adapters/exec.rs`     | PTY branch in `run_exec_blocking`; stdin relay task                      |
+| `crates/daemonbox/src/handler.rs`         | Wire `SendInput`/`ResizePty` dispatch; pass stdin channel                |
+| `crates/daemonbox/src/server.rs`          | Add `SendInput`/`ResizePty` to dispatch                                  |
+| `crates/minibox-cli/src/terminal.rs`      | New: raw-mode guard + terminal_size()                                    |
+| `crates/minibox-cli/src/commands/exec.rs` | `-it` flag, raw mode, stdin task, SIGWINCH forwarding                    |
+| `crates/minibox-cli/src/commands/run.rs`  | `-it` flag, same terminal setup as exec                                  |
+| `crates/minibox-cli/src/main.rs`          | Add `-i`/`-t` flags to `Exec` and `Run` subcommands                      |
 
 ---
 
 ## Task 1: Protocol — `ResizePty` + `SendInput` variants + `tty` on `Run`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
 
 - [ ] **Step 1: Add `tty` field to `DaemonRequest::Run`**
@@ -156,8 +157,9 @@ git commit -m "feat(protocol): add ResizePty, SendInput variants; tty field on R
 ## Task 2: Domain — `stdin_tx` + `resize_rx` in `ExecConfig`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain.rs`
-- Modify: `crates/mbx/src/adapters/exec.rs`
+- Modify: `crates/minibox/src/adapters/exec.rs`
 - Modify: `crates/daemonbox/src/handler.rs`
 
 `ExecConfig` gains two new optional fields. Because `mpsc::Receiver` is not `Clone`, we
@@ -186,7 +188,7 @@ pub struct ExecConfig {
 
 - [ ] **Step 2: Fix `exec.rs` unit test — add new fields**
 
-In `crates/mbx/src/adapters/exec.rs` test:
+In `crates/minibox/src/adapters/exec.rs` test:
 
 ```rust
     #[test]
@@ -233,7 +235,7 @@ or pass by ownership.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/minibox-core/src/domain.rs crates/mbx/src/adapters/exec.rs \
+git add crates/minibox-core/src/domain.rs crates/minibox/src/adapters/exec.rs \
         crates/daemonbox/src/handler.rs
 git commit -m "feat(domain): add stdin_tx, resize_rx to ExecConfig for PTY relay"
 ```
@@ -243,11 +245,12 @@ git commit -m "feat(domain): add stdin_tx, resize_rx to ExecConfig for PTY relay
 ## Task 3: PTY allocation in `NativeExecRuntime`
 
 **Files:**
-- Modify: `crates/mbx/src/adapters/exec.rs`
+
+- Modify: `crates/minibox/src/adapters/exec.rs`
 
 - [ ] **Step 1: Add a failing PTY unit test**
 
-At the bottom of `#[cfg(test)]` in `crates/mbx/src/adapters/exec.rs`:
+At the bottom of `#[cfg(test)]` in `crates/minibox/src/adapters/exec.rs`:
 
 ```rust
     #[cfg(target_os = "linux")]
@@ -317,7 +320,7 @@ At the bottom of `#[cfg(test)]` in `crates/mbx/src/adapters/exec.rs`:
 - [ ] **Step 2: Run test — confirm it fails**
 
 ```bash
-cargo test -p mbx pty_exec_echo_roundtrip -- --nocapture 2>&1 | tail -10
+cargo test -p minibox pty_exec_echo_roundtrip -- --nocapture 2>&1 | tail -10
 ```
 
 Expected: compile error (`run_exec_blocking` signature mismatch) or test failure.
@@ -486,7 +489,7 @@ fn run_pty_exec(
 - [ ] **Step 6: Run PTY unit test**
 
 ```bash
-cargo test -p mbx pty_exec_echo_roundtrip -- --nocapture 2>&1 | tail -20
+cargo test -p minibox pty_exec_echo_roundtrip -- --nocapture 2>&1 | tail -20
 ```
 
 Expected: PASS.
@@ -502,7 +505,7 @@ Expected: all tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/exec.rs
+git add crates/minibox/src/adapters/exec.rs
 git commit -m "feat(exec): PTY allocation path in NativeExecRuntime (openpty + setsid + TIOCSCTTY)"
 ```
 
@@ -511,6 +514,7 @@ git commit -m "feat(exec): PTY allocation path in NativeExecRuntime (openpty + s
 ## Task 4: Handler wiring — `SendInput` + `ResizePty` + `PtySessionRegistry`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 
@@ -711,6 +715,7 @@ git commit -m "feat(handler): SendInput + ResizePty dispatch + PtySessionRegistr
 ## Task 5: CLI — `-it` flag, raw mode, stdin relay, SIGWINCH forwarding
 
 **Files:**
+
 - Create: `crates/minibox-cli/src/terminal.rs`
 - Modify: `crates/minibox-cli/src/main.rs`
 - Modify: `crates/minibox-cli/src/commands/exec.rs`
@@ -1019,18 +1024,19 @@ git commit -m "feat(cli): -it flag, raw mode, stdin relay, SIGWINCH forwarding f
 
 **Spec coverage (minibox-16):**
 
-| Requirement | Task |
-|---|---|
-| PTY allocation inside container namespace | Task 3 |
-| Binary framing for output (base64 ContainerOutput) | Reuses existing; Task 3 |
-| Terminal resize SIGWINCH forwarding | Task 5 (CLI) + Task 3 (TIOCSWINSZ) + Task 4 (ResizePty dispatch) |
-| CLI `-it` flag | Task 5 Step 3 |
-| `minibox run -it` | Task 5 Step 5 |
-| Protocol `ResizePty` + `SendInput` | Task 1 |
-| Stdin forwarding | Task 4 (registry + channels) + Task 5 (relay task) |
-| Maestro Phase 2 unblock | All tasks combined |
+| Requirement                                        | Task                                                             |
+| -------------------------------------------------- | ---------------------------------------------------------------- |
+| PTY allocation inside container namespace          | Task 3                                                           |
+| Binary framing for output (base64 ContainerOutput) | Reuses existing; Task 3                                          |
+| Terminal resize SIGWINCH forwarding                | Task 5 (CLI) + Task 3 (TIOCSWINSZ) + Task 4 (ResizePty dispatch) |
+| CLI `-it` flag                                     | Task 5 Step 3                                                    |
+| `minibox run -it`                                  | Task 5 Step 5                                                    |
+| Protocol `ResizePty` + `SendInput`                 | Task 1                                                           |
+| Stdin forwarding                                   | Task 4 (registry + channels) + Task 5 (relay task)               |
+| Maestro Phase 2 unblock                            | All tasks combined                                               |
 
 **Type consistency:**
+
 - `ExecConfig.resize_rx` defined Task 2, used Task 3 Step 5.
 - `ExecConfig.stdin_tx` defined Task 2, used Task 4 Step 2.
 - `PtySessionRegistry` / `SharedPtyRegistry` defined Task 4 Step 1, used Task 4 Steps 2–4.

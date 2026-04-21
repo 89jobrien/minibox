@@ -1,6 +1,6 @@
 //! CAS (content-addressed storage) overlay helpers.
 //!
-//! Layout under `~/.mbx/vm/overlay/`:
+//! Layout under `~/.minibox/vm/overlay/`:
 //!   cas/<sha256>   — file content, named by sha256 of content
 //!   refs/<name>    — text file containing a sha256, maps name → CAS object
 
@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Return the default overlay directory: `~/.mbx/vm/overlay/`.
+/// Return the default overlay directory: `~/.minibox/vm/overlay/`.
 pub fn default_overlay_dir() -> PathBuf {
     crate::vm_image::default_vm_dir().join("overlay")
 }

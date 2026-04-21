@@ -1,17 +1,17 @@
-# Design: Rename `mbx` Crate to `mbx`
+# Design: Rename `minibox` Crate to `minibox`
 
 **Date:** 2026-03-29
 **Status:** Approved
 
 ## Summary
 
-Rename the `mbx` crate to `mbx` — both the directory (`crates/mbx/` → `crates/mbx/`) and the crate name. This is a mechanical refactor with no behavioral changes.
+Rename the `minibox` crate to `minibox` — both the directory (`crates/minibox/` → `crates/minibox/`) and the crate name. This is a mechanical refactor with no behavioral changes.
 
 ## Scope
 
-- 118 occurrences of `mbx` across 45 files
-- Crate directory: `crates/mbx/` → `crates/mbx/`
-- Crate name: `mbx` → `mbx`
+- 118 occurrences of `minibox` across 45 files
+- Crate directory: `crates/minibox/` → `crates/minibox/`
+- Crate name: `minibox` → `minibox`
 - All dependents updated in-place
 
 ## Changes
@@ -19,23 +19,23 @@ Rename the `mbx` crate to `mbx` — both the directory (`crates/mbx/` → `crate
 ### 1. Directory rename
 
 ```
-git mv crates/mbx crates/mbx
+git mv crates/minibox crates/minibox
 ```
 
-### 2. Crate manifest (`crates/mbx/Cargo.toml`)
+### 2. Crate manifest (`crates/minibox/Cargo.toml`)
 
 ```toml
-name = "mbx"   # was: mbx
+name = "minibox"   # was: minibox
 ```
 
 ### 3. Workspace manifest (`Cargo.toml`)
 
-- Update workspace member: `"crates/mbx"` → `"crates/mbx"`
-- Update workspace dep: `mbx = { path = "crates/mbx" }` → `mbx = { path = "crates/mbx" }`
+- Update workspace member: `"crates/minibox"` → `"crates/minibox"`
+- Update workspace dep: `minibox = { path = "crates/minibox" }` → `minibox = { path = "crates/minibox" }`
 
 ### 4. Dependent crate manifests
 
-Five crates declare `mbx = { workspace = true }`:
+Five crates declare `minibox = { workspace = true }`:
 
 - `crates/miniboxd/Cargo.toml`
 - `crates/macbox/Cargo.toml`
@@ -43,15 +43,15 @@ Five crates declare `mbx = { workspace = true }`:
 - `crates/minibox-bench/Cargo.toml`
 - `crates/winbox/Cargo.toml` (also in `ignored` list)
 
-All become `mbx = { workspace = true }`.
+All become `minibox = { workspace = true }`.
 
 ### 5. Rust source files
 
-All `use mbx::` and `mbx::` qualified paths become `use mbx::` and `mbx::` respectively. Affects ~45 `.rs` files.
+All `use minibox::` and `minibox::` qualified paths become `use minibox::` and `minibox::` respectively. Affects ~45 `.rs` files.
 
 ### 6. `recipe.json`
 
-cargo-chef artifact — update `mbx` crate name to `mbx` manually (or regenerate with `cargo chef prepare`).
+cargo-chef artifact — update `minibox` crate name to `minibox` manually (or regenerate with `cargo chef prepare`).
 
 ### 7. Documentation
 

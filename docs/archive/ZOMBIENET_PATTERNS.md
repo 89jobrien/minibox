@@ -256,7 +256,7 @@ crates/provider/src/
 **What We Can Adopt:**
 
 ```
-crates/mbx/src/
+crates/minibox/src/
 ├── domain.rs
 ├── adapters/
 │   ├── mod.rs
@@ -315,7 +315,7 @@ license = "MIT"
 ```toml
 [workspace]
 members = [
-    "crates/mbx",
+    "crates/minibox",
     "crates/miniboxd",
     "crates/minibox-cli",
 ]

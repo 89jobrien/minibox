@@ -14,13 +14,13 @@
 
 ## File Map
 
-| File                                | Action | Responsibility                                                                                                                 |
-| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `crates/mbx/src/adapters/colima.rs` | Modify | Add `LimaSpawner` type, `with_spawner()` builder, rewrite `spawn_process`, add `block_device` field + probe to `ColimaLimiter` |
-| `crates/daemonbox/src/handler.rs`   | Modify | Widen 3 cfg gates, add local `wait_for_exit` helper, conditionally import `wait_for_exit`                                      |
-| `crates/macbox/src/lib.rs`          | Modify | Wire `LimaSpawner` closure and executor into adapter constructors                                                              |
-| `crates/minibox-bench/src/main.rs`  | Modify | Add `colima` benchmark suite                                                                                                   |
-| `.github/workflows/ci.yml`          | Modify | Add `macos-colima` smoke test job                                                                                              |
+| File                                    | Action | Responsibility                                                                                                                 |
+| --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `crates/minibox/src/adapters/colima.rs` | Modify | Add `LimaSpawner` type, `with_spawner()` builder, rewrite `spawn_process`, add `block_device` field + probe to `ColimaLimiter` |
+| `crates/daemonbox/src/handler.rs`       | Modify | Widen 3 cfg gates, add local `wait_for_exit` helper, conditionally import `wait_for_exit`                                      |
+| `crates/macbox/src/lib.rs`              | Modify | Wire `LimaSpawner` closure and executor into adapter constructors                                                              |
+| `crates/minibox-bench/src/main.rs`      | Modify | Add `colima` benchmark suite                                                                                                   |
+| `.github/workflows/ci.yml`              | Modify | Add `macos-colima` smoke test job                                                                                              |
 
 ---
 
@@ -28,9 +28,9 @@
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/colima.rs:38-45` (type alias area)
-- Modify: `crates/mbx/src/adapters/colima.rs:544-570` (ColimaRuntime struct + impl)
-- Test: `crates/mbx/src/adapters/colima.rs` (existing test module)
+- Modify: `crates/minibox/src/adapters/colima.rs:38-45` (type alias area)
+- Modify: `crates/minibox/src/adapters/colima.rs:544-570` (ColimaRuntime struct + impl)
+- Test: `crates/minibox/src/adapters/colima.rs` (existing test module)
 
 - [ ] **Step 1: Write failing test — `spawn_process_returns_piped_output`**
 
@@ -79,12 +79,12 @@ async fn spawn_process_returns_piped_output() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p mbx spawn_process_returns_piped_output -- --nocapture`
+Run: `cargo test -p minibox spawn_process_returns_piped_output -- --nocapture`
 Expected: FAIL — `ColimaRuntime` has no `with_spawner` method.
 
 - [ ] **Step 3: Add `LimaSpawner` type alias and `with_spawner` builder**
 
-In `crates/mbx/src/adapters/colima.rs`, after the existing `LimaExecutor` type alias (line ~45), add:
+In `crates/minibox/src/adapters/colima.rs`, after the existing `LimaExecutor` type alias (line ~45), add:
 
 ```rust
 /// Callable that starts a long-lived process inside the Lima VM,
@@ -236,18 +236,18 @@ async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResu
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cargo test -p mbx spawn_process_returns_piped_output -- --nocapture`
+Run: `cargo test -p minibox spawn_process_returns_piped_output -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 6: Run existing tests to verify no regressions**
 
-Run: `cargo test -p mbx -- colima`
+Run: `cargo test -p minibox -- colima`
 Expected: All existing colima tests pass (spawn_process_includes_args_in_script, etc.)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/colima.rs
+git add crates/minibox/src/adapters/colima.rs
 git commit -m "feat(colima): add LimaSpawner for streaming output from containers"
 ```
 
@@ -257,8 +257,8 @@ git commit -m "feat(colima): add LimaSpawner for streaming output from container
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/colima.rs:409-533` (ColimaLimiter)
-- Test: `crates/mbx/src/adapters/colima.rs` (test module)
+- Modify: `crates/minibox/src/adapters/colima.rs:409-533` (ColimaLimiter)
+- Test: `crates/minibox/src/adapters/colima.rs` (test module)
 
 - [ ] **Step 1: Write failing test — `limiter_detects_block_device`**
 
@@ -289,7 +289,7 @@ fn limiter_io_max_uses_detected_device() {
         }
     }));
 
-    let config = mbx::domain::ResourceConfig {
+    let config = minibox::domain::ResourceConfig {
         memory_limit_bytes: None,
         cpu_weight: None,
         pids_max: None,
@@ -305,7 +305,7 @@ fn limiter_io_max_uses_detected_device() {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p mbx limiter_detects_block_device limiter_io_max_uses_detected_device -- --nocapture`
+Run: `cargo test -p minibox limiter_detects_block_device limiter_io_max_uses_detected_device -- --nocapture`
 Expected: FAIL — `ColimaLimiter` has no `with_executor` method or `block_device` field.
 
 - [ ] **Step 3: Add `block_device` field and `with_executor` builder to `ColimaLimiter`**
@@ -350,18 +350,18 @@ if let Some(io_max) = config.io_max_bytes_per_sec {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cargo test -p mbx limiter_detects_block_device limiter_io_max_uses_detected_device -- --nocapture`
+Run: `cargo test -p minibox limiter_detects_block_device limiter_io_max_uses_detected_device -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 6: Run all colima tests for regressions**
 
-Run: `cargo test -p mbx -- colima`
+Run: `cargo test -p minibox -- colima`
 Expected: All pass
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/colima.rs
+git add crates/minibox/src/adapters/colima.rs
 git commit -m "fix(colima): detect VM block device for io.max instead of hardcoding 8:0"
 ```
 
@@ -377,7 +377,7 @@ git commit -m "fix(colima): detect VM block device for io.max instead of hardcod
 This is the most delicate task. Three issues to solve:
 
 1. Three `#[cfg(target_os = "linux")]` gates must become `#[cfg(unix)]`
-2. `use mbx::container::process::wait_for_exit` — the `container` module is gated `#[cfg(target_os = "linux")]` in `mbx/src/lib.rs:32`, so this import fails on macOS
+2. `use minibox::container::process::wait_for_exit` — the `container` module is gated `#[cfg(target_os = "linux")]` in `minibox/src/lib.rs:32`, so this import fails on macOS
 3. Solution: add a local `handler_wait_for_exit` helper
 
 - [ ] **Step 1: Add local `handler_wait_for_exit` helper**
@@ -388,7 +388,7 @@ Add this function in `handler.rs` just above `daemon_wait_for_exit` (around line
 /// Wait for a process to exit and return its exit code.
 ///
 /// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `mbx::container::process::wait_for_exit` variant is only
+/// The `minibox::container::process::wait_for_exit` variant is only
 /// available on Linux (the `container` module is gated
 /// `#[cfg(target_os = "linux")]`). This local version provides the same
 /// functionality for the macOS streaming path.
@@ -445,7 +445,7 @@ Inside `handle_run_streaming`, replace the `wait_for_exit` call (lines ~207-211)
 
 ```rust
 // Before:
-use mbx::container::process::wait_for_exit;
+use minibox::container::process::wait_for_exit;
 let exit_code = tokio::task::spawn_blocking(move || wait_for_exit(pid))
     .await
     .unwrap_or(Ok(-1))
@@ -491,12 +491,12 @@ Linux-gated container::process module."
 **Files:**
 
 - Modify: `crates/macbox/src/lib.rs:109-117`
-- Modify: `crates/mbx/src/adapters/colima.rs` (make types public, may already be done in Task 1)
+- Modify: `crates/minibox/src/adapters/colima.rs` (make types public, may already be done in Task 1)
 - Test: compile check + `cargo test -p macbox`
 
 - [ ] **Step 1: Verify LimaExecutor and LimaSpawner are pub**
 
-Check `crates/mbx/src/adapters/colima.rs` — both type aliases should be `pub` (done in Task 1). Also check `crates/mbx/src/adapters/mod.rs` to verify they are re-exported. If `mod.rs` uses `pub use colima::*;` they are covered. If not, add:
+Check `crates/minibox/src/adapters/colima.rs` — both type aliases should be `pub` (done in Task 1). Also check `crates/minibox/src/adapters/mod.rs` to verify they are re-exported. If `mod.rs` uses `pub use colima::*;` they are covered. If not, add:
 
 ```rust
 pub use colima::{LimaExecutor, LimaSpawner};
@@ -509,7 +509,7 @@ Replace the adapter wiring at lines 109-117 in `macbox/src/lib.rs`:
 ```rust
 // ── Dependency Injection — Colima adapter suite ──────────────────────
 // Shared executor closure — runs commands inside the Lima VM.
-let executor: mbx::adapters::LimaExecutor =
+let executor: minibox::adapters::LimaExecutor =
     Arc::new(|args: &[&str]| {
         let output = std::process::Command::new("limactl")
             .arg("shell")
@@ -527,7 +527,7 @@ let executor: mbx::adapters::LimaExecutor =
     });
 
 // Spawner closure — starts a long-lived process with piped stdout.
-let spawner: mbx::adapters::LimaSpawner =
+let spawner: minibox::adapters::LimaSpawner =
     Arc::new(|args: &[&str]| {
         std::process::Command::new("limactl")
             .arg("shell")
@@ -568,13 +568,13 @@ Expected: Clean compile.
 
 - [ ] **Step 6: Run the macOS quality gates**
 
-Run: `cargo fmt --all --check && cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
+Run: `cargo fmt --all --check && cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings && cargo xtask test-unit`
 Expected: All pass.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/colima.rs crates/mbx/src/adapters/mod.rs crates/macbox/src/lib.rs
+git add crates/minibox/src/adapters/colima.rs crates/minibox/src/adapters/mod.rs crates/macbox/src/lib.rs
 git commit -m "feat(macbox): wire LimaSpawner and executor into composition root
 
 Enables streaming output and io.max device detection on macOS.

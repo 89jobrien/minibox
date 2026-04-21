@@ -18,11 +18,11 @@ macOS Colima path.
 
 Each operation is represented as a trait in `minibox-core::domain`:
 
-| Operation | Port trait          | Config type     | Result type   |
-|-----------|---------------------|-----------------|---------------|
-| Commit    | `ContainerCommitter`| `CommitConfig`  | `ImageMetadata` |
-| Build     | `ImageBuilder`      | `BuildConfig` + `BuildContext` | `ImageMetadata` |
-| Push      | `ImagePusher`       | `RegistryCredentials` | `PushResult` |
+| Operation | Port trait           | Config type                    | Result type     |
+| --------- | -------------------- | ------------------------------ | --------------- |
+| Commit    | `ContainerCommitter` | `CommitConfig`                 | `ImageMetadata` |
+| Build     | `ImageBuilder`       | `BuildConfig` + `BuildContext` | `ImageMetadata` |
+| Push      | `ImagePusher`        | `RegistryCredentials`          | `PushResult`    |
 
 All three traits require `AsAny + Send + Sync` and are declared `#[async_trait]`. They are
 object-safe and exposed as `DynContainerCommitter`, `DynImageBuilder`, `DynImagePusher`
@@ -50,12 +50,12 @@ running any test for that capability.
 
 ## Backend Support Matrix
 
-| Backend        | `Commit` | `BuildFromContext` | `PushToRegistry` | Notes |
-|----------------|:--------:|:-----------------:|:----------------:|-------|
-| linux-native   | yes      | yes               | yes              | Requires root + overlay FS |
-| Colima (macOS) | no       | no                | yes              | Uses `nerdctl push` via lima VM |
-| GKE (proot)    | no       | no                | no               | No writable upperdir exposed |
-| vz             | blocked  | blocked           | blocked          | VZErrorInternal on macOS 26 ARM64 |
+| Backend        | `Commit` | `BuildFromContext` | `PushToRegistry` | Notes                             |
+| -------------- | :------: | :----------------: | :--------------: | --------------------------------- |
+| linux-native   |   yes    |        yes         |       yes        | Requires root + overlay FS        |
+| Colima (macOS) |    no    |         no         |       yes        | Uses `nerdctl push` via lima VM   |
+| GKE (proot)    |    no    |         no         |        no        | No writable upperdir exposed      |
+| vz             | blocked  |      blocked       |     blocked      | VZErrorInternal on macOS 26 ARM64 |
 
 ### linux-native detail
 
@@ -84,7 +84,7 @@ running any test for that capability.
 # Run the full conformance suite (all backends, all tiers)
 cargo xtask test-conformance
 
-# Per-operation test files (in crates/mbx/tests/)
+# Per-operation test files (in crates/minibox/tests/)
 cargo nextest run --test conformance_commit    # ContainerCommitter tests
 cargo nextest run --test conformance_build     # ImageBuilder tests
 cargo nextest run --test conformance_push      # ImagePusher tests
@@ -95,6 +95,7 @@ Reports are written to `artifacts/conformance/` (gitignored; CI uploads as artif
 Override with `CONFORMANCE_ARTIFACT_DIR`.
 
 Optional env vars:
+
 - `CONFORMANCE_PUSH_REGISTRY=localhost:5000` — enable Tier 2 push tests against a live registry
 - `CONFORMANCE_COLIMA=1` — enable Colima backend tests (requires running Lima VM)
 
@@ -114,6 +115,7 @@ A test **fails** when the backend declares the capability but the operation retu
 produces incorrect output.
 
 This means:
+
 - Colima not supporting `Commit` is a **skip**, not a failure.
 - `OciPushAdapter` failing on a reachable registry is a **failure**.
 - Adding a new backend that declares `Commit` without a working implementation causes **failures**
@@ -125,13 +127,13 @@ This means:
 
 `minibox-core::adapters::conformance` (behind the `test-utils` feature) provides:
 
-| Fixture | Purpose |
-|---------|---------|
-| `MinimalStoredImageFixture` | Creates a minimal extracted image layer on disk |
-| `WritableUpperDirFixture` | Creates a writable `upperdir` with test files for commit |
-| `BuildContextFixture` | Creates a minimal build context dir with a stub Dockerfile |
-| `LocalPushTargetFixture` | Provides a local OCI registry ref for push round-trip tests |
-| `BackendDescriptor` | Declares backend capabilities + zero-arg factory closures for each adapter |
+| Fixture                     | Purpose                                                                    |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `MinimalStoredImageFixture` | Creates a minimal extracted image layer on disk                            |
+| `WritableUpperDirFixture`   | Creates a writable `upperdir` with test files for commit                   |
+| `BuildContextFixture`       | Creates a minimal build context dir with a stub Dockerfile                 |
+| `LocalPushTargetFixture`    | Provides a local OCI registry ref for push round-trip tests                |
+| `BackendDescriptor`         | Declares backend capabilities + zero-arg factory closures for each adapter |
 
 `BackendDescriptor` factories take no arguments — required context (image store paths, state
 handles) is captured from the surrounding fixture, so each test invocation gets a fresh adapter
@@ -143,14 +145,14 @@ with no shared mutable state between cases.
 
 The following work is required to extend the conformance boundary to macOS Colima:
 
-| ID | Gap |
-|----|-----|
-| minibox-40 | Define the rootfs metadata contract — what fields does a Colima container expose to host-side commit logic? |
+| ID         | Gap                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| minibox-40 | Define the rootfs metadata contract — what fields does a Colima container expose to host-side commit logic?               |
 | minibox-41 | Persist rootfs metadata into `ContainerRecord` during `create`/`run` so commit can retrieve it without re-querying the VM |
-| minibox-42 | Implement `ColimaFilesystemMetadata` — map Lima container paths to the metadata contract |
-| minibox-49 | Extend `FilesystemProvider::setup_rootfs` return type (`RootfsLayout`) to carry backend-specific writable-layer metadata |
-| minibox-50 | Wire the macbox Colima path to existing local commit/build adapters using the extended `RootfsLayout` |
-| minibox-51 | End-to-end dogfood: `create` → `commit` → `push` on macOS Colima |
+| minibox-42 | Implement `ColimaFilesystemMetadata` — map Lima container paths to the metadata contract                                  |
+| minibox-49 | Extend `FilesystemProvider::setup_rootfs` return type (`RootfsLayout`) to carry backend-specific writable-layer metadata  |
+| minibox-50 | Wire the macbox Colima path to existing local commit/build adapters using the extended `RootfsLayout`                     |
+| minibox-51 | End-to-end dogfood: `create` → `commit` → `push` on macOS Colima                                                          |
 
 Until these are complete, Colima declares only `PushToRegistry` in its `BackendCapabilitySet`.
 Conformance tests for `Commit` and `BuildFromContext` skip on Colima backends.

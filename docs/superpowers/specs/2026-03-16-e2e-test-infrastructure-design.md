@@ -72,7 +72,7 @@ Existing `conformance_tests.rs` (trait-level assertions with mocks) serves as th
 
 ### 1. Preflight Module
 
-**File:** `crates/mbx/src/preflight.rs`
+**File:** `crates/minibox/src/preflight.rs`
 
 Probes the host for capabilities needed by integration and e2e tests. Pure reads, no mutations. Infallible — missing data yields false/empty.
 
@@ -263,7 +263,7 @@ default:
 
 # Preflight capability check
 doctor:
-    cargo run -p mbx --example doctor 2>/dev/null || cargo test -p mbx preflight -- --nocapture
+    cargo run -p minibox --example doctor 2>/dev/null || cargo test -p minibox preflight -- --nocapture
 
 # Unit tests (mock-based, any platform)
 test-unit:
@@ -324,7 +324,7 @@ nuke-test-state:
 
 ### 5. Modified Files
 
-**`crates/mbx/src/lib.rs`** — add `pub mod preflight;`
+**`crates/minibox/src/lib.rs`** — add `pub mod preflight;`
 
 **`TESTING.md`** — update test pyramid counts, add just recipes, document the three test layers.
 
@@ -357,7 +357,7 @@ Each test uses a `TestGuard` or Drop-based cleanup:
 
 ```
 justfile
-crates/mbx/src/preflight.rs
+crates/minibox/src/preflight.rs
 crates/miniboxd/tests/cgroup_tests.rs
 crates/miniboxd/tests/e2e_tests.rs
 ```
@@ -365,7 +365,7 @@ crates/miniboxd/tests/e2e_tests.rs
 **Modified files:**
 
 ```
-crates/mbx/src/lib.rs
+crates/minibox/src/lib.rs
 TESTING.md
 ```
 

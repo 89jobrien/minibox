@@ -23,6 +23,7 @@ cruxx-plugin, minibox-client, minibox-secrets
 **Spec:** `docs/superpowers/specs/2026-04-20-crux-maestro-integration-design.md`
 
 **Sentinel review findings (must-address):**
+
 1. TraceStore trait must live in `minibox-core`, not `minibox-agent`
    (avoids inverted dependency daemonbox -> minibox-agent)
 2. `PipelineComplete` uses `serde_json::Value` for the trace field,
@@ -53,6 +54,7 @@ in minibox's `Cargo.toml`.
 ### Task 1.1: Add `RunPipeline` to `DaemonRequest`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
 - Modify: `crates/minibox-core/tests/` (snapshot tests)
 
@@ -162,6 +164,7 @@ git commit -m "feat(protocol): add RunPipeline request variant"
 ### Task 1.2: Add `PipelineComplete` to `DaemonResponse`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
 - Modify: `crates/daemonbox/src/server.rs` (is_terminal_response)
 
@@ -229,6 +232,7 @@ git commit -m "feat(protocol): add PipelineComplete response variant"
 ### Task 1.3: TraceStore trait in minibox-core
 
 **Files:**
+
 - Create: `crates/minibox-core/src/trace.rs`
 - Modify: `crates/minibox-core/src/lib.rs`
 
@@ -323,6 +327,7 @@ git commit -m "feat(core): add TraceStore trait (hexagonal port)"
 ### Task 1.4: FileTraceStore adapter in minibox-agent
 
 **Files:**
+
 - Create: `crates/minibox-agent/src/trace.rs`
 - Modify: `crates/minibox-agent/src/lib.rs`
 - Modify: `crates/minibox-agent/Cargo.toml`
@@ -349,7 +354,7 @@ Create `crates/minibox-agent/src/trace.rs`:
 ```rust
 //! File-based trace storage adapter.
 //!
-//! Writes traces to `~/.mbx/traces/<id>.json`. Enforces 7-day retention
+//! Writes traces to `~/.minibox/traces/<id>.json`. Enforces 7-day retention
 //! and 500MB cap, rotating oldest traces when either limit is hit.
 //! Override with `MINIBOX_TRACE_RETENTION_DAYS` and `MINIBOX_TRACE_MAX_MB`.
 
@@ -393,11 +398,11 @@ impl FileTraceStore {
         })
     }
 
-    /// Default trace directory: `~/.mbx/traces/`.
+    /// Default trace directory: `~/.minibox/traces/`.
     pub fn default_dir() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join(".mbx")
+            .join(".minibox")
             .join("traces")
     }
 
@@ -648,6 +653,7 @@ git commit -m "feat(agent): add FileTraceStore adapter for pipeline traces"
 ### Task 2.1: Minibox handler set (crux handler implementations)
 
 **Files:**
+
 - Create: `crates/minibox-agent/src/handlers.rs`
 - Modify: `crates/minibox-agent/src/lib.rs`
 - Modify: `crates/minibox-agent/Cargo.toml`
@@ -674,7 +680,7 @@ Create `crates/minibox-agent/src/handlers.rs`:
 //! Minibox handler set for crux pipeline `HandlerRegistry`.
 //!
 //! Each handler wraps a `DaemonClient` call and maps the result to a
-//! crux step outcome. Handlers are registered under the `mbx::`
+//! crux step outcome. Handlers are registered under the `minibox::`
 //! namespace.
 
 use anyhow::{Context, Result};
@@ -705,11 +711,11 @@ impl MiniboxHandlers {
         Ok(Self { client })
     }
 
-    /// Execute `mbx::container::run` — create and start a container.
+    /// Execute `minibox::container::run` — create and start a container.
     pub async fn container_run(&self, params: Value) -> Result<Value> {
         let image = params["image"]
             .as_str()
-            .context("mbx::container::run requires 'image' field")?
+            .context("minibox::container::run requires 'image' field")?
             .to_string();
         let tag = params["tag"].as_str().map(String::from);
         let command: Vec<String> = params["command"]
@@ -737,64 +743,64 @@ impl MiniboxHandlers {
         };
 
         let response = self.client.send_request(&req).await
-            .context("mbx::container::run request failed")?;
+            .context("minibox::container::run request failed")?;
         Ok(serde_json::to_value(&response)
             .context("serialize run response")?)
     }
 
-    /// Execute `mbx::container::stop`.
+    /// Execute `minibox::container::stop`.
     pub async fn container_stop(&self, params: Value) -> Result<Value> {
         let id = params["id"]
             .as_str()
-            .context("mbx::container::stop requires 'id' field")?
+            .context("minibox::container::stop requires 'id' field")?
             .to_string();
 
         let req = DaemonRequest::Stop { id };
         let response = self.client.send_request(&req).await
-            .context("mbx::container::stop request failed")?;
+            .context("minibox::container::stop request failed")?;
         Ok(serde_json::to_value(&response)
             .context("serialize stop response")?)
     }
 
-    /// Execute `mbx::container::rm`.
+    /// Execute `minibox::container::rm`.
     pub async fn container_rm(&self, params: Value) -> Result<Value> {
         let id = params["id"]
             .as_str()
-            .context("mbx::container::rm requires 'id' field")?
+            .context("minibox::container::rm requires 'id' field")?
             .to_string();
 
         let req = DaemonRequest::Remove { id };
         let response = self.client.send_request(&req).await
-            .context("mbx::container::rm request failed")?;
+            .context("minibox::container::rm request failed")?;
         Ok(serde_json::to_value(&response)
             .context("serialize rm response")?)
     }
 
-    /// Execute `mbx::container::ps`.
+    /// Execute `minibox::container::ps`.
     pub async fn container_ps(&self, _params: Value) -> Result<Value> {
         let req = DaemonRequest::List;
         let response = self.client.send_request(&req).await
-            .context("mbx::container::ps request failed")?;
+            .context("minibox::container::ps request failed")?;
         Ok(serde_json::to_value(&response)
             .context("serialize ps response")?)
     }
 
-    /// Execute `mbx::image::pull`.
+    /// Execute `minibox::image::pull`.
     pub async fn image_pull(&self, params: Value) -> Result<Value> {
         let image = params["image"]
             .as_str()
-            .context("mbx::image::pull requires 'image' field")?
+            .context("minibox::image::pull requires 'image' field")?
             .to_string();
         let tag = params["tag"].as_str().map(String::from);
 
         let req = DaemonRequest::Pull { image, tag };
         let response = self.client.send_request(&req).await
-            .context("mbx::image::pull request failed")?;
+            .context("minibox::image::pull request failed")?;
         Ok(serde_json::to_value(&response)
             .context("serialize pull response")?)
     }
 
-    /// Execute `mbx::env::inject` — resolve secrets via minibox-secrets.
+    /// Execute `minibox::env::inject` — resolve secrets via minibox-secrets.
     pub async fn env_inject(&self, params: Value) -> Result<Value> {
         let keys: Vec<String> = params["keys"]
             .as_array()
@@ -853,6 +859,7 @@ git commit -m "feat(agent): add MiniboxHandlers for crux pipeline registry"
 ### Task 2.2: PipelineRunner
 
 **Files:**
+
 - Create: `crates/minibox-agent/src/pipeline.rs`
 - Modify: `crates/minibox-agent/src/lib.rs`
 
@@ -1090,6 +1097,7 @@ git commit -m "feat(agent): add PipelineRunner with discovery logic"
 ### Task 2.3: handle_pipeline in daemonbox
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 - Modify: `crates/daemonbox/Cargo.toml`
@@ -1244,6 +1252,7 @@ git commit -m "feat(daemon): add handle_pipeline stub with depth gate"
 ### Task 3.1: Create minibox-crux-plugin crate
 
 **Files:**
+
 - Create: `crates/minibox-crux-plugin/Cargo.toml`
 - Create: `crates/minibox-crux-plugin/src/main.rs`
 - Modify: `Cargo.toml` (workspace members)
@@ -1296,7 +1305,7 @@ Create `crates/minibox-crux-plugin/src/main.rs`:
 //! this binary routes to `DaemonClient` operations.
 //!
 //! Protocol:
-//! - Input (stdin): `{"id":"...","method":"mbx::container::run","params":{...}}\n`
+//! - Input (stdin): `{"id":"...","method":"minibox::container::run","params":{...}}\n`
 //! - Output (stdout): `{"id":"...","result":{...}}\n` or `{"id":"...","error":"..."}\n`
 
 use anyhow::{Context, Result};
@@ -1395,7 +1404,7 @@ async fn dispatch(
         .with_context(|| format!("connect: {}", socket.display()))?;
 
     let daemon_req = match method {
-        "mbx::container::run" => DaemonRequest::Run {
+        "minibox::container::run" => DaemonRequest::Run {
             image: params["image"]
                 .as_str()
                 .context("missing 'image'")?
@@ -1419,20 +1428,20 @@ async fn dispatch(
             name: None,
             tty: false,
         },
-        "mbx::container::stop" => DaemonRequest::Stop {
+        "minibox::container::stop" => DaemonRequest::Stop {
             id: params["id"]
                 .as_str()
                 .context("missing 'id'")?
                 .into(),
         },
-        "mbx::container::rm" => DaemonRequest::Remove {
+        "minibox::container::rm" => DaemonRequest::Remove {
             id: params["id"]
                 .as_str()
                 .context("missing 'id'")?
                 .into(),
         },
-        "mbx::container::ps" => DaemonRequest::List,
-        "mbx::image::pull" => DaemonRequest::Pull {
+        "minibox::container::ps" => DaemonRequest::List,
+        "minibox::image::pull" => DaemonRequest::Pull {
             image: params["image"]
                 .as_str()
                 .context("missing 'image'")?
@@ -1480,6 +1489,7 @@ git commit -m "feat: add minibox-crux-plugin binary crate"
 ### Task 4.1: CLI subcommands (run-pipeline, traces)
 
 **Files:**
+
 - Create: `crates/minibox-cli/src/commands/pipeline.rs`
 - Create: `crates/minibox-cli/src/commands/traces.rs`
 - Modify: `crates/minibox-cli/src/commands/mod.rs`
@@ -1668,6 +1678,7 @@ git commit -m "feat(cli): add run-pipeline and traces subcommands"
 ### Task 4.2: Dashbox Traces tab
 
 **Files:**
+
 - Create: `crates/dashbox/src/tabs/traces.rs` (or equivalent per
   existing tab pattern)
 - Modify: `crates/dashbox/src/` (tab registration)
@@ -1680,7 +1691,8 @@ Read the existing dashbox tab module structure (e.g., `agents.rs` or
 - [ ] **Step 2: Create traces tab**
 
 Follow the established pattern. The tab should:
-- Read `~/.mbx/traces/` via `FileTraceStore::list()`
+
+- Read `~/.minibox/traces/` via `FileTraceStore::list()`
 - Display a table of recent traces (id, pipeline, timestamp, exit,
   steps)
 - On selection, show full trace JSON with step drill-down
@@ -1705,6 +1717,7 @@ git commit -m "feat(dashbox): add Traces tab for pipeline trace viewing"
 ### Task 5.1: Container group lifecycle
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/state.rs`
 - Modify: `crates/daemonbox/src/handler.rs`
 
@@ -1743,6 +1756,7 @@ with the pipeline's group_id to clean up child containers.
 - [ ] **Step 4: Tests**
 
 Write a unit test in handler_tests.rs that:
+
 1. Creates a state with 3 containers sharing a group_id
 2. Calls `reap_group`
 3. Verifies all 3 are returned for cleanup
@@ -1759,15 +1773,17 @@ git commit -m "feat(daemon): add container group lifecycle for pipeline cleanup"
 ### Task 5.2: VPS e2e validation
 
 **Files:**
+
 - Create: `tests/e2e/pipeline_e2e.rs` (or extend existing e2e suite)
 
 - [ ] **Step 1: Write e2e test**
 
 Test on VPS (`MINIBOX_ADAPTER=native`):
+
 1. Create a trivial `.cruxx` pipeline file
 2. Send `RunPipeline` request to daemon
 3. Verify `PipelineComplete` response with valid trace
-4. Verify trace is stored in `~/.mbx/traces/`
+4. Verify trace is stored in `~/.minibox/traces/`
 
 - [ ] **Step 2: Run on VPS**
 
@@ -1807,10 +1823,10 @@ Phase 5.2 (VPS e2e) ◄── all above
 
 ## Risk Register
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Phase 0 blocked (crux crates unpublished) | Blocks Phase 2+ | Use git deps with pinned rev |
-| `DaemonClient` API changes needed for streaming | Delays Phase 3 | Plugin can use blocking client initially |
-| `cruxx-plugin` protocol changes | Rework Phase 3 | Pin to specific version, don't over-abstract |
-| Budget enforcement is client-side only | Security gap | Document as known limitation; daemon-side tokens are Phase 6 |
-| Multi-container orphans on OOM/SIGKILL | Leaked resources | Group reaper + daemon-side timeout watchdog |
+| Risk                                            | Impact           | Mitigation                                                   |
+| ----------------------------------------------- | ---------------- | ------------------------------------------------------------ |
+| Phase 0 blocked (crux crates unpublished)       | Blocks Phase 2+  | Use git deps with pinned rev                                 |
+| `DaemonClient` API changes needed for streaming | Delays Phase 3   | Plugin can use blocking client initially                     |
+| `cruxx-plugin` protocol changes                 | Rework Phase 3   | Pin to specific version, don't over-abstract                 |
+| Budget enforcement is client-side only          | Security gap     | Document as known limitation; daemon-side tokens are Phase 6 |
+| Multi-container orphans on OOM/SIGKILL          | Leaked resources | Group reaper + daemon-side timeout watchdog                  |

@@ -18,7 +18,7 @@ Mermaid the authoring format while keeping the existing navigable `Diagram` doma
 2. **`Diagram` stays unchanged** — the navigable domain model, renderer, and navigation code are not
    touched.
 3. **Two source origins** — embedded statics (built-in diagrams, no I/O) and file-loaded
-   (`~/.mbx/diagrams/*.mmd`, no recompile needed for user diagrams).
+   (`~/.minibox/diagrams/*.mmd`, no recompile needed for user diagrams).
 4. **Full navigation preserved** — parsed diagrams work identically to hand-coded ones: arrow-key
    navigation, Tab cycling, detail panel, edge list.
 5. **No new runtime dependencies** — parser is hand-rolled (the Mermaid subset is small).
@@ -249,7 +249,7 @@ impl DiagramSource {
     pub fn load(&self) -> OwnedDiagram { ... }
 }
 
-/// Load all .mmd files from ~/.mbx/diagrams/, returning one DiagramSource per file.
+/// Load all .mmd files from ~/.minibox/diagrams/, returning one DiagramSource per file.
 pub fn load_user_diagrams() -> Vec<DiagramSource> { ... }
 ```
 
@@ -303,6 +303,7 @@ from `diagrams.rs`. `diagrams.rs` is replaced by `built_in_diagrams()` in `sourc
 `diagrams.rs` that calls it).
 
 Order of migration:
+
 1. Write parser + `OwnedDiagram` types
 2. Add `DiagramSource::Embedded` + `load()`
 3. Convert `ci_flow` as a smoke test
@@ -328,10 +329,10 @@ No new dependencies needed. Tests run on any platform (`cargo test -p dashbox`).
 
 ## Open Questions (resolved)
 
-| Question | Decision |
-|---|---|
-| Detail text in `.mmd`? | `%% detail:` comment convention (Option B from brainstorm) |
-| String ownership? | `OwnedDiagram` with `String` fields (Option A — simplest) |
-| Diagram source? | Both embedded statics and `~/.mbx/diagrams/` file loading |
-| Layout? | `%% layout:` hints; BFS topological fallback |
-| Parse errors? | Non-fatal — render as single error node in TUI |
+| Question               | Decision                                                      |
+| ---------------------- | ------------------------------------------------------------- |
+| Detail text in `.mmd`? | `%% detail:` comment convention (Option B from brainstorm)    |
+| String ownership?      | `OwnedDiagram` with `String` fields (Option A — simplest)     |
+| Diagram source?        | Both embedded statics and `~/.minibox/diagrams/` file loading |
+| Layout?                | `%% layout:` hints; BFS topological fallback                  |
+| Parse errors?          | Non-fatal — render as single error node in TUI                |

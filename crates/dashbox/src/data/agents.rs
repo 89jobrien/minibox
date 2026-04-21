@@ -75,11 +75,11 @@ impl JsonlFileSource {
         Self { path: path.into() }
     }
 
-    /// Default path: ~/.mbx/agent-runs.jsonl
+    /// Default path: ~/.minibox/agent-runs.jsonl
     pub fn default_agent_log() -> Self {
         let path = dirs::home_dir()
             .expect("cannot determine home directory")
-            .join(".mbx/agent-runs.jsonl");
+            .join(".minibox/agent-runs.jsonl");
         Self { path }
     }
 }

@@ -93,7 +93,7 @@ fn snapshot_path() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             std::env::var("HOME")
-                .map(|h| std::path::PathBuf::from(h).join(".mbx"))
+                .map(|h| std::path::PathBuf::from(h).join(".minibox"))
                 .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/minibox"))
         });
     base.join("metrics.json")

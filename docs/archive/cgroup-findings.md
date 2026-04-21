@@ -58,7 +58,7 @@ pure inner node that can freely enable `subtree_control`.
   daemon reads `/proc/self/cgroup`, creates a `supervisor/` child, and moves
   its own PID there. No-op if systemd `DelegateSubgroup` already handled it.
 
-**`crates/mbx/src/container/cgroups.rs`:**
+**`crates/minibox/src/container/cgroups.rs`:**
 
 - `enable_subtree_controllers()` writes `+pids +memory +cpu +io` to
   `cgroup.subtree_control` at the cgroup root before creating container

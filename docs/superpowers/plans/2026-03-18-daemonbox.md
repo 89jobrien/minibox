@@ -15,7 +15,7 @@ note: daemonbox extracted and live
 
 **Platform note:** `daemonbox` compiles on Linux and macOS (both are unix, both have `tokio::net::UnixStream`). It does not need to compile on Windows — `winboxd` is a Named Pipe proxy that does not embed `daemonbox`.
 
-**Tech Stack:** Rust workspace, `mbx` (domain traits), `tokio`, `nix`, `serde`/`serde_json`, `uuid`, `chrono`, `anyhow`, `tracing`.
+**Tech Stack:** Rust workspace, `minibox` (domain traits), `tokio`, `nix`, `serde`/`serde_json`, `uuid`, `chrono`, `anyhow`, `tracing`.
 
 **Spec:** `docs/superpowers/specs/2026-03-17-macbox-daemonbox-design.md`
 
@@ -93,7 +93,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-mbx = { workspace = true }
+minibox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -153,7 +153,7 @@ git commit -m "chore: scaffold daemonbox crate (empty placeholders)"
 - Modify: `crates/daemonbox/src/state.rs` (replace placeholder with content from `miniboxd`)
 - Modify: `crates/daemonbox/src/server.rs` (replace placeholder with content from `miniboxd`)
 
-The three files contain only `use crate::...` and `use mbx::...` references — no `use miniboxd::` references — so they can be copied verbatim and will compile immediately in the new crate.
+The three files contain only `use crate::...` and `use minibox::...` references — no `use miniboxd::` references — so they can be copied verbatim and will compile immediately in the new crate.
 
 - [ ] **Step 1: Copy `handler.rs`**
 
@@ -324,6 +324,6 @@ git commit -m "refactor: extract handler/state/server into daemonbox crate"
 | daemonbox compiles  | `cargo check -p daemonbox`                          | Linux/macOS | No errors                       |
 | miniboxd compiles   | `cargo check -p miniboxd`                           | Linux       | No errors                       |
 | miniboxd tests pass | `cargo nextest run -p miniboxd`                     | Linux       | All pass (12 handler tests etc) |
-| mbx unaffected      | `cargo check -p mbx`                                | any         | No errors                       |
+| minibox unaffected  | `cargo check -p minibox`                            | any         | No errors                       |
 | clippy clean        | `cargo clippy -p daemonbox -p miniboxd -D warnings` | Linux       | No warnings                     |
 | fmt clean           | `cargo fmt -p daemonbox --check`                    | any         | No diff                         |

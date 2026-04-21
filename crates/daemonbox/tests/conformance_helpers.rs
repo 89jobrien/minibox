@@ -31,7 +31,7 @@ use daemonbox::handler::{
     PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
-use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
@@ -179,7 +179,7 @@ pub fn make_mock_deps_with_registry(
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = mbx::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, base))
 }
 

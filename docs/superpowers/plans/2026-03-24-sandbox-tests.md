@@ -280,8 +280,8 @@ Create `crates/miniboxd/tests/sandbox_tests.rs`:
 mod helpers;
 use helpers::SandboxClient;
 
-use mbx::preflight;
-use mbx::require_capability;
+use minibox::preflight;
+use minibox::require_capability;
 use std::sync::{Mutex, OnceLock};
 
 // ---------------------------------------------------------------------------
@@ -735,7 +735,7 @@ Expected: all existing tests pass (sandbox tests won't run — they're `#[ignore
 
 - [ ] **Step 2: Run clippy**
 
-Run: `cd /Users/joe/dev/minibox && cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings 2>&1`
+Run: `cd /Users/joe/dev/minibox && cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings 2>&1`
 Expected: no warnings
 
 - [ ] **Step 3: Verify sandbox_tests compiles**

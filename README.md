@@ -25,7 +25,7 @@ The project is currently pushing toward stronger dogfooding: agent-facing contro
 - **Container events** – `minibox events` streams lifecycle events; all adapter suites.
 - **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub), `daemonbox` (shared
   handler + server).
-- **Core library (`mbx`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
+- **Core library (`minibox`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
 - **JSON CLI (`minibox-cli`)** – Thin client over Unix socket.
 - **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
 - **Bench tooling (`minibox-bench`)** – Codec + adapter microbenchmarks.
@@ -129,7 +129,7 @@ sudo /usr/local/bin/minibox ps
 cargo xtask build-test-image
 
 # Load a local OCI tarball into minibox
-sudo ./target/release/minibox load ~/.mbx/test-image/mbx-tester.tar --name mbx-tester
+sudo ./target/release/minibox load ~/.minibox/test-image/minibox-tester.tar --name minibox-tester
 
 # Run the Linux suite inside minibox
 cargo xtask test-linux
@@ -139,25 +139,25 @@ cargo xtask test-linux
 
 ## Crate Structure
 
-| Crate             | Type    | Description                                                        |
-| ----------------- | ------- | ------------------------------------------------------------------ |
-| `minibox-core`    | Library | Protocol, domain traits, image types, error types                  |
-| `mbx`             | Library | Linux primitives, adapters, image management                       |
-| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle               |
-| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch             |
-| `minibox-cli`     | Binary  | CLI client                                                         |
-| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                  |
-| `minibox-llm`     | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback  |
-| `minibox-bench`   | Binary  | Benchmark harness (codec + adapter + parallel suites)              |
-| `minibox-client`  | Library | Low-level Unix socket client                                       |
-| `minibox-secrets` | Library | Typed credential store with validation & audit hashes              |
-| `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)         |
-| `winbox`          | Library | Windows daemon implementation (stub)                               |
-| `dockerbox`       | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox  |
-| `dashbox`         | Binary  | Ratatui TUI dashboard (8 tabs: containers, bench, git, CI, etc.)   |
-| `mbxctl`          | Binary  | SSE-based streaming CLI (dagu integration)                         |
+| Crate             | Type    | Description                                                       |
+| ----------------- | ------- | ----------------------------------------------------------------- |
+| `minibox-core`    | Library | Protocol, domain traits, image types, error types                 |
+| `minibox`         | Library | Linux primitives, adapters, image management                      |
+| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle              |
+| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch            |
+| `minibox-cli`     | Binary  | CLI client                                                        |
+| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                 |
+| `minibox-llm`     | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback |
+| `minibox-bench`   | Binary  | Benchmark harness (codec + adapter + parallel suites)             |
+| `minibox-client`  | Library | Low-level Unix socket client                                      |
+| `minibox-secrets` | Library | Typed credential store with validation & audit hashes             |
+| `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)        |
+| `winbox`          | Library | Windows daemon implementation (stub)                              |
+| `dockerbox`       | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox |
+| `dashbox`         | Binary  | Ratatui TUI dashboard (8 tabs: containers, bench, git, CI, etc.)  |
+| `miniboxctl`      | Binary  | SSE-based streaming CLI (dagu integration)                        |
 
-**Key modules in `mbx`:**
+**Key modules in `minibox`:**
 
 | Module         | Purpose                                                                                   |
 | -------------- | ----------------------------------------------------------------------------------------- |
@@ -245,14 +245,14 @@ miniboxd starts
 
 ### Adapter Wiring Status
 
-| Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status       |
-| -------------------- | ------------------ | ----------------- | ------------ |
-| Native Linux         | `native` (default) | Yes               | Production   |
-| GKE unprivileged     | `gke`              | Yes               | Production   |
-| macOS Colima         | `colima`           | Yes               | Production   |
+| Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status                                                         |
+| -------------------- | ------------------ | ----------------- | -------------------------------------------------------------- |
+| Native Linux         | `native` (default) | Yes               | Production                                                     |
+| GKE unprivileged     | `gke`              | Yes               | Production                                                     |
+| macOS Colima         | `colima`           | Yes               | Production                                                     |
 | macOS VZ.framework   | `vz`               | Yes               | Blocked (Apple bug — VZErrorInternal code=1 on macOS 26 ARM64) |
-| macOS Docker Desktop | `docker-desktop`   | No                | Library only |
-| Windows WSL2         | `wsl`              | No                | Library only |
+| macOS Docker Desktop | `docker-desktop`   | No                | Library only                                                   |
+| Windows WSL2         | `wsl`              | No                | Library only                                                   |
 
 Passing an unwired value causes the daemon to exit at startup with an error.
 
@@ -304,7 +304,7 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
 
 ### macOS (Docker Desktop) / Windows (WSL2) — Library only
 
-Adapters are implemented in `mbx` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` and `MINIBOX_ADAPTER=wsl` are not currently accepted by the daemon.
+Adapters are implemented in `minibox` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` and `MINIBOX_ADAPTER=wsl` are not currently accepted by the daemon.
 
 ---
 
@@ -342,7 +342,7 @@ sudo minibox resume <container_id>
 sudo minibox rm <container_id>
 
 # Load local OCI tarball
-sudo minibox load ./mbx-tester.tar --name mbx-tester
+sudo minibox load ./minibox-tester.tar --name minibox-tester
 
 # Image management
 sudo minibox prune          # GC unused images
@@ -361,15 +361,15 @@ MINIBOX_NETWORK_MODE=bridge miniboxd     # bridge networking
 
 **Run flags:**
 
-| Flag              | Type    | Default   | Notes                            |
-| ----------------- | ------- | --------- | -------------------------------- |
-| `--memory`        | bytes   | unlimited | e.g. `536870912` for 512 MB      |
-| `--cpu-weight`    | 1–10000 | 100       | relative CPU share               |
-| `--name`          | string  | —         | assign a name to the container   |
-| `-it`             | flag    | false     | interactive PTY mode             |
-| `-v`/`--volume`   | string  | —         | bind mount (`host:container`)    |
-| `--mount`         | string  | —         | mount spec (long form)           |
-| `--privileged`    | flag    | false     | curated capability whitelist     |
+| Flag            | Type    | Default   | Notes                          |
+| --------------- | ------- | --------- | ------------------------------ |
+| `--memory`      | bytes   | unlimited | e.g. `536870912` for 512 MB    |
+| `--cpu-weight`  | 1–10000 | 100       | relative CPU share             |
+| `--name`        | string  | —         | assign a name to the container |
+| `-it`           | flag    | false     | interactive PTY mode           |
+| `-v`/`--volume` | string  | —         | bind mount (`host:container`)  |
+| `--mount`       | string  | —         | mount spec (long form)         |
+| `--privileged`  | flag    | false     | curated capability whitelist   |
 
 ---
 
@@ -377,7 +377,7 @@ MINIBOX_NETWORK_MODE=bridge miniboxd     # bridge networking
 
 ```bash
 # Unit + protocol tests (any platform)
-cargo test -p mbx
+cargo test -p minibox
 
 # All tests (Linux)
 cargo test --workspace
@@ -400,7 +400,7 @@ just doctor
 # Benchmarks (any platform, no daemon needed)
 cargo xtask bench --suite codec    # 36 protocol encode/decode benchmarks
 cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
-cargo bench -p mbx         # Criterion HTML reports (local only)
+cargo bench -p minibox         # Criterion HTML reports (local only)
 ```
 
 **Current counts:** 300+ unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
@@ -446,18 +446,18 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 ## Extending
 
-Domain traits are defined as ports in `crates/mbx/src/domain.rs`. Adding a capability means
+Domain traits are defined as ports in `crates/minibox/src/domain.rs`. Adding a capability means
 implementing the trait and wiring the adapter into `HandlerDependencies`.
 
-| Trait                | Status   | Notes                                          |
-| -------------------- | -------- | ---------------------------------------------- |
-| `BridgeNetworking`   | Shipped  | veth + NAT, `MINIBOX_NETWORK_MODE=bridge`      |
-| `ExecRuntime`        | Shipped  | `setns`, PTY, stdin relay                      |
-| `NetworkProvider`    | Shipped  | None / Host / Bridge dispatch                  |
-| `ImagePusher`        | Partial  | OCI Distribution Spec — not wired in miniboxd  |
-| `ContainerCommitter` | Partial  | Overlay upperdir snapshot — not wired          |
-| `ImageBuilder`       | Partial  | Basic Dockerfile subset — not wired            |
-| `StateStore`         | Open     | SQLite / sled — replaces in-memory HashMap     |
+| Trait                | Status  | Notes                                         |
+| -------------------- | ------- | --------------------------------------------- |
+| `BridgeNetworking`   | Shipped | veth + NAT, `MINIBOX_NETWORK_MODE=bridge`     |
+| `ExecRuntime`        | Shipped | `setns`, PTY, stdin relay                     |
+| `NetworkProvider`    | Shipped | None / Host / Bridge dispatch                 |
+| `ImagePusher`        | Partial | OCI Distribution Spec — not wired in miniboxd |
+| `ContainerCommitter` | Partial | Overlay upperdir snapshot — not wired         |
+| `ImageBuilder`       | Partial | Basic Dockerfile subset — not wired           |
+| `StateStore`         | Open    | SQLite / sled — replaces in-memory HashMap    |
 
 ---
 
@@ -465,7 +465,7 @@ implementing the trait and wiring the adapter into `HandlerDependencies`.
 
 Minibox is increasingly being shaped as infrastructure for agent workflows, not just a human CLI:
 
-- `mbxctl` is the first controller-shaped surface: a small HTTP/SSE wrapper over `miniboxd` for long-running job orchestration
+- `miniboxctl` is the first controller-shaped surface: a small HTTP/SSE wrapper over `miniboxd` for long-running job orchestration
 - the next layer is an MCP-friendly control surface so an agent can drive image pulls, container lifecycle, and log streaming directly
 - the longer-term dogfood goal is to run agent-generated code and CI jobs inside minibox-managed containers by default
 
@@ -485,7 +485,7 @@ lsmod | grep overlay
 
 # Build
 cargo build --release              # Linux full build
-cargo build -p mbx         # macOS/Windows (lib only)
+cargo build -p minibox         # macOS/Windows (lib only)
 cargo check --workspace            # fast type check
 
 # Lint

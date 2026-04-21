@@ -153,7 +153,7 @@ pub trait MetricsRecorder: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use mbx::domain::ImageRegistry;
+/// use minibox::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,
@@ -926,7 +926,7 @@ impl From<&str> for SessionId {
 ///
 /// This is a domain value type — no channel fields, no tokio types.
 /// Channel wiring (stdin relay, PTY resize) belongs in the infrastructure
-/// adapter layer (`mbx::adapters::exec`).
+/// adapter layer (`minibox::adapters::exec`).
 #[derive(Debug, Clone)]
 pub struct ExecSpec {
     pub cmd: Vec<String>,
@@ -1505,7 +1505,7 @@ mod tests {
         async fn image_loader_trait_is_object_safe() {
             let loader: Box<dyn ImageLoader> = Box::new(AlwaysOkLoader);
             let result = loader
-                .load_image(std::path::Path::new("/fake.tar"), "mbx-tester", "latest")
+                .load_image(std::path::Path::new("/fake.tar"), "minibox-tester", "latest")
                 .await;
             assert!(result.is_ok());
         }

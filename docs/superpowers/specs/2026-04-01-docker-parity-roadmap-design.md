@@ -10,12 +10,12 @@
 
 Maestro currently depends on Docker (via the `bollard` Rust crate) for its container workflow. The dockerbox shim (HTTP-over-Unix-socket Docker API translator) today covers ~35% of maestro's Docker API surface. The four missing capabilities are:
 
-| Capability | Maestro usage |
-|---|---|
-| **Exec** | Run commands inside running session containers |
-| **Image Push** | Push built images to GHCR / GCR |
-| **Container Commit** | Snapshot containers after prebuild steps |
-| **Image Build** | Build session images from Dockerfiles |
+| Capability           | Maestro usage                                  |
+| -------------------- | ---------------------------------------------- |
+| **Exec**             | Run commands inside running session containers |
+| **Image Push**       | Push built images to GHCR / GCR                |
+| **Container Commit** | Snapshot containers after prebuild steps       |
+| **Image Build**      | Build session images from Dockerfiles          |
 
 These four capabilities, plus the existing dockerbox shim, will allow maestro to remove its Docker dependency entirely.
 
@@ -143,7 +143,7 @@ ExecStarted {
 // ContainerOutput and ContainerStopped are reused for exec output + exit code
 ```
 
-### NativeExecRuntime adapter (`crates/mbx/src/adapters/exec.rs`)
+### NativeExecRuntime adapter (`crates/minibox/src/adapters/exec.rs`)
 
 Uses Linux namespace joining via `/proc/{pid}/ns/*`:
 
@@ -184,7 +184,7 @@ GET  /exec/{id}/json        -> return ExecInstance status
 4. **Upload config blob** — same for image config JSON
 5. **Put manifest** — `PUT /v2/{name}/manifests/{tag}` with OCI manifest JSON
 
-### OciPushAdapter (`crates/mbx/src/adapters/push.rs`)
+### OciPushAdapter (`crates/minibox/src/adapters/push.rs`)
 
 Extends existing `RegistryClient` with push methods:
 
@@ -244,7 +244,7 @@ A container's writable changes live entirely in its `upperdir`. Commit:
 
 The result is immediately available to `DaemonRequest::Run` without any push.
 
-### OverlayCommitAdapter (`crates/mbx/src/adapters/commit.rs`)
+### OverlayCommitAdapter (`crates/minibox/src/adapters/commit.rs`)
 
 ```rust
 pub struct OverlayCommitAdapter {
@@ -289,21 +289,21 @@ POST /containers/{id}/commit  -> DaemonRequest::Commit
 
 ### Supported instruction subset (~90% of real Dockerfiles)
 
-| Instruction | Semantics |
-|---|---|
-| `FROM image[:tag]` | Base image; must be first non-comment instruction |
-| `FROM image AS name` | Named stage (multi-stage: only final stage built) |
-| `RUN cmd` | Execute in container, commit layer |
-| `COPY src... dest` | Copy files from build context into image |
-| `ADD src... dest` | Like COPY; also handles URLs and tar auto-extract |
-| `ENV key=value` | Set environment variable |
-| `ARG name[=default]` | Build-time variable (substituted in subsequent instructions) |
-| `WORKDIR /path` | Set working directory |
-| `CMD ["cmd", "arg"]` | Default command (exec form and shell form) |
-| `ENTRYPOINT ["cmd"]` | Container entrypoint |
-| `EXPOSE port[/proto]` | Document exposed ports (metadata only) |
-| `LABEL key=value` | Image metadata |
-| `USER name[:group]` | Set user for RUN/CMD/ENTRYPOINT |
+| Instruction           | Semantics                                                    |
+| --------------------- | ------------------------------------------------------------ |
+| `FROM image[:tag]`    | Base image; must be first non-comment instruction            |
+| `FROM image AS name`  | Named stage (multi-stage: only final stage built)            |
+| `RUN cmd`             | Execute in container, commit layer                           |
+| `COPY src... dest`    | Copy files from build context into image                     |
+| `ADD src... dest`     | Like COPY; also handles URLs and tar auto-extract            |
+| `ENV key=value`       | Set environment variable                                     |
+| `ARG name[=default]`  | Build-time variable (substituted in subsequent instructions) |
+| `WORKDIR /path`       | Set working directory                                        |
+| `CMD ["cmd", "arg"]`  | Default command (exec form and shell form)                   |
+| `ENTRYPOINT ["cmd"]`  | Container entrypoint                                         |
+| `EXPOSE port[/proto]` | Document exposed ports (metadata only)                       |
+| `LABEL key=value`     | Image metadata                                               |
+| `USER name[:group]`   | Set user for RUN/CMD/ENTRYPOINT                              |
 
 **Not supported (deferred):** `HEALTHCHECK`, `VOLUME`, `ONBUILD`, `SHELL`, `STOPSIGNAL`, BuildKit `--mount` syntax, `.dockerignore`.
 
@@ -335,7 +335,7 @@ ImageStore.write_image() -> final OCI manifest + config
 
 Cache key: `hash(parent_digest + instruction_text + context_files_digest)`. Hit -> reuse existing blob. Miss -> execute and write new blob. Cache stored in `ImageStore`'s `build_cache/` subdirectory.
 
-### `DockerfileParser` (`crates/mbx/src/image/dockerfile.rs`)
+### `DockerfileParser` (`crates/minibox/src/image/dockerfile.rs`)
 
 ```rust
 pub fn parse(input: &str) -> Result<Vec<Instruction>, ParseError>;
@@ -427,11 +427,11 @@ let builder = Arc::new(MiniboxImageBuilder::new(
 
 ## Phased Delivery
 
-| Phase | Deliverable | Unblocks in maestro |
-|---|---|---|
-| **1** | Exec (nsenter + protocol + dockerbox) | `exec_command` |
-| **2** | Image Push (OCI dist spec + dockerbox) | `push_image` |
-| **3** | Container Commit (overlay snapshot + dockerbox) | `commit_container` |
+| Phase | Deliverable                                            | Unblocks in maestro                      |
+| ----- | ------------------------------------------------------ | ---------------------------------------- |
+| **1** | Exec (nsenter + protocol + dockerbox)                  | `exec_command`                           |
+| **2** | Image Push (OCI dist spec + dockerbox)                 | `push_image`                             |
+| **3** | Container Commit (overlay snapshot + dockerbox)        | `commit_container`                       |
 | **4** | Image Build (Dockerfile parser + executor + dockerbox) | `build_image` — final Docker dep removal |
 
 Each phase is independently shippable. Maestro can switch one operation at a time.
@@ -502,19 +502,19 @@ tracing::info!(tag = %tag, image_id = %id, "build: complete");
 
 ## Files Changed (summary)
 
-| File | Change |
-|---|---|
-| `minibox-core/src/domain.rs` | Add 4 new traits + new domain types |
-| `minibox-core/src/error.rs` | Add new DomainError variants |
-| `minibox-core/src/protocol.rs` | Add Exec/Push/Commit/Build request+response variants |
-| `mbx/src/protocol.rs` | Mirror protocol changes |
-| `mbx/src/adapters/exec.rs` | New — NativeExecRuntime |
-| `mbx/src/adapters/push.rs` | New — OciPushAdapter |
-| `mbx/src/adapters/commit.rs` | New — OverlayCommitAdapter |
-| `mbx/src/image/dockerfile.rs` | New — DockerfileParser + BuildPlanner |
-| `mbx/src/adapters/builder.rs` | New — MiniboxImageBuilder |
-| `daemonbox/src/handler.rs` | Add handle_exec, handle_push, handle_commit, handle_build |
-| `daemonbox/src/state.rs` | Add pid + image_ref + overlay_paths to ContainerRecord |
-| `miniboxd/src/main.rs` | Wire new adapters into native suite |
-| `dockerbox/src/api/` | Add exec, push, commit, build endpoints |
-| `dockerbox/src/domain/` | Extend ContainerRuntime trait |
+| File                              | Change                                                    |
+| --------------------------------- | --------------------------------------------------------- |
+| `minibox-core/src/domain.rs`      | Add 4 new traits + new domain types                       |
+| `minibox-core/src/error.rs`       | Add new DomainError variants                              |
+| `minibox-core/src/protocol.rs`    | Add Exec/Push/Commit/Build request+response variants      |
+| `minibox/src/protocol.rs`         | Mirror protocol changes                                   |
+| `minibox/src/adapters/exec.rs`    | New — NativeExecRuntime                                   |
+| `minibox/src/adapters/push.rs`    | New — OciPushAdapter                                      |
+| `minibox/src/adapters/commit.rs`  | New — OverlayCommitAdapter                                |
+| `minibox/src/image/dockerfile.rs` | New — DockerfileParser + BuildPlanner                     |
+| `minibox/src/adapters/builder.rs` | New — MiniboxImageBuilder                                 |
+| `daemonbox/src/handler.rs`        | Add handle_exec, handle_push, handle_commit, handle_build |
+| `daemonbox/src/state.rs`          | Add pid + image_ref + overlay_paths to ContainerRecord    |
+| `miniboxd/src/main.rs`            | Wire new adapters into native suite                       |
+| `dockerbox/src/api/`              | Add exec, push, commit, build endpoints                   |
+| `dockerbox/src/domain/`           | Extend ContainerRuntime trait                             |

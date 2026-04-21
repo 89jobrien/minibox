@@ -21,6 +21,7 @@ infrastructure.
 ## Existing State
 
 `minibox-agent` already bridges crux into minibox:
+
 - Depends on published `crux-agentic` (0.2.3) and `cruxai-core` (0.2.1)
 - `FallbackChainAdapter` implements `crux_agentic::LlmProvider` port,
   wrapping `minibox-llm::FallbackChain`
@@ -51,6 +52,7 @@ Extracted from `cruxx-core`. Contains only serializable types with
 minimal dependencies (`serde`, `chrono`, `ulid`).
 
 Exports:
+
 - `Crux<T>` — execution trace fused with result
 - `Step`, `StepKind`, `StepStatus` — recorded unit of work
 - `CruxId`, `TaskId` — identifiers
@@ -74,7 +76,7 @@ hub:
   registry with minibox-specific handlers, executes pipelines
 - **New:** `TraceStore` trait + `FileTraceStore` adapter
 - **New:** Minibox handler set for the crux `HandlerRegistry`
-  (`mbx::container::*`, `mbx::exec::*`, `mbx::env::*`)
+  (`minibox::container::*`, `minibox::exec::*`, `minibox::env::*`)
 - **New:** `MiniboxPlugin` binary — implements `cruxx-plugin` JSON-RPC
   protocol, exposing minibox container ops as crux pipeline handlers
 
@@ -87,7 +89,7 @@ communication), `minibox-secrets` (credential resolution).
 Maestro integration happens later, through the same `cruxx-plugin`
 protocol. A future `maestro-crux-plugin` binary exposes
 `maestro::session::*` handlers. Crux pipelines call either
-`mbx::container::*` or `maestro::session::*` depending on where they
+`minibox::container::*` or `maestro::session::*` depending on where they
 run — the pipeline YAML is the same, only the `plugins.toml` differs.
 
 ## Bidirectional Plugin Protocol
@@ -98,25 +100,26 @@ A plugin binary (`minibox-crux-plugin`) runs alongside `crux run` and
 implements the `cruxx-plugin` JSON-RPC protocol (newline-delimited JSON
 over stdin/stdout). It exposes minibox infrastructure:
 
-| Handler | Purpose |
-|---|---|
-| `mbx::container::run` | Create and start a container |
-| `mbx::container::stop` | Stop a container |
-| `mbx::container::rm` | Remove a container |
-| `mbx::container::exec` | Execute a command in running container |
-| `mbx::container::ps` | List containers |
-| `mbx::container::logs` | Stream container output |
-| `mbx::image::pull` | Pull an OCI image |
-| `mbx::env::inject` | Resolve secrets via minibox-secrets |
+| Handler                    | Purpose                                |
+| -------------------------- | -------------------------------------- |
+| `minibox::container::run`  | Create and start a container           |
+| `minibox::container::stop` | Stop a container                       |
+| `minibox::container::rm`   | Remove a container                     |
+| `minibox::container::exec` | Execute a command in running container |
+| `minibox::container::ps`   | List containers                        |
+| `minibox::container::logs` | Stream container output                |
+| `minibox::image::pull`     | Pull an OCI image                      |
+| `minibox::env::inject`     | Resolve secrets via minibox-secrets    |
 
 The plugin binary wraps `minibox-client::DaemonClient` calls — it
 communicates with `miniboxd` over the Unix socket, not by shelling out
 to the CLI.
 
 Plugin manifest (`~/.cruxx/plugins.toml` or `.cruxx/plugins.toml`):
+
 ```toml
 [[plugin]]
-name = "mbx"
+name = "minibox"
 path = "minibox-crux-plugin"
 ```
 
@@ -153,8 +156,8 @@ combinators to coordinate agents as subprocesses:
 
 ### Multi-container mode
 
-A pipeline step calls `mbx::container::run` (via the minibox plugin) to
-spin up a new container, then `mbx::container::exec` to dispatch work.
+A pipeline step calls `minibox::container::run` (via the minibox plugin) to
+spin up a new container, then `minibox::container::exec` to dispatch work.
 The pipeline blocks until the container exits and collects the result.
 
 `join_all()` parallelizes this naturally — each arm starts its own
@@ -166,7 +169,7 @@ trace to a mounted volume. The orchestrating pipeline reads child traces
 and attaches them as `children` on the parent `Crux<T>`.
 
 **Budget propagation:** The parent pipeline's `Budget` is split across
-delegations. Each `mbx::container::run` call passes a budget allocation
+delegations. Each `minibox::container::run` call passes a budget allocation
 as an environment variable, enforced by the `crux run` instance in the
 child container.
 
@@ -176,7 +179,7 @@ child container.
 
 `TraceStore` trait in `minibox-agent` with one initial backend:
 
-- **`FileTraceStore`** — writes to `~/.mbx/traces/<pipeline>-<timestamp>.json`.
+- **`FileTraceStore`** — writes to `~/.minibox/traces/<pipeline>-<timestamp>.json`.
 
 The trait is a hexagonal port. Future adapters (SQLite, remote API) can
 be added without changing the pipeline runner.
@@ -192,6 +195,7 @@ pub trait TraceStore: Send + Sync {
 ### Trace format
 
 `Crux<T>` serializes natively via serde. Each trace includes:
+
 - Full step tree (name, kind, status, confidence, duration,
   input/output hashes)
 - Child traces from delegations (including multi-container)
@@ -200,12 +204,12 @@ pub trait TraceStore: Send + Sync {
 
 ### Surfacing traces
 
-| Surface | Mechanism |
-|---|---|
-| CLI | `minibox traces list` — list recent traces |
-| CLI | `minibox traces show <id>` — render trace tree |
-| TUI | New `dashbox` tab — trace viewer with step drill-down |
-| File | `~/.mbx/traces/` directory for external tools |
+| Surface | Mechanism                                             |
+| ------- | ----------------------------------------------------- |
+| CLI     | `minibox traces list` — list recent traces            |
+| CLI     | `minibox traces show <id>` — render trace tree        |
+| TUI     | New `dashbox` tab — trace viewer with step drill-down |
+| File    | `~/.minibox/traces/` directory for external tools     |
 
 ## Pipeline-Driven Workflows
 
@@ -240,13 +244,13 @@ run `crux run` with minibox plugin + stream trace back.
 The same `.cruxx` pipeline runs in both minibox and maestro. The only
 difference is which plugin binary is available:
 
-| Environment | Plugin binary | Handlers available |
-|---|---|---|
-| minibox | `minibox-crux-plugin` | `mbx::container::*`, `mbx::env::*` |
-| maestro | `maestro-crux-plugin` (future) | `maestro::session::*`, `maestro::env::*` |
+| Environment | Plugin binary                  | Handlers available                         |
+| ----------- | ------------------------------ | ------------------------------------------ |
+| minibox     | `minibox-crux-plugin`          | `minibox::container::*`, `minibox::env::*` |
+| maestro     | `maestro-crux-plugin` (future) | `maestro::session::*`, `maestro::env::*`   |
 
 Pipeline authors use abstract handler names where possible. For
-infrastructure-specific operations, the handler namespace (`mbx::` vs
+infrastructure-specific operations, the handler namespace (`minibox::` vs
 `maestro::`) makes the dependency explicit.
 
 A future `cruxx-infra` trait in the crux workspace could abstract over
@@ -297,20 +301,20 @@ conventions. Snapshot tests must be added to `minibox-core`.
   jq, curl, git). Published alongside crux releases.
 - **~~VPS mode~~** — RESOLVED: Works out of the box.
   `MINIBOX_ADAPTER=native` manages real containers; multi-container
-  pipelines issue `mbx::container::run` through the plugin hitting the
+  pipelines issue `minibox::container::run` through the plugin hitting the
   same daemon socket. Validate with an e2e test.
 
 ## Summary
 
-| Layer | Component | Purpose |
-|---|---|---|
-| Types | `cruxx-types` (new, crux workspace) | Shared serializable types |
-| Bridge | `minibox-agent` (expanded) | Pipeline runner, trace store, handler wiring |
-| Plugin: M->C | `minibox-crux-plugin` (new binary) | Minibox ops exposed to crux pipelines |
-| Plugin: C->M | `handle_pipeline` (new handler) | Crux pipelines as minibox daemon requests |
-| Coordination | Single-container | Subprocess agents via crux combinators |
-| Coordination | Multi-container | Cross-container via `mbx::container::*` handlers |
-| Observability | `TraceStore` | File-based trace persistence |
-| Observability | CLI/TUI | Trace listing and viewing |
-| Workflows | `.cruxx` pipelines | Primary agent work definition format |
-| Portability | Plugin protocol | Same pipelines run in minibox and maestro |
+| Layer         | Component                           | Purpose                                              |
+| ------------- | ----------------------------------- | ---------------------------------------------------- |
+| Types         | `cruxx-types` (new, crux workspace) | Shared serializable types                            |
+| Bridge        | `minibox-agent` (expanded)          | Pipeline runner, trace store, handler wiring         |
+| Plugin: M->C  | `minibox-crux-plugin` (new binary)  | Minibox ops exposed to crux pipelines                |
+| Plugin: C->M  | `handle_pipeline` (new handler)     | Crux pipelines as minibox daemon requests            |
+| Coordination  | Single-container                    | Subprocess agents via crux combinators               |
+| Coordination  | Multi-container                     | Cross-container via `minibox::container::*` handlers |
+| Observability | `TraceStore`                        | File-based trace persistence                         |
+| Observability | CLI/TUI                             | Trace listing and viewing                            |
+| Workflows     | `.cruxx` pipelines                  | Primary agent work definition format                 |
+| Portability   | Plugin protocol                     | Same pipelines run in minibox and maestro            |

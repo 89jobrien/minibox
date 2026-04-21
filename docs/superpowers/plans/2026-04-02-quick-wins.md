@@ -1,11 +1,12 @@
 # Quick Wins Implementation Plan
+
 # Container Freeze, Events, Image GC + Leases, Bridge Networking
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add four independently committable features — container pause/resume, a pub/sub event broker, image garbage collection with lease protection, and bridge networking — all following minibox's existing hexagonal architecture patterns.
 
-**Architecture:** Each feature adds a new port (trait) in `minibox-core`, a concrete adapter in `mbx` or `daemonbox`, protocol variants in both `protocol.rs` files, handler arms in `daemonbox/src/handler.rs`, and CLI subcommands in `minibox-cli`. Composition roots (`miniboxd/src/main.rs`) wire adapters in. All Linux-only features are gated with `#[cfg(target_os = "linux")]`.
+**Architecture:** Each feature adds a new port (trait) in `minibox-core`, a concrete adapter in `minibox` or `daemonbox`, protocol variants in both `protocol.rs` files, handler arms in `daemonbox/src/handler.rs`, and CLI subcommands in `minibox-cli`. Composition roots (`miniboxd/src/main.rs`) wire adapters in. All Linux-only features are gated with `#[cfg(target_os = "linux")]`.
 
 **Tech Stack:** Rust 2024 edition, `async_trait`, `nix` crate, `tokio::sync::broadcast` for events, `ipnet` crate for CIDR math, `iptables` subprocess for NAT, existing `CgroupManager` for freeze.
 
@@ -15,29 +16,29 @@
 
 ## File Map
 
-| File | Action | Purpose |
-|---|---|---|
-| `crates/minibox-core/src/events.rs` | Create | `ContainerEvent` enum, `EventSink` + `EventSource` traits, `BroadcastEventBroker` |
-| `crates/minibox-core/src/image/lease.rs` | Create | `LeaseRecord`, `DiskLeaseService`, `ImageLeaseService` trait |
-| `crates/minibox-core/src/image/gc.rs` | Create | `ImageGc`, `ImageGarbageCollector` trait, `PruneReport` |
-| `crates/mbx/src/adapters/network/bridge.rs` | Create | `BridgeNetwork`, `IpAllocator` (Linux-only) |
-| `crates/minibox-core/src/lib.rs` | Modify | `pub mod events;` |
-| `crates/minibox-core/src/domain.rs` | Modify | `DynEventSink`, `DynEventSource` type aliases |
-| `crates/minibox-core/src/image/mod.rs` | Modify | `list_all_images()`, `delete_image()`, `image_size_bytes()` |
-| `crates/minibox-core/src/protocol.rs` | Modify | `PauseContainer`, `ResumeContainer`, `Prune`, `SubscribeEvents` requests; `ContainerPaused`, `ContainerResumed`, `Pruned`, `Event` responses |
-| `crates/mbx/src/protocol.rs` | Modify | Mirror all protocol changes |
-| `crates/mbx/src/container/cgroups.rs` | Modify | `pause()`, `resume()` methods on `CgroupManager` |
-| `crates/mbx/src/adapters/network/mod.rs` | Modify | `pub mod bridge;` + re-export (cfg linux) |
-| `crates/daemonbox/src/handler.rs` | Modify | `event_sink` field; `handle_pause`, `handle_resume`, `handle_prune`, `handle_subscribe_events`; emit events at existing lifecycle points |
-| `crates/daemonbox/src/server.rs` | Modify | Dispatch arms for 4 new requests; `Event` and `ContainerPaused`/`ContainerResumed` in `is_terminal_response` |
-| `crates/daemonbox/src/state.rs` | Modify | `ContainerState::Paused`; allow `Running→Paused` and `Paused→Running` transitions; `allocated_ips: HashMap<String, IpAddr>` field |
-| `crates/miniboxd/src/main.rs` | Modify | Wire `BroadcastEventBroker`; wire `BridgeNetwork` for bridge mode |
-| `crates/minibox-cli/src/commands/pause.rs` | Create | `minibox pause <id>` |
-| `crates/minibox-cli/src/commands/resume.rs` | Create | `minibox resume <id>` |
-| `crates/minibox-cli/src/commands/events.rs` | Create | `minibox events` (streaming JSON-lines) |
-| `crates/minibox-cli/src/commands/prune.rs` | Create | `minibox prune [--dry-run]` |
-| `crates/minibox-cli/src/commands/rmi.rs` | Create | `minibox rmi <image>` |
-| `crates/minibox-cli/src/main.rs` | Modify | Register 5 new subcommands |
+| File                                            | Action | Purpose                                                                                                                                      |
+| ----------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crates/minibox-core/src/events.rs`             | Create | `ContainerEvent` enum, `EventSink` + `EventSource` traits, `BroadcastEventBroker`                                                            |
+| `crates/minibox-core/src/image/lease.rs`        | Create | `LeaseRecord`, `DiskLeaseService`, `ImageLeaseService` trait                                                                                 |
+| `crates/minibox-core/src/image/gc.rs`           | Create | `ImageGc`, `ImageGarbageCollector` trait, `PruneReport`                                                                                      |
+| `crates/minibox/src/adapters/network/bridge.rs` | Create | `BridgeNetwork`, `IpAllocator` (Linux-only)                                                                                                  |
+| `crates/minibox-core/src/lib.rs`                | Modify | `pub mod events;`                                                                                                                            |
+| `crates/minibox-core/src/domain.rs`             | Modify | `DynEventSink`, `DynEventSource` type aliases                                                                                                |
+| `crates/minibox-core/src/image/mod.rs`          | Modify | `list_all_images()`, `delete_image()`, `image_size_bytes()`                                                                                  |
+| `crates/minibox-core/src/protocol.rs`           | Modify | `PauseContainer`, `ResumeContainer`, `Prune`, `SubscribeEvents` requests; `ContainerPaused`, `ContainerResumed`, `Pruned`, `Event` responses |
+| `crates/minibox/src/protocol.rs`                | Modify | Mirror all protocol changes                                                                                                                  |
+| `crates/minibox/src/container/cgroups.rs`       | Modify | `pause()`, `resume()` methods on `CgroupManager`                                                                                             |
+| `crates/minibox/src/adapters/network/mod.rs`    | Modify | `pub mod bridge;` + re-export (cfg linux)                                                                                                    |
+| `crates/daemonbox/src/handler.rs`               | Modify | `event_sink` field; `handle_pause`, `handle_resume`, `handle_prune`, `handle_subscribe_events`; emit events at existing lifecycle points     |
+| `crates/daemonbox/src/server.rs`                | Modify | Dispatch arms for 4 new requests; `Event` and `ContainerPaused`/`ContainerResumed` in `is_terminal_response`                                 |
+| `crates/daemonbox/src/state.rs`                 | Modify | `ContainerState::Paused`; allow `Running→Paused` and `Paused→Running` transitions; `allocated_ips: HashMap<String, IpAddr>` field            |
+| `crates/miniboxd/src/main.rs`                   | Modify | Wire `BroadcastEventBroker`; wire `BridgeNetwork` for bridge mode                                                                            |
+| `crates/minibox-cli/src/commands/pause.rs`      | Create | `minibox pause <id>`                                                                                                                         |
+| `crates/minibox-cli/src/commands/resume.rs`     | Create | `minibox resume <id>`                                                                                                                        |
+| `crates/minibox-cli/src/commands/events.rs`     | Create | `minibox events` (streaming JSON-lines)                                                                                                      |
+| `crates/minibox-cli/src/commands/prune.rs`      | Create | `minibox prune [--dry-run]`                                                                                                                  |
+| `crates/minibox-cli/src/commands/rmi.rs`        | Create | `minibox rmi <image>`                                                                                                                        |
+| `crates/minibox-cli/src/main.rs`                | Modify | Register 5 new subcommands                                                                                                                   |
 
 ---
 
@@ -46,11 +47,12 @@
 ### Task 1: Add `pause()` and `resume()` to `CgroupManager`
 
 **Files:**
-- Modify: `crates/mbx/src/container/cgroups.rs`
+
+- Modify: `crates/minibox/src/container/cgroups.rs`
 
 - [ ] **Step 1: Write failing compile test**
 
-Add at the bottom of `crates/mbx/src/container/cgroups.rs` inside the existing `#[cfg(test)] mod tests`:
+Add at the bottom of `crates/minibox/src/container/cgroups.rs` inside the existing `#[cfg(test)] mod tests`:
 
 ```rust
 #[cfg(target_os = "linux")]
@@ -68,14 +70,14 @@ fn test_cgroup_pause_resume_methods_exist() {
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-cargo check -p mbx 2>&1 | grep "no method named \`pause\`"
+cargo check -p minibox 2>&1 | grep "no method named \`pause\`"
 ```
 
 Expected: error about missing `pause` method.
 
 - [ ] **Step 3: Add `cgroup_path()` helper and `pause()`/`resume()` to `CgroupManager`**
 
-In `crates/mbx/src/container/cgroups.rs`, add after the `cleanup()` method:
+In `crates/minibox/src/container/cgroups.rs`, add after the `cleanup()` method:
 
 ```rust
 /// Returns the cgroup path for this container.
@@ -113,7 +115,7 @@ Also ensure `CgroupManager` has an `id: String` field (add it if not already pre
 - [ ] **Step 4: Run check**
 
 ```bash
-cargo check -p mbx
+cargo check -p minibox
 ```
 
 Expected: compiles cleanly.
@@ -121,7 +123,7 @@ Expected: compiles cleanly.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/container/cgroups.rs
+git add crates/minibox/src/container/cgroups.rs
 git commit -m "feat(cgroups): add pause() and resume() via cgroup.freeze"
 ```
 
@@ -130,6 +132,7 @@ git commit -m "feat(cgroups): add pause() and resume() via cgroup.freeze"
 ### Task 2: Add `ContainerState::Paused` and transition logic
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/state.rs`
 
 - [ ] **Step 1: Write failing test**
@@ -215,8 +218,9 @@ git commit -m "feat(state): add ContainerState::Paused and pause/resume transiti
 ### Task 3: Protocol variants for Pause and Resume
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 
 - [ ] **Step 1: Add to `DaemonRequest` in `crates/minibox-core/src/protocol.rs`**
 
@@ -254,9 +258,9 @@ ContainerResumed {
 },
 ```
 
-- [ ] **Step 3: Mirror changes in `crates/mbx/src/protocol.rs`**
+- [ ] **Step 3: Mirror changes in `crates/minibox/src/protocol.rs`**
 
-Apply the identical `PauseContainer`, `ResumeContainer`, `ContainerPaused`, `ContainerResumed` additions to `crates/mbx/src/protocol.rs`.
+Apply the identical `PauseContainer`, `ResumeContainer`, `ContainerPaused`, `ContainerResumed` additions to `crates/minibox/src/protocol.rs`.
 
 - [ ] **Step 4: Add to `is_terminal_response` in `crates/daemonbox/src/server.rs`**
 
@@ -270,7 +274,7 @@ Add `ContainerPaused` and `ContainerResumed` to the `matches!` block:
 - [ ] **Step 5: Check**
 
 ```bash
-cargo check -p minibox-core -p mbx -p daemonbox
+cargo check -p minibox-core -p minibox -p daemonbox
 ```
 
 Expected: compiles cleanly.
@@ -278,7 +282,7 @@ Expected: compiles cleanly.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs crates/daemonbox/src/server.rs
+git add crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs crates/daemonbox/src/server.rs
 git commit -m "feat(protocol): add PauseContainer/ResumeContainer request+response variants"
 ```
 
@@ -287,6 +291,7 @@ git commit -m "feat(protocol): add PauseContainer/ResumeContainer request+respon
 ### Task 4: `handle_pause` and `handle_resume` in handler
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 
 - [ ] **Step 1: Write failing test**
@@ -442,6 +447,7 @@ git commit -m "feat(handler): add handle_pause and handle_resume"
 ### Task 5: CLI subcommands — `minibox pause` and `minibox resume`
 
 **Files:**
+
 - Create: `crates/minibox-cli/src/commands/pause.rs`
 - Create: `crates/minibox-cli/src/commands/resume.rs`
 - Modify: `crates/minibox-cli/src/commands/mod.rs`
@@ -500,6 +506,7 @@ pub async fn run(id: String) -> Result<()> {
 - [ ] **Step 3: Register in `mod.rs` and `main.rs`**
 
 In `crates/minibox-cli/src/commands/mod.rs`, add:
+
 ```rust
 pub mod pause;
 pub mod resume;
@@ -530,6 +537,7 @@ git commit -m "feat(cli): add minibox pause and minibox resume subcommands"
 ### Task 6: `EventSink`, `EventSource`, and `BroadcastEventBroker`
 
 **Files:**
+
 - Create: `crates/minibox-core/src/events.rs`
 - Modify: `crates/minibox-core/src/lib.rs`
 - Modify: `crates/minibox-core/src/domain.rs`
@@ -669,6 +677,7 @@ mod tests {
 - [ ] **Step 2: Register module in `lib.rs`**
 
 In `crates/minibox-core/src/lib.rs`, add:
+
 ```rust
 pub mod events;
 ```
@@ -704,6 +713,7 @@ git commit -m "feat(events): add EventSink/EventSource ports and BroadcastEventB
 ### Task 7: Inject `event_sink` into `HandlerDependencies` and emit events
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/miniboxd/src/main.rs`
 
@@ -823,8 +833,9 @@ git commit -m "feat(handler): inject EventSink and emit lifecycle events"
 ### Task 8: Protocol + handler for `SubscribeEvents`, CLI `minibox events`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 - Create: `crates/minibox-cli/src/commands/events.rs`
@@ -853,7 +864,7 @@ Event {
 },
 ```
 
-Mirror both in `crates/mbx/src/protocol.rs`.
+Mirror both in `crates/minibox/src/protocol.rs`.
 
 - [ ] **Step 2: `Event` is non-terminal — update `is_terminal_response`**
 
@@ -929,7 +940,7 @@ Add `pub mod events;` to `commands/mod.rs`. Add `Events` (no args) to the CLI `C
 - [ ] **Step 7: Check**
 
 ```bash
-cargo check -p minibox-core -p mbx -p daemonbox -p minibox-cli
+cargo check -p minibox-core -p minibox -p daemonbox -p minibox-cli
 ```
 
 Expected: compiles cleanly.
@@ -937,7 +948,7 @@ Expected: compiles cleanly.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/minibox-core/src/protocol.rs crates/mbx/src/protocol.rs \
+git add crates/minibox-core/src/protocol.rs crates/minibox/src/protocol.rs \
         crates/daemonbox/src/handler.rs crates/daemonbox/src/server.rs \
         crates/minibox-cli/src/commands/events.rs \
         crates/minibox-cli/src/commands/mod.rs crates/minibox-cli/src/main.rs
@@ -951,6 +962,7 @@ git commit -m "feat(events): add SubscribeEvents protocol + minibox events CLI c
 ### Task 9: `list_all_images()`, `delete_image()`, `image_size_bytes()` on `ImageStore`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/image/mod.rs`
 
 - [ ] **Step 1: Write failing tests**
@@ -1068,6 +1080,7 @@ git commit -m "feat(image): add list_all_images, delete_image, image_size_bytes 
 ### Task 10: `DiskLeaseService` and `ImageLeaseService` trait
 
 **Files:**
+
 - Create: `crates/minibox-core/src/image/lease.rs`
 - Modify: `crates/minibox-core/src/image/mod.rs`
 
@@ -1080,6 +1093,7 @@ Create a temp file `crates/minibox-core/src/image/lease.rs` with just:
 ```
 
 Add to `crates/minibox-core/src/image/mod.rs`:
+
 ```rust
 pub mod lease;
 ```
@@ -1255,6 +1269,7 @@ impl ImageLeaseService for DiskLeaseService {
 ```
 
 Add `uuid` to `minibox-core/Cargo.toml`:
+
 ```toml
 uuid = { version = "1", features = ["v4"] }
 ```
@@ -1280,6 +1295,7 @@ git commit -m "feat(image): add DiskLeaseService and ImageLeaseService trait"
 ### Task 11: `ImageGc` and `prune` operation
 
 **Files:**
+
 - Create: `crates/minibox-core/src/image/gc.rs`
 - Modify: `crates/minibox-core/src/image/mod.rs`
 
@@ -1460,8 +1476,9 @@ git commit -m "feat(image): add ImageGc and ImageGarbageCollector trait"
 ### Task 12: Protocol + handler for `Prune` and `Rmi`; CLI commands
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/protocol.rs`
-- Modify: `crates/mbx/src/protocol.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 - Modify: `crates/daemonbox/src/handler.rs`
 - Modify: `crates/daemonbox/src/server.rs`
 - Create: `crates/minibox-cli/src/commands/prune.rs`
@@ -1472,6 +1489,7 @@ git commit -m "feat(image): add ImageGc and ImageGarbageCollector trait"
 - [ ] **Step 1: Add protocol variants**
 
 In `DaemonRequest`:
+
 ```rust
 /// Remove unused images (optionally dry-run).
 Prune {
@@ -1486,6 +1504,7 @@ RemoveImage {
 ```
 
 In `DaemonResponse` (add to `is_terminal_response`):
+
 ```rust
 /// Result of a prune operation.
 Pruned {
@@ -1495,7 +1514,7 @@ Pruned {
 },
 ```
 
-Mirror in `crates/mbx/src/protocol.rs`. Add `Pruned` to `is_terminal_response`.
+Mirror in `crates/minibox/src/protocol.rs`. Add `Pruned` to `is_terminal_response`.
 
 - [ ] **Step 2: Add `image_gc` field to `HandlerDependencies`**
 
@@ -1620,7 +1639,7 @@ Add `pub mod prune; pub mod rmi;` to `commands/mod.rs`. Add `Prune { #[arg(long)
 - [ ] **Step 8: Check**
 
 ```bash
-cargo check -p minibox-core -p mbx -p daemonbox -p minibox-cli
+cargo check -p minibox-core -p minibox -p daemonbox -p minibox-cli
 ```
 
 Expected: compiles cleanly.
@@ -1647,11 +1666,12 @@ git commit -m "feat(gc): add Prune/RemoveImage protocol, handler, and minibox pr
 ### Task 13: `IpAllocator` and IP management
 
 **Files:**
-- Create: `crates/mbx/src/adapters/network/bridge.rs` (initial skeleton)
+
+- Create: `crates/minibox/src/adapters/network/bridge.rs` (initial skeleton)
 
 - [ ] **Step 1: Write failing test**
 
-Create `crates/mbx/src/adapters/network/bridge.rs` with:
+Create `crates/minibox/src/adapters/network/bridge.rs` with:
 
 ```rust
 #[cfg(test)]
@@ -1687,7 +1707,7 @@ mod tests {
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
-cargo test -p mbx bridge 2>&1 | tail -5
+cargo test -p minibox bridge 2>&1 | tail -5
 ```
 
 Expected: compile error — `IpAllocator` not found.
@@ -1746,7 +1766,8 @@ impl IpAllocator {
 }
 ```
 
-Add `ipnet` to `crates/mbx/Cargo.toml`:
+Add `ipnet` to `crates/minibox/Cargo.toml`:
+
 ```toml
 ipnet = "2"
 ```
@@ -1754,7 +1775,7 @@ ipnet = "2"
 - [ ] **Step 4: Run tests**
 
 ```bash
-cargo test -p mbx bridge::tests 2>&1 | tail -10
+cargo test -p minibox bridge::tests 2>&1 | tail -10
 ```
 
 Expected: both allocator tests pass.
@@ -1762,7 +1783,7 @@ Expected: both allocator tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/network/bridge.rs crates/mbx/Cargo.toml
+git add crates/minibox/src/adapters/network/bridge.rs crates/minibox/Cargo.toml
 git commit -m "feat(network): add IpAllocator for bridge subnet management"
 ```
 
@@ -1771,8 +1792,9 @@ git commit -m "feat(network): add IpAllocator for bridge subnet management"
 ### Task 14: `BridgeNetwork` adapter — `setup()` and `attach()`
 
 **Files:**
-- Modify: `crates/mbx/src/adapters/network/bridge.rs`
-- Modify: `crates/mbx/src/adapters/network/mod.rs`
+
+- Modify: `crates/minibox/src/adapters/network/bridge.rs`
+- Modify: `crates/minibox/src/adapters/network/mod.rs`
 
 - [ ] **Step 1: Implement `BridgeNetwork` struct and `setup()`**
 
@@ -1996,7 +2018,7 @@ pub use bridge::BridgeNetwork;
 - [ ] **Step 3: Check**
 
 ```bash
-cargo check -p mbx
+cargo check -p minibox
 ```
 
 Expected: compiles cleanly on Linux. On macOS, `BridgeNetwork` is not compiled.
@@ -2004,7 +2026,7 @@ Expected: compiles cleanly on Linux. On macOS, `BridgeNetwork` is not compiled.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/network/bridge.rs crates/mbx/src/adapters/network/mod.rs
+git add crates/minibox/src/adapters/network/bridge.rs crates/minibox/src/adapters/network/mod.rs
 git commit -m "feat(network): add BridgeNetwork adapter with veth/NAT setup"
 ```
 
@@ -2013,7 +2035,8 @@ git commit -m "feat(network): add BridgeNetwork adapter with veth/NAT setup"
 ### Task 15: Write network context file in `setup()`, wire `BridgeNetwork` in `miniboxd`
 
 **Files:**
-- Modify: `crates/mbx/src/adapters/network/bridge.rs`
+
+- Modify: `crates/minibox/src/adapters/network/bridge.rs`
 - Modify: `crates/miniboxd/src/main.rs`
 - Modify: `crates/daemonbox/src/state.rs`
 
@@ -2056,11 +2079,11 @@ let network_provider: Arc<dyn NetworkProvider> = {
         .unwrap_or_else(|_| "none".to_string());
     match mode.as_str() {
         "bridge" => Arc::new(
-            mbx::adapters::network::bridge::BridgeNetwork::new()
+            minibox::adapters::network::bridge::BridgeNetwork::new()
                 .expect("BridgeNetwork init failed")
         ),
-        "host" => Arc::new(mbx::adapters::network::host::HostNetwork),
-        _ => Arc::new(mbx::adapters::network::none::NoopNetwork),
+        "host" => Arc::new(minibox::adapters::network::host::HostNetwork),
+        _ => Arc::new(minibox::adapters::network::none::NoopNetwork),
     }
 };
 ```
@@ -2070,7 +2093,7 @@ Pass `network_provider` through to `HandlerDependencies` (it likely already flow
 - [ ] **Step 4: Check**
 
 ```bash
-cargo check -p miniboxd -p mbx -p daemonbox
+cargo check -p miniboxd -p minibox -p daemonbox
 ```
 
 Expected: compiles cleanly.
@@ -2078,7 +2101,7 @@ Expected: compiles cleanly.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/network/bridge.rs \
+git add crates/minibox/src/adapters/network/bridge.rs \
         crates/daemonbox/src/state.rs \
         crates/miniboxd/src/main.rs
 git commit -m "feat(network): wire BridgeNetwork in miniboxd via MINIBOX_NETWORK_MODE=bridge"
@@ -2089,7 +2112,8 @@ git commit -m "feat(network): wire BridgeNetwork in miniboxd via MINIBOX_NETWORK
 ### Task 16: Port mapping via iptables DNAT
 
 **Files:**
-- Modify: `crates/mbx/src/adapters/network/bridge.rs`
+
+- Modify: `crates/minibox/src/adapters/network/bridge.rs`
 
 - [ ] **Step 1: Add `apply_port_mappings()` to `BridgeNetwork`**
 
@@ -2160,7 +2184,7 @@ if let Ok(bytes) = std::fs::read(&net_file) {
 - [ ] **Step 3: Check**
 
 ```bash
-cargo check -p mbx
+cargo check -p minibox
 ```
 
 Expected: compiles cleanly.
@@ -2168,7 +2192,7 @@ Expected: compiles cleanly.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/network/bridge.rs
+git add crates/minibox/src/adapters/network/bridge.rs
 git commit -m "feat(network): add port mapping via iptables DNAT in BridgeNetwork"
 ```
 
@@ -2179,7 +2203,8 @@ git commit -m "feat(network): add port mapping via iptables DNAT in BridgeNetwor
 ### Task 17: Pre-commit gate and integration test skeleton
 
 **Files:**
-- Modify: `crates/mbx/src/adapters/network/bridge.rs` (integration test)
+
+- Modify: `crates/minibox/src/adapters/network/bridge.rs` (integration test)
 
 - [ ] **Step 1: Run pre-commit gate**
 
@@ -2199,7 +2224,7 @@ Expected: all tests pass (new tests from phases 1-3 included).
 
 - [ ] **Step 3: Add Linux-gated integration test for bridge networking**
 
-In `crates/mbx/src/adapters/network/bridge.rs`, add:
+In `crates/minibox/src/adapters/network/bridge.rs`, add:
 
 ```rust
 #[cfg(all(test, target_os = "linux"))]
@@ -2245,24 +2270,24 @@ git push
 
 **Spec coverage check:**
 
-| Spec requirement | Task |
-|---|---|
-| `CgroupManager::pause()`/`resume()` | Task 1 |
-| `ContainerState::Paused` + transitions | Task 2 |
-| `PauseContainer`/`ResumeContainer` protocol | Task 3 |
-| `handle_pause`/`handle_resume` | Task 4 |
-| `minibox pause`/`resume` CLI | Task 5 |
-| `EventSink`/`EventSource`/`BroadcastEventBroker` | Task 6 |
-| `event_sink` in `HandlerDependencies`, emit at lifecycle | Task 7 |
-| `SubscribeEvents` protocol + `minibox events` CLI | Task 8 |
-| `list_all_images`, `delete_image`, `image_size_bytes` | Task 9 |
-| `DiskLeaseService` + `ImageLeaseService` trait | Task 10 |
-| `ImageGc` + `PruneReport` | Task 11 |
-| `Prune`/`RemoveImage` protocol + CLI | Task 12 |
-| `IpAllocator` | Task 13 |
+| Spec requirement                                          | Task    |
+| --------------------------------------------------------- | ------- |
+| `CgroupManager::pause()`/`resume()`                       | Task 1  |
+| `ContainerState::Paused` + transitions                    | Task 2  |
+| `PauseContainer`/`ResumeContainer` protocol               | Task 3  |
+| `handle_pause`/`handle_resume`                            | Task 4  |
+| `minibox pause`/`resume` CLI                              | Task 5  |
+| `EventSink`/`EventSource`/`BroadcastEventBroker`          | Task 6  |
+| `event_sink` in `HandlerDependencies`, emit at lifecycle  | Task 7  |
+| `SubscribeEvents` protocol + `minibox events` CLI         | Task 8  |
+| `list_all_images`, `delete_image`, `image_size_bytes`     | Task 9  |
+| `DiskLeaseService` + `ImageLeaseService` trait            | Task 10 |
+| `ImageGc` + `PruneReport`                                 | Task 11 |
+| `Prune`/`RemoveImage` protocol + CLI                      | Task 12 |
+| `IpAllocator`                                             | Task 13 |
 | `BridgeNetwork::setup()`/`attach()`/`cleanup()`/`stats()` | Task 14 |
-| Net context file, `allocated_ips`, miniboxd wiring | Task 15 |
-| Port mapping via iptables | Task 16 |
-| Pre-commit gate + integration test | Task 17 |
+| Net context file, `allocated_ips`, miniboxd wiring        | Task 15 |
+| Port mapping via iptables                                 | Task 16 |
+| Pre-commit gate + integration test                        | Task 17 |
 
 All spec requirements covered. No placeholders. Types are consistent across tasks (`ContainerEvent`, `LeaseRecord`, `PruneReport`, `BridgeNetwork`, `IpAllocator` used consistently throughout).

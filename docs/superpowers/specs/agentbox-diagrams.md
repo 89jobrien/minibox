@@ -17,7 +17,7 @@ Shows the four-layer module structure of the `agentbox/` Go module: Binary (CLI 
 │  ┌──────────────────────────────────────────────────────────────────┐ │
 │  │                        Binary Layer                              │ │
 │  │  ┌───────────────────────┐  ┌─────────────────────────────────┐  │ │
-│  │  │   cmd/agentbox/       │  │   cmd/mbx-commit-msg/           │  │ │
+│  │  │   cmd/agentbox/       │  │   cmd/minibox-commit-msg/           │  │ │
 │  │  │   • council           │  │   • standalone commit-msg tool  │  │ │
 │  │  │   • meta-agent        │  │                                 │  │ │
 │  │  └──────────┬────────────┘  └──────────────┬──────────────────┘  │ │
@@ -55,7 +55,7 @@ Shows the four-layer module structure of the `agentbox/` Go module: Binary (CLI 
 
 ## 2. Hexagonal Architecture — Ports and Adapters
 
-Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go interfaces (ports). Driving adapters on the left (`cmd/agentbox`, `cmd/mbx-commit-msg`, future HTTP/gRPC) invoke the core. Driven adapters on the right implement each port: `ClaudeSDKRunner` for agent execution, `AnthropicProvider` for LLM calls, `ChannelBroker` for pub/sub, `GitProvider` for branch context, and `DualWriter` for JSONL + Markdown output. Swapping any adapter requires no changes to the domain core.
+Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go interfaces (ports). Driving adapters on the left (`cmd/agentbox`, `cmd/minibox-commit-msg`, future HTTP/gRPC) invoke the core. Driven adapters on the right implement each port: `ClaudeSDKRunner` for agent execution, `AnthropicProvider` for LLM calls, `ChannelBroker` for pub/sub, `GitProvider` for branch context, and `DualWriter` for JSONL + Markdown output. Swapping any adapter requires no changes to the domain core.
 
 ```
                     ┌──────────────────────────────────┐
@@ -70,7 +70,7 @@ Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go
     │  Adapter  │         │  Adapter   │         │   Adapter    │
     │           │         │            │         │              │
     │ cmd/      │         │ cmd/       │         │  (future)    │
-    │ agentbox  │         │ mbx-       │         │  HTTP API    │
+    │ agentbox  │         │ minibox-       │         │  HTTP API    │
     │           │         │ commit-msg │         │  gRPC        │
     └────┬──────┘         └─────┬──────┘         └──────────────┘
          │                      │
@@ -100,7 +100,7 @@ Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go
     └────┬────┘ └───┬─────┘ └─┬───────┘ └───┬─────┘ └────┬─────┘
          │          │         │             │            │
          ▼          ▼         ▼             ▼            ▼
-      claude      Anthropic  Go          git CLI     ~/.mbx/
+      claude      Anthropic  Go          git CLI     ~/.minibox/
       CLI         Messages   channels                ├─ agent-runs.jsonl
       subprocess  API                                └─ ai-logs/*.md
 ```
@@ -137,7 +137,7 @@ End-to-end sequence for `agentbox council`. After parsing flags, three adapters 
                               └─────────┬────────────┘
                                         │
                            ┌────────────▼────────────┐
-                           │   WriteRun("running")   │──→ ~/.mbx/agent-runs.jsonl
+                           │   WriteRun("running")   │──→ ~/.minibox/agent-runs.jsonl
                            └────────────┬────────────┘
                                         │
                                         ▼
@@ -191,8 +191,8 @@ End-to-end sequence for `agentbox council`. After parsing flags, three adapters 
               └──────────────────────┬───────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(council)   │──→ ~/.mbx/ai-logs/{sha}-council-core.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(council)   │──→ ~/.minibox/ai-logs/{sha}-council-core.md
                         └─────────────────────────┘
 ```
 
@@ -287,8 +287,8 @@ Three-phase pipeline for `agentbox meta-agent`. Phase 1 (Design): a designer SDK
   └──────────────────────────────────┬───────────────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(meta)      │──→ ~/.mbx/ai-logs/{sha}-meta-agent.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(meta)      │──→ ~/.minibox/ai-logs/{sha}-meta-agent.md
                         └─────────────────────────┘
 ```
 
@@ -407,7 +407,7 @@ Illustrates how `ClaudeSDKRunner` translates an `AgentConfig` into a running Cla
 
 ## 7. Output Pipeline
 
-Shows the dual-write fan-out at the end of every orchestrator run. `WriteRun` appends a JSONL record (start + completion with `duration_s` and full `output`) to the append-only `~/.mbx/agent-runs.jsonl` file consumed by `dashboard.py` and standup scripts. `WriteReport` writes a human-readable Markdown file per run to `~/.mbx/ai-logs/` named by commit SHA and script type. Both paths are wired through `DualWriter`, which implements `ResultWriter` and delegates to `JSONLWriter` and `ReportWriter` respectively.
+Shows the dual-write fan-out at the end of every orchestrator run. `WriteRun` appends a JSONL record (start + completion with `duration_s` and full `output`) to the append-only `~/.minibox/agent-runs.jsonl` file consumed by `dashboard.py` and standup scripts. `WriteReport` writes a human-readable Markdown file per run to `~/.minibox/ai-logs/` named by commit SHA and script type. Both paths are wired through `DualWriter`, which implements `ResultWriter` and delegates to `JSONLWriter` and `ReportWriter` respectively.
 
 ```
   Orchestrator completes
@@ -421,7 +421,7 @@ Shows the dual-write fan-out at the end of every orchestrator run. `WriteRun` ap
              │                                    │
              ▼                                    ▼
   ┌──────────────────────────┐      ┌──────────────────────────────────┐
-  │ ~/.mbx/agent-runs.jsonl  │      │ ~/.mbx/ai-logs/                  │
+  │ ~/.minibox/agent-runs.jsonl  │      │ ~/.minibox/ai-logs/                  │
   │                          │      │                                  │
   │ Append-only JSONL:       │      │ One file per run:                │
   │                          │      │ {sha}-council-core.md            │
@@ -555,10 +555,10 @@ Documents which tools each orchestrator grants to SDK agents and how tool safety
 
 ## 10. Commit Message Flow
 
-End-to-end sequence for `mbx-commit-msg`. The tool first verifies there is staged content (`git diff --cached`), collecting diff, stat, branch name, recent log, and working-tree status. If the diff exceeds 64 KB, only the stat summary is sent to reduce token cost. `CommitMsg.Generate()` calls the SDK with a conventional-commit prompt (type(scope): description, ≤72 chars, imperative mood). The generated message is printed to stdout; with `-c -y`, a `Co-Authored-By` trailer is appended and `git commit` runs automatically.
+End-to-end sequence for `minibox-commit-msg`. The tool first verifies there is staged content (`git diff --cached`), collecting diff, stat, branch name, recent log, and working-tree status. If the diff exceeds 64 KB, only the stat summary is sent to reduce token cost. `CommitMsg.Generate()` calls the SDK with a conventional-commit prompt (type(scope): description, ≤72 chars, imperative mood). The generated message is printed to stdout; with `-c -y`, a `Co-Authored-By` trailer is appended and `git commit` runs automatically.
 
 ```
-  User: mbx-commit-msg -a -c -y
+  User: minibox-commit-msg -a -c -y
          │
          ├─ -a: git add -A
          ├─ -c: commit after generating
@@ -699,13 +699,13 @@ Maps all import relationships across the module. Two external dependencies: `ant
        ├──→ internal/orchestrator/ (context, fmt, strings, sync, encoding/json)
        ├──→ internal/tools/        (context, fmt)
        ├──→ cmd/agentbox/          (flag, fmt, os, time)
-       └──→ cmd/mbx-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
+       └──→ cmd/minibox-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
 
 
   Internal Dependency Graph:
 
   cmd/agentbox ──────┐
-  cmd/mbx-commit-msg ┤
+  cmd/minibox-commit-msg ┤
                      │
                      ├──→ internal/orchestrator
                      │    ├──→ internal/domain
@@ -736,7 +736,7 @@ Maps all import relationships across the module. Two external dependencies: `ant
 
 ## 13. Tier A → B → C Evolution
 
-Roadmap for agentbox's three deployment tiers. Tier A (current): a single Go binary runs all agents in-process using Go channels; output goes to `~/.mbx/` files. Tier B (future): `agentboxd` becomes a standalone daemon communicating with `miniboxd` over NATS; individual council/review/commit agents are separate processes dispatched by the daemon. Tier C (future): a capability registry stores agent manifests (inputs, outputs, tool allowlists) that can be auto-discovered via OCI labels or a NATS service registry, enabling dynamic agent composition without code changes.
+Roadmap for agentbox's three deployment tiers. Tier A (current): a single Go binary runs all agents in-process using Go channels; output goes to `~/.minibox/` files. Tier B (future): `agentboxd` becomes a standalone daemon communicating with `miniboxd` over NATS; individual council/review/commit agents are separate processes dispatched by the daemon. Tier C (future): a capability registry stores agent manifests (inputs, outputs, tool allowlists) that can be auto-discovered via OCI labels or a NATS service registry, enabling dynamic agent composition without code changes.
 
 ```
   ┌────────────────────────────────────────────────────────────────────┐
@@ -745,7 +745,7 @@ Roadmap for agentbox's three deployment tiers. Tier A (current): a single Go bin
   │  ┌─────────────┐                                                   │
   │  │ Container   │  agentbox binary + claude CLI                     │
   │  │             │  Go channels pub/sub                              │
-  │  │  agentbox   │  ~/.mbx/ output files                             │
+  │  │  agentbox   │  ~/.minibox/ output files                             │
   │  │  council    │                                                   │
   │  │             │  All in one process                               │
   │  └─────────────┘                                                   │

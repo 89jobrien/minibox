@@ -1,0 +1,29 @@
+[package]
+name = "miniboxctl"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+rust-version = "1.85"
+
+[dependencies]
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+chrono = { workspace = true }
+futures = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+tokio-stream = { workspace = true }
+
+# Internal: protocol types (DaemonRequest, DaemonResponse, etc.)
+minibox-core = { workspace = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+axum = { workspace = true, features = ["macros"] }

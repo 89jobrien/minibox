@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-23
 **Status:** Draft
-**Crate:** mbx (domain + adapters), daemonbox (handler wiring)
+**Crate:** minibox (domain + adapters), daemonbox (handler wiring)
 
 ## Problem
 
@@ -63,7 +63,7 @@ Container joins a Headscale-coordinated tailnet:
 - Daemon creates ephemeral pre-auth key via Headscale REST API
 - Container runs `tailscaled` in userspace networking mode (no TUN required)
 - Container registers with `tailscale up --login-server=<url> --authkey=<key>`
-- Container gets a stable 100.x.y.z IP and MagicDNS hostname (`mbx-<id>.<tailnet>`)
+- Container gets a stable 100.x.y.z IP and MagicDNS hostname (`minibox-<id>.<tailnet>`)
 - On container stop, daemon calls `DELETE /api/v1/node/<id>` to deregister
 - Ephemeral nodes auto-expire after 30min inactivity as fallback
 
@@ -137,7 +137,7 @@ The existing trait methods (`setup`, `attach`, `cleanup`, `stats`) are sufficien
 ## Adapter Architecture
 
 ```
-mbx/src/adapters/
+minibox/src/adapters/
 ├── network/
 │   ├── mod.rs          # NetworkMode dispatch
 │   ├── none.rs         # NoopNetwork (current behavior)
@@ -211,12 +211,12 @@ impl NetworkProvider for TailnetNetwork {
         // 1. Start tailscaled inside the container's network namespace
         //    (userspace mode: --tun=userspace-networking)
         // 2. Run: tailscale up --login-server=<url> --authkey=<key>
-        //         --hostname=mbx-<container_id>
+        //         --hostname=minibox-<container_id>
         // 3. Wait for tailscale to report "connected"
     }
 
     async fn cleanup(&self, container_id: &str) -> Result<()> {
-        // 1. Find node by hostname mbx-<container_id>
+        // 1. Find node by hostname minibox-<container_id>
         // 2. DELETE /api/v1/node/{id}
         // 3. Ephemeral fallback: node auto-expires after 30min
     }
@@ -324,7 +324,7 @@ tailscaled --tun=userspace-networking \
 tailscale --socket=/tmp/tailscaled.sock up \
           --login-server=https://<headscale> \
           --authkey=<ephemeral-preauth-key> \
-          --hostname=mbx-<container-id>
+          --hostname=minibox-<container-id>
 ```
 
 **Pros:** Each container is a distinct tailnet node with its own IP, ACLs, and DNS name. Clean deregistration on stop.
@@ -358,7 +358,7 @@ Embed Tailscale directly into the minibox daemon process via `libtailscale`, the
 use libtailscale::Tailscale;
 
 let ts = Tailscale::new();
-ts.set_hostname(&format!("mbx-{}", container_id));
+ts.set_hostname(&format!("minibox-{}", container_id));
 ts.set_auth_key(&preauth_key);           // ephemeral key from Headscale API
 ts.set_control_url(&headscale_url);       // point to Headscale, not Tailscale SaaS
 ts.set_dir(&format!("/tmp/ts-{}", container_id)); // per-container state
@@ -478,7 +478,7 @@ Push via `PUT /api/v1/policy` on daemon startup. Container tags control access.
 - Implement `EmbeddedTailnetNetwork` adapter: per-container `Tailscale` instance in daemon
 - SOCKS5 proxy per container (Option 1) or netns wiring (Option 3)
 - Replace host-side proxy with embedded instances
-- Per-container MagicDNS hostname (`mbx-<id>.<tailnet>`)
+- Per-container MagicDNS hostname (`minibox-<id>.<tailnet>`)
 - ACL template management via `PUT /api/v1/policy`
 - Lifecycle: `ts.start()` on create, `ts.close()` on stop, Headscale deregistration as fallback
 - Bench: measure connection setup latency, Go GC impact on daemon

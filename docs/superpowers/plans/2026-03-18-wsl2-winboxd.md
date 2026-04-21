@@ -544,7 +544,7 @@ Expected: `Finished` — binary at `target\debug\winboxd.exe`. Fix any compilati
 
 ```bash
 # Run on macOS or Linux (omit winboxd — it has compile_error! on non-Windows)
-cargo check -p winbox -p mbx
+cargo check -p winbox -p minibox
 ```
 
 Expected: no errors.

@@ -25,8 +25,8 @@ mount -t tmpfs tmpfs /tmp 2>/dev/null || true
 
 # Mount virtiofs shares
 mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
-mount -t virtiofs mbx-images /var/lib/minibox/images 2>/dev/null || true
-mount -t virtiofs mbx-containers /var/lib/minibox/containers 2>/dev/null || true
+mount -t virtiofs minibox-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs minibox-containers /var/lib/minibox/containers 2>/dev/null || true
 
 # Loopback interface
 ip link set lo up 2>/dev/null || true
@@ -97,12 +97,12 @@ mod tests {
         let content = generate_rc_local();
         assert!(content.contains("virtiofs"), "must use virtiofs");
         assert!(
-            content.contains("mbx-images"),
-            "must mount mbx-images share"
+            content.contains("minibox-images"),
+            "must mount minibox-images share"
         );
         assert!(
-            content.contains("mbx-containers"),
-            "must mount mbx-containers share"
+            content.contains("minibox-containers"),
+            "must mount minibox-containers share"
         );
     }
 

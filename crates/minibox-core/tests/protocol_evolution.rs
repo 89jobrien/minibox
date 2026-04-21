@@ -58,7 +58,7 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         },
         DaemonResponse::ContainerStopped { exit_code: 0 },
         DaemonResponse::ImageLoaded {
-            image: "mbx-tester:latest".to_string(),
+            image: "minibox-tester:latest".to_string(),
         },
         DaemonResponse::BuildComplete {
             image_id: "sha256:deadbeef".to_string(),

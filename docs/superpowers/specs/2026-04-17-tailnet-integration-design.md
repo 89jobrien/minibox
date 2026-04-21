@@ -39,6 +39,7 @@ miniboxd (main.rs)
 ### Dependency chain
 
 `tailbox/Cargo.toml`:
+
 ```toml
 [dependencies]
 tailscale = "0.2"
@@ -52,6 +53,7 @@ serde_json = "1"
 ```
 
 `miniboxd/Cargo.toml`:
+
 ```toml
 [features]
 tailnet = ["dep:tailbox"]
@@ -61,6 +63,7 @@ tailbox = { path = "../tailbox", optional = true }
 ```
 
 Adapter selection in `miniboxd/src/main.rs`:
+
 ```rust
 #[cfg(feature = "tailnet")]
 "tailnet" => Arc::new(tailbox::TailnetNetwork::new(tailnet_config).await?),
@@ -96,13 +99,13 @@ pub struct TailnetConfig {
    - Lazily start daemon `Device` if not already running (stored in `gateway_device`).
    - Allocate an internal routing entry (container_id → tailnet addr mapping).
    - Return JSON context: `{ "mode": "gateway", "tailnet_ip": "<daemon tailnet ipv4>",
-     "container_id": "..." }`.
+"container_id": "..." }`.
 4. **Per-container mode** (`config.tailnet_mode == TailnetMode::PerContainer`):
    - Call `tailscale::Device::new(&tailscale::Config { key_state: load_key_file(...), ..Default::default() }, Some(auth_key)).await?`.
-   - Key file path: `~/.mbx/tailnet/{container_id}.json` (created per-container).
+   - Key file path: `~/.minibox/tailnet/{container_id}.json` (created per-container).
    - Store device in `DeviceStore`.
    - Return JSON context: `{ "mode": "per_container", "tailnet_ip": "<device ipv4>",
-     "container_id": "..." }`.
+"container_id": "..." }`.
 5. Write context to `/run/minibox/net/{container_id}.json` (same path as `BridgeNetwork`).
 
 ### `attach(container_id, pid) -> Result<()>`
@@ -112,7 +115,7 @@ No-op. Returns `Ok(())`. tailscale-rs devices are not pid-namespace-based.
 ### `cleanup(container_id) -> Result<()>`
 
 - Per-container: remove device from `DeviceStore` (drop triggers teardown). Delete key file
-  at `~/.mbx/tailnet/{container_id}.json`.
+  at `~/.minibox/tailnet/{container_id}.json`.
 - Gateway: no-op — daemon device persists across container lifecycle.
 - Remove `/run/minibox/net/{container_id}.json` (best-effort, warn on error).
 
@@ -184,17 +187,20 @@ Called at the top of `TailnetNetwork::setup()`.
 ## Feature Flag Build
 
 Default build (no tailnet):
+
 ```bash
 cargo build --release
 ```
 
 With tailnet support:
+
 ```bash
 cargo build --release --features tailnet
 ```
 
 CI: `tailnet` feature is NOT included in `cargo xtask pre-commit` or `cargo xtask test-unit` by
 default. A separate CI job or manual test covers it:
+
 ```bash
 cargo build -p tailbox
 cargo clippy -p tailbox -- -D warnings
@@ -203,12 +209,14 @@ cargo clippy -p tailbox -- -D warnings
 ## Testing Strategy
 
 **Unit tests** (no tailscale auth required, no network):
+
 - `TailnetNetwork::attach()` is a no-op — trivially passes.
 - `resolve_auth_key()` priority chain — tested with mock env vars and a mock secrets provider.
 - `setup()` in gateway mode with a mock `Device` (behind a test trait shim, or skipped/ignored).
 - Context JSON written to tempdir — verified structure.
 
 **Integration tests** (require auth key, marked `#[ignore]`):
+
 ```rust
 #[cfg(all(test, feature = "tailnet"))]
 #[tokio::test]

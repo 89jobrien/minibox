@@ -4,9 +4,9 @@
 
 **Goal:** Add 9 property-based tests covering daemonbox state invariants, handler input safety, and cgroup config bounds.
 
-**Architecture:** Two new/extended test files: `crates/daemonbox/tests/proptest_suite.rs` (new, 7 tests) and `crates/mbx/tests/proptest_suite.rs` (extended, 2 Linux-gated tests). DaemonState tests use `tokio::runtime::Runtime::block_on` to drive async calls synchronously inside proptest closures. Handler safety tests wire `HandlerDependencies` with `adapters::mocks`. Cgroup tests require a real cgroup2 mount and run only under `just test-integration` on the VPS.
+**Architecture:** Two new/extended test files: `crates/daemonbox/tests/proptest_suite.rs` (new, 7 tests) and `crates/minibox/tests/proptest_suite.rs` (extended, 2 Linux-gated tests). DaemonState tests use `tokio::runtime::Runtime::block_on` to drive async calls synchronously inside proptest closures. Handler safety tests wire `HandlerDependencies` with `adapters::mocks`. Cgroup tests require a real cgroup2 mount and run only under `just test-integration` on the VPS.
 
-**Tech Stack:** Rust, proptest 1.x, tokio (workspace, `features = ["full"]`), tempfile (workspace), mbx mock adapters.
+**Tech Stack:** Rust, proptest 1.x, tokio (workspace, `features = ["full"]`), tempfile (workspace), minibox mock adapters.
 
 ---
 
@@ -16,7 +16,7 @@
 | ------------------------------------------ | ------ | ----------------------------------------------- |
 | `crates/daemonbox/Cargo.toml`              | Modify | Add `proptest = "1"` dev-dep                    |
 | `crates/daemonbox/tests/proptest_suite.rs` | Create | DaemonState invariants (4) + handler safety (3) |
-| `crates/mbx/tests/proptest_suite.rs`       | Modify | Add cgroup bounds tests (2, Linux-gated)        |
+| `crates/minibox/tests/proptest_suite.rs`   | Modify | Add cgroup bounds tests (2, Linux-gated)        |
 
 ---
 
@@ -52,7 +52,7 @@ use daemonbox::{
     handler::{handle_list, handle_remove, handle_stop, HandlerDependencies},
     state::{ContainerRecord, DaemonState},
 };
-use mbx::{
+use minibox::{
     adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime},
     image::ImageStore,
     protocol::{ContainerInfo, DaemonResponse},
@@ -312,20 +312,20 @@ git commit -m "test(proptest): handler input safety — stop/remove unknown IDs 
 
 **Files:**
 
-- Modify: `crates/mbx/tests/proptest_suite.rs`
+- Modify: `crates/minibox/tests/proptest_suite.rs`
 
 These tests require a real cgroup2 mount and root. They are gated `#[cfg(target_os = "linux")]` and skipped on macOS. Run with `just test-integration` on the VPS.
 
 - [ ] **Step 1: Add the cgroup bound tests to the existing proptest suite**
 
-Open `crates/mbx/tests/proptest_suite.rs` and append at the end:
+Open `crates/minibox/tests/proptest_suite.rs` and append at the end:
 
 ```rust
 // ── CgroupConfig boundary validation (Linux + root only) ─────────────────────
 
 #[cfg(target_os = "linux")]
 mod cgroup_props {
-    use mbx::container::cgroups::{CgroupConfig, CgroupManager};
+    use minibox::container::cgroups::{CgroupConfig, CgroupManager};
     use proptest::prelude::*;
 
     // NOTE: On unprivileged Linux (no root / no cgroup2 mount), `create_dir_all` will
@@ -375,12 +375,12 @@ mod cgroup_props {
 cargo xtask test-unit
 ```
 
-Expected: existing mbx proptest tests still pass; `cgroup_props` module is compiled away on macOS — no failures.
+Expected: existing minibox proptest tests still pass; `cgroup_props` module is compiled away on macOS — no failures.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/mbx/tests/proptest_suite.rs
+git add crates/minibox/tests/proptest_suite.rs
 git commit -m "test(proptest): cgroup config bounds — memory < 4096 and cpu_weight out of range always rejected (Linux-gated)"
 ```
 

@@ -451,7 +451,7 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mbx::adapters::mocks::{
+    use minibox::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
     use minibox_core::adapters::HostnameRegistryRouter;
@@ -617,7 +617,7 @@ mod tests {
             (DaemonResponse::ContainerStopped { exit_code: 0 }, true),
             (
                 DaemonResponse::ImageLoaded {
-                    image: "mbx-tester:latest".to_string(),
+                    image: "minibox-tester:latest".to_string(),
                 },
                 true,
             ),
@@ -736,7 +736,7 @@ mod tests {
         // ContainerOutput is the only non-terminal response
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerOutput {
-                stream: mbx::protocol::OutputStreamKind::Stdout,
+                stream: minibox::protocol::OutputStreamKind::Stdout,
                 data: "dGVzdA==".to_string(),
             }),
             "ContainerOutput must be non-terminal"
@@ -771,7 +771,7 @@ mod tests {
         );
         assert!(
             is_terminal_response(&DaemonResponse::ImageLoaded {
-                image: "mbx-tester:latest".to_string()
+                image: "minibox-tester:latest".to_string()
             }),
             "ImageLoaded must be terminal"
         );

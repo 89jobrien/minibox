@@ -116,18 +116,18 @@ use daemonbox::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistr
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
-use mbx::adapters::network::BridgeNetwork;
+use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
-use mbx::adapters::{
+use minibox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
     OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use mbx::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use minibox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use mbx::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
+use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
-use mbx::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+use minibox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 #[cfg(target_os = "linux")]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(target_os = "linux")]
@@ -201,7 +201,7 @@ impl AdapterSuite {
 ///
 /// Resolution order:
 /// 1. `MINIBOX_DATA_DIR` env var (explicit override)
-/// 2. `~/.mbx/cache/` if uid is non-root
+/// 2. `~/.minibox/cache/` if uid is non-root
 /// 3. `/var/lib/minibox/` if uid is root
 #[cfg(target_os = "linux")]
 fn resolve_data_dir_for_uid(uid: u32) -> std::path::PathBuf {
@@ -212,7 +212,7 @@ fn resolve_data_dir_for_uid(uid: u32) -> std::path::PathBuf {
         std::path::PathBuf::from("/var/lib/minibox")
     } else {
         std::env::var("HOME")
-            .map(|h| std::path::PathBuf::from(h).join(".mbx/cache"))
+            .map(|h| std::path::PathBuf::from(h).join(".minibox/cache"))
             .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/minibox"))
     }
 }
@@ -242,15 +242,15 @@ fn build_native_handler_dependencies(
             ) as minibox_core::domain::DynImageRegistry,
         )],
     ));
-    let commit_adapter = mbx::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as mbx::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
     );
-    let image_builder = mbx::adapters::builder::minibox_image_builder(
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.to_path_buf(),
     );
-    let image_pusher = mbx::adapters::push::oci_push_adapter(
+    let image_pusher = minibox::adapters::push::oci_push_adapter(
         RegistryClient::new().context("creating OCI push registry client")?,
         Arc::clone(&state.image_store),
     );
@@ -265,8 +265,8 @@ fn build_native_handler_dependencies(
         run_containers_base: run_containers_dir,
         metrics: metrics_recorder,
         image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-        exec_runtime: Some(mbx::adapters::exec::native_exec_runtime(
-            Arc::clone(&state) as mbx::daemonbox_state::StateHandle
+        exec_runtime: Some(minibox::adapters::exec::native_exec_runtime(
+            Arc::clone(&state) as minibox::daemonbox_state::StateHandle
         )),
         event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
         event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
@@ -446,7 +446,7 @@ async fn main() -> Result<()> {
 
     // ── Directories ──────────────────────────────────────────────────────
     // Explicit 0700 keeps extracted layer/rootfs contents private on shared
-    // hosts (matters for the per-user ~/.mbx/cache path; harmless for the
+    // hosts (matters for the per-user ~/.minibox/cache path; harmless for the
     // root-owned /var/lib/minibox default).
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -511,7 +511,7 @@ async fn main() -> Result<()> {
         let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
         match mode.as_str() {
             "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
-            "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+            "host" => Arc::new(minibox::adapters::network::HostNetwork::new()),
             #[cfg(feature = "tailnet")]
             "tailnet" => {
                 let tailnet_cfg = TailnetConfig {
@@ -753,7 +753,7 @@ mod tests {
         unsafe {
             std::env::remove_var("HOME");
         }
-        assert_eq!(dir, PathBuf::from("/home/testuser/.mbx/cache"));
+        assert_eq!(dir, PathBuf::from("/home/testuser/.minibox/cache"));
     }
 
     #[test]

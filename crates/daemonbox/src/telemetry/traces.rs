@@ -40,7 +40,7 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
             }
             Err(e) => {
                 // Fall back to fmt-only if OTEL init fails.
-                eprintln!("[mbx] OTEL trace init failed, falling back to fmt-only: {e}");
+                eprintln!("[minibox] OTEL trace init failed, falling back to fmt-only: {e}");
                 None
             }
         }
@@ -98,7 +98,7 @@ impl Drop for OtelGuard {
         if let Some(provider) = self.provider.take()
             && let Err(e) = provider.shutdown()
         {
-            eprintln!("[mbx] OTEL tracer shutdown error: {e}");
+            eprintln!("[minibox] OTEL tracer shutdown error: {e}");
         }
     }
 }

@@ -320,17 +320,17 @@ delegates to a `SnapshotterProvider` for mount parameter construction.
 
 ## Crate Placement
 
-| Component | Location |
-|---|---|
-| `BlobDigest`, `TreeDigest`, `TreeEntry`, `EntryKind`, `EntryContent`, `SnapshotMount` | `minibox-core/src/domain.rs` |
-| `ContentStore`, `SnapshotterProvider`, `LayerImporter` traits | `minibox-core/src/domain.rs` |
-| `FsContentStore` | `mbx/src/cas/store.rs` |
-| `OciLayerImporter` | `mbx/src/cas/importer.rs` |
-| `OverlayCasSnapshotter` | `mbx/src/adapters/cas.rs` |
-| `ColimaSnapshotter` | `macbox/src/adapters/cas.rs` |
-| Wiring / adapter selection | `miniboxd/src/main.rs` |
+| Component                                                                             | Location                      |
+| ------------------------------------------------------------------------------------- | ----------------------------- |
+| `BlobDigest`, `TreeDigest`, `TreeEntry`, `EntryKind`, `EntryContent`, `SnapshotMount` | `minibox-core/src/domain.rs`  |
+| `ContentStore`, `SnapshotterProvider`, `LayerImporter` traits                         | `minibox-core/src/domain.rs`  |
+| `FsContentStore`                                                                      | `minibox/src/cas/store.rs`    |
+| `OciLayerImporter`                                                                    | `minibox/src/cas/importer.rs` |
+| `OverlayCasSnapshotter`                                                               | `minibox/src/adapters/cas.rs` |
+| `ColimaSnapshotter`                                                                   | `macbox/src/adapters/cas.rs`  |
+| Wiring / adapter selection                                                            | `miniboxd/src/main.rs`        |
 
-The `mbx/src/cas/` module is Linux-only (`#[cfg(target_os = "linux")]`). `minibox-core` must
+The `minibox/src/cas/` module is Linux-only (`#[cfg(target_os = "linux")]`). `minibox-core` must
 remain platform-neutral.
 
 ---

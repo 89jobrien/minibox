@@ -4,7 +4,7 @@
 
 **Goal:** Build an xtask pipeline that downloads an Alpine aarch64 kernel + initrd + minirootfs, cross-compiles minibox-agent, and assembles a ready-to-boot VM image directory that `macbox` can use to launch a Linux VM via Apple's Virtualization.framework.
 
-**Architecture:** The `build-vm-image` xtask command downloads Alpine Linux aarch64 assets (kernel `vmlinuz-virt`, `initramfs-virt`, minirootfs tarball) from the Alpine CDN, extracts the rootfs to `~/.mbx/vm/rootfs/`, cross-compiles `miniboxd` for `aarch64-unknown-linux-musl` and places it at `rootfs/sbin/minibox-agent`, then writes a `VmImageManifest` JSON to `~/.mbx/vm/manifest.json` for cache invalidation. A new `vz` feature flag in `macbox` gates the VZ code path; `macbox` reads the manifest, checks staleness, optionally re-runs `build-vm-image`, then boots the VM using VZ.framework via thin `objc2` bindings.
+**Architecture:** The `build-vm-image` xtask command downloads Alpine Linux aarch64 assets (kernel `vmlinuz-virt`, `initramfs-virt`, minirootfs tarball) from the Alpine CDN, extracts the rootfs to `~/.minibox/vm/rootfs/`, cross-compiles `miniboxd` for `aarch64-unknown-linux-musl` and places it at `rootfs/sbin/minibox-agent`, then writes a `VmImageManifest` JSON to `~/.minibox/vm/manifest.json` for cache invalidation. A new `vz` feature flag in `macbox` gates the VZ code path; `macbox` reads the manifest, checks staleness, optionally re-runs `build-vm-image`, then boots the VM using VZ.framework via thin `objc2` bindings.
 
 **Tech Stack:** Rust (xtask + xshell), `aarch64-unknown-linux-musl` cross target (already in `.cargo/config.toml`), Alpine Linux CDN, `objc2` crate (Apple framework bindings), Tokio `spawn_blocking` for GCD calls.
 
@@ -21,7 +21,7 @@
 | Create | `crates/macbox/src/vz/bindings.rs` | Thin `objc2` wrappers for VZ.framework classes          |
 | Create | `crates/macbox/src/vz/vm.rs`       | `VzVm` struct: boot, wait-ready, shutdown               |
 | Modify | `crates/macbox/src/lib.rs`         | `mod vz` behind `#[cfg(feature = "vz")]`                |
-| Create | `~/.mbx/vm/manifest.json`          | **Runtime artifact** — versioned image manifest         |
+| Create | `~/.minibox/vm/manifest.json`      | **Runtime artifact** — versioned image manifest         |
 
 ---
 
@@ -439,12 +439,12 @@ git commit -m "feat(xtask): cross-compile agent and install into rootfs/sbin"
 
 ```rust
 #[test]
-fn vm_dir_default_uses_mbx_cache() {
+fn vm_dir_default_uses_minibox_cache() {
     // Just test the path computation, not the actual build.
     let dir = default_vm_dir();
-    // Should end in .mbx/vm or similar; path must be absolute.
+    // Should end in .minibox/vm or similar; path must be absolute.
     assert!(dir.is_absolute());
-    assert!(dir.to_string_lossy().contains(".mbx"));
+    assert!(dir.to_string_lossy().contains(".minibox"));
 }
 ```
 
@@ -464,7 +464,7 @@ Expected: compile error.
 pub fn default_vm_dir() -> std::path::PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join(".mbx")
+        .join(".minibox")
         .join("vm")
 }
 
@@ -713,7 +713,7 @@ pub unsafe fn new_linux_boot_loader(
 
 /// Create a `VZVirtioFileSystemDeviceConfiguration` for a virtiofs share.
 ///
-/// - `tag` — the mount tag the guest sees (e.g. `"mbx-images"`)
+/// - `tag` — the mount tag the guest sees (e.g. `"minibox-images"`)
 /// - `host_path` — directory on the host to share
 ///
 /// SAFETY: must be called on the VZ dispatch queue.
@@ -841,9 +841,9 @@ use super::bindings;
 pub struct VzVmConfig {
     /// Directory containing `boot/vmlinuz-virt`, `boot/initramfs-virt`, and `rootfs/`.
     pub vm_dir: PathBuf,
-    /// Host path for the `mbx-images` virtiofs share (read-only OCI layers).
+    /// Host path for the `minibox-images` virtiofs share (read-only OCI layers).
     pub images_dir: PathBuf,
-    /// Host path for the `mbx-containers` virtiofs share (read-write container data).
+    /// Host path for the `minibox-containers` virtiofs share (read-write container data).
     pub containers_dir: PathBuf,
     /// RAM in bytes (default: 1 GiB).
     pub memory_bytes: u64,
@@ -866,7 +866,7 @@ impl VzVmConfig {
 /// Handle to a running Virtualization.framework Linux VM.
 ///
 /// The inner `VZVirtualMachine` pointer lives on a private GCD serial queue
-/// (`mbx.vz.queue`). All calls that touch it must be dispatched onto that queue
+/// (`minibox.vz.queue`). All calls that touch it must be dispatched onto that queue
 /// via `dispatch_sync` / `dispatch_async`.
 pub struct VzVm {
     /// Raw pointer to `VZVirtualMachine` — only accessed on `queue`.
@@ -976,9 +976,9 @@ impl VzVm {
         let _: () = objc2::msg_send![&*vm_config, setCPUCount: config.cpu_count];
 
         // Storage: virtiofs rootfs
-        let rootfs_fs = bindings::new_virtio_fs("mbx-rootfs", &config.rootfs_path())?;
-        let images_fs = bindings::new_virtio_fs("mbx-images", &config.images_dir)?;
-        let containers_fs = bindings::new_virtio_fs("mbx-containers", &config.containers_dir)?;
+        let rootfs_fs = bindings::new_virtio_fs("minibox-rootfs", &config.rootfs_path())?;
+        let images_fs = bindings::new_virtio_fs("minibox-images", &config.images_dir)?;
+        let containers_fs = bindings::new_virtio_fs("minibox-containers", &config.containers_dir)?;
 
         // NSArray of storage devices
         let devices = objc2_foundation::NSArray::from_retained_slice(&[
@@ -1173,15 +1173,15 @@ Then on macOS, do a live smoke test:
 ```bash
 # Build the VM image (downloads ~15 MB, cross-compiles miniboxd)
 cargo xtask build-vm-image
-ls ~/.mbx/vm/
+ls ~/.minibox/vm/
 # Expected: boot/  cache/  manifest.json  rootfs/
-ls ~/.mbx/vm/boot/
+ls ~/.minibox/vm/boot/
 # Expected: initramfs-virt  vmlinuz-virt
-ls ~/.mbx/vm/rootfs/sbin/minibox-agent
+ls ~/.minibox/vm/rootfs/sbin/minibox-agent
 # Expected: file exists, is an ELF aarch64 binary
-file ~/.mbx/vm/rootfs/sbin/minibox-agent
+file ~/.minibox/vm/rootfs/sbin/minibox-agent
 # Expected: ELF 64-bit LSB executable, ARM aarch64, statically linked
-cat ~/.mbx/vm/manifest.json
+cat ~/.minibox/vm/manifest.json
 # Expected: JSON with alpine_version, agent_commit, built_at fields
 ```
 

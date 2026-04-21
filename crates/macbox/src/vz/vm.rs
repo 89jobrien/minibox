@@ -83,7 +83,7 @@ mod imp {
 
         // virtiofs root: use the tag name, not a block device path.
         let cmdline =
-            NSString::from_str("console=hvc0 root=mbx-rootfs rootfstype=virtiofs rw quiet");
+            NSString::from_str("console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet");
         // SAFETY: setCommandLine: is a standard setter.
         unsafe { boot_loader.setCommandLine(&cmdline) };
 
@@ -219,13 +219,13 @@ mod imp {
             unsafe { vm_config.setMemorySize(config.memory_bytes) };
             unsafe { vm_config.setCPUCount(config.cpu_count) };
 
-            let rootfs_dev = unsafe { build_virtiofs("mbx-rootfs", &config.rootfs_path(), false) }
-                .context("build virtiofs mbx-rootfs")?;
-            let images_dev = unsafe { build_virtiofs("mbx-images", &config.images_dir, true) }
-                .context("build virtiofs mbx-images")?;
+            let rootfs_dev = unsafe { build_virtiofs("minibox-rootfs", &config.rootfs_path(), false) }
+                .context("build virtiofs minibox-rootfs")?;
+            let images_dev = unsafe { build_virtiofs("minibox-images", &config.images_dir, true) }
+                .context("build virtiofs minibox-images")?;
             let containers_dev =
-                unsafe { build_virtiofs("mbx-containers", &config.containers_dir, false) }
-                    .context("build virtiofs mbx-containers")?;
+                unsafe { build_virtiofs("minibox-containers", &config.containers_dir, false) }
+                    .context("build virtiofs minibox-containers")?;
 
             // SAFETY: into_super() is a safe upcast; setDirectorySharingDevices: is a standard setter.
             let fs_devices: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
@@ -377,11 +377,11 @@ mod imp {
 
 pub use imp::VzVm;
 
-/// Return the default VM image directory: `~/.mbx/vm`.
+/// Return the default VM image directory: `~/.minibox/vm`.
 ///
 /// Returns `None` if the home directory cannot be determined.
 pub fn default_vm_dir() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|h| h.join(".mbx").join("vm"))
+    dirs::home_dir().map(|h| h.join(".minibox").join("vm"))
 }
 
 #[cfg(test)]

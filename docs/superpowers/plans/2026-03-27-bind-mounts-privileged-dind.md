@@ -12,19 +12,19 @@
 
 ## File Map
 
-| Action | File                                     |
-| ------ | ---------------------------------------- |
-| Modify | `crates/minibox-core/src/domain.rs`      |
-| Modify | `crates/minibox-core/src/protocol.rs`    |
-| Modify | `crates/mbx/src/container/filesystem.rs` |
-| Modify | `crates/mbx/src/container/process.rs`    |
-| Modify | `crates/mbx/src/adapters/runtime.rs`     |
-| Modify | `crates/daemonbox/src/handler.rs`        |
-| Modify | `crates/daemonbox/src/server.rs`         |
-| Modify | `crates/mbx/src/adapters/colima.rs`      |
-| Modify | `crates/minibox-cli/src/main.rs`         |
-| Modify | `crates/minibox-cli/src/commands/run.rs` |
-| Modify | `Justfile`                               |
+| Action | File                                         |
+| ------ | -------------------------------------------- |
+| Modify | `crates/minibox-core/src/domain.rs`          |
+| Modify | `crates/minibox-core/src/protocol.rs`        |
+| Modify | `crates/minibox/src/container/filesystem.rs` |
+| Modify | `crates/minibox/src/container/process.rs`    |
+| Modify | `crates/minibox/src/adapters/runtime.rs`     |
+| Modify | `crates/daemonbox/src/handler.rs`            |
+| Modify | `crates/daemonbox/src/server.rs`             |
+| Modify | `crates/minibox/src/adapters/colima.rs`      |
+| Modify | `crates/minibox-cli/src/main.rs`             |
+| Modify | `crates/minibox-cli/src/commands/run.rs`     |
+| Modify | `Justfile`                                   |
 
 ---
 
@@ -250,7 +250,7 @@ git commit -m "feat(domain): add mounts and privileged fields to ContainerSpawnC
 
 **Files:**
 
-- Modify: `crates/mbx/src/container/filesystem.rs`
+- Modify: `crates/minibox/src/container/filesystem.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -259,7 +259,7 @@ Add to the `#[cfg(test)]` block at the bottom of `filesystem.rs`:
 ```rust
 // ── apply_bind_mounts ────────────────────────────────────────────────────
 // These tests require Linux (MS_BIND is Linux-only) and root.
-// Run with: sudo cargo test -p mbx container::filesystem::tests::bind_mount
+// Run with: sudo cargo test -p minibox container::filesystem::tests::bind_mount
 
 #[cfg(target_os = "linux")]
 mod bind_mount_tests {
@@ -362,7 +362,7 @@ mod bind_mount_tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p mbx container::filesystem::tests::bind_mount 2>&1 | head -10
+cargo test -p minibox container::filesystem::tests::bind_mount 2>&1 | head -10
 ```
 
 Expected: compile error — `apply_bind_mounts` and `cleanup_bind_mounts` not found.
@@ -512,7 +512,7 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
 - [ ] **Step 4: Run tests**
 
 ```bash
-sudo cargo test -p mbx container::filesystem::tests::bind_mount -- --nocapture 2>&1 | tail -15
+sudo cargo test -p minibox container::filesystem::tests::bind_mount -- --nocapture 2>&1 | tail -15
 ```
 
 Expected: `apply_bind_mounts_mounts_directory`, `apply_bind_mounts_read_only`, `apply_bind_mounts_creates_target_dir` pass; `apply_bind_mounts_nonexistent_host_path_fails` passes.
@@ -520,7 +520,7 @@ Expected: `apply_bind_mounts_mounts_directory`, `apply_bind_mounts_read_only`, `
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/container/filesystem.rs
+git add crates/minibox/src/container/filesystem.rs
 git commit -m "feat(filesystem): add apply_bind_mounts and cleanup_bind_mounts"
 ```
 
@@ -530,7 +530,7 @@ git commit -m "feat(filesystem): add apply_bind_mounts and cleanup_bind_mounts"
 
 **Files:**
 
-- Modify: `crates/mbx/src/container/process.rs`
+- Modify: `crates/minibox/src/container/process.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -584,7 +584,7 @@ mod tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p mbx container::process::tests 2>&1 | head -10
+cargo test -p minibox container::process::tests 2>&1 | head -10
 ```
 
 Expected: compile error — `mounts` and `privileged` fields not found in `ContainerConfig`.
@@ -762,7 +762,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
 - [ ] **Step 6: Run tests**
 
 ```bash
-cargo test -p mbx container::process::tests 2>&1 | tail -10
+cargo test -p minibox container::process::tests 2>&1 | tail -10
 ```
 
 Expected: both new tests pass.
@@ -770,7 +770,7 @@ Expected: both new tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/container/process.rs
+git add crates/minibox/src/container/process.rs
 git commit -m "feat(process): add mounts/privileged to ContainerConfig; apply bind mounts and capset in child_init"
 ```
 
@@ -780,7 +780,7 @@ git commit -m "feat(process): add mounts/privileged to ContainerConfig; apply bi
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/runtime.rs`
+- Modify: `crates/minibox/src/adapters/runtime.rs`
 
 - [ ] **Step 1: Write a test**
 
@@ -837,7 +837,7 @@ fn spawn_config_fields_map_to_container_config() {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cargo test -p mbx adapters::runtime::tests 2>&1 | head -10
+cargo test -p minibox adapters::runtime::tests 2>&1 | head -10
 ```
 
 Expected: compile error — `ContainerConfig` missing `mounts` and `privileged` (fixed in Task 4), or `ContainerSpawnConfig` missing fields (fixed in Task 2).
@@ -865,7 +865,7 @@ let container_config = ContainerConfig {
 - [ ] **Step 4: Run test**
 
 ```bash
-cargo test -p mbx adapters::runtime::tests 2>&1 | tail -5
+cargo test -p minibox adapters::runtime::tests 2>&1 | tail -5
 ```
 
 Expected: `spawn_config_fields_map_to_container_config` passes.
@@ -873,7 +873,7 @@ Expected: `spawn_config_fields_map_to_container_config` passes.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/runtime.rs
+git add crates/minibox/src/adapters/runtime.rs
 git commit -m "feat(runtime): wire mounts and privileged from ContainerSpawnConfig to ContainerConfig"
 ```
 
@@ -1147,7 +1147,7 @@ git commit -m "feat(handler): wire mounts and privileged through handle_run, run
 
 **Files:**
 
-- Modify: `crates/mbx/src/adapters/colima.rs`
+- Modify: `crates/minibox/src/adapters/colima.rs`
 
 - [ ] **Step 1: Write failing unit tests**
 
@@ -1233,7 +1233,7 @@ mod bind_mount_tests {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p mbx adapters::colima::bind_mount_tests 2>&1 | head -10
+cargo test -p minibox adapters::colima::bind_mount_tests 2>&1 | head -10
 ```
 
 Expected: compile error — `validate_lima_paths` and `bind_mount_shell_snippet` not found.
@@ -1363,7 +1363,7 @@ let spawn_script = format!(
 - [ ] **Step 5: Run tests**
 
 ```bash
-cargo test -p mbx adapters::colima::bind_mount_tests 2>&1 | tail -10
+cargo test -p minibox adapters::colima::bind_mount_tests 2>&1 | tail -10
 ```
 
 Expected: all 6 tests pass.
@@ -1377,7 +1377,7 @@ cargo check --workspace 2>&1 | tail -5
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/mbx/src/adapters/colima.rs
+git add crates/minibox/src/adapters/colima.rs
 git commit -m "feat(colima): add Lima path validation and bind mount injection into spawn script"
 ```
 

@@ -17,7 +17,7 @@ Requires Colima to be running (`colima start`).
 
 ### `vz` (feature-gated)
 
-Uses macOS Virtualization.framework to boot a lightweight Alpine Linux VM and forward container operations to an in-VM miniboxd agent over vsock. Requires building with `--features vz` and a VM image at `~/.mbx/vm/` (build with `cargo xtask build-vm-image`).
+Uses macOS Virtualization.framework to boot a lightweight Alpine Linux VM and forward container operations to an in-VM miniboxd agent over vsock. Requires building with `--features vz` and a VM image at `~/.minibox/vm/` (build with `cargo xtask build-vm-image`).
 
 - `VzRegistry`, `VzRuntime`, `VzFilesystem`, `VzLimiter` — trait impls forwarding via `VzProxy`
 - `VzProxy` — JSON-over-vsock request/response to in-VM agent

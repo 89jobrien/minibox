@@ -54,11 +54,11 @@ pub fn built_in_diagrams() -> Vec<OwnedDiagram> {
         .collect()
 }
 
-/// Load all `.mmd` files from `~/.mbx/diagrams/`, sorted by filename.
+/// Load all `.mmd` files from `~/.minibox/diagrams/`, sorted by filename.
 /// Files that fail to parse produce single error-node diagrams (never panics).
 pub fn load_user_diagrams() -> Vec<OwnedDiagram> {
     let dir = match dirs::home_dir() {
-        Some(h) => h.join(".mbx").join("diagrams"),
+        Some(h) => h.join(".minibox").join("diagrams"),
         None => return Vec::new(),
     };
     if !dir.exists() {

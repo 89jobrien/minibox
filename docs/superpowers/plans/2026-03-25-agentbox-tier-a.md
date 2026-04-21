@@ -47,8 +47,8 @@
 | ---------------------------------------- | -------------------------------------------------------- |
 | `agentbox/internal/context/git.go`       | GitContextProvider: git log, diff, branch, project rules |
 | `agentbox/internal/context/git_test.go`  | Tests with fixture data                                  |
-| `agentbox/internal/output/jsonl.go`      | JSONL writer for ~/.mbx/agent-runs.jsonl                 |
-| `agentbox/internal/output/report.go`     | Markdown report writer for ~/.mbx/ai-logs/               |
+| `agentbox/internal/output/jsonl.go`      | JSONL writer for ~/.minibox/agent-runs.jsonl             |
+| `agentbox/internal/output/report.go`     | Markdown report writer for ~/.minibox/ai-logs/           |
 | `agentbox/internal/output/dual.go`       | DualWriter: pub/sub + file output                        |
 | `agentbox/internal/output/jsonl_test.go` | Tests for JSONL format compatibility                     |
 
@@ -77,10 +77,10 @@
 
 ### Binaries & Integration (Tasks 15–16)
 
-| File                                  | Responsibility                            |
-| ------------------------------------- | ----------------------------------------- |
-| `agentbox/cmd/agentbox/main.go`       | Orchestration binary: subcommand dispatch |
-| `agentbox/cmd/mbx-commit-msg/main.go` | Standalone commit-msg binary              |
+| File                                      | Responsibility                            |
+| ----------------------------------------- | ----------------------------------------- |
+| `agentbox/cmd/agentbox/main.go`           | Orchestration binary: subcommand dispatch |
+| `agentbox/cmd/minibox-commit-msg/main.go` | Standalone commit-msg binary              |
 
 ---
 
@@ -781,12 +781,12 @@ type DualWriter struct {
 	report *ReportWriter
 }
 
-// NewDualWriter creates a writer targeting ~/.mbx/ paths.
+// NewDualWriter creates a writer targeting ~/.minibox/ paths.
 func NewDualWriter() *DualWriter {
 	home, _ := os.UserHomeDir()
 	return &DualWriter{
-		jsonl:  NewJSONLWriter(filepath.Join(home, ".mbx", "agent-runs.jsonl")),
-		report: NewReportWriter(filepath.Join(home, ".mbx", "ai-logs")),
+		jsonl:  NewJSONLWriter(filepath.Join(home, ".minibox", "agent-runs.jsonl")),
+		report: NewReportWriter(filepath.Join(home, ".minibox", "ai-logs")),
 	}
 }
 
@@ -2335,7 +2335,7 @@ func (c *CommitMsg) Generate(ctx context.Context, input CommitMsgContext) (strin
 		"- Follow the existing commit style shown in the recent log\n" +
 		"- Use conventional commits format: `type(scope): description`\n" +
 		"  Types: feat, fix, docs, refactor, test, chore, perf, ci\n" +
-		"  Scope: crate name, module, or area (e.g. mbx, standup, justfile)\n" +
+		"  Scope: crate name, module, or area (e.g. minibox, standup, justfile)\n" +
 		"- First line: ≤72 chars, imperative mood, no period\n" +
 		"- If the change warrants it, add a blank line then a short body (2–4 lines max)\n" +
 		"- Do NOT add 'Co-Authored-By' lines — those are added separately\n" +
@@ -2659,7 +2659,7 @@ git commit -m "feat(agentbox): add orchestration binary with council and meta-ag
 
 **Files:**
 
-- Create: `agentbox/cmd/mbx-commit-msg/main.go`
+- Create: `agentbox/cmd/minibox-commit-msg/main.go`
 
 - [ ] **Step 1: Implement standalone binary**
 
@@ -2782,7 +2782,7 @@ func gitRun(args ...string) string {
 
 ```bash
 cd /Users/joe/dev/minibox/agentbox
-go build ./cmd/mbx-commit-msg/
+go build ./cmd/minibox-commit-msg/
 ```
 
 Expected: no errors
@@ -2790,8 +2790,8 @@ Expected: no errors
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agentbox/cmd/mbx-commit-msg/
-git commit -m "feat(agentbox): add standalone mbx-commit-msg binary"
+git add agentbox/cmd/minibox-commit-msg/
+git commit -m "feat(agentbox): add standalone minibox-commit-msg binary"
 ```
 
 ---
@@ -2811,7 +2811,7 @@ Add the following recipes to the Justfile:
 
 # Build all agentbox binaries
 agentbox-build:
-    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/mbx-commit-msg/
+    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/minibox-commit-msg/
 
 # Run agentbox tests
 agentbox-test:
@@ -2827,7 +2827,7 @@ agentbox-meta-agent *ARGS:
 
 # Generate commit message (Go)
 agentbox-commit-msg *ARGS:
-    cd agentbox && go run ./cmd/mbx-commit-msg/ {{ARGS}}
+    cd agentbox && go run ./cmd/minibox-commit-msg/ {{ARGS}}
 ```
 
 - [ ] **Step 2: Verify recipes work**
@@ -2862,7 +2862,7 @@ Expected: all tests pass
 
 ```bash
 go build ./cmd/agentbox/
-go build ./cmd/mbx-commit-msg/
+go build ./cmd/minibox-commit-msg/
 ```
 
 Expected: both binaries compile

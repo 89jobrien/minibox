@@ -89,7 +89,7 @@ cargo xtask ci-smoke
 
 - Bind mount support: `minibox run --mount <host-path>:<container-path>` (Phase 1 complete)
 - `RunContainer` protocol gains `mounts: Vec<Mount>` field
-- `crates/mbx/src/container/filesystem.rs`: `MS_BIND` mount setup before `pivot_root`
+- `crates/minibox/src/container/filesystem.rs`: `MS_BIND` mount setup before `pivot_root`
 
 **What changes:**
 
@@ -99,7 +99,7 @@ Hooks mount the host workspace into the container. The container sees live sourc
 // xtask/src/main.rs — Phase 2 pre-commit
 "pre-commit" => {
     let workspace = env::current_dir()?;
-    let cargo_cache = home_dir()?.join(".mbx/cache/cargo-registry");
+    let cargo_cache = home_dir()?.join(".minibox/cache/cargo-registry");
     cmd!(
         "minibox", "run",
         "--mount", format!("{}:/workspace", workspace.display()),
@@ -108,8 +108,8 @@ Hooks mount the host workspace into the container. The container sees live sourc
         "--",
         "sh", "-c",
         "cd /workspace && cargo fmt --all --check && \
-         cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings && \
-         cargo build --release -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
+         cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings && \
+         cargo build --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench"
     ).run()?;
 }
 ```
@@ -119,9 +119,9 @@ Hooks mount the host workspace into the container. The container sees live sourc
 - `std::fs::canonicalize(host_path)` resolves symlinks and `..`; the canonical path must start with an allowed prefix.
 - Allowed prefixes: user's `$HOME` and `/tmp`. Paths outside these are rejected.
 - The container path must be absolute and free of `..` components.
-- This mirrors the `canonicalize()` + path-escape rejection in `crates/mbx/src/container/filesystem.rs`.
+- This mirrors the `canonicalize()` + path-escape rejection in `crates/minibox/src/container/filesystem.rs`.
 
-**Cargo cache mount:** `~/.mbx/cache/cargo-registry` is bind-mounted at `/root/.cargo/registry` inside the container. The directory is created on first use if absent. Containers accumulate the registry cache across runs; the overlay upper dir isolates any per-container writes.
+**Cargo cache mount:** `~/.minibox/cache/cargo-registry` is bind-mounted at `/root/.cargo/registry` inside the container. The directory is created on first use if absent. Containers accumulate the registry cache across runs; the overlay upper dir isolates any per-container writes.
 
 **Ephemeral cleanup:** Each `minibox run` with `ephemeral: true` (the default for all xtask invocations) creates a fresh overlay upper dir, removes it on exit, and deletes the state entry. `minibox ps` shows no residual containers after hook completion.
 
@@ -284,7 +284,7 @@ The xtask implementation progressively replaces native commands with containeriz
 - `just pre-commit` runs fmt/clippy/build inside a minibox container against the live workspace
 - Output visible in terminal as it streams
 - `minibox ps` shows no residual containers after completion
-- Cargo registry cache in `~/.mbx/cache/cargo-registry` persists across invocations
+- Cargo registry cache in `~/.minibox/cache/cargo-registry` persists across invocations
 
 **Phase 3:**
 

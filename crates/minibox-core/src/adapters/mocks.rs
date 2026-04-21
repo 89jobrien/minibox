@@ -12,8 +12,8 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use mbx::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
-//! use mbx::domain::*;
+//! use minibox::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
+//! use minibox::domain::*;
 //! use std::sync::Arc;
 //!
 //! #[tokio::test]

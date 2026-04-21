@@ -24,8 +24,8 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 ```
 crates/
   minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
-  mbx/             — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
-                     RENAMED from linuxbox → mbx on 2026-03-29; any linuxbox:: ref is stale
+  minibox/             — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
+                     RENAMED from linuxbox → minibox on 2026-03-29; any linuxbox:: ref is stale
   minibox-macros/  — proc macros: as_any!, default_new!, adapt!
   daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
   miniboxd/        — unified daemon binary; dispatches by platform
@@ -44,20 +44,20 @@ crates/
   dashbox/         — Ratatui TUI dashboard (6 tabs: Agents, Bench, History, Git, Todos, CI)
   crates/xtask/    — dev tool: pre-commit, test-unit, e2e-suite, coverage, build-vm-image
                      Modularised 2026-03-29: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs
-mbxctl/            — axum-based control plane (WIP)
+miniboxctl/            — axum-based control plane (WIP)
 ```
 
 **Dependency graph:**
 
 ```
-miniboxd  ──[linux]──► mbx ──► minibox-core
-          ──[macos]──► macbox ──► daemonbox ──► mbx
-          ──[win]────► winbox ──► daemonbox ──► mbx
-minibox-cli ──► minibox-client ──► mbx
-minibox-bench ──────────────────► mbx
+miniboxd  ──[linux]──► minibox ──► minibox-core
+          ──[macos]──► macbox ──► daemonbox ──► minibox
+          ──[win]────► winbox ──► daemonbox ──► minibox
+minibox-cli ──► minibox-client ──► minibox
+minibox-bench ──────────────────► minibox
 minibox-llm (standalone)
 minibox-secrets (standalone)
-mbxctl (standalone, axum)
+miniboxctl (standalone, axum)
 ```
 
 ---
@@ -66,7 +66,7 @@ mbxctl (standalone, axum)
 
 | Suite                                                    | Count                      | Platform     |
 | -------------------------------------------------------- | -------------------------- | ------------ |
-| mbx unit                                                 | 88 (+1 ignored)            | any          |
+| minibox unit                                             | 88 (+1 ignored)            | any          |
 | minibox-cli                                              | 36                         | any          |
 | daemonbox lib                                            | 27 (1 failing — see below) | any          |
 | daemonbox integration (handler + conformance + proptest) | 108 (+3 ignored)           | any          |
@@ -81,12 +81,12 @@ likely needs updating after a protocol change (new response variant not marked t
 
 Coverage snapshot (2026-03-25, `cargo xtask prepush`):
 
-| File                           | fn%   | line% | Notes                                         |
-| ------------------------------ | ----- | ----- | --------------------------------------------- |
-| `daemonbox/src/handler.rs`     | 67.5% | 55%   | Biggest gap — error paths in run/pull/stop/rm |
-| `mbx/src/adapters/ghcr.rs`     | 74.5% | 89.7% | New; 4 wiremock tests added this session      |
-| `daemonbox/src/server.rs`      | 100%  | 90.6% | Healthy                                       |
-| `mbx/src/adapters/registry.rs` | 89.5% | 85.8% | Good                                          |
+| File                               | fn%   | line% | Notes                                         |
+| ---------------------------------- | ----- | ----- | --------------------------------------------- |
+| `daemonbox/src/handler.rs`         | 67.5% | 55%   | Biggest gap — error paths in run/pull/stop/rm |
+| `minibox/src/adapters/ghcr.rs`     | 74.5% | 89.7% | New; 4 wiremock tests added this session      |
+| `daemonbox/src/server.rs`          | 100%  | 90.6% | Healthy                                       |
+| `minibox/src/adapters/registry.rs` | 89.5% | 85.8% | Good                                          |
 
 Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 `crates/miniboxd/tests/` during daemonbox extraction, 2026-03-18).
@@ -135,7 +135,7 @@ E2e CI job restored (commit `0b862ad`, 2026-03-27) after streaming regression fi
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
+cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 
 # Full pre-commit gate:
@@ -202,14 +202,14 @@ All items below are merged to `main`:
 - [x] `minibox-client` crate (shared client library)
 - [x] `minibox-llm` crate (multi-provider LLM client)
 - [x] `minibox-secrets` crate (typed credential store)
-- [x] `mbxctl` axum control plane skeleton
+- [x] `miniboxctl` axum control plane skeleton
 - [x] `xtask` moved to `crates/xtask/` (2026-03-28)
 - [x] macOS socket path fix: `minibox-client` now defaults to `/tmp/minibox/miniboxd.sock` on macOS (2026-03-28)
-- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `mbx/src/container/mod.rs` (2026-03-28)
+- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `minibox/src/container/mod.rs` (2026-03-28)
 - [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
 - [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
 - [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
-- [x] `linuxbox` → `mbx` crate rename (2026-03-29)
+- [x] `linuxbox` → `minibox` crate rename (2026-03-29)
 - [x] VZ.framework adapter suite — `macbox` now owns full macOS VM stack (2026-03-29):
   - `xtask build-vm-image`: Alpine aarch64 virt kernel + rootfs + musl agent cross-compile
   - `VzVm::boot`: objc2-virtualization, VZLinuxBootLoader, virtiofs shares, vsock
@@ -232,8 +232,8 @@ All items below are merged to `main`:
   - `HandlerDependencies.image_loader: DynImageLoader` + `handle_load_image()` handler
   - Composition roots wired: `macbox` uses `ColimaRegistry`, `miniboxd` native uses `NativeImageLoader`
   - `minibox load <path>` CLI subcommand
-  - `cargo xtask build-test-image` — cross-compiles 6 binaries for `aarch64-unknown-linux-musl`, fetches Alpine base layer from Docker Hub, assembles OCI tarball at `$HOME/.mbx/test-image/mbx-tester.tar`; cached by mtime, `--force` bypasses
-  - `cargo xtask test-linux` / `just test-linux` — orchestrates build-image → load → `minibox run --privileged mbx-tester /run-tests.sh`
+  - `cargo xtask build-test-image` — cross-compiles 6 binaries for `aarch64-unknown-linux-musl`, fetches Alpine base layer from Docker Hub, assembles OCI tarball at `$HOME/.minibox/test-image/minibox-tester.tar`; cached by mtime, `--force` bypasses
+  - `cargo xtask test-linux` / `just test-linux` — orchestrates build-image → load → `minibox run --privileged minibox-tester /run-tests.sh`
 
 ---
 
@@ -295,7 +295,7 @@ All open issues in execution order. Update status as issues close.
 | #12 | has_image_sync: eliminate per-call String alloc      | XS   | closed |
 | #13 | Proptest DaemonState: avoid disk I/O per iteration   | S    | closed |
 
-### Tier 2 — mbx-dagu fixes
+### Tier 2 — minibox-dagu fixes
 
 | #   | Title                                            | Size | Status |
 | --- | ------------------------------------------------ | ---- | ------ |
@@ -367,28 +367,28 @@ Execution order is now tracked in `doob` under project `minibox`:
 
 #### Phase 1 — shared test scaffolding
 
-| Priority | Task                                                                                                     |
-| -------- | -------------------------------------------------------------------------------------------------------- |
+| Priority | Task                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------ |
 | 5        | Define the conformance boundary around commit/build/push for `linux-native` and `colima`.              |
-| 5        | Add a test-only backend descriptor with capability flags and adapter constructors.                       |
-| 5        | Add shared fixture helpers for minimal stored images, writable upper dirs, build contexts, and pushes.  |
+| 5        | Add a test-only backend descriptor with capability flags and adapter constructors.                     |
+| 5        | Add shared fixture helpers for minimal stored images, writable upper dirs, build contexts, and pushes. |
 
 #### Phase 2 — backend-agnostic test bodies
 
 | Priority | Task                                                                                                                   |
 | -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 4        | Extract commit conformance tests: success, returned metadata, store artifacts, backend-consistent results.            |
+| 4        | Extract commit conformance tests: success, returned metadata, store artifacts, backend-consistent results.             |
 | 4        | Extract build conformance tests: minimal Dockerfile build, stored image result, metadata preservation, skip semantics. |
-| 4        | Extract push conformance tests: local test-registry push, reported digest, visible tag, transport hidden by port.     |
-| 4        | Add a serializable matrix result model: backend, capability, status (`pass`/`fail`/`skip`), optional message/path.   |
+| 4        | Extract push conformance tests: local test-registry push, reported digest, visible tag, transport hidden by port.      |
+| 4        | Add a serializable matrix result model: backend, capability, status (`pass`/`fail`/`skip`), optional message/path.     |
 
 #### Phase 3 — reporting, wiring, validation
 
-| Priority | Task                                                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------ |
-| 3        | Emit Markdown and JSON reports under `artifacts/conformance/`.                                        |
-| 3        | Wire the suite into the existing conformance entry point and `cargo xtask test-unit`.                 |
-| 2        | Validate on macOS Colima, then verify `linux-native` coverage on a real Linux host or in CI.         |
+| Priority | Task                                                                                         |
+| -------- | -------------------------------------------------------------------------------------------- |
+| 3        | Emit Markdown and JSON reports under `artifacts/conformance/`.                               |
+| 3        | Wire the suite into the existing conformance entry point and `cargo xtask test-unit`.        |
+| 2        | Validate on macOS Colima, then verify `linux-native` coverage on a real Linux host or in CI. |
 
 Scope constraints:
 
@@ -399,11 +399,11 @@ Scope constraints:
 
 `feature/test-linux-dogfood` merged to main.
 
-Full flow: `cargo xtask test-linux` builds a cross-compiled `mbx-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged mbx-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
+Full flow: `cargo xtask test-linux` builds a cross-compiled `minibox-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged minibox-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
 
 Key new commands:
 
-- `cargo xtask build-test-image [--force]` — build + cache `mbx-tester.tar`
+- `cargo xtask build-test-image [--force]` — build + cache `minibox-tester.tar`
 - `cargo xtask test-linux` / `just test-linux` — full dogfood run
 - `minibox load <path> [--name <name>] [--tag <tag>]` — load local OCI tarball
 
@@ -525,13 +525,13 @@ See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` 
 
 ### Ready to execute (no blockers)
 
-| Item                                   | Plan / Notes                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------ |
-| Linux CI job (self-hosted runner)      | Use `mbx:minibox-ci` skill; runner is on jobrien-vm (SSH timeout 2026-03-26)   |
-| `WslRuntime` executor injection seam   | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters   |
-|                                        | (same pattern as Colima `LimaExecutor`) so they can be unit-tested without WSL |
-| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time;            |
-|                                        | contract is documented in CLAUDE.md                                            |
+| Item                                   | Plan / Notes                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| Linux CI job (self-hosted runner)      | Use `minibox:minibox-ci` skill; runner is on jobrien-vm (SSH timeout 2026-03-26) |
+| `WslRuntime` executor injection seam   | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters     |
+|                                        | (same pattern as Colima `LimaExecutor`) so they can be unit-tested without WSL   |
+| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time;              |
+|                                        | contract is documented in CLAUDE.md                                              |
 
 ### Blocked on hardware
 
@@ -561,8 +561,8 @@ See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` 
 - No `exec` command — cannot run commands in existing containers
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
-- `docker_desktop` and `wsl2` adapters exist in `mbx` but are **not wired** into `miniboxd`
-- VZ adapter is wired; VM image is built (`~/.mbx/vm/`); test harness is ready — blocked on Apple OS bug `VZErrorInternal(code=1)` on macOS 26 ARM64 (see [apple/container#1254](https://github.com/apple/container/issues/1254))
+- `docker_desktop` and `wsl2` adapters exist in `minibox` but are **not wired** into `miniboxd`
+- VZ adapter is wired; VM image is built (`~/.minibox/vm/`); test harness is ready — blocked on Apple OS bug `VZErrorInternal(code=1)` on macOS 26 ARM64 (see [apple/container#1254](https://github.com/apple/container/issues/1254))
 
 ---
 
@@ -574,7 +574,7 @@ See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` 
 | `/tmp/minibox/miniboxd.sock`                     | Unix socket (macOS)            |
 | `\\.\pipe\miniboxd`                              | Named Pipe (Windows, future)   |
 | `/var/lib/minibox/images/`                       | Image layer storage (root)     |
-| `~/.mbx/cache/`                                  | Image layer storage (non-root) |
+| `~/.minibox/cache/`                              | Image layer storage (non-root) |
 | `/sys/fs/cgroup/minibox.slice/miniboxd.service/` | Container cgroup root          |
 
 Override with: `MINIBOX_SOCKET_PATH`, `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MINIBOX_CGROUP_ROOT`

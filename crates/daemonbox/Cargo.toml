@@ -17,7 +17,7 @@ otel = [
 
 [dependencies]
 minibox-core = { workspace = true }
-mbx = { workspace = true }
+minibox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

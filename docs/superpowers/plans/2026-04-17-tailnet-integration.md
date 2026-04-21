@@ -27,26 +27,27 @@ comment on `TailnetNetwork` must reproduce the verbatim stability warning from t
 
 ## File Map
 
-| File | Change |
-|------|--------|
+| File                                           | Change                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------- |
 | `crates/minibox-core/src/domain/networking.rs` | Add `TailnetMode` enum; three new fields on `NetworkConfig` |
-| `Cargo.toml` (workspace root) | Add `tailbox` to `[workspace] members` |
-| `crates/tailbox/Cargo.toml` | New crate manifest |
-| `crates/tailbox/src/lib.rs` | Re-export `TailnetNetwork`, `TailnetConfig` |
-| `crates/tailbox/src/config.rs` | `TailnetConfig` struct |
-| `crates/tailbox/src/adapter.rs` | `TailnetNetwork` (NetworkProvider impl) |
-| `crates/tailbox/src/auth.rs` | `resolve_auth_key()` priority chain |
-| `crates/tailbox/src/experiment.rs` | `ensure_tsrs_experiment()` once-guard |
-| `crates/tailbox/tests/auth_tests.rs` | Unit tests for auth resolution |
-| `crates/tailbox/tests/adapter_tests.rs` | Unit tests for setup/attach/cleanup/stats |
-| `crates/miniboxd/Cargo.toml` | `tailnet` feature + optional `tailbox` dep |
-| `crates/miniboxd/src/main.rs` | `"tailnet"` arm in network provider selection |
+| `Cargo.toml` (workspace root)                  | Add `tailbox` to `[workspace] members`                      |
+| `crates/tailbox/Cargo.toml`                    | New crate manifest                                          |
+| `crates/tailbox/src/lib.rs`                    | Re-export `TailnetNetwork`, `TailnetConfig`                 |
+| `crates/tailbox/src/config.rs`                 | `TailnetConfig` struct                                      |
+| `crates/tailbox/src/adapter.rs`                | `TailnetNetwork` (NetworkProvider impl)                     |
+| `crates/tailbox/src/auth.rs`                   | `resolve_auth_key()` priority chain                         |
+| `crates/tailbox/src/experiment.rs`             | `ensure_tsrs_experiment()` once-guard                       |
+| `crates/tailbox/tests/auth_tests.rs`           | Unit tests for auth resolution                              |
+| `crates/tailbox/tests/adapter_tests.rs`        | Unit tests for setup/attach/cleanup/stats                   |
+| `crates/miniboxd/Cargo.toml`                   | `tailnet` feature + optional `tailbox` dep                  |
+| `crates/miniboxd/src/main.rs`                  | `"tailnet"` arm in network provider selection               |
 
 ---
 
 ## Task 1: Protocol — `TailnetMode` + three new fields on `NetworkConfig`
 
 **Files:**
+
 - Modify: `crates/minibox-core/src/domain/networking.rs`
 
 - [ ] **Step 1: Add `TailnetMode` enum after the `NetworkMode` enum**
@@ -177,6 +178,7 @@ git commit -m "feat(protocol): add TailnetMode enum and tailnet fields to Networ
 ## Task 2: Workspace registration + `tailbox` crate skeleton
 
 **Files:**
+
 - Modify: `Cargo.toml` (workspace root)
 - Create: `crates/tailbox/Cargo.toml`
 - Create: `crates/tailbox/src/lib.rs`
@@ -453,6 +455,7 @@ git commit -m "feat(tailbox): new crate skeleton — TailnetNetwork stub, Tailne
 ## Task 3: Auth key resolution + tests
 
 **Files:**
+
 - Modify: `crates/tailbox/src/auth.rs`
 - Create: `crates/tailbox/tests/auth_tests.rs`
 
@@ -473,6 +476,7 @@ we compose manually with `or_else`.
 
 Rewrite `crates/tailbox/src/auth.rs` `lookup_secret` to use the full provider chain available
 in `minibox-secrets`. The priority inside `lookup_secret` is:
+
 1. OS keyring (if available).
 2. 1Password CLI (`op`).
 3. Environment variable (provider, not raw `std::env`).
@@ -605,6 +609,7 @@ git commit -m "feat(tailbox): auth key resolution chain + unit tests"
 ## Task 4: `TailnetNetwork` adapter — gateway + per-container modes
 
 **Files:**
+
 - Modify: `crates/tailbox/src/adapter.rs`
 - Create: `crates/tailbox/tests/adapter_tests.rs`
 
@@ -721,7 +726,7 @@ async fn setup_per_container_mode_returns_own_ip() {
 ```
 
 - [ ] **Step 2: Run — confirm `attach_is_noop`, `stats_returns_default`,
-  `cleanup_unknown_container_is_ok` pass; integration tests are skipped**
+      `cleanup_unknown_container_is_ok` pass; integration tests are skipped**
 
 ```bash
 cargo test -p tailbox -- adapter_tests --nocapture
@@ -866,13 +871,13 @@ fn net_context_path(container_id: &str) -> std::path::PathBuf {
 fn container_key_path(container_id: &str) -> std::path::PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     std::path::PathBuf::from(home)
-        .join(".mbx/tailnet")
+        .join(".minibox/tailnet")
         .join(format!("{container_id}.json"))
 }
 
 fn gateway_key_state() -> anyhow::Result<tailscale::KeyState> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let path = std::path::PathBuf::from(home).join(".mbx/tailnet/gateway.json");
+    let path = std::path::PathBuf::from(home).join(".minibox/tailnet/gateway.json");
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("create gateway key dir {}", parent.display()))?;
@@ -930,6 +935,7 @@ async fn cleanup(&self, container_id: &str) -> Result<()> {
 - [ ] **Step 8: Verify `tailscale-rs` API matches assumptions**
 
 The implementation above assumes:
+
 - `tailscale::Device::new(config, auth_key)` is async and returns `Result<Device>`.
 - `device.local_addr()` is async and returns `Result<SocketAddr>`.
 - `tailscale::load_key_file(path)` returns `Result<KeyState>`.
@@ -970,6 +976,7 @@ git commit -m "feat(tailbox): TailnetNetwork gateway + per-container setup/clean
 ## Task 5: `miniboxd` feature flag + wiring
 
 **Files:**
+
 - Modify: `crates/miniboxd/Cargo.toml`
 - Modify: `crates/miniboxd/src/main.rs`
 
@@ -998,7 +1005,7 @@ Locate the existing block (around line 493):
     let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
     match mode.as_str() {
         "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
-        "host" => Arc::new(mbx::adapters::network::HostNetwork::new()),
+        "host" => Arc::new(minibox::adapters::network::HostNetwork::new()),
         _ => Arc::new(NoopNetwork::new()),
     }
 ```
@@ -1010,7 +1017,7 @@ Replace with:
     match mode.as_str() {
         "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?)
             as Arc<dyn minibox_core::domain::NetworkProvider>,
-        "host" => Arc::new(mbx::adapters::network::HostNetwork::new())
+        "host" => Arc::new(minibox::adapters::network::HostNetwork::new())
             as Arc<dyn minibox_core::domain::NetworkProvider>,
         #[cfg(feature = "tailnet")]
         "tailnet" => {
@@ -1127,28 +1134,29 @@ git commit -m "chore(tailbox): clippy + test fixups from final validation pass"
 
 **Spec coverage:**
 
-| Requirement | Task |
-|---|---|
-| New `tailbox` crate with `{platform}box` naming | Task 2 |
-| `NetworkConfig` — `TailnetMode` enum + 3 new fields, `#[serde(default)]` | Task 1 |
-| `TailnetNetwork` struct — `DeviceStore`, `gateway_device`, `TailnetConfig` | Task 2 + 4 |
-| Gateway mode: lazy daemon device, shared tailnet IP | Task 4 Steps 3–4 |
-| Per-container mode: own device, key file, `DeviceStore` entry | Task 4 Steps 5–6 |
-| `attach()` is a no-op | Task 2 stub; confirmed in Task 4 test |
-| `cleanup()` — per-container drops device + key file; removes ctx file | Task 4 Step 7 |
-| `stats()` returns `NetworkStats::default()` | Task 2 stub; confirmed in Task 4 test |
-| `resolve_auth_key()` priority chain (inline → secrets → env → err) | Task 3 |
-| `TS_RS_EXPERIMENT` once-guard with `SAFETY:` comment | Task 2 Step 4 |
-| `tailnet` Cargo feature gates dep and `main.rs` arm | Task 5 |
-| `MINIBOX_NETWORK_MODE=tailnet` selects the adapter | Task 5 Step 2 |
-| Stability warning in crate-level doc | Task 2 Step 3 |
-| Context file at `/run/minibox/net/{container_id}.json` | Task 4 Step 3 |
-| Per-container key file at `~/.mbx/tailnet/{container_id}.json` | Task 4 Step 6 |
-| Unit tests: no network required | Tasks 3 + 4 |
-| Integration tests: `#[ignore]`, require `TAILSCALE_AUTH_KEY` | Task 4 Steps 1 + 7 |
-| Default build excludes tailscale-rs | Task 5 + Task 6 Step 5 |
+| Requirement                                                                | Task                                  |
+| -------------------------------------------------------------------------- | ------------------------------------- |
+| New `tailbox` crate with `{platform}box` naming                            | Task 2                                |
+| `NetworkConfig` — `TailnetMode` enum + 3 new fields, `#[serde(default)]`   | Task 1                                |
+| `TailnetNetwork` struct — `DeviceStore`, `gateway_device`, `TailnetConfig` | Task 2 + 4                            |
+| Gateway mode: lazy daemon device, shared tailnet IP                        | Task 4 Steps 3–4                      |
+| Per-container mode: own device, key file, `DeviceStore` entry              | Task 4 Steps 5–6                      |
+| `attach()` is a no-op                                                      | Task 2 stub; confirmed in Task 4 test |
+| `cleanup()` — per-container drops device + key file; removes ctx file      | Task 4 Step 7                         |
+| `stats()` returns `NetworkStats::default()`                                | Task 2 stub; confirmed in Task 4 test |
+| `resolve_auth_key()` priority chain (inline → secrets → env → err)         | Task 3                                |
+| `TS_RS_EXPERIMENT` once-guard with `SAFETY:` comment                       | Task 2 Step 4                         |
+| `tailnet` Cargo feature gates dep and `main.rs` arm                        | Task 5                                |
+| `MINIBOX_NETWORK_MODE=tailnet` selects the adapter                         | Task 5 Step 2                         |
+| Stability warning in crate-level doc                                       | Task 2 Step 3                         |
+| Context file at `/run/minibox/net/{container_id}.json`                     | Task 4 Step 3                         |
+| Per-container key file at `~/.minibox/tailnet/{container_id}.json`         | Task 4 Step 6                         |
+| Unit tests: no network required                                            | Tasks 3 + 4                           |
+| Integration tests: `#[ignore]`, require `TAILSCALE_AUTH_KEY`               | Task 4 Steps 1 + 7                    |
+| Default build excludes tailscale-rs                                        | Task 5 + Task 6 Step 5                |
 
 **Type consistency:**
+
 - `TailnetMode` defined Task 1, used in `NetworkConfig` Task 1, matched in `adapter.rs` Task 4.
 - `TailnetConfig` defined Task 2 (`config.rs`), instantiated in `miniboxd/main.rs` Task 5.
 - `DeviceStore` (`Arc<Mutex<HashMap<String, tailscale::Device>>>`) defined Task 2, populated
@@ -1160,6 +1168,7 @@ git commit -m "chore(tailbox): clippy + test fixups from final validation pass"
 - `net_context_path` / `container_key_path` / `gateway_key_state` defined Task 4 Step 6.
 
 **Platform contract:**
+
 - `tailbox` compiles on Linux and macOS only. The `#[cfg(feature = "tailnet")]` gate in
   `miniboxd` ensures the crate is never pulled into Windows or GKE builds unless explicitly
   opted in.

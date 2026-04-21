@@ -8,7 +8,7 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::DaemonState;
-use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageRegistry, DynNetworkProvider};
 use minibox_core::protocol::DaemonResponse;
@@ -124,7 +124,7 @@ fn make_deps(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = mbx::image::ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(tmp.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 

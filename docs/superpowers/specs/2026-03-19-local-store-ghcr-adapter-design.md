@@ -7,7 +7,7 @@
 
 Three self-contained additions that form the foundation for minibox-native CI execution:
 
-1. **`~/.mbx/cache/`** — user-local image store. Image pulls write to the user's home directory; no root required for image storage. Runtime state (containers, mounts, cgroups) is unchanged.
+1. **`~/.minibox/cache/`** — user-local image store. Image pulls write to the user's home directory; no root required for image storage. Runtime state (containers, mounts, cgroups) is unchanged.
 2. **`GhcrRegistry`** — a new `ImageRegistry` adapter for GitHub Container Registry (`ghcr.io`). Nearly identical to `DockerHubRegistry` — same OCI Distribution Spec — with GitHub PAT auth instead of Docker Hub anonymous token exchange.
 3. **Protocol streaming** — `ContainerOutput` and `ContainerStopped` message types that enable stdout/stderr to be piped from a running container back to the CLI. Required before containerized hook execution can work.
 
@@ -41,7 +41,7 @@ A reference containing a `.` or `:` in the first path component is treated as a 
 
 ### Implementation
 
-A new `ImageRef` type in `crates/mbx/src/image/reference.rs`:
+A new `ImageRef` type in `crates/minibox/src/image/reference.rs`:
 
 ```rust
 pub struct ImageRef {
@@ -63,7 +63,7 @@ The `cache_path` method produces the path under `MINIBOX_DATA_DIR/images/` where
 
 ---
 
-## `~/.mbx/cache/` — User-Local Image Store
+## `~/.minibox/cache/` — User-Local Image Store
 
 ### Motivation
 
@@ -72,7 +72,7 @@ Today `MINIBOX_DATA_DIR` defaults to `/var/lib/minibox/` — a system path requi
 ### Directory Structure
 
 ```
-~/.mbx/cache/
+~/.minibox/cache/
   images/
     <registry>/
       <namespace>/<name>/
@@ -96,28 +96,28 @@ Runtime state remains at:
 `MINIBOX_DATA_DIR` controls image storage. The daemon resolves this at startup based on its own effective UID:
 
 1. `MINIBOX_DATA_DIR` env var (explicit override — unchanged)
-2. `~/.mbx/cache/` if effective UID is non-root
+2. `~/.minibox/cache/` if effective UID is non-root
 3. `/var/lib/minibox/` if effective UID is root (unchanged)
 
 No breaking change: existing deployments using `sudo miniboxd` continue to use `/var/lib/minibox/`.
 
-**Non-root image pulls:** When a future CLI-direct pull path is implemented (without daemon), the CLI applies the same resolution: `MINIBOX_DATA_DIR` → `~/.mbx/cache/`. For now, all pulls go through the daemon which runs as root and uses `/var/lib/minibox/` unless `MINIBOX_DATA_DIR` is explicitly overridden.
+**Non-root image pulls:** When a future CLI-direct pull path is implemented (without daemon), the CLI applies the same resolution: `MINIBOX_DATA_DIR` → `~/.minibox/cache/`. For now, all pulls go through the daemon which runs as root and uses `/var/lib/minibox/` unless `MINIBOX_DATA_DIR` is explicitly overridden.
 
 ### Image path encoding
 
 Registry hostname and full namespace are included in the path:
 
 ```
-~/.mbx/cache/images/docker.io/library/alpine/latest/
-~/.mbx/cache/images/ghcr.io/org/minibox-rust-ci/stable/
+~/.minibox/cache/images/docker.io/library/alpine/latest/
+~/.minibox/cache/images/ghcr.io/org/minibox-rust-ci/stable/
 ```
 
 ### Affected modules
 
-- `crates/mbx/src/image/reference.rs` — new `ImageRef` type (see above)
-- `crates/mbx/src/adapters/registry.rs` — `DockerHubRegistry`: use `ImageRef::cache_path()` for layer extraction paths; update `data_dir` resolution logic
-- `crates/mbx/src/image/` — layer extraction paths use resolved `data_dir`
-- `crates/mbx/src/preflight.rs` — doctor check reports active data dir
+- `crates/minibox/src/image/reference.rs` — new `ImageRef` type (see above)
+- `crates/minibox/src/adapters/registry.rs` — `DockerHubRegistry`: use `ImageRef::cache_path()` for layer extraction paths; update `data_dir` resolution logic
+- `crates/minibox/src/image/` — layer extraction paths use resolved `data_dir`
+- `crates/minibox/src/preflight.rs` — doctor check reports active data dir
 
 ---
 
@@ -179,7 +179,7 @@ Both `DockerHubRegistry` and `GhcrRegistry` are initialized unconditionally at d
 
 ### Implementation
 
-New file: `crates/mbx/src/adapters/ghcr.rs`
+New file: `crates/minibox/src/adapters/ghcr.rs`
 
 ```rust
 pub struct GhcrRegistry {
@@ -189,12 +189,12 @@ pub struct GhcrRegistry {
 }
 ```
 
-Implements `ImageRegistry` trait. Shares layer extraction, manifest parsing, and digest verification with `DockerHubRegistry` — these live in `crates/mbx/src/image/` and are registry-agnostic.
+Implements `ImageRegistry` trait. Shares layer extraction, manifest parsing, and digest verification with `DockerHubRegistry` — these live in `crates/minibox/src/image/` and are registry-agnostic.
 
 ### Affected modules
 
-- `crates/mbx/src/adapters/ghcr.rs` — new file
-- `crates/mbx/src/adapters/mod.rs` — export `GhcrRegistry`
+- `crates/minibox/src/adapters/ghcr.rs` — new file
+- `crates/minibox/src/adapters/mod.rs` — export `GhcrRegistry`
 - `crates/miniboxd/src/main.rs` — initialize both registries at startup
 - `crates/miniboxd/src/handler.rs` — add `select_registry()`, update all image operations to call it
 
@@ -224,7 +224,7 @@ When `ephemeral: true`, the daemon deletes the container's overlay upper dir and
 
 ### New message types
 
-Added to `crates/mbx/src/protocol.rs`:
+Added to `crates/minibox/src/protocol.rs`:
 
 ```rust
 #[serde(tag = "type")]
@@ -268,7 +268,7 @@ All messages are newline-delimited JSON over the existing Unix socket, consisten
 
 ### Implementation
 
-- `crates/mbx/src/container/process.rs` — pipe child stdout/stderr to a pair of `UnixStream` handles; spawn two reader tasks that send `ContainerOutput` messages to the client connection
+- `crates/minibox/src/container/process.rs` — pipe child stdout/stderr to a pair of `UnixStream` handles; spawn two reader tasks that send `ContainerOutput` messages to the client connection
 - `crates/miniboxd/src/handler.rs` — `handle_run`: after spawning container, enter read loop sending `ContainerOutput` until process exits, then send `ContainerStopped`
 - `crates/minibox-cli/src/commands/run.rs` — read streaming response, write to stdout/stderr, exit with received code
 
@@ -281,7 +281,7 @@ Existing clients that only read the first response message (e.g. expecting `Cont
 ## Security
 
 - `GHCR_TOKEN` is never logged (existing tracing conventions: structured fields only, no secret values)
-- Path validation for `~/.mbx/cache/` follows same `canonicalize()` + `..` rejection as `/var/lib/minibox/`
+- Path validation for `~/.minibox/cache/` follows same `canonicalize()` + `..` rejection as `/var/lib/minibox/`
 - Layer size limits (1 GB per layer, 5 GB total) apply regardless of registry
 
 ---

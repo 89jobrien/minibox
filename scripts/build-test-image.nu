@@ -1,5 +1,5 @@
 #!/usr/bin/env nu
-# Build the mbx-tester image inside Colima for Linux test dogfooding.
+# Build the minibox-tester image inside Colima for Linux test dogfooding.
 # Copies cross-compiled binaries into Colima and runs docker build there.
 #
 # Usage: nu scripts/build-test-image.nu [--target aarch64-unknown-linux-musl]
@@ -7,7 +7,7 @@
 def main [
     --target: string = "aarch64-unknown-linux-musl"  # Cargo target triple
 ] {
-    let target_dir = ($env.HOME | path join ".mbx" "cache" "target")
+    let target_dir = ($env.HOME | path join ".minibox" "cache" "target")
     let bin_dir = ($target_dir | path join $target "debug")
     let deps_dir = ($bin_dir | path join "deps")
 
@@ -81,16 +81,16 @@ RUN chmod +x /run-tests.sh
     $dockerfile | save ($ctx | path join "Dockerfile")
 
     # Build inside Colima — tar context and pipe to docker build
-    print "[3/3] building mbx-tester:latest inside Colima..."
+    print "[3/3] building minibox-tester:latest inside Colima..."
     let tar_bytes = (
         COPYFILE_DISABLE=1 ^tar --no-xattrs -c -C $ctx . | complete
     )
 
     # Pipe tar to docker build via colima ssh
-    (COPYFILE_DISABLE=1 ^tar --no-xattrs -c -C $ctx .) | ^colima ssh -- docker build -t mbx-tester:latest -
+    (COPYFILE_DISABLE=1 ^tar --no-xattrs -c -C $ctx .) | ^colima ssh -- docker build -t minibox-tester:latest -
 
     rm -rf $ctx
-    print "mbx-tester:latest ready in Colima"
+    print "minibox-tester:latest ready in Colima"
 }
 
 # Find the compiled test binary in deps/ by prefix match

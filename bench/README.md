@@ -4,11 +4,11 @@ Benchmarking for minibox. Results are stored in `bench/results/` and committed a
 
 ## Suites
 
-| Suite       | Tests | Requires daemon  | Platform |
-| ----------- | ----- | ---------------- | -------- |
-| `codec`     | 36    | No               | Any      |
-| `adapter`   | 10    | No               | Any      |
-| `cli`       | Multiple command cases (`pull`, `run`, `ps`, `stop`, `rm`, `exec`, `e2e`) | Yes (Linux+root) | Linux    |
+| Suite     | Tests                                                                     | Requires daemon  | Platform |
+| --------- | ------------------------------------------------------------------------- | ---------------- | -------- |
+| `codec`   | 36                                                                        | No               | Any      |
+| `adapter` | 10                                                                        | No               | Any      |
+| `cli`     | Multiple command cases (`pull`, `run`, `ps`, `stop`, `rm`, `exec`, `e2e`) | Yes (Linux+root) | Linux    |
 
 ## Run via xtask (saves results)
 
@@ -30,7 +30,7 @@ Results are appended to `bench/results/bench.jsonl` and written to `bench/result
 ## Criterion HTML reports (local only)
 
 ```bash
-cargo bench -p mbx
+cargo bench -p minibox
 # Opens target/criterion/report/index.html
 ```
 

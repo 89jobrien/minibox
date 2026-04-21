@@ -5,7 +5,7 @@
 def main [
     --adapter: string = "colima"  # Adapter to use (colima, native, gke)
 ] {
-    let binary = ($env.HOME | path join ".mbx" "cache" "target" "release" "miniboxd")
+    let binary = ($env.HOME | path join ".minibox" "cache" "target" "release" "miniboxd")
 
     if not ($binary | path exists) {
         error make {msg: $"miniboxd not found at ($binary) — run: cargo build --release -p miniboxd"}

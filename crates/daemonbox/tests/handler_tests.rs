@@ -8,7 +8,7 @@ use daemonbox::handler::{
     handle_resize_pty, handle_send_input,
 };
 use daemonbox::state::{ContainerState, DaemonState};
-use mbx::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageRegistry, NetworkMode};
 use minibox_core::protocol::DaemonResponse;
@@ -184,7 +184,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 /// Helper to create daemon state with a test image store.
 fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = mbx::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -1237,7 +1237,7 @@ async fn test_stop_nonexistent_container() {
 /// (cleanup failures are best-effort warnings, not hard errors).
 #[tokio::test]
 async fn test_remove_with_filesystem_cleanup_failure() {
-    use mbx::adapters::mocks::FailableFilesystemMock;
+    use minibox::adapters::mocks::FailableFilesystemMock;
 
     let temp_dir = TempDir::new().expect("create temp dir");
     let failable_fs = Arc::new(FailableFilesystemMock::new());
@@ -3305,7 +3305,7 @@ async fn test_load_image_success() {
 
     let response = handler::handle_load_image(
         "fake.tar".to_string(),
-        "mbx-tester".to_string(),
+        "minibox-tester".to_string(),
         "latest".to_string(),
         state,
         Arc::new(deps),
@@ -3337,7 +3337,7 @@ async fn test_load_image_failure() {
 
     let response = handler::handle_load_image(
         "/nonexistent/fake.tar".to_string(),
-        "mbx-tester".to_string(),
+        "minibox-tester".to_string(),
         "latest".to_string(),
         state,
         Arc::new(deps),

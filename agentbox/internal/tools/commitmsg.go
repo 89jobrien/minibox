@@ -41,7 +41,7 @@ func (c *CommitMsg) Generate(ctx context.Context, input CommitMsgContext) (strin
 		"- Follow the existing commit style shown in the recent log\n" +
 		"- Use conventional commits format: `type(scope): description`\n" +
 		"  Types: feat, fix, docs, refactor, test, chore, perf, ci\n" +
-		"  Scope: crate name, module, or area (e.g. mbx, standup, justfile)\n" +
+		"  Scope: crate name, module, or area (e.g. minibox, standup, justfile)\n" +
 		"- First line: ≤72 chars, imperative mood, no period\n" +
 		"- If the change warrants it, add a blank line then a short body (2–4 lines max)\n" +
 		"- Do NOT add 'Co-Authored-By' lines — those are added separately\n" +

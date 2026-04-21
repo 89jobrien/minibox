@@ -161,7 +161,7 @@ fn main() -> Result<()> {
                 "  test-linux       build image + load into minibox + run tests in container"
             );
             eprintln!(
-                "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.mbx/vm/overlay/cas/)"
+                "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             Ok(())

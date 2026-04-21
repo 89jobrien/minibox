@@ -129,7 +129,7 @@ mod suite {
     // -----------------------------------------------------------------------
 
     fn vm_dir() -> std::path::PathBuf {
-        dirs::home_dir().unwrap().join(".mbx").join("vm")
+        dirs::home_dir().unwrap().join(".minibox").join("vm")
     }
 
     fn vm_image_available() -> bool {

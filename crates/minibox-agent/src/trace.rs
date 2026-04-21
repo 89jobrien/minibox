@@ -1,7 +1,7 @@
 //! File-based adapter for the [`TraceStore`] port.
 //!
 //! Stores each pipeline trace as `{id}.json` under a configurable directory
-//! (default `~/.mbx/traces/`). Rotation removes files older than
+//! (default `~/.minibox/traces/`). Rotation removes files older than
 //! `MINIBOX_TRACE_RETENTION_DAYS` (default 7) or when total size exceeds
 //! `MINIBOX_TRACE_MAX_MB` (default 500).
 
@@ -67,7 +67,7 @@ impl FileTraceStore {
 
     /// Build from environment variables, falling back to defaults.
     ///
-    /// - Directory: `MINIBOX_TRACE_DIR` or `~/.mbx/traces/`
+    /// - Directory: `MINIBOX_TRACE_DIR` or `~/.minibox/traces/`
     /// - Retention: `MINIBOX_TRACE_RETENTION_DAYS` (default 7)
     /// - Max size: `MINIBOX_TRACE_MAX_MB` (default 500)
     pub fn from_env() -> Result<Self> {
@@ -248,7 +248,7 @@ impl TraceStore for FileTraceStore {
 // ---------------------------------------------------------------------------
 
 fn default_trace_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".mbx").join("traces"))
+    dirs::home_dir().map(|h| h.join(".minibox").join("traces"))
 }
 
 struct DirEntry {

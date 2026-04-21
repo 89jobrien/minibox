@@ -15,10 +15,10 @@
 
 #![cfg(target_os = "linux")]
 
-use mbx::adapters::CgroupV2Limiter;
-use mbx::domain::{ResourceConfig, ResourceLimiter};
-use mbx::preflight;
-use mbx::require_capability;
+use minibox::adapters::CgroupV2Limiter;
+use minibox::domain::{ResourceConfig, ResourceLimiter};
+use minibox::preflight;
+use minibox::require_capability;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;

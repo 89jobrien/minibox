@@ -40,7 +40,7 @@ impl TailnetNetwork {
     fn container_key_path(id: &str) -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         PathBuf::from(home)
-            .join(".mbx")
+            .join(".minibox")
             .join("tailnet")
             .join(format!("{id}.json"))
     }
@@ -49,7 +49,7 @@ impl TailnetNetwork {
     fn gateway_key_path() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
         PathBuf::from(home)
-            .join(".mbx")
+            .join(".minibox")
             .join("tailnet")
             .join("gateway.json")
     }

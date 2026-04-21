@@ -1,4 +1,5 @@
 # Quick Wins Design Spec
+
 # Container Freeze, Events, Image GC + Leases, Bridge Networking
 
 **Date:** 2026-04-02
@@ -22,16 +23,18 @@ largest:
 ## Phase 1: Container Freeze / Pause (XS)
 
 ### Problem
+
 No way to pause a running container. `cgroup.freeze` exists in kernel but is unwired.
 
 ### Design
 
-Add `pause()` / `resume()` to `CgroupManager` (`crates/mbx/src/container/cgroups.rs`).
+Add `pause()` / `resume()` to `CgroupManager` (`crates/minibox/src/container/cgroups.rs`).
 Write `"1"` to `{cgroup_path}/cgroup.freeze` for pause, `"0"` for resume.
 
 New `ContainerState::Paused` variant (between `Running` and `Stopped`).
 
 New protocol variants:
+
 - `DaemonRequest::PauseContainer { id: String }`
 - `DaemonRequest::ResumeContainer { id: String }`
 - `DaemonResponse::ContainerPaused { id: String }`
@@ -48,9 +51,11 @@ return `DomainError::InvalidConfig("pause not supported on this platform")` when
 no cgroup path is available. CLI prints error and exits 1.
 
 ### State machine addition
+
 ```
 Created → Running → Paused → Running → Stopped
 ```
+
 `update_container_state` must allow `Running → Paused` and `Paused → Running`
 transitions.
 
@@ -59,6 +64,7 @@ transitions.
 ## Phase 2: Container Events (S)
 
 ### Problem
+
 No observability. Handler fires and forgets. Dashbox polls state; can't react.
 
 ### Design
@@ -107,6 +113,7 @@ New protocol variant: `DaemonResponse::Event { event: ContainerEvent }`
 New CLI: `minibox events` — streams JSON-lines to stdout until Ctrl+C.
 
 ### Event emission points
+
 - `handle_run` after spawn → `Started`
 - `daemon_wait_for_exit` on exit → `Stopped` or `OomKilled`
 - `handle_run` on create → `Created`
@@ -120,6 +127,7 @@ New CLI: `minibox events` — streams JSON-lines to stdout until Ctrl+C.
 ## Phase 3: Image GC + Leases (M)
 
 ### Problem
+
 Disk fills up. No way to remove unused images. No protection for in-flight pulls.
 
 ### Design
@@ -178,6 +186,7 @@ pub struct ImageGc {
 ```
 
 GC algorithm:
+
 1. List all `name:tag` in `ImageStore` (walk `{data_dir}/images/`)
 2. Collect `in_use`: all `source_image_ref` from running/paused containers
 3. Collect `leased`: all `image_refs` from non-expired leases
@@ -186,6 +195,7 @@ GC algorithm:
 6. Emit `ImagePruned` event
 
 New protocol variants:
+
 - `DaemonRequest::Prune { dry_run: bool }`
 - `DaemonResponse::Pruned { report: PruneReport }`
 
@@ -198,12 +208,13 @@ Also: `minibox rmi <image>` — remove a specific image (if not in use).
 ## Phase 4: Bridge Networking (M)
 
 ### Problem
+
 `NetworkMode::Bridge` is defined but no adapter exists. Containers get isolated
 network namespace with no connectivity.
 
 ### Design
 
-New file: `crates/mbx/src/adapters/network/bridge.rs` (Linux-only)
+New file: `crates/minibox/src/adapters/network/bridge.rs` (Linux-only)
 
 ```rust
 #[cfg(target_os = "linux")]
@@ -216,6 +227,7 @@ pub struct BridgeNetwork {
 ```
 
 #### setup() flow
+
 1. Ensure `minibox0` bridge exists (`ip link add minibox0 type bridge` via `rtnetlink` crate or subprocess fallback)
 2. Ensure bridge has an IP on the subnet (`ip addr add 172.20.0.1/16 dev minibox0`)
 3. Ensure bridge is up (`ip link set minibox0 up`)
@@ -226,6 +238,7 @@ pub struct BridgeNetwork {
 8. Return namespace path (written by caller after `clone(CLONE_NEWNET)`)
 
 #### attach() flow (called after container PID is known)
+
 1. Move peer veth into container's network namespace: `ip link set eth0 netns {pid}`
 2. Inside namespace (via `nsenter` or `setns`):
    - Assign IP to `eth0`
@@ -234,12 +247,15 @@ pub struct BridgeNetwork {
    - Write `/etc/resolv.conf` with DNS servers
 
 #### cleanup() flow
+
 1. Delete veth pair (bridge stays — shared resource)
 2. Delete iptables DNAT rules for port mappings
 3. Release IP back to allocator
 
 #### Port mapping
+
 For each `PortMapping` in `NetworkConfig`:
+
 ```
 iptables -t nat -A PREROUTING -p {proto} --dport {host_port} \
   -j DNAT --to-destination {container_ip}:{container_port}
@@ -247,11 +263,13 @@ iptables -t nat -A POSTROUTING -s 172.20.0.0/16 -j MASQUERADE
 ```
 
 #### IpAllocator
+
 Sequential allocation from subnet, skipping `.0` (network) and `.1` (gateway).
 Persisted in `DaemonState` (new field: `allocated_ips: HashMap<String, IpAddr>`).
 Released on container stop/cleanup.
 
 #### Dependencies
+
 - `rtnetlink` crate for netlink socket operations (or `nix` raw socket + subprocess fallback)
 - `ipnet` crate for CIDR parsing
 - `iptables` subprocess for NAT rules (spawn `iptables` binary)
@@ -260,6 +278,7 @@ Released on container stop/cleanup.
 `NetworkMode::Bridge` on macOS → `DomainError::InvalidConfig("bridge networking requires Linux")`.
 
 ### Wiring
+
 `miniboxd` native suite: if `config.network.mode == Bridge`, construct `BridgeNetwork`.
 `daemonbox/src/handler.rs`: pass `network_provider` through to `spawn_process`.
 
@@ -267,12 +286,12 @@ Released on container stop/cleanup.
 
 ## Testing Strategy
 
-| Feature | Unit test | Integration test | Platform |
-|---|---|---|---|
-| Freeze | Mock cgroup writes | Real cgroup (Linux+root) | Linux only for integration |
-| Events | MockEventSink counts calls | CLI `minibox events` streams | any |
-| GC | In-memory store + lease | Real image store on tmpfs | any |
-| Bridge | Subprocess mock | Real veth/bridge creation | Linux+root |
+| Feature | Unit test                  | Integration test             | Platform                   |
+| ------- | -------------------------- | ---------------------------- | -------------------------- |
+| Freeze  | Mock cgroup writes         | Real cgroup (Linux+root)     | Linux only for integration |
+| Events  | MockEventSink counts calls | CLI `minibox events` streams | any                        |
+| GC      | In-memory store + lease    | Real image store on tmpfs    | any                        |
+| Bridge  | Subprocess mock            | Real veth/bridge creation    | Linux+root                 |
 
 All unit tests: `cargo xtask test-unit`
 Integration: `just test-integration` (Linux+root)
@@ -281,22 +300,22 @@ Integration: `just test-integration` (Linux+root)
 
 ## Files touched
 
-| File | Change |
-|---|---|
-| `crates/minibox-core/src/events.rs` | **CREATE** — event types + traits |
-| `crates/minibox-core/src/image/lease.rs` | **CREATE** — lease service |
-| `crates/minibox-core/src/image/gc.rs` | **CREATE** — GC + prune |
-| `crates/mbx/src/adapters/network/bridge.rs` | **CREATE** — bridge adapter |
-| `crates/minibox-core/src/lib.rs` | mod events |
-| `crates/minibox-core/src/domain.rs` | EventSink/EventSource type aliases |
-| `crates/minibox-core/src/image/mod.rs` | list_all_images(), delete_image() |
-| `crates/minibox-core/src/protocol.rs` | Pause/Resume/Prune/Events variants |
-| `crates/mbx/src/protocol.rs` | mirror changes |
-| `crates/mbx/src/container/cgroups.rs` | pause(), resume() |
-| `crates/mbx/src/adapters/network/mod.rs` | re-export BridgeNetwork |
-| `crates/daemonbox/src/handler.rs` | handle_pause/resume/prune/events, event_sink dep |
-| `crates/daemonbox/src/server.rs` | dispatch arms, Event as non-terminal |
-| `crates/daemonbox/src/state.rs` | Paused state, allocated_ips |
-| `crates/miniboxd/src/main.rs` | wire BroadcastEventBroker, BridgeNetwork |
-| `crates/minibox-cli/src/commands/` | pause.rs, resume.rs, events.rs, prune.rs, rmi.rs |
-| `crates/minibox-cli/src/main.rs` | register new subcommands |
+| File                                            | Change                                           |
+| ----------------------------------------------- | ------------------------------------------------ |
+| `crates/minibox-core/src/events.rs`             | **CREATE** — event types + traits                |
+| `crates/minibox-core/src/image/lease.rs`        | **CREATE** — lease service                       |
+| `crates/minibox-core/src/image/gc.rs`           | **CREATE** — GC + prune                          |
+| `crates/minibox/src/adapters/network/bridge.rs` | **CREATE** — bridge adapter                      |
+| `crates/minibox-core/src/lib.rs`                | mod events                                       |
+| `crates/minibox-core/src/domain.rs`             | EventSink/EventSource type aliases               |
+| `crates/minibox-core/src/image/mod.rs`          | list_all_images(), delete_image()                |
+| `crates/minibox-core/src/protocol.rs`           | Pause/Resume/Prune/Events variants               |
+| `crates/minibox/src/protocol.rs`                | mirror changes                                   |
+| `crates/minibox/src/container/cgroups.rs`       | pause(), resume()                                |
+| `crates/minibox/src/adapters/network/mod.rs`    | re-export BridgeNetwork                          |
+| `crates/daemonbox/src/handler.rs`               | handle_pause/resume/prune/events, event_sink dep |
+| `crates/daemonbox/src/server.rs`                | dispatch arms, Event as non-terminal             |
+| `crates/daemonbox/src/state.rs`                 | Paused state, allocated_ips                      |
+| `crates/miniboxd/src/main.rs`                   | wire BroadcastEventBroker, BridgeNetwork         |
+| `crates/minibox-cli/src/commands/`              | pause.rs, resume.rs, events.rs, prune.rs, rmi.rs |
+| `crates/minibox-cli/src/main.rs`                | register new subcommands                         |

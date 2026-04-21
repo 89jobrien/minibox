@@ -12,7 +12,7 @@ Interactive terminal dashboard for minibox project health. Six tabs displaying a
 
 ### 1. Agents
 
-Displays data from `~/.mbx/agent-runs.jsonl`.
+Displays data from `~/.minibox/agent-runs.jsonl`.
 
 - **Header panel:** total runs, complete/running/crashed counts (colored)
 - **Summary table:** per-script stats (runs, avg duration, last run, last output)
@@ -120,6 +120,7 @@ dashbox/
 - `TabAction` — enum returned by key handlers: `None`, `Scroll(direction)`, `RunInline(Command)`, `RunBackground(Command)`, `OpenUrl(String)`, `ExpandRow`.
 
 **Adapters:**
+
 - `data/*.rs` — concrete `DataSource` implementations (file readers, CLI wrappers)
 - `tabs/*.rs` — concrete `TabRenderer` implementations (ratatui widgets)
 
@@ -175,6 +176,7 @@ Rendered as a `Tabs` widget at the top of the screen. Active tab highlighted. Fo
 ## Status Bar
 
 Bottom row of the screen. Shows:
+
 - Left: available keys for current tab (e.g., `t:test  b:bench  B:vps-bench  r:refresh`)
 - Right: background task status if running (e.g., `VPS bench 42s...`)
 - Notification flash: on background completion, highlight for 5s then fade

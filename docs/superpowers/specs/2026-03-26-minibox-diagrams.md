@@ -24,7 +24,7 @@
 │  │                       Library Crates                                  │ │
 │  │                                                                       │ │
 │  │  ┌────────────┐  ┌────────────┐  ┌────────┐  ┌────────┐               │ │
-│  │  │ daemonbox  │  │  mbx  │  │ macbox │  │ winbox │               │ │
+│  │  │ daemonbox  │  │  minibox  │  │ macbox │  │ winbox │               │ │
 │  │  │ handler    │  │  adapters  │  │ colima │  │  stub  │               │ │
 │  │  │ server     │  │  container │  │ macOS  │  │  win   │               │ │
 │  │  │ state      │  │  image     │  │        │  │        │               │ │
@@ -51,8 +51,8 @@
   miniboxd
   ├──→ daemonbox
   │    ├──→ minibox-core
-  │    └──→ mbx
-  ├──→ mbx
+  │    └──→ minibox
+  ├──→ minibox
   │    ├──→ minibox-core
   │    ├──→ minibox-macros (proc-macro)
   │    └──→ nix (syscalls)
@@ -71,12 +71,12 @@
   ├── error.rs          Cross-platform error types
   └── adapters/mocks    Test doubles (behind test-utils feature)
 
-  mbx re-exports minibox-core:
+  minibox re-exports minibox-core:
     pub use minibox_core::domain;   ← as_any!/adapt! macros expand to crate::domain::AsAny
     pub use minibox_core::image;
     pub use minibox_core::protocol;
 
-  ⚠ Do NOT remove mbx re-exports — macro expansion depends on them
+  ⚠ Do NOT remove minibox re-exports — macro expansion depends on them
 ```
 
 ---
@@ -95,7 +95,7 @@
          Adapters                    (pure logic)                  Adapters
               │                          │                            │
     ┌─────────▼──────────┐               │               ┌────────────▼─────────────┐
-    │ minibox-cli        │               │               │ mbx/adapters/       │
+    │ minibox-cli        │               │               │ minibox/adapters/       │
     │ (CLI commands)     │               │               │                          │
     ├────────────────────┤               │               │ ┌────────────────────┐   │
     │ daemonbox/server   │               │               │ │  ImageRegistry     │   │
@@ -105,7 +105,7 @@
     ┌────────────────────┐               │               │ ├────────────────────┤   │
     │ Future:            │               │               │ │  ContainerRuntime  │   │
     │ • HTTP/gRPC API    │               │               │ │  ├─ LinuxNamespace │   │
-    │ • mbxctl REST      │               │               │ │  ├─ Proot (GKE)    │   │
+    │ • miniboxctl REST      │               │               │ │  ├─ Proot (GKE)    │   │
     │ • Web dashboard    │               │               │ │  └─ Colima         │   │
     └────────────────────┘               │               │ ├────────────────────┤   │
                                          │               │ │  FilesystemProvider│   │
@@ -837,7 +837,7 @@
           └── pid                        ← host PID file
 
   /var/lib/minibox/                      ← MINIBOX_DATA_DIR (root)
-  ~/.mbx/cache/                          ← MINIBOX_DATA_DIR (non-root)
+  ~/.minibox/cache/                          ← MINIBOX_DATA_DIR (non-root)
   ├── images/
   │   ├── library/
   │   │   ├── alpine/
@@ -1017,12 +1017,12 @@
   }
 
   Platform crate naming convention: {platform}box
-  ├─ mbx   (Linux namespaces, cgroups, overlay)
+  ├─ minibox   (Linux namespaces, cgroups, overlay)
   ├─ macbox     (macOS via Colima VM)
   └─ winbox     (Windows stub)
 
   Compile gates:
-  ├─ mbx/container/  → #[cfg(target_os = "linux")]
+  ├─ minibox/container/  → #[cfg(target_os = "linux")]
   ├─ nix syscall wrappers → #[cfg(unix)]
   └─ miniboxd compiles on all platforms (macbox::start() dispatch)
 ```

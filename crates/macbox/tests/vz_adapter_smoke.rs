@@ -2,7 +2,7 @@
 //!
 //! Requires:
 //!   - macOS + Apple Silicon (or x86 Mac with VZ.framework)
-//!   - VM image at ~/.mbx/vm/ (run `cargo xtask build-vm-image` first)
+//!   - VM image at ~/.minibox/vm/ (run `cargo xtask build-vm-image` first)
 //!   - `vz` feature compiled in
 //!
 //! Automatically skipped if VM image is absent.
@@ -16,7 +16,7 @@ use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::sync::Arc;
 
 fn vm_dir() -> std::path::PathBuf {
-    dirs::home_dir().unwrap().join(".mbx").join("vm")
+    dirs::home_dir().unwrap().join(".minibox").join("vm")
 }
 
 fn vm_image_available() -> bool {
@@ -83,7 +83,7 @@ async fn boot_vm(config: VzVmConfig) -> anyhow::Result<VzVm> {
 #[tokio::test]
 async fn vz_smoke_list_containers_returns_empty() {
     if !vm_image_available() {
-        eprintln!("SKIP: VM image not found at ~/.mbx/vm/ — run `cargo xtask build-vm-image`");
+        eprintln!("SKIP: VM image not found at ~/.minibox/vm/ — run `cargo xtask build-vm-image`");
         return;
     }
 

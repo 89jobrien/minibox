@@ -21,10 +21,10 @@ Dual-mode LLM access. Agents choose mode per-task based on these rules:
 - **Use Agent SDK** when the task requires tool use, file editing, multi-turn reasoning, MCP servers, or code execution. The agent needs to act on the environment.
 - **Use minibox-llm** when the task is a single-shot completion: scoring, classification, structured JSON output, summarization. The agent needs an answer, not an action.
 
-| Mode | When | How |
-|------|------|-----|
-| Agent SDK (CLI subprocess) | Agentic workflows: tool use, multi-turn, MCP, code generation | Go Agent SDK wraps `claude` CLI, NDJSON over stdin/stdout |
-| minibox-llm (direct API) | Simple completions: scoring, classification, structured output | Rust HTTP service (existing crate, ~600 lines) |
+| Mode                       | When                                                           | How                                                       |
+| -------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| Agent SDK (CLI subprocess) | Agentic workflows: tool use, multi-turn, MCP, code generation  | Go Agent SDK wraps `claude` CLI, NDJSON over stdin/stdout |
+| minibox-llm (direct API)   | Simple completions: scoring, classification, structured output | Rust HTTP service (existing crate, ~600 lines)            |
 
 ### Agent SDK Integration
 
@@ -32,14 +32,15 @@ Use a community Go port of the Claude Agent SDK. Container images ship with the 
 
 Candidate SDKs evaluated:
 
-| Project | Differentiator |
-|---------|---------------|
+| Project                          | Differentiator                                             |
+| -------------------------------- | ---------------------------------------------------------- |
 | character-ai/claude-agent-sdk-go | Direct API Agent, type-safe tool registration via generics |
-| severity1/claude-agent-sdk-go | 100% Python SDK compat, dual API (Query + Client) |
-| M1n9X/claude-agent-sdk-go | Complete 204-feature parity with Python SDK |
-| partio-io/claude-agent-sdk-go | Multi-turn, tool use, hooks, MCP, subagents |
+| severity1/claude-agent-sdk-go    | 100% Python SDK compat, dual API (Query + Client)          |
+| M1n9X/claude-agent-sdk-go        | Complete 204-feature parity with Python SDK                |
+| partio-io/claude-agent-sdk-go    | Multi-turn, tool use, hooks, MCP, subagents                |
 
 Final SDK selection deferred to implementation phase — evaluate against these criteria:
+
 1. CLI subprocess stability (NDJSON parsing robustness)
 2. Multi-turn session management
 3. Tool use / MCP support
@@ -51,6 +52,7 @@ Final SDK selection deferred to implementation phase — evaluate against these 
 The existing Rust crate (`crates/minibox-llm/`) provides multi-provider LLM access with fallback chains, retry logic, and structured output. Go agents call it for simple completions where full agentic capabilities are unnecessary.
 
 For Tier A, agents call minibox-llm either:
+
 - Via a lightweight HTTP/UDS sidecar (Axum, ~100 lines of Rust wrapper)
 - Or via a Go-native reimplementation wrapping official SDKs (`anthropic-sdk-go`, `openai-go`, `go-genai`) — ~700 lines of Go mirroring the same `FallbackChain` + `RetryingProvider` pattern
 
@@ -111,16 +113,17 @@ agentbox bench <subcmd>                 # performance analysis
 Each tool agent is a separate binary. Independently shippable, smaller attack surface:
 
 ```
-mbx-commit-msg    # AI commit message generation
-mbx-diagnose      # container failure diagnosis
-mbx-sync-check    # git sync with conflict resolution
-mbx-gen-tests     # test scaffolding
-mbx-standup       # activity summarization
+minibox-commit-msg    # AI commit message generation
+minibox-diagnose      # container failure diagnosis
+minibox-sync-check    # git sync with conflict resolution
+minibox-gen-tests     # test scaffolding
+minibox-standup       # activity summarization
 ```
 
 ### Container Image Layout
 
 Container images include:
+
 - `agentbox` binary (orchestration)
 - Tool binaries as needed (per-image selection)
 - `claude` CLI binary (for Agent SDK subprocess)
@@ -136,8 +139,8 @@ Results published to `result.<agent>.<id>` topics. Parent agents (meta-agent) su
 
 ### File Output (backward compatible)
 
-- `~/.mbx/agent-runs.jsonl` — run metadata (start time, duration, agent type, exit status, token usage)
-- `~/.mbx/ai-logs/<sha>-<agent>.md` — human-readable reports
+- `~/.minibox/agent-runs.jsonl` — run metadata (start time, duration, agent type, exit status, token usage)
+- `~/.minibox/ai-logs/<sha>-<agent>.md` — human-readable reports
 
 Compatible with existing `dashboard.py` — no changes needed during migration.
 
@@ -150,15 +153,15 @@ agentbox/
 ├── cmd/
 │   ├── agentbox/          # orchestration binary
 │   │   └── main.go
-│   ├── mbx-commit-msg/    # tool binary
+│   ├── minibox-commit-msg/    # tool binary
 │   │   └── main.go
-│   ├── mbx-diagnose/
+│   ├── minibox-diagnose/
 │   │   └── main.go
-│   ├── mbx-sync-check/
+│   ├── minibox-sync-check/
 │   │   └── main.go
-│   ├── mbx-gen-tests/
+│   ├── minibox-gen-tests/
 │   │   └── main.go
-│   └── mbx-standup/
+│   └── minibox-standup/
 │       └── main.go
 ├── internal/
 │   ├── agent/             # agent SDK wrapper
@@ -191,8 +194,8 @@ agentbox/
 │   │   ├── project.go     # CLAUDE.md, README, structure
 │   │   └── discover.go    # dynamic context collection
 │   └── output/            # result persistence
-│       ├── jsonl.go       # ~/.mbx/agent-runs.jsonl writer
-│       ├── report.go      # ~/.mbx/ai-logs/ markdown writer
+│       ├── jsonl.go       # ~/.minibox/agent-runs.jsonl writer
+│       ├── report.go      # ~/.minibox/ai-logs/ markdown writer
 │       └── dual.go        # pub/sub + file dual writer
 ├── pkg/
 │   └── manifest/          # Tier C: capability manifests
@@ -241,16 +244,16 @@ type ResultWriter interface {
 
 ### Adapters
 
-| Interface | Adapter | Notes |
-|-----------|---------|-------|
-| AgentRunner | ClaudeSDKRunner | CLI subprocess, NDJSON |
-| LlmProvider | AnthropicProvider | `anthropic-sdk-go` (primary) |
-| LlmProvider | OpenAIProvider | `openai-go` (fallback) |
-| LlmProvider | GeminiProvider | `go-genai` (fallback) |
-| MessageBroker | ChannelBroker | Go channels (Tier A) |
-| MessageBroker | NATSBroker | Embedded NATS (Tier B) |
-| ContextProvider | GitContextProvider | `git` CLI subprocess |
-| ResultWriter | DualResultWriter | pub/sub + `~/.mbx/` files |
+| Interface       | Adapter            | Notes                         |
+| --------------- | ------------------ | ----------------------------- |
+| AgentRunner     | ClaudeSDKRunner    | CLI subprocess, NDJSON        |
+| LlmProvider     | AnthropicProvider  | `anthropic-sdk-go` (primary)  |
+| LlmProvider     | OpenAIProvider     | `openai-go` (fallback)        |
+| LlmProvider     | GeminiProvider     | `go-genai` (fallback)         |
+| MessageBroker   | ChannelBroker      | Go channels (Tier A)          |
+| MessageBroker   | NATSBroker         | Embedded NATS (Tier B)        |
+| ContextProvider | GitContextProvider | `git` CLI subprocess          |
+| ResultWriter    | DualResultWriter   | pub/sub + `~/.minibox/` files |
 
 ### Composition Root
 
@@ -297,6 +300,7 @@ Future phase. Go daemon (`agentboxd`) running alongside miniboxd.
 ### Container Integration
 
 Each agent task runs in an isolated minibox container:
+
 - Agent binary + `claude` CLI copied/mounted in
 - Environment variables injected (API keys, config)
 - Results streamed back via pub/sub or container stdout
@@ -312,15 +316,19 @@ Each tool binary supports `--manifest` flag:
 
 ```json
 {
-  "name": "mbx-commit-msg",
+  "name": "minibox-commit-msg",
   "version": "0.1.0",
   "description": "Generate conventional commit messages from staged diffs",
   "inputs": {
-    "diff": {"type": "string", "description": "Git diff to summarize"},
-    "history": {"type": "string", "description": "Recent commit history", "optional": true}
+    "diff": { "type": "string", "description": "Git diff to summarize" },
+    "history": {
+      "type": "string",
+      "description": "Recent commit history",
+      "optional": true
+    }
   },
   "outputs": {
-    "message": {"type": "string", "description": "Generated commit message"}
+    "message": { "type": "string", "description": "Generated commit message" }
   },
   "capabilities": ["git", "commit-message", "conventional-commits"],
   "requires": {
@@ -344,16 +352,18 @@ Each tool binary supports `--manifest` flag:
 ### Meta-Agent (orchestration)
 
 Port of `scripts/meta-agent.py`. Workflow:
+
 1. Collect repo context (CLAUDE.md, git log, code structure)
 2. Designer agent (via Claude Agent SDK) → JSON agent plan (2-5 independent tasks)
 3. Spawn child agents concurrently via pub/sub
 4. Collect results from `result.<child>.<id>` topics
 5. Synthesizer agent → final report
-6. Write to `~/.mbx/ai-logs/<sha>-meta-agent.md`
+6. Write to `~/.minibox/ai-logs/<sha>-meta-agent.md`
 
 ### Council (orchestration)
 
 Port of `scripts/council.py`. Modes:
+
 - **Core**: Strict Critic, Creative Explorer, General Analyst (3 roles)
 - **Extensive**: + Security Reviewer, Performance Analyst (5 roles)
 
@@ -369,13 +379,13 @@ Port of `scripts/bench-agent.py`. Subcommands: `report`, `compare`, `regress`, `
 
 ### Tool Agents
 
-| Agent | Port of | Core Logic |
-|-------|---------|-----------|
-| mbx-commit-msg | `scripts/commit-msg.py` | Read staged diff + recent history → generate conventional commit message |
-| mbx-diagnose | `scripts/diagnose.py` | Read container logs + cgroup state → diagnose failure |
-| mbx-sync-check | `scripts/sync-check.py` | Fetch + rebase onto origin/main, auto-resolve obvious conflicts |
-| mbx-gen-tests | `scripts/gen-tests.py` | Read trait definition → scaffold unit tests for adapter |
-| mbx-standup | `scripts/standup.py` | Read git activity across repos → time-block standup summary |
+| Agent              | Port of                 | Core Logic                                                               |
+| ------------------ | ----------------------- | ------------------------------------------------------------------------ |
+| minibox-commit-msg | `scripts/commit-msg.py` | Read staged diff + recent history → generate conventional commit message |
+| minibox-diagnose   | `scripts/diagnose.py`   | Read container logs + cgroup state → diagnose failure                    |
+| minibox-sync-check | `scripts/sync-check.py` | Fetch + rebase onto origin/main, auto-resolve obvious conflicts          |
+| minibox-gen-tests  | `scripts/gen-tests.py`  | Read trait definition → scaffold unit tests for adapter                  |
+| minibox-standup    | `scripts/standup.py`    | Read git activity across repos → time-block standup summary              |
 
 ## Migration Plan
 
@@ -383,7 +393,7 @@ Port of `scripts/bench-agent.py`. Subcommands: `report`, `compare`, `regress`, `
 2. Port review + bench agents
 3. Port tool agents as standalone binaries
 4. Existing Python scripts remain functional throughout — no breaking changes
-5. Dashboard reads from same `~/.mbx/` paths
+5. Dashboard reads from same `~/.minibox/` paths
 6. Update Justfile/mise.toml to offer both Python and Go invocations
 7. Deprecate Python scripts once Go versions are stable and tested
 8. Tier B (agent runtime daemon) after Tier A agents are proven

@@ -1,6 +1,6 @@
 //! build-test-image — cross-compile test binaries and assemble an OCI tarball.
 //!
-//! Output: `~/.mbx/test-image/mbx-tester.tar`
+//! Output: `~/.minibox/test-image/minibox-tester.tar`
 //!
 //! The tarball is compatible with both `nerdctl load -i <path>` and the
 //! minibox `NativeImageLoader` (Docker-compat `manifest.json` + OCI `index.json`).
@@ -26,7 +26,7 @@ const DOCKER_AUTH: &str = "https://auth.docker.io";
 pub fn default_test_image_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".mbx")
+        .join(".minibox")
         .join("test-image")
 }
 
@@ -45,8 +45,8 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
     cmd!(sh, "nu {build_script}").run()?;
 
     // 2. Run — privileged, ephemeral, stream output
-    println!("$ minibox run --privileged mbx-tester -- /run-tests.sh");
-    cmd!(sh, "minibox run --privileged mbx-tester -- /run-tests.sh").run()?;
+    println!("$ minibox run --privileged minibox-tester -- /run-tests.sh");
+    cmd!(sh, "minibox run --privileged minibox-tester -- /run-tests.sh").run()?;
 
     Ok(())
 }
@@ -54,7 +54,7 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 /// Entry point: build or refresh the test OCI tarball.
 pub fn build_test_image(force: bool) -> Result<()> {
     let out_dir = default_test_image_dir();
-    let tar_path = out_dir.join("mbx-tester.tar");
+    let tar_path = out_dir.join("minibox-tester.tar");
 
     fs::create_dir_all(&out_dir)
         .with_context(|| format!("creating output dir {}", out_dir.display()))?;
@@ -94,7 +94,7 @@ pub fn build_test_image(force: bool) -> Result<()> {
         &bins_layer_digest,
     )?;
 
-    println!("mbx-tester.tar ready: {}", tar_path.display());
+    println!("minibox-tester.tar ready: {}", tar_path.display());
     Ok(())
 }
 
@@ -622,7 +622,7 @@ fn assemble_oci_tar(
     // Docker-compat manifest.json
     let docker_manifest = json!([{
         "Config": config_filename,
-        "RepoTags": ["mbx-tester:latest"],
+        "RepoTags": ["minibox-tester:latest"],
         "Layers": [alpine_layer_name, bins_layer_name]
     }]);
 
@@ -667,7 +667,7 @@ fn assemble_oci_tar(
                 "os": "linux"
             },
             "annotations": {
-                "org.opencontainers.image.ref.name": "mbx-tester:latest"
+                "org.opencontainers.image.ref.name": "minibox-tester:latest"
             }
         }]
     });
@@ -705,7 +705,7 @@ fn assemble_oci_tar(
 
     // Build the final tar — suppress macOS extended attrs
     if out_tar.exists() {
-        fs::remove_file(out_tar).context("removing old mbx-tester.tar")?;
+        fs::remove_file(out_tar).context("removing old minibox-tester.tar")?;
     }
     let status = Command::new("tar")
         .args(["--no-xattrs", "-cf"])
@@ -733,10 +733,10 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn default_dir_is_absolute_and_contains_mbx() {
+    fn default_dir_is_absolute_and_contains_minibox() {
         let d = default_test_image_dir();
         assert!(d.is_absolute());
-        assert!(d.to_string_lossy().contains(".mbx"));
+        assert!(d.to_string_lossy().contains(".minibox"));
         assert!(d.to_string_lossy().contains("test-image"));
     }
 

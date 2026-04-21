@@ -45,7 +45,7 @@ graph TB
 
     subgraph "Platform Libraries"
         daemonbox["daemonbox<br/><i>handler, server, state</i>"]
-        mbx["mbx<br/><i>Linux adapters + container</i>"]
+        minibox["minibox<br/><i>Linux adapters + container</i>"]
         macbox["macbox<br/><i>macOS Colima</i>"]
         winbox["winbox<br/><i>Windows stub</i>"]
     end
@@ -62,17 +62,17 @@ graph TB
     end
 
     miniboxd --> daemonbox
-    miniboxd --> mbx
+    miniboxd --> minibox
     miniboxd --> macbox
     miniboxd --> winbox
     cli --> client
     cli --> core
     client --> core
     daemonbox --> core
-    daemonbox --> mbx
-    mbx --> core
-    mbx --> macros
-    bench --> mbx
+    daemonbox --> minibox
+    minibox --> core
+    minibox --> macros
+    bench --> minibox
     bench --> core
 ```
 
@@ -80,7 +80,7 @@ graph TB
 
 ## 2. Crate Dependency Graph
 
-Each crate has a specific responsibility. The most important architectural decision is the split between `minibox-core` (cross-platform types) and `mbx` (Linux-specific implementations). mbx re-exports core's `domain`, `image`, and `protocol` modules — this is intentional because the `as_any!` and `adapt!` proc macros expand to `crate::domain::AsAny`, which resolves at the call site (mbx), not the defining crate (minibox-macros).
+Each crate has a specific responsibility. The most important architectural decision is the split between `minibox-core` (cross-platform types) and `minibox` (Linux-specific implementations). minibox re-exports core's `domain`, `image`, and `protocol` modules — this is intentional because the `as_any!` and `adapt!` proc macros expand to `crate::domain::AsAny`, which resolves at the call site (minibox), not the defining crate (minibox-macros).
 
 ```mermaid
 graph LR
@@ -91,7 +91,7 @@ graph LR
 
     subgraph "Infrastructure"
         DB[daemonbox]
-        LB[mbx]
+        LB[minibox]
         MB[macbox]
         WB[winbox]
     end
@@ -131,7 +131,7 @@ graph LR
     style DB fill:#f3e5f5
 ```
 
-**Key re-export chain**: `mbx` re-exports `minibox_core::{domain, image, protocol}`. This is load-bearing — removing these re-exports breaks macro expansion in every adapter file. The `#[allow(clippy::crate_in_macro_def)]` suppression on `as_any!` is intentional; `crate` in `macro_rules!` resolves at the call site by design.
+**Key re-export chain**: `minibox` re-exports `minibox_core::{domain, image, protocol}`. This is load-bearing — removing these re-exports breaks macro expansion in every adapter file. The `#[allow(clippy::crate_in_macro_def)]` suppression on `as_any!` is intentional; `crate` in `macro_rules!` resolves at the call site by design.
 
 ---
 
@@ -245,7 +245,7 @@ graph TD
     style COLIMA fill:#e1bee7
 ```
 
-**Library-only adapters** (not yet wired into miniboxd): `docker_desktop`, `wsl2`, `vf` (Virtualization.framework), `hcs` (Windows HCS). These exist as code in `mbx/src/adapters/` but have no entry in the adapter suite selection logic.
+**Library-only adapters** (not yet wired into miniboxd): `docker_desktop`, `wsl2`, `vf` (Virtualization.framework), `hcs` (Windows HCS). These exist as code in `minibox/src/adapters/` but have no entry in the adapter suite selection logic.
 
 ---
 
@@ -880,14 +880,14 @@ graph TB
 
 **Environment variable overrides:**
 
-| Variable               | Default (root)           | Default (non-root) | Description                 |
-| ---------------------- | ------------------------ | ------------------ | --------------------------- |
-| `MINIBOX_DATA_DIR`     | `/var/lib/minibox`       | `~/.mbx/cache/`    | Image and container storage |
-| `MINIBOX_RUN_DIR`      | `/run/minibox`           | `/run/minibox`     | Socket and runtime state    |
-| `MINIBOX_SOCKET_PATH`  | `$RUN_DIR/miniboxd.sock` | —                  | Unix socket path            |
-| `MINIBOX_CGROUP_ROOT`  | `/sys/fs/cgroup/minibox` | —                  | cgroup root for containers  |
-| `MINIBOX_SOCKET_MODE`  | `0600`                   | —                  | Socket file permissions     |
-| `MINIBOX_SOCKET_GROUP` | (none)                   | —                  | Socket group ownership      |
+| Variable               | Default (root)           | Default (non-root)  | Description                 |
+| ---------------------- | ------------------------ | ------------------- | --------------------------- |
+| `MINIBOX_DATA_DIR`     | `/var/lib/minibox`       | `~/.minibox/cache/` | Image and container storage |
+| `MINIBOX_RUN_DIR`      | `/run/minibox`           | `/run/minibox`      | Socket and runtime state    |
+| `MINIBOX_SOCKET_PATH`  | `$RUN_DIR/miniboxd.sock` | —                   | Unix socket path            |
+| `MINIBOX_CGROUP_ROOT`  | `/sys/fs/cgroup/minibox` | —                   | cgroup root for containers  |
+| `MINIBOX_SOCKET_MODE`  | `0600`                   | —                   | Socket file permissions     |
+| `MINIBOX_SOCKET_GROUP` | (none)                   | —                   | Socket group ownership      |
 
 ---
 
@@ -994,7 +994,7 @@ flowchart TD
 - `#[cfg(unix)]` — Unix-wide: preflight checks, signal handling, socket permissions
 - `#[cfg(test)]` — Test fixtures, mock adapters
 
-**Platform crate naming**: `{platform}box` — `mbx`, `macbox`, `winbox`. This convention should be followed for future platforms.
+**Platform crate naming**: `{platform}box` — `minibox`, `macbox`, `winbox`. This convention should be followed for future platforms.
 
 ---
 
@@ -1056,7 +1056,7 @@ graph TB
 
 ```
 cargo fmt --all --check
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 ```
 

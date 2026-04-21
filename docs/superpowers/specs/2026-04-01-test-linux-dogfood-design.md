@@ -17,8 +17,8 @@ the execution layer. No SSH, no manual VM steps. Minibox all the way down.
 ```
 cargo xtask test-linux
   1. cargo xtask build-test-image   (cached; skips if image is fresh)
-  2. minibox load ~/.mbx/test-image/mbx-tester.tar
-  3. minibox run --privileged mbx-tester /run-tests.sh
+  2. minibox load ~/.minibox/test-image/minibox-tester.tar
+  3. minibox run --privileged minibox-tester /run-tests.sh
      └─ streams stdout/stderr back to terminal
      └─ exits with container's exit code
 ```
@@ -44,13 +44,13 @@ New xtask command implemented in `crates/xtask/src/test_image.rs`.
    - `integration_tests` test binary
    - `sandbox_tests` test binary
 2. Pulls an Alpine musl base layer (reuses `vm_image.rs` fetch patterns).
-3. Assembles an OCI image tarball at `~/.mbx/test-image/mbx-tester.tar`:
+3. Assembles an OCI image tarball at `~/.minibox/test-image/minibox-tester.tar`:
    - Layer 0: Alpine base (for `/bin/sh`, coreutils)
    - Layer 1: minibox binaries + test binaries + entrypoint script
 4. Writes an OCI `index.json` + `manifest.json` compatible with the
    `LoadImage` handler.
 
-**Cache logic:** skips rebuild if `mbx-tester.tar` mtime is newer than the
+**Cache logic:** skips rebuild if `minibox-tester.tar` mtime is newer than the
 newest `.rs` source file in the workspace. `--force` bypasses the cache.
 
 **Entrypoint — `/run-tests.sh`:**
@@ -78,7 +78,7 @@ echo "=== all Linux tests passed ==="
 **Image layout:**
 
 ```
-mbx-tester:latest
+minibox-tester:latest
 ├── /usr/local/bin/miniboxd
 ├── /usr/local/bin/minibox
 ├── /usr/local/bin/cgroup_tests
@@ -91,7 +91,7 @@ mbx-tester:latest
 ### 2. `LoadImage` — new protocol command
 
 New `DaemonRequest` variant in both `minibox-core/src/protocol.rs` and
-`mbx/src/protocol.rs`:
+`minibox/src/protocol.rs`:
 
 ```rust
 LoadImage {
@@ -104,7 +104,7 @@ New `DaemonResponse` variant:
 
 ```rust
 ImageLoaded {
-    /// The image name registered in the store (e.g. "mbx-tester:latest").
+    /// The image name registered in the store (e.g. "minibox-tester:latest").
     name: String,
 }
 ```
@@ -144,7 +144,7 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
     cmd!(sh, "minibox load {image_path}").run()?;
 
     // 3. run — privileged, ephemeral, stream output
-    cmd!(sh, "minibox run --privileged mbx-tester /run-tests.sh").run()?;
+    cmd!(sh, "minibox run --privileged minibox-tester /run-tests.sh").run()?;
 
     Ok(())
 }
@@ -157,13 +157,13 @@ Also wired in `Justfile` as `just test-linux`.
 
 ## Existing Code Reused
 
-| Existing | Reused for |
-|---|---|
-| `vm_image.rs` Alpine fetch + musl cross-compile | `build-test-image` layer assembly |
-| `mbx/src/image/layer.rs` tar extraction | `LoadImage` handler |
-| `LimaExecutor` | Colima `load` delegation |
-| `DaemonFixture` | unchanged — works inside container |
-| `--privileged` flag (already wired) | container gets full Linux capabilities |
+| Existing                                        | Reused for                             |
+| ----------------------------------------------- | -------------------------------------- |
+| `vm_image.rs` Alpine fetch + musl cross-compile | `build-test-image` layer assembly      |
+| `minibox/src/image/layer.rs` tar extraction     | `LoadImage` handler                    |
+| `LimaExecutor`                                  | Colima `load` delegation               |
+| `DaemonFixture`                                 | unchanged — works inside container     |
+| `--privileged` flag (already wired)             | container gets full Linux capabilities |
 
 ## Sequence: First Run
 
@@ -171,9 +171,9 @@ Also wired in `Justfile` as `just test-linux`.
 $ cargo xtask test-linux
 [build-test-image] cross-compiling for aarch64-unknown-linux-musl...
 [build-test-image] fetching Alpine base layer...
-[build-test-image] assembling mbx-tester.tar...
-[load] importing mbx-tester:latest into image store...
-[run] starting mbx-tester (privileged)...
+[build-test-image] assembling minibox-tester.tar...
+[load] importing minibox-tester:latest into image store...
+[run] starting minibox-tester (privileged)...
 === cgroup_tests ===
 test cgroup_create ... ok
 ...
@@ -193,5 +193,5 @@ test test_e2e_pull_alpine ... ok
 ## Out of Scope
 
 - Windows / VZ paths (VZ is blocked by Apple OS bug; Windows has no Colima)
-- Pushing `mbx-tester` to a registry (local-only tarball is sufficient)
+- Pushing `minibox-tester` to a registry (local-only tarball is sufficient)
 - Running unit tests (macOS-native) inside the container — those stay on the host via `cargo xtask test-unit`

@@ -161,7 +161,7 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
     }
 
     // Binary is at target/<target>/release/miniboxd
-    // Respect CARGO_TARGET_DIR if set (e.g. ~/.mbx/cache/target/)
+    // Respect CARGO_TARGET_DIR if set (e.g. ~/.minibox/cache/target/)
     let target_base = std::env::var("CARGO_TARGET_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
@@ -190,12 +190,12 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 }
 
 /// Get the default VM directory for the host.
-/// Uses ~/.mbx/vm if home directory is available, otherwise /tmp/.mbx/vm.
+/// Uses ~/.minibox/vm if home directory is available, otherwise /tmp/.minibox/vm.
 #[allow(dead_code)]
 pub fn default_vm_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".mbx")
+        .join(".minibox")
         .join("vm")
 }
 
@@ -233,7 +233,7 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
     // 4. Extract rootfs
     extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
 
-    // 4b. Apply user overlay (~/.mbx/vm/overlay/ → rootfs)
+    // 4b. Apply user overlay (~/.minibox/vm/overlay/ → rootfs)
     install_overlay(&rootfs_dir, vm_dir)?;
 
     // 5. Cross-compile and install agent
@@ -298,8 +298,8 @@ mount -t sysfs sys /sys 2>/dev/null || true
 mount -t devtmpfs dev /dev 2>/dev/null || true
 mount -t tmpfs tmpfs /tmp 2>/dev/null || true
 mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
-mount -t virtiofs mbx-images /var/lib/minibox/images 2>/dev/null || true
-mount -t virtiofs mbx-containers /var/lib/minibox/containers 2>/dev/null || true
+mount -t virtiofs minibox-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs minibox-containers /var/lib/minibox/containers 2>/dev/null || true
 ip link set lo up 2>/dev/null || true
 hostname minibox-vm 2>/dev/null || true
 "#;
@@ -446,7 +446,7 @@ echo "=== $PASS ok, $FAIL failed ==="
     Ok(())
 }
 
-/// Copy `~/.mbx/vm/overlay/` into `rootfs_dir`, overwriting any existing files.
+/// Copy `~/.minibox/vm/overlay/` into `rootfs_dir`, overwriting any existing files.
 /// Silently skips if the overlay directory is absent.
 /// Prints a count of files copied if any were found.
 #[allow(dead_code)]
@@ -687,10 +687,10 @@ mod tests {
     }
 
     #[test]
-    fn vm_dir_default_uses_mbx_cache() {
+    fn vm_dir_default_uses_minibox_cache() {
         let dir = default_vm_dir();
         assert!(dir.is_absolute());
-        assert!(dir.to_string_lossy().contains(".mbx"));
+        assert!(dir.to_string_lossy().contains(".minibox"));
     }
 
     #[test]
