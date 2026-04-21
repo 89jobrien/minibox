@@ -866,6 +866,162 @@ mod build_conformance {
 }
 
 // ---------------------------------------------------------------------------
+// Lifecycle conformance tests — handler stop/remove/list/pull edge cases
+// ---------------------------------------------------------------------------
+
+mod lifecycle_conformance {
+    use super::*;
+
+    fn deps_with_alpine(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+        mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            temp_dir,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_stop_already_stopped_container_returns_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        // Create container
+        let create_response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_response {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated"),
+        };
+
+        // First stop — may succeed or error depending on mock PID state
+        let _first = handler::handle_stop(id.clone(), state.clone(), deps.clone()).await;
+
+        // Force state to Stopped so second stop sees a stopped container
+        state
+            .update_container_state(&id, ContainerState::Stopped)
+            .await
+            .ok();
+
+        // Second stop must return Error
+        let second = handler::handle_stop(id.clone(), state.clone(), deps.clone()).await;
+        assert!(
+            matches!(second, DaemonResponse::Error { .. }),
+            "stopping an already-stopped container must return Error, got: {second:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remove_running_container_returns_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let create_response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_response {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated"),
+        };
+
+        // Force state to Running so remove sees a running container
+        state
+            .update_container_state(&id, ContainerState::Running)
+            .await
+            .ok();
+
+        let response = handler::handle_remove(id, state, deps).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "removing a running container must return Error, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_empty_state_returns_empty_list() {
+        let temp_dir = TempDir::new().unwrap();
+        let state = mock_state(&temp_dir);
+
+        let response = handler::handle_list(state).await;
+        match response {
+            DaemonResponse::ContainerList { containers } => {
+                assert!(
+                    containers.is_empty(),
+                    "fresh state must return empty container list"
+                );
+            }
+            _ => panic!("expected ContainerList, got: {response:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pull_then_list_shows_no_containers() {
+        let temp_dir = TempDir::new().unwrap();
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let pull_response =
+            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
+                .await;
+        assert!(
+            matches!(pull_response, DaemonResponse::Success { .. }),
+            "pull must succeed, got: {pull_response:?}"
+        );
+
+        let list_response = handler::handle_list(state).await;
+        match list_response {
+            DaemonResponse::ContainerList { containers } => {
+                assert!(
+                    containers.is_empty(),
+                    "pull must not create a container record; list must be empty"
+                );
+            }
+            _ => panic!("expected ContainerList, got: {list_response:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_pull_is_idempotent() {
+        let temp_dir = TempDir::new().unwrap();
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let first =
+            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
+                .await;
+        assert!(
+            matches!(first, DaemonResponse::Success { .. }),
+            "first pull must succeed, got: {first:?}"
+        );
+
+        let second =
+            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
+                .await;
+        assert!(
+            matches!(second, DaemonResponse::Success { .. }),
+            "second pull must also succeed (idempotent), got: {second:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Issue #62 — Push conformance tests
 // ---------------------------------------------------------------------------
 
