@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Dashbox Space-Leader Command Palette Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

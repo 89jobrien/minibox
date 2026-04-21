@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260421:174041'
+updated: '20260421:session14'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -219,26 +219,16 @@ items:
   priority: P1
   status: open
   title: 'Increase daemonbox/handler.rs coverage to 80% function threshold'
-  description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Priority error
-    paths: pull failure, empty image, registry unreachable, channel send failures.'
+  description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Added duplicate
+    container name error-path test (session 14). Remaining gap: channel send failures
+    require test-only Sender infrastructure not yet built. 82 tests passing.'
   files:
   - crates/daemonbox/src/handler.rs
+  - crates/daemonbox/tests/handler_tests.rs
   extra:
   - type: github-issue
     number: 129
     url: https://github.com/89jobrien/minibox/issues/129
-- id: minibox-71
-  name: adapter-integration-tests
-  priority: P1
-  status: open
-  title: 'Add integration tests for every wired adapter path (native, gke, colima)'
-  description: 'GH #130: Every daemon-accepted adapter path needs at least one integration
-    test. Unit tests alone are insufficient per STABILITY_CHECKLIST.'
-  files: []
-  extra:
-  - type: github-issue
-    number: 130
-    url: https://github.com/89jobrien/minibox/issues/130
 - id: minibox-72
   name: feature-matrix-sot
   priority: P2
@@ -297,46 +287,22 @@ items:
   - type: note
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
-- id: minibox-76
-  name: p0-consolidate-daemonrequest
-  priority: P0
-  status: open
-  title: 'P0: Consolidate duplicate DaemonRequest definitions into minibox-core'
-  description: 'GH #122: Single source of truth for DaemonRequest/DaemonResponse in
-    minibox-core. Eliminate any remaining duplicate definitions.'
-  files: []
-  extra:
-  - type: github-issue
-    number: 122
-    url: https://github.com/89jobrien/minibox/issues/122
-- id: minibox-77
-  name: p0-remove-committed-artifacts
-  priority: P0
-  status: open
-  title: 'P0: Remove committed build/test/runtime artifacts from version control'
-  description: 'GH #121: Build outputs, test fixtures, runtime state committed to
-    repo. Clean up and add appropriate .gitignore entries.'
-  files: []
-  extra:
-  - type: github-issue
-    number: 121
-    url: https://github.com/89jobrien/minibox/issues/121
-- id: minibox-78
-  name: p0-fix-docs-contradictions
-  priority: P0
-  status: open
-  title: 'P0: Fix docs/feature-status contradictions between CLAUDE.md and README.md'
-  description: 'GH #120: CLAUDE.md and README.md contradict each other on feature
-    status. Align both to FEATURE_MATRIX.md as single source of truth.'
-  files:
-  - CLAUDE.md
-  - README.md
-  - docs/FEATURE_MATRIX.md
-  extra:
-  - type: github-issue
-    number: 120
-    url: https://github.com/89jobrien/minibox/issues/120
 log:
+- date: '20260421:session14'
+  session: 14
+  summary: 'P0: removed bench/profiles/*.nsp artifact, aligned README+CLAUDE.md to
+    FEATURE_MATRIX (Colima experimental, adapter names, vz blocked note). minibox-76
+    confirmed already done (single DaemonRequest in minibox-core). P1: added
+    duplicate-container-name error-path test (82 handler tests passing). P1 adapter
+    integration tests confirmed substantially complete (39 GKE+Colima tests pass).
+    fmt-only test file cleanup committed.'
+  commits:
+  - sha: 7c31151
+    branch: main
+  - sha: 274f704
+    branch: main
+  - sha: 07d1003
+    branch: main
 - date: '20260421:174041'
   session: 13
   summary: 'refactor: rename crates/mbx -> crates/minibox, crates/mbxctl -> crates/miniboxctl.

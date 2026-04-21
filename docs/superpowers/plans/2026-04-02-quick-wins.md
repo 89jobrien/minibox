@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Quick Wins Implementation Plan
 
 # Container Freeze, Events, Image GC + Leases, Bridge Networking
