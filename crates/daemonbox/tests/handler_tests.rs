@@ -8,7 +8,9 @@ use daemonbox::handler::{
     handle_resize_pty, handle_send_input,
 };
 use daemonbox::state::{ContainerState, DaemonState};
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageRegistry, NetworkMode};
 use minibox_core::protocol::DaemonResponse;

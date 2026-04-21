@@ -9,7 +9,9 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, ImageRegistry,

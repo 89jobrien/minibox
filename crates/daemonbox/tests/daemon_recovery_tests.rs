@@ -5,7 +5,9 @@
 
 use daemonbox::handler;
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;

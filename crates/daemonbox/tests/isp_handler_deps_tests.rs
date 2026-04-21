@@ -6,7 +6,9 @@
 use daemonbox::handler::{
     BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
 };
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use std::sync::Arc;

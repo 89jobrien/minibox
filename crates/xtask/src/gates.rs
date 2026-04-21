@@ -103,19 +103,28 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 /// to activate tier-2 push tests.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
     // --- Commit conformance ---
-    cmd!(sh, "cargo test --release -p minibox --test conformance_commit")
-        .run()
-        .context("conformance_commit tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test conformance_commit"
+    )
+    .run()
+    .context("conformance_commit tests failed")?;
 
     // --- Build conformance ---
-    cmd!(sh, "cargo test --release -p minibox --test conformance_build")
-        .run()
-        .context("conformance_build tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test conformance_build"
+    )
+    .run()
+    .context("conformance_build tests failed")?;
 
     // --- Push conformance ---
-    cmd!(sh, "cargo test --release -p minibox --test conformance_push")
-        .run()
-        .context("conformance_push tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test conformance_push"
+    )
+    .run()
+    .context("conformance_push tests failed")?;
 
     // --- Emit reports ---
     // Run the report emitter with `--nocapture` so the artifact paths are visible.

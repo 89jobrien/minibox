@@ -31,7 +31,9 @@ use daemonbox::handler::{
     PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::events::{BroadcastEventBroker, NoopEventSink};

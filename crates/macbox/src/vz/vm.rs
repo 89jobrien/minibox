@@ -219,8 +219,9 @@ mod imp {
             unsafe { vm_config.setMemorySize(config.memory_bytes) };
             unsafe { vm_config.setCPUCount(config.cpu_count) };
 
-            let rootfs_dev = unsafe { build_virtiofs("minibox-rootfs", &config.rootfs_path(), false) }
-                .context("build virtiofs minibox-rootfs")?;
+            let rootfs_dev =
+                unsafe { build_virtiofs("minibox-rootfs", &config.rootfs_path(), false) }
+                    .context("build virtiofs minibox-rootfs")?;
             let images_dev = unsafe { build_virtiofs("minibox-images", &config.images_dir, true) }
                 .context("build virtiofs minibox-images")?;
             let containers_dev =

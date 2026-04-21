@@ -266,7 +266,7 @@ fn build_native_handler_dependencies(
         metrics: metrics_recorder,
         image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
         exec_runtime: Some(minibox::adapters::exec::native_exec_runtime(
-            Arc::clone(&state) as minibox::daemonbox_state::StateHandle
+            Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
         )),
         event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
         event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,

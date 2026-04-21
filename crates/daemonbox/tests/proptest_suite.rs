@@ -5,7 +5,9 @@ use std::sync::{Arc, OnceLock};
 
 use daemonbox::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use daemonbox::state::{ContainerRecord, DaemonState};
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};

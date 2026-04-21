@@ -46,7 +46,11 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 
     // 2. Run — privileged, ephemeral, stream output
     println!("$ minibox run --privileged minibox-tester -- /run-tests.sh");
-    cmd!(sh, "minibox run --privileged minibox-tester -- /run-tests.sh").run()?;
+    cmd!(
+        sh,
+        "minibox run --privileged minibox-tester -- /run-tests.sh"
+    )
+    .run()?;
 
     Ok(())
 }

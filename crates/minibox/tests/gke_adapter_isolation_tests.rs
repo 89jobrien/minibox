@@ -6,7 +6,9 @@
 //! including macOS.
 
 use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
-use minibox::domain::{ChildInit, FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup};
+use minibox::domain::{
+    ChildInit, FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup,
+};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tempfile::TempDir;

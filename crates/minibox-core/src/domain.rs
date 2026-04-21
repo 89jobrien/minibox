@@ -1505,7 +1505,11 @@ mod tests {
         async fn image_loader_trait_is_object_safe() {
             let loader: Box<dyn ImageLoader> = Box::new(AlwaysOkLoader);
             let result = loader
-                .load_image(std::path::Path::new("/fake.tar"), "minibox-tester", "latest")
+                .load_image(
+                    std::path::Path::new("/fake.tar"),
+                    "minibox-tester",
+                    "latest",
+                )
                 .await;
             assert!(result.is_ok());
         }
