@@ -10,7 +10,7 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+    ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
