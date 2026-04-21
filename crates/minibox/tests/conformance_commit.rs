@@ -225,6 +225,72 @@ async fn commit_metadata_is_consistent_across_calls() -> Result<()> {
     Ok(())
 }
 
+/// Committing an empty upperdir must not panic.
+///
+/// The adapter may return `Ok(meta)` with empty layers, or `Err(_)` — both are
+/// acceptable. The invariant under test is that no panic occurs.
+#[tokio::test]
+async fn commit_empty_upperdir_returns_error() -> Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let store = make_image_store(&tmp);
+    let upper = WritableUpperDirFixture::new()?;
+
+    // Remove all files from the upperdir so it is empty.
+    for entry in std::fs::read_dir(&upper.upper_dir)? {
+        let entry = entry?;
+        std::fs::remove_file(entry.path())?;
+    }
+
+    let (backend, committer) = minibox_commit_backend(Arc::clone(&store), upper.upper_dir.clone());
+
+    if !backend.capabilities.supports(BackendCapability::Commit) {
+        return Ok(()); // skip
+    }
+
+    let cid = ContainerId::new("00000000000000000000".to_string()).expect("ContainerId");
+    let result = committer
+        .commit(&cid, "conformance/empty-upper:v1", &default_commit_config())
+        .await;
+
+    // Either Ok (with any number of layers) or Err — but no panic.
+    match result {
+        Ok(_meta) => {} // adapter may produce an empty-tar layer — acceptable
+        Err(_) => {}    // error is also acceptable
+    }
+
+    Ok(())
+}
+
+/// The conformance adapter must not validate the container ID itself.
+///
+/// `ContainerCommitter` uses `upper_dir` directly; the container ID is
+/// informational only. A zero-filled ID must not cause an error.
+#[tokio::test]
+async fn commit_nonexistent_container_id_is_accepted() -> Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let store = make_image_store(&tmp);
+    let upper = WritableUpperDirFixture::new()?;
+
+    let (backend, committer) = minibox_commit_backend(Arc::clone(&store), upper.upper_dir.clone());
+
+    if !backend.capabilities.supports(BackendCapability::Commit) {
+        return Ok(()); // skip
+    }
+
+    let cid = ContainerId::new("00000000000000000000".to_string()).expect("ContainerId");
+    let meta = committer
+        .commit(&cid, "conformance/zero-id:v1", &default_commit_config())
+        .await?;
+
+    assert_eq!(
+        meta.name, "conformance/zero-id",
+        "name must match target ref"
+    );
+    assert_eq!(meta.tag, "v1", "tag must match target ref");
+
+    Ok(())
+}
+
 /// A backend that does NOT declare `Commit` capability must have no `make_committer`.
 /// This test verifies the skip-path — the test harness must not call `commit` on it.
 #[tokio::test]
@@ -237,5 +303,20 @@ async fn commit_skipped_for_backend_without_capability() {
     assert!(
         descriptor.make_committer.is_none(),
         "make_committer must be None when capability is absent"
+    );
+}
+
+/// krun adapter declares no Commit capability — conformance must skip gracefully.
+#[tokio::test]
+async fn commit_krun_backend_skips_cleanly() {
+    // krun does not expose a writable overlay upperdir — Commit is not supported.
+    let descriptor = BackendDescriptor::new("krun");
+    assert!(
+        !descriptor.capabilities.supports(BackendCapability::Commit),
+        "krun must not claim Commit capability"
+    );
+    assert!(
+        descriptor.make_committer.is_none(),
+        "krun must not wire a committer"
     );
 }

@@ -50,12 +50,13 @@ running any test for that capability.
 
 ## Backend Support Matrix
 
-| Backend        | `Commit` | `BuildFromContext` | `PushToRegistry` | Notes                             |
-| -------------- | :------: | :----------------: | :--------------: | --------------------------------- |
-| linux-native   |   yes    |        yes         |       yes        | Requires root + overlay FS        |
-| Colima (macOS) |    no    |         no         |       yes        | Uses `nerdctl push` via lima VM   |
-| GKE (proot)    |    no    |         no         |        no        | No writable upperdir exposed      |
-| vz             | blocked  |      blocked       |     blocked      | VZErrorInternal on macOS 26 ARM64 |
+| Backend        | `Commit` | `BuildFromContext` | `PushToRegistry` | Notes                                      |
+| -------------- | :------: | :----------------: | :--------------: | ------------------------------------------ |
+| linux-native   |   yes    |        yes         |       yes        | Requires root + overlay FS                 |
+| Colima (macOS) |    no    |         no         |       yes        | Uses `nerdctl push` via lima VM            |
+| GKE (proot)    |    no    |         no         |        no        | No writable upperdir exposed               |
+| vz             | blocked  |      blocked       |     blocked      | VZErrorInternal on macOS 26 ARM64          |
+| krun           |    no    |         no         |        no        | macOS only; no writable layer exposed      |
 
 ### linux-native detail
 

@@ -84,6 +84,7 @@ The `LocalPushTargetFixture` always targets `localhost:5000`. The env var must m
 | `minibox-native-push`   | no     | no               | yes            |
 | `linux-native` (future) | yes    | yes              | yes            |
 | `colima` (future)       | yes    | yes              | yes            |
+| `krun`                  | no     | no               | no             | macOS only; no writable upperdir |
 
 Backends that do not declare a capability have their corresponding conformance tests skipped
 (not failed). The skip is recorded in the report matrix.

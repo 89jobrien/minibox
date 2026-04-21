@@ -88,6 +88,22 @@ async fn push_skipped_for_backend_without_capability() {
     );
 }
 
+/// krun adapter declares no PushToRegistry capability — conformance must skip gracefully.
+#[tokio::test]
+async fn push_krun_backend_skips_cleanly() {
+    let descriptor = BackendDescriptor::new("krun");
+    assert!(
+        !descriptor
+            .capabilities
+            .supports(BackendCapability::PushToRegistry),
+        "krun must not claim PushToRegistry capability"
+    );
+    assert!(
+        descriptor.make_pusher.is_none(),
+        "krun must not wire a pusher"
+    );
+}
+
 /// `make_pusher` invocation must return a fresh `DynImagePusher` each call.
 #[tokio::test]
 async fn push_make_pusher_returns_fresh_instance() {
@@ -103,6 +119,25 @@ async fn push_make_pusher_returns_fresh_instance() {
         // verify both are constructable and the capability set is still consistent.
         drop(p1);
         drop(p2);
+    } else {
+        panic!("make_pusher must be Some for minibox-native-push backend");
+    }
+}
+
+/// Calling `make_pusher` factory 5 times must not panic or fail.
+///
+/// Verifies the factory closure has no single-use invariants (e.g. moved captures).
+#[tokio::test]
+async fn push_descriptor_factory_is_reentrant() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let store = make_image_store(&tmp);
+    let (descriptor, _) = minibox_push_backend(store);
+
+    if let Some(ref factory) = descriptor.make_pusher {
+        for _ in 0..5 {
+            let pusher = factory();
+            drop(pusher);
+        }
     } else {
         panic!("make_pusher must be Some for minibox-native-push backend");
     }

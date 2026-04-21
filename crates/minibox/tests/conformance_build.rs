@@ -177,6 +177,84 @@ async fn build_metadata_reflects_config_tag() -> Result<()> {
     Ok(())
 }
 
+/// An empty Dockerfile must not cause a panic.
+///
+/// The builder may return `Ok(meta)` with empty layers or `Err(_)` — both are
+/// acceptable. The invariant under test is that no panic occurs.
+#[tokio::test]
+async fn build_empty_dockerfile_returns_error_or_empty() -> Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let store = make_image_store(&tmp);
+
+    // Create a context dir with a zero-byte Dockerfile.
+    let ctx_dir = tempfile::TempDir::new()?;
+    std::fs::write(ctx_dir.path().join("Dockerfile"), b"")?;
+
+    let (backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+
+    if !backend
+        .capabilities
+        .supports(BackendCapability::BuildFromContext)
+    {
+        return Ok(()); // skip
+    }
+
+    let (tx, _rx) = mpsc::channel(64);
+    let context = BuildContext {
+        directory: ctx_dir.path().to_path_buf(),
+        dockerfile: std::path::PathBuf::from("Dockerfile"),
+    };
+    let config = build_config("conformance/empty-dockerfile:v1");
+
+    let result = builder.build_image(&context, &config, tx).await;
+
+    // Either empty layers or an error — but no panic.
+    match result {
+        Ok(meta) => assert!(
+            meta.layers.is_empty(),
+            "empty Dockerfile must produce empty layers, got: {:?}",
+            meta.layers
+        ),
+        Err(_) => {} // also acceptable
+    }
+
+    Ok(())
+}
+
+/// A tag without a registry prefix must be parsed and reflected in metadata.
+///
+/// `BuildConfig.tag = "myimage:v1"` (no registry host) must result in
+/// `meta.name == "myimage"` and `meta.tag == "v1"`.
+#[tokio::test]
+async fn build_tag_without_registry_prefix_is_accepted() -> Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let store = make_image_store(&tmp);
+    let ctx_fixture = BuildContextFixture::new()?;
+
+    let (backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+
+    if !backend
+        .capabilities
+        .supports(BackendCapability::BuildFromContext)
+    {
+        return Ok(()); // skip
+    }
+
+    let (tx, _rx) = mpsc::channel(64);
+    let context = BuildContext {
+        directory: ctx_fixture.context_dir.clone(),
+        dockerfile: std::path::PathBuf::from("Dockerfile"),
+    };
+    let config = build_config("myimage:v1");
+
+    let meta = builder.build_image(&context, &config, tx).await?;
+
+    assert_eq!(meta.name, "myimage", "name must be 'myimage'");
+    assert_eq!(meta.tag, "v1", "tag must be 'v1'");
+
+    Ok(())
+}
+
 /// A backend that does NOT declare `BuildFromContext` must have no `make_builder`.
 #[tokio::test]
 async fn build_skipped_for_backend_without_capability() {
@@ -190,5 +268,21 @@ async fn build_skipped_for_backend_without_capability() {
     assert!(
         descriptor.make_builder.is_none(),
         "make_builder must be None when capability is absent"
+    );
+}
+
+/// krun adapter declares no BuildFromContext capability — conformance must skip gracefully.
+#[tokio::test]
+async fn build_krun_backend_skips_cleanly() {
+    let descriptor = BackendDescriptor::new("krun");
+    assert!(
+        !descriptor
+            .capabilities
+            .supports(BackendCapability::BuildFromContext),
+        "krun must not claim BuildFromContext capability"
+    );
+    assert!(
+        descriptor.make_builder.is_none(),
+        "krun must not wire a builder"
     );
 }
