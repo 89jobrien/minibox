@@ -294,7 +294,7 @@ mod imp {
         /// free to dispatch the `startWithCompletionHandler` completion callback.
         /// Call this from a tokio `spawn_blocking` worker thread after
         /// `prepare_on_main_queue` returns.
-        pub fn wait_for_running(
+        pub(crate) fn wait_for_running(
             vm: Self,
             start_signal: Arc<Mutex<Option<Result<(), String>>>>,
         ) -> Result<Self> {

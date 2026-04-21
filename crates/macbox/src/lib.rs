@@ -136,8 +136,21 @@ impl daemonbox::server::ServerListener for MacUnixListener {
 
     async fn accept(&self) -> anyhow::Result<(Self::Stream, Option<daemonbox::server::PeerCreds>)> {
         let (stream, _addr) = self.0.accept().await?;
-        // On macOS SO_PEERCRED is not available via nix; skip credential check.
-        Ok((stream, None))
+        // macOS does not expose SO_PEERCRED via nix, but does support getpeereid(2)
+        // which returns the effective uid/gid of the peer. pid is not available on
+        // macOS via this interface; we use 0 as a sentinel (never a real daemon pid).
+        use std::os::unix::io::AsRawFd;
+        let mut uid: libc::uid_t = 0;
+        let mut gid: libc::gid_t = 0;
+        // SAFETY: stream.as_raw_fd() is a valid connected Unix socket fd owned by
+        // `stream`. getpeereid is safe to call on any connected Unix domain socket.
+        let creds = if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } == 0 {
+            Some(daemonbox::server::PeerCreds { uid, pid: 0 })
+        } else {
+            tracing::warn!("getpeereid failed: {}", std::io::Error::last_os_error());
+            None
+        };
+        Ok((stream, creds))
     }
 }
 
@@ -410,7 +423,12 @@ async fn start_vz(
     let vz_image_store_ref = Arc::clone(&state.image_store);
     let vz_lease_path = images_dir
         .parent()
-        .unwrap_or(&images_dir)
+        .with_context(|| {
+            format!(
+                "vz: images_dir has no parent directory: {}",
+                images_dir.display()
+            )
+        })?
         .join("leases.json");
     let vz_leases = Arc::new(
         DiskLeaseService::new(vz_lease_path)
