@@ -440,6 +440,20 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 **Rule**: use `key = value` structured fields for queryable data — never embed structured values in the message string (e.g. use `pid = pid_value`, not `"PID={pid}"` in the message).
 
+## Crate Renaming Gotcha
+
+- When renaming a crate directory, `Cargo.toml` workspace `members` paths must match the actual
+  directory name. If they diverge, `cargo check` fails with "failed to read Cargo.toml / No such
+  file or directory". Fix: `mv crates/old crates/new`.
+- `cargo fix --lib -p <crate>` only fixes lib targets. Add `--tests` to also fix integration test
+  files, or use `--allow-dirty` to fix everything in-tree.
+
+## FilesystemProvider Supertrait
+
+`FilesystemProvider` is a marker supertrait combining `RootfsSetup + ChildInit`. `setup_rootfs`
+is defined on `RootfsSetup` — import `RootfsSetup` explicitly wherever `setup_rootfs` is called
+(benches, tests). Importing `FilesystemProvider` alone is not sufficient.
+
 ## Debugging
 
 ### Testing gotchas
