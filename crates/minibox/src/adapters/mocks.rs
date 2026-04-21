@@ -717,7 +717,7 @@ adapt!(FailableFilesystemMock);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_core::domain::{ChildInit, ContainerHooks, RootfsSetup};
+    use minibox_core::domain::{ContainerHooks, RootfsSetup};
 
     #[test]
     fn mock_registry_has_image_sync_cached() {

@@ -7,7 +7,7 @@ use minibox::adapters::mocks::{
     FailableFilesystemMock, MockFilesystem, MockLimiter, MockRegistry, MockRuntime,
 };
 use minibox::domain::{
-    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider,
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig,
     ImageRegistry, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use std::path::{Path, PathBuf};
