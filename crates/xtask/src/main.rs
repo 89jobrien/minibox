@@ -56,6 +56,7 @@ fn main() -> Result<()> {
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
         Some("test-conformance") => gates::test_conformance(&sh),
+        Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-integration") => gates::test_integration(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),

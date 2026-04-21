@@ -148,6 +148,20 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// krun adapter conformance tests (macOS, requires smolvm on PATH).
+///
+/// Run serially — parallel smolvm invocations collide on the agent socket.
+pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test --release -p macbox --test krun_conformance_tests -- --test-threads=1"
+    )
+    .run()
+    .context("krun_conformance_tests failed")?;
+    eprintln!("krun conformance suite passed");
+    Ok(())
+}
+
 /// Property-based tests (proptest)
 pub fn test_property(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test --release -p mbx --test proptest_suite")

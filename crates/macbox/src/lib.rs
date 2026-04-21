@@ -16,6 +16,7 @@
 //! - [`preflight`] — Colima/backend detection via `colima status`
 //! - [`vz`] — VZ.framework and vsock integration
 
+pub mod krun;
 pub mod paths;
 pub mod preflight;
 
