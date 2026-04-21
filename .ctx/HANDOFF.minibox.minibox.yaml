@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260421:070605'
+updated: '20260421:174041'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -71,7 +71,7 @@ items:
     PTY fork/exec wiring deferred — requires Linux root.'
   files:
   - crates/minibox-core/src/domain.rs
-  - crates/mbx/src/container/process.rs
+  - crates/minibox/src/container/process.rs
   extra:
   - type: github-issue
     number: 70
@@ -209,7 +209,7 @@ items:
   - crates/miniboxd/src/main.rs
   - crates/daemonbox/tests/conformance_helpers.rs
   - crates/daemonbox/tests/conformance_tests.rs
-  - crates/mbx/src/adapters/colima.rs
+  - crates/minibox/src/adapters/colima.rs
   - crates/minibox-core/src/domain.rs
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
@@ -337,6 +337,25 @@ items:
     number: 120
     url: https://github.com/89jobrien/minibox/issues/120
 log:
+- date: '20260421:174041'
+  session: 13
+  summary: 'refactor: rename crates/mbx -> crates/minibox, crates/mbxctl -> crates/miniboxctl.
+    Fix bench trait_overhead (RootfsSetup import). Fix dockerbox api_conformance tests
+    (exec stubs, Mutex expect, body_json panic, HTTP-layer lifecycle assertions). Update
+    CLAUDE.md with rename gotcha + FilesystemProvider supertrait note.'
+  commits:
+  - sha: b7f8f16
+    branch: main
+  - sha: f78f747
+    branch: main
+  - sha: 25294cb
+    branch: main
+  - sha: 3738ded
+    branch: main
+  - sha: 1dc88cf
+    branch: main
+  - sha: 6ffa370
+    branch: main
 - date: '20260421:070605'
   session: 12
   summary: 'fix: macbox test stale HandlerDependencies field paths (deps.build.*).
