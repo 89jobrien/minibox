@@ -1,4 +1,5 @@
 pub mod containers;
+pub mod exec;
 pub mod images;
 pub mod networks;
 pub mod system;
@@ -65,5 +66,12 @@ pub fn router(state: AppState) -> Router {
             "/containers/{id}",
             axum::routing::delete(containers::remove),
         )
+        // exec
+        .route(
+            "/containers/{id}/exec",
+            axum::routing::post(exec::create),
+        )
+        .route("/exec/{id}/start", axum::routing::post(exec::start))
+        .route("/exec/{id}/json", axum::routing::get(exec::inspect))
         .with_state(state)
 }

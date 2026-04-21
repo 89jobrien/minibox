@@ -7,6 +7,21 @@ use tokio::sync::mpsc;
 pub use error::RuntimeError;
 
 #[derive(Debug, Clone)]
+pub struct ExecConfig {
+    pub cmd: Vec<String>,
+    pub env: Vec<String>,
+    pub attach_stdout: bool,
+    pub attach_stderr: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecDetails {
+    pub id: String,
+    pub exit_code: Option<i64>,
+    pub running: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct CreateConfig {
     pub image: String,
     pub name: Option<String>,
@@ -90,4 +105,15 @@ pub trait ContainerRuntime: Send + Sync {
     async fn stop_container(&self, id: &str, timeout_secs: u32) -> Result<(), RuntimeError>;
     async fn wait_container(&self, id: &str) -> Result<i64, RuntimeError>;
     async fn remove_container(&self, id: &str) -> Result<(), RuntimeError>;
+    async fn exec_create(
+        &self,
+        container_id: &str,
+        config: ExecConfig,
+    ) -> Result<String, RuntimeError>;
+    async fn exec_start(
+        &self,
+        exec_id: &str,
+        tx: mpsc::Sender<LogChunk>,
+    ) -> Result<(), RuntimeError>;
+    async fn exec_inspect(&self, exec_id: &str) -> Result<ExecDetails, RuntimeError>;
 }

@@ -1,7 +1,8 @@
 use crate::domain::{
-    CgroupNs, ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, LogChunk,
-    PullProgress, RuntimeError,
+    CgroupNs, ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig,
+    ExecDetails, LogChunk, PullProgress, RuntimeError,
 };
+use crate::infra::state::{ExecRecord, StateStore};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use minibox_client::DaemonClient;
@@ -20,12 +21,21 @@ fn to_minibox_id(id: &str) -> &str {
 
 pub struct MiniboxAdapter {
     socket_path: String,
+    state: StateStore,
 }
 
 impl MiniboxAdapter {
     pub fn new(socket_path: &str) -> Self {
         Self {
             socket_path: socket_path.to_string(),
+            state: StateStore::default(),
+        }
+    }
+
+    pub fn with_state(socket_path: &str, state: StateStore) -> Self {
+        Self {
+            socket_path: socket_path.to_string(),
+            state,
         }
     }
 
@@ -314,5 +324,121 @@ impl ContainerRuntime for MiniboxAdapter {
             }
         }
         Ok(())
+    }
+
+    async fn exec_create(
+        &self,
+        container_id: &str,
+        config: ExecConfig,
+    ) -> Result<String, RuntimeError> {
+        let exec_id = uuid::Uuid::new_v4().to_string();
+        let record = ExecRecord {
+            container_id: container_id.to_string(),
+            config,
+            exit_code: None,
+            running: false,
+        };
+        self.state
+            .execs
+            .write()
+            .await
+            .insert(exec_id.clone(), record);
+        Ok(exec_id)
+    }
+
+    async fn exec_start(
+        &self,
+        exec_id: &str,
+        tx: mpsc::Sender<LogChunk>,
+    ) -> Result<(), RuntimeError> {
+        // Retrieve the exec record
+        let (container_id, cmd, env) = {
+            let execs = self.state.execs.read().await;
+            let record = execs
+                .get(exec_id)
+                .ok_or_else(|| RuntimeError::NotFound(format!("exec {exec_id} not found")))?;
+            (
+                record.container_id.clone(),
+                record.config.cmd.clone(),
+                record.config.env.clone(),
+            )
+        };
+
+        // Mark as running
+        {
+            let mut execs = self.state.execs.write().await;
+            if let Some(r) = execs.get_mut(exec_id) {
+                r.running = true;
+            }
+        }
+
+        let minibox_id = to_minibox_id(&container_id).to_string();
+
+        let mut stream = self
+            .client()
+            .call(DaemonRequest::Exec {
+                container_id: minibox_id,
+                cmd,
+                env,
+                working_dir: None,
+                tty: false,
+            })
+            .await?;
+
+        let mut exit_code: i64 = 0;
+        while let Some(resp) = stream.next().await? {
+            match resp {
+                DaemonResponse::ContainerOutput {
+                    stream: stream_kind,
+                    data,
+                } => {
+                    use minibox_core::protocol::OutputStreamKind;
+                    let stream_type: u8 = match stream_kind {
+                        OutputStreamKind::Stderr => 2,
+                        OutputStreamKind::Stdout => 1,
+                    };
+                    // data is base64-encoded
+                    let raw = base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        &data,
+                    )
+                    .unwrap_or_else(|_| data.into_bytes());
+                    let _ = tx
+                        .send(LogChunk {
+                            stream: stream_type,
+                            data: bytes::Bytes::from(raw),
+                        })
+                        .await;
+                }
+                DaemonResponse::ContainerStopped { exit_code: code } => {
+                    exit_code = code as i64;
+                }
+                DaemonResponse::Error { message } => {
+                    return Err(RuntimeError::Minibox(anyhow!("{}", message)));
+                }
+                _ => {}
+            }
+        }
+
+        // Update exit code and mark not running
+        let mut execs = self.state.execs.write().await;
+        if let Some(r) = execs.get_mut(exec_id) {
+            r.running = false;
+            r.exit_code = Some(exit_code);
+        }
+
+        Ok(())
+    }
+
+    async fn exec_inspect(&self, exec_id: &str) -> Result<ExecDetails, RuntimeError> {
+        let execs = self.state.execs.read().await;
+        let record = execs
+            .get(exec_id)
+            .ok_or_else(|| RuntimeError::NotFound(format!("exec {exec_id} not found")))?;
+        Ok(ExecDetails {
+            id: exec_id.to_string(),
+            exit_code: record.exit_code,
+            running: record.running,
+        })
     }
 }
