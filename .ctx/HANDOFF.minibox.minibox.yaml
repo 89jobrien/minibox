@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260421:session14'
+updated: '20260421:222026'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -288,6 +288,20 @@ items:
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
 log:
+- date: '20260421:222026'
+  session: 15
+  summary: 'Pruned 3 resolved P0 items (docs-contradictions, committed-artifacts, consolidate-daemonrequest
+    — all completed in session 14). minibox-testers Phase 1 migration landed (centralize
+    test infrastructure, 484 tests passing). Build clean.'
+  commits:
+  - sha: a379cf6
+    branch: main
+  - sha: 2e0bf87
+    branch: main
+  - sha: f5372ce
+    branch: main
+  - sha: 20e7897
+    branch: main
 - date: '20260421:session14'
   session: 14
   summary: 'P0: removed bench/profiles/*.nsp artifact, aligned README+CLAUDE.md to
@@ -340,54 +354,4 @@ log:
     phase 1. cargo xtask test-krun-conformance wired.'
   commits:
   - sha: 5eb03e8
-    branch: main
-- date: '20260420:150353'
-  session: 10
-  summary: 'feat(smolvm): SmolVM adapter suite — 4 adapters (Registry, Runtime, Filesystem,
-    Limiter), MINIBOX_ADAPTER=smolvm wired in miniboxd, 15 tests pass. Researched
-    maestro smolvm usage (bats hooktests) as driver for maestro Docker dep reduction.'
-  commits: []
-- date: '20260420:050814'
-  session: 9
-  summary: 'Session: fixed ANTHROPIC_API_KEY in ~/dev/.env (dotenvx re-encrypt with
-    correct key). Council report 271aaba → 10 GH issues (#128-#137). Forge agent closed
-    #128 (protocol already consolidated in #122). Review fixes: restored AgentError
-    variants, updated CLAUDE.md, fixed HANDOFF tailbox context, clarified checklist
-    attribution. Version bump 0.18.2→0.19.0, pushed 21 commits to origin/main. 452
-    tests passing.'
-  commits:
-  - sha: 96b026a
-    branch: main
-  - sha: 7fa04e5
-    branch: main
-  - sha: 87b9183
-    branch: main
-  - sha: 2e62bf0
-    branch: main
-  - sha: 271aaba
-    branch: main
-- date: '2026-04-18'
-  session: 8
-  summary: 'fix(xtask): set_current_dir(root) before Shell::new() — survives deleted
-    worktree CWDs. chore: bump 0.18.1→0.18.2. pushed to origin/main.'
-  commits:
-  - sha: 6fb238e
-    branch: main
-  - sha: bf580df
-    branch: main
-- date: '2026-04-17'
-  session: 7
-  summary: 'tailbox integration complete: TailnetNetwork adapter, TailnetConfig, auth
-    chain, gateway IP caching, per-container setup/cleanup. miniboxd wired with tailnet
-    feature flag. Spec at docs/superpowers/specs/2026-04-17-tailnet-integration-design.md'
-  commits:
-  - sha: 67896ac
-    branch: main
-  - sha: f719be5
-    branch: main
-  - sha: 18cea02
-    branch: main
-  - sha: 2b44e4b
-    branch: main
-  - sha: 6aa8175
     branch: main
