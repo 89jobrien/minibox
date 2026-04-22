@@ -5,6 +5,7 @@
 //! import them directly.
 
 pub mod backend;
+pub mod capability;
 pub mod fixtures;
 pub mod helpers;
 pub mod mocks;
