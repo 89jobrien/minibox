@@ -441,7 +441,7 @@ impl DaemonState {
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl linuxbox::daemonbox_state::ContainerStateAccess for DaemonState {
+impl minibox::daemonbox_state::ContainerStateAccess for DaemonState {
     async fn get_container_pid(&self, container_id: &str) -> anyhow::Result<u32> {
         let map = self.containers.read().await;
         let record = map

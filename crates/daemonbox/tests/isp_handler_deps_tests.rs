@@ -6,7 +6,7 @@
 use daemonbox::handler::{
     BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
 };
-use linuxbox::adapters::mocks::{
+use minibox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox_core::adapters::HostnameRegistryRouter;

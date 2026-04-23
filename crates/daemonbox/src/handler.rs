@@ -12,7 +12,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use linuxbox::ImageRef;
+use minibox::ImageRef;
 use minibox_core::domain::NetworkMode;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
@@ -204,7 +204,7 @@ pub struct EventDeps {
 /// Created once in the composition root (main.rs) and passed to all handlers:
 ///
 /// ```rust,ignore
-/// use linuxbox::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
+/// use minibox::adapters::{DockerHubRegistry, OverlayFilesystem, CgroupV2Limiter, LinuxNamespaceRuntime};
 ///
 /// let deps = Arc::new(HandlerDependencies {
 ///     image: ImageDeps {
@@ -1194,7 +1194,7 @@ fn daemon_wait_for_exit(
 
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
-        use linuxbox::container::process::run_hooks;
+        use minibox::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
             warn!(container_id = %id, error = %e, "container: post-exit hooks error");
         }
@@ -2480,8 +2480,8 @@ mod run_inner_tests {
 
 #[cfg(test)]
 mod registry_router_tests {
-    use linuxbox::ImageRef;
-    use linuxbox::adapters::{DockerHubRegistry, GhcrRegistry};
+    use minibox::ImageRef;
+    use minibox::adapters::{DockerHubRegistry, GhcrRegistry};
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::{DynImageRegistry, RegistryRouter};
     use minibox_core::image::ImageStore;

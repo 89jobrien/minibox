@@ -116,18 +116,18 @@ use daemonbox::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistr
 #[cfg(target_os = "linux")]
 use daemonbox::state::DaemonState;
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::network::BridgeNetwork;
+use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{
+use minibox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
     OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use minibox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
+use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+use minibox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 #[cfg(target_os = "linux")]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(target_os = "linux")]
@@ -242,15 +242,15 @@ fn build_native_handler_dependencies(
             ) as minibox_core::domain::DynImageRegistry,
         )],
     ));
-    let commit_adapter = linuxbox::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
     );
-    let image_builder = linuxbox::adapters::builder::minibox_image_builder(
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.to_path_buf(),
     );
-    let image_pusher = linuxbox::adapters::push::oci_push_adapter(
+    let image_pusher = minibox::adapters::push::oci_push_adapter(
         RegistryClient::new().context("creating OCI push registry client")?,
         Arc::clone(&state.image_store),
     );
@@ -265,8 +265,8 @@ fn build_native_handler_dependencies(
         run_containers_base: run_containers_dir,
         metrics: metrics_recorder,
         image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-        exec_runtime: Some(linuxbox::adapters::exec::native_exec_runtime(
-            Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+        exec_runtime: Some(minibox::adapters::exec::native_exec_runtime(
+            Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
         )),
         event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
         event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
@@ -511,7 +511,7 @@ async fn main() -> Result<()> {
         let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
         match mode.as_str() {
             "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
-            "host" => Arc::new(linuxbox::adapters::network::HostNetwork::new()),
+            "host" => Arc::new(minibox::adapters::network::HostNetwork::new()),
             #[cfg(feature = "tailnet")]
             "tailnet" => {
                 let tailnet_cfg = TailnetConfig {

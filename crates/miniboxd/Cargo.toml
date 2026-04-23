@@ -28,7 +28,7 @@ tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
+minibox = { workspace = true }
 nix = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
