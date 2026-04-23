@@ -13,6 +13,10 @@
 //! serde = { version = "1", features = ["derive"] }
 //! serde_json = "1"
 //! ```
+//!
+//! Streaming: spawns `claude -p --stream` and tees each line to stdout and an
+//! in-memory buffer simultaneously, so the review appears live while still
+//! being captured for JSONL telemetry and the per-commit markdown log.
 
 use anyhow::{bail, Context, Result};
 use chrono::Local;
@@ -20,9 +24,9 @@ use clap::Parser;
 use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::PathBuf,
-    process::Command,
+    process::{Command, Stdio},
     time::Instant,
 };
 
@@ -180,22 +184,38 @@ Diff versus {base}:
 }
 
 fn run_review(prompt: &str) -> Result<String> {
-    // Stream output live to the terminal; capture it for logging.
-    // `claude -p <prompt>` sends a single non-interactive query.
-    let output = Command::new("claude")
-        .args(["-p", prompt])
-        .output()
-        .context("failed to run 'claude' — is it on PATH?")?;
+    // Spawn `claude -p --stream` and tee each line to stdout + capture buffer.
+    // --stream makes the CLI emit tokens as they arrive rather than buffering
+    // the full response, so the review appears live in the terminal.
+    let mut child = Command::new("claude")
+        .args(["-p", "--stream", prompt])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed to spawn 'claude' — is it on PATH?")?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("claude exited with error:\n{}", stderr.trim());
+    let stdout = child.stdout.take().expect("stdout piped");
+    let mut captured = String::new();
+
+    for line in BufReader::new(stdout).lines() {
+        let line = line.context("reading claude stdout")?;
+        println!("{line}");
+        captured.push_str(&line);
+        captured.push('\n');
     }
 
-    let result = String::from_utf8_lossy(&output.stdout).to_string();
-    // Print to terminal (claude -p doesn't stream, so we print after completion).
-    print!("{result}");
-    Ok(result)
+    let status = child.wait().context("waiting for claude")?;
+    if !status.success() {
+        // Collect any stderr for the error message.
+        let mut stderr_buf = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use std::io::Read;
+            let _ = e.read_to_string(&mut stderr_buf);
+        }
+        bail!("claude exited with {status}:\n{}", stderr_buf.trim());
+    }
+
+    Ok(captured)
 }
 
 // ---------------------------------------------------------------------------
