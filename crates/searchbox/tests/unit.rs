@@ -1,5 +1,7 @@
+use searchbox::adapters::{merged::MergedAdapter, mock::MockSearchProvider};
 use searchbox::config::SearchboxConfig;
 use searchbox::domain::{SearchQuery, SourceType};
+use searchbox::SearchProvider;
 
 #[test]
 fn search_query_defaults() {
@@ -53,4 +55,64 @@ source = "git"
 "#;
     let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
     assert!(cfg.validate_pub().is_err());
+}
+
+fn make_result(repo: &str, file: &str, line: u32, score: f32) -> searchbox::domain::SearchResult {
+    searchbox::domain::SearchResult {
+        repo: repo.into(),
+        file: file.into(),
+        line,
+        col: 0,
+        snippet: "snippet".into(),
+        score,
+        commit: None,
+    }
+}
+
+#[tokio::test]
+async fn merged_deduplicates_same_repo_file_line() {
+    let r1 = make_result("repo", "src/lib.rs", 42, 1.0);
+    let r2 = make_result("repo", "src/lib.rs", 42, 0.9); // duplicate
+    let r3 = make_result("repo", "src/lib.rs", 99, 0.5); // distinct
+
+    let p1 = MockSearchProvider::with_results(vec![r1]);
+    let p2 = MockSearchProvider::with_results(vec![r2, r3]);
+
+    let merged = MergedAdapter::new(vec![Box::new(p1), Box::new(p2)]);
+    let results = merged
+        .search(searchbox::domain::SearchQuery::new("foo"))
+        .await
+        .unwrap();
+
+    assert_eq!(results.len(), 2, "expected 2 unique results, got {}", results.len());
+}
+
+#[tokio::test]
+async fn merged_sorts_by_score_descending() {
+    let results = vec![
+        make_result("r", "a", 1, 0.3),
+        make_result("r", "b", 2, 0.9),
+        make_result("r", "c", 3, 0.6),
+    ];
+    let p = MockSearchProvider::with_results(results);
+    let merged = MergedAdapter::new(vec![Box::new(p)]);
+    let out = merged
+        .search(searchbox::domain::SearchQuery::new("x"))
+        .await
+        .unwrap();
+    assert_eq!(out[0].score, 0.9);
+    assert_eq!(out[1].score, 0.6);
+    assert_eq!(out[2].score, 0.3);
+}
+
+#[tokio::test]
+async fn merged_continues_on_provider_failure() {
+    let good = MockSearchProvider::with_results(vec![make_result("r", "f", 1, 1.0)]);
+    let bad = MockSearchProvider::failing();
+    let merged = MergedAdapter::new(vec![Box::new(bad), Box::new(good)]);
+    let out = merged
+        .search(searchbox::domain::SearchQuery::new("x"))
+        .await
+        .unwrap();
+    assert_eq!(out.len(), 1);
 }
