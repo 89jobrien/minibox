@@ -79,7 +79,7 @@ async fn smolvm_registry_pull_failure_propagates() {
     }));
 
     let result = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
         .await;
 
     assert!(
@@ -97,7 +97,7 @@ async fn smolvm_registry_pull_failure_propagates() {
 /// supported (provided by the Linux kernel inside the VM).
 #[test]
 fn smolvm_runtime_capabilities() {
-    use minibox::adapters::SmolVmRuntime;
+    use linuxbox::adapters::SmolVmRuntime;
 
     let runtime = SmolVmRuntime::new();
     let caps = runtime.capabilities();
@@ -131,7 +131,7 @@ fn smolvm_backend_descriptor_name_is_smolvm() {
 /// SmolVmFilesystem.setup_rootfs returns a no-op layout (delegation to VM).
 #[test]
 fn smolvm_filesystem_setup_rootfs_is_noop() {
-    use minibox::adapters::SmolVmFilesystem;
+    use linuxbox::adapters::SmolVmFilesystem;
     use minibox_core::domain::RootfsSetup;
     use std::path::PathBuf;
 
@@ -153,8 +153,8 @@ fn smolvm_filesystem_setup_rootfs_is_noop() {
 /// SmolVmLimiter.create returns the container ID (delegation to VM).
 #[test]
 fn smolvm_limiter_create_returns_id() {
-    use minibox::adapters::SmolVmLimiter;
-    use minibox::domain::ResourceLimiter;
+    use linuxbox::adapters::SmolVmLimiter;
+    use linuxbox::domain::ResourceLimiter;
     use minibox_core::domain::ResourceConfig;
 
     let limiter = SmolVmLimiter::new();

@@ -5,8 +5,8 @@
 //! domain trait interface, verifying that the adapter correctly translates trait
 //! calls into the expected Lima shell commands and handles responses properly.
 
-use minibox::adapters::{ColimaRegistry, ColimaRuntime};
-use minibox::domain::{
+use linuxbox::adapters::{ColimaRegistry, ColimaRuntime};
+use linuxbox::domain::{
     ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, ImageRegistry,
     ResourceLimiter, RootfsSetup,
 };
@@ -58,7 +58,7 @@ async fn registry_pull_image_propagates_executor_error() {
     }));
 
     let result = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
         .await;
     assert!(
         result.is_err(),
@@ -87,7 +87,7 @@ async fn registry_pull_image_parses_inspect_output() {
     }));
 
     let metadata = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
         .await
         .expect("pull_image should succeed with valid executor output");
 
@@ -435,7 +435,7 @@ async fn runtime_spawn_script_embeds_args() {
 // no-executor path (where limactl is absent, verifying error propagation).
 // ============================================================================
 
-use minibox::adapters::{ColimaFilesystem, ColimaLimiter};
+use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter};
 
 /// setup_rootfs must pass the overlay mount as argv so spaced macOS paths work.
 #[test]
@@ -534,7 +534,7 @@ fn filesystem_cleanup_uses_sudo_umount() {
 /// ResourceLimiter::create must use sudo for cgroup setup and writes.
 #[test]
 fn limiter_create_uses_sudo_for_cgroup_operations() {
-    use minibox::domain::ResourceConfig;
+    use linuxbox::domain::ResourceConfig;
     use std::sync::{Arc, Mutex};
 
     let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));

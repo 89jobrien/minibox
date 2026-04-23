@@ -1,7 +1,7 @@
 //! Property-based tests for image digest verification and manifest parsing.
 
-use minibox::image::layer::verify_digest;
-use minibox::image::manifest::{Descriptor, ManifestList, ManifestResponse, OciManifest, Platform};
+use linuxbox::image::layer::verify_digest;
+use linuxbox::image::manifest::{Descriptor, ManifestList, ManifestResponse, OciManifest, Platform};
 use proptest::prelude::*;
 use sha2::{Digest, Sha256};
 
