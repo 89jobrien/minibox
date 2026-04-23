@@ -539,6 +539,68 @@ mod tests {
         let ip2 = alloc.allocate().unwrap();
         assert_eq!(ip1, ip2); // released IP is reused
     }
+
+    /// Issue #134: gateway IP must never be returned by `allocate()`.
+    #[test]
+    fn ip_allocator_gateway_never_allocated() {
+        let subnet: ipnet::IpNet = "10.0.0.0/24".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet);
+        let expected_gateway: IpAddr = "10.0.0.1".parse().unwrap();
+
+        let mut allocated = vec![];
+        while let Some(ip) = alloc.allocate() {
+            allocated.push(ip);
+        }
+
+        assert!(
+            !allocated.contains(&expected_gateway),
+            "gateway 10.0.0.1 must never be allocated; got: {allocated:?}"
+        );
+        assert_eq!(alloc.gateway(), expected_gateway);
+    }
+
+    /// Issue #134: exhausted pool must return `None`, never panic.
+    #[test]
+    fn ip_allocator_exhaustion_returns_none() {
+        // /30 has only 2 usable host addresses (.2 and .3); .1 is gateway.
+        let subnet: ipnet::IpNet = "192.168.1.0/30".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet);
+
+        assert!(alloc.allocate().is_some(), "first allocation must succeed");
+        assert!(alloc.allocate().is_some(), "second allocation must succeed");
+        assert!(
+            alloc.allocate().is_none(),
+            "pool exhausted — must return None"
+        );
+    }
+
+    /// Issue #134: releasing an IP outside the subnet must be a safe no-op.
+    #[test]
+    fn ip_allocator_release_out_of_subnet_is_noop() {
+        let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet);
+
+        let foreign: IpAddr = "10.0.0.5".parse().unwrap();
+        alloc.release(foreign); // must not panic
+
+        let ip = alloc.allocate().unwrap();
+        assert_eq!(ip, "172.20.0.2".parse::<IpAddr>().unwrap());
+    }
+
+    /// Issue #134: allocations must be sequential starting at .2.
+    #[test]
+    fn ip_allocator_sequential_allocation() {
+        let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet);
+
+        let ip1 = alloc.allocate().unwrap();
+        let ip2 = alloc.allocate().unwrap();
+        let ip3 = alloc.allocate().unwrap();
+
+        assert_eq!(ip1, "172.20.0.2".parse::<IpAddr>().unwrap());
+        assert_eq!(ip2, "172.20.0.3".parse::<IpAddr>().unwrap());
+        assert_eq!(ip3, "172.20.0.4".parse::<IpAddr>().unwrap());
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]

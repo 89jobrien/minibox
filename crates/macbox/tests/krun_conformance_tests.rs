@@ -28,8 +28,19 @@ mod suite {
         which::which("smolvm").is_ok()
     }
 
+    /// Returns `true` if krun integration tests are explicitly opted in via env var.
+    fn krun_tests_enabled() -> bool {
+        std::env::var("MINIBOX_KRUN_TESTS")
+            .map(|v| v == "1")
+            .unwrap_or(false)
+    }
+
     macro_rules! skip_if_no_smolvm {
         () => {
+            if !krun_tests_enabled() {
+                eprintln!("SKIP: set MINIBOX_KRUN_TESTS=1 to run krun integration tests");
+                return;
+            }
             if !smolvm_available() {
                 eprintln!("SKIP: smolvm not found on PATH");
                 return;

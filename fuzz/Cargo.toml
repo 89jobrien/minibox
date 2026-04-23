@@ -1,0 +1,41 @@
+[package]
+name = "minibox-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+minibox-core = { path = "../crates/minibox-core" }
+minibox = { path = "../crates/minibox" }
+minibox-oci = { path = "../crates/minibox-oci", features = ["fuzzing"] }
+tempfile = "3"
+
+[[bin]]
+name = "fuzz_decode_request"
+path = "fuzz_targets/fuzz_decode_request.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_decode_response"
+path = "fuzz_targets/fuzz_decode_response.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_extract_layer"
+path = "fuzz_targets/fuzz_extract_layer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_validate_layer_path"
+path = "fuzz_targets/fuzz_validate_layer_path.rs"
+test = false
+doc = false

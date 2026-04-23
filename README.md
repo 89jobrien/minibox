@@ -247,16 +247,9 @@ miniboxd starts
 
 ### Adapter Wiring Status
 
-| Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status                                                         |
-| -------------------- | ------------------ | ----------------- | -------------------------------------------------------------- |
-| Native Linux         | `native` (default) | Yes               | Production                                                     |
-| GKE unprivileged     | `gke`              | Yes               | Production                                                     |
-| macOS Colima         | `colima`           | Yes               | Experimental (exec/logs limited)                               |
-| macOS VZ.framework   | `vz`               | Yes               | Blocked (Apple bug — VZErrorInternal code=1 on macOS 26 ARM64) |
-| macOS Docker Desktop | `docker_desktop`   | No                | Library only                                                   |
-| Windows WSL2         | `wsl2`             | No                | Library only                                                   |
-
-Passing an unwired value causes the daemon to exit at startup with an error.
+See [`docs/FEATURE_MATRIX.md` — Adapter Wiring Summary](docs/FEATURE_MATRIX.md) for the full
+per-adapter status table. Passing an unwired `MINIBOX_ADAPTER` value causes the daemon to exit
+at startup with an error.
 
 ---
 
@@ -438,11 +431,9 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 ## Current Limitations
 
-- **No persistent state** — daemon restart loses all container records
-- **Root required** — no rootless support
-- **Docker parity incomplete** — push/commit/build traits defined but adapters not wired end-to-end into miniboxd
-- **VZ.framework blocked** — `VZErrorInternal(code=1)` on macOS 26 ARM64 (upstream Apple bug)
-- **No seccomp/capability dropping** — privileged mode uses curated whitelist, not full drop
+See `CLAUDE.md` ("Current Limitations") for the authoritative list. Key constraints:
+root required, VZ.framework blocked upstream, push/commit/build not wired end-to-end,
+no seccomp/capability dropping, no rootless support.
 
 ---
 

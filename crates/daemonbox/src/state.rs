@@ -576,4 +576,116 @@ mod tests {
         let c = state.get_container(&id).await.unwrap();
         assert_eq!(c.info.state, "Running");
     }
+
+    // ── Persistence semantics — Issue #134 ──────────────────────────────────
+
+    /// Issue #134: container records must survive a daemon restart.
+    ///
+    /// After `save_to_disk` (triggered by `add_container`), a new `DaemonState`
+    /// backed by the same directory must load the record via `load_from_disk`.
+    ///
+    /// Guards the documented contract in `docs/STATE_MODEL.md`.
+    #[tokio::test]
+    async fn container_records_survive_restart() {
+        let tmp = TempDir::new().unwrap();
+
+        // First "daemon session" — add a container and implicitly save.
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Stopped".to_string();
+            state.add_container(record).await;
+        }
+
+        // Second "daemon session" — load state from the same directory.
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers.len(),
+            1,
+            "container record must survive daemon restart"
+        );
+        assert_eq!(containers[0].id, "test-container-id");
+    }
+
+    /// Issue #134: containers that were "Running" when the daemon stopped must
+    /// be marked "Stopped" on reload — their PIDs are gone and cannot be reattached.
+    ///
+    /// Guards: `load_from_disk` transitions Running/Created/Paused → Stopped
+    /// and clears the `pid` field.
+    #[tokio::test]
+    async fn running_containers_marked_stopped_on_reload() {
+        let tmp = TempDir::new().unwrap();
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Running".to_string();
+            record.info.pid = Some(99999);
+            record.pid = Some(99999);
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers.len(), 1);
+        assert_eq!(
+            containers[0].state, "Stopped",
+            "Running containers must be marked Stopped on reload (process is gone)"
+        );
+        assert_eq!(
+            containers[0].pid, None,
+            "pid must be cleared on reload — process cannot be reattached"
+        );
+    }
+
+    /// Issue #134: "Created" containers must also be marked "Stopped" on reload.
+    #[tokio::test]
+    async fn created_containers_marked_stopped_on_reload() {
+        let tmp = TempDir::new().unwrap();
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Created".to_string();
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers.len(), 1);
+        assert_eq!(
+            containers[0].state, "Stopped",
+            "Created containers must be marked Stopped on reload"
+        );
+    }
+
+    /// Issue #134: "Stopped" containers must be preserved as-is on reload.
+    #[tokio::test]
+    async fn stopped_containers_preserved_on_reload() {
+        let tmp = TempDir::new().unwrap();
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Stopped".to_string();
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers.len(), 1);
+        assert_eq!(
+            containers[0].state, "Stopped",
+            "Stopped containers must remain Stopped — not double-reset"
+        );
+    }
 }

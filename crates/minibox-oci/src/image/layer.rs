@@ -270,6 +270,19 @@ pub fn extract_layer(tar_gz_data: &[u8], dest: &Path) -> anyhow::Result<()> {
 /// Note: because the entry file may not yet exist, only the *parent* directory
 /// is canonicalized. A pre-pass with [`has_parent_dir_component`] catches `..`
 /// before any filesystem access.
+/// Thin public wrapper around [`validate_tar_entry_path`] for fuzz harnesses.
+///
+/// Only compiled when the `fuzzing` feature is enabled. Never use in
+/// production code — the internal function is intentionally private.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn validate_layer_path(path: &Path) -> anyhow::Result<()> {
+    // Use a temp dir as destination so canonicalize passes; the pre-checks
+    // for `..` and absolute paths still fire regardless.
+    let dest = std::env::temp_dir();
+    validate_tar_entry_path(path, &dest)
+}
+
 fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()> {
     // Reject absolute paths
     if entry_path.is_absolute() {

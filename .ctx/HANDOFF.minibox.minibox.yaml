@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260422:231641'
+updated: '20260423:042807'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -232,6 +232,22 @@ items:
     - crates/searchbox/bin/searchboxd.rs
     - crates/searchbox/tests/
   extra: []
+- id: minibox-76
+  name: class-diagram-generator
+  priority: P2
+  status: open
+  title: 'feat(docs): Rust class diagram generator script for docs/diagrams.html'
+  description: >
+    Write a script (uv/rust-script) that parses workspace crate sources and emits
+    Mermaid classDiagram blocks for structs, enums, and traits. Scope TBD: fields
+    (pub only vs all), relationships (implements/contains), per-crate vs grouped.
+    Output appended to docs/diagrams.html as new diagram cards. Plan discussion
+    started but scope questions unanswered — resume with user to nail scope before
+    writing script.
+  files:
+    - docs/diagrams.html
+    - scripts/gen-class-diagrams.py
+  extra: []
 - id: minibox-70
   name: handler-coverage-80pct
   priority: P1
@@ -295,7 +311,9 @@ items:
     (5eb03e8). Next TDD cycle: implement KrunRuntime (ContainerRuntime), KrunFilesystem
     (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter (ResourceLimiter
     no-op), KrunRegistry (ImageRegistry). Wire start_krun() in macbox/src/lib.rs as
-    MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code.'
+    MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code. Phase B:
+    libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun on both Linux (KVM)
+    and macOS (HVF). See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
   files:
   - crates/macbox/src/krun/process.rs
   - crates/macbox/src/krun/mod.rs
@@ -305,7 +323,57 @@ items:
   - type: note
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+- id: minibox-77
+  name: qemu-cross-platform
+  priority: P1
+  status: open
+  title: 'feat(xtask): QEMU cross-platform VM runner — Phase A+C complete, Phase B pending'
+  description: 'Phases A+C done on feat/qemu-cross-platform (7 commits, 51 tests).
+    HostPlatform enum (MacOsArm64/LinuxX86_64/LinuxArm64) threads through vm_run.rs
+    and vm_image.rs. VmRunner+VmHandle structs extracted as Phase B seam. Phase B:
+    KrunRuntime via libkrun FFI is the primary path; MINIBOX_ADAPTER=qemu is fallback.
+    Next: merge feat/qemu-cross-platform to main, then begin Phase B as separate branch.'
+  files:
+  - crates/xtask/src/vm_run.rs
+  - crates/xtask/src/vm_image.rs
+  - crates/xtask/src/main.rs
+  extra:
+  - type: note
+    note: 'Branch feat/qemu-cross-platform pushed. Spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
 log:
+- date: '20260423:042807'
+  session: 19
+  summary: >-
+    feat(xtask): QEMU cross-platform VM runner — Phase A+C complete. HostPlatform enum
+    (MacOsArm64/LinuxX86_64/LinuxArm64), VmRunner+VmHandle extracted. Phase B: libkrun
+    as primary adapter, QEMU fallback. Brainstormed smolvm-on-Linux, landed on libkrun FFI.
+    Diagrams audited+reordered (hexagonal first). HANDOFF parse bug fixed.
+  commits:
+  - sha: bd0922f
+    branch: feat/qemu-cross-platform
+  - sha: 427af66
+    branch: feat/qemu-cross-platform
+  - sha: 80ce9f8
+    branch: feat/qemu-cross-platform
+  - sha: 8f60a1d
+    branch: feat/qemu-cross-platform
+  - sha: 0238fb7
+    branch: feat/qemu-cross-platform
+  - sha: edfa022
+    branch: feat/qemu-cross-platform
+  - sha: eadc9e0
+    branch: feat/qemu-cross-platform
+  - sha: 6b0b76d
+    branch: feat/qemu-cross-platform
+- date: '20260423:065051'
+  session: 18
+  summary: >-
+    docs: updated diagrams.html — full crate graph rewrite (02/02b), searchbox+zoektbox
+    architecture (08), crux pipeline integration (09); began class diagram generator
+    planning (scope TBD)
+  commits:
+  - sha: c8e227a
+    branch: feat/minibox-security-tests
 - date: '20260422:231641'
   session: 17
   summary: "feat(searchbox+zoektbox): Tasks 1-4 done via subagent TDD — zoektbox scaffold/download/deploy/service, searchbox domain scaffold with ports+types"
