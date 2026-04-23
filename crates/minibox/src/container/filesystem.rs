@@ -592,6 +592,58 @@ mod tests {
         validate_layer_path(base.path(), base.path()).unwrap();
     }
 
+    // ── validate_layer_path: symlink escape ─────────────────────────────────
+
+    /// Issue #123: a symlink inside `base_dir` that points *outside* must be
+    /// rejected — this is the canonical symlink-escape attack.
+    ///
+    /// The protection relies on `std::fs::canonicalize` following symlinks and
+    /// verifying the resulting path still starts with `canonical_base`.
+    #[cfg(unix)]
+    #[test]
+    fn symlink_pointing_outside_base_is_rejected() {
+        use std::os::unix::fs::symlink;
+        let outside = TempDir::new().unwrap();
+        let base = TempDir::new().unwrap();
+        // base/evil -> outside_dir  (symlink escaping base)
+        let link_path = base.path().join("evil");
+        symlink(outside.path(), &link_path).unwrap();
+
+        let err = validate_layer_path(&link_path, base.path())
+            .expect_err("symlink escaping base must be rejected");
+        assert!(
+            err.to_string().contains("path traversal") || err.to_string().contains("outside"),
+            "expected traversal/outside error, got: {err}"
+        );
+    }
+
+    // ── proptest: validate_layer_path ────────────────────────────────────────
+
+    mod proptest_validate_layer_path {
+        use super::*;
+        use proptest::prelude::*;
+        use tempfile::TempDir;
+
+        proptest! {
+            #![proptest_config(proptest::prelude::ProptestConfig {
+                failure_persistence: None,
+                ..proptest::prelude::ProptestConfig::default()
+            })]
+
+            /// Any path containing a `..` component must always be rejected.
+            #[test]
+            fn dotdot_paths_always_rejected(
+                prefix in "[a-z]{1,8}",
+                suffix in "[a-z]{1,8}",
+            ) {
+                let dir = TempDir::new().unwrap();
+                let evil = dir.path().join(format!("{prefix}/../../{suffix}"));
+                let result = validate_layer_path(&evil, dir.path());
+                prop_assert!(result.is_err(), "expected rejection for {:?}", evil);
+            }
+        }
+    }
+
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
     // Run with: sudo cargo test -p minibox container::filesystem::tests

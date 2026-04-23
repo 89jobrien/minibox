@@ -5,9 +5,11 @@
 //! - `mocks`: Mock test doubles for all four domain traits (behind `test-utils` feature)
 //! - `test_fixtures`: Shared test setup helpers (behind `test-utils` feature)
 
+mod noop_exec;
 mod registry;
 mod registry_router;
 
+pub use noop_exec::NoopExecRuntime;
 pub use registry_router::HostnameRegistryRouter;
 
 /// Mock adapters for all domain traits, for use in tests.

@@ -25,7 +25,7 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 crates/
   minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
   minibox/             — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
-                     RENAMED from linuxbox → minibox on 2026-03-29; any linuxbox:: ref is stale
+                     renamed from linuxbox → mbx → minibox; any linuxbox:: or mbx:: ref is stale
   minibox-macros/  — proc macros: as_any!, default_new!, adapt!
   daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
   miniboxd/        — unified daemon binary; dispatches by platform
@@ -209,7 +209,7 @@ All items below are merged to `main`:
 - [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
 - [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
 - [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
-- [x] `linuxbox` → `minibox` crate rename (2026-03-29)
+- [x] `linuxbox` → `mbx` → `minibox` crate rename (completed 2026-04-21; any linuxbox:: ref is stale)
 - [x] VZ.framework adapter suite — `macbox` now owns full macOS VM stack (2026-03-29):
   - `xtask build-vm-image`: Alpine aarch64 virt kernel + rootfs + musl agent cross-compile
   - `VzVm::boot`: objc2-virtualization, VZLinuxBootLoader, virtiofs shares, vsock
