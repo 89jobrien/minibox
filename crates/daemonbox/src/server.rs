@@ -761,7 +761,7 @@ mod tests {
         // ContainerOutput is the only non-terminal response
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerOutput {
-                stream: minibox::protocol::OutputStreamKind::Stdout,
+                stream: linuxbox::protocol::OutputStreamKind::Stdout,
                 data: "dGVzdA==".to_string(),
             }),
             "ContainerOutput must be non-terminal"

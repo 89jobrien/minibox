@@ -24,7 +24,7 @@ use daemonbox::handler::{
     NoopImageLoader,
 };
 use daemonbox::state::DaemonState;
-use minibox::adapters::mocks::{
+use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -224,7 +224,7 @@ async fn test_native_adapter_suite_pull_failure_returns_error() {
 /// spawning, which is the correct unit boundary.
 #[tokio::test]
 async fn test_gke_adapter_suite_run_returns_container_created() {
-    use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork};
+    use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork};
 
     let tmp = TempDir::new().expect("tempdir");
     let registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
@@ -258,7 +258,7 @@ async fn test_gke_adapter_suite_run_returns_container_created() {
 /// GKE suite: registry pull failure propagates to DaemonResponse::Error.
 #[tokio::test]
 async fn test_gke_adapter_suite_pull_failure_returns_error() {
-    use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork};
+    use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork};
 
     let tmp = TempDir::new().expect("tempdir");
     let registry = Arc::new(MockRegistry::new().with_pull_failure());
@@ -299,7 +299,7 @@ async fn test_gke_adapter_suite_pull_failure_returns_error() {
 /// exercises the Colima runtime dispatch path without spawning host processes.
 #[tokio::test]
 async fn test_colima_adapter_suite_run_returns_container_created() {
-    use minibox::adapters::{ColimaLimiter, ColimaRuntime, NoopNetwork};
+    use linuxbox::adapters::{ColimaLimiter, ColimaRuntime, NoopNetwork};
 
     let tmp = TempDir::new().expect("tempdir");
     let registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
@@ -341,7 +341,7 @@ async fn test_colima_adapter_suite_run_returns_container_created() {
 /// Colima suite: registry pull failure propagates to DaemonResponse::Error.
 #[tokio::test]
 async fn test_colima_adapter_suite_pull_failure_returns_error() {
-    use minibox::adapters::{ColimaLimiter, ColimaRuntime, NoopNetwork};
+    use linuxbox::adapters::{ColimaLimiter, ColimaRuntime, NoopNetwork};
 
     let tmp = TempDir::new().expect("tempdir");
     let registry = Arc::new(MockRegistry::new().with_pull_failure());
