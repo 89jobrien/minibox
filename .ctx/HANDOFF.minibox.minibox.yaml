@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260423:185322'
+updated: '20260423:150355'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -345,6 +345,16 @@ items:
   - type: note
     note: 'Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.'
 log:
+- date: '20260423:150355'
+  session: 23
+  summary: >-
+    chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale (vps-automation-safety,
+    no commit evidence); 10 missing-status plans flagged as LANDED (ci-agent-hardening,
+    llm-timeouts-retries, minibox-llm, sandbox-tests, tailnet-integration, test-linux-dogfood,
+    crux-minibox-integration, minibox-testers-migration, searchbox, qemu-cross-platform);
+    pty-stdio-piping partial (domain types only); conformance-phase2 in progress;
+    testing-strategy-expansion has no evidence. No code changes this session.
+  commits: []
 - date: '20260423:185322'
   session: 22
   summary: >-
