@@ -96,3 +96,46 @@ pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
     let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, base))
 }
+
+/// Build a minimal [`daemonbox::state::ContainerRecord`] for use in tests.
+///
+/// All optional/path fields are set to safe empty/tmp values. The returned
+/// record is in `Created` state with no PID.
+pub fn make_stub_record(id: impl Into<String>) -> daemonbox::state::ContainerRecord {
+    let id = id.into();
+    daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: id.clone(),
+            name: None,
+            image: "test:latest".to_string(),
+            command: "/bin/true".to_string(),
+            state: "created".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/minibox-test-rootfs"),
+        cgroup_path: std::path::PathBuf::from("/tmp/minibox-test-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("test:latest".to_string()),
+    }
+}
+
+/// Build a [`DaemonState`] pre-populated with `n` stub container records.
+///
+/// Uses `tokio::runtime::Runtime::new()` internally — do not call from within
+/// an existing async context (use `make_mock_state` + `add_container` instead).
+pub fn make_mock_state_with_n_containers(base: &Path, n: usize) -> Arc<DaemonState> {
+    let state = make_mock_state(base);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        for i in 0..n {
+            state.add_container(make_stub_record(format!("ctr-{i:04}"))).await;
+        }
+    });
+    state
+}
