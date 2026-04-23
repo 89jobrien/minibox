@@ -9,15 +9,13 @@
 
 use daemonbox::handler::{self, HandlerDependencies};
 use daemonbox::state::{ContainerState, DaemonState};
-use minibox_testers::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, ImageRegistry,
     NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::protocol::DaemonResponse;
+use minibox_testers::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -72,7 +70,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
                 [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
             )),
             image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
-            image_gc: Arc::new(NoopImageGc),
+            image_gc: Arc::new(NoopImageGc::new()),
             image_store,
         },
         lifecycle: daemonbox::handler::LifecycleDeps {
@@ -120,7 +118,7 @@ fn mock_deps_with_network(
                 [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
             )),
             image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
-            image_gc: Arc::new(NoopImageGc),
+            image_gc: Arc::new(NoopImageGc::new()),
             image_store,
         },
         lifecycle: daemonbox::handler::LifecycleDeps {
@@ -631,9 +629,9 @@ mod performance_conformance {
 /// Tests are skipped automatically when `BackendCapability::Commit` is absent.
 #[cfg(test)]
 mod commit_conformance {
+    use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
     use minibox_testers::backend::BackendDescriptor;
     use minibox_testers::mocks::MockContainerCommitter;
-    use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
     use std::sync::Arc;
 
     fn mock_backend() -> BackendDescriptor {
@@ -747,10 +745,10 @@ mod commit_conformance {
 /// `MockImageBuilder` for the in-memory adapter under test.
 #[cfg(test)]
 mod build_conformance {
+    use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
     use minibox_testers::backend::BackendDescriptor;
     use minibox_testers::fixtures::BuildContextFixture;
     use minibox_testers::mocks::MockImageBuilder;
-    use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
     use std::sync::Arc;
     use tokio::sync::mpsc;
 
@@ -962,9 +960,13 @@ mod lifecycle_conformance {
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
-        let pull_response =
-            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
-                .await;
+        let pull_response = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
         assert!(
             matches!(pull_response, DaemonResponse::Success { .. }),
             "pull must succeed, got: {pull_response:?}"
@@ -988,17 +990,25 @@ mod lifecycle_conformance {
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
-        let first =
-            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
-                .await;
+        let first = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
         assert!(
             matches!(first, DaemonResponse::Success { .. }),
             "first pull must succeed, got: {first:?}"
         );
 
-        let second =
-            handler::handle_pull("alpine".to_string(), Some("latest".to_string()), state.clone(), deps.clone())
-                .await;
+        let second = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
         assert!(
             matches!(second, DaemonResponse::Success { .. }),
             "second pull must also succeed (idempotent), got: {second:?}"
@@ -1016,11 +1026,11 @@ mod lifecycle_conformance {
 /// for the in-memory adapter that records pushes without a real registry.
 #[cfg(test)]
 mod push_conformance {
+    use minibox_core::domain::{BackendCapability, RegistryCredentials};
+    use minibox_core::image::reference::ImageRef;
     use minibox_testers::backend::BackendDescriptor;
     use minibox_testers::fixtures::LocalPushTargetFixture;
     use minibox_testers::mocks::MockImagePusher;
-    use minibox_core::domain::{BackendCapability, RegistryCredentials};
-    use minibox_core::image::reference::ImageRef;
     use std::sync::Arc;
 
     fn mock_backend() -> (BackendDescriptor, Arc<MockImagePusher>) {
@@ -1130,6 +1140,387 @@ mod push_conformance {
         assert!(
             pusher_handle.has_tag(&fixture.image_ref),
             "mock registry must report tag as present after push"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime conformance tests
+// ---------------------------------------------------------------------------
+
+mod runtime_conformance {
+    use super::*;
+
+    /// The first spawn must return PID 10000 and subsequent spawns must
+    /// return monotonically increasing PIDs (MockRuntime starts at 10000).
+    #[tokio::test]
+    async fn runtime_pids_are_unique_and_monotonically_increasing() {
+        let runtime = MockRuntime::new();
+        let config = ContainerSpawnConfig {
+            rootfs: PathBuf::from("/rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            hostname: "test".to_string(),
+            cgroup_path: PathBuf::from("/cgroup"),
+            capture_output: false,
+            hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
+            mounts: vec![],
+            privileged: false,
+        };
+
+        let r1 = runtime.spawn_process(&config).await.unwrap();
+        let r2 = runtime.spawn_process(&config).await.unwrap();
+        let r3 = runtime.spawn_process(&config).await.unwrap();
+
+        // Check PIDs are unique
+        assert_ne!(r1.pid, r2.pid, "PIDs must be unique");
+        assert_ne!(r2.pid, r3.pid, "PIDs must be unique");
+
+        // Check PIDs are monotonically increasing
+        assert_eq!(r1.pid, 10000, "first PID must be 10000");
+        assert_eq!(r2.pid, 10001, "second PID must be 10001");
+        assert_eq!(r3.pid, 10002, "third PID must be 10002");
+    }
+
+    /// MockRuntime with spawn_failure must return errors and still increment
+    /// spawn_count on each attempt.
+    #[tokio::test]
+    async fn runtime_with_spawn_failure_increments_count_on_failure() {
+        let runtime = MockRuntime::new().with_spawn_failure();
+        let config = ContainerSpawnConfig {
+            rootfs: PathBuf::from("/rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            hostname: "test".to_string(),
+            cgroup_path: PathBuf::from("/cgroup"),
+            capture_output: false,
+            hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
+            mounts: vec![],
+            privileged: false,
+        };
+
+        // All three attempts fail, but spawn_count must still increment
+        let _ = runtime.spawn_process(&config).await;
+        let _ = runtime.spawn_process(&config).await;
+        let _ = runtime.spawn_process(&config).await;
+
+        assert_eq!(
+            runtime.spawn_count(),
+            3,
+            "spawn count must include failed attempts"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Resource-limit boundary conformance
+// ---------------------------------------------------------------------------
+
+mod resource_limit_conformance {
+    use super::*;
+    use minibox_core::domain::ResourceConfig;
+
+    /// MockLimiter must accept u64::MAX for all limit fields without error.
+    #[test]
+    fn limiter_accepts_maximum_u64_limits() {
+        let limiter = MockLimiter::new();
+        let config = ResourceConfig {
+            memory_limit_bytes: Some(u64::MAX),
+            cpu_weight: Some(u64::MAX),
+            pids_max: Some(u64::MAX),
+            io_max_bytes_per_sec: Some(u64::MAX),
+        };
+
+        let result = limiter.create("container-max-limits", &config);
+        assert!(
+            result.is_ok(),
+            "limiter must accept u64::MAX limits: {result:?}"
+        );
+    }
+
+    /// MockLimiter must accept zero for all optional limit fields.
+    #[test]
+    fn limiter_accepts_zero_limits() {
+        let limiter = MockLimiter::new();
+        let config = ResourceConfig {
+            memory_limit_bytes: Some(0),
+            cpu_weight: Some(0),
+            pids_max: Some(0),
+            io_max_bytes_per_sec: Some(0),
+        };
+
+        let result = limiter.create("container-zero-limits", &config);
+        assert!(
+            result.is_ok(),
+            "limiter must accept zero limits: {result:?}"
+        );
+    }
+
+    /// MockLimiter must accept `None` for all optional limit fields.
+    #[test]
+    fn limiter_accepts_all_none_limits() {
+        let limiter = MockLimiter::new();
+        let config = ResourceConfig::default();
+
+        let result = limiter.create("container-no-limits", &config);
+        assert!(
+            result.is_ok(),
+            "limiter must accept all-None ResourceConfig: {result:?}"
+        );
+    }
+
+    /// Cleanup before create must not panic.
+    #[test]
+    fn limiter_cleanup_before_create_does_not_panic() {
+        let limiter = MockLimiter::new();
+        let result = limiter.cleanup("nonexistent-container");
+        let _ = result;
+    }
+
+    /// add_process before create must not panic.
+    #[test]
+    fn limiter_add_process_before_create_does_not_panic() {
+        let limiter = MockLimiter::new();
+        let result = limiter.add_process("nonexistent-container", 99999);
+        let _ = result;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GC conformance — ImageGarbageCollector behaves correctly
+// ---------------------------------------------------------------------------
+
+mod gc_conformance {
+    use minibox_core::image::gc::ImageGarbageCollector;
+    use minibox_testers::capability::{GcCapability, should_skip};
+    use minibox_testers::helpers::NoopImageGc;
+
+    /// NoopImageGc never prunes anything — prune returns Ok(PruneReport) with 0 freed.
+    #[tokio::test]
+    async fn noop_gc_prune_returns_zero_freed() {
+        let cap = GcCapability { supported: true };
+        if let Some(reason) = should_skip(&cap) {
+            eprintln!("skip: {reason}");
+            return;
+        }
+
+        let gc = NoopImageGc::new();
+        let result = gc.prune(false, &[]).await;
+        assert!(result.is_ok(), "prune must not error: {result:?}");
+        let report = result.unwrap();
+        assert_eq!(report.freed_bytes, 0, "noop GC must report 0 bytes freed");
+        assert!(
+            report.removed.is_empty(),
+            "noop GC must not remove anything"
+        );
+    }
+
+    /// NoopImageGc::prune is callable multiple times without error.
+    #[tokio::test]
+    async fn noop_gc_prune_is_idempotent() {
+        let gc = NoopImageGc::new();
+        for _ in 0..3 {
+            let r = gc.prune(false, &[]).await;
+            assert!(r.is_ok(), "repeated prune must not error: {r:?}");
+            let report = r.unwrap();
+            assert_eq!(report.freed_bytes, 0, "must always report 0 freed");
+            assert!(report.removed.is_empty(), "must not remove anything");
+        }
+        assert_eq!(
+            gc.prune_call_count(),
+            3,
+            "call count must match invocations"
+        );
+    }
+
+    /// GcCapability with supported=false must skip via should_skip.
+    #[test]
+    fn gc_capability_unsupported_skips() {
+        let cap = GcCapability { supported: false };
+        let skip = should_skip(&cap);
+        assert!(
+            skip.is_some(),
+            "unsupported GcCapability must produce a skip reason"
+        );
+        assert!(
+            skip.unwrap().contains("ImageGarbageCollection"),
+            "skip message must mention capability name"
+        );
+    }
+
+    /// NoopImageGc respects dry_run flag in PruneReport.
+    #[tokio::test]
+    async fn noop_gc_respects_dry_run_flag() {
+        let gc = NoopImageGc::new();
+
+        // Test with dry_run=true
+        let dry_report = gc.prune(true, &[]).await.unwrap();
+        assert!(dry_report.dry_run, "must set dry_run=true in report");
+
+        // Test with dry_run=false
+        let live_report = gc.prune(false, &[]).await.unwrap();
+        assert!(!live_report.dry_run, "must set dry_run=false in report");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Error-path conformance — handler propagates adapter failures correctly
+// ---------------------------------------------------------------------------
+
+mod error_path_conformance {
+    use super::*;
+
+    /// When the registry returns a pull error, `handle_run` must respond with
+    /// `DaemonResponse::Error` — not panic, not hang.
+    #[tokio::test]
+    async fn run_with_pull_failure_returns_error_response() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps_with_registry(MockRegistry::new().with_pull_failure(), &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "pull failure must produce DaemonResponse::Error, got: {response:?}"
+        );
+    }
+
+    /// `handle_pull` with a pull-failing registry must return `DaemonResponse::Error`.
+    #[tokio::test]
+    async fn pull_failure_returns_error_response() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps_with_registry(MockRegistry::new().with_pull_failure(), &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let response = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "pull failure must produce DaemonResponse::Error, got: {response:?}"
+        );
+    }
+
+    /// `handle_remove` on a non-existent container ID must return
+    /// `DaemonResponse::Error`.
+    #[tokio::test]
+    async fn remove_nonexistent_container_returns_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let response =
+            handler::handle_remove("nonexistent-container-id".to_string(), state, deps).await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "remove of nonexistent container must return Error, got: {response:?}"
+        );
+    }
+
+    /// `handle_stop` on a non-existent container ID must return
+    /// `DaemonResponse::Error`.
+    #[tokio::test]
+    async fn stop_nonexistent_container_returns_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let response =
+            handler::handle_stop("nonexistent-container-id".to_string(), state, deps).await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "stop of nonexistent container must return Error, got: {response:?}"
+        );
+    }
+
+    /// `handle_run` with a spawn-failing runtime must return `DaemonResponse::Error`.
+    /// This only applies on Linux where `handle_run` spawns synchronously.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn run_with_spawn_failure_returns_error_response() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+        let failing_runtime = Arc::new(MockRuntime::new().with_spawn_failure());
+        let deps = Arc::new(HandlerDependencies {
+            image: daemonbox::handler::ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                        as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc::new()),
+                image_store,
+            },
+            lifecycle: daemonbox::handler::LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: failing_runtime,
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: temp_dir.path().join("containers"),
+                run_containers_base: temp_dir.path().join("run"),
+            },
+            exec: daemonbox::handler::ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: daemonbox::handler::BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: daemonbox::handler::EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+        });
+        let state = mock_state(&temp_dir);
+
+        let response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "spawn failure must produce DaemonResponse::Error, got: {response:?}"
         );
     }
 }

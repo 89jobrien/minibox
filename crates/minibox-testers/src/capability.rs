@@ -158,7 +158,10 @@ mod tests {
     fn should_skip_returns_message_when_unsupported() {
         let cap = CommitCapability { supported: false };
         let msg = should_skip(&cap).expect("should return skip message");
-        assert!(msg.contains("Commit"), "message must mention capability name");
+        assert!(
+            msg.contains("Commit"),
+            "message must mention capability name"
+        );
     }
 
     #[test]

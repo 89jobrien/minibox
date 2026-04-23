@@ -1,8 +1,8 @@
 //! Mock implementation of [`ImageRegistry`].
 
-use minibox_core::domain::{AsAny, ImageMetadata, ImageRegistry, LayerInfo};
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::domain::{AsAny, ImageMetadata, ImageRegistry, LayerInfo};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 

@@ -1,10 +1,10 @@
 //! Mock implementation of [`ContainerRuntime`].
 
+use anyhow::Result;
+use async_trait::async_trait;
 use minibox_core::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
 };
-use anyhow::Result;
-use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
 
 // ---------------------------------------------------------------------------

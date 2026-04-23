@@ -18,10 +18,10 @@
 
 use anyhow::Result;
 use minibox::adapters::MiniboxImageBuilder;
-use minibox_testers::backend::BackendDescriptor;
-use minibox_testers::fixtures::BuildContextFixture;
 use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext, DynImageBuilder};
 use minibox_core::image::ImageStore;
+use minibox_testers::backend::BackendDescriptor;
+use minibox_testers::fixtures::BuildContextFixture;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 

@@ -20,7 +20,9 @@
 //! ```
 
 use crate::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use minibox_core::domain::{DynContainerRuntime, DynFilesystemProvider, DynImageRegistry, DynResourceLimiter};
+use minibox_core::domain::{
+    DynContainerRuntime, DynFilesystemProvider, DynImageRegistry, DynResourceLimiter,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;

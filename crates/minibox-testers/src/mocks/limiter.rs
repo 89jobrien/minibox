@@ -1,7 +1,7 @@
 //! Mock implementation of [`ResourceLimiter`].
 
-use minibox_core::domain::{AsAny, ResourceConfig, ResourceLimiter};
 use anyhow::Result;
+use minibox_core::domain::{AsAny, ResourceConfig, ResourceLimiter};
 use std::sync::{Arc, Mutex};
 
 // ---------------------------------------------------------------------------

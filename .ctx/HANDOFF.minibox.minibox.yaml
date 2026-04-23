@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260421:222026'
+updated: '20260422:083000'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -288,6 +288,19 @@ items:
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
 log:
+- date: '20260422:083000'
+  session: 16
+  summary: 'Phase 1 conformance infrastructure: ConformanceCapability trait with built-in
+    descriptors for lifecycle, image, networking, execution, and persistence domains.
+    trait methods: describe_capability(), on_setup(), on_teardown(), test_payload().
+    All adapters (native, gke, colima, vz, krun) return trait objects in register_capabilities().
+    Maintains separation of concerns: capability modeling in domain layer, test automation
+    in test crates. Build clean, tests passing (484).'
+  commits:
+  - sha: 7d8d655
+    branch: main
+  - sha: 4daceda
+    branch: main
 - date: '20260421:222026'
   session: 15
   summary: 'Pruned 3 resolved P0 items (docs-contradictions, committed-artifacts, consolidate-daemonrequest

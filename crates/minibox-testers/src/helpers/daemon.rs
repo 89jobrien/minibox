@@ -2,12 +2,12 @@
 
 use crate::helpers::gc::NoopImageGc;
 use crate::mocks::MockRegistry;
+use crate::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
 use daemonbox::handler::{
     BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps, NoopImageLoader,
     PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
-use crate::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
@@ -35,7 +35,7 @@ pub fn make_mock_deps_with_registry(
                 [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
             )),
             image_loader: Arc::new(NoopImageLoader),
-            image_gc: Arc::new(NoopImageGc),
+            image_gc: Arc::new(NoopImageGc::new()),
             image_store,
         },
         lifecycle: LifecycleDeps {

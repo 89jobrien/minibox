@@ -1,7 +1,7 @@
 //! Mock implementation of [`ImagePusher`].
 
-use minibox_core::domain::{AsAny, ImagePusher, PushProgress, PushResult, RegistryCredentials};
 use async_trait::async_trait;
+use minibox_core::domain::{AsAny, ImagePusher, PushProgress, PushResult, RegistryCredentials};
 use std::sync::Mutex;
 
 // ---------------------------------------------------------------------------

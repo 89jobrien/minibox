@@ -1,7 +1,9 @@
 //! Mock implementation of [`ImageBuilder`].
 
-use minibox_core::domain::{AsAny, BuildConfig, BuildContext, BuildProgress, ImageBuilder, ImageMetadata, LayerInfo};
 use async_trait::async_trait;
+use minibox_core::domain::{
+    AsAny, BuildConfig, BuildContext, BuildProgress, ImageBuilder, ImageMetadata, LayerInfo,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------

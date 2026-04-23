@@ -1,8 +1,8 @@
 //! Mock implementation of [`NetworkProvider`].
 
-use minibox_core::domain::{AsAny, NetworkConfig, NetworkProvider, NetworkStats};
 use anyhow::Result;
 use async_trait::async_trait;
+use minibox_core::domain::{AsAny, NetworkConfig, NetworkProvider, NetworkStats};
 use std::sync::{Arc, Mutex};
 
 // ---------------------------------------------------------------------------

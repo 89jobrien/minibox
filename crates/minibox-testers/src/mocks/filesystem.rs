@@ -1,7 +1,7 @@
 //! Mock implementations of [`FilesystemProvider`].
 
-use minibox_core::domain::{AsAny, RootfsLayout, RootfsSetup, ChildInit};
 use anyhow::Result;
+use minibox_core::domain::{AsAny, ChildInit, RootfsLayout, RootfsSetup};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};

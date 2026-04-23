@@ -1,9 +1,9 @@
 //! Mock implementation of [`ContainerCommitter`].
 
+use async_trait::async_trait;
 use minibox_core::domain::{
     AsAny, CommitConfig, ContainerCommitter, ContainerId, ImageMetadata, LayerInfo,
 };
-use async_trait::async_trait;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------

@@ -31,12 +31,11 @@ use daemonbox::handler::{
     PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
-use minibox_testers::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
+use minibox_testers::helpers::NoopImageGc;
+use minibox_testers::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -147,7 +146,7 @@ pub fn make_mock_deps_with_registry(
                 [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
             )),
             image_loader: Arc::new(NoopImageLoader),
-            image_gc: Arc::new(NoopImageGc),
+            image_gc: Arc::new(NoopImageGc::new()),
             image_store,
         },
         lifecycle: LifecycleDeps {
@@ -184,5 +183,3 @@ pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
     let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, base))
 }
-
-use minibox_testers::helpers::NoopImageGc;
