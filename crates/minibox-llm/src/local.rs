@@ -183,10 +183,10 @@ impl LlmProvider for OllamaProvider {
             let text: String = msg
                 .content
                 .iter()
-                .filter_map(|b| match b {
-                    ContentBlock::Text { text } => Some(text.clone()),
-                    ContentBlock::ToolResult { content, .. } => Some(content.clone()),
-                    ContentBlock::ToolUse { name, .. } => Some(format!("[tool call: {name}]")),
+                .map(|b| match b {
+                    ContentBlock::Text { text } => text.clone(),
+                    ContentBlock::ToolResult { content, .. } => content.clone(),
+                    ContentBlock::ToolUse { name, .. } => format!("[tool call: {name}]"),
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
