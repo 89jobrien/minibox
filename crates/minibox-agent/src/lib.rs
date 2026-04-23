@@ -29,9 +29,16 @@
 //! }
 //! ```
 
+pub mod agent;
+pub mod conversation;
 pub mod error;
+pub mod events;
+pub mod hooks;
+pub mod observation;
 pub mod provider;
+pub mod session_log;
 pub mod step;
+pub mod tools;
 pub mod trace;
 
 pub use trace::FileTraceStore;

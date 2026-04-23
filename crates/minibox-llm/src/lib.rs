@@ -58,33 +58,6 @@
 //! # Structured output
 //!
 //! Pass a [`JsonSchema`] in the request to request JSON-structured output.
-//! Anthropic uses tool-use; OpenAI uses `response_format`; Gemini uses
-//! `responseSchema` (with unsupported JSON Schema keywords stripped automatically).
-//!
-//! ```ignore
-//! use minibox_llm::{ainvoke, JsonSchema};
-//!
-//! let schema = JsonSchema {
-//!     name: "sentiment".to_string(),
-//!     schema: serde_json::json!({
-//!         "type": "object",
-//!         "properties": { "label": { "type": "string" } },
-//!         "required": ["label"],
-//!     }),
-//! };
-//!
-//! let resp = ainvoke!(chain, "Classify this text", schema: schema).await?;
-//! let parsed: serde_json::Value = serde_json::from_str(&resp.text)?;
-//! ```
-//!
-//! # Macros
-//!
-//! Three ergonomic macros are re-exported at the crate root:
-//!
-//! - [`provide!`] — internal macro that generates `from_env()` /
-//!   `from_env_with_config()` / `from_key()` methods on a provider struct.
-//! - [`ainvoke!`] — async invocation shorthand.
-//! - [`invoke!`] — sync invocation shorthand (calls `FallbackChain::complete_sync`).
 //!
 //! # Error handling
 //!
@@ -112,7 +85,10 @@ pub use chain::FallbackChain;
 pub use error::{HttpStatusError, LlmError};
 pub use provider::{LlmProvider, ProviderConfig};
 pub use retry::{RetryConfig, RetryingProvider};
-pub use types::{CompletionRequest, CompletionResponse, JsonSchema, Usage};
+pub use types::{
+    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
+    JsonSchema, Message, Role, ToolDefinition, Usage,
+};
 
 /// Async LLM invocation macro. Returns a `Future` that resolves to
 /// `Result<CompletionResponse, LlmError>`.
@@ -124,13 +100,13 @@ pub use types::{CompletionRequest, CompletionResponse, JsonSchema, Usage};
 ///
 /// # Supported keyword arguments
 ///
-/// | Key          | Type                   | Description                                 |
-/// |--------------|------------------------|---------------------------------------------|
-/// | `system`     | `impl Into<String>`    | System prompt                               |
-/// | `schema`     | [`JsonSchema`]         | Request structured JSON output              |
-/// | `max_tokens` | `u32`                  | Maximum tokens in the response (default 1024) |
-/// | `timeout`    | `Duration`             | Per-request timeout override                |
-/// | `max_retries`| `u32`                  | Per-request retry count override            |
+/// | Key          | Type                   | Notes                              |
+/// |--------------|------------------------|------------------------------------|
+/// | `system`     | `impl Into<String>`    | Sets [`CompletionRequest::system`] |
+/// | `max_tokens` | `u32`                  |                                    |
+/// | `schema`     | [`JsonSchema`]         | Request structured JSON output     |
+/// | `timeout`    | `std::time::Duration`  | Per-request timeout override       |
+/// | `max_retries`| `u32`                  | Override retry count for this call |
 ///
 /// # Examples
 ///
@@ -140,13 +116,14 @@ pub use types::{CompletionRequest, CompletionResponse, JsonSchema, Usage};
 /// ```
 #[macro_export]
 macro_rules! ainvoke {
-    ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {
-        $chain.complete(&$crate::CompletionRequest {
+    ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
+        let request = $crate::CompletionRequest {
             prompt: $prompt.into(),
             $( $key: $crate::ainvoke!(@wrap $key $val), )*
             ..$crate::CompletionRequest::default()
-        })
-    };
+        };
+        $chain.complete(&request)
+    }};
     (@wrap system $val:expr) => { Some($val.into()) };
     (@wrap schema $val:expr) => { Some($val) };
     (@wrap timeout $val:expr) => { Some($val) };
