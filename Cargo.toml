@@ -6,7 +6,7 @@ members = [
     "crates/linuxbox",
     "crates/minibox",
     "crates/miniboxd",
-    "crates/minibox-cli",
+    "crates/mbx",
     "crates/minibox-bench",
     "crates/minibox-macros",
     "crates/daemonbox",

@@ -475,12 +475,12 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path, platform: &HostPlatform) -> R
             "-p",
             "miniboxd",
             "-p",
-            "minibox-cli",
+            "mbx",
             "--target",
             target,
         ])
         .status()
-        .context("cargo zigbuild for miniboxd + minibox-cli")?;
+        .context("cargo zigbuild for miniboxd + mbx")?;
     if !bin_status.success() {
         bail!("cargo zigbuild for binaries failed");
     }
