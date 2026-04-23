@@ -1,4 +1,4 @@
-use zoektbox::release::{expected_sha256, release_url, ZoektPlatform};
+use zoektbox::release::{ZoektPlatform, expected_sha256, release_url};
 
 #[test]
 fn release_url_linux_amd64_contains_version_and_triple() {
@@ -28,10 +28,32 @@ fn expected_sha256_is_64_hex_chars() {
         ZoektPlatform::DarwinArm64,
     ] {
         let digest = expected_sha256(platform);
-        assert_eq!(digest.len(), 64, "platform {platform:?}: len={}", digest.len());
+        assert_eq!(
+            digest.len(),
+            64,
+            "platform {platform:?}: len={}",
+            digest.len()
+        );
         assert!(
             digest.chars().all(|c| c.is_ascii_hexdigit()),
             "not hex: {digest}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "fill in real SHA-256 checksums in release.rs before enabling"]
+fn expected_sha256_is_not_placeholder() {
+    for platform in [
+        ZoektPlatform::LinuxAmd64,
+        ZoektPlatform::LinuxArm64,
+        ZoektPlatform::DarwinArm64,
+    ] {
+        let digest = expected_sha256(platform);
+        assert_ne!(
+            digest,
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "platform {platform:?}: placeholder SHA not replaced"
         );
     }
 }

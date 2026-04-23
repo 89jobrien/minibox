@@ -10,12 +10,12 @@ pub enum ZoektPlatform {
 }
 
 impl ZoektPlatform {
-    pub fn detect() -> Self {
+    pub fn detect() -> anyhow::Result<Self> {
         match (std::env::consts::OS, std::env::consts::ARCH) {
-            ("linux", "x86_64") => Self::LinuxAmd64,
-            ("linux", "aarch64") => Self::LinuxArm64,
-            ("macos", "aarch64") => Self::DarwinArm64,
-            (os, arch) => panic!("unsupported platform: {os}/{arch}"),
+            ("linux", "x86_64") => Ok(Self::LinuxAmd64),
+            ("linux", "aarch64") => Ok(Self::LinuxArm64),
+            ("macos", "aarch64") => Ok(Self::DarwinArm64),
+            (os, arch) => anyhow::bail!("unsupported platform: {os}/{arch}"),
         }
     }
 
