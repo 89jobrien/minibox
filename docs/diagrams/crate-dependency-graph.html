@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Crate Dependency Graph — Minibox</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #ddd; padding-bottom: .4rem; }
+  h2 { font-size: 1.1rem; color: #555; margin-top: 2rem; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; font-size: .85rem; overflow-x: auto; line-height: 1.5; }
+  .mermaid { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; }
+  p { line-height: 1.6; }
+  nav { font-size: .85rem; margin-bottom: 1.5rem; }
+  nav a { color: #0066cc; text-decoration: none; margin-right: 1rem; }
+  nav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="crate-dependency-graph.html">Crate Deps</a>
+  <a href="hexagonal-architecture.html">Hexagonal Architecture</a>
+  <a href="platform-adapter-selection.html">Adapter Selection</a>
+  <a href="container-lifecycle.html">Container Lifecycle</a>
+  <a href="mbxctl-sse-pipeline.html">SSE Pipeline</a>
+  <a href="env-var-flow.html">Env Var Flow</a>
+</nav>
+
+<h1>Crate Dependency Graph</h1>
+
+<p>Shows the workspace crate relationships. Platform-specific dependencies are gated at compile
+time — <code>macbox</code> is only compiled on macOS, <code>winbox</code> only on Windows. <code>daemonbox</code> and
+<code>minibox-core</code> are platform-agnostic. <code>minibox</code> is a thin re-export facade over <code>linuxbox</code>,
+which contains the actual Linux adapter implementations. New in 2026-Q2: <code>searchbox</code>,
+<code>zoektbox</code>, <code>tailbox</code>, <code>minibox-agent</code>, <code>dashbox</code>, <code>dockerbox</code>, <code>minibox-secrets</code>, <code>minibox-llm</code>.</p>
+
+<h2>Diagram</h2>
+<div class="mermaid">
+flowchart LR
+    subgraph binaries["Binaries"]
+        miniboxd["miniboxd\n(unified daemon)"]
+        mbx["mbx\n(CLI binary)"]
+        minibox_bench["minibox-bench"]
+        miniboxctl["miniboxctl\n(HTTP API, WIP)"]
+        dockerboxd["dockerboxd\n(Docker shim)"]
+        dashbox["dashbox\n(TUI dashboard)"]
+        searchboxd["searchboxd\n(MCP stdio server)"]
+    end
+
+    subgraph platform["Platform Crates"]
+        macbox["macbox\n[cfg(macos)]"]
+        winbox["winbox\n[cfg(windows)]"]
+    end
+
+    subgraph daemon["Daemon"]
+        daemonbox["daemonbox\n(platform-agnostic\nhandler + state + server)"]
+    end
+
+    subgraph core["Core"]
+        minibox_core["minibox-core\n(protocol + domain traits)"]
+        minibox["minibox\n(re-export facade\nover linuxbox)"]
+        linuxbox["linuxbox\n(Linux adapters)"]
+        minibox_macros["minibox-macros\n(proc-macro)"]
+        minibox_oci["minibox-oci\n(OCI types)"]
+    end
+
+    subgraph services["Service / Feature Crates"]
+        searchbox["searchbox\n(SearchProvider port + adapters)"]
+        zoektbox["zoektbox\n(Zoekt lifecycle)"]
+        tailbox["tailbox\n(Tailnet adapter)"]
+        dockerbox["dockerbox\n(Docker API shim lib)"]
+        minibox_agent["minibox-agent\n(AI agent runtime)"]
+        minibox_llm["minibox-llm\n(LLM client)"]
+        minibox_secrets["minibox-secrets\n(credential store)"]
+    end
+
+    subgraph devtools["Dev / Test"]
+        minibox_testers["minibox-testers\n(shared test helpers)"]
+        nix["nix\n[cfg(unix)]"]
+    end
+
+    miniboxd -->|"linux"| linuxbox
+    miniboxd -->|"linux"| nix
+    miniboxd -->|"macos"| macbox
+    miniboxd -->|"windows"| winbox
+    miniboxd --> daemonbox
+    miniboxd -->|"tailnet feature"| tailbox
+
+    macbox --> daemonbox
+    macbox --> minibox_core
+    winbox --> daemonbox
+    winbox --> minibox_core
+
+    daemonbox --> minibox_core
+
+    minibox --> linuxbox
+    linuxbox --> minibox_core
+    linuxbox --> minibox_oci
+    linuxbox --> minibox_macros
+
+    mbx --> minibox_core
+    minibox_bench --> linuxbox
+    miniboxctl --> minibox_core
+    dockerboxd --> dockerbox
+    dockerbox --> minibox_core
+
+    searchboxd --> searchbox
+    searchbox --> zoektbox
+    searchbox --> minibox_core
+
+    minibox_agent --> minibox_llm
+    minibox_agent --> minibox_secrets
+    minibox_agent --> minibox_core
+    tailbox --> minibox_secrets
+    tailbox --> minibox_core
+
+    classDef binary fill:#e2e3e5,stroke:#6c757d,color:#000;
+    classDef platform_mac fill:#d4edda,stroke:#155724,color:#000;
+    classDef platform_win fill:#cce5ff,stroke:#004085,color:#000;
+    classDef daemon_crate fill:#fff3cd,stroke:#856404,color:#000;
+    classDef core_crate fill:#f8d7da,stroke:#721c24,color:#000;
+    classDef macro_crate fill:#e2d9f3,stroke:#4b3c82,color:#000;
+    classDef service_crate fill:#fde8d8,stroke:#a0522d,color:#000;
+    classDef new_crate fill:#ffe0b2,stroke:#e65100,color:#000;
+    classDef external fill:#f0f0f0,stroke:#999,color:#000,font-style:italic;
+
+    class miniboxd,mbx,minibox_bench,miniboxctl,dockerboxd,dashbox,searchboxd binary;
+    class macbox platform_mac;
+    class winbox platform_win;
+    class daemonbox daemon_crate;
+    class minibox_core,minibox,linuxbox,minibox_oci core_crate;
+    class minibox_macros macro_crate;
+    class minibox_agent,minibox_llm,minibox_secrets,dockerbox service_crate;
+    class searchbox,zoektbox,tailbox new_crate;
+    class minibox_testers,nix external;
+</div>
+
+<h2>ASCII</h2>
+<pre>
+BINARIES
+  miniboxd ──[linux]──► linuxbox ──► minibox-core
+           ──[linux]──► nix
+           ──[macos]──► macbox ──► daemonbox ──► minibox-core
+           ──[win]────► winbox ──► daemonbox
+           ────────────► daemonbox
+           ──[tailnet]──► tailbox ──► minibox-secrets ──► minibox-core
+  mbx (CLI binary), miniboxctl ───────────────────────► minibox-core
+  minibox-bench ──────────────────────────────────────► linuxbox
+  dockerboxd ──► dockerbox ──────────────────────────► minibox-core
+  searchboxd ──► searchbox ──► zoektbox
+                           ──► minibox-core
+
+CORE
+  minibox-core  ← canonical protocol + domain traits
+  linuxbox      ← Linux adapters (namespaces, cgroups, overlay, OCI)
+  minibox       ← thin re-export facade: `pub use linuxbox::*`
+  minibox-oci   ← OCI image types
+  minibox-macros ← proc-macros (as_any!, adapt!)
+
+SERVICE / FEATURE (2026-Q2 additions marked *)
+  searchbox*    ← SearchProvider port + Zoekt/fan-out/fs adapters
+  zoektbox*     ← Zoekt binary lifecycle (download, verify, deploy)
+  tailbox*      ← Tailnet/Tailscale NetworkProvider adapter
+  minibox-agent ← AI agent runtime (wired to crux)
+  minibox-llm   ← Multi-provider LLM client
+  minibox-secrets ← Credential store (env/keyring/1Password/Bitwarden)
+  dockerbox     ← Docker API shim library
+</pre>
+
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</body>
+</html>

@@ -13,6 +13,7 @@
 !docs/plans/*.md
 !docs/superpowers/**/*.md
 !docs/minibox-agent-design.md
+!docs/parallel-layer-pulls-design.md
 !docs/diagrams/
 !docs/archive/*.md
 !docs/archive/
