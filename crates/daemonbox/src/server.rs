@@ -476,7 +476,7 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::adapters::mocks::{
+    use minibox::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
     use minibox_core::adapters::HostnameRegistryRouter;
@@ -761,7 +761,7 @@ mod tests {
         // ContainerOutput is the only non-terminal response
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerOutput {
-                stream: linuxbox::protocol::OutputStreamKind::Stdout,
+                stream: minibox::protocol::OutputStreamKind::Stdout,
                 data: "dGVzdA==".to_string(),
             }),
             "ContainerOutput must be non-terminal"

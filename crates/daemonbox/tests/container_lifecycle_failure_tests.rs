@@ -5,7 +5,7 @@
 
 use daemonbox::handler;
 use daemonbox::state::{ContainerRecord, DaemonState};
-use linuxbox::adapters::mocks::{
+use minibox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -20,7 +20,7 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = linuxbox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
