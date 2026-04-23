@@ -393,13 +393,23 @@ items:
   name: krun-adapter-full
   priority: P1
   status: open
-  title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring'
-  description: 'SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done (5eb03e8). Next TDD cycle: implement KrunRuntime (ContainerRuntime), KrunFilesystem (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter (ResourceLimiter no-op), KrunRegistry (ImageRegistry). Wire start_krun() in macbox/src/lib.rs as MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code. Phase B: libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun on both Linux (KVM) and macOS (HVF). See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
+  title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring — cross-platform
+    (macOS HVF + Linux KVM)'
+  description: "SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done\
+    \ (5eb03e8). libkrun is the unified adapter for BOTH macOS (HVF) and Linux (KVM)\
+    \ — not macOS-only. Next TDD cycle: implement KrunRuntime (ContainerRuntime),\
+    \ KrunFilesystem (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter\
+    \ (ResourceLimiter no-op), KrunRegistry (ImageRegistry). Wire start_krun() callable\
+    \ from both macbox and linuxbox/miniboxd dispatch. Remove vz feature + vz/ module\
+    \ code. Phase B: libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun\
+    \ on macOS (HVF) and Linux (KVM), same domain port. Open: krunbox crate vs macbox;\
+    \ Linux CI /dev/kvm provisioning; libkrun version pinning. See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md"
   files:
   - crates/macbox/src/krun/process.rs
   - crates/macbox/src/krun/mod.rs
   - crates/macbox/tests/krun_conformance_tests.rs
   - crates/macbox/src/lib.rs
+  - crates/miniboxd/src/main.rs
   completed: null
   extra:
   - date: null
@@ -407,7 +417,16 @@ items:
     field: null
     value: null
     reviewed: null
-    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1 required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
+      required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+  - date: 20260423:233500
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: 'libkrun is cross-platform: macOS uses HVF, Linux uses KVM — same adapter,
+      same domain port. miniboxd wiring needs a platform-agnostic start_krun() callable
+      from both OS dispatch paths. krunbox crate placement TBD.'
 - id: parallel-layer-pulls-port
   doob_uuid: null
   name: parallel-layer-pulls-port

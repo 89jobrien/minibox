@@ -1,6 +1,7 @@
-# QEMU Cross-Platform VM Runner Design
+# Cross-Platform VM Runner Design (libkrun primary, QEMU fallback)
 
 **Date:** 2026-04-23
+**Updated:** 2026-04-23 (libkrun promoted to primary cross-platform adapter)
 **Branch:** `feat/qemu-cross-platform`
 **Status:** Approved for implementation
 
@@ -115,28 +116,70 @@ impl VmHandle {
 `VmHandle::connect_serial`. This is the seam that Phase B will use without
 touching the xtask internals.
 
-## Phase B Expectation (not designed here)
+## Phase B: `KrunRuntime` — Single Adapter for Both macOS and Linux
 
-**Primary path: `KrunRuntime` via libkrun FFI.**
+**libkrun is the primary cross-platform VM adapter.** It is a C library (Red Hat /
+containers/libkrun) that embeds a microVM in-process using the host hypervisor:
 
-libkrun is a C library (Red Hat) that embeds a KVM-based microVM in-process — no QEMU
-subprocess, no separate binary, ~125ms boot. It uses KVM on Linux and
-Hypervisor.framework on macOS. `smolvm` is a thin CLI wrapper around libkrun; the
-existing `macbox/src/krun/` path is already Phase 1 of this (shells out to smolvm,
-with Phase 2 planned as direct FFI).
+| Host          | Hypervisor backend              | KVM device  |
+| ------------- | ------------------------------- | ----------- |
+| macOS ARM64   | Apple Hypervisor.framework (HVF)| not needed  |
+| Linux x86_64  | KVM (`/dev/kvm`)                | required    |
+| Linux ARM64   | KVM (`/dev/kvm`)                | required    |
 
-The Phase B adapter is therefore `KrunRuntime` in
-`crates/minibox/src/adapters/krun.rs` (or promoted to a `krunbox` crate), implementing
-`ContainerRuntime`. `MINIBOX_ADAPTER=krun` selects it on **both Linux and macOS** —
-single adapter, two platforms, same domain port.
+Key properties: ~125ms boot, no subprocess, no QEMU binary, same Rust FFI call on all
+three platforms. `smolvm` is a thin CLI shim around libkrun used today in
+`macbox/src/krun/` — Phase B replaces the subprocess shim with direct FFI.
+
+### `KrunRuntime` placement
+
+`KrunRuntime` goes in **`crates/macbox/src/krun/`** for the smolvm→FFI migration
+(already wired), but the adapter is **not macOS-only**. The longer-term home is either:
+
+- A new `krunbox` crate (`crates/krunbox/`) — symmetric with `macbox`/`linuxbox`
+- Or `crates/minibox/src/adapters/krun.rs` — if kept as a single-crate adapter
+
+`MINIBOX_ADAPTER=krun` selects it on **both Linux and macOS** — one adapter, two
+platforms, same `ContainerRuntime` domain port.
+
+### `miniboxd` wiring
+
+`miniboxd/src/main.rs` currently dispatches on OS:
+
+```
+#[cfg(target_os = "macos")]  → macbox::start()
+#[cfg(target_os = "linux")]  → linuxbox / native / gke
+```
+
+With libkrun, `krun` becomes a third branch checked *before* the OS gate — or wired
+as a shared `start_krun()` callable from both macOS and Linux dispatch paths.
+
+### Adapter selection precedence
+
+1. `MINIBOX_ADAPTER=krun` — libkrun FFI (preferred, **macOS + Linux**)
+2. `MINIBOX_ADAPTER=native` — Linux namespaces+cgroups (Linux only, no VM)
+3. `MINIBOX_ADAPTER=qemu` — QEMU subprocess fallback (no KVM/HVF required)
+4. `MINIBOX_ADAPTER=smolvm` — smolvm CLI shim (macOS, transitional — remove post-FFI)
+5. `MINIBOX_ADAPTER=colima` / `gke` — existing paths unchanged
+
+### libkrun FFI crate
+
+The Rust binding is `libkrun-sys` (or hand-written `unsafe extern "C"` in
+`krunbox/src/ffi.rs`). Link against the system `libkrun.dylib` / `libkrun.so`.
+Build dependency: `brew install libkrun` (macOS), `dnf install libkrun-devel` (Fedora),
+or build from source (`containers/libkrun`).
+
+`cargo:rustc-link-lib=krun` in `build.rs` — gated on `#[cfg(feature = "krun-ffi")]`
+so the crate still compiles without libkrun installed (smolvm shim path stays active).
+
+### Open questions
+
+- Does `krunbox` become its own top-level crate, or stay inside `macbox`?
+- Linux CI: provision `/dev/kvm` in GHA runner, or gate krun tests behind a feature flag?
+- libkrun version pinning: commit hash vs semver release?
 
 `MINIBOX_ADAPTER=qemu` remains a supported fallback for hosts without KVM/HVF or
 where libkrun is not installed. `VmRunner::spawn_vm` backs the QEMU path.
-
-Adapter selection precedence (Phase B):
-1. `MINIBOX_ADAPTER=krun` — libkrun FFI (preferred, cross-platform)
-2. `MINIBOX_ADAPTER=qemu` — QEMU subprocess fallback
-3. `MINIBOX_ADAPTER=smolvm` — macOS only, shells out to smolvm CLI (existing)
 
 ## Files Touched (Phase A)
 
