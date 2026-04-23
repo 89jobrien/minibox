@@ -19,6 +19,7 @@ miniboxd starts
       │      ├── native (default) → namespaces + cgroups v2    │
       │      ├── gke              → proot + copy FS            │
       │      └── colima           → Colima/limactl delegate    │
+      │                             (available on Linux too)   │
       │                                                        │
       ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
@@ -47,7 +48,7 @@ flowchart TD
 
     linux_env -->|native / unset| native["Native\nnamespaces + overlay + cgroups v2"]
     linux_env -->|gke| gke["GKE\nproot + copy FS + no-op limiter"]
-    linux_env -->|colima| colima_linux["Colima\nlimactl delegate"]
+    linux_env -->|colima| colima_linux["Colima\nlimactl delegate\n(also valid on Linux)"]
 
     mac_pre --> mac_env{MINIBOX_ADAPTER set?}
     mac_env -->|vz| vf["Virtualization.framework\nshared Linux VM"]

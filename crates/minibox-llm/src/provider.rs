@@ -1,7 +1,5 @@
 use crate::error::LlmError;
-use crate::types::{
-    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
-};
+use crate::types::{CompletionRequest, CompletionResponse};
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -27,44 +25,6 @@ pub trait LlmProvider: Send + Sync {
     /// source so that [`RetryingProvider`](crate::RetryingProvider) can classify
     /// them correctly via [`LlmError::is_transient`](crate::LlmError::is_transient).
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, LlmError>;
-
-    /// Send a multi-turn inference request. Providers that support native
-    /// multi-turn can override this. The default implementation adapts the
-    /// last user message into a [`CompletionRequest`] and calls [`complete`](Self::complete).
-    async fn infer(&self, request: &InferenceRequest) -> Result<InferenceResponse, LlmError> {
-        // Default: use the last user-turn text as the prompt.
-        let prompt = request
-            .messages
-            .iter()
-            .rev()
-            .find_map(|m| {
-                m.content.iter().find_map(|b| {
-                    if let ContentBlock::Text { text } = b {
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or_default();
-
-        let completion_req = CompletionRequest {
-            prompt,
-            system: request.system.clone(),
-            max_tokens: request.max_tokens,
-            schema: None,
-            timeout: None,
-            max_retries: None,
-        };
-
-        let resp = self.complete(&completion_req).await?;
-        Ok(InferenceResponse {
-            content: vec![ContentBlock::Text { text: resp.text }],
-            stop_reason: "end_turn".to_string(),
-            usage: resp.usage,
-            provider: resp.provider,
-        })
-    }
 }
 
 /// HTTP-level configuration applied when constructing a provider's `reqwest` client.
@@ -89,54 +49,5 @@ impl Default for ProviderConfig {
             connect_timeout: Duration::from_secs(10),
             request_timeout: Duration::from_secs(60),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::{CompletionResponse, Message};
-
-    struct EchoProvider;
-
-    #[async_trait]
-    impl LlmProvider for EchoProvider {
-        fn name(&self) -> &str {
-            "echo"
-        }
-        async fn complete(
-            &self,
-            request: &CompletionRequest,
-        ) -> Result<CompletionResponse, LlmError> {
-            Ok(CompletionResponse {
-                text: request.prompt.clone(),
-                provider: "echo".to_string(),
-                usage: None,
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn infer_default_wraps_complete() {
-        let provider = EchoProvider;
-        let req = InferenceRequest {
-            messages: vec![Message::user("hello world")],
-            ..InferenceRequest::default()
-        };
-        let resp = provider.infer(&req).await.unwrap();
-        assert_eq!(resp.provider, "echo");
-        assert_eq!(resp.text(), "hello world");
-        assert_eq!(resp.stop_reason, "end_turn");
-    }
-
-    #[tokio::test]
-    async fn infer_picks_last_text_block() {
-        let provider = EchoProvider;
-        let req = InferenceRequest {
-            messages: vec![Message::user("first"), Message::user("last")],
-            ..InferenceRequest::default()
-        };
-        let resp = provider.infer(&req).await.unwrap();
-        assert_eq!(resp.text(), "last");
     }
 }

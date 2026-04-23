@@ -9,121 +9,8 @@
 //! - `just doctor` to report host readiness
 //! - Future `minibox doctor` CLI subcommand
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-
-// ---------------------------------------------------------------------------
-// Startup diagnostic paths
-// ---------------------------------------------------------------------------
-
-/// Resolved runtime paths logged at daemon startup for observability.
-///
-/// All three fields reflect the same env-var resolution order used by
-/// `miniboxd` and `minibox-client`:
-///
-/// 1. `MINIBOX_SOCKET_PATH` / `MINIBOX_DATA_DIR` / `MINIBOX_CGROUP_ROOT` (full path)
-/// 2. `MINIBOX_RUN_DIR` / `MINIBOX_DATA_DIR` directory hints
-/// 3. Platform default
-#[derive(Debug, Clone)]
-pub struct DiagnosticPaths {
-    /// Resolved Unix socket path (`miniboxd.sock`).
-    pub socket_path: PathBuf,
-    /// Resolved data directory for images and container state.
-    pub data_dir: PathBuf,
-    /// Resolved cgroup v2 root (typically `/sys/fs/cgroup`).
-    pub cgroup_root: PathBuf,
-}
-
-impl DiagnosticPaths {
-    /// Return a structured, human-readable log string with `key = value` pairs.
-    ///
-    /// Intended for `tracing::info!` at daemon startup. Keys are `socket_path`,
-    /// `data_dir`, and `cgroup_root`.
-    pub fn to_log_string(&self) -> String {
-        format!(
-            "socket_path = {} | data_dir = {} | cgroup_root = {}",
-            self.socket_path.display(),
-            self.data_dir.display(),
-            self.cgroup_root.display(),
-        )
-    }
-}
-
-/// Resolve the runtime paths miniboxd will use, applying the same env-var
-/// precedence order as the daemon and client library.
-///
-/// Pure — reads env vars, does not mutate the filesystem.
-///
-/// Intended to be called once at daemon startup:
-///
-/// ```rust,ignore
-/// let paths = minibox_core::preflight::resolve_diagnostic_paths();
-/// tracing::info!(
-///     socket_path = %paths.socket_path.display(),
-///     data_dir    = %paths.data_dir.display(),
-///     cgroup_root = %paths.cgroup_root.display(),
-///     "daemon: resolved runtime paths"
-/// );
-/// ```
-pub fn resolve_diagnostic_paths() -> DiagnosticPaths {
-    DiagnosticPaths {
-        socket_path: resolve_socket_path(),
-        data_dir: resolve_data_dir(),
-        cgroup_root: resolve_cgroup_root(),
-    }
-}
-
-/// Resolve daemon socket path.
-///
-/// Precedence: `MINIBOX_SOCKET_PATH` > `$MINIBOX_RUN_DIR/miniboxd.sock` > platform default.
-fn resolve_socket_path() -> PathBuf {
-    if let Ok(p) = std::env::var("MINIBOX_SOCKET_PATH") {
-        return PathBuf::from(p);
-    }
-    if let Ok(dir) = std::env::var("MINIBOX_RUN_DIR") {
-        return PathBuf::from(dir).join("miniboxd.sock");
-    }
-    #[cfg(target_os = "macos")]
-    {
-        PathBuf::from("/tmp/minibox/miniboxd.sock")
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        PathBuf::from("/run/minibox/miniboxd.sock")
-    }
-}
-
-/// Resolve data directory.
-///
-/// Precedence: `MINIBOX_DATA_DIR` > platform default.
-fn resolve_data_dir() -> PathBuf {
-    if let Ok(d) = std::env::var("MINIBOX_DATA_DIR") {
-        return PathBuf::from(d);
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".local/share/minibox")
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        PathBuf::from("/var/lib/minibox")
-    }
-}
-
-/// Resolve cgroup v2 root.
-///
-/// Precedence: `MINIBOX_CGROUP_ROOT` > `/sys/fs/cgroup`.
-fn resolve_cgroup_root() -> PathBuf {
-    if let Ok(r) = std::env::var("MINIBOX_CGROUP_ROOT") {
-        return PathBuf::from(r);
-    }
-    PathBuf::from("/sys/fs/cgroup")
-}
-
-// ---------------------------------------------------------------------------
-// Host capabilities
-// ---------------------------------------------------------------------------
 
 /// Host capabilities relevant to minibox operation.
 #[derive(Debug, Clone)]
@@ -227,6 +114,9 @@ pub fn format_report(caps: &HostCapabilities) -> String {
 // Probe helpers
 // ---------------------------------------------------------------------------
 
+/// Check whether the current process is running as UID 0 (root).
+///
+/// Returns `false` on non-Unix platforms.
 fn probe_root() -> bool {
     #[cfg(unix)]
     {
@@ -238,20 +128,28 @@ fn probe_root() -> bool {
     }
 }
 
+/// Read and parse the running kernel version from `/proc/version`.
+///
+/// Returns `(0, 0, 0)` if the file is unreadable or the format is unexpected.
 fn probe_kernel_version() -> (u32, u32, u32) {
     let content = match std::fs::read_to_string("/proc/version") {
         Ok(s) => s,
         Err(_) => return (0, 0, 0),
     };
+    // "Linux version 6.1.0-18-amd64 ..."
     let version_str = content.split_whitespace().nth(2).unwrap_or("0.0.0");
     parse_kernel_version(version_str)
 }
 
 /// Parse a kernel version string like `"6.1.0-18-amd64"` into `(major, minor, patch)`.
+///
+/// Any non-numeric suffix after the patch component (e.g. `-18-amd64`) is ignored.
+/// Individual components that fail to parse are treated as `0`.
 fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     let parts: Vec<&str> = s.split('.').collect();
     let major = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
     let minor = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
+    // Patch may have suffix like "0-18-amd64"; take only the numeric prefix.
     let patch = parts
         .get(2)
         .and_then(|p| p.split('-').next())
@@ -260,28 +158,49 @@ fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     (major, minor, patch)
 }
 
+/// Check whether a cgroup v2 unified hierarchy is mounted by scanning `/proc/mounts`.
+///
+/// A `cgroup2` entry in `/proc/mounts` means the unified hierarchy is active.
+/// Missing or unreadable file returns `false`.
 fn probe_cgroups_v2() -> bool {
     std::fs::read_to_string("/proc/mounts")
         .map(|s| s.contains("cgroup2"))
         .unwrap_or(false)
 }
 
+/// Read the list of available cgroup v2 controllers from
+/// `/sys/fs/cgroup/cgroup.controllers`.
+///
+/// Returns an empty `Vec` if the file is absent (cgroup v1 or non-Linux host).
+/// Typical controllers are `cpu`, `memory`, `io`, `pids`.
 fn probe_cgroup_controllers() -> Vec<String> {
     std::fs::read_to_string("/sys/fs/cgroup/cgroup.controllers")
         .map(|s| s.split_whitespace().map(String::from).collect())
         .unwrap_or_default()
 }
 
+/// Check whether `/sys/fs/cgroup/cgroup.subtree_control` exists.
+///
+/// Presence of this file indicates that the cgroup v2 root supports subtree
+/// controller delegation, which minibox requires to create per-container
+/// cgroups and assign controllers to them.
 fn probe_subtree_delegatable() -> bool {
     Path::new("/sys/fs/cgroup/cgroup.subtree_control").exists()
 }
 
+/// Check whether the `overlay` filesystem type is registered with the kernel
+/// by scanning `/proc/filesystems`.
+///
+/// Returns `false` if overlay is not compiled in or not loaded as a module.
 fn probe_overlay_fs() -> bool {
     std::fs::read_to_string("/proc/filesystems")
         .map(|s| s.contains("overlay"))
         .unwrap_or(false)
 }
 
+/// Check whether `systemctl --version` succeeds, indicating systemd is running.
+///
+/// Returns `false` if `systemctl` is not in `$PATH` or exits with a non-zero status.
 fn probe_systemd_available() -> bool {
     Command::new("systemctl")
         .arg("--version")
@@ -290,12 +209,17 @@ fn probe_systemd_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Parse the systemd version number from `systemctl --version`.
+///
+/// Expects output starting with a line like `"systemd 252 (252.22-1~deb12u1)"`.
+/// Returns `None` if the command fails or the version cannot be parsed.
 fn probe_systemd_version() -> Option<u32> {
     let output = Command::new("systemctl").arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
+    // "systemd 252 (252.22-1~deb12u1)"
     stdout
         .lines()
         .next()?
@@ -305,6 +229,10 @@ fn probe_systemd_version() -> Option<u32> {
         .ok()
 }
 
+/// Check whether `minibox.slice` is active in systemd.
+///
+/// Uses `systemctl is-active minibox.slice`; returns `false` if systemd is
+/// absent or the slice has not been created.
 fn probe_minibox_slice() -> bool {
     Command::new("systemctl")
         .args(["is-active", "minibox.slice"])
@@ -316,56 +244,6 @@ fn probe_minibox_slice() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn diagnostic_paths_socket_default_linux() {
-        // Default socket filename must be miniboxd.sock, not the old minibox.sock.
-        let paths = resolve_diagnostic_paths();
-        let socket = paths.socket_path.to_string_lossy();
-        assert!(
-            socket.ends_with("miniboxd.sock"),
-            "socket path must end with miniboxd.sock, got: {socket}"
-        );
-    }
-
-    #[test]
-    fn diagnostic_paths_socket_env_override() {
-        // SAFETY: test-only env mutation.
-        unsafe {
-            std::env::set_var("MINIBOX_SOCKET_PATH", "/tmp/test/custom.sock");
-        }
-        let paths = resolve_diagnostic_paths();
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-        }
-        assert_eq!(paths.socket_path.to_string_lossy(), "/tmp/test/custom.sock");
-    }
-
-    #[test]
-    fn diagnostic_paths_run_dir_env_override() {
-        // MINIBOX_RUN_DIR: socket becomes <run_dir>/miniboxd.sock.
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::set_var("MINIBOX_RUN_DIR", "/tmp/run-test");
-        }
-        let paths = resolve_diagnostic_paths();
-        unsafe {
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
-        assert_eq!(
-            paths.socket_path.to_string_lossy(),
-            "/tmp/run-test/miniboxd.sock"
-        );
-    }
-
-    #[test]
-    fn diagnostic_paths_log_output_is_structured() {
-        let paths = resolve_diagnostic_paths();
-        let output = paths.to_log_string();
-        assert!(output.contains("socket_path"));
-        assert!(output.contains("data_dir"));
-        assert!(output.contains("cgroup_root"));
-    }
 
     #[test]
     fn test_parse_kernel_version() {

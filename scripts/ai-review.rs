@@ -3,8 +3,7 @@
 //!
 //! Usage: ./scripts/ai-review.rs [--base <ref>]
 //!
-//! Requires: rust-script, ANTHROPIC_API_KEY or OLLAMA_HOST in env.
-//! Provider auto-detection order: Anthropic → OpenAI → Gemini → Ollama.
+//! Requires: rust-script, claude CLI on PATH, ANTHROPIC_API_KEY in env.
 //!
 //! ```cargo
 //! [dependencies]
@@ -13,20 +12,21 @@
 //! chrono = "0.4"
 //! serde = { version = "1", features = ["derive"] }
 //! serde_json = "1"
-//! minibox-llm = { path = "../crates/minibox-llm", features = ["anthropic", "openai", "gemini"] }
-//! tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 //! ```
+//!
+//! Streaming: spawns `claude -p --stream` and tees each line to stdout and an
+//! in-memory buffer simultaneously, so the review appears live while still
+//! being captured for JSONL telemetry and the per-commit markdown log.
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
-use minibox_llm::{CompletionRequest, FallbackChain};
 use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::PathBuf,
-    process::Command,
+    process::{Command, Stdio},
     time::Instant,
 };
 
@@ -105,8 +105,7 @@ fn save_commit_log(sha: &str, content: &str, base: &str) -> Result<PathBuf> {
     fs::create_dir_all(&dir)?;
     let path = dir.join(format!("{sha}-ai-review.md"));
     let date = Local::now().format("%Y-%m-%d %H:%M").to_string();
-    let header =
-        format!("# ai-review · {sha}\n\n- **base**: {base}\n- **date**: {date}\n\n---\n\n");
+    let header = format!("# ai-review · {sha}\n\n- **base**: {base}\n- **date**: {date}\n\n---\n\n");
     fs::write(&path, format!("{header}{content}"))?;
     Ok(path)
 }
@@ -158,7 +157,7 @@ fn get_diff(base: &str) -> Result<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Review via FallbackChain (minibox-llm)
+// Review via `claude` CLI
 // ---------------------------------------------------------------------------
 
 fn build_prompt(diff: &str, base: &str) -> String {
@@ -185,31 +184,38 @@ Diff versus {base}:
 }
 
 fn run_review(prompt: &str) -> Result<String> {
-    // Build provider chain from environment variables.
-    // Auto-detection order: ANTHROPIC_API_KEY → OPENAI_API_KEY → GEMINI_API_KEY → Ollama.
-    // Each available provider is wrapped in a RetryingProvider with default settings.
-    let chain = FallbackChain::from_env();
+    // Spawn `claude -p --stream` and tee each line to stdout + capture buffer.
+    // --stream makes the CLI emit tokens as they arrive rather than buffering
+    // the full response, so the review appears live in the terminal.
+    let mut child = Command::new("claude")
+        .args(["-p", "--stream", prompt])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed to spawn 'claude' — is it on PATH?")?;
 
-    let request = CompletionRequest {
-        prompt: prompt.to_string(),
-        system: Some(
-            "You are a senior Rust systems engineer specialising in container runtimes. \
-             Be precise, terse, and actionable."
-                .to_string(),
-        ),
-        max_tokens: 4096,
-        schema: None,
-        timeout: None,
-        max_retries: None,
-    };
+    let stdout = child.stdout.take().expect("stdout piped");
+    let mut captured = String::new();
 
-    // complete_sync drives an internal Tokio runtime — no deadlock risk from
-    // piped child-process stderr, unlike the previous `claude -p --stream` approach.
-    let response = chain
-        .complete_sync(&request)
-        .context("LLM review request failed — check ANTHROPIC_API_KEY / OLLAMA_HOST")?;
+    for line in BufReader::new(stdout).lines() {
+        let line = line.context("reading claude stdout")?;
+        println!("{line}");
+        captured.push_str(&line);
+        captured.push('\n');
+    }
 
-    Ok(response.text)
+    let status = child.wait().context("waiting for claude")?;
+    if !status.success() {
+        // Collect any stderr for the error message.
+        let mut stderr_buf = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use std::io::Read;
+            let _ = e.read_to_string(&mut stderr_buf);
+        }
+        bail!("claude exited with {status}:\n{}", stderr_buf.trim());
+    }
+
+    Ok(captured)
 }
 
 // ---------------------------------------------------------------------------
@@ -238,17 +244,10 @@ fn main() -> Result<()> {
     let result = run_review(&prompt);
     let elapsed = start.elapsed().as_secs_f64();
 
-    let output = match result {
-        Ok(text) => {
-            // Print the review live (complete_sync returns the full response once done).
-            println!("{text}");
-            text
-        }
-        Err(e) => {
-            eprintln!("error: review failed: {e}");
-            String::new()
-        }
-    };
+    let output = result.unwrap_or_else(|e| {
+        eprintln!("error: review failed: {e}");
+        String::new()
+    });
 
     let _ = log_complete(&run_id, &args.base, &output, elapsed);
 

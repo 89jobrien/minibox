@@ -27,14 +27,20 @@ manually stopped.
           │ success            │ error
           ▼                    ▼
      ┌─────────┐          ┌────────┐
-     │ Running │          │ Failed │
-     └────┬────┘          └───┬────┘
-          │                   │
-          │ exit / SIGTERM    │
-          │ / SIGKILL         │
-          ▼                   │
-     ┌─────────┐              │
-     │ Stopped │◄─────────────┘
+     │ Running │◄─┐        │ Failed │
+     └────┬────┘  │        └───┬────┘
+          │       │ ResumeContainer
+          │ PauseContainer    │
+          ▼       │            │
+     ┌─────────┐  │            │
+     │ Paused  │──┘            │
+     └────┬────┘               │
+          │                    │
+          │ exit / SIGTERM /   │
+          │ SIGKILL / Stopped  │
+          ▼                    │
+     ┌─────────┐               │
+     │ Stopped │◄──────────────┘
      └────┬────┘
           │ Remove request
           ▼
@@ -52,8 +58,12 @@ stateDiagram-v2
     Created --> Running : spawn_process() ok\n(PID recorded)
     Created --> Failed : spawn_process() error
 
+    Running --> Paused : handle_pause()\n(cgroup.freeze = 1)
+    Paused --> Running : handle_resume()\n(cgroup.freeze = 0)
+
     Running --> Stopped : process exited\n(waitpid / adapter event)
     Running --> Stopped : handle_stop()\n(SIGTERM → SIGKILL after 10s)
+    Paused --> Stopped : handle_stop()
 
     Failed --> [*] : handle_remove()
 

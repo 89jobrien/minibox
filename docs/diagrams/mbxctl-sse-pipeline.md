@@ -84,6 +84,9 @@ HTTP Client ◄── GET /jobs/:id/logs
 
 - `drain_container_output` in `mbxctl/src/server.rs` owns the `ResponseStream`
   returned by `JobAdapter::create_and_run` — no stream is dropped prematurely.
+- `DaemonClient` is a local copy in `miniboxctl/src/client.rs` — miniboxctl does
+  not depend on the `minibox-client` crate; the client is inlined to avoid the
+  external dependency.
 - `ContainerOutput` is the only **non-terminal** `DaemonResponse` variant;
   all others (`ContainerStopped`, `Error`, etc.) end the stream.
 - `DefaultBodyLimit(1 MB)` is applied to the axum router to prevent request-body DoS.

@@ -1,0 +1,83 @@
+{
+  "metadata": {
+    "timestamp": "2026-03-22T02:21:20.948185+00:00",
+    "hostname": "Josephs-MacBook-Pro.local",
+    "git_sha": "ae01b21b10c6e1aed368cc1fbcaabc14bd076824",
+    "minibox_version": "unknown"
+  },
+  "suites": [
+    {
+      "name": "pull",
+      "tests": []
+    },
+    {
+      "name": "run",
+      "tests": [
+        {
+          "name": "run_true",
+          "iterations": 0,
+          "stats": null
+        }
+      ]
+    },
+    {
+      "name": "exec",
+      "tests": [
+        {
+          "name": "exec_echo",
+          "iterations": 0,
+          "stats": null
+        }
+      ]
+    },
+    {
+      "name": "e2e",
+      "tests": []
+    }
+  ],
+  "errors": [
+    "command error: minibox [\"pull\", \"alpine\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/echo\", \"ok\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"pull\", \"alpine\"]: No such file or directory (os error 2)",
+    "command error: minibox [\"run\", \"alpine\", \"--\", \"/bin/true\"]: No such file or directory (os error 2)"
+  ]
+}

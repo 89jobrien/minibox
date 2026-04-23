@@ -1057,8 +1057,8 @@ mod macro_contract_tests {
 // ---------------------------------------------------------------------------
 
 use crate::domain::{
-    CommitConfig, ContainerCommitter, ContainerId, ImagePusher,
-    PushProgress, PushResult, RegistryCredentials,
+    CommitConfig, ContainerCommitter, ContainerId, ImagePusher, PushProgress, PushResult,
+    RegistryCredentials,
 };
 
 /// In-memory mock for [`ContainerCommitter`].

@@ -1,7 +1,7 @@
 use crate::error::LlmError;
 use crate::provider::{LlmProvider, ProviderConfig};
 use crate::retry::RetryConfig;
-use crate::types::{CompletionRequest, CompletionResponse, InferenceRequest, InferenceResponse};
+use crate::types::{CompletionRequest, CompletionResponse};
 use std::sync::OnceLock;
 
 /// An ordered chain of [`LlmProvider`] instances tried in sequence until one succeeds.
@@ -65,32 +65,6 @@ impl FallbackChain {
                         provider = provider.name(),
                         error = %e,
                         "llm: provider failed, trying next"
-                    );
-                    errors.push(format!("{}: {e}", provider.name()));
-                }
-            }
-        }
-        Err(LlmError::AllProvidersFailed(errors.join("; ")))
-    }
-
-    /// Send a multi-turn inference request, trying each provider in order.
-    ///
-    /// Mirrors the fallback semantics of [`complete`](FallbackChain::complete):
-    /// the first provider that succeeds wins; if all fail,
-    /// [`LlmError::AllProvidersFailed`] is returned.
-    pub async fn infer(&self, request: &InferenceRequest) -> Result<InferenceResponse, LlmError> {
-        let mut errors = Vec::new();
-        for provider in &self.providers {
-            match provider.infer(request).await {
-                Ok(response) => {
-                    tracing::info!(provider = provider.name(), "llm: infer succeeded");
-                    return Ok(response);
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        provider = provider.name(),
-                        error = %e,
-                        "llm: provider infer failed, trying next"
                     );
                     errors.push(format!("{}: {e}", provider.name()));
                 }
@@ -206,7 +180,7 @@ impl FallbackChain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{CompletionRequest, Message};
+    use crate::types::CompletionRequest;
     use crate::{ainvoke, invoke};
     use std::sync::Mutex;
 
@@ -415,55 +389,6 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(resp.text, "with opts");
-    }
-
-    #[tokio::test]
-    async fn infer_returns_first_successful_provider() {
-        let chain = FallbackChain::new(vec![Box::new(MockProvider {
-            response: Ok("infer result".to_string()),
-        })]);
-        let req = InferenceRequest {
-            messages: vec![Message::user("hello")],
-            ..InferenceRequest::default()
-        };
-        let resp = chain.infer(&req).await.unwrap();
-        assert_eq!(resp.text(), "infer result");
-    }
-
-    #[tokio::test]
-    async fn infer_falls_back_on_failure() {
-        let chain = FallbackChain::new(vec![
-            Box::new(MockProvider {
-                response: Err("down".to_string()),
-            }),
-            Box::new(MockProvider {
-                response: Ok("fallback infer".to_string()),
-            }),
-        ]);
-        let req = InferenceRequest {
-            messages: vec![Message::user("test")],
-            ..InferenceRequest::default()
-        };
-        let resp = chain.infer(&req).await.unwrap();
-        assert_eq!(resp.text(), "fallback infer");
-    }
-
-    #[tokio::test]
-    async fn infer_all_fail_returns_all_providers_failed() {
-        let chain = FallbackChain::new(vec![
-            Box::new(MockProvider {
-                response: Err("err1".to_string()),
-            }),
-            Box::new(MockProvider {
-                response: Err("err2".to_string()),
-            }),
-        ]);
-        let req = InferenceRequest {
-            messages: vec![Message::user("test")],
-            ..InferenceRequest::default()
-        };
-        let result = chain.infer(&req).await;
-        assert!(matches!(result, Err(LlmError::AllProvidersFailed(_))));
     }
 
     #[test]

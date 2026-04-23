@@ -1,9 +1,10 @@
 # Crate Dependency Graph
 
 Shows the workspace crate relationships. Platform-specific dependencies are gated at compile
-time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and `minibox`
-are platform-agnostic. New in 2026-Q2: `searchbox`, `zoektbox`, `tailbox`, `minibox-agent`,
-`dashbox`, `dockerbox`, `minibox-secrets`, `minibox-llm`.
+time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and
+`minibox-core` are platform-agnostic. `minibox` is a thin re-export facade over `linuxbox`,
+which contains the actual Linux adapter implementations. New in 2026-Q2: `searchbox`,
+`zoektbox`, `tailbox`, `minibox-agent`, `dashbox`, `dockerbox`, `minibox-secrets`, `minibox-llm`.
 
 ## Mermaid
 
@@ -11,7 +12,7 @@ are platform-agnostic. New in 2026-Q2: `searchbox`, `zoektbox`, `tailbox`, `mini
 flowchart LR
     subgraph binaries["Binaries"]
         miniboxd["miniboxd\n(unified daemon)"]
-        minibox_cli["minibox-cli"]
+        mbx["mbx\n(CLI binary)"]
         minibox_bench["minibox-bench"]
         miniboxctl["miniboxctl\n(HTTP API, WIP)"]
         dockerboxd["dockerboxd\n(Docker shim)"]
@@ -30,7 +31,8 @@ flowchart LR
 
     subgraph core["Core"]
         minibox_core["minibox-core\n(protocol + domain traits)"]
-        minibox["minibox\n(Linux adapters)"]
+        minibox["minibox\n(re-export facade\nover linuxbox)"]
+        linuxbox["linuxbox\n(Linux adapters)"]
         minibox_macros["minibox-macros\n(proc-macro)"]
         minibox_oci["minibox-oci\n(OCI types)"]
     end
@@ -50,12 +52,12 @@ flowchart LR
         nix["nix\n[cfg(unix)]"]
     end
 
-    miniboxd -->|"linux"| minibox
+    miniboxd -->|"linux"| linuxbox
     miniboxd -->|"linux"| nix
     miniboxd -->|"macos"| macbox
     miniboxd -->|"windows"| winbox
     miniboxd --> daemonbox
-    miniboxd --> tailbox
+    miniboxd -->|"tailnet feature"| tailbox
 
     macbox --> daemonbox
     macbox --> minibox_core
@@ -63,14 +65,14 @@ flowchart LR
     winbox --> minibox_core
 
     daemonbox --> minibox_core
-    daemonbox --> minibox_agent
 
-    minibox --> minibox_core
-    minibox --> minibox_oci
-    minibox --> minibox_macros
+    minibox --> linuxbox
+    linuxbox --> minibox_core
+    linuxbox --> minibox_oci
+    linuxbox --> minibox_macros
 
-    minibox_cli --> minibox_core
-    minibox_bench --> minibox_core
+    mbx --> minibox_core
+    minibox_bench --> linuxbox
     miniboxctl --> minibox_core
     dockerboxd --> dockerbox
     dockerbox --> minibox_core
@@ -78,8 +80,6 @@ flowchart LR
     searchboxd --> searchbox
     searchbox --> zoektbox
     searchbox --> minibox_core
-
-    dashbox --> minibox_core
 
     minibox_agent --> minibox_llm
     minibox_agent --> minibox_secrets
@@ -97,11 +97,11 @@ flowchart LR
     classDef new_crate fill:#ffe0b2,stroke:#e65100,color:#000;
     classDef external fill:#f0f0f0,stroke:#999,color:#000,font-style:italic;
 
-    class miniboxd,minibox_cli,minibox_bench,miniboxctl,dockerboxd,dashbox,searchboxd binary;
+    class miniboxd,mbx,minibox_bench,miniboxctl,dockerboxd,dashbox,searchboxd binary;
     class macbox platform_mac;
     class winbox platform_win;
     class daemonbox daemon_crate;
-    class minibox_core,minibox,minibox_oci core_crate;
+    class minibox_core,minibox,linuxbox,minibox_oci core_crate;
     class minibox_macros macro_crate;
     class minibox_agent,minibox_llm,minibox_secrets,dockerbox service_crate;
     class searchbox,zoektbox,tailbox new_crate;
@@ -112,21 +112,22 @@ flowchart LR
 
 ```
 BINARIES
-  miniboxd ──[linux]──► minibox ──► minibox-core
+  miniboxd ──[linux]──► linuxbox ──► minibox-core
            ──[linux]──► nix
            ──[macos]──► macbox ──► daemonbox ──► minibox-core
            ──[win]────► winbox ──► daemonbox
            ────────────► daemonbox
-           ────────────► tailbox ──► minibox-secrets ──► minibox-core
-  minibox-cli, minibox-bench, miniboxctl ──────────────► minibox-core
+           ──[tailnet]──► tailbox ──► minibox-secrets ──► minibox-core
+  mbx (CLI binary), miniboxctl ───────────────────────► minibox-core
+  minibox-bench ──────────────────────────────────────► linuxbox
   dockerboxd ──► dockerbox ──────────────────────────► minibox-core
   searchboxd ──► searchbox ──► zoektbox
                            ──► minibox-core
-  dashbox ───────────────────────────────────────────► minibox-core
 
 CORE
   minibox-core  ← canonical protocol + domain traits
-  minibox       ← Linux adapters; re-exports minibox-core
+  linuxbox      ← Linux adapters (namespaces, cgroups, overlay, OCI)
+  minibox       ← thin re-export facade: `pub use linuxbox::*`
   minibox-oci   ← OCI image types
   minibox-macros ← proc-macros (as_any!, adapt!)
 

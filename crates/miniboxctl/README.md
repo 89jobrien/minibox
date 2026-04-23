@@ -26,5 +26,5 @@ Work in progress. Core job execution and SSE streaming are implemented; full fea
 ./target/release/miniboxctl
 
 # Custom listen address and minibox socket
-miniboxctl --listen 127.0.0.1:8080 --socket /run/minibox/miniboxd.sock
+miniboxctl --listen 127.0.0.1:8080 --socket /run/minibox/minibox.sock
 ```

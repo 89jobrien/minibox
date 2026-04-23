@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `crates/dockerbox` — HTTP-over-Unix-socket shim that translates Docker API calls to minibox protocol.
 
 - Binary: `dockerboxd`; socket at `/run/dockerbox/dockerbox.sock` (`DOCKERBOX_SOCKET` overrides)
-- Upstream minibox socket: `MINIBOX_SOCKET` (default `/run/minibox/miniboxd.sock`)
+- Upstream minibox socket: `MINIBOX_SOCKET` (default `/run/minibox/minibox.sock`)
 - **ID translation**: minibox uses 16-char hex IDs; Docker expects 64. `to_docker_id` pads with trailing zeros.
 - **create/start**: minibox starts containers at `Run` time — `start_container` is intentionally a no-op.
 - **Log streaming**: stub only — minibox has no attach-to-existing-container support yet.

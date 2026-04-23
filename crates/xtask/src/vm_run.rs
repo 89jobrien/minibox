@@ -471,13 +471,7 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path, platform: &HostPlatform) -> R
     }
     let bin_status = Command::new("cargo")
         .args([
-            "zigbuild",
-            "-p",
-            "miniboxd",
-            "-p",
-            "mbx",
-            "--target",
-            target,
+            "zigbuild", "-p", "miniboxd", "-p", "mbx", "--target", target,
         ])
         .status()
         .context("cargo zigbuild for miniboxd + mbx")?;

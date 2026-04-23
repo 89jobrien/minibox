@@ -3,7 +3,7 @@
 ## Description
 
 Minibox uses hexagonal (ports and adapters) architecture. The domain ports
-(traits) in `minibox/src/domain.rs` define the interfaces. The application
+(traits) in `minibox-core/src/domain.rs` define the interfaces. The application
 core in `daemonbox` depends only on those traits — it never imports a concrete
 adapter. Composition roots (`miniboxd/main.rs` for Linux, `macbox::start()` for
 macOS, `winbox::start()` for Windows) are the only place where concrete adapters
@@ -25,26 +25,34 @@ adapters and has zero platform-specific code.
 ║          (depends only on domain port traits — no cfg blocks)         ║
 ╠═══════════════════════════════════════════════════════════════════════╣
 ║                     DOMAIN PORTS                                      ║
-║               minibox/src/domain.rs                                   ║
+║               minibox-core/src/domain.rs                             ║
 ║    ContainerRuntime   FilesystemProvider                              ║
 ║    ImageRegistry      ResourceLimiter      NetworkProvider            ║
 ╠═══════════════════════════════════════════════════════════════════════╣
 ║                     DRIVEN ADAPTERS                                   ║
-║              minibox/src/adapters/                                    ║
+║              linuxbox/src/adapters/                                   ║
 ║                                                                       ║
-║  Linux:    LinuxNamespaceRuntime  OverlayFilesystem  CgroupV2Limiter  ║
+║  Linux native:                                                        ║
+║            LinuxNamespaceRuntime  OverlayFilesystem  CgroupV2Limiter  ║
 ║            DockerHubRegistry      GhcrRegistry       NativeExecRuntime║
-║            ProotRuntime           CopyFilesystem      NoopLimiter     ║
+║            ProotRuntime           CopyFilesystem     NoopLimiter      ║
+║                                                                       ║
+║  Linux (also available via MINIBOX_ADAPTER=colima):                  ║
+║            ColimaRuntime          ColimaFilesystem    ColimaLimiter   ║
+║            ColimaRegistry                                             ║
+║                                                                       ║
+║  Windows (adapters in linuxbox/src/adapters/, stub wired in winbox): ║
 ║            Wsl2Runtime            Wsl2Filesystem      Wsl2Limiter     ║
 ║            HcsRuntime             HcsFilesystem       HcsLimiter      ║
 ║            HcsRegistry                                                ║
 ║                                                                       ║
-║  macOS:    ColimaRuntime          ColimaFilesystem    ColimaLimiter   ║
-║            ColimaRegistry                                             ║
-║            VzRuntime (macbox)     VzFilesystem        VzLimiter       ║
-║            VzRegistry (macbox)                                        ║
+║  macOS (macbox/src/vz/adapter.rs):                                   ║
+║            VzRuntime              VzFilesystem        VzLimiter       ║
+║            VzRegistry                                                 ║
+║                                                                       ║
+║  macOS krun/in-progress (linuxbox/src/adapters/smolvm.rs):           ║
 ║            SmolVmRuntime          SmolVmFilesystem    SmolVmLimiter   ║
-║            SmolVmRegistry  [krun path — macbox/src/krun/]            ║
+║            SmolVmRegistry                                             ║
 ╚═══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -64,30 +72,30 @@ graph TB
         server["server.rs"]
     end
 
-    subgraph ports["Domain Ports — minibox/domain.rs"]
+    subgraph ports["Domain Ports — minibox-core/src/domain.rs"]
         runtime_trait["ContainerRuntime"]
         fs_trait["FilesystemProvider"]
         registry_trait["ImageRegistry"]
         limiter_trait["ResourceLimiter"]
+        network_trait["NetworkProvider"]
     end
 
-    subgraph adapters_linux["Linux Adapters"]
+    subgraph adapters_linux["Linux Adapters — linuxbox/src/adapters/"]
         ln_rt["LinuxNamespaceRuntime"]
         ln_fs["OverlayFilesystem"]
         ln_lim["CgroupV2Limiter"]
         ln_reg["DockerHubRegistry"]
-    end
-
-    subgraph adapters_mac["macOS Adapters"]
-        col_rt["ColimaRuntime"]
+        col_rt["ColimaRuntime\n(also: MINIBOX_ADAPTER=colima on Linux)"]
         col_fs["ColimaFilesystem"]
-        vz_rt["VzRuntime (macbox)"]
-        vz_fs["VzFilesystem (macbox)"]
-        smolvm_rt["SmolVmRuntime (krun)"]
-        smolvm_fs["SmolVmFilesystem (krun)"]
     end
 
-    subgraph adapters_win["Windows Adapters"]
+    subgraph adapters_mac["macOS Adapters — macbox/src/vz/"]
+        vz_rt["VzRuntime"]
+        vz_fs["VzFilesystem"]
+        smolvm_rt["SmolVmRuntime\n(linuxbox/src/adapters/smolvm.rs, krun in-progress)"]
+    end
+
+    subgraph adapters_win["Windows Adapters — linuxbox/src/adapters/\n(stub-wired via winbox)"]
         hcs_rt["HcsRuntime"]
         hcs_fs["HcsFilesystem"]
         hcs_lim["HcsLimiter"]
