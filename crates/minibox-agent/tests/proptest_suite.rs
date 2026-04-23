@@ -30,11 +30,10 @@ fn arb_tool_use_block() -> impl Strategy<Value = ContentBlock> {
 }
 
 fn arb_tool_result_block() -> impl Strategy<Value = ContentBlock> {
-    (any::<String>(), any::<String>())
-        .prop_map(|(tool_use_id, content)| ContentBlock::ToolResult {
-            tool_use_id,
-            content,
-        })
+    (any::<String>(), any::<String>()).prop_map(|(tool_use_id, content)| ContentBlock::ToolResult {
+        tool_use_id,
+        content,
+    })
 }
 
 fn arb_content_block() -> impl Strategy<Value = ContentBlock> {
@@ -46,10 +45,7 @@ fn arb_content_block() -> impl Strategy<Value = ContentBlock> {
 }
 
 fn arb_message() -> impl Strategy<Value = Message> {
-    (
-        arb_role(),
-        prop::collection::vec(arb_content_block(), 1..8),
-    )
+    (arb_role(), prop::collection::vec(arb_content_block(), 1..8))
         .prop_map(|(role, content)| Message { role, content })
 }
 

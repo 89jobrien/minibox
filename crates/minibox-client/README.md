@@ -16,6 +16,7 @@ let response = client.send(request).await?;
 ## Message Protocol
 
 JSON-over-newline on Unix socket. Each request/response includes:
+
 - `id` — Correlation ID for multiplexing
 - `type` — Message variant (e.g., "RunContainer", "ListContainers")
 - Payload — Variant-specific fields

@@ -18,6 +18,8 @@
 !docs/archive/*.md
 !docs/archive/
 *.csv
+fuzz/*
+!fuzz/fuzz_targets/
 
 # Claude Code local configuration
 .claude/

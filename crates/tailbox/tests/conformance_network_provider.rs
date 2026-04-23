@@ -64,7 +64,10 @@ async fn cleanup_called_twice_on_same_id_is_ok() {
         .await
         .expect("TailnetNetwork::new must not fail");
     assert!(net.cleanup("ctr-1").await.is_ok());
-    assert!(net.cleanup("ctr-1").await.is_ok(), "double cleanup must be idempotent");
+    assert!(
+        net.cleanup("ctr-1").await.is_ok(),
+        "double cleanup must be idempotent"
+    );
 }
 
 // ---------------------------------------------------------------------------

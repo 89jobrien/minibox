@@ -7,8 +7,8 @@
 //! Run with: `cargo bench --bench trait_overhead`
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use minibox::domain::{
+use linuxbox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use linuxbox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
     ResourceConfig, ResourceLimiter, RootfsSetup,
 };

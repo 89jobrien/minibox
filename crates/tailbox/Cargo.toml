@@ -20,3 +20,4 @@ tailscale = "0.2"
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
+proptest = "1"

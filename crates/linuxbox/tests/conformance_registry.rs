@@ -15,6 +15,7 @@ fn alpine_ref() -> ImageRef {
     ImageRef::parse("alpine:3.18").expect("parse alpine ref")
 }
 
+#[warn(dead_code)]
 fn nginx_ref() -> ImageRef {
     ImageRef::parse("library/nginx:latest").expect("parse nginx ref")
 }

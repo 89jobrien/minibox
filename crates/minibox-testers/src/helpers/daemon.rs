@@ -134,7 +134,9 @@ pub fn make_mock_state_with_n_containers(base: &Path, n: usize) -> Arc<DaemonSta
         .unwrap();
     rt.block_on(async {
         for i in 0..n {
-            state.add_container(make_stub_record(format!("ctr-{i:04}"))).await;
+            state
+                .add_container(make_stub_record(format!("ctr-{i:04}")))
+                .await;
         }
     });
     state

@@ -40,7 +40,10 @@ fn api_key_fetched(raw: &str, hint: CacheHint) -> Arc<FetchedCredentialInner> {
 async fn inmemory_returns_inserted_credential() {
     let r = ref_for("inmemory:test-key:api_key");
     let mut p = InMemoryProvider::new();
-    p.insert(r.as_str(), api_key_fetched("sk-test1234", CacheHint::Session));
+    p.insert(
+        r.as_str(),
+        api_key_fetched("sk-test1234", CacheHint::Session),
+    );
     let fetched = p.get(&r).await.expect("should return credential");
     assert!(matches!(fetched.credential, Credential::ApiKey(_)));
 }
@@ -76,10 +79,16 @@ async fn chain_returns_first_match() {
     let r = ref_for("inmemory:my-key:api_key");
 
     let mut p1 = InMemoryProvider::new();
-    p1.insert(r.as_str(), api_key_fetched("sk-first1234", CacheHint::Session));
+    p1.insert(
+        r.as_str(),
+        api_key_fetched("sk-first1234", CacheHint::Session),
+    );
 
     let mut p2 = InMemoryProvider::new();
-    p2.insert(r.as_str(), api_key_fetched("sk-second123", CacheHint::Session));
+    p2.insert(
+        r.as_str(),
+        api_key_fetched("sk-second123", CacheHint::Session),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p1), Box::new(p2)]);
     let fetched = chain.get(&r).await.expect("chain should resolve");
@@ -101,7 +110,10 @@ async fn chain_falls_through_to_second_provider() {
 
     let p1 = InMemoryProvider::new(); // empty — NotFound
     let mut p2 = InMemoryProvider::new();
-    p2.insert(r.as_str(), api_key_fetched("sk-second123", CacheHint::Session));
+    p2.insert(
+        r.as_str(),
+        api_key_fetched("sk-second123", CacheHint::Session),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p1), Box::new(p2)]);
     let fetched = chain.get(&r).await.expect("second provider should resolve");
@@ -127,7 +139,10 @@ async fn chain_all_miss_returns_not_found() {
 async fn session_cache_hit_returns_same_arc() {
     let r = ref_for("inmemory:my-key:api_key");
     let mut p = InMemoryProvider::new();
-    p.insert(r.as_str(), api_key_fetched("sk-cached1234", CacheHint::Session));
+    p.insert(
+        r.as_str(),
+        api_key_fetched("sk-cached1234", CacheHint::Session),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p)]);
     let first = chain.get(&r).await.expect("first fetch");
@@ -146,7 +161,10 @@ async fn never_hint_fetches_from_provider_each_time() {
     // cache entry).
     let r = ref_for("env:SOME_VAR:api_key");
     let mut p = InMemoryProvider::new();
-    p.insert(r.as_str(), api_key_fetched("sk-envval123", CacheHint::Never));
+    p.insert(
+        r.as_str(),
+        api_key_fetched("sk-envval123", CacheHint::Never),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p)]);
     let a = chain.get(&r).await.expect("first fetch with Never hint");
@@ -163,7 +181,10 @@ async fn never_hint_fetches_from_provider_each_time() {
 async fn clear_causes_re_fetch_from_provider() {
     let r = ref_for("inmemory:my-key:api_key");
     let mut p = InMemoryProvider::new();
-    p.insert(r.as_str(), api_key_fetched("sk-cached1234", CacheHint::Session));
+    p.insert(
+        r.as_str(),
+        api_key_fetched("sk-cached1234", CacheHint::Session),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p)]);
     // Warm the cache
@@ -178,12 +199,18 @@ async fn clear_causes_re_fetch_from_provider() {
 async fn invalidate_causes_re_fetch_from_provider() {
     let r = ref_for("inmemory:my-key:api_key");
     let mut p = InMemoryProvider::new();
-    p.insert(r.as_str(), api_key_fetched("sk-cached1234", CacheHint::Session));
+    p.insert(
+        r.as_str(),
+        api_key_fetched("sk-cached1234", CacheHint::Session),
+    );
 
     let chain = CredentialProviderChain::new(vec![Box::new(p)]);
     chain.get(&r).await.unwrap();
     chain.invalidate(r.as_str()).await;
-    let after = chain.get(&r).await.expect("should re-fetch after invalidate");
+    let after = chain
+        .get(&r)
+        .await
+        .expect("should re-fetch after invalidate");
     assert!(matches!(after.credential, Credential::ApiKey(_)));
 }
 

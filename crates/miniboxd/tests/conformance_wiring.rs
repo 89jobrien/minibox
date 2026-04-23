@@ -111,8 +111,10 @@ async fn handle_list_empty_state_returns_container_list() {
 async fn handle_pull_failure_returns_error_response() {
     let tmp = TempDir::new().unwrap();
     let state = make_mock_state(tmp.path());
-    let deps =
-        minibox_testers::helpers::make_mock_deps_with_registry(MockRegistry::new().with_pull_failure(), &tmp);
+    let deps = minibox_testers::helpers::make_mock_deps_with_registry(
+        MockRegistry::new().with_pull_failure(),
+        &tmp,
+    );
 
     let response = miniboxd::handler::handle_pull(
         "alpine".to_string(),

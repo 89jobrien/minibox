@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use minibox::protocol::{
+use linuxbox::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
     encode_response,
 };

@@ -1,23 +1,43 @@
-# minibox-cli
+# mbx
 
-CLI client binary (`minibox` command) for managing containers via the daemon.
+`mbx` is the CLI client for the miniboxd container runtime.
+
+Connects to the miniboxd daemon over its Unix socket and issues JSON-over-newline requests,
+printing human-readable output.
 
 ## Commands
 
-- `minibox pull <image>` — Fetch image from Docker Hub
-- `minibox run [--memory M] [--cpus N] <image> -- <command>` — Run container (ephemeral by default)
-- `minibox ps` — List running containers
-- `minibox stop <container-id>` — Stop container
-- `minibox rm <container-id>` — Remove container
+```
+mbx pull <image>                              # Pull image from Docker Hub
+mbx run [--memory M] [--cpus N] <image> -- <command>  # Run container
+mbx ps                                        # List containers
+mbx stop <container-id>                       # Stop a container
+mbx rm <container-id>                         # Remove a container
+mbx exec <container-id> -- <command>          # Exec into a container
+mbx images                                    # List local images
+```
 
-## Ephemeral Mode
+## Ephemeral mode
 
-`minibox run` streams container stdout/stderr in real time and exits with the container's exit code. The container is automatically cleaned up on completion.
+`mbx run` uses `ephemeral: true` and streams container stdout/stderr in real time until a
+`ContainerStopped` frame arrives. The CLI then exits with the container's reported exit code.
 
-## Socket Communication
+## Socket communication
 
-CLI sends requests to the daemon via the Unix socket (`/run/minibox/miniboxd.sock`). Responses are JSON-over-newline. For streaming containers, output is received via broadcast channels.
+Requests are serialised as a single JSON line (`DaemonRequest`) and written to the Unix socket
+at `/run/minibox/miniboxd.sock` (override with `MINIBOX_SOCKET_PATH`). Each response is a
+newline-delimited `DaemonResponse` JSON object.
 
-## Testing
+## Features
 
-Enable the `subprocess-tests` feature to run CLI integration tests against a pre-built `minibox` binary.
+| Feature            | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `subprocess-tests` | Enable integration tests that spawn a real `miniboxd` binary. |
+|                    | Run via `just test-cli-subprocess`.                           |
+
+## Building
+
+```bash
+cargo build -p mbx --release
+# output: target/release/mbx
+```

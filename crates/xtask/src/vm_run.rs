@@ -193,6 +193,7 @@ impl VmHandle {
     }
 
     /// Kill the QEMU process immediately.
+    #[allow(dead_code)] // retained for future use in test harness teardown
     pub fn kill(mut self) -> Result<()> {
         let _ = self.child.kill();
         let _ = self.child.wait();
