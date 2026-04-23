@@ -9,8 +9,8 @@
 //! These tests use injected executors and do NOT require a running smolvm
 //! instance.
 
-use minibox::adapters::SmolVmRegistry;
-use minibox::domain::{ContainerRuntime, ImageRegistry};
+use linuxbox::adapters::SmolVmRegistry;
+use linuxbox::domain::{ContainerRuntime, ImageRegistry};
 use minibox_core::adapters::conformance::BackendDescriptor;
 use minibox_core::domain::BackendCapability;
 use std::sync::Arc;

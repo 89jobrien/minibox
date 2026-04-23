@@ -476,7 +476,7 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox::adapters::mocks::{
+    use linuxbox::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
     use minibox_core::adapters::HostnameRegistryRouter;
