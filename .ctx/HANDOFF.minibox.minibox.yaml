@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260423:150355'
+updated: 20260423:232521
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -8,199 +8,282 @@ items:
   priority: P2
   status: blocked
   title: 'bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64'
-  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete
-    and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation
-    should pass as-is once Apple ships a fix.'
+  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships a fix.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 61
     url: https://github.com/89jobrien/minibox/issues/61
   - date: 2026-04-01
     type: blocker
-    note: 'VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64.
-      Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254'
+    field: null
+    value: null
+    reviewed: null
+    note: VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
   - date: 2026-04-06
     type: note
+    field: null
+    value: null
+    reviewed: null
     note: captured in doob — todo id 34l16mxn2y29do1562s9
 - id: minibox-33
+  doob_uuid: null
   name: winbox-hyper-v-wsl2
   priority: P2
   status: open
   title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
-  description: 'GH #45: Implement Windows container support via Hyper-V for Windows
-    Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
+  description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 45
     url: https://github.com/89jobrien/minibox/issues/45
 - id: minibox-34
+  doob_uuid: null
   name: mbx-dagu-tier2
   priority: P2
   status: open
   title: 'Tier 2 mbx-dagu fixes (#31, #35, #36)'
-  description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile
-    use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
+  description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 31
     url: https://github.com/89jobrien/minibox/issues/31
 - id: minibox-43
+  doob_uuid: null
   name: vz-virtiofs-mounts
   priority: P2
   status: blocked
-  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) /
-    (#66, #75)'
-  description: 'GH #66, #75: Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount
-    paths into VM via virtiofs. Allows in-VM minibox-agent to construct overlay FS
-    from host-stored layers without copying.'
+  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
+  description: 'GH #66, #75: Mount MINIBOX_DATA_DIR (OCI layers) and user bind mount paths into VM via virtiofs. Allows in-VM minibox-agent to construct overlay FS from host-stored layers without copying.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 66
     url: https://github.com/89jobrien/minibox/issues/66
 - id: minibox-46
+  doob_uuid: null
   name: pty-stdio-plan
   priority: P2
   status: open
   title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
-  description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md.
-    Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full
-    PTY fork/exec wiring deferred — requires Linux root.'
+  description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md. Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full PTY fork/exec wiring deferred — requires Linux root.'
   files:
   - crates/minibox-core/src/domain.rs
   - crates/minibox/src/container/process.rs
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 70
     url: https://github.com/89jobrien/minibox/issues/70
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 83
     url: https://github.com/89jobrien/minibox/issues/83
 - id: minibox-52
+  doob_uuid: null
   name: vz-vm-provision
   priority: P2
   status: blocked
-  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40)
-    / (#76, #84)'
-  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle
-    (create disk image, configure VZ VM, start/stop) inside macbox.'
+  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
+  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 76
     url: https://github.com/89jobrien/minibox/issues/76
 - id: minibox-53
+  doob_uuid: null
   name: vz-minibox-agent
   priority: P2
   status: blocked
   title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
-  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK,
-    forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
+  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 78
     url: https://github.com/89jobrien/minibox/issues/78
 - id: minibox-54
+  doob_uuid: null
   name: vz-vsock-bridge
   priority: P2
   status: blocked
-  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42)
-    / (#81, #93)'
-  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK.
-    Container stdout/stderr forwarded as ContainerOutput protocol messages.'
+  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
+  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr forwarded as ContainerOutput protocol messages.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 81
     url: https://github.com/89jobrien/minibox/issues/81
 - id: minibox-55
+  doob_uuid: null
   name: vz-full-stack
   priority: P2
   status: open
   title: 'feat: minibox owns the full container stack on every OS'
-  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock
-    planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
+  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 87
     url: https://github.com/89jobrien/minibox/issues/87
 - id: minibox-58
+  doob_uuid: null
   name: release-ci-gate
   priority: P2
   status: open
   title: 'bug(ci): no CI gate required before merging release version bumps (#55)'
-  description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI.
-    Add a GitHub check preventing main→next promotion until full test suite passes.'
+  description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI. Add a GitHub check preventing main→next promotion until full test suite passes.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 55
     url: https://github.com/89jobrien/minibox/issues/55
 - id: minibox-65
+  doob_uuid: null
   name: vz-virtiofs
   priority: P2
   status: blocked
-  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts
-    (#43) / (#75)'
-  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via
-    virtiofs for efficient layer access.'
+  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
+  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 75
     url: https://github.com/89jobrien/minibox/issues/75
 - id: minibox-66
+  doob_uuid: null
   name: vz-agent
   priority: P2
   status: blocked
   title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
-  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon
-    for container control.'
+  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 88
     url: https://github.com/89jobrien/minibox/issues/88
 - id: minibox-67
+  doob_uuid: null
   name: vz-io-bridge
   priority: P2
   status: blocked
-  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from
-    VM (#42) / (#93)'
+  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
   description: 'GH #93: Blocked by minibox-agent and vsock bridge implementation.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 93
     url: https://github.com/89jobrien/minibox/issues/93
 - id: minibox-68
+  doob_uuid: null
   name: vm-image-overlay
   priority: P2
   status: open
   title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
-  description: 'GH #107: Add install_overlay() to vm_image.rs. Deferred — VZ stack
-    blocked by #61.'
+  description: 'GH #107: Add install_overlay() to vm_image.rs. Deferred — VZ stack blocked by #61.'
   files:
   - crates/xtask/src/vm_image.rs
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 107
     url: https://github.com/89jobrien/minibox/issues/107
 - id: minibox-69
+  doob_uuid: null
   name: tailbox-wiring-complete
   priority: P2
   status: open
-  title: 'feat(tailbox): complete tailnet integration wiring — miniboxd feature flag
-    + auth chain + gateway routing'
-  description: 'tailbox crate implemented: TailnetNetwork adapter, TailnetConfig,
-    auth key resolution chain (1Password→env→file), gateway IP caching, per-container
-    network setup/cleanup. miniboxd wired with tailnet feature flag. Uncommitted changes
-    remain in daemonbox conformance tests, colima adapter, domain.rs, xtask preflight.'
+  title: 'feat(tailbox): complete tailnet integration wiring — miniboxd feature flag + auth chain + gateway routing'
+  description: 'tailbox crate implemented: TailnetNetwork adapter, TailnetConfig, auth key resolution chain (1Password→env→file), gateway IP caching, per-container network setup/cleanup. miniboxd wired with tailnet feature flag. Uncommitted changes remain in daemonbox conformance tests, colima adapter, domain.rs, xtask preflight.'
   files:
   - crates/tailbox/src/adapter.rs
   - crates/tailbox/src/auth.rs
@@ -213,225 +296,205 @@ items:
   - crates/minibox-core/src/domain.rs
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
+  completed: null
   extra: []
 - id: minibox-76
+  doob_uuid: null
   name: class-diagram-generator
   priority: P2
   status: open
   title: 'feat(docs): Rust class diagram generator script for docs/diagrams.html'
-  description: >
-    Write a script (uv/rust-script) that parses workspace crate sources and emits
-    Mermaid classDiagram blocks for structs, enums, and traits. Scope TBD: fields
-    (pub only vs all), relationships (implements/contains), per-crate vs grouped.
-    Output appended to docs/diagrams.html as new diagram cards. Plan discussion
-    started but scope questions unanswered — resume with user to nail scope before
-    writing script.
+  description: |
+    Write a script (uv/rust-script) that parses workspace crate sources and emits Mermaid classDiagram blocks for structs, enums, and traits. Scope TBD: fields (pub only vs all), relationships (implements/contains), per-crate vs grouped. Output appended to docs/diagrams.html as new diagram cards. Plan discussion started but scope questions unanswered — resume with user to nail scope before writing script.
   files:
-    - docs/diagrams.html
-    - scripts/gen-class-diagrams.py
+  - docs/diagrams.html
+  - scripts/gen-class-diagrams.py
+  completed: null
   extra: []
 - id: minibox-70
+  doob_uuid: null
   name: handler-coverage-80pct
   priority: P1
   status: open
-  title: 'Increase daemonbox/handler.rs coverage to 80% function threshold'
-  description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Added duplicate
-    container name error-path test (session 14). Remaining gap: channel send failures
-    require test-only Sender infrastructure not yet built. 82 tests passing.'
+  title: Increase daemonbox/handler.rs coverage to 80% function threshold
+  description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Added duplicate container name error-path test (session 14). Remaining gap: channel send failures require test-only Sender infrastructure not yet built. 82 tests passing.'
   files:
   - crates/daemonbox/src/handler.rs
   - crates/daemonbox/tests/handler_tests.rs
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 129
     url: https://github.com/89jobrien/minibox/issues/129
 - id: minibox-72
+  doob_uuid: null
   name: feature-matrix-sot
   priority: P2
   status: open
-  title: 'Make FEATURE_MATRIX.md single source of truth — trim README/CLAUDE to summaries'
-  description: 'GH #131: Centralize per-platform status in docs/FEATURE_MATRIX.md.
-    Reduce README/CLAUDE.md to summary-level statements with links.'
+  title: Make FEATURE_MATRIX.md single source of truth — trim README/CLAUDE to summaries
+  description: 'GH #131: Centralize per-platform status in docs/FEATURE_MATRIX.md. Reduce README/CLAUDE.md to summary-level statements with links.'
   files:
   - docs/FEATURE_MATRIX.md
   - README.md
   - CLAUDE.md
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 131
     url: https://github.com/89jobrien/minibox/issues/131
 - id: minibox-73
+  doob_uuid: null
   name: ci-stability-gates
   priority: P2
   status: open
-  title: 'Add CI enforcement for stability checklist gates'
-  description: 'GH #133: doc-sync validation, adapter integration test requirements,
-    handler coverage thresholds as CI checks.'
+  title: Add CI enforcement for stability checklist gates
+  description: 'GH #133: doc-sync validation, adapter integration test requirements, handler coverage thresholds as CI checks.'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 133
     url: https://github.com/89jobrien/minibox/issues/133
 - id: minibox-74
+  doob_uuid: null
   name: experimental-surface-tests
   priority: P2
   status: open
   title: 'Add tests for experimental surfaces: bridge networking, exec, persistence'
-  description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence
-    semantics (records survive restart, processes do not reattach).'
+  description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence semantics (records survive restart, processes do not reattach).'
   files: []
+  completed: null
   extra:
-  - type: github-issue
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
     number: 134
     url: https://github.com/89jobrien/minibox/issues/134
 - id: minibox-75
+  doob_uuid: null
   name: krun-adapter-full
   priority: P1
   status: open
   title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring'
-  description: 'SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done
-    (5eb03e8). Next TDD cycle: implement KrunRuntime (ContainerRuntime), KrunFilesystem
-    (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter (ResourceLimiter
-    no-op), KrunRegistry (ImageRegistry). Wire start_krun() in macbox/src/lib.rs as
-    MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code. Phase B:
-    libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun on both Linux (KVM)
-    and macOS (HVF). See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
+  description: 'SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done (5eb03e8). Next TDD cycle: implement KrunRuntime (ContainerRuntime), KrunFilesystem (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter (ResourceLimiter no-op), KrunRegistry (ImageRegistry). Wire start_krun() in macbox/src/lib.rs as MINIBOX_ADAPTER=krun path. Remove vz feature + all vz/ module code. Phase B: libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun on both Linux (KVM) and macOS (HVF). See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
   files:
   - crates/macbox/src/krun/process.rs
   - crates/macbox/src/krun/mod.rs
   - crates/macbox/tests/krun_conformance_tests.rs
   - crates/macbox/src/lib.rs
+  completed: null
   extra:
-  - type: note
-    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
-      required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+  - date: null
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1 required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
 - id: parallel-layer-pulls-port
+  doob_uuid: null
   name: parallel-layer-pulls-port
   priority: P2
   status: open
-  title: 'Port feat/parallel-layer-pulls to linuxbox (crate rename required)'
-  description: >
-    Branch feat/parallel-layer-pulls has 7 commits (63fcc48..bc7a764) targeting
-    crates/minibox-lib/ (old name). All changes must be ported to crates/linuxbox/.
-    Key features: HashingReader<R> (transparent SHA-256 streaming), LimitedStream<S>
-    (async size cap), parallel JoinSet+Semaphore layer pulls (MAX_CONCURRENT_LAYERS=4),
-    atomic tmp-dir+rename for each layer, digest verify before rename,
-    extract_layer accepts impl Read. Design captured in docs/parallel-layer-pulls-design.md.
+  title: Port feat/parallel-layer-pulls to linuxbox (crate rename required)
+  description: |
+    Branch feat/parallel-layer-pulls has 7 commits (63fcc48..bc7a764) targeting crates/minibox-lib/ (old name). All changes must be ported to crates/linuxbox/. Key features: HashingReader<R> (transparent SHA-256 streaming), LimitedStream<S> (async size cap), parallel JoinSet+Semaphore layer pulls (MAX_CONCURRENT_LAYERS=4), atomic tmp-dir+rename for each layer, digest verify before rename, extract_layer accepts impl Read. Design captured in docs/parallel-layer-pulls-design.md.
   files:
   - crates/linuxbox/src/image/registry.rs
   - crates/linuxbox/src/image/layer.rs
   - crates/linuxbox/src/error.rs
   - crates/linuxbox/Cargo.toml
+  completed: null
   extra:
-  - type: note
-    note: 'Branch feat/parallel-layer-pulls preserved. Design doc at docs/parallel-layer-pulls-design.md.'
+  - date: null
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: Branch feat/parallel-layer-pulls preserved. Design doc at docs/parallel-layer-pulls-design.md.
 - id: minibox-agent-llm-api
+  doob_uuid: null
   name: minibox-agent-llm-api
   priority: P2
   status: open
-  title: 'Extend minibox-llm with infer() API, then re-land minibox-agent'
-  description: >
-    feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in
-    docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse
-    to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/
-    ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs.
-    AgentError in error.rs is already correct (only 2 variants: Llm, Step).
+  title: Extend minibox-llm with infer() API, then re-land minibox-agent
+  description: |
+    feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
   files:
   - crates/minibox-llm/src/provider.rs
   - crates/minibox-llm/src/types.rs
   - crates/minibox-agent/src/agent.rs
   - crates/minibox-agent/src/conversation.rs
+  completed: null
   extra:
-  - type: note
-    note: 'Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.'
+  - date: null
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
 log:
-- date: '20260423:150355'
+- date: 20260423:232521
+  summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items — 71 todos wired with blocks/blocked_by in topological order covering VZ, mac dogfood, conformance, handler/CI, linuxbox rename, run_review, and PTY chains.'
+  commits: []
+  session: 24
+- date: 20260423:150355
+  summary: 'chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale (vps-automation-safety, no commit evidence); 10 missing-status plans flagged as LANDED (ci-agent-hardening, llm-timeouts-retries, minibox-llm, sandbox-tests, tailnet-integration, test-linux-dogfood, crux-minibox-integration, minibox-testers-migration, searchbox, qemu-cross-platform); pty-stdio-piping partial (domain types only); conformance-phase2 in progress; testing-strategy-expansion has no evidence. No code changes this session.'
+  commits: []
   session: 23
-  summary: >-
-    chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale (vps-automation-safety,
-    no commit evidence); 10 missing-status plans flagged as LANDED (ci-agent-hardening,
-    llm-timeouts-retries, minibox-llm, sandbox-tests, tailnet-integration, test-linux-dogfood,
-    crux-minibox-integration, minibox-testers-migration, searchbox, qemu-cross-platform);
-    pty-stdio-piping partial (domain types only); conformance-phase2 in progress;
-    testing-strategy-expansion has no evidence. No code changes this session.
+- date: 20260423:185322
+  summary: 'chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests for AgentError and TailnetConfig, 3 new fuzz targets (parse_www_authenticate, parse_manifest, agent_message_decode), READMEs for 7 crates (mbx updated, minibox/minibox-agent/minibox-testers/tailbox/zoektbox/searchbox added). All 103 tests pass, fuzz workspace checks clean.'
   commits: []
-- date: '20260423:185322'
   session: 22
-  summary: >-
-    chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox,
-    conformance tests for AgentError and TailnetConfig, 3 new fuzz targets
-    (parse_www_authenticate, parse_manifest, agent_message_decode), READMEs for 7 crates
-    (mbx updated, minibox/minibox-agent/minibox-testers/tailbox/zoektbox/searchbox added).
-    All 103 tests pass, fuzz workspace checks clean.
-  commits: []
-- date: '20260423:081051'
+- date: 20260423:081051
+  summary: 'docs+chore: audited and fixed 6 diagrams (container-lifecycle, crate-graph, env-var-flow, hexagonal, mbxctl-sse, platform-selection); converted all to standalone HTML with Mermaid.js; cleaned 14 local + 5 remote merged branches; merged feat/docs-cleanup and feat/repo-hygiene; reverted feat/minibox-agent-error (LLM API incompatible) and documented design in docs/minibox-agent-design.md; aborted feat/parallel-layer-pulls merge (stale crate path) and documented design in docs/parallel-layer-pulls-design.md; applied pre-session stash (minibox-llm simplification, preflight cleanup, socket rename miniboxd.sock→minibox.sock).'
+  commits:
+  - 3528b40
+  - 6fbd81d
+  - bc71176
+  - d8809b1
+  - c20ef80
   session: 21
-  summary: >-
-    docs+chore: audited and fixed 6 diagrams (container-lifecycle, crate-graph, env-var-flow,
-    hexagonal, mbxctl-sse, platform-selection); converted all to standalone HTML with Mermaid.js;
-    cleaned 14 local + 5 remote merged branches; merged feat/docs-cleanup and feat/repo-hygiene;
-    reverted feat/minibox-agent-error (LLM API incompatible) and documented design in
-    docs/minibox-agent-design.md; aborted feat/parallel-layer-pulls merge (stale crate path)
-    and documented design in docs/parallel-layer-pulls-design.md; applied pre-session stash
-    (minibox-llm simplification, preflight cleanup, socket rename miniboxd.sock→minibox.sock).
+- date: 20260423:063311
+  summary: 'refactor: binary-consolidation — linuxbox (Linux primitives), minibox facade (re-exports linuxbox+minibox-core), mbx CLI binary (renamed from minibox-cli). Merged worktree branch to main. Expanded xtask gate crate lists to full coverage.'
   commits:
-  - sha: 3528b40
-    branch: main
-  - sha: 6fbd81d
-    branch: main
-  - sha: bc71176
-    branch: main
-  - sha: d8809b1
-    branch: main
-  - sha: c20ef80
-    branch: main
-- date: '20260423:063311'
+  - fe62553
+  - 2b2c7e0
+  - 407eda7
+  - d820ade
+  - 6237b24
   session: 20
-  summary: >-
-    refactor: binary-consolidation — linuxbox (Linux primitives), minibox facade (re-exports
-    linuxbox+minibox-core), mbx CLI binary (renamed from minibox-cli). Merged worktree branch
-    to main. Expanded xtask gate crate lists to full coverage.
+- date: 20260423:042807
+  summary: 'feat(xtask): QEMU cross-platform VM runner — Phase A+C complete. HostPlatform enum (MacOsArm64/LinuxX86_64/LinuxArm64), VmRunner+VmHandle extracted. Phase B: libkrun as primary adapter, QEMU fallback. Brainstormed smolvm-on-Linux, landed on libkrun FFI. Diagrams audited+reordered (hexagonal first). HANDOFF parse bug fixed.'
   commits:
-  - sha: fe62553
-    branch: main
-  - sha: 2b2c7e0
-    branch: main
-  - sha: 407eda7
-    branch: main
-  - sha: d820ade
-    branch: main
-  - sha: 6237b24
-    branch: main
-- date: '20260423:042807'
+  - bd0922f
+  - 427af66
+  - 80ce9f8
+  - 8f60a1d
+  - 0238fb7
+  - edfa022
+  - eadc9e0
+  - 6b0b76d
   session: 19
-  summary: >-
-    feat(xtask): QEMU cross-platform VM runner — Phase A+C complete. HostPlatform enum
-    (MacOsArm64/LinuxX86_64/LinuxArm64), VmRunner+VmHandle extracted. Phase B: libkrun
-    as primary adapter, QEMU fallback. Brainstormed smolvm-on-Linux, landed on libkrun FFI.
-    Diagrams audited+reordered (hexagonal first). HANDOFF parse bug fixed.
+- date: 20260423:065051
+  summary: 'docs: updated diagrams.html — full crate graph rewrite (02/02b), searchbox+zoektbox architecture (08), crux pipeline integration (09); began class diagram generator planning (scope TBD)'
   commits:
-  - sha: bd0922f
-    branch: feat/qemu-cross-platform
-  - sha: 427af66
-    branch: feat/qemu-cross-platform
-  - sha: 80ce9f8
-    branch: feat/qemu-cross-platform
-  - sha: 8f60a1d
-    branch: feat/qemu-cross-platform
-  - sha: 0238fb7
-    branch: feat/qemu-cross-platform
-  - sha: edfa022
-    branch: feat/qemu-cross-platform
-  - sha: eadc9e0
-    branch: feat/qemu-cross-platform
-  - sha: 6b0b76d
-    branch: feat/qemu-cross-platform
-- date: '20260423:065051'
+  - c8e227a
   session: 18
-  summary: >-
-    docs: updated diagrams.html — full crate graph rewrite (02/02b), searchbox+zoektbox
-    architecture (08), crux pipeline integration (09); began class diagram generator
-    planning (scope TBD)
-  commits:
-  - sha: c8e227a
-    branch: feat/minibox-security-tests
