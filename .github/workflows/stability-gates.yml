@@ -1,0 +1,90 @@
+name: Stability Gates
+
+on:
+  push:
+    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*", "feat/*"]
+  pull_request:
+    branches: [main, next]
+
+jobs:
+  doc-sync:
+    name: doc-sync (FEATURE_MATRIX staleness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: FEATURE_MATRIX must be updated within 90 days
+        run: |
+          LAST_COMMIT=$(git log -1 --format="%ct" -- docs/FEATURE_MATRIX.md)
+          if [ -z "$LAST_COMMIT" ]; then
+            echo "ERROR: docs/FEATURE_MATRIX.md has never been committed."
+            exit 1
+          fi
+          NOW=$(date +%s)
+          AGE_DAYS=$(( (NOW - LAST_COMMIT) / 86400 ))
+          echo "docs/FEATURE_MATRIX.md last updated ${AGE_DAYS} days ago."
+          if [ "$AGE_DAYS" -gt 90 ]; then
+            echo "ERROR: FEATURE_MATRIX.md is stale (${AGE_DAYS} days). Update it before merging."
+            exit 1
+          fi
+          echo "OK: within 90-day freshness window."
+
+  adapter-integration-tests:
+    name: adapter integration test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Each wired adapter must have an integration test file
+        run: |
+          FAIL=0
+          for ADAPTER in native gke colima; do
+            FILES=$(ls crates/minibox/tests/*${ADAPTER}* 2>/dev/null | wc -l)
+            if [ "$FILES" -eq 0 ]; then
+              echo "ERROR: No integration test file for adapter '${ADAPTER}' in crates/minibox/tests/"
+              FAIL=1
+            else
+              echo "OK: adapter '${ADAPTER}' has ${FILES} integration test file(s)."
+            fi
+          done
+          exit $FAIL
+
+  no-unwrap-in-prod:
+    name: no .unwrap() in production code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan non-test Rust source for .unwrap() calls
+        run: |
+          HITS=$(grep -rn '\.unwrap()' \
+            --include='*.rs' \
+            crates/ \
+            --exclude-dir=xtask \
+            | grep -v 'tests/' \
+            | grep -v 'examples/' \
+            | grep -v 'bench' \
+            | grep -v '// allow:unwrap' \
+            || true)
+          if [ -n "$HITS" ]; then
+            echo "ERROR: .unwrap() found in production code (use .context()? instead):"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "OK: no .unwrap() in production code paths."
+
+  stability-compile:
+    name: stability compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check workspace (stability gate)
+        run: cargo check --workspace
+      - name: clippy stability crates
+        run: |
+          cargo clippy \
+            -p minibox-core \
+            -p daemonbox \
+            -p minibox-client \
+            -- -D warnings

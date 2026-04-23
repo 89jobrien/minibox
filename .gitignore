@@ -54,13 +54,15 @@ Cargo.lock is committed for binary projects
 /profile.json.gz
 /artifacts/
 
-# Benchmark output — track only the canonical baseline files
+# Benchmark output — only the canonical snapshot is versioned.
+# Historical runs (bench.jsonl) are pushed to CI artifacts or external storage;
+# they must NOT accumulate in the repo (retention policy: CI artifact, 90 days).
 /bench/results/*.json
+/bench/results/*.jsonl
 /bench/results/*.txt
 /bench/results/*.html
 !/bench/results/latest.json
-!/bench/results/bench.jsonl
-# Timestamped result directories (history lives in bench.jsonl)
+# Timestamped result directories
 /bench/results/*/
 
 # Profiling
