@@ -199,11 +199,14 @@ where
             }
             Err(e) => {
                 warn!("failed to parse request '{trimmed}': {e}");
-                let _ = tx
-                    .send(DaemonResponse::Error {
+                send_terminal_response(
+                    &tx,
+                    "parse_error",
+                    DaemonResponse::Error {
                         message: format!("invalid request: {e}"),
-                    })
-                    .await;
+                    },
+                )
+                .await;
             }
         }
 
@@ -254,6 +257,31 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
     // Event are non-terminal.
 }
 
+/// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
+/// when the receiver has already been dropped (client disconnected before the
+/// handler finished computing the response).
+///
+/// Use this instead of `let _ = tx.send(...).await` so dropped connections are
+/// observable in logs rather than silently swallowed.  Mirrors the `send_error`
+/// helper in [`crate::handler`].
+///
+/// # Issue #118
+///
+/// Eliminates the silent-channel-discard footgun documented in `CLAUDE.md`.
+/// Every single-response dispatch arm must use this function.
+async fn send_terminal_response(
+    tx: &tokio::sync::mpsc::Sender<DaemonResponse>,
+    context: &str,
+    response: DaemonResponse,
+) {
+    if tx.send(response).await.is_err() {
+        warn!(
+            context,
+            "client disconnected before terminal response could be sent"
+        );
+    }
+}
+
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
 /// responses through `tx`.
 ///
@@ -301,33 +329,33 @@ async fn dispatch(
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Stop", response).await;
         }
         DaemonRequest::PauseContainer { id } => {
             let response =
                 handler::handle_pause(id, state, Arc::clone(&deps.events.event_sink)).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "PauseContainer", response).await;
         }
         DaemonRequest::ResumeContainer { id } => {
             let response =
                 handler::handle_resume(id, state, Arc::clone(&deps.events.event_sink)).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "ResumeContainer", response).await;
         }
         DaemonRequest::Remove { id } => {
             let response = handler::handle_remove(id, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Remove", response).await;
         }
         DaemonRequest::List => {
             let response = handler::handle_list(state).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "List", response).await;
         }
         DaemonRequest::Pull { image, tag } => {
             let response = handler::handle_pull(image, tag, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Pull", response).await;
         }
         DaemonRequest::LoadImage { path, name, tag } => {
             let response = handler::handle_load_image(path, name, tag, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "LoadImage", response).await;
         }
         DaemonRequest::Exec {
             container_id,
@@ -433,17 +461,14 @@ async fn dispatch(
             });
         }
         DaemonRequest::RunPipeline { .. } => {
-            if tx
-                .send(DaemonResponse::Error {
+            send_terminal_response(
+                &tx,
+                "RunPipeline",
+                DaemonResponse::Error {
                     message: "RunPipeline is not yet implemented".to_string(),
-                })
-                .await
-                .is_err()
-            {
-                tracing::warn!(
-                    "dispatch: client disconnected before RunPipeline error could be sent"
-                );
-            }
+                },
+            )
+            .await;
         }
     }
 }
@@ -1200,5 +1225,48 @@ mod tests {
 
         // Server should have shut down via the shutdown future, not timed out
         assert!(result.is_ok(), "server should not have timed out");
+    }
+
+    // ─── send_terminal_response ──────────────────────────────────────────────
+
+    /// Issue #118: `send_terminal_response` must NOT panic when the receiver is
+    /// already dropped (client disconnected before the handler finished).
+    #[tokio::test]
+    async fn test_send_terminal_response_does_not_panic_on_dropped_receiver() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+        // Drop the receiver — simulates a client that disconnected early.
+        drop(rx);
+
+        // Must not panic; must return gracefully.
+        send_terminal_response(
+            &tx,
+            "test_context",
+            DaemonResponse::Success {
+                message: "ok".to_string(),
+            },
+        )
+        .await;
+    }
+
+    /// Issue #118: `send_terminal_response` must deliver the response when the
+    /// receiver is still alive.
+    #[tokio::test]
+    async fn test_send_terminal_response_delivers_when_receiver_alive() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+
+        send_terminal_response(
+            &tx,
+            "test_context",
+            DaemonResponse::Success {
+                message: "delivered".to_string(),
+            },
+        )
+        .await;
+
+        let received = rx.recv().await.expect("expected a response");
+        assert!(
+            matches!(received, DaemonResponse::Success { ref message } if message == "delivered"),
+            "unexpected response: {received:?}"
+        );
     }
 }
