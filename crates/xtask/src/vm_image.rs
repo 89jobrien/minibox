@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::vm_run::HostPlatform;
+
 #[allow(dead_code)]
 pub const ALPINE_VERSION: &str = "3.21.3";
 #[allow(dead_code)]
@@ -187,6 +189,132 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
         .context("symlinking /sbin/init → minibox-agent")?;
 
     Ok(rustc_ver)
+}
+
+/// Cross-compile miniboxd for an explicit musl `target` and copy into rootfs.
+/// Skips if agent already exists at dest and `force` is false.
+/// Returns the rustc version string (for the manifest).
+#[allow(dead_code)]
+pub fn build_and_install_agent_for_target(
+    rootfs_dir: &Path,
+    force: bool,
+    target: &str,
+) -> Result<String> {
+    let dest = agent_dest_path(rootfs_dir);
+
+    let rustc_ver = {
+        let out = std::process::Command::new("rustc")
+            .args(["--version"])
+            .output()
+            .context("running rustc --version")?;
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
+    if dest.exists() && !force {
+        println!("  cached  agent at {}", dest.display());
+        return Ok(rustc_ver);
+    }
+
+    println!("  compile miniboxd → {target}");
+    let status = std::process::Command::new("cargo")
+        .args(["zigbuild", "--release", "--target", target, "-p", "miniboxd"])
+        .status()
+        .context("cargo zigbuild for agent (is cargo-zigbuild installed?)")?;
+    if !status.success() {
+        anyhow::bail!("cargo zigbuild failed for miniboxd/{target}");
+    }
+
+    let target_base = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
+    let src = target_base.join(target).join("release").join("miniboxd");
+    if !src.exists() {
+        anyhow::bail!(
+            "expected binary at {} — build succeeded but file missing",
+            src.display()
+        );
+    }
+
+    std::fs::create_dir_all(rootfs_dir.join("sbin")).context("creating rootfs/sbin")?;
+    std::fs::copy(&src, &dest)
+        .with_context(|| format!("copying agent to {}", dest.display()))?;
+    println!("  installed {}", dest.display());
+
+    let init_link = rootfs_dir.join("sbin").join("init");
+    if init_link.exists() || init_link.symlink_metadata().is_ok() {
+        std::fs::remove_file(&init_link).context("removing old /sbin/init")?;
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("minibox-agent", &init_link)
+        .context("symlinking /sbin/init → minibox-agent")?;
+
+    Ok(rustc_ver)
+}
+
+/// Build or refresh the VM image directory using an explicit platform.
+/// Downloads Alpine assets, extracts rootfs, cross-compiles agent, writes manifest.
+#[allow(dead_code)]
+pub fn build_vm_image_with_platform(vm_dir: &Path, force: bool, platform: &HostPlatform) -> Result<()> {
+    println!("Building VM image in {}", vm_dir.display());
+
+    let cache_dir = vm_dir.join("cache");
+    let rootfs_dir = vm_dir.join("rootfs");
+    let boot_dir = vm_dir.join("boot");
+    let manifest_path = vm_dir.join("manifest.json");
+
+    for dir in &[&cache_dir, &rootfs_dir, &boot_dir] {
+        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+
+    let arch = platform.alpine_arch();
+    let assets = AlpineAssets::for_version(ALPINE_VERSION, arch);
+
+    let kernel_dest = boot_dir.join("vmlinuz-virt");
+    download_file(&assets.kernel, &kernel_dest, force)?;
+
+    let initramfs_dest = boot_dir.join("initramfs-virt");
+    download_file(&assets.initramfs, &initramfs_dest, force)?;
+
+    let tarball_dest =
+        cache_dir.join(format!("alpine-minirootfs-{ALPINE_VERSION}-{arch}.tar.gz"));
+    download_file(&assets.minirootfs, &tarball_dest, force)?;
+
+    extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
+    install_overlay(&rootfs_dir, vm_dir)?;
+
+    let rustc_ver =
+        build_and_install_agent_for_target(&rootfs_dir, force, platform.musl_target())?;
+
+    install_init_files(&rootfs_dir)?;
+
+    let our_initramfs = vm_dir.join("minibox-initramfs.img");
+    create_initramfs(&rootfs_dir, &our_initramfs, force)?;
+
+    let commit = {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .output()
+            .context("git rev-parse")?;
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let manifest = VmImageManifest {
+        alpine_version: ALPINE_VERSION.into(),
+        agent_rustc_version: rustc_ver,
+        agent_commit: commit,
+        built_at: now,
+    };
+    manifest.save(&manifest_path)?;
+
+    println!("VM image ready at {}", vm_dir.display());
+    println!("  kernel    {}", kernel_dest.display());
+    println!("  initramfs {}", our_initramfs.display());
+    println!("  rootfs    {}", rootfs_dir.display());
+    Ok(())
 }
 
 /// Get the default VM directory for the host.
@@ -753,6 +881,51 @@ mod tests {
             std::fs::read(rootfs_dir.join("etc").join("hostname")).unwrap(),
             b"overwritten"
         );
+    }
+
+    #[test]
+    fn alpine_urls_x86_64() {
+        let urls = AlpineAssets::for_version("3.21.3", "x86_64");
+        assert!(urls.kernel.contains("x86_64"), "kernel URL should contain arch");
+        assert!(
+            urls.minirootfs
+                .contains("alpine-minirootfs-3.21.3-x86_64.tar.gz"),
+            "minirootfs URL should contain x86_64: {}",
+            urls.minirootfs
+        );
+    }
+
+    #[test]
+    fn build_vm_image_uses_platform_arch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_dir = tmp.path().join("vm");
+
+        let cache_dir = vm_dir.join("cache");
+        let rootfs_dir = vm_dir.join("rootfs");
+        let boot_dir = vm_dir.join("boot");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&rootfs_dir).unwrap();
+        std::fs::create_dir_all(&boot_dir).unwrap();
+
+        std::fs::write(boot_dir.join("vmlinuz-virt"), b"fake kernel").unwrap();
+        std::fs::write(boot_dir.join("initramfs-virt"), b"fake initrd").unwrap();
+
+        let tarball = cache_dir.join(format!(
+            "alpine-minirootfs-{ALPINE_VERSION}-x86_64.tar.gz"
+        ));
+        std::fs::write(&tarball, b"fake tarball").unwrap();
+        std::fs::create_dir_all(rootfs_dir.join("bin")).unwrap();
+        std::fs::create_dir_all(rootfs_dir.join("sbin")).unwrap();
+        std::fs::write(
+            rootfs_dir.join("sbin").join("minibox-agent"),
+            b"fake agent",
+        )
+        .unwrap();
+
+        let platform = HostPlatform::LinuxX86_64;
+        let result = build_vm_image_with_platform(&vm_dir, false, &platform);
+        assert!(result.is_ok(), "build_vm_image_with_platform failed: {:?}", result);
+        assert!(vm_dir.join("manifest.json").exists());
     }
 
     #[test]
