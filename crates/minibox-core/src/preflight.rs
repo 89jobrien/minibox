@@ -246,6 +246,76 @@ mod tests {
     use super::*;
 
     #[test]
+    fn diagnostic_paths_socket_default_linux() {
+        // When no env vars are set the socket path must end with miniboxd.sock
+        // and must NOT contain "minibox.sock" (the old incorrect name).
+        let paths = resolve_diagnostic_paths();
+        let socket = paths.socket_path.to_string_lossy();
+        assert!(
+            socket.ends_with("miniboxd.sock"),
+            "socket path must end with miniboxd.sock, got: {socket}"
+        );
+        assert!(
+            !socket.ends_with("minibox.sock") || socket.ends_with("miniboxd.sock"),
+            "socket must not use old minibox.sock name: {socket}"
+        );
+    }
+
+    #[test]
+    fn diagnostic_paths_socket_env_override() {
+        // MINIBOX_SOCKET_PATH env var must override the default.
+        // SAFETY: test-only mutation of env; not run in parallel with other env-touching tests.
+        unsafe {
+            std::env::set_var("MINIBOX_SOCKET_PATH", "/tmp/test/custom.sock");
+        }
+        let paths = resolve_diagnostic_paths();
+        unsafe {
+            std::env::remove_var("MINIBOX_SOCKET_PATH");
+        }
+        assert_eq!(
+            paths.socket_path.to_string_lossy(),
+            "/tmp/test/custom.sock",
+            "MINIBOX_SOCKET_PATH must override the default"
+        );
+    }
+
+    #[test]
+    fn diagnostic_paths_run_dir_env_override() {
+        // MINIBOX_RUN_DIR env var: socket becomes <run_dir>/miniboxd.sock.
+        unsafe {
+            std::env::remove_var("MINIBOX_SOCKET_PATH");
+            std::env::set_var("MINIBOX_RUN_DIR", "/tmp/run-test");
+        }
+        let paths = resolve_diagnostic_paths();
+        unsafe {
+            std::env::remove_var("MINIBOX_RUN_DIR");
+        }
+        assert_eq!(
+            paths.socket_path.to_string_lossy(),
+            "/tmp/run-test/miniboxd.sock",
+        );
+    }
+
+    #[test]
+    fn diagnostic_paths_log_output_is_structured() {
+        // log_diagnostic_paths must not panic and must return a non-empty string.
+        let paths = resolve_diagnostic_paths();
+        let output = paths.to_log_string();
+        assert!(
+            output.contains("socket_path"),
+            "log output must contain socket_path"
+        );
+        assert!(
+            output.contains("data_dir"),
+            "log output must contain data_dir"
+        );
+        assert!(
+            output.contains("cgroup_root"),
+            "log output must contain cgroup_root"
+        );
+    }
+
+    #[test]
     fn test_parse_kernel_version() {
         assert_eq!(parse_kernel_version("6.1.0-18-amd64"), (6, 1, 0));
         assert_eq!(parse_kernel_version("5.15.0"), (5, 15, 0));
