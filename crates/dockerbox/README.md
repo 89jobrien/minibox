@@ -7,7 +7,7 @@ HTTP-over-Unix-socket shim that translates Docker API calls to the minibox proto
 `dockerboxd` listens on a Unix socket and forwards requests to miniboxd, translating between the Docker v2 HTTP API and the minibox JSON-over-newline protocol.
 
 - **Socket**: `/run/dockerbox/dockerbox.sock` (override with `DOCKERBOX_SOCKET`)
-- **Upstream**: `MINIBOX_SOCKET` (default `/run/minibox/minibox.sock`)
+- **Upstream**: `MINIBOX_SOCKET` (default `/run/minibox/miniboxd.sock`)
 
 ## API Coverage
 
@@ -43,7 +43,7 @@ minibox uses 16-character hex container IDs; Docker expects 64. `dockerboxd` pad
 sudo ./target/release/dockerboxd
 
 # With custom sockets
-DOCKERBOX_SOCKET=/tmp/docker.sock MINIBOX_SOCKET=/run/minibox/minibox.sock sudo ./target/release/dockerboxd
+DOCKERBOX_SOCKET=/tmp/docker.sock MINIBOX_SOCKET=/run/minibox/miniboxd.sock sudo ./target/release/dockerboxd
 
 # Point Docker CLI at dockerbox
 docker -H unix:///run/dockerbox/dockerbox.sock ps

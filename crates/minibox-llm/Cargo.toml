@@ -10,6 +10,7 @@ default = ["anthropic", "openai", "gemini"]
 anthropic = ["dep:reqwest"]
 openai = ["dep:reqwest"]
 gemini = ["dep:reqwest"]
+local = ["dep:reqwest"]
 
 [dependencies]
 async-trait = { workspace = true }
