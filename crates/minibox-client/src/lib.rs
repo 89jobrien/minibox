@@ -41,9 +41,7 @@ use std::path::PathBuf;
 ///    - Linux/other: `/run/minibox/miniboxd.sock`
 pub fn default_socket_path() -> PathBuf {
     if let Ok(p) = std::env::var("MINIBOX_SOCKET_PATH") {
-        if !p.is_empty() {
-            return PathBuf::from(p);
-        }
+        return PathBuf::from(p);
     }
     if let Ok(dir) = std::env::var("MINIBOX_RUN_DIR") {
         return PathBuf::from(dir).join("miniboxd.sock");
