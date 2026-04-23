@@ -19,7 +19,7 @@ minibox-llm = { path = "../minibox-llm" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
-# tokio removed: no production usage in minibox-agent; callers must bring their own runtime
+tokio = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
