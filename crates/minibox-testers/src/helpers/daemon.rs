@@ -4,8 +4,8 @@ use crate::helpers::gc::NoopImageGc;
 use crate::mocks::MockRegistry;
 use crate::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
 use daemonbox::handler::{
-    BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps, NoopImageLoader,
-    PtySessionRegistry,
+    BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
+    NoopImageLoader, PtySessionRegistry,
 };
 use daemonbox::state::DaemonState;
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -19,6 +19,30 @@ use tempfile::TempDir;
 /// `temp_dir`.
 pub fn make_mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     make_mock_deps_with_registry(MockRegistry::new(), temp_dir)
+}
+
+/// Build mock deps with a specific [`ContainerPolicy`].
+///
+/// Use this when testing policy gate behavior (bind mount / privileged denials).
+/// The default policy from [`make_mock_deps`] permits both; this variant lets
+/// you pass a deny-all or partially-restricted policy.
+///
+/// ```rust,ignore
+/// let deps = make_mock_deps_with_policy(
+///     &tmp,
+///     ContainerPolicy { allow_bind_mounts: false, allow_privileged: false },
+/// );
+/// ```
+pub fn make_mock_deps_with_policy(
+    temp_dir: &TempDir,
+    policy: ContainerPolicy,
+) -> Arc<HandlerDependencies> {
+    let base = make_mock_deps_with_registry(MockRegistry::new(), temp_dir);
+    // SAFETY: Arc::try_unwrap would fail here since we just created it — clone
+    // the inner value and rebuild with the new policy.
+    let mut deps = (*base).clone();
+    deps.policy = policy;
+    Arc::new(deps)
 }
 
 /// Build mock deps with a specific `registry`.

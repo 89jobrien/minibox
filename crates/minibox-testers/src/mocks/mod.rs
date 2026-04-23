@@ -2,6 +2,7 @@
 
 pub mod build;
 pub mod commit;
+pub mod exec;
 pub mod filesystem;
 pub mod limiter;
 pub mod network;
@@ -11,6 +12,7 @@ pub mod runtime;
 
 pub use build::MockImageBuilder;
 pub use commit::MockContainerCommitter;
+pub use exec::MockExecRuntime;
 pub use filesystem::{FailableFilesystemMock, MockFilesystem};
 pub use limiter::MockLimiter;
 pub use network::MockNetwork;
