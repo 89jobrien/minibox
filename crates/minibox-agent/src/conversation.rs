@@ -5,7 +5,7 @@
 //! user message text are expanded to the file's contents before being sent to the
 //! model.
 
-use minibox_llm::{ContentBlock, Message, Role};
+use crate::message::{ContentBlock, Message, Role};
 
 /// Manages the ordered list of messages for a multi-turn conversation.
 #[derive(Debug, Default)]
@@ -100,7 +100,7 @@ fn resolve_file_refs(text: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_llm::Role;
+    use crate::message::Role;
 
     #[test]
     fn push_user_appends_user_message() {

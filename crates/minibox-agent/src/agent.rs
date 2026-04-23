@@ -10,7 +10,24 @@
 //! The agent never imports infrastructure crates directly; both ports are
 //! injected as `Box<dyn …>`.
 
-use minibox_llm::{ContentBlock, InferenceRequest, LlmProvider, Message, ToolDefinition};
+use async_trait::async_trait;
+
+use crate::message::{ContentBlock, InferenceRequest, InferenceResponse, Message, ToolDefinition};
+use minibox_llm::LlmError;
+
+/// Port: an LLM backend that supports multi-turn conversation with tool use.
+///
+/// This is distinct from [`minibox_llm::LlmProvider`], which is a single-turn
+/// text-completion interface. Adapters that wrap a provider supporting structured
+/// tool-use (e.g. Anthropic's messages API) implement this trait.
+#[async_trait]
+pub trait InferenceLlmProvider: Send + Sync {
+    /// Human-readable name identifying this provider.
+    fn name(&self) -> &str;
+
+    /// Send a multi-turn inference request and return the model's response.
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, LlmError>;
+}
 
 use crate::events::{Event, EventContext, EventManager};
 use crate::observation::{Observation, ObservationManager};
@@ -31,12 +48,12 @@ pub struct TurnResult {
 /// Error from the agent loop.
 #[derive(Debug, thiserror::Error)]
 pub enum AgentLoopError {
-    /// An LLM call failed.
-    #[error("LLM infer failed: {0}")]
-    Llm(String),
-    /// A tool call failed with a hard error.
-    #[error("tool error: {0}")]
-    Tool(String),
+    /// An LLM call failed. Source [`minibox_llm::LlmError`] is preserved.
+    #[error("LLM infer failed")]
+    Llm(#[from] minibox_llm::LlmError),
+    /// A tool call failed. Source [`crate::tools::ToolError`] is preserved.
+    #[error("tool error")]
+    Tool(#[from] crate::tools::ToolError),
     /// The loop exceeded [`MAX_TOOL_ROUNDS`] without reaching a text response.
     #[error("exceeded max tool rounds ({MAX_TOOL_ROUNDS})")]
     MaxRoundsExceeded,
@@ -48,7 +65,7 @@ pub enum AgentLoopError {
 /// Constructed via [`Agent::new`]; holds `Box<dyn …>` ports so there is no
 /// generic-parameter explosion at call sites.
 pub struct Agent {
-    llm: Box<dyn LlmProvider>,
+    llm: Box<dyn InferenceLlmProvider>,
     tools: Box<dyn ToolExecutor>,
     events: EventManager,
     system: Option<String>,
@@ -58,7 +75,7 @@ pub struct Agent {
 impl Agent {
     /// Create a new agent.
     pub fn new(
-        llm: Box<dyn LlmProvider>,
+        llm: Box<dyn InferenceLlmProvider>,
         tools: Box<dyn ToolExecutor>,
         system: Option<String>,
         tool_defs: Vec<ToolDefinition>,
@@ -109,7 +126,7 @@ impl Agent {
                 .llm
                 .infer(&req)
                 .await
-                .map_err(|e| AgentLoopError::Llm(e.to_string()))?;
+                .map_err(AgentLoopError::Llm)?;
 
             // Append the assistant response to history.
             messages.push(Message::assistant(response.content.clone()));
@@ -141,7 +158,7 @@ impl Agent {
                     let tool_output = self
                         .tools
                         .execute(tool_input.clone())
-                        .map_err(|e| AgentLoopError::Tool(e.to_string()))?;
+                        .map_err(AgentLoopError::Tool)?;
 
                     self.events.fire(&Event::PostToolUse {
                         ctx: ctx.clone(),
@@ -175,7 +192,8 @@ impl Agent {
 mod tests {
     use super::*;
     use crate::tools::{InMemoryToolExecutor, ToolOutput};
-    use minibox_llm::{InferenceResponse, LlmError};
+    use crate::message::InferenceResponse;
+    use minibox_llm::LlmError;
 
     use async_trait::async_trait;
 
@@ -195,16 +213,9 @@ mod tests {
     }
 
     #[async_trait]
-    impl LlmProvider for ScriptedLlm {
+    impl InferenceLlmProvider for ScriptedLlm {
         fn name(&self) -> &str {
             "scripted"
-        }
-
-        async fn complete(
-            &self,
-            _req: &minibox_llm::CompletionRequest,
-        ) -> Result<minibox_llm::CompletionResponse, LlmError> {
-            Err(LlmError::AllProvidersFailed("not implemented".into()))
         }
 
         async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse, LlmError> {
@@ -277,6 +288,37 @@ mod tests {
         assert_eq!(result.text, "tool result received");
         assert_eq!(result.observations.len(), 1);
         assert_eq!(result.observations[0].input.name, "bash");
+    }
+
+    #[tokio::test]
+    async fn llm_error_source_is_preserved_in_agent_loop_error() {
+        // Regression: AgentLoopError::Llm used to store String, discarding
+        // the upstream source. Verify std::error::Error::source() is non-None.
+        let llm_err = LlmError::AllProvidersFailed("timeout".into());
+        let loop_err: AgentLoopError = AgentLoopError::from(llm_err);
+        let source = std::error::Error::source(&loop_err);
+        assert!(
+            source.is_some(),
+            "AgentLoopError::Llm should preserve upstream source"
+        );
+        assert!(
+            source.unwrap().to_string().contains("timeout"),
+            "source should reference original LlmError"
+        );
+    }
+
+    #[tokio::test]
+    async fn tool_error_source_is_preserved_in_agent_loop_error() {
+        // Regression: AgentLoopError::Tool used to store String, discarding
+        // the upstream ToolError source.
+        use crate::tools::ToolError;
+        let tool_err = ToolError::UnknownTool("bash".into());
+        let loop_err: AgentLoopError = AgentLoopError::from(tool_err);
+        let source = std::error::Error::source(&loop_err);
+        assert!(
+            source.is_some(),
+            "AgentLoopError::Tool should preserve upstream source"
+        );
     }
 
     #[tokio::test]

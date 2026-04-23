@@ -31,6 +31,7 @@
 
 pub mod agent;
 pub mod conversation;
+pub mod message;
 pub mod error;
 pub mod events;
 pub mod hooks;
