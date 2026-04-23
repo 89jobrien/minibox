@@ -217,7 +217,14 @@ pub fn build_and_install_agent_for_target(
 
     println!("  compile miniboxd → {target}");
     let status = std::process::Command::new("cargo")
-        .args(["zigbuild", "--release", "--target", target, "-p", "miniboxd"])
+        .args([
+            "zigbuild",
+            "--release",
+            "--target",
+            target,
+            "-p",
+            "miniboxd",
+        ])
         .status()
         .context("cargo zigbuild for agent (is cargo-zigbuild installed?)")?;
     if !status.success() {
@@ -236,8 +243,7 @@ pub fn build_and_install_agent_for_target(
     }
 
     std::fs::create_dir_all(rootfs_dir.join("sbin")).context("creating rootfs/sbin")?;
-    std::fs::copy(&src, &dest)
-        .with_context(|| format!("copying agent to {}", dest.display()))?;
+    std::fs::copy(&src, &dest).with_context(|| format!("copying agent to {}", dest.display()))?;
     println!("  installed {}", dest.display());
 
     let init_link = rootfs_dir.join("sbin").join("init");
@@ -254,7 +260,11 @@ pub fn build_and_install_agent_for_target(
 /// Build or refresh the VM image directory using an explicit platform.
 /// Downloads Alpine assets, extracts rootfs, cross-compiles agent, writes manifest.
 #[allow(dead_code)]
-pub fn build_vm_image_with_platform(vm_dir: &Path, force: bool, platform: &HostPlatform) -> Result<()> {
+pub fn build_vm_image_with_platform(
+    vm_dir: &Path,
+    force: bool,
+    platform: &HostPlatform,
+) -> Result<()> {
     println!("Building VM image in {}", vm_dir.display());
 
     let cache_dir = vm_dir.join("cache");
@@ -275,15 +285,13 @@ pub fn build_vm_image_with_platform(vm_dir: &Path, force: bool, platform: &HostP
     let initramfs_dest = boot_dir.join("initramfs-virt");
     download_file(&assets.initramfs, &initramfs_dest, force)?;
 
-    let tarball_dest =
-        cache_dir.join(format!("alpine-minirootfs-{ALPINE_VERSION}-{arch}.tar.gz"));
+    let tarball_dest = cache_dir.join(format!("alpine-minirootfs-{ALPINE_VERSION}-{arch}.tar.gz"));
     download_file(&assets.minirootfs, &tarball_dest, force)?;
 
     extract_rootfs_if_needed(&tarball_dest, &rootfs_dir, force)?;
     install_overlay(&rootfs_dir, vm_dir)?;
 
-    let rustc_ver =
-        build_and_install_agent_for_target(&rootfs_dir, force, platform.musl_target())?;
+    let rustc_ver = build_and_install_agent_for_target(&rootfs_dir, force, platform.musl_target())?;
 
     install_init_files(&rootfs_dir)?;
 
@@ -886,7 +894,10 @@ mod tests {
     #[test]
     fn alpine_urls_x86_64() {
         let urls = AlpineAssets::for_version("3.21.3", "x86_64");
-        assert!(urls.kernel.contains("x86_64"), "kernel URL should contain arch");
+        assert!(
+            urls.kernel.contains("x86_64"),
+            "kernel URL should contain arch"
+        );
         assert!(
             urls.minirootfs
                 .contains("alpine-minirootfs-3.21.3-x86_64.tar.gz"),
@@ -910,21 +921,19 @@ mod tests {
         std::fs::write(boot_dir.join("vmlinuz-virt"), b"fake kernel").unwrap();
         std::fs::write(boot_dir.join("initramfs-virt"), b"fake initrd").unwrap();
 
-        let tarball = cache_dir.join(format!(
-            "alpine-minirootfs-{ALPINE_VERSION}-x86_64.tar.gz"
-        ));
+        let tarball = cache_dir.join(format!("alpine-minirootfs-{ALPINE_VERSION}-x86_64.tar.gz"));
         std::fs::write(&tarball, b"fake tarball").unwrap();
         std::fs::create_dir_all(rootfs_dir.join("bin")).unwrap();
         std::fs::create_dir_all(rootfs_dir.join("sbin")).unwrap();
-        std::fs::write(
-            rootfs_dir.join("sbin").join("minibox-agent"),
-            b"fake agent",
-        )
-        .unwrap();
+        std::fs::write(rootfs_dir.join("sbin").join("minibox-agent"), b"fake agent").unwrap();
 
         let platform = HostPlatform::LinuxX86_64;
         let result = build_vm_image_with_platform(&vm_dir, false, &platform);
-        assert!(result.is_ok(), "build_vm_image_with_platform failed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "build_vm_image_with_platform failed: {:?}",
+            result
+        );
         assert!(vm_dir.join("manifest.json").exists());
     }
 

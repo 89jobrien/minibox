@@ -38,7 +38,7 @@ use minibox_core::protocol::{
 };
 use serde::Serialize;
 use std::hint::black_box;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Top-level benchmark report serialised to JSON.
@@ -470,7 +470,7 @@ impl Profiler for LinuxPerfProfiler {
         let bench_pid = std::process::id();
 
         let perf_child = std::process::Command::new("perf")
-            .args(&[
+            .args([
                 "record",
                 "-p",
                 &bench_pid.to_string(),
@@ -509,7 +509,7 @@ impl Profiler for LinuxPerfProfiler {
                 .unwrap_or(false)
             {
                 let _convert = std::process::Command::new("pprof")
-                    .args(&["-proto", perf_data.to_str().unwrap_or("")])
+                    .args(["-proto", perf_data.to_str().unwrap_or("")])
                     .output()
                     .ok();
             }
@@ -907,7 +907,7 @@ struct ProfileMetadata {
 
 /// Write `metadata.json` alongside profile output in `results_dir`.
 fn save_profile_metadata(
-    results_dir: &PathBuf,
+    results_dir: &Path,
     timestamp: &str,
     suites: &[String],
 ) -> Result<(), String> {
@@ -957,7 +957,7 @@ fn save_profile_metadata(
 fn run_suites(
     cfg: &BenchConfig,
     dry_run: bool,
-    results_dir: &PathBuf,
+    results_dir: &Path,
     timestamp: &str,
 ) -> Result<BenchReport, String> {
     let minibox_bin = std::env::var("MINIBOX_BIN").unwrap_or_else(|_| "minibox".to_string());
@@ -1003,13 +1003,13 @@ fn run_suites(
 
     if suite_enabled(cfg, "pull") {
         let suite_name = "pull";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut pull_suite = SuiteResult {
@@ -1030,26 +1030,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(pull_suite);
     }
 
     if suite_enabled(cfg, "run") {
         let suite_name = "run";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut run_suite = SuiteResult {
@@ -1074,26 +1074,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(run_suite);
     }
 
     if suite_enabled(cfg, "ps") {
         let suite_name = "ps";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut ps_suite = SuiteResult {
@@ -1126,26 +1126,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(ps_suite);
     }
 
     if suite_enabled(cfg, "stop") {
         let suite_name = "stop";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut stop_suite = SuiteResult {
@@ -1180,26 +1180,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(stop_suite);
     }
 
     if suite_enabled(cfg, "rm") {
         let suite_name = "rm";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut rm_suite = SuiteResult {
@@ -1239,26 +1239,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(rm_suite);
     }
 
     if suite_enabled(cfg, "exec") {
         let suite_name = "exec";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut exec_suite = SuiteResult {
@@ -1283,26 +1283,26 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(exec_suite);
     }
 
     if suite_enabled(cfg, "parallel") {
         let suite_name = "parallel";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         // Snapshot error count before the suite so we can detect flakiness.
@@ -1414,13 +1414,13 @@ fn run_suites(
             });
         }
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         // Flake detection: if more than half of the expected parallel
@@ -1445,13 +1445,13 @@ fn run_suites(
 
     if suite_enabled(cfg, "e2e") {
         let suite_name = "e2e";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
 
         let mut e2e_suite = SuiteResult {
@@ -1489,57 +1489,57 @@ fn run_suites(
             ..Default::default()
         });
 
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(e2e_suite);
     }
 
     if suite_enabled(cfg, "codec") {
         let suite_name = "codec";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         let codec_suite = bench_codec_suite(cfg);
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(codec_suite);
     }
 
     if suite_enabled(cfg, "adapter") {
         let suite_name = "adapter";
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.start(suite_name) {
-                eprintln!(
-                    "warn: failed to start profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.start(suite_name)
+        {
+            eprintln!(
+                "warn: failed to start profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         let adapter_suite = bench_adapter_suite(cfg);
-        if let Some(ref mut prof) = profiler {
-            if let Err(e) = prof.stop(suite_name) {
-                eprintln!(
-                    "warn: failed to stop profiler for suite {}: {}",
-                    suite_name, e
-                );
-            }
+        if let Some(ref mut prof) = profiler
+            && let Err(e) = prof.stop(suite_name)
+        {
+            eprintln!(
+                "warn: failed to stop profiler for suite {}: {}",
+                suite_name, e
+            );
         }
         suites.push(adapter_suite);
     }
@@ -1617,10 +1617,10 @@ fn bench_colima_suite(
                 minibox_bin,
                 &["run", "alpine", "--", "/bin/echo", "bench-marker"],
                 errors,
-            ) {
-                if r.success && r.stdout.contains("bench-marker") {
-                    durations.push(r.duration_micros);
-                }
+            ) && r.success
+                && r.stdout.contains("bench-marker")
+            {
+                durations.push(r.duration_micros);
             }
         }
         tests.push(TestResult {
@@ -1637,16 +1637,16 @@ fn bench_colima_suite(
         let mut durations = Vec::with_capacity(iters);
         for _ in 0..iters {
             // Start a background container (non-ephemeral returns container ID)
-            if let Ok(run_result) = run_cmd(minibox_bin, &["run", "alpine", "--", "sleep", "300"]) {
-                if run_result.success {
-                    let container_id = run_result.stdout.trim().to_string();
-                    if !container_id.is_empty() {
-                        let start = std::time::Instant::now();
-                        let _ = run_cmd(minibox_bin, &["stop", &container_id]);
-                        durations.push(start.elapsed().as_micros() as u64);
-                        // Clean up
-                        let _ = run_cmd(minibox_bin, &["rm", &container_id]);
-                    }
+            if let Ok(run_result) = run_cmd(minibox_bin, &["run", "alpine", "--", "sleep", "300"])
+                && run_result.success
+            {
+                let container_id = run_result.stdout.trim().to_string();
+                if !container_id.is_empty() {
+                    let start = std::time::Instant::now();
+                    let _ = run_cmd(minibox_bin, &["stop", &container_id]);
+                    durations.push(start.elapsed().as_micros() as u64);
+                    // Clean up
+                    let _ = run_cmd(minibox_bin, &["rm", &container_id]);
                 }
             }
         }

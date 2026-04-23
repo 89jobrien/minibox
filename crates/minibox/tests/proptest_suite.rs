@@ -82,26 +82,30 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
             option::of(any::<String>()),
             any::<bool>(),
         )
-            .prop_map(|(container_id, cmd, env, working_dir, tty)| DaemonRequest::Exec {
-                container_id,
-                cmd,
-                env,
-                working_dir,
-                tty,
-            }),
+            .prop_map(
+                |(container_id, cmd, env, working_dir, tty)| DaemonRequest::Exec {
+                    container_id,
+                    cmd,
+                    env,
+                    working_dir,
+                    tty,
+                }
+            ),
         (arb_session_id(), any::<String>())
             .prop_map(|(session_id, data)| DaemonRequest::SendInput { session_id, data }),
-        (arb_session_id(), any::<u16>(), any::<u16>())
-            .prop_map(|(session_id, cols, rows)| DaemonRequest::ResizePty {
+        (arb_session_id(), any::<u16>(), any::<u16>()).prop_map(|(session_id, cols, rows)| {
+            DaemonRequest::ResizePty {
                 session_id,
                 cols,
                 rows,
-            }),
-        (any::<String>(), arb_push_credentials())
-            .prop_map(|(image_ref, credentials)| DaemonRequest::Push {
+            }
+        }),
+        (any::<String>(), arb_push_credentials()).prop_map(|(image_ref, credentials)| {
+            DaemonRequest::Push {
                 image_ref,
                 credentials,
-            }),
+            }
+        }),
         (
             any::<String>(),
             any::<String>(),
@@ -141,24 +145,27 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
         Just(DaemonRequest::SubscribeEvents),
         any::<bool>().prop_map(|dry_run| DaemonRequest::Prune { dry_run }),
         any::<String>().prop_map(|image_ref| DaemonRequest::RemoveImage { image_ref }),
-        (any::<String>(), any::<bool>())
-            .prop_map(|(container_id, follow)| DaemonRequest::ContainerLogs {
+        (any::<String>(), any::<bool>()).prop_map(|(container_id, follow)| {
+            DaemonRequest::ContainerLogs {
                 container_id,
                 follow,
-            }),
+            }
+        }),
         (
             any::<String>(),
             option::of(any::<String>()),
             prop::collection::vec((any::<String>(), any::<String>()), 0..4),
             any::<u32>(),
         )
-            .prop_map(|(pipeline_path, image, env, max_depth)| DaemonRequest::RunPipeline {
-                pipeline_path,
-                input: None,
-                image,
-                budget: None,
-                env,
-                max_depth,
+            .prop_map(|(pipeline_path, image, env, max_depth)| {
+                DaemonRequest::RunPipeline {
+                    pipeline_path,
+                    input: None,
+                    image,
+                    budget: None,
+                    env,
+                    max_depth,
+                }
             }),
     ]
 }
@@ -245,23 +252,26 @@ fn arb_response() -> impl Strategy<Value = DaemonResponse> {
                 total_bytes,
             }
         ),
-        (any::<u32>(), any::<u32>(), any::<String>()).prop_map(
-            |(step, total_steps, message)| DaemonResponse::BuildOutput {
+        (any::<u32>(), any::<u32>(), any::<String>()).prop_map(|(step, total_steps, message)| {
+            DaemonResponse::BuildOutput {
                 step,
                 total_steps,
                 message,
             }
-        ),
+        }),
         (any::<String>(), any::<String>())
             .prop_map(|(image_id, tag)| DaemonResponse::BuildComplete { image_id, tag }),
         arb_container_event().prop_map(|event| DaemonResponse::Event { event }),
-        (prop::collection::vec(any::<String>(), 0..4), any::<u64>(), any::<bool>()).prop_map(
-            |(removed, freed_bytes, dry_run)| DaemonResponse::Pruned {
+        (
+            prop::collection::vec(any::<String>(), 0..4),
+            any::<u64>(),
+            any::<bool>()
+        )
+            .prop_map(|(removed, freed_bytes, dry_run)| DaemonResponse::Pruned {
                 removed,
                 freed_bytes,
                 dry_run,
-            }
-        ),
+            }),
         (arb_stream_kind(), any::<String>())
             .prop_map(|(stream, line)| DaemonResponse::LogLine { stream, line }),
         (any::<i32>(), any::<String>()).prop_map(|(exit_code, container_id)| {
