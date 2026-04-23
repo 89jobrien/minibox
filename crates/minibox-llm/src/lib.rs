@@ -96,9 +96,12 @@
 #[cfg(feature = "anthropic")]
 pub mod anthropic;
 pub mod chain;
+pub mod config;
 pub mod error;
 #[cfg(feature = "gemini")]
 pub mod gemini;
+#[cfg(feature = "local")]
+pub mod local;
 #[cfg(feature = "openai")]
 pub mod openai;
 pub mod provider;
