@@ -894,7 +894,7 @@ dependencies = [
  "base64",
  "chrono",
  "dashmap",
- "minibox",
+ "linuxbox",
  "minibox-core",
  "minibox-testers",
  "nix",
@@ -2218,6 +2218,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
+name = "linuxbox"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64",
+ "bytes",
+ "chrono",
+ "criterion",
+ "flate2",
+ "futures",
+ "hex",
+ "ipnet",
+ "libc",
+ "minibox-core",
+ "minibox-macros",
+ "minibox-testers",
+ "nix",
+ "proptest",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "walkdir",
+ "wiremock",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2265,7 +2300,7 @@ dependencies = [
  "dirs 5.0.1",
  "hostname",
  "libc",
- "minibox",
+ "linuxbox",
  "minibox-core",
  "objc2",
  "objc2-foundation",
@@ -2301,6 +2336,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
+name = "mbx"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "base64",
+ "clap",
+ "libc",
+ "minibox-client",
+ "minibox-core",
+ "nix",
+ "predicates",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "md5"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2331,35 +2385,8 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 name = "minibox"
 version = "0.19.0"
 dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bytes",
- "chrono",
- "criterion",
- "flate2",
- "futures",
- "hex",
- "ipnet",
- "libc",
+ "linuxbox",
  "minibox-core",
- "minibox-macros",
- "minibox-testers",
- "nix",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "walkdir",
- "wiremock",
 ]
 
 [[package]]
@@ -2389,31 +2416,12 @@ name = "minibox-bench"
 version = "0.19.0"
 dependencies = [
  "chrono",
- "minibox",
+ "linuxbox",
  "minibox-core",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "minibox-cli"
-version = "0.19.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "base64",
- "clap",
- "libc",
- "minibox-client",
- "minibox-core",
- "nix",
- "predicates",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2516,7 +2524,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "daemonbox",
- "minibox",
+ "linuxbox",
  "minibox-core",
  "serde",
  "serde_json",
@@ -2554,8 +2562,8 @@ dependencies = [
  "async-trait",
  "daemonbox",
  "libc",
+ "linuxbox",
  "macbox",
- "minibox",
  "minibox-core",
  "nix",
  "serde_json",
@@ -5540,7 +5548,7 @@ dependencies = [
  "anyhow",
  "daemonbox",
  "dirs 5.0.1",
- "minibox",
+ "minibox-core",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

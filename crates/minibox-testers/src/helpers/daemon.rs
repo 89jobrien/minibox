@@ -93,6 +93,6 @@ pub fn make_mock_deps_with_registry(
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store = linuxbox::image::ImageStore::new(base.join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, base))
 }

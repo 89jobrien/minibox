@@ -177,13 +177,13 @@ fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
         println!("  cached  miniboxd");
     }
 
-    // -- minibox (CLI) binary --
-    let cli_bin = target_base.join(TARGET).join("debug").join("minibox");
+    // -- mbx (CLI) binary --
+    let cli_bin = target_base.join(TARGET).join("debug").join("mbx");
     if force || !cli_bin.exists() {
-        println!("  cargo build minibox-cli …");
-        run_cross(&["build", "--target", TARGET, "-p", "minibox-cli"], cc)?;
+        println!("  cargo build mbx …");
+        run_cross(&["build", "--target", TARGET, "-p", "mbx"], cc)?;
     } else {
-        println!("  cached  minibox-cli");
+        println!("  cached  mbx");
     }
 
     // -- test binaries --

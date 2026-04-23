@@ -3,9 +3,10 @@ resolver = "3"
 members = [
     "crates/minibox-oci",
     "crates/minibox-core",
+    "crates/linuxbox",
     "crates/minibox",
     "crates/miniboxd",
-    "crates/minibox-cli",
+    "crates/mbx",
     "crates/minibox-bench",
     "crates/minibox-macros",
     "crates/daemonbox",
@@ -80,6 +81,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 # Internal crates
 minibox-oci = { path = "crates/minibox-oci" }
 minibox-core = { path = "crates/minibox-core" }
+linuxbox = { path = "crates/linuxbox" }
 minibox = { path = "crates/minibox" }
 minibox-macros = { path = "crates/minibox-macros" }
 minibox-client = { path = "crates/minibox-client" }

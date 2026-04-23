@@ -1,4 +1,4 @@
-//! Subprocess integration tests for the `minibox` CLI binary.
+//! Subprocess integration tests for the `mbx` CLI binary.
 //!
 //! Each test spins up a mock Unix socket server, points the binary at it via
 //! `MINIBOX_SOCKET_PATH`, runs the binary as a subprocess with `assert_cmd`,
@@ -10,7 +10,7 @@
 #![cfg(all(unix, feature = "subprocess-tests"))]
 
 use assert_cmd::Command;
-use minibox::protocol::{ContainerInfo, DaemonResponse};
+use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use predicates::prelude::*;
 use std::path::Path;
 use tempfile::TempDir;
@@ -37,15 +37,15 @@ async fn serve_once(socket_path: &Path, response: DaemonResponse) {
     write_half.flush().await.unwrap();
 }
 
-/// Locate the minibox binary.
+/// Locate the mbx binary.
 ///
 /// Search order:
 /// 1. `MINIBOX_TEST_BIN_DIR` env var (set by `just test-cli-subprocess`)
-/// 2. `target/release/minibox`
-/// 3. `target/debug/minibox`
+/// 2. `target/release/mbx`
+/// 3. `target/debug/mbx`
 fn find_minibox() -> std::path::PathBuf {
     if let Ok(dir) = std::env::var("MINIBOX_TEST_BIN_DIR") {
-        let p = std::path::PathBuf::from(&dir).join("minibox");
+        let p = std::path::PathBuf::from(&dir).join("mbx");
         if p.exists() {
             return p;
         }
@@ -56,13 +56,13 @@ fn find_minibox() -> std::path::PathBuf {
         .and_then(|p| p.parent())
         .expect("could not find workspace root");
     for profile in ["release", "debug"] {
-        let p = workspace_root.join("target").join(profile).join("minibox");
+        let p = workspace_root.join("target").join(profile).join("mbx");
         if p.exists() {
             return p;
         }
     }
     panic!(
-        "Could not find minibox binary. Run `cargo build -p minibox-cli` first, \
+        "Could not find mbx binary. Run `cargo build -p mbx` first, \
          or set MINIBOX_TEST_BIN_DIR."
     );
 }

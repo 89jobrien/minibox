@@ -1,22 +1,22 @@
-//! minibox — CLI client for the miniboxd container runtime.
+//! mbx — CLI client for the miniboxd container runtime.
 //!
 //! Connects to the daemon over `/run/minibox/miniboxd.sock` and issues
 //! JSON-over-newline requests, printing human-readable output.
 //!
-//! Each subcommand serialises a [`minibox::protocol::DaemonRequest`] as a
+//! Each subcommand serialises a [`minibox_core::protocol::DaemonRequest`] as a
 //! single JSON line, writes it to the Unix socket, then reads one or more
-//! [`minibox::protocol::DaemonResponse`] lines back.  The `run` subcommand
+//! [`minibox_core::protocol::DaemonResponse`] lines back.  The `run` subcommand
 //! is special: it uses `ephemeral: true` and loops, streaming
 //! `ContainerOutput` chunks to the terminal until a `ContainerStopped` message
 //! is received, at which point the CLI exits with the container's exit code.
 //!
 //! # Usage
 //! ```text
-//! minibox run alpine --tag latest -- /bin/sh
-//! minibox ps
-//! minibox stop <id>
-//! minibox rm <id>
-//! minibox pull nginx
+//! mbx run alpine --tag latest -- /bin/sh
+//! mbx ps
+//! mbx stop <id>
+//! mbx rm <id>
+//! mbx pull nginx
 //! ```
 
 mod commands;
@@ -30,7 +30,7 @@ use std::path::Path;
 /// dispatch.
 #[derive(Parser)]
 #[command(
-    name = "minibox",
+    name = "mbx",
     about = "A container runtime in Rust",
     version,
     propagate_version = true
@@ -314,35 +314,21 @@ mod tests {
 
     #[test]
     fn cli_parses_network_none() {
-        let cli = Cli::try_parse_from([
-            "minibox",
-            "run",
-            "--network",
-            "none",
-            "alpine",
-            "--",
-            "/bin/sh",
-        ]);
+        let cli =
+            Cli::try_parse_from(["mbx", "run", "--network", "none", "alpine", "--", "/bin/sh"]);
         assert!(cli.is_ok());
     }
 
     #[test]
     fn cli_parses_network_host() {
-        let cli = Cli::try_parse_from([
-            "minibox",
-            "run",
-            "--network",
-            "host",
-            "alpine",
-            "--",
-            "/bin/sh",
-        ]);
+        let cli =
+            Cli::try_parse_from(["mbx", "run", "--network", "host", "alpine", "--", "/bin/sh"]);
         assert!(cli.is_ok());
     }
 
     #[test]
     fn cli_default_network_is_none() {
-        let cli = Cli::try_parse_from(["minibox", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
         match cli.command {
             Commands::Run { network, .. } => assert_eq!(network, "none"),
             _ => panic!("expected Run"),
@@ -351,8 +337,7 @@ mod tests {
 
     #[test]
     fn cli_parses_privileged_flag() {
-        let cli =
-            Cli::try_parse_from(["minibox", "run", "--privileged", "ubuntu", "--", "/bin/sh"]);
+        let cli = Cli::try_parse_from(["mbx", "run", "--privileged", "ubuntu", "--", "/bin/sh"]);
         assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
         match cli.unwrap().command {
             Commands::Run { privileged, .. } => assert!(privileged),
@@ -363,7 +348,7 @@ mod tests {
     #[test]
     fn cli_parses_volume_flag() {
         let cli = Cli::try_parse_from([
-            "minibox",
+            "mbx",
             "run",
             "-v",
             "/tmp/host:/guest",
@@ -384,7 +369,7 @@ mod tests {
     #[test]
     fn cli_parses_multiple_volume_flags() {
         let cli = Cli::try_parse_from([
-            "minibox",
+            "mbx",
             "run",
             "-v",
             "/tmp/a:/a",
@@ -403,9 +388,7 @@ mod tests {
 
     #[test]
     fn cli_parses_exec_subcommand() {
-        let cli = Cli::try_parse_from([
-            "minibox", "exec", "abc123", "--", "/bin/sh", "-c", "echo hi",
-        ]);
+        let cli = Cli::try_parse_from(["mbx", "exec", "abc123", "--", "/bin/sh", "-c", "echo hi"]);
         assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
         match cli.unwrap().command {
             Commands::Exec {
@@ -421,7 +404,7 @@ mod tests {
     #[test]
     fn cli_parses_name_flag() {
         let cli = Cli::try_parse_from([
-            "minibox",
+            "mbx",
             "run",
             "--name",
             "my-container",
@@ -440,7 +423,7 @@ mod tests {
 
     #[test]
     fn cli_run_without_name_is_none() {
-        let cli = Cli::try_parse_from(["minibox", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
         match cli.command {
             Commands::Run { name, .. } => assert_eq!(name, None),
             _ => panic!("expected Run"),
@@ -450,7 +433,7 @@ mod tests {
     #[test]
     fn cli_parses_mount_flag() {
         let cli = Cli::try_parse_from([
-            "minibox",
+            "mbx",
             "run",
             "--mount",
             "type=bind,src=/tmp/host,dst=/guest",
