@@ -69,12 +69,9 @@
 #[cfg(feature = "anthropic")]
 pub mod anthropic;
 pub mod chain;
-pub mod config;
 pub mod error;
 #[cfg(feature = "gemini")]
 pub mod gemini;
-#[cfg(feature = "local")]
-pub mod local;
 #[cfg(feature = "openai")]
 pub mod openai;
 pub mod provider;
@@ -85,10 +82,7 @@ pub use chain::FallbackChain;
 pub use error::{HttpStatusError, LlmError};
 pub use provider::{LlmProvider, ProviderConfig};
 pub use retry::{RetryConfig, RetryingProvider};
-pub use types::{
-    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
-    JsonSchema, Message, Role, ToolDefinition, Usage,
-};
+pub use types::{CompletionRequest, CompletionResponse, JsonSchema, Usage};
 
 /// Async LLM invocation macro. Returns a `Future` that resolves to
 /// `Result<CompletionResponse, LlmError>`.
