@@ -1,8 +1,15 @@
-# searchbox
+# searchbox + zoektbox
 
-**Date:** 2026-04-22  **Status:** Draft  **Crate:** `crates/searchbox`
+**Date:** 2026-04-22  **Status:** Draft  **Crates:** `crates/searchbox`, `crates/zoektbox`
 
-Manages a [Zoekt][zoekt] instance on the VPS and exposes it as a local MCP stdio server.
+Two crates, split by responsibility:
+
+- **`zoektbox`** — owns the Zoekt binary lifecycle: pinned-release download, SHA256
+  verification, upload to VPS, version management. No search logic. Follows the `tailbox`
+  pattern for third-party binary provisioning.
+- **`searchbox`** — owns search: `SearchProvider` port, adapters, index sources, MCP stdio
+  server. Depends on `zoektbox` via the `ServiceManager` port for Zoekt process lifecycle.
+
 Query surface: full-text code search, git-history traversal, and plaintext doc search
 (Obsidian vault, `~/dev/*/docs`). Replaces the failing `${SOURCEGRAPH_ENDPOINT}` MCP plugin.
 
@@ -95,7 +102,7 @@ pub enum ServiceError {
 | `GitRepoSource` | `IndexSource` | `git clone --mirror` / `git remote update` into the VPS index volume, then `zoekt-git-index`. Indexes all branches; history traversal comes for free. Default source type. |
 | `FilesystemSource` | `IndexSource` | Glob-expands a local path, rsyncs to VPS via `tailbox` SSH host, triggers `zoekt-index` on the VPS-side path. For `~/dev/*/docs`, markdown files, etc. |
 | `LocalZoektSource` | `IndexSource` + `SearchProvider` | Optional Mac sidecar. Runs `zoekt-webserver` on localhost:6071, indexes paths that must not leave the Mac (e.g. Obsidian vault when vault is not a git repo). Results merged via `MergedAdapter`. |
-| `ZoektServiceAdapter` | `ServiceManager` | SSHes into VPS via `tailbox`. Runs `zoekt-indexserver` + `zoekt-webserver` inside a minibox container with `/data/index` volume. Registers cron for scheduled reindex. |
+| `ZoektServiceAdapter` | `ServiceManager` | Implemented in `zoektbox`. SSHes into VPS via `tailbox`. Downloads pinned Zoekt release tarball, verifies SHA256, uploads binaries, runs `zoekt-indexserver` + `zoekt-webserver` inside a minibox container with `/data/index` volume. Registers cron for scheduled reindex. Version pin in `zoektbox/src/release.rs`. |
 
 **Zoekt git history note:** `zoekt-git-index -index_all_branches` indexes every branch's
 HEAD. For commit-level history search, `zoekt-git-index -branches` with explicit refs. The
@@ -107,11 +114,22 @@ the result originated from a non-HEAD ref.
 ## Crate Layout
 
 ```
-crates/searchbox/
+crates/zoektbox/
   Cargo.toml
   src/
     lib.rs
-    domain.rs            — ports, domain types, all error enums
+    release.rs           — pinned version, download URL, SHA256 manifest per platform
+    download.rs          — fetch tarball, verify hash, extract binaries to staging dir
+    deploy.rs            — rsync binaries to VPS via tailbox SSH
+    service.rs           — ZoektServiceAdapter: impl ServiceManager (start/stop/status/reindex)
+  tests/
+    unit.rs              — SHA256 verify, release URL construction, version parse
+
+crates/searchbox/
+  Cargo.toml             — depends on zoektbox
+  src/
+    lib.rs
+    domain.rs            — SearchProvider, IndexSource, ServiceManager ports; all domain types + errors
     config.rs            — SearchboxConfig (serde_derive, TOML)
     mcp.rs               — JSON-RPC stdio loop; tool dispatch
     adapters/
@@ -120,13 +138,15 @@ crates/searchbox/
       git_source.rs      — GitRepoSource
       fs_source.rs       — FilesystemSource
       local.rs           — LocalZoektSource
-      service.rs         — ZoektServiceAdapter
   bin/
-    searchboxd.rs        — composition root; clap subcommands: --mcp | --reindex | --status
+    searchboxd.rs        — composition root; clap subcommands: --mcp | --reindex | --status | --provision
   tests/
     unit.rs              — MergedAdapter dedup, config parse, domain invariants
     integration.rs       — ZoektAdapter against live zoekt-webserver (feature = "integration-tests")
 ```
+
+`ServiceManager` port is defined in `searchbox::domain` and implemented in `zoektbox::service`.
+`searchbox` depends on `zoektbox`; `zoektbox` has zero knowledge of search.
 
 ---
 
@@ -249,12 +269,15 @@ searchboxd --reindex minibox # single-repo reindex, tail zoekt-indexserver log
 
 New additions only (workspace deps reused):
 
-| Crate | Use |
-|-------|-----|
-| `reqwest` | `ZoektAdapter` HTTP client |
-| `futures` | `join_all` in `MergedAdapter` |
-| `clap` | `searchboxd` CLI |
-| `serde_json` | Zoekt API + MCP wire format |
+| Crate | Crate(s) | Use |
+|-------|----------|-----|
+| `reqwest` | searchbox | `ZoektAdapter` HTTP client |
+| `futures` | searchbox | `join_all` in `MergedAdapter` |
+| `clap` | searchbox | `searchboxd` CLI |
+| `serde_json` | searchbox | Zoekt API + MCP wire format |
+| `sha2` | zoektbox | release tarball verification |
+| `hex` | zoektbox | SHA256 hex encoding (already in minibox-secrets) |
+| `flate2` + `tar` | zoektbox | tarball extraction |
 
 `tokio`, `async-trait`, `thiserror`, `tracing`, `serde` — workspace deps, no version bump needed.
 
