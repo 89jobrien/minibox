@@ -4281,3 +4281,351 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
         "duplicate name should produce Error, got {second:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// handle_push Tests
+// ---------------------------------------------------------------------------
+
+/// handle_push with no image_pusher wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_push_no_pusher_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_push(
+        "docker.io/library/alpine:latest".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_push with an invalid image ref → Error.
+#[tokio::test]
+async fn test_handle_push_invalid_image_ref_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_pusher =
+            Some(Arc::clone(&mock_pusher) as minibox_core::domain::DynImagePusher);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_push(
+        "".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid ref, got {resp:?}"
+    );
+}
+
+/// handle_push with a valid pusher and valid image ref → Success.
+#[tokio::test]
+async fn test_handle_push_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_pusher =
+            Some(Arc::clone(&mock_pusher) as minibox_core::domain::DynImagePusher);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+
+    handler::handle_push(
+        "docker.io/library/alpine:latest".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain until terminal (Success or Error).
+    let mut terminal = None;
+    while let Ok(Some(r)) =
+        tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await
+    {
+        if !matches!(r, DaemonResponse::PushProgress { .. }) {
+            terminal = Some(r);
+            break;
+        }
+    }
+    assert!(
+        matches!(terminal, Some(DaemonResponse::Success { .. })),
+        "expected Success, got {terminal:?}"
+    );
+    assert!(mock_pusher.has_tag("docker.io/library/alpine:latest"));
+}
+
+// ---------------------------------------------------------------------------
+// handle_commit Tests
+// ---------------------------------------------------------------------------
+
+/// handle_commit with no commit_adapter wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_commit_no_adapter_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_commit with invalid container id → Error.
+#[tokio::test]
+async fn test_handle_commit_invalid_container_id_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_committer =
+        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "".to_string(), // empty → invalid ContainerId
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid container id, got {resp:?}"
+    );
+}
+
+/// handle_commit with valid adapter and valid container id → Success.
+#[tokio::test]
+async fn test_handle_commit_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_committer =
+        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        Some("test-author".to_string()),
+        Some("test commit".to_string()),
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("myimage:v1")),
+        "expected Success with target image, got {resp:?}"
+    );
+    assert_eq!(mock_committer.call_count(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// handle_build Tests
+// ---------------------------------------------------------------------------
+
+/// handle_build with no image_builder wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_build_no_builder_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_build(
+        "FROM alpine\nRUN echo hi".to_string(),
+        temp_dir.path().to_str().unwrap().to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_build with a relative context_path → Error.
+#[tokio::test]
+async fn test_handle_build_relative_context_path_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_build(
+        "FROM alpine".to_string(),
+        "relative/path".to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("absolute")),
+        "expected 'absolute' path error, got {resp:?}"
+    );
+}
+
+/// handle_build with valid builder and absolute context path → BuildComplete.
+#[tokio::test]
+async fn test_handle_build_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+
+    handler::handle_build(
+        "FROM alpine\nRUN echo hi".to_string(),
+        temp_dir.path().to_str().unwrap().to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain until terminal response.
+    let mut terminal = None;
+    while let Ok(Some(r)) =
+        tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await
+    {
+        if !matches!(r, DaemonResponse::BuildOutput { .. }) {
+            terminal = Some(r);
+            break;
+        }
+    }
+    assert!(
+        matches!(
+            terminal,
+            Some(DaemonResponse::BuildComplete { ref tag, .. }) if tag == "myimage:latest"
+        ),
+        "expected BuildComplete, got {terminal:?}"
+    );
+    assert_eq!(mock_builder.call_count(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// handle_exec Tests
+// ---------------------------------------------------------------------------
+
+/// handle_exec with no exec_runtime wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_exec_no_runtime_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir); // exec_runtime: None
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_exec(
+        "abc123def456abcd".to_string(),
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
