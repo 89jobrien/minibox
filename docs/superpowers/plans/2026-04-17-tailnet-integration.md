@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-04-17"
+branch: main
+---
+
 # Tailnet Integration — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

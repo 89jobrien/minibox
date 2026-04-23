@@ -1,8 +1,6 @@
 ---
-status: done
-completed: "2026-03-18"
-branch: feat/parallel-layer-pulls
-note: Parallel pulls shipped
+status: archived
+note: Branch feat/parallel-layer-pulls aborted 2026-04-23 — stale crate paths; feature not shipped
 ---
 
 # Parallel Layer Pulls Implementation Plan

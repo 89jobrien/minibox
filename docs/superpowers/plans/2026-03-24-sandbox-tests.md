@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-03-24"
+branch: main
+---
+
 # Sandbox Tests Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

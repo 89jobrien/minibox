@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-04-20"
+branch: main
+---
+
 # Crux-Minibox Integration Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use

@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-04-21"
+branch: main
+---
+
 # minibox-testers: Conformance Infrastructure Migration — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

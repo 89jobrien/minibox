@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-04-23"
+branch: main
+---
+
 # QEMU Cross-Platform VM Runner Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

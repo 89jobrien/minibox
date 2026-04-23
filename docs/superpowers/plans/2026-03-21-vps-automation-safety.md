@@ -1,5 +1,6 @@
 ---
-status: done
+status: archived
+note: No commit evidence found; sshpass tmpfile pattern not implemented as of 2026-04-23
 ---
 
 # VPS Automation Safety Implementation Plan
