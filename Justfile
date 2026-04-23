@@ -261,9 +261,9 @@ diagnose *args:
     #!/usr/bin/env bash
     uv run scripts/diagnose.py "$@"
 
-# Fetch, check sync vs origin/main, auto-resolve obvious conflicts (prompts if unsure)
+# Fetch, check sync vs origin/main — safe to push check
 sync-check:
-    uv run scripts/sync-check.py
+    cruxx run .crux/sync-check.crux
 
 # ── Git ──────────────────────────────────────────────────────────────────────
 

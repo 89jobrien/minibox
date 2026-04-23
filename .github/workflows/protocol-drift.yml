@@ -1,0 +1,17 @@
+name: Protocol Drift
+
+on:
+  push:
+    branches: [main, next, stable, "feature/*", "hotfix/*"]
+  pull_request:
+    branches: [main, next]
+
+jobs:
+  protocol-drift:
+    name: protocol drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check protocol consistency
+        run: bash .claude/hooks/protocol-drift-check.sh
