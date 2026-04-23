@@ -64,7 +64,7 @@ See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
-**Status:** Development (`v0.2.0`)
+**Status:** Development (`v0.19.0`)
 
 ## Supported
 
@@ -143,21 +143,27 @@ cargo xtask test-linux
 
 | Crate             | Type    | Description                                                       |
 | ----------------- | ------- | ----------------------------------------------------------------- |
-| `minibox-core`    | Library | Protocol, domain traits, image types, error types                 |
-| `minibox`         | Library | Linux primitives, adapters, image management                      |
-| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle              |
-| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch            |
-| `minibox-cli`     | Binary  | CLI client                                                        |
-| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                 |
-| `minibox-llm`     | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback |
-| `minibox-bench`   | Binary  | Benchmark harness (codec + adapter + parallel suites)             |
-| `minibox-client`  | Library | Low-level Unix socket client                                      |
-| `minibox-secrets` | Library | Typed credential store with validation & audit hashes             |
-| `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)        |
-| `winbox`          | Library | Windows daemon implementation (stub)                              |
-| `dockerbox`       | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox |
-| `dashbox`         | Binary  | Ratatui TUI dashboard (8 tabs: containers, bench, git, CI, etc.)  |
-| `miniboxctl`      | Binary  | SSE-based streaming CLI (dagu integration)                        |
+| `minibox-core`      | Library | Protocol, domain traits, image types, error types                  |
+| `minibox-oci`       | Library | OCI image types and operations (extracted from minibox)            |
+| `minibox`           | Library | Linux primitives, adapters, image management; re-exports core      |
+| `daemonbox`         | Library | Handler, state, Unix socket server, NetworkLifecycle               |
+| `miniboxd`          | Binary  | Async daemon — Unix socket listener, platform dispatch             |
+| `minibox-cli`       | Binary  | CLI client                                                         |
+| `minibox-macros`    | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                  |
+| `minibox-llm`       | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback  |
+| `minibox-bench`     | Binary  | Benchmark harness (codec + adapter + parallel suites)              |
+| `minibox-client`    | Library | Low-level Unix socket client                                       |
+| `minibox-secrets`   | Library | Typed credential store with validation & audit hashes              |
+| `minibox-agent`     | Library | AI agent runtime — error types, LLM providers, agentic steps       |
+| `minibox-testers`   | Library | Test infrastructure — mocks, fixtures, conformance helpers         |
+| `macbox`            | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)         |
+| `winbox`            | Library | Windows daemon implementation (stub)                               |
+| `dockerbox`         | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox  |
+| `tailbox`           | Library | Tailscale/tailnet adapter — auth, config, experiments              |
+| `dashbox`           | Binary  | Ratatui TUI dashboard (6 tabs: Agents, Bench, History, Git, Todos, CI) |
+| `miniboxctl`        | Binary  | SSE-based streaming CLI (dagu integration)                         |
+| `zoektbox`          | Library | Zoekt-based code search adapter                                    |
+| `searchbox`         | Library | Unified search port (zoekt + local)                                |
 
 **Key modules in `minibox`:**
 
@@ -405,7 +411,21 @@ cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
 cargo bench -p minibox         # Criterion HTML reports (local only)
 ```
 
-**Current counts:** 300+ unit + conformance + property (any platform), 16 cgroup integration (Linux+root), 14 E2E (Linux+root).
+**Current counts:** 1039 unit + conformance + property (any platform), 16 cgroup integration
+(Linux+root), 14 E2E (Linux+root), 7 skipped (platform-gated).
+
+**krun conformance tests** (macOS only) are opt-in: `MINIBOX_KRUN_TESTS=1 cargo nextest run -p macbox
+--test krun_conformance_tests`.
+
+**Fuzzing** (`fuzz/` harness, requires nightly):
+
+```bash
+cd fuzz
+cargo +nightly fuzz run fuzz_decode_request    # arbitrary bytes → decode_request, never panics
+cargo +nightly fuzz run fuzz_decode_response   # arbitrary bytes → decode_response, never panics
+cargo +nightly fuzz run fuzz_extract_layer     # arbitrary bytes → extract_layer, escape-proof
+cargo +nightly fuzz run fuzz_validate_layer_path  # arbitrary paths → validate_layer_path
+```
 
 See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile guards.
 
