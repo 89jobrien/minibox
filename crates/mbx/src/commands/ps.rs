@@ -140,41 +140,14 @@ fn truncate(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_helpers::setup;
     use super::*;
     use minibox_core::protocol::ContainerInfo;
-
-    /// Bind a Unix socket, accept one connection, read one request line,
-    /// respond with `response`, then close.  Returns the socket path.
-    #[cfg(unix)]
-    async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use tokio::net::UnixListener;
-
-        let listener = UnixListener::bind(socket_path).unwrap();
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read_half, mut write_half) = tokio::io::split(stream);
-        let mut reader = BufReader::new(read_half);
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let mut resp = serde_json::to_string(&response).unwrap();
-        resp.push('\n');
-        write_half.write_all(resp.as_bytes()).await.unwrap();
-        write_half.flush().await.unwrap();
-    }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn execute_prints_empty_list() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let socket_path = tmp.path().join("test.sock");
-
-        let sp = socket_path.clone();
-        tokio::spawn(async move {
-            serve_once(&sp, DaemonResponse::ContainerList { containers: vec![] }).await;
-        });
-
-        // Give server a moment to bind
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let (_tmp, socket_path) = setup(DaemonResponse::ContainerList { containers: vec![] }).await;
         let result = execute(&socket_path).await;
         assert!(
             result.is_ok(),
@@ -185,9 +158,6 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn execute_prints_container_row() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let socket_path = tmp.path().join("test.sock");
-
         let container = ContainerInfo {
             id: "abc123456789".to_string(),
             name: None,
@@ -197,19 +167,10 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".to_string(),
             pid: Some(42),
         };
-
-        let sp = socket_path.clone();
-        tokio::spawn(async move {
-            serve_once(
-                &sp,
-                DaemonResponse::ContainerList {
-                    containers: vec![container],
-                },
-            )
-            .await;
-        });
-
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let (_tmp, socket_path) = setup(DaemonResponse::ContainerList {
+            containers: vec![container],
+        })
+        .await;
         let result = execute(&socket_path).await;
         assert!(
             result.is_ok(),
@@ -304,5 +265,78 @@ mod tests {
         // "café" is 4 chars but 5 bytes; should be treated as 4 chars
         assert_eq!(truncate("café", 4), "café");
         assert_eq!(truncate("café!", 4), "caf…");
+    }
+
+    // ── Property-based tests ──────────────────────────────────────────────────
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
+        /// Result length never exceeds `max` chars.
+        #[test]
+        fn prop_truncate_never_exceeds_max(s in ".*", max in 1_usize..=40) {
+            let result = truncate(&s, max);
+            let char_count = result.chars().count();
+            prop_assert!(
+                char_count <= max,
+                "truncate({s:?}, {max}) produced {char_count} chars: {result:?}"
+            );
+        }
+
+        /// Input at or below `max` chars is returned unchanged.
+        #[test]
+        fn prop_truncate_short_input_unchanged(s in "[a-zA-Z0-9 ]{0,20}", max in 20_usize..=40) {
+            // s is at most 20 chars, max is at least 20 — so s.len() <= max always.
+            let result = truncate(&s, max);
+            prop_assert_eq!(&result, &s);
+        }
+
+        /// Truncated output always ends with the ellipsis character.
+        #[test]
+        fn prop_truncate_long_input_ends_with_ellipsis(
+            s in "[a-zA-Z]{50,60}",
+            max in 1_usize..=20,
+        ) {
+            // s is at least 50 chars, max at most 20 — always triggers truncation.
+            let result = truncate(&s, max);
+            prop_assert!(
+                result.ends_with('…'),
+                "expected ellipsis at end of {result:?}"
+            );
+        }
+
+        /// `format_row` always contains the container id.
+        #[test]
+        fn prop_format_row_contains_id(id in "[a-z0-9]{1,14}") {
+            let info = ContainerInfo {
+                id: id.clone(),
+                name: None,
+                image: "alpine".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "running".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            };
+            let row = format_row(&info);
+            prop_assert!(row.contains(&id), "row missing id={id:?}: {row:?}");
+        }
+
+        /// `format_row` always contains the state.
+        #[test]
+        fn prop_format_row_contains_state(state in "[a-z]{3,10}") {
+            let info = ContainerInfo {
+                id: "abc1".to_string(),
+                name: None,
+                image: "alpine".to_string(),
+                command: "/bin/sh".to_string(),
+                state: state.clone(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            };
+            let row = format_row(&info);
+            prop_assert!(row.contains(&state), "row missing state={state:?}: {row:?}");
+        }
     }
 }

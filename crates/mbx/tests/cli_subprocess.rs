@@ -286,3 +286,345 @@ fn run_exits_one_on_unknown_network_mode() {
         .failure()
         .stderr(predicate::str::contains("unknown network mode"));
 }
+
+// ---------------------------------------------------------------------------
+// exec
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn exec_exits_zero_on_exec_started_then_close() {
+    // Server sends ExecStarted then closes — execute() returns Ok(()).
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("exec_test.sock");
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(&sp).unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read_half, mut write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let resp = serde_json::to_string(&DaemonResponse::ExecStarted {
+            exec_id: "x1".to_string(),
+        })
+        .unwrap();
+        write_half
+            .write_all(format!("{resp}\n").as_bytes())
+            .await
+            .unwrap();
+        write_half.flush().await.unwrap();
+        // Close — stream.next() returns None, execute returns Ok(()).
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    minibox(&socket_path)
+        .args(["exec", "abc123", "--", "/bin/sh"])
+        .assert()
+        .success();
+}
+
+#[tokio::test]
+async fn exec_exits_one_on_error_response() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "container not running".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["exec", "abc123", "--", "/bin/sh"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("container not running"));
+}
+
+// ---------------------------------------------------------------------------
+// logs
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn logs_exits_zero_on_success() {
+    // Server sends a LogLine then Success — execute() returns Ok(()).
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("logs_sub.sock");
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        use minibox_core::protocol::OutputStreamKind;
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(&sp).unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read_half, mut write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        for resp in [
+            DaemonResponse::LogLine {
+                stream: OutputStreamKind::Stdout,
+                line: "log line one".to_string(),
+            },
+            DaemonResponse::Success {
+                message: "end of log".to_string(),
+            },
+        ] {
+            let mut encoded = serde_json::to_string(&resp).unwrap();
+            encoded.push('\n');
+            write_half.write_all(encoded.as_bytes()).await.unwrap();
+        }
+        write_half.flush().await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    minibox(&socket_path)
+        .args(["logs", "abc123"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("log line one"));
+}
+
+#[tokio::test]
+async fn logs_exits_one_on_error_response() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "container not found".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["logs", "nosuchcontainer"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("container not found"));
+}
+
+// ---------------------------------------------------------------------------
+// pause / resume
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn pause_exits_zero_on_success() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Success {
+        message: "paused".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["pause", "abc123"])
+        .assert()
+        .success();
+}
+
+#[tokio::test]
+async fn pause_exits_one_on_error() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "container not running".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["pause", "abc123"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("container not running"));
+}
+
+#[tokio::test]
+async fn resume_exits_zero_on_success() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Success {
+        message: "resumed".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["resume", "abc123"])
+        .assert()
+        .success();
+}
+
+#[tokio::test]
+async fn resume_exits_one_on_error() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "container not paused".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["resume", "abc123"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("container not paused"));
+}
+
+// ---------------------------------------------------------------------------
+// prune
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn prune_exits_zero_with_removed_images() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Pruned {
+        removed: vec!["alpine:latest".to_string(), "ubuntu:22.04".to_string()],
+        freed_bytes: 52_428_800,
+        dry_run: false,
+    })
+    .await;
+
+    minibox(&socket_path)
+        .arg("prune")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpine:latest"))
+        .stdout(predicate::str::contains("50.0 MB"));
+}
+
+#[tokio::test]
+async fn prune_dry_run_shows_prefix() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Pruned {
+        removed: vec!["nginx:latest".to_string()],
+        freed_bytes: 10_485_760,
+        dry_run: true,
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["prune", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[dry-run]"));
+}
+
+#[tokio::test]
+async fn prune_exits_zero_with_nothing_removed() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Pruned {
+        removed: vec![],
+        freed_bytes: 0,
+        dry_run: false,
+    })
+    .await;
+
+    minibox(&socket_path)
+        .arg("prune")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("0 images"));
+}
+
+#[tokio::test]
+async fn prune_exits_one_on_error() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "prune failed".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .arg("prune")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("prune failed"));
+}
+
+// ---------------------------------------------------------------------------
+// rmi
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn rmi_exits_zero_on_success() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Success {
+        message: "removed alpine:latest".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["rmi", "alpine:latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("removed alpine:latest"));
+}
+
+#[tokio::test]
+async fn rmi_exits_one_on_error() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "image not found".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["rmi", "nosuchimage:latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("image not found"));
+}
+
+// ---------------------------------------------------------------------------
+// load
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn load_exits_zero_on_image_loaded() {
+    let (_tmp, socket_path) = setup(DaemonResponse::ImageLoaded {
+        image: "myimage:latest".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["load", "--name", "myimage", "/tmp/myimage.tar"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Loaded image: myimage:latest"));
+}
+
+#[tokio::test]
+async fn load_exits_one_on_error() {
+    let (_tmp, socket_path) = setup(DaemonResponse::Error {
+        message: "invalid tar archive".to_string(),
+    })
+    .await;
+
+    minibox(&socket_path)
+        .args(["load", "/tmp/broken.tar"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid tar archive"));
+}
+
+// ---------------------------------------------------------------------------
+// events
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn events_exits_zero_when_daemon_closes_connection() {
+    // events streams until server closes — send one event then close.
+    use minibox_core::events::ContainerEvent;
+    use std::time::SystemTime;
+
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("events_test.sock");
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(&sp).unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read_half, mut write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let event = ContainerEvent::Created {
+            id: "ctr1".to_string(),
+            image: "alpine".to_string(),
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+        let resp = DaemonResponse::Event { event };
+        let mut encoded = serde_json::to_string(&resp).unwrap();
+        encoded.push('\n');
+        write_half.write_all(encoded.as_bytes()).await.unwrap();
+        write_half.flush().await.unwrap();
+        // Close connection — events loop breaks, exits 0.
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    minibox(&socket_path)
+        .arg("events")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"type\":\"created\""));
+}

@@ -94,6 +94,7 @@ keyring = "3"
 wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
 assert_cmd = "2"    # dev-only: CLI subprocess testing
 predicates = "3"    # dev-only: assert_cmd predicate helpers
+proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
 

@@ -38,3 +38,4 @@ assert_cmd = { workspace = true }
 predicates = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+proptest = { workspace = true }

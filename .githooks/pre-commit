@@ -19,7 +19,10 @@ if [ -n "$RUST_STAGED" ]; then
   git add Cargo.toml
 fi
 
-# Delegate to global pre-commit hook
+# Quality gate — self-contained, works without global hook
+cargo xtask pre-commit || exit 1
+
+# Delegate to global pre-commit hook (obfsck, additional checks)
 GLOBAL_HOOK="$HOME/.config/git/hooks/pre-commit"
 if [ -x "$GLOBAL_HOOK" ]; then
   exec "$GLOBAL_HOOK" "$@"
