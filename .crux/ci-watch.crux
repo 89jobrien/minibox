@@ -1,0 +1,16 @@
+pipeline: minibox_ci_watch
+# Check CI status after a push and surface any failures.
+# Input: { "repo": "owner/repo", "branch": "main" }
+# Run via post-push hook: cruxx run .crux/ci-watch.crux --input '{"repo":"89jobrien/minibox","branch":"main"}'
+budget: { calls: 6 }
+
+steps:
+  - step: latest_run
+    handler: shell::capture
+    args:
+      cmd: "gh run list --repo {{ input.repo }} --branch {{ input.branch }} --limit 1 --json databaseId,status,conclusion,name --jq '.[0]'"
+
+  - step: log_status
+    handler: ctrl::log
+    args:
+      msg: "CI run: {{ steps.latest_run.output.stdout }}"
