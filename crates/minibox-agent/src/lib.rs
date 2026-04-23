@@ -31,10 +31,10 @@
 
 pub mod agent;
 pub mod conversation;
-pub mod message;
 pub mod error;
 pub mod events;
 pub mod hooks;
+pub mod message;
 pub mod observation;
 pub mod provider;
 pub mod session_log;

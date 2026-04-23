@@ -122,11 +122,7 @@ impl Agent {
                 temperature: None,
             };
 
-            let response = self
-                .llm
-                .infer(&req)
-                .await
-                .map_err(AgentLoopError::Llm)?;
+            let response = self.llm.infer(&req).await.map_err(AgentLoopError::Llm)?;
 
             // Append the assistant response to history.
             messages.push(Message::assistant(response.content.clone()));
@@ -191,8 +187,8 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::{InMemoryToolExecutor, ToolOutput};
     use crate::message::InferenceResponse;
+    use crate::tools::{InMemoryToolExecutor, ToolOutput};
     use minibox_llm::LlmError;
 
     use async_trait::async_trait;
