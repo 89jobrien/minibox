@@ -88,14 +88,16 @@ fn main() -> Result<()> {
         }
         Some("run-vm") => {
             let vm_dir = vm_image::default_vm_dir();
-            vm_run::run_vm_interactive(&vm_dir)
+            let platform = vm_run::HostPlatform::detect()?;
+            vm_run::run_vm_interactive(&vm_dir, &platform)
         }
         Some("test-vm") => {
             let vm_dir = vm_image::default_vm_dir();
             let cargo_target = env::var("CARGO_TARGET_DIR")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
-            vm_run::test_vm(&vm_dir, &cargo_target)
+            let platform = vm_run::HostPlatform::detect()?;
+            vm_run::test_vm(&vm_dir, &cargo_target, &platform)
         }
         Some("cas-add") => {
             let file_path = env::args()

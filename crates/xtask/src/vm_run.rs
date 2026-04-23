@@ -126,14 +126,9 @@ mod tests {
     }
 }
 
-/// Common QEMU baseline flags shared by interactive and test-runner modes.
-const QEMU_BASE_ARGS: &[&str] = &[
-    "-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4", "-kernel",
-];
-
 /// Boot the VM in interactive shell mode.  Blocks until QEMU exits.
 /// Exit QEMU with `Ctrl-A X`.
-pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
+pub fn run_vm_interactive(vm_dir: &Path, platform: &HostPlatform) -> Result<()> {
     let kernel = vm_dir.join("boot").join("vmlinuz-virt");
     let initrd = vm_dir.join("minibox-initramfs.img");
 
@@ -154,8 +149,20 @@ pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
     println!("  Exit: Ctrl-A X");
     println!();
 
-    let status = Command::new("qemu-system-aarch64")
-        .args(QEMU_BASE_ARGS)
+    let status = Command::new(platform.qemu_binary())
+        .args([
+            "-M",
+            platform.machine_type(),
+            "-cpu",
+            "host",
+            "-accel",
+            platform.accel(),
+            "-m",
+            "2048",
+            "-smp",
+            "4",
+            "-kernel",
+        ])
         .arg(&kernel)
         .arg("-initrd")
         .arg(&initrd)
@@ -166,7 +173,7 @@ pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
             "-no-reboot",
         ])
         .status()
-        .context("spawning qemu-system-aarch64 (is QEMU installed?)")?;
+        .with_context(|| format!("spawning {} (is QEMU installed?)", platform.qemu_binary()))?;
 
     if !status.success() {
         bail!("QEMU exited with status {}", status);
@@ -176,7 +183,7 @@ pub fn run_vm_interactive(vm_dir: &Path) -> Result<()> {
 
 /// Cross-compile test binaries then run them inside the VM, streaming output.
 /// Exits with an error if any test suite fails.
-pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
+pub fn test_vm(vm_dir: &Path, cargo_target: &Path, platform: &HostPlatform) -> Result<()> {
     let kernel = vm_dir.join("boot").join("vmlinuz-virt");
     let rootfs_dir = vm_dir.join("rootfs");
 
@@ -187,8 +194,8 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
         );
     }
 
-    // 1. Build test binaries for aarch64-unknown-linux-musl
-    let target = "aarch64-unknown-linux-musl";
+    // 1. Build test binaries for the target platform
+    let target = platform.musl_target();
     println!("Building test binaries for {target}...");
     let build_status = Command::new("cargo")
         .args(["zigbuild", "--tests", "-p", "miniboxd", "--target", target])
@@ -304,8 +311,20 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
     println!("  serial socket: {sock_path}");
 
     // 6. Spawn QEMU
-    let mut child = Command::new("qemu-system-aarch64")
-        .args(QEMU_BASE_ARGS)
+    let mut child = Command::new(platform.qemu_binary())
+        .args([
+            "-M",
+            platform.machine_type(),
+            "-cpu",
+            "host",
+            "-accel",
+            platform.accel(),
+            "-m",
+            "2048",
+            "-smp",
+            "4",
+            "-kernel",
+        ])
         .arg(&kernel)
         .arg("-initrd")
         .arg(&initrd)
@@ -319,7 +338,7 @@ pub fn test_vm(vm_dir: &Path, cargo_target: &Path) -> Result<()> {
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .spawn()
-        .context("spawning qemu-system-aarch64")?;
+        .with_context(|| format!("spawning {}", platform.qemu_binary()))?;
 
     // 7. Connect to serial socket with retry
     let stream = {
