@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260423:042807'
+updated: '20260423:063311'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -341,6 +341,23 @@ items:
   - type: note
     note: 'Branch feat/qemu-cross-platform pushed. Spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
 log:
+- date: '20260423:063311'
+  session: 20
+  summary: >-
+    refactor: binary-consolidation — linuxbox (Linux primitives), minibox facade (re-exports
+    linuxbox+minibox-core), mbx CLI binary (renamed from minibox-cli). Merged worktree branch
+    to main. Expanded xtask gate crate lists to full coverage.
+  commits:
+  - sha: fe62553
+    branch: main
+  - sha: 2b2c7e0
+    branch: main
+  - sha: 407eda7
+    branch: main
+  - sha: d820ade
+    branch: main
+  - sha: 6237b24
+    branch: main
 - date: '20260423:042807'
   session: 19
   summary: >-
