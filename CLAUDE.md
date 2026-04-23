@@ -624,6 +624,26 @@ Workflows in `.github/workflows/`:
 
 - Check CI status: `mise run all:ci`
 
+## macOS Path Gotchas
+
+- `dirs::config_dir()` on macOS resolves to `~/Library/Application Support/`, not `~/.config/`.
+  Any crate using `dirs` for config paths must account for this in docs and setup instructions.
+
+## Serde/Default Gotcha
+
+- `#[derive(Default)]` ignores `#[serde(default = "fn")]` field annotations — derived `Default`
+  uses `u16::default()` (0), not the serde default fn. When a struct has field-level serde
+  defaults AND is used as `#[serde(default)]` on its parent, implement `Default` manually.
+
+## zoektbox
+
+- Zoekt does not publish prebuilt GitHub release binaries. `ZoektServiceAdapter::provision()`
+  installs via `GOBIN=/opt/zoekt/bin go install github.com/sourcegraph/zoekt/cmd/...@latest`
+  on the remote host. Requires Go on the VPS PATH.
+- SHA256 checksums in `release.rs` are placeholders (`0000...`). The download path in
+  `download.rs` is preserved for future use if Zoekt adds releases; for now `provision()` uses
+  `go install`.
+
 ## Skills Available
 
 Global minibox skills available across all projects:
