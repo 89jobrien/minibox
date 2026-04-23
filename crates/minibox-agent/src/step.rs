@@ -53,9 +53,21 @@ impl CruxLlmStep {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::AgentError;
 
     #[test]
     fn from_env_constructs_without_panic() {
         let _step = CruxLlmStep::from_env();
+    }
+
+    /// Compile-time check: `invoke` must return `Result<LlmResponse, AgentError>`.
+    /// If this doesn't compile, the public API leaks a non-domain error type.
+    #[allow(dead_code)]
+    fn invoke_return_type_is_agent_error<'a, C: cruxai_core::context::Context>(
+        step: &'a CruxLlmStep,
+        ctx: &'a mut C,
+        req: LlmRequest,
+    ) -> impl std::future::Future<Output = Result<LlmResponse, AgentError>> + 'a {
+        step.invoke(ctx, "type-check", req)
     }
 }

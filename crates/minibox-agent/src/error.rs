@@ -21,13 +21,6 @@ pub enum AgentError {
     #[error("agent step failed")]
     Step(#[from] cruxai_core::types::error::CruxErr),
 
-    /// The agent exceeded its token/step/time budget.
-    #[error("budget exceeded: {0}")]
-    BudgetExceeded(String),
-
-    /// Catch-all for ad-hoc agent errors that don't fit other variants.
-    #[error("{0}")]
-    Other(String),
 }
 
 #[cfg(test)]
@@ -89,5 +82,21 @@ mod tests {
             debug.contains("AllProvidersFailed"),
             "Debug should show inner variant, got: {debug}"
         );
+    }
+
+    /// Every variant in AgentError must have a construction site.
+    /// This test will fail to compile if speculative variants (BudgetExceeded,
+    /// Other) are present but not constructible from domain logic.
+    #[test]
+    fn no_unused_variants_budget_exceeded() {
+        // Confirm BudgetExceeded does NOT exist by exhaustively matching.
+        // If this test fails to compile, the variant was re-added without a
+        // construction site — remove it or wire it properly.
+        let err: AgentError = AgentError::Llm(LlmError::AllProvidersFailed("x".into()));
+        match err {
+            AgentError::Llm(_) => {}
+            AgentError::Step(_) => {}
+            // No BudgetExceeded, no Other — exhaustive match proves it.
+        }
     }
 }
