@@ -126,6 +126,32 @@ mod tests {
     }
 
     #[test]
+    fn vm_runner_new_stores_fields() {
+        use std::path::PathBuf;
+        let platform = HostPlatform::LinuxX86_64;
+        let vm_dir = PathBuf::from("/tmp/test-vm");
+        let cargo_target = PathBuf::from("/tmp/target");
+        let runner = VmRunner::new(platform.clone(), vm_dir.clone(), cargo_target.clone());
+        assert_eq!(runner.platform, platform);
+        assert_eq!(runner.vm_dir, vm_dir);
+        assert_eq!(runner.cargo_target, cargo_target);
+    }
+
+    #[test]
+    fn vm_runner_kernel_path() {
+        use std::path::PathBuf;
+        let runner = VmRunner::new(
+            HostPlatform::MacOsArm64,
+            PathBuf::from("/tmp/vm"),
+            PathBuf::from("/tmp/target"),
+        );
+        assert_eq!(
+            runner.kernel_path(),
+            PathBuf::from("/tmp/vm/boot/vmlinuz-virt")
+        );
+    }
+
+    #[test]
     fn vm_handle_serial_sock_path_is_absolute() {
         let pid = std::process::id();
         let sock = format!("/tmp/minibox-vm-serial-{pid}.sock");
@@ -174,6 +200,240 @@ impl VmHandle {
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = std::fs::remove_file(&self.serial_sock);
+        Ok(())
+    }
+}
+
+/// Orchestrates QEMU VM lifecycle for the xtask test harness.
+/// Wraps platform detection, VM directory layout, and QEMU spawn/connect.
+/// `spawn_vm` is the seam for the future Phase B `QemuRuntime` adapter.
+pub struct VmRunner {
+    pub platform: HostPlatform,
+    pub vm_dir: std::path::PathBuf,
+    pub cargo_target: std::path::PathBuf,
+}
+
+impl VmRunner {
+    pub fn new(
+        platform: HostPlatform,
+        vm_dir: std::path::PathBuf,
+        cargo_target: std::path::PathBuf,
+    ) -> Self {
+        Self { platform, vm_dir, cargo_target }
+    }
+
+    pub fn kernel_path(&self) -> std::path::PathBuf {
+        self.vm_dir.join("boot").join("vmlinuz-virt")
+    }
+
+    /// Spawn a QEMU VM with the given kernel command-line append string.
+    /// Returns a `VmHandle` that owns the child process and serial socket.
+    pub fn spawn_vm(&self, kernel_cmdline: &str) -> Result<VmHandle> {
+        let kernel = self.kernel_path();
+        if !kernel.exists() {
+            bail!(
+                "kernel not found at {}; run `cargo xtask build-vm-image` first",
+                kernel.display()
+            );
+        }
+
+        let pid = std::process::id();
+        let sock_path = format!("/tmp/minibox-vm-serial-{pid}.sock");
+        let serial_arg = format!("unix:{sock_path},server,nowait");
+
+        let child = Command::new(self.platform.qemu_binary())
+            .args([
+                "-M",
+                self.platform.machine_type(),
+                "-cpu",
+                "host",
+                "-accel",
+                self.platform.accel(),
+                "-m",
+                "2048",
+                "-smp",
+                "4",
+                "-kernel",
+            ])
+            .arg(&kernel)
+            .args(["-append"])
+            .arg(kernel_cmdline)
+            .args(["-serial"])
+            .arg(&serial_arg)
+            .args(["-display", "none", "-monitor", "none", "-no-reboot"])
+            .stdin(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .with_context(|| format!("spawning {}", self.platform.qemu_binary()))?;
+
+        Ok(VmHandle {
+            child,
+            serial_sock: std::path::PathBuf::from(sock_path),
+        })
+    }
+
+    /// Run tests inside the VM. Stages binaries, spawns VM, streams serial output.
+    pub fn run_tests(&self, suites: &[&str]) -> Result<()> {
+        let target = self.platform.musl_target();
+        let deps_dir = self.cargo_target.join(target).join("debug").join("deps");
+        let tests_dir = self.vm_dir.join("rootfs").join("tests");
+        std::fs::create_dir_all(&tests_dir).context("creating rootfs/tests")?;
+
+        let mut copied = 0usize;
+        for suite in suites {
+            if let Ok(entries) = std::fs::read_dir(&deps_dir) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if !name_str.starts_with(suite) || name_str.contains('.') {
+                        continue;
+                    }
+                    let meta = entry.metadata().context("reading entry metadata")?;
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        if meta.permissions().mode() & 0o111 == 0 {
+                            continue;
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    if !meta.is_file() {
+                        continue;
+                    }
+                    let dest = tests_dir.join(&*name_str);
+                    std::fs::copy(entry.path(), &dest)
+                        .with_context(|| format!("copying {name_str} to rootfs/tests"))?;
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        std::fs::set_permissions(
+                            &dest,
+                            std::fs::Permissions::from_mode(0o755),
+                        )
+                        .context("chmod test binary")?;
+                    }
+                    println!("  copied  tests/{name_str}");
+                    copied += 1;
+                    break;
+                }
+            }
+        }
+
+        let bin_dir = self.cargo_target.join(target).join("debug");
+        for bin_name in &["miniboxd", "minibox"] {
+            let src = bin_dir.join(bin_name);
+            if src.exists() {
+                let dest = tests_dir.join(bin_name);
+                std::fs::copy(&src, &dest)
+                    .with_context(|| format!("copying {bin_name}"))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(
+                        &dest,
+                        std::fs::Permissions::from_mode(0o755),
+                    )
+                    .context("chmod binary")?;
+                }
+                copied += 1;
+            }
+        }
+        println!("  staged  {copied} binaries into rootfs/tests/");
+
+        crate::vm_image::install_init_files(&self.vm_dir.join("rootfs"))?;
+        let initrd = self.vm_dir.join("minibox-initramfs-test.img");
+        crate::vm_image::create_initramfs(&self.vm_dir.join("rootfs"), &initrd, true)?;
+
+        println!("Starting QEMU VM for tests...");
+        let handle =
+            self.spawn_vm("rdinit=/sbin/init console=ttyAMA0,115200 minibox.mode=test")?;
+
+        let stream = handle.connect_serial()?;
+        let reader = BufReader::new(stream);
+        let mut final_rc: Option<i32> = None;
+
+        for line in reader.lines() {
+            match line {
+                Ok(l) => {
+                    println!("[vm] {l}");
+                    if let Some(rest) = l.strip_prefix("MINIBOX_TESTS_DONE rc=") {
+                        final_rc = rest.trim().parse::<i32>().ok();
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[vm] read error: {e}");
+                    break;
+                }
+            }
+        }
+
+        handle.wait()?;
+
+        match final_rc {
+            Some(0) => {
+                println!("All VM tests passed.");
+                Ok(())
+            }
+            Some(n) => bail!("VM tests failed (rc={n})"),
+            None => bail!(
+                "VM tests did not produce a MINIBOX_TESTS_DONE sentinel — check VM output"
+            ),
+        }
+    }
+
+    /// Run the VM in interactive shell mode. Blocks until QEMU exits.
+    pub fn run_interactive(&self) -> Result<()> {
+        let kernel = self.kernel_path();
+        if !kernel.exists() {
+            bail!(
+                "kernel not found at {}; run `cargo xtask build-vm-image` first",
+                kernel.display()
+            );
+        }
+        let initrd = self.vm_dir.join("minibox-initramfs.img");
+        if !initrd.exists() {
+            bail!(
+                "initramfs not found at {}; run `cargo xtask build-vm-image` first",
+                initrd.display()
+            );
+        }
+
+        println!("Booting minibox VM — interactive shell");
+        println!("  Exit: Ctrl-A X");
+        println!();
+
+        let status = Command::new(self.platform.qemu_binary())
+            .args([
+                "-M",
+                self.platform.machine_type(),
+                "-cpu",
+                "host",
+                "-accel",
+                self.platform.accel(),
+                "-m",
+                "2048",
+                "-smp",
+                "4",
+                "-kernel",
+            ])
+            .arg(&kernel)
+            .arg("-initrd")
+            .arg(&initrd)
+            .args([
+                "-append",
+                "rdinit=/sbin/init console=ttyAMA0,115200 minibox.mode=shell",
+                "-nographic",
+                "-no-reboot",
+            ])
+            .status()
+            .with_context(|| {
+                format!("spawning {} (is QEMU installed?)", self.platform.qemu_binary())
+            })?;
+
+        if !status.success() {
+            bail!("QEMU exited with status {}", status);
+        }
         Ok(())
     }
 }
