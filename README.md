@@ -224,9 +224,9 @@ miniboxd starts
       │      │                                                 │
       │    MINIBOX_ADAPTER?                                    │
       │      ├── native (default) → namespaces + cgroups v2    │
-      │      ├── docker                                        │
       │      ├── gke              → proot + copy FS            │
       │      └── colima           → Colima/limactl delegate    │
+      │      (any other value causes daemon to exit at startup) │
       │                                                        │
       ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
@@ -247,9 +247,16 @@ miniboxd starts
 
 ### Adapter Wiring Status
 
-See [`docs/FEATURE_MATRIX.md` — Adapter Wiring Summary](docs/FEATURE_MATRIX.md) for the full
-per-adapter status table. Passing an unwired `MINIBOX_ADAPTER` value causes the daemon to exit
-at startup with an error.
+| Adapter Suite        | `MINIBOX_ADAPTER`  | Wired into daemon | Status                                                         |
+| -------------------- | ------------------ | ----------------- | -------------------------------------------------------------- |
+| Native Linux         | `native` (default) | Yes               | Production                                                     |
+| GKE unprivileged     | `gke`              | Yes               | Production                                                     |
+| macOS Colima         | `colima`           | Yes               | Experimental (exec/logs limited)                               |
+| macOS VZ.framework   | `vz`               | Yes               | Blocked (Apple bug — VZErrorInternal code=1 on macOS 26 ARM64) |
+| macOS Docker Desktop | `docker_desktop`   | No                | Library only                                                   |
+| Windows WSL2         | `wsl2`             | No                | Library only                                                   |
+
+Passing an unwired value causes the daemon to exit at startup with an error.
 
 ---
 
@@ -431,9 +438,13 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 ## Current Limitations
 
-See `CLAUDE.md` ("Current Limitations") for the authoritative list. Key constraints:
-root required, VZ.framework blocked upstream, push/commit/build not wired end-to-end,
-no seccomp/capability dropping, no rootless support.
+- **Partial state persistence** — container records are saved to disk and survive daemon restart
+  (`state.json`), but running processes are not reattached; they appear as `Stopped` on next
+  startup. Bridge-network IP allocations are lost on restart. See `docs/STATE_MODEL.md`.
+- **Root required** — no rootless support
+- **Docker parity incomplete** — push/commit/build traits defined but adapters not wired end-to-end into miniboxd
+- **VZ.framework blocked** — `VZErrorInternal(code=1)` on macOS 26 ARM64 (upstream Apple bug)
+- **No seccomp/capability dropping** — privileged mode uses curated whitelist, not full drop
 
 ---
 
@@ -450,7 +461,7 @@ implementing the trait and wiring the adapter into `HandlerDependencies`.
 | `ImagePusher`        | Partial | OCI Distribution Spec — not wired in miniboxd |
 | `ContainerCommitter` | Partial | Overlay upperdir snapshot — not wired         |
 | `ImageBuilder`       | Partial | Basic Dockerfile subset — not wired           |
-| `StateStore`         | Open    | SQLite / sled — replaces in-memory HashMap    |
+| `StateStore`         | Open    | SQLite / sled — replaces JSON-file persistence |
 
 ---
 

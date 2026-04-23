@@ -103,9 +103,10 @@ For the authoritative last-modified date, run: `git log -1 --format="%ci" -- doc
 | Container records across restarts | ~            | ~         | ~            | ~        | —       | Records survive restart; running containers are not reattached     |
 | Image layer cache persisted       | ✓            | ✓         | ~            | ~        | —       | Disk-backed; survives restarts                                     |
 
-> **Note on state persistence**: CLAUDE.md previously said "no persistent state". This is now
-> partially incorrect. `DaemonState` saves container records to disk (loaded on startup), but
-> the daemon does not reattach to processes from a previous run.
+> **Note on state persistence**: `DaemonState` saves container records to disk (loaded on
+> startup). The daemon does not reattach to running processes after a restart — their PIDs are
+> gone; records survive as `Stopped`. See `docs/STATE_MODEL.md` for the full persistence
+> contract.
 
 ## Platform Daemon Status
 
