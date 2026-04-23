@@ -18,7 +18,7 @@ minibox-llm = { path = "../minibox-llm" }
 # Shared
 anyhow = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+# tokio removed: no production usage in minibox-agent; callers must bring their own runtime
 tracing = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
