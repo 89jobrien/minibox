@@ -14,6 +14,118 @@ use std::{
     time::Duration,
 };
 
+/// Host platform detected at runtime. Determines QEMU binary, accelerator,
+/// Alpine arch, and musl cross-compile target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HostPlatform {
+    MacOsArm64,
+    LinuxX86_64,
+    LinuxArm64,
+}
+
+impl HostPlatform {
+    /// Detect from `std::env::consts::{OS, ARCH}`.
+    pub fn detect() -> anyhow::Result<Self> {
+        Self::from_parts(std::env::consts::OS, std::env::consts::ARCH)
+    }
+
+    /// Construct from explicit OS/arch strings. Used by tests.
+    pub fn from_parts(os: &str, arch: &str) -> anyhow::Result<Self> {
+        match (os, arch) {
+            ("macos", "aarch64") => Ok(Self::MacOsArm64),
+            ("linux", "x86_64") => Ok(Self::LinuxX86_64),
+            ("linux", "aarch64") => Ok(Self::LinuxArm64),
+            _ => anyhow::bail!(
+                "unsupported host: os={os} arch={arch}\n  \
+                 QEMU VM runner requires macOS arm64 (hvf) or Linux x86_64/arm64 (kvm)."
+            ),
+        }
+    }
+
+    pub fn qemu_binary(&self) -> &'static str {
+        match self {
+            Self::MacOsArm64 | Self::LinuxArm64 => "qemu-system-aarch64",
+            Self::LinuxX86_64 => "qemu-system-x86_64",
+        }
+    }
+
+    pub fn accel(&self) -> &'static str {
+        match self {
+            Self::MacOsArm64 => "hvf",
+            Self::LinuxX86_64 | Self::LinuxArm64 => "kvm",
+        }
+    }
+
+    pub fn alpine_arch(&self) -> &'static str {
+        match self {
+            Self::MacOsArm64 | Self::LinuxArm64 => "aarch64",
+            Self::LinuxX86_64 => "x86_64",
+        }
+    }
+
+    pub fn musl_target(&self) -> &'static str {
+        match self {
+            Self::MacOsArm64 | Self::LinuxArm64 => "aarch64-unknown-linux-musl",
+            Self::LinuxX86_64 => "x86_64-unknown-linux-musl",
+        }
+    }
+
+    /// QEMU machine type. Currently `virt` for all platforms.
+    /// Revisit when wiring as a runtime adapter (Phase B).
+    pub fn machine_type(&self) -> &'static str {
+        "virt"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_platform_macos_arm64() {
+        let p = HostPlatform::from_parts("macos", "aarch64").unwrap();
+        assert_eq!(p.qemu_binary(), "qemu-system-aarch64");
+        assert_eq!(p.accel(), "hvf");
+        assert_eq!(p.alpine_arch(), "aarch64");
+        assert_eq!(p.musl_target(), "aarch64-unknown-linux-musl");
+        assert_eq!(p.machine_type(), "virt");
+    }
+
+    #[test]
+    fn host_platform_linux_x86_64() {
+        let p = HostPlatform::from_parts("linux", "x86_64").unwrap();
+        assert_eq!(p.qemu_binary(), "qemu-system-x86_64");
+        assert_eq!(p.accel(), "kvm");
+        assert_eq!(p.alpine_arch(), "x86_64");
+        assert_eq!(p.musl_target(), "x86_64-unknown-linux-musl");
+        assert_eq!(p.machine_type(), "virt");
+    }
+
+    #[test]
+    fn host_platform_linux_arm64() {
+        let p = HostPlatform::from_parts("linux", "aarch64").unwrap();
+        assert_eq!(p.qemu_binary(), "qemu-system-aarch64");
+        assert_eq!(p.accel(), "kvm");
+        assert_eq!(p.alpine_arch(), "aarch64");
+        assert_eq!(p.musl_target(), "aarch64-unknown-linux-musl");
+        assert_eq!(p.machine_type(), "virt");
+    }
+
+    #[test]
+    fn host_platform_unsupported_os_returns_err() {
+        let result = HostPlatform::from_parts("windows", "x86_64");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("windows"), "error should mention OS: {msg}");
+    }
+
+    #[test]
+    fn host_platform_unsupported_arch_returns_err() {
+        let result = HostPlatform::from_parts("linux", "riscv64");
+        assert!(result.is_err());
+    }
+}
+
 /// Common QEMU baseline flags shared by interactive and test-runner modes.
 const QEMU_BASE_ARGS: &[&str] = &[
     "-M", "virt", "-cpu", "host", "-accel", "hvf", "-m", "2048", "-smp", "4", "-kernel",
