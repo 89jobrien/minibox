@@ -11,7 +11,7 @@ pub async fn deploy_binaries(ssh_host: &str, src_dir: &Path, dest_path: &str) ->
         .args([
             "-avz",
             "--chmod=755",
-            &format!("{}/", src_dir.display()),
+            &format!("{}/", src_dir.to_string_lossy()),
             &format!("{ssh_host}:{dest_path}/"),
         ])
         .status()

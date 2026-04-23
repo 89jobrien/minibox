@@ -39,11 +39,8 @@ impl ZoektServiceAdapter {
     /// Must be called once before `start()`.
     pub async fn provision(&self) -> Result<()> {
         let tmp = tempfile::tempdir().context("tempdir")?;
-        crate::download::download_release(
-            crate::release::ZoektPlatform::LinuxAmd64,
-            tmp.path(),
-        )
-        .await?;
+        crate::download::download_release(crate::release::ZoektPlatform::LinuxAmd64, tmp.path())
+            .await?;
         crate::deploy::deploy_binaries(
             &self.config.ssh_host,
             tmp.path(),
@@ -100,6 +97,8 @@ impl ZoektServiceAdapter {
     }
 
     pub async fn stop(&self) -> Result<()> {
+        // pkill exits non-zero if no process matched; append `; true` to treat
+        // "not running" as success. SSH transport failures still propagate.
         ssh_run(
             &self.config.ssh_host,
             "pkill -f zoekt-webserver; pkill -f zoekt-indexserver; true",
@@ -111,14 +110,15 @@ impl ZoektServiceAdapter {
     }
 
     pub async fn status(&self) -> Result<bool> {
-        let url = format!(
-            "http://{}:{}/healthz",
-            self.config.ssh_host, self.config.port
-        );
-        match reqwest::get(&url).await {
-            Ok(r) => Ok(r.status().is_success()),
-            Err(_) => Ok(false),
-        }
+        // Try Tailscale IP first (webserver is bound to it); fall back to ssh_host alias
+        let host = self.tailscale_ip().await.unwrap_or_else(|_| self.config.ssh_host.clone());
+        let url = format!("http://{host}:{}/healthz", self.config.port);
+        let running = match reqwest::get(&url).await {
+            Ok(r) => r.status().is_success(),
+            Err(_) => false,
+        };
+        tracing::debug!(host = %host, port = self.config.port, running, "zoektbox: status check");
+        Ok(running)
     }
 
     pub async fn reindex(&self, repo: Option<&str>) -> Result<()> {
@@ -126,9 +126,7 @@ impl ZoektServiceAdapter {
         let git_index = self.bin("zoekt-git-index");
         let cmd = match repo {
             Some(r) => format!("{git_index} -index {index} {index}/{r}.git"),
-            None => format!(
-                "for d in {index}/*.git; do {git_index} -index {index} \"$d\"; done"
-            ),
+            None => format!("for d in {index}/*.git; do {git_index} -index {index} \"$d\"; done"),
         };
         ssh_run(&self.config.ssh_host, &cmd)
             .await
