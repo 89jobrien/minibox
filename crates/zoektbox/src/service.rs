@@ -35,24 +35,27 @@ impl ZoektServiceAdapter {
         Self { config }
     }
 
-    /// Download, verify, and rsync Zoekt binaries to the VPS.
-    /// Must be called once before `start()`.
+    /// Install Zoekt binaries on the VPS via `go install` and create the index directory.
+    /// Requires Go on the remote PATH. Must be called once before `start()`.
     pub async fn provision(&self) -> Result<()> {
-        let tmp = tempfile::tempdir().context("tempdir")?;
-        crate::download::download_release(crate::release::ZoektPlatform::LinuxAmd64, tmp.path())
-            .await?;
-        crate::deploy::deploy_binaries(
-            &self.config.ssh_host,
-            tmp.path(),
-            &format!("{}/bin", self.config.remote_base),
-        )
-        .await?;
-        // Create index dir on VPS
+        let base = &self.config.remote_base;
+        // Ensure destination dirs exist
         ssh_run(
             &self.config.ssh_host,
-            &format!("mkdir -p {}/index", self.config.remote_base),
+            &format!("mkdir -p {base}/bin {base}/index"),
         )
-        .await?;
+        .await
+        .context("mkdir provision dirs")?;
+
+        // Install all Zoekt tools; GOBIN ensures they land in our bin dir
+        info!(host = %self.config.ssh_host, "zoektbox: installing zoekt via go install");
+        ssh_run(
+            &self.config.ssh_host,
+            &format!("GOBIN={base}/bin go install github.com/sourcegraph/zoekt/cmd/...@latest"),
+        )
+        .await
+        .context("go install zoekt")?;
+
         info!(host = %self.config.ssh_host, "zoektbox: provision complete");
         Ok(())
     }
@@ -111,7 +114,10 @@ impl ZoektServiceAdapter {
 
     pub async fn status(&self) -> Result<bool> {
         // Try Tailscale IP first (webserver is bound to it); fall back to ssh_host alias
-        let host = self.tailscale_ip().await.unwrap_or_else(|_| self.config.ssh_host.clone());
+        let host = self
+            .tailscale_ip()
+            .await
+            .unwrap_or_else(|_| self.config.ssh_host.clone());
         let url = format!("http://{host}:{}/healthz", self.config.port);
         let running = match reqwest::get(&url).await {
             Ok(r) => r.status().is_success(),
