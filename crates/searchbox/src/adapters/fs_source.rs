@@ -90,7 +90,9 @@ impl IndexSource for FilesystemSource {
             .await
             .map_err(|e| IndexError::IndexCmd(e.to_string()))?;
 
-        Ok(SyncStats { files_synced: total })
+        Ok(SyncStats {
+            files_synced: total,
+        })
     }
 }
 

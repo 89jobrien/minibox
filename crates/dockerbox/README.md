@@ -11,20 +11,20 @@ HTTP-over-Unix-socket shim that translates Docker API calls to the minibox proto
 
 ## API Coverage
 
-| Endpoint | Status |
-|----------|--------|
-| `POST /containers/create` | Implemented |
-| `POST /containers/{id}/start` | No-op (minibox starts at `Run` time) |
-| `GET /containers/json` | Implemented |
-| `GET /containers/{id}/json` | Implemented |
-| `DELETE /containers/{id}` | Implemented |
-| `GET /containers/{id}/logs` | Stub |
-| `GET /images/json` | Implemented |
-| `POST /images/create` (pull) | Implemented |
-| `GET /networks` | In-memory stub |
-| `GET /volumes` | Stub (maps to `~/.local/share/dockerbox/volumes/`) |
-| `GET /_ping` | Implemented |
-| `GET /info` | Implemented |
+| Endpoint                      | Status                                             |
+| ----------------------------- | -------------------------------------------------- |
+| `POST /containers/create`     | Implemented                                        |
+| `POST /containers/{id}/start` | No-op (minibox starts at `Run` time)               |
+| `GET /containers/json`        | Implemented                                        |
+| `GET /containers/{id}/json`   | Implemented                                        |
+| `DELETE /containers/{id}`     | Implemented                                        |
+| `GET /containers/{id}/logs`   | Stub                                               |
+| `GET /images/json`            | Implemented                                        |
+| `POST /images/create` (pull)  | Implemented                                        |
+| `GET /networks`               | In-memory stub                                     |
+| `GET /volumes`                | Stub (maps to `~/.local/share/dockerbox/volumes/`) |
+| `GET /_ping`                  | Implemented                                        |
+| `GET /info`                   | Implemented                                        |
 
 ## ID Translation
 

@@ -17,7 +17,11 @@ use searchbox::{
 use zoektbox::service::{ZoektServiceAdapter, ZoektServiceConfig};
 
 #[derive(Parser)]
-#[command(name = "searchboxd", version, about = "Zoekt-backed code search MCP server")]
+#[command(
+    name = "searchboxd",
+    version,
+    about = "Zoekt-backed code search MCP server"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -75,23 +79,18 @@ async fn main() -> Result<()> {
         }
 
         Cmd::Mcp => {
-            let base_url = format!(
-                "http://{}:{}",
-                cfg.service.vps_host, cfg.service.zoekt_port
-            );
+            let base_url = format!("http://{}:{}", cfg.service.vps_host, cfg.service.zoekt_port);
             let zoekt = ZoektAdapter::new(&base_url);
 
             let mut providers: Vec<Box<dyn searchbox::domain::SearchProvider>> =
                 vec![Box::new(zoekt)];
 
             if cfg.local.enabled {
-                providers.push(Box::new(
-                    searchbox::adapters::local::LocalZoektSource::new(
-                        "local",
-                        "",
-                        cfg.local.port,
-                    ),
-                ));
+                providers.push(Box::new(searchbox::adapters::local::LocalZoektSource::new(
+                    "local",
+                    "",
+                    cfg.local.port,
+                )));
             }
 
             let merged = MergedAdapter::new(providers);

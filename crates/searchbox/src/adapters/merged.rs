@@ -49,11 +49,7 @@ impl SearchProvider for MergedAdapter {
     async fn list_repos(&self) -> Result<Vec<RepoInfo>, SearchError> {
         let futs = self.providers.iter().map(|p| p.list_repos());
         let all = join_all(futs).await;
-        let mut repos: Vec<RepoInfo> = all
-            .into_iter()
-            .filter_map(|r| r.ok())
-            .flatten()
-            .collect();
+        let mut repos: Vec<RepoInfo> = all.into_iter().filter_map(|r| r.ok()).flatten().collect();
         repos.dedup_by(|a, b| a.name == b.name);
         Ok(repos)
     }

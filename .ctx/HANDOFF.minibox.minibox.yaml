@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260422:083000'
+updated: '20260422:231641'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -214,6 +214,24 @@ items:
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
   extra: []
+- id: searchbox-impl
+  name: searchbox-impl
+  priority: P1
+  status: open
+  title: "Complete searchbox+zoektbox implementation (Tasks 5-14)"
+  description: |
+    Tasks 1-4 done (zoektbox scaffold, download/verify, deploy/service, searchbox domain).
+    Remaining: SearchboxConfig (T5), MergedAdapter/Mock (T6), ZoektAdapter (T7),
+    IndexSources git+fs+local (T8), MCP server (T9), searchboxd binary (T10),
+    wire MCP settings.json (T11), provision config+VPS (T12), integration tests (T13),
+    xtask clippy gates (T14). Plan: docs/superpowers/plans/2026-04-22-searchbox.md
+  files:
+    - crates/searchbox/src/config.rs
+    - crates/searchbox/src/adapters/
+    - crates/searchbox/src/mcp.rs
+    - crates/searchbox/bin/searchboxd.rs
+    - crates/searchbox/tests/
+  extra: []
 - id: minibox-70
   name: handler-coverage-80pct
   priority: P1
@@ -288,6 +306,22 @@ items:
     note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
       required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
 log:
+- date: '20260422:231641'
+  session: 17
+  summary: "feat(searchbox+zoektbox): Tasks 1-4 done via subagent TDD — zoektbox scaffold/download/deploy/service, searchbox domain scaffold with ports+types"
+  commits:
+  - sha: 62756ba
+    branch: main
+  - sha: 510053c
+    branch: main
+  - sha: cd6fc83
+    branch: main
+  - sha: f96b710
+    branch: main
+  - sha: 0e26645
+    branch: main
+  - sha: b951b16
+    branch: main
 - date: '20260422:083000'
   session: 16
   summary: 'Phase 1 conformance infrastructure: ConformanceCapability trait with built-in

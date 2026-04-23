@@ -69,7 +69,10 @@ source = "fs"
 "#;
     let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
     let err = cfg.validate_pub().unwrap_err();
-    assert!(err.to_string().contains("path"), "expected 'path' in error: {err}");
+    assert!(
+        err.to_string().contains("path"),
+        "expected 'path' in error: {err}"
+    );
 }
 
 #[test]
@@ -84,7 +87,10 @@ source = "local"
 "#;
     let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
     let err = cfg.validate_pub().unwrap_err();
-    assert!(err.to_string().contains("path"), "expected 'path' in error: {err}");
+    assert!(
+        err.to_string().contains("path"),
+        "expected 'path' in error: {err}"
+    );
 }
 
 #[test]

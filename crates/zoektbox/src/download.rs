@@ -1,11 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tar::Archive;
 use tracing::info;
 
-use crate::release::{expected_sha256, ZoektPlatform, ZOEKT_BINARIES};
+use crate::release::{ZOEKT_BINARIES, ZoektPlatform, expected_sha256};
 
 /// Download the Zoekt release tarball for `platform`, verify its SHA256,
 /// extract the binaries into `dest_dir`, and return paths to the extracted binaries.
