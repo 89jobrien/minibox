@@ -1,0 +1,28 @@
+/Users/joe/dev/minibox/fuzz/target/debug/deps/minibox-54c3de78ffcd16e4.d: /Users/joe/dev/minibox/crates/minibox/src/lib.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/builder.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/commit.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/registry.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/gke.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima_push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/docker_desktop.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/hcs.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/smolvm.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/vf.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/wsl2.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/host.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/none.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/ghcr.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/image_loader.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mocks.rs /Users/joe/dev/minibox/crates/minibox/src/daemonbox_state.rs /Users/joe/dev/minibox/crates/minibox/src/error.rs
+
+/Users/joe/dev/minibox/fuzz/target/debug/deps/libminibox-54c3de78ffcd16e4.rlib: /Users/joe/dev/minibox/crates/minibox/src/lib.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/builder.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/commit.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/registry.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/gke.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima_push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/docker_desktop.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/hcs.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/smolvm.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/vf.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/wsl2.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/host.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/none.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/ghcr.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/image_loader.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mocks.rs /Users/joe/dev/minibox/crates/minibox/src/daemonbox_state.rs /Users/joe/dev/minibox/crates/minibox/src/error.rs
+
+/Users/joe/dev/minibox/fuzz/target/debug/deps/libminibox-54c3de78ffcd16e4.rmeta: /Users/joe/dev/minibox/crates/minibox/src/lib.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/builder.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/commit.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/registry.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/gke.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/colima_push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/docker_desktop.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/hcs.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/smolvm.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/vf.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/wsl2.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/mod.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/host.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/network/none.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/ghcr.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/image_loader.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/push.rs /Users/joe/dev/minibox/crates/minibox/src/adapters/mocks.rs /Users/joe/dev/minibox/crates/minibox/src/daemonbox_state.rs /Users/joe/dev/minibox/crates/minibox/src/error.rs
+
+/Users/joe/dev/minibox/crates/minibox/src/lib.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/mod.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/builder.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/commit.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/registry.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/gke.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/colima.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/colima_push.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/docker_desktop.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/hcs.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/smolvm.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/vf.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/wsl2.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/network/mod.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/network/host.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/network/none.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/ghcr.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/image_loader.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/push.rs:
+/Users/joe/dev/minibox/crates/minibox/src/adapters/mocks.rs:
+/Users/joe/dev/minibox/crates/minibox/src/daemonbox_state.rs:
+/Users/joe/dev/minibox/crates/minibox/src/error.rs:

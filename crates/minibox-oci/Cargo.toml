@@ -23,6 +23,11 @@ flate2 = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 
+[features]
+# Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.
+# Never enable in production builds.
+fuzzing = []
+
 [dev-dependencies]
 tempfile = { workspace = true }
 wiremock = { workspace = true }
