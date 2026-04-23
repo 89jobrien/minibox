@@ -517,10 +517,8 @@ impl TrajectoryWriter {
     /// `{dir}/{session_id}.yaml`, replacing any existing file.
     pub fn write(&self, trajectory: &Trajectory) -> Result<PathBuf> {
         let path = self.path_for(&trajectory.session_id);
-        let yaml =
-            serde_yaml::to_string(trajectory).context("serialize trajectory to YAML")?;
-        fs::write(&path, yaml)
-            .with_context(|| format!("write trajectory: {}", path.display()))?;
+        let yaml = serde_yaml::to_string(trajectory).context("serialize trajectory to YAML")?;
+        fs::write(&path, yaml).with_context(|| format!("write trajectory: {}", path.display()))?;
         Ok(path)
     }
 

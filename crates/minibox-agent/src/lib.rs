@@ -30,7 +30,6 @@
 //! ```
 
 pub mod agent;
-pub mod trajectory;
 pub mod conversation;
 pub mod error;
 pub mod events;
@@ -42,6 +41,7 @@ pub mod session_log;
 pub mod step;
 pub mod tools;
 pub mod trace;
+pub mod trajectory;
 
 pub use trace::FileTraceStore;
 
