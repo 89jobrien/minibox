@@ -10,9 +10,11 @@
 //! No network, no actual search backend required.
 
 use async_trait::async_trait;
-use searchbox::domain::{RepoInfo, SearchError, SearchProvider, SearchQuery, SearchResult, SourceType};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use searchbox::domain::{
+    RepoInfo, SearchError, SearchProvider, SearchQuery, SearchResult, SourceType,
+};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // Mock provider for conformance tests
@@ -99,7 +101,10 @@ async fn search_provider_search_returns_structured_result() {
     assert!(!result.file.is_empty(), "result must have file path");
     assert!(result.line > 0, "result must have line number");
     assert!(!result.snippet.is_empty(), "result must have snippet");
-    assert!(result.score > 0.0 && result.score <= 1.0, "result score must be in range [0, 1]");
+    assert!(
+        result.score > 0.0 && result.score <= 1.0,
+        "result score must be in range [0, 1]"
+    );
 }
 
 #[tokio::test]
@@ -119,7 +124,10 @@ async fn search_provider_search_failure_returns_error() {
     let provider = CountingSearchProvider::new(true);
     let query = SearchQuery::new("test");
     let result = provider.search(query.clone()).await;
-    assert!(result.is_err(), "search must return error when backend fails");
+    assert!(
+        result.is_err(),
+        "search must return error when backend fails"
+    );
 }
 
 #[tokio::test]
@@ -128,7 +136,10 @@ async fn search_provider_list_repos_returns_list() {
     let result = provider.list_repos().await;
     assert!(result.is_ok(), "list_repos must succeed");
     let repos = result.unwrap();
-    assert!(!repos.is_empty(), "list_repos should return at least one repo");
+    assert!(
+        !repos.is_empty(),
+        "list_repos should return at least one repo"
+    );
 }
 
 #[tokio::test]
@@ -162,7 +173,10 @@ async fn search_provider_list_repos_tracks_invocations() {
 async fn search_provider_list_repos_failure_returns_error() {
     let provider = CountingSearchProvider::new(true);
     let result = provider.list_repos().await;
-    assert!(result.is_err(), "list_repos must return error when backend fails");
+    assert!(
+        result.is_err(),
+        "list_repos must return error when backend fails"
+    );
 }
 
 #[tokio::test]
@@ -201,8 +215,16 @@ async fn search_provider_search_and_list_independent() {
     let _ = provider.list_repos().await;
     let _ = provider.search(query.clone()).await;
 
-    assert_eq!(provider.search_count(), 2, "search count should track only search calls");
-    assert_eq!(provider.list_count(), 1, "list count should track only list calls");
+    assert_eq!(
+        provider.search_count(),
+        2,
+        "search count should track only search calls"
+    );
+    assert_eq!(
+        provider.list_count(),
+        1,
+        "list count should track only list calls"
+    );
 }
 
 #[tokio::test]
@@ -242,13 +264,15 @@ async fn search_provider_error_message_is_informative() {
 async fn search_provider_empty_results_valid() {
     let provider = CountingSearchProvider::new(false);
 
-    // Even though our mock returns results, the contract allows empty results
-    // This test verifies that the provider interface accepts empty Vec<SearchResult>
+    // The contract allows empty results — verify search returns Ok (not Err) even
+    // when no results match, and that the result vec is accessible.
     let query = SearchQuery::new("nonexistent");
-    let result = provider.search(query.clone()).await.unwrap();
-    // Just verify we can call search without panic
-    let _ = result;
-    assert!(true, "search should accept queries that might return empty results");
+    let results = provider
+        .search(query.clone())
+        .await
+        .expect("search must return Ok even for queries with no results");
+    // Mock always returns results; contract assertion is that the type is Vec<SearchResult>
+    let _ = results.len(); // exercise the contract: result is indexable
 }
 
 #[tokio::test]
@@ -269,6 +293,14 @@ async fn search_provider_concurrent_safety() {
 
     let _ = tokio::join!(h1, h2);
 
-    assert_eq!(provider.search_count(), 1, "concurrent calls should be tracked");
-    assert_eq!(provider.list_count(), 1, "concurrent calls should be tracked");
+    assert_eq!(
+        provider.search_count(),
+        1,
+        "concurrent calls should be tracked"
+    );
+    assert_eq!(
+        provider.list_count(),
+        1,
+        "concurrent calls should be tracked"
+    );
 }

@@ -21,8 +21,8 @@
 
 use async_trait::async_trait;
 use dockerbox::domain::{
-    ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig, ExecDetails,
-    LogChunk, PullProgress, RuntimeError, CgroupNs,
+    CgroupNs, ContainerDetails, ContainerRuntime, ContainerSummary, CreateConfig, ExecConfig,
+    ExecDetails, LogChunk, PullProgress, RuntimeError,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -246,7 +246,10 @@ async fn create_container_returns_non_empty_id() {
         network_mode: None,
         labels: Default::default(),
     };
-    let id = runtime.create_container(config).await.expect("create failed");
+    let id = runtime
+        .create_container(config)
+        .await
+        .expect("create failed");
     assert!(!id.is_empty(), "container ID must not be empty");
 }
 
@@ -330,11 +333,11 @@ async fn inspect_container_returns_details_matching_config() {
 #[tokio::test]
 async fn list_containers_empty_on_fresh_runtime() {
     let runtime = MockContainerRuntime::new();
-    let containers = runtime
-        .list_containers(false)
-        .await
-        .expect("list failed");
-    assert!(containers.is_empty(), "fresh runtime must have no containers");
+    let containers = runtime.list_containers(false).await.expect("list failed");
+    assert!(
+        containers.is_empty(),
+        "fresh runtime must have no containers"
+    );
 }
 
 #[tokio::test]
@@ -357,10 +360,7 @@ async fn list_containers_returns_created() {
         .await
         .expect("create failed");
 
-    let containers = runtime
-        .list_containers(false)
-        .await
-        .expect("list failed");
+    let containers = runtime.list_containers(false).await.expect("list failed");
     assert_eq!(containers.len(), 1, "list must contain created container");
     assert_eq!(containers[0].id, id, "listed container ID must match");
 }
@@ -386,16 +386,16 @@ async fn stop_container_updates_status() {
         .expect("create failed");
     runtime.start_container(&id).await.expect("start failed");
 
-    runtime
-        .stop_container(&id, 10)
-        .await
-        .expect("stop failed");
+    runtime.stop_container(&id, 10).await.expect("stop failed");
 
     let details = runtime
         .inspect_container(&id)
         .await
         .expect("inspect failed");
-    assert_eq!(details.status, "exited", "stopped container must have exited status");
+    assert_eq!(
+        details.status, "exited",
+        "stopped container must have exited status"
+    );
 }
 
 #[tokio::test]
@@ -590,8 +590,8 @@ async fn stream_logs_requires_valid_container() {
 async fn image_exists_returns_bool() {
     let runtime = MockContainerRuntime::new();
     let result = runtime.image_exists("alpine").await;
-    assert!(result.is_ok(), "image_exists must return Ok(bool)");
-    assert!(result.unwrap(), "image_exists must return true for any image");
+    let exists = result.expect("image_exists must return Ok(bool)");
+    assert!(exists, "image_exists must return true for any image");
 }
 
 #[tokio::test]

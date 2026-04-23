@@ -114,8 +114,9 @@ pub fn make_stub_record(id: impl Into<String>) -> daemonbox::state::ContainerRec
             pid: None,
         },
         pid: None,
-        rootfs_path: std::path::PathBuf::from("/tmp/minibox-test-rootfs"),
-        cgroup_path: std::path::PathBuf::from("/tmp/minibox-test-cgroup"),
+        // Use ID-namespaced paths under /tmp to avoid collisions in parallel test runs.
+        rootfs_path: std::path::PathBuf::from(format!("/tmp/minibox-test-{id}-rootfs")),
+        cgroup_path: std::path::PathBuf::from(format!("/tmp/minibox-test-{id}-cgroup")),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
         source_image_ref: Some("test:latest".to_string()),

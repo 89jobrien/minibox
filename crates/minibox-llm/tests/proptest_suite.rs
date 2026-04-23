@@ -9,14 +9,14 @@
 //! No network, no API calls.
 
 use async_trait::async_trait;
-use minibox_llm::error::{LlmError, HttpStatusError};
+use minibox_llm::chain::FallbackChain;
+use minibox_llm::error::{HttpStatusError, LlmError};
 use minibox_llm::provider::LlmProvider;
 use minibox_llm::retry::{RetryConfig, RetryingProvider};
 use minibox_llm::types::{CompletionRequest, CompletionResponse};
-use minibox_llm::chain::FallbackChain;
 use proptest::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // Mock provider for property tests
@@ -50,10 +50,7 @@ impl LlmProvider for CountingTransientProvider {
         &self.name
     }
 
-    async fn complete(
-        &self,
-        _request: &CompletionRequest,
-    ) -> Result<CompletionResponse, LlmError> {
+    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         let current_call = self.call_count.fetch_add(1, Ordering::Relaxed);
         if current_call < self.fail_count {
             // Return transient error (HTTP 503) that should be retried
@@ -98,10 +95,7 @@ impl LlmProvider for PermanentFailProvider {
         &self.name
     }
 
-    async fn complete(
-        &self,
-        _request: &CompletionRequest,
-    ) -> Result<CompletionResponse, LlmError> {
+    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         self.call_count.fetch_add(1, Ordering::Relaxed);
         // Return a permanent error (schema parse error)
         Err(LlmError::SchemaParseError("bad schema".to_string()))
@@ -161,20 +155,18 @@ proptest! {
     ) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            let mut providers: Vec<Box<dyn LlmProvider>> = Vec::new();
-            let mut call_counts = Vec::new();
-
-            for i in 0..num_providers {
-                let provider = PermanentFailProvider::new(format!("provider-{}", i));
-                let count = provider.call_count.clone();
-                call_counts.push(count);
-                providers.push(Box::new(provider));
-            }
-
-            // Replace the first provider with a successful one
+            // Build the success provider first, at index 0.
             let success_provider = CountingTransientProvider::new("success", 0);
             let success_count = success_provider.call_count.clone();
-            providers[0] = Box::new(success_provider);
+
+            // Build fail providers for indices 1..num_providers, tracking their counts.
+            let mut fail_counts = Vec::new();
+            let mut providers: Vec<Box<dyn LlmProvider>> = vec![Box::new(success_provider)];
+            for i in 1..num_providers {
+                let provider = PermanentFailProvider::new(format!("provider-{}", i));
+                fail_counts.push(provider.call_count.clone());
+                providers.push(Box::new(provider));
+            }
 
             let chain = FallbackChain::new(providers);
             let request = CompletionRequest::default();
@@ -182,11 +174,11 @@ proptest! {
             let response = chain.complete(&request).await;
             prop_assert!(response.is_ok());
 
-            // Only the first provider should have been called
+            // Only the first provider (success) should have been called.
             prop_assert_eq!(success_count.load(Ordering::Relaxed), 1);
 
-            // Remaining providers should not be called
-            for count in call_counts.iter() {
+            // Remaining fail providers must not have been called.
+            for count in fail_counts.iter() {
                 prop_assert_eq!(count.load(Ordering::Relaxed), 0);
             }
             Ok(())

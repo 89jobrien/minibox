@@ -10,12 +10,12 @@
 //! No network, no API keys required.
 
 use async_trait::async_trait;
+use minibox_llm::chain::FallbackChain;
 use minibox_llm::error::LlmError;
 use minibox_llm::provider::LlmProvider;
 use minibox_llm::types::{CompletionRequest, CompletionResponse};
-use minibox_llm::chain::FallbackChain;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // Mock provider that tracks call count
@@ -49,18 +49,12 @@ impl LlmProvider for CountingProvider {
         &self.name
     }
 
-    async fn complete(
-        &self,
-        _request: &CompletionRequest,
-    ) -> Result<CompletionResponse, LlmError> {
+    async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         self.call_count.fetch_add(1, Ordering::Relaxed);
         if self.should_fail {
             Err(LlmError::ProviderError {
                 provider: self.name.clone(),
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "test error",
-                )),
+                source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, "test error")),
             })
         } else {
             Ok(CompletionResponse {
@@ -103,9 +97,10 @@ async fn llm_provider_complete_success_returns_response() {
         max_retries: None,
         schema: None,
     };
-    let response = provider.complete(&request).await;
-    assert!(response.is_ok());
-    let resp = response.unwrap();
+    let resp = provider
+        .complete(&request)
+        .await
+        .expect("provider.complete must succeed");
     assert_eq!(resp.text, "test response");
 }
 
@@ -153,10 +148,7 @@ async fn fallback_chain_first_success_returns_immediately() {
     let p2 = CountingProvider::new("second", false);
     let second_call_count = p2.call_count.clone();
 
-    let chain = FallbackChain::new(vec![
-        Box::new(p1),
-        Box::new(p2),
-    ]);
+    let chain = FallbackChain::new(vec![Box::new(p1), Box::new(p2)]);
 
     let request = CompletionRequest {
         prompt: "test".to_string(),
@@ -182,10 +174,7 @@ async fn fallback_chain_tries_next_on_failure() {
     let p2 = CountingProvider::new("second", false);
     let second_call_count = p2.call_count.clone();
 
-    let chain = FallbackChain::new(vec![
-        Box::new(p1),
-        Box::new(p2),
-    ]);
+    let chain = FallbackChain::new(vec![Box::new(p1), Box::new(p2)]);
 
     let request = CompletionRequest {
         prompt: "test".to_string(),
@@ -209,10 +198,7 @@ async fn fallback_chain_all_failures_returns_all_providers_failed() {
     let p1 = CountingProvider::new("first", true);
     let p2 = CountingProvider::new("second", true);
 
-    let chain = FallbackChain::new(vec![
-        Box::new(p1),
-        Box::new(p2),
-    ]);
+    let chain = FallbackChain::new(vec![Box::new(p1), Box::new(p2)]);
 
     let request = CompletionRequest {
         prompt: "test".to_string(),
@@ -262,7 +248,10 @@ async fn fallback_chain_response_contains_provider_name() {
         schema: None,
     };
 
-    let response = chain.complete(&request).await.unwrap();
+    let response = chain
+        .complete(&request)
+        .await
+        .expect("fallback chain must succeed when first provider succeeds");
     assert_eq!(response.provider, "my-test-provider");
 }
 
@@ -275,11 +264,7 @@ async fn fallback_chain_tries_all_providers_in_order() {
     let p3 = CountingProvider::new("third", true);
     let third_calls = p3.call_count.clone();
 
-    let chain = FallbackChain::new(vec![
-        Box::new(p1),
-        Box::new(p2),
-        Box::new(p3),
-    ]);
+    let chain = FallbackChain::new(vec![Box::new(p1), Box::new(p2), Box::new(p3)]);
 
     let request = CompletionRequest {
         prompt: "test".to_string(),

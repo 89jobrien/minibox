@@ -259,11 +259,18 @@ fn socket_path_empty_socket_path_is_treated_as_default() {
     unsafe {
         std::env::remove_var("MINIBOX_SOCKET_PATH");
     }
-    // An empty string should be treated as "path not set" and use the default
+    // Empty string must be treated as absent — falls through to the platform default.
+    #[cfg(target_os = "macos")]
     assert_eq!(
         path,
-        PathBuf::from(""),
-        "empty MINIBOX_SOCKET_PATH results in empty PathBuf from std::env::var"
+        PathBuf::from("/tmp/minibox/miniboxd.sock"),
+        "empty MINIBOX_SOCKET_PATH must fall through to macOS platform default"
+    );
+    #[cfg(not(target_os = "macos"))]
+    assert_eq!(
+        path,
+        PathBuf::from("/run/minibox/miniboxd.sock"),
+        "empty MINIBOX_SOCKET_PATH must fall through to Linux platform default"
     );
 }
 

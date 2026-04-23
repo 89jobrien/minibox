@@ -9,18 +9,8 @@
 
 use tailbox::TailnetConfig;
 
-#[test]
-fn default_key_secret_name_is_tailscale_auth_key() {
-    assert_eq!(
-        TailnetConfig::default().key_secret_name,
-        "tailscale-auth-key"
-    );
-}
-
-#[test]
-fn default_auth_key_is_none() {
-    assert!(TailnetConfig::default().auth_key.is_none());
-}
+// default_key_secret_name and default_auth_key tests live in proptest_suite.rs
+// to avoid duplication — see the "Default value contract" section there.
 
 #[test]
 fn clone_produces_equal_key_secret_name() {

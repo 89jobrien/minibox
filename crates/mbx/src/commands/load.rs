@@ -53,6 +53,7 @@ pub fn name_from_path(path: &str) -> String {
     let stem = std::path::Path::new(path)
         .file_name()
         .and_then(|s| s.to_str())
+        // Fallback to full path string — safe on Linux/macOS where paths are valid UTF-8.
         .unwrap_or(path);
 
     // Strip known archive extensions.
@@ -66,6 +67,7 @@ pub fn name_from_path(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_helpers::setup;
     use super::*;
 
     #[test]
@@ -88,38 +90,65 @@ mod tests {
         assert_eq!(name_from_path("myimage"), "myimage");
     }
 
-    #[cfg(unix)]
-    async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use tokio::net::UnixListener;
-        let listener = UnixListener::bind(socket_path).unwrap();
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read_half, mut write_half) = tokio::io::split(stream);
-        let mut reader = BufReader::new(read_half);
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let mut resp = serde_json::to_string(&response).unwrap();
-        resp.push('\n');
-        write_half.write_all(resp.as_bytes()).await.unwrap();
-        write_half.flush().await.unwrap();
+    // ── Property-based tests ──────────────────────────────────────────────────
+
+    use proptest::prelude::*;
+
+    fn arb_stem() -> impl Strategy<Value = String> {
+        "[a-z][a-z0-9_-]{1,15}"
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
+        /// Archive extensions are always stripped.
+        #[test]
+        fn prop_name_from_path_strips_archive_extension(
+            stem in arb_stem(),
+            ext in prop_oneof![Just(".tar.gz"), Just(".tgz"), Just(".tar")],
+        ) {
+            let filename = format!("{stem}{ext}");
+            let result = name_from_path(&filename);
+            prop_assert_eq!(&result, &stem);
+        }
+
+        /// Result is never empty for archive filenames.
+        #[test]
+        fn prop_name_from_path_nonempty(
+            stem in arb_stem(),
+            ext in prop_oneof![Just(".tar.gz"), Just(".tgz"), Just(".tar")],
+        ) {
+            let result = name_from_path(&format!("{stem}{ext}"));
+            prop_assert!(!result.is_empty());
+        }
+
+        /// Directory prefix does not affect the result.
+        #[test]
+        fn prop_name_from_path_ignores_directory(
+            dir in "[a-z]{1,10}".prop_map(|s| format!("/{s}")),
+            stem in arb_stem(),
+            ext in prop_oneof![Just(".tar.gz"), Just(".tgz"), Just(".tar")],
+        ) {
+            let filename = format!("{stem}{ext}");
+            let with_dir = format!("{dir}/{filename}");
+            prop_assert_eq!(name_from_path(&with_dir), name_from_path(&filename));
+        }
+
+        /// A stem with no known extension is returned as-is (no directory).
+        #[test]
+        fn prop_name_from_path_no_known_ext_unchanged(stem in arb_stem()) {
+            // Stems from arb_stem() never end with .tar/.tgz/.tar.gz
+            prop_assert_eq!(name_from_path(&stem), stem);
+        }
     }
 
     #[cfg(unix)]
     #[tokio::test]
     async fn execute_succeeds_on_image_loaded_response() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let socket_path = tmp.path().join("test.sock");
-        let sp = socket_path.clone();
-        tokio::spawn(async move {
-            serve_once(
-                &sp,
-                DaemonResponse::ImageLoaded {
-                    image: "myimage:latest".to_string(),
-                },
-            )
-            .await;
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let (_tmp, socket_path) = setup(DaemonResponse::ImageLoaded {
+            image: "myimage:latest".to_string(),
+        })
+        .await;
         let result = execute(
             "/tmp/myimage.tar".to_string(),
             "myimage".to_string(),

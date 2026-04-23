@@ -93,7 +93,8 @@ fn parse_localhost_registry() {
     let result = ImageRef::parse("localhost/myimage:latest");
     assert!(
         result.is_err(),
-        "localhost without namespace must fail like any non-docker registry"
+        "localhost/myimage has only one path component after the registry — \
+         must have namespace/name to be valid"
     );
 }
 
@@ -143,10 +144,7 @@ fn parse_non_docker_registry_requires_namespace() {
 #[test]
 fn parse_empty_name_returns_invalid() {
     let result = ImageRef::parse("myorg/");
-    assert!(
-        result.is_err(),
-        "image reference with empty name must fail"
-    );
+    assert!(result.is_err(), "image reference with empty name must fail");
 }
 
 #[test]
@@ -210,7 +208,11 @@ fn repository_custom_namespace() {
 #[test]
 fn repository_includes_tag_not_included() {
     let r = ImageRef::parse("myorg/image:v1.2.3").expect("parse failed");
-    assert_eq!(r.repository(), "myorg/image", "repository must not include tag");
+    assert_eq!(
+        r.repository(),
+        "myorg/image",
+        "repository must not include tag"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -303,10 +305,7 @@ fn cache_path_ghcr_includes_registry_and_tag() {
     let r = ImageRef::parse("ghcr.io/org/minibox:stable").expect("parse failed");
     let base = Path::new("/data/images");
     let path = r.cache_path(base);
-    assert_eq!(
-        path,
-        Path::new("/data/images/ghcr.io/org/minibox/stable")
-    );
+    assert_eq!(path, Path::new("/data/images/ghcr.io/org/minibox/stable"));
 }
 
 #[test]
@@ -316,7 +315,8 @@ fn cache_path_ecr_registry() {
     let base = Path::new("/tmp/images");
     let path = r.cache_path(base);
     assert!(
-        path.to_string_lossy().contains("123456789.dkr.ecr.us-east-1.amazonaws.com"),
+        path.to_string_lossy()
+            .contains("123456789.dkr.ecr.us-east-1.amazonaws.com"),
         "ECR registry must be included in path"
     );
     assert!(

@@ -19,6 +19,10 @@ use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
 // Re-export contract: miniboxd lib must expose handler / state / server
+//
+// NOTE: These are compile-time guards. If a type is removed, this file will
+// fail to compile, which is the intended signal. They do not exercise runtime
+// behaviour and should not be counted toward runtime coverage metrics.
 // ---------------------------------------------------------------------------
 
 #[test]

@@ -25,7 +25,7 @@ proptest! {
 
     /// `handle_list` must always return `ContainerList`, never panic.
     #[test]
-    fn handle_list_always_returns_container_list(_seed in 0u64..u64::MAX) {
+    fn handle_list_always_returns_container_list(_unused in Just(())) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let tmp = TempDir::new().unwrap();

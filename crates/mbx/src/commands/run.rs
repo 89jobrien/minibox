@@ -70,6 +70,7 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
             "type" => mount_type = Some(v.to_string()),
             "src" | "source" => src = Some(PathBuf::from(v)),
             "dst" | "target" | "destination" => dst = Some(PathBuf::from(v)),
+            // Unknown keys are silently ignored by design — forward-compatible parsing.
             _ => {}
         }
     }
@@ -221,43 +222,19 @@ pub async fn execute(
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_helpers::setup;
     use super::*;
     use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
-
-    #[cfg(unix)]
-    async fn serve_once(socket_path: &std::path::Path, response: DaemonResponse) {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use tokio::net::UnixListener;
-        let listener = UnixListener::bind(socket_path).unwrap();
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read_half, mut write_half) = tokio::io::split(stream);
-        let mut reader = BufReader::new(read_half);
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let mut resp = serde_json::to_string(&response).unwrap();
-        resp.push('\n');
-        write_half.write_all(resp.as_bytes()).await.unwrap();
-        write_half.flush().await.unwrap();
-    }
 
     /// ContainerCreated is the non-streaming legacy path — returns Ok(()) without
     /// calling process::exit, so it's the only execute() path testable in-process.
     #[cfg(unix)]
     #[tokio::test]
     async fn execute_returns_ok_on_container_created() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let socket_path = tmp.path().join("test.sock");
-        let sp = socket_path.clone();
-        tokio::spawn(async move {
-            serve_once(
-                &sp,
-                DaemonResponse::ContainerCreated {
-                    id: "abc123".to_string(),
-                },
-            )
-            .await;
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        let (_tmp, socket_path) = setup(DaemonResponse::ContainerCreated {
+            id: "abc123".to_string(),
+        })
+        .await;
         let result = execute(
             "alpine".to_string(),
             "latest".to_string(),
@@ -413,6 +390,128 @@ mod tests {
             assert_eq!(decoded, b"hello world\n");
         } else {
             panic!("expected ContainerOutput");
+        }
+    }
+
+    // ── Property-based tests ──────────────────────────────────────────────────
+
+    use proptest::prelude::*;
+
+    fn arb_abs_path() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9_-]{1,30}".prop_map(|s| format!("/{s}"))
+    }
+
+    fn arb_rel_path() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9_-]{1,20}"
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+
+        /// Any `src:abs_dst` spec succeeds with correct fields and read_only=false.
+        #[test]
+        fn prop_parse_volume_valid_succeeds(
+            src in arb_abs_path(),
+            dst in arb_abs_path(),
+        ) {
+            let spec = format!("{src}:{dst}");
+            let result = parse_volume(&spec);
+            let ok = result.is_ok();
+            prop_assert!(ok, "expected Ok for {spec:?}");
+            let m = result.unwrap();
+            prop_assert_eq!(m.host_path.to_str().unwrap(), src);
+            prop_assert_eq!(m.container_path.to_str().unwrap(), dst);
+            prop_assert!(!m.read_only);
+        }
+
+        /// `:ro` suffix always sets read_only=true.
+        #[test]
+        fn prop_parse_volume_ro_suffix(src in arb_abs_path(), dst in arb_abs_path()) {
+            let m = parse_volume(&format!("{src}:{dst}:ro")).unwrap();
+            prop_assert!(m.read_only);
+        }
+
+        /// Relative dst always errors.
+        #[test]
+        fn prop_parse_volume_relative_dst_errors(src in arb_abs_path(), dst in arb_rel_path()) {
+            let is_err = parse_volume(&format!("{src}:{dst}")).is_err();
+            prop_assert!(is_err);
+        }
+
+        /// No colon separator always errors.
+        #[test]
+        fn prop_parse_volume_no_separator_errors(s in arb_abs_path()) {
+            prop_assert!(parse_volume(&s).is_err());
+        }
+
+        /// host_path always roundtrips src exactly.
+        #[test]
+        fn prop_parse_volume_host_path_roundtrips(src in arb_abs_path(), dst in arb_abs_path()) {
+            let m = parse_volume(&format!("{src}:{dst}")).unwrap();
+            prop_assert_eq!(m.host_path.to_str().unwrap(), src.as_str());
+        }
+
+        /// `type=bind,src=ABS,dst=ABS` always succeeds with correct fields.
+        #[test]
+        fn prop_parse_mount_bind_absolute_succeeds(
+            src in arb_abs_path(),
+            dst in arb_abs_path(),
+        ) {
+            let spec = format!("type=bind,src={src},dst={dst}");
+            let result = parse_mount(&spec);
+            let ok = result.is_ok();
+            prop_assert!(ok, "expected Ok for {spec:?}");
+            let m = result.unwrap();
+            prop_assert_eq!(m.host_path.to_str().unwrap(), src);
+            prop_assert_eq!(m.container_path.to_str().unwrap(), dst);
+            prop_assert!(!m.read_only);
+        }
+
+        /// `,readonly` always sets read_only=true.
+        #[test]
+        fn prop_parse_mount_readonly_flag(src in arb_abs_path(), dst in arb_abs_path()) {
+            let m = parse_mount(&format!("type=bind,src={src},dst={dst},readonly")).unwrap();
+            prop_assert!(m.read_only);
+        }
+
+        /// `,ro` shorthand also sets read_only=true.
+        #[test]
+        fn prop_parse_mount_ro_shorthand(src in arb_abs_path(), dst in arb_abs_path()) {
+            let m = parse_mount(&format!("type=bind,src={src},dst={dst},ro")).unwrap();
+            prop_assert!(m.read_only);
+        }
+
+        /// Relative dst always errors.
+        #[test]
+        fn prop_parse_mount_relative_dst_errors(src in arb_abs_path(), dst in arb_rel_path()) {
+            let is_err = parse_mount(&format!("type=bind,src={src},dst={dst}")).is_err();
+            prop_assert!(is_err);
+        }
+
+        /// Missing src always errors.
+        #[test]
+        fn prop_parse_mount_missing_src_errors(dst in arb_abs_path()) {
+            let is_err = parse_mount(&format!("type=bind,dst={dst}")).is_err();
+            prop_assert!(is_err);
+        }
+
+        /// Missing dst always errors.
+        #[test]
+        fn prop_parse_mount_missing_dst_errors(src in arb_abs_path()) {
+            let is_err = parse_mount(&format!("type=bind,src={src}")).is_err();
+            prop_assert!(is_err);
+        }
+
+        /// Non-bind type always errors.
+        #[test]
+        fn prop_parse_mount_non_bind_type_errors(
+            t in "[a-z]{3,10}",
+            src in arb_abs_path(),
+            dst in arb_abs_path(),
+        ) {
+            prop_assume!(t != "bind");
+            let is_err = parse_mount(&format!("type={t},src={src},dst={dst}")).is_err();
+            prop_assert!(is_err);
         }
     }
 
