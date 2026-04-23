@@ -31,6 +31,14 @@ impl FallbackChainAdapter {
     pub fn from_env() -> Self {
         Self(Arc::new(FallbackChain::from_env()))
     }
+
+    /// Return a shared reference to the inner [`FallbackChain`].
+    ///
+    /// Used by [`crate::step::CruxLlmStep::invoke`] to call the chain directly
+    /// with typed `LlmError` propagation, bypassing the `CruxErr` string boundary.
+    pub(crate) fn chain(&self) -> Arc<FallbackChain> {
+        Arc::clone(&self.0)
+    }
 }
 
 impl LlmProvider for FallbackChainAdapter {
