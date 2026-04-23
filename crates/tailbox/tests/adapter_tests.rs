@@ -15,7 +15,6 @@ async fn attach_is_noop() {
 /// stats() must always return Ok(NetworkStats::default()) — no stats API in v0.2.
 #[tokio::test]
 async fn stats_returns_default() {
-    use minibox_core::domain::NetworkStats;
     let net = TailnetNetwork::new(TailnetConfig::default()).await.unwrap();
     let stats = net.stats("test-container-id").await.unwrap();
     assert_eq!(stats.rx_bytes, 0);
