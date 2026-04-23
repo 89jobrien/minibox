@@ -396,14 +396,14 @@ items:
   title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring — cross-platform
     (macOS HVF + Linux KVM)'
   description: "SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done\
-    \ (5eb03e8). libkrun is the unified adapter for BOTH macOS (HVF) and Linux (KVM)\
-    \ — not macOS-only. Next TDD cycle: implement KrunRuntime (ContainerRuntime),\
-    \ KrunFilesystem (FilesystemProvider+RootfsSetup+ChildInit no-ops), KrunLimiter\
-    \ (ResourceLimiter no-op), KrunRegistry (ImageRegistry). Wire start_krun() callable\
-    \ from both macbox and linuxbox/miniboxd dispatch. Remove vz feature + vz/ module\
-    \ code. Phase B: libkrun FFI replaces smolvm subprocess — MINIBOX_ADAPTER=krun\
-    \ on macOS (HVF) and Linux (KVM), same domain port. Open: krunbox crate vs macbox;\
-    \ Linux CI /dev/kvm provisioning; libkrun version pinning. See spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md"
+    \ (5eb03e8). libkrun is the unified adapter for BOTH macOS (HVF) and Linux (KVM).\
+    \ Conformance doc written: docs/superpowers/specs/2026-04-23-krun-adapter-conformance.md\
+    \ — 31 tests across 4 phases (K-S existing, K-R/K-F/K-L/K-I domain ports, K-H\
+    \ handler integration). TDD order: K-R-01 (create returns ID) → K-R-02 (output)\
+    \ → K-R-03..10 (lifecycle) → K-F → K-L → K-I → K-H. Wire start_krun() from\
+    \ both macbox and miniboxd dispatch (platform-agnostic branch). Remove vz feature\
+    \ + vz/ module code. Open: krunbox crate vs macbox; Linux CI /dev/kvm; libkrun\
+    \ version pinning. Platform spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md"
   files:
   - crates/macbox/src/krun/process.rs
   - crates/macbox/src/krun/mod.rs
