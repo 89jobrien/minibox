@@ -1,7 +1,7 @@
+use searchbox::SearchProvider;
 use searchbox::adapters::{merged::MergedAdapter, mock::MockSearchProvider};
 use searchbox::config::SearchboxConfig;
 use searchbox::domain::{SearchQuery, SourceType};
-use searchbox::SearchProvider;
 
 #[test]
 fn search_query_defaults() {
@@ -57,6 +57,48 @@ source = "git"
     assert!(cfg.validate_pub().is_err());
 }
 
+#[test]
+fn config_rejects_fs_source_without_path() {
+    let toml = r#"
+[service]
+vps_host = "minibox"
+
+[[repos]]
+name   = "bad"
+source = "fs"
+"#;
+    let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
+    let err = cfg.validate_pub().unwrap_err();
+    assert!(err.to_string().contains("path"), "expected 'path' in error: {err}");
+}
+
+#[test]
+fn config_rejects_local_source_without_path() {
+    let toml = r#"
+[service]
+vps_host = "minibox"
+
+[[repos]]
+name   = "bad"
+source = "local"
+"#;
+    let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
+    let err = cfg.validate_pub().unwrap_err();
+    assert!(err.to_string().contains("path"), "expected 'path' in error: {err}");
+}
+
+#[test]
+fn config_local_section_defaults() {
+    let toml = r#"
+[service]
+vps_host = "minibox"
+"#;
+    let cfg: SearchboxConfig = toml::from_str(toml).unwrap();
+    assert!(!cfg.local.enabled);
+    assert_eq!(cfg.local.port, 6071);
+    assert!(cfg.local.repos.is_empty());
+}
+
 fn make_result(repo: &str, file: &str, line: u32, score: f32) -> searchbox::domain::SearchResult {
     searchbox::domain::SearchResult {
         repo: repo.into(),
@@ -84,7 +126,12 @@ async fn merged_deduplicates_same_repo_file_line() {
         .await
         .unwrap();
 
-    assert_eq!(results.len(), 2, "expected 2 unique results, got {}", results.len());
+    assert_eq!(
+        results.len(),
+        2,
+        "expected 2 unique results, got {}",
+        results.len()
+    );
 }
 
 #[tokio::test]

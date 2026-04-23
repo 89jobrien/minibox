@@ -1,5 +1,5 @@
 use crate::domain::SourceType;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -37,7 +37,7 @@ pub struct RepoConfig {
     pub source: SourceType,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct LocalConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -45,6 +45,16 @@ pub struct LocalConfig {
     pub port: u16,
     #[serde(default)]
     pub repos: Vec<String>,
+}
+
+impl Default for LocalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: default_local_port(),
+            repos: Vec::new(),
+        }
+    }
 }
 
 fn default_local_port() -> u16 {
