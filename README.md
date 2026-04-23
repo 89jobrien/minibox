@@ -224,9 +224,9 @@ miniboxd starts
       │      │                                                 │
       │    MINIBOX_ADAPTER?                                    │
       │      ├── native (default) → namespaces + cgroups v2    │
-      │      ├── docker                                        │
       │      ├── gke              → proot + copy FS            │
       │      └── colima           → Colima/limactl delegate    │
+      │      (any other value causes daemon to exit at startup) │
       │                                                        │
       ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
@@ -438,7 +438,9 @@ See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
 
 ## Current Limitations
 
-- **No persistent state** — daemon restart loses all container records
+- **Partial state persistence** — container records are saved to disk and survive daemon restart
+  (`state.json`), but running processes are not reattached; they appear as `Stopped` on next
+  startup. Bridge-network IP allocations are lost on restart. See `docs/STATE_MODEL.md`.
 - **Root required** — no rootless support
 - **Docker parity incomplete** — push/commit/build traits defined but adapters not wired end-to-end into miniboxd
 - **VZ.framework blocked** — `VZErrorInternal(code=1)` on macOS 26 ARM64 (upstream Apple bug)
@@ -459,7 +461,7 @@ implementing the trait and wiring the adapter into `HandlerDependencies`.
 | `ImagePusher`        | Partial | OCI Distribution Spec — not wired in miniboxd |
 | `ContainerCommitter` | Partial | Overlay upperdir snapshot — not wired         |
 | `ImageBuilder`       | Partial | Basic Dockerfile subset — not wired           |
-| `StateStore`         | Open    | SQLite / sled — replaces in-memory HashMap    |
+| `StateStore`         | Open    | SQLite / sled — replaces JSON-file persistence |
 
 ---
 

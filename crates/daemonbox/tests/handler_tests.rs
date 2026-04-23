@@ -4420,8 +4420,7 @@ async fn test_handle_commit_invalid_container_id_returns_error() {
     let temp_dir = TempDir::new().unwrap();
     let state = create_test_state_with_dir(&temp_dir);
 
-    let mock_committer =
-        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
     let deps = {
         let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
         d.build.commit_adapter =
@@ -4456,8 +4455,7 @@ async fn test_handle_commit_success() {
     let temp_dir = TempDir::new().unwrap();
     let state = create_test_state_with_dir(&temp_dir);
 
-    let mock_committer =
-        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
     let deps = {
         let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
         d.build.commit_adapter =
