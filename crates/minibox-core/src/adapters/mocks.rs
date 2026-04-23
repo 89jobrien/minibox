@@ -1057,7 +1057,7 @@ mod macro_contract_tests {
 // ---------------------------------------------------------------------------
 
 use crate::domain::{
-    CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter, ImagePusher,
+    CommitConfig, ContainerCommitter, ContainerId, ImagePusher,
     PushProgress, PushResult, RegistryCredentials,
 };
 

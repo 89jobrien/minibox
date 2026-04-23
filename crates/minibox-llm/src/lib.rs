@@ -116,14 +116,16 @@ pub use types::{
 /// ```
 #[macro_export]
 macro_rules! ainvoke {
-    ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {{
-        let request = $crate::CompletionRequest {
-            prompt: $prompt.into(),
-            $( $key: $crate::ainvoke!(@wrap $key $val), )*
-            ..$crate::CompletionRequest::default()
-        };
-        $chain.complete(&request)
-    }};
+    ($chain:expr, $prompt:expr $(, $key:ident : $val:expr)* $(,)?) => {
+        async {
+            let request = $crate::CompletionRequest {
+                prompt: $prompt.into(),
+                $( $key: $crate::ainvoke!(@wrap $key $val), )*
+                ..$crate::CompletionRequest::default()
+            };
+            $chain.complete(&request).await
+        }
+    };
     (@wrap system $val:expr) => { Some($val.into()) };
     (@wrap schema $val:expr) => { Some($val) };
     (@wrap timeout $val:expr) => { Some($val) };
