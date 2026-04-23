@@ -21,6 +21,7 @@ members = [
     "crates/dockerbox",
     "crates/minibox-agent",
     "crates/minibox-testers",
+    "crates/zoektbox",
 ]
 
 [workspace.package]
