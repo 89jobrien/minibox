@@ -2348,6 +2348,7 @@ dependencies = [
  "minibox-core",
  "nix",
  "predicates",
+ "proptest",
  "serde_json",
  "tempfile",
  "tokio",

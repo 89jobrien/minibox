@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260423:081051'
+updated: '20260423:185322'
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -345,6 +345,15 @@ items:
   - type: note
     note: 'Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.'
 log:
+- date: '20260423:185322'
+  session: 22
+  summary: >-
+    chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox,
+    conformance tests for AgentError and TailnetConfig, 3 new fuzz targets
+    (parse_www_authenticate, parse_manifest, agent_message_decode), READMEs for 7 crates
+    (mbx updated, minibox/minibox-agent/minibox-testers/tailbox/zoektbox/searchbox added).
+    All 103 tests pass, fuzz workspace checks clean.
+  commits: []
 - date: '20260423:081051'
   session: 21
   summary: >-
@@ -416,61 +425,3 @@ log:
   commits:
   - sha: c8e227a
     branch: feat/minibox-security-tests
-- date: '20260422:231641'
-  session: 17
-  summary: "feat(searchbox+zoektbox): Tasks 1-4 done via subagent TDD — zoektbox scaffold/download/deploy/service, searchbox domain scaffold with ports+types"
-  commits:
-  - sha: 62756ba
-    branch: main
-  - sha: 510053c
-    branch: main
-  - sha: cd6fc83
-    branch: main
-  - sha: f96b710
-    branch: main
-  - sha: 0e26645
-    branch: main
-  - sha: b951b16
-    branch: main
-- date: '20260422:083000'
-  session: 16
-  summary: 'Phase 1 conformance infrastructure: ConformanceCapability trait with built-in
-    descriptors for lifecycle, image, networking, execution, and persistence domains.
-    trait methods: describe_capability(), on_setup(), on_teardown(), test_payload().
-    All adapters (native, gke, colima, vz, krun) return trait objects in register_capabilities().
-    Maintains separation of concerns: capability modeling in domain layer, test automation
-    in test crates. Build clean, tests passing (484).'
-  commits:
-  - sha: 7d8d655
-    branch: main
-  - sha: 4daceda
-    branch: main
-- date: '20260421:222026'
-  session: 15
-  summary: 'Pruned 3 resolved P0 items (docs-contradictions, committed-artifacts, consolidate-daemonrequest
-    — all completed in session 14). minibox-testers Phase 1 migration landed (centralize
-    test infrastructure, 484 tests passing). Build clean.'
-  commits:
-  - sha: a379cf6
-    branch: main
-  - sha: 2e0bf87
-    branch: main
-  - sha: f5372ce
-    branch: main
-  - sha: 20e7897
-    branch: main
-- date: '20260421:session14'
-  session: 14
-  summary: 'P0: removed bench/profiles/*.nsp artifact, aligned README+CLAUDE.md to
-    FEATURE_MATRIX (Colima experimental, adapter names, vz blocked note). minibox-76
-    confirmed already done (single DaemonRequest in minibox-core). P1: added
-    duplicate-container-name error-path test (82 handler tests passing). P1 adapter
-    integration tests confirmed substantially complete (39 GKE+Colima tests pass).
-    fmt-only test file cleanup committed.'
-  commits:
-  - sha: 7c31151
-    branch: main
-  - sha: 274f704
-    branch: main
-  - sha: 07d1003
-    branch: main
