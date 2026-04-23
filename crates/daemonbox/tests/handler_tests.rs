@@ -4420,8 +4420,7 @@ async fn test_handle_commit_invalid_container_id_returns_error() {
     let temp_dir = TempDir::new().unwrap();
     let state = create_test_state_with_dir(&temp_dir);
 
-    let mock_committer =
-        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
     let deps = {
         let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
         d.build.commit_adapter =
@@ -4456,8 +4455,7 @@ async fn test_handle_commit_success() {
     let temp_dir = TempDir::new().unwrap();
     let state = create_test_state_with_dir(&temp_dir);
 
-    let mock_committer =
-        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
     let deps = {
         let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
         d.build.commit_adapter =
@@ -4628,4 +4626,351 @@ async fn test_handle_exec_no_runtime_returns_error() {
         matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
         "expected 'not supported' error, got {resp:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// handle_send_input happy path — channel registered, bytes delivered (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// Registering a stdin channel then calling handle_send_input delivers
+/// decoded bytes to the channel and returns Success.
+///
+/// Covers the `reg.stdin.get(...)` Some arm and final Success send in
+/// handle_send_input — both previously uncovered.
+#[tokio::test]
+async fn test_handle_send_input_delivers_bytes_and_returns_success() {
+    use base64::Engine as _;
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let session_id = "test-session-send-01";
+    let (stdin_tx, mut stdin_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+    {
+        let mut reg = deps.exec.pty_sessions.lock().await;
+        reg.stdin.insert(session_id.to_string(), stdin_tx);
+    }
+
+    let payload = b"hello world";
+    let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::from(session_id),
+        encoded,
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    let received = stdin_rx
+        .recv()
+        .await
+        .expect("stdin channel must receive bytes");
+    assert_eq!(&received[..], payload, "delivered bytes must match payload");
+
+    let resp = rx.recv().await.expect("no response from handle_send_input");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("input")),
+        "expected Success with 'input' in message, got {resp:?}"
+    );
+}
+
+/// handle_send_input with invalid base64 returns Error.
+#[tokio::test]
+async fn test_handle_send_input_invalid_base64_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::from("any-session"),
+        "!!!not-base64!!!".to_string(),
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid base64, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_resize_pty happy path — channel registered, resize delivered (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// Registering a resize channel then calling handle_resize_pty delivers
+/// (cols, rows) and returns Success — both previously uncovered.
+#[tokio::test]
+async fn test_handle_resize_pty_delivers_size_and_returns_success() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let session_id = "test-session-resize-01";
+    let (resize_tx, mut resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
+    {
+        let mut reg = deps.exec.pty_sessions.lock().await;
+        reg.resize.insert(session_id.to_string(), resize_tx);
+    }
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_resize_pty(
+        minibox_core::domain::SessionId::from(session_id),
+        132,
+        50,
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    let (cols, rows) = resize_rx
+        .recv()
+        .await
+        .expect("resize channel must receive size");
+    assert_eq!((cols, rows), (132, 50), "resize dimensions must match");
+
+    let resp = rx.recv().await.expect("no response from handle_resize_pty");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("resize")),
+        "expected Success with 'resize' in message, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_pause / handle_resume success paths (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// handle_pause on a Running container with a writable cgroup dir returns
+/// ContainerPaused and transitions state to Paused.
+#[tokio::test]
+async fn test_handle_pause_running_container_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let cgroup_dir = tmp.path().join("fake-cgroup-pause");
+    std::fs::create_dir_all(&cgroup_dir).unwrap();
+
+    let container_id = "pausesuccesstest01";
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(99997),
+            },
+            pid: Some(99997),
+            rootfs_path: tmp.path().join("fake-rootfs"),
+            cgroup_path: cgroup_dir.clone(),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        Arc::clone(&state),
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerPaused { ref id } if id == container_id),
+        "expected ContainerPaused, got {resp:?}"
+    );
+
+    let record = state
+        .get_container(container_id)
+        .await
+        .expect("container must still exist");
+    assert_eq!(
+        record.info.state, "Paused",
+        "state should be Paused after handle_pause"
+    );
+}
+
+/// handle_resume on a Paused container with a writable cgroup dir returns
+/// ContainerResumed and transitions state to Running.
+#[tokio::test]
+async fn test_handle_resume_paused_container_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let cgroup_dir = tmp.path().join("fake-cgroup-resume");
+    std::fs::create_dir_all(&cgroup_dir).unwrap();
+    std::fs::write(cgroup_dir.join("cgroup.freeze"), "1\n").unwrap();
+
+    let container_id = "resumesuccesstest1";
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Paused".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(99996),
+            },
+            pid: Some(99996),
+            rootfs_path: tmp.path().join("fake-rootfs"),
+            cgroup_path: cgroup_dir.clone(),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        Arc::clone(&state),
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerResumed { ref id } if id == container_id),
+        "expected ContainerResumed, got {resp:?}"
+    );
+
+    let record = state
+        .get_container(container_id)
+        .await
+        .expect("container must still exist");
+    assert_eq!(
+        record.info.state, "Running",
+        "state should be Running after handle_resume"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PtySessionRegistry::cleanup unit test (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// cleanup removes both the resize and stdin channels for the target session
+/// while leaving all other sessions intact.
+#[tokio::test]
+async fn test_pty_session_registry_cleanup_removes_only_target_session() {
+    use daemonbox::handler::PtySessionRegistry;
+
+    let mut registry = PtySessionRegistry::default();
+
+    let (resize_tx_a, _) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
+    let (stdin_tx_a, _) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+    let (resize_tx_b, _) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
+    let (stdin_tx_b, _) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+
+    registry.resize.insert("session-a".to_string(), resize_tx_a);
+    registry.stdin.insert("session-a".to_string(), stdin_tx_a);
+    registry.resize.insert("session-b".to_string(), resize_tx_b);
+    registry.stdin.insert("session-b".to_string(), stdin_tx_b);
+
+    registry.cleanup("session-a");
+
+    assert!(
+        !registry.resize.contains_key("session-a"),
+        "session-a resize must be removed"
+    );
+    assert!(
+        !registry.stdin.contains_key("session-a"),
+        "session-a stdin must be removed"
+    );
+    assert!(
+        registry.resize.contains_key("session-b"),
+        "session-b resize must remain"
+    );
+    assert!(
+        registry.stdin.contains_key("session-b"),
+        "session-b stdin must remain"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// send_error dropped-receiver path (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// When the response channel receiver is dropped before handle_run sends its
+/// terminal error response, the `if tx.send(...).await.is_err()` warn path
+/// must not panic.
+#[tokio::test]
+async fn test_handler_with_dropped_receiver_does_not_panic() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let deps_fail = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(tmp.path().join("img_dr")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers_dr"),
+            run_containers_base: tmp.path().join("run_dr"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    });
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+    drop(rx); // closed — any send returns Err, triggering the warn path
+
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps_fail,
+        tx,
+    )
+    .await;
+    // No panic = warn path exercised correctly.
 }
