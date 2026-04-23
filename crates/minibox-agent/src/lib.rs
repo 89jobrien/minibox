@@ -30,6 +30,7 @@
 //! ```
 
 pub mod agent;
+pub mod trajectory;
 pub mod conversation;
 pub mod error;
 pub mod events;
