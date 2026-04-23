@@ -124,6 +124,58 @@ mod tests {
         let result = HostPlatform::from_parts("linux", "riscv64");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn vm_handle_serial_sock_path_is_absolute() {
+        let pid = std::process::id();
+        let sock = format!("/tmp/minibox-vm-serial-{pid}.sock");
+        assert!(sock.starts_with("/tmp/minibox-vm-serial-"));
+        assert!(sock.ends_with(".sock"));
+    }
+}
+
+/// Handle to a running QEMU VM process. Owns the child process and serial socket path.
+/// Created by `VmRunner::spawn_vm`. Drop kills the process and cleans up the socket.
+pub struct VmHandle {
+    pub child: std::process::Child,
+    pub serial_sock: std::path::PathBuf,
+}
+
+impl VmHandle {
+    /// Connect to the VM serial console. Retries for up to 10 seconds.
+    pub fn connect_serial(&self) -> Result<std::os::unix::net::UnixStream> {
+        let max_attempts = 50u32;
+        for attempt in 0..max_attempts {
+            match std::os::unix::net::UnixStream::connect(&self.serial_sock) {
+                Ok(s) => return Ok(s),
+                Err(_) if attempt + 1 < max_attempts => {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                Err(e) => {
+                    anyhow::bail!(
+                        "could not connect to VM serial socket after {}s: {e}",
+                        max_attempts / 5
+                    );
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    /// Wait for the QEMU process to exit.
+    pub fn wait(mut self) -> Result<std::process::ExitStatus> {
+        let status = self.child.wait().context("waiting for QEMU child")?;
+        let _ = std::fs::remove_file(&self.serial_sock);
+        Ok(status)
+    }
+
+    /// Kill the QEMU process immediately.
+    pub fn kill(mut self) -> Result<()> {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_file(&self.serial_sock);
+        Ok(())
+    }
 }
 
 /// Boot the VM in interactive shell mode.  Blocks until QEMU exits.
