@@ -92,6 +92,9 @@ pub enum RegistryError {
     #[error("manifest list nesting too deep (max 2 levels)")]
     ManifestNestingTooDeep,
 
+    #[error("layer download task failed: {0}")]
+    LayerTask(#[from] tokio::task::JoinError),
+
     #[error("registry error: {0}")]
     Other(String),
 }

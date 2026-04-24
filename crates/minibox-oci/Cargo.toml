@@ -22,6 +22,8 @@ tar = { workspace = true }
 flate2 = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
+tokio-util = { workspace = true }
+pin-project-lite = { workspace = true }
 
 [features]
 # Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.

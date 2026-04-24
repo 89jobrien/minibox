@@ -214,16 +214,7 @@ impl ImageStore {
             source,
         })?;
 
-        // Read all bytes (needed for the extractor which needs full data).
-        let mut buf = Vec::new();
-        data_reader
-            .read_to_end(&mut buf)
-            .map_err(|source| ImageError::StoreRead {
-                path: digest.to_owned(),
-                source,
-            })?;
-
-        extract_layer(&buf, &dest)
+        extract_layer(&mut data_reader, &dest)
             .with_context(|| format!("extracting layer {digest} to {dest:?}"))?;
 
         info!("stored layer {} at {:?}", digest, dest);
