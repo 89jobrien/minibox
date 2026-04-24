@@ -27,7 +27,8 @@ fuzz/*
 .worktrees/
 .superpowers/
 .remember/
-.cargo-ai/
+.cargo-ai/*
+!.cargo-ai/*.json
 
 # Go build artifacts (agentbox)
 agentbox/bin/
