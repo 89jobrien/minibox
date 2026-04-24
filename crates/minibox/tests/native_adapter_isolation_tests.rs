@@ -13,9 +13,9 @@
 
 #![cfg(target_os = "linux")]
 
-use linuxbox::adapters::{CgroupV2Limiter, OverlayFilesystem};
-use linuxbox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter};
-use linuxbox::preflight::probe_capabilities;
+use minibox::adapters::{CgroupV2Limiter, OverlayFilesystem};
+use minibox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter};
+use minibox::preflight::probe_capabilities;
 use minibox_macros::require_capability;
 use std::fs;
 use tempfile::TempDir;

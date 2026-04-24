@@ -7,7 +7,7 @@
 //!   cargo run --release --example showcase -p minibox -- --run /path/to/minibox
 //!   cargo run --release --example showcase -p minibox -- --run ./target/release/minibox --cleanup
 
-use linuxbox::{
+use minibox::{
     adapters::DockerHubRegistry,
     domain::ImageRegistry,
     image::{ImageStore, reference::ImageRef},

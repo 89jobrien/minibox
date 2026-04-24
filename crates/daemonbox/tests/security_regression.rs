@@ -25,7 +25,10 @@ mod security_regression {
 
     #[test]
     fn non_root_uid_rejected_when_root_required() {
-        let creds = PeerCreds { uid: 1000, pid: 5678 };
+        let creds = PeerCreds {
+            uid: 1000,
+            pid: 5678,
+        };
         assert!(
             !is_authorized(Some(&creds), true),
             "non-root UID must be rejected when require_root_auth=true"
@@ -83,7 +86,10 @@ mod security_regression {
     #[test]
     fn max_uid_rejected_when_root_required() {
         // Boundary check: u32::MAX must not be treated as root.
-        let creds = PeerCreds { uid: u32::MAX, pid: 1 };
+        let creds = PeerCreds {
+            uid: u32::MAX,
+            pid: 1,
+        };
         assert!(
             !is_authorized(Some(&creds), true),
             "u32::MAX UID must be rejected when require_root_auth=true"

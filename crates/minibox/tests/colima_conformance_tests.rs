@@ -13,8 +13,8 @@
 //! isolation automatically. The CI job and local command use identical xtask
 //! recipes (see `crates/xtask/src/gates.rs`), ensuring parity.
 
-use linuxbox::adapters::ColimaRegistry;
-use linuxbox::domain::{ContainerRuntime, ImageRegistry};
+use minibox::adapters::ColimaRegistry;
+use minibox::domain::{ContainerRuntime, ImageRegistry};
 use minibox_core::adapters::conformance::BackendDescriptor;
 use minibox_core::domain::BackendCapability;
 use std::sync::Arc;
@@ -91,7 +91,7 @@ async fn colima_registry_pull_failure_propagates() {
     }));
 
     let result = registry
-        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
         .await;
 
     assert!(
@@ -111,7 +111,7 @@ async fn colima_registry_pull_failure_propagates() {
 /// setup is handled by the VM, not by Colima directly.
 #[test]
 fn colima_runtime_capabilities_excludes_privileged() {
-    use linuxbox::adapters::ColimaRuntime;
+    use minibox::adapters::ColimaRuntime;
 
     let runtime = ColimaRuntime::new();
     let caps = runtime.capabilities();

@@ -9,8 +9,8 @@
 //! by the `DaemonRequest::Pull` roundtrip which exercises arbitrary image/tag
 //! strings through the full protocol layer.
 
-use linuxbox::domain::SessionId;
-use linuxbox::protocol::{
+use minibox::domain::SessionId;
+use minibox::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind, PushCredentials,
     decode_request, decode_response, encode_request, encode_response,
 };
@@ -313,7 +313,7 @@ proptest! {
 
 #[cfg(target_os = "linux")]
 mod cgroup_props {
-    use linuxbox::container::cgroups::{CgroupConfig, CgroupManager};
+    use minibox::container::cgroups::{CgroupConfig, CgroupManager};
     use proptest::prelude::*;
 
     // NOTE: On unprivileged Linux (no root / no cgroup2 mount), `create_dir_all` will

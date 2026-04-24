@@ -3,10 +3,10 @@
 //! Verifies error propagation and cleanup behavior when adapters
 //! fail at different points in the container lifecycle.
 
-use linuxbox::adapters::mocks::{
+use minibox::adapters::mocks::{
     FailableFilesystemMock, MockFilesystem, MockLimiter, MockRegistry, MockRuntime,
 };
-use linuxbox::domain::{
+use minibox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, ImageRegistry, ResourceConfig,
     ResourceLimiter, RootfsSetup,
 };
@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 async fn test_registry_pull_failure_returns_descriptive_error() {
     let registry = MockRegistry::new().with_pull_failure();
     let result = registry
-        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
         .await;
     assert!(result.is_err());
     assert!(
@@ -213,7 +213,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // First pull succeeds
     assert!(
         registry
-            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
             .await
             .is_ok()
     );
@@ -228,7 +228,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // Second pull also succeeds (re-pull)
     assert!(
         registry
-            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
             .await
             .is_ok()
     );

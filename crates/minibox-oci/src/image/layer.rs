@@ -827,7 +827,10 @@ mod tests {
         assert_eq!(hr.bytes_read(), data.len() as u64);
         let got = hr.finalize();
         let expected = hex::encode(Sha256::digest(data));
-        assert_eq!(got, expected, "HashingReader digest must match direct sha256");
+        assert_eq!(
+            got, expected,
+            "HashingReader digest must match direct sha256"
+        );
     }
 
     #[test]

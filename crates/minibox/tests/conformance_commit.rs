@@ -18,7 +18,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use linuxbox::adapters::commit_upper_dir_to_image;
+use minibox::adapters::commit_upper_dir_to_image;
 use minibox_core::domain::{
     AsAny, BackendCapability, CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter,
     ImageMetadata,

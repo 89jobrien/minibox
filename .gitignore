@@ -27,6 +27,7 @@ fuzz/*
 .worktrees/
 .superpowers/
 .remember/
+.cargo-ai/
 
 # Go build artifacts (agentbox)
 agentbox/bin/
@@ -41,7 +42,7 @@ rust_out.*
 repro.rs
 
 # Cargo
-Cargo.lock is committed for binary projects
+# Cargo.lock is committed for binary projects
 # Remove the line below if this becomes a library
 # Cargo.lock
 
@@ -94,8 +95,7 @@ Thumbs.db
 .env.local
 *.log
 *.pid
-*.json
-!/grafana/*.json
+
 
 # Documentation build
 /target/doc/
@@ -105,7 +105,8 @@ Thumbs.db
 *.orig
 .envrc
 
-# Python*.pyc
+# Python
+*.pyc
 *.pyo
 *.pyd
 __pycache__/

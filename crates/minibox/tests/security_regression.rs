@@ -23,7 +23,7 @@
 //!    (commit `2fc7036`).
 
 use flate2::{Compression, write::GzEncoder};
-use linuxbox::image::layer::extract_layer;
+use minibox::image::layer::extract_layer;
 use std::io::Write;
 use tar::{Builder, EntryType, Header};
 use tempfile::TempDir;
@@ -123,7 +123,8 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
     let dest = TempDir::new().unwrap();
     let tar_gz = raw_tar_gz_with_traversal_filename("../escape.txt");
 
-    let err = extract_layer(&mut tar_gz.as_slice(), dest.path()).expect_err("path traversal must be rejected");
+    let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+        .expect_err("path traversal must be rejected");
 
     assert!(
         err.to_string().contains("..") || err.to_string().contains("traversal"),
@@ -149,7 +150,8 @@ fn regression_zip_slip_dotdot_in_middle_is_rejected() {
     // Use the raw builder because the tar crate sanitises paths before our check.
     let tar_gz = raw_tar_gz_with_traversal_filename("foo/../../etc/passwd");
 
-    let err = extract_layer(&mut tar_gz.as_slice(), dest.path()).expect_err("embedded .. must be rejected");
+    let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+        .expect_err("embedded .. must be rejected");
 
     assert!(
         err.to_string().contains("..") || err.to_string().contains("traversal"),
@@ -173,7 +175,8 @@ fn regression_block_device_node_is_rejected() {
     let dest = TempDir::new().unwrap();
     let tar_gz = tar_gz_device_node("dev/sda", EntryType::Block);
 
-    let err = extract_layer(&mut tar_gz.as_slice(), dest.path()).expect_err("block device node must be rejected");
+    let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+        .expect_err("block device node must be rejected");
 
     assert!(
         err.to_string().contains("device") || err.to_string().contains("DeviceNode"),
@@ -197,7 +200,8 @@ fn regression_char_device_node_is_rejected() {
     let dest = TempDir::new().unwrap();
     let tar_gz = tar_gz_device_node("dev/null", EntryType::Char);
 
-    let err = extract_layer(&mut tar_gz.as_slice(), dest.path()).expect_err("char device node must be rejected");
+    let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+        .expect_err("char device node must be rejected");
 
     assert!(
         err.to_string().contains("device") || err.to_string().contains("DeviceNode"),
@@ -294,7 +298,8 @@ fn regression_setuid_bits_stripped_on_extraction() {
     // 04755 = setuid + rwxr-xr-x
     let tar_gz = tar_gz_regular_file("usr/bin/setuid_binary", b"#!/bin/sh", 0o4755);
 
-    extract_layer(&mut tar_gz.as_slice(), dest.path()).expect("setuid file must be extracted without error");
+    extract_layer(&mut tar_gz.as_slice(), dest.path())
+        .expect("setuid file must be extracted without error");
 
     let path = dest.path().join("usr/bin/setuid_binary");
     assert!(path.exists(), "file must have been extracted");

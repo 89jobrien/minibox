@@ -1,0 +1,48 @@
+pipeline: minibox_sync_check
+# Pre-push divergence check against origin/main.
+# Exits ERR if behind or diverged — safe to push only when all steps OK.
+#
+# Run: cruxx run .crux/sync-check.crux
+# With custom base: cruxx run .crux/sync-check.crux .crux/input/sync-check-next.json
+budget: { calls: 4 }
+
+steps:
+  - step: fetch
+    handler: shell::capture
+    args:
+      cmd: "git fetch origin --quiet 2>&1 || true"
+    # Always succeeds — offline fetch is a warn, not a hard failure.
+    # shell::exec would also work here; capture gives us stderr in the trace.
+
+  - step: check_base_exists
+    handler: shell::capture
+    args:
+      cmd: "git rev-parse --verify --quiet origin/main"
+    # ERR if origin/main doesn't exist (fresh repo, wrong remote).
+
+  - step: count_divergence
+    handler: shell::capture
+    args:
+      cmd: >-
+        AHEAD=$(git rev-list --count origin/main..HEAD);
+        BEHIND=$(git rev-list --count HEAD..origin/main);
+        echo "{\"ahead\": $AHEAD, \"behind\": $BEHIND}"
+    # Output: { "exit_code": 0, "stdout": "{\"ahead\": N, \"behind\": M}", ... }
+
+  - step: assert_safe_to_push
+    handler: shell::capture
+    args:
+      cmd: >-
+        BEHIND=$(git rev-list --count HEAD..origin/main);
+        if [ "$BEHIND" -gt 0 ]; then
+          AHEAD=$(git rev-list --count origin/main..HEAD);
+          echo "NOT SAFE: behind by $BEHIND commit(s), ahead by $AHEAD";
+          git log --oneline HEAD..origin/main | sed 's/^/  remote: /';
+          exit 1;
+        fi;
+        AHEAD=$(git rev-list --count origin/main..HEAD);
+        echo "SAFE: ahead by $AHEAD commit(s), not behind"
+    # ERR step in trace = unsafe to push. OK step = push is safe.
+
+  - step: summary
+    handler: ctrl::log

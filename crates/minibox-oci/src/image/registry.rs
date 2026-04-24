@@ -498,10 +498,7 @@ impl RegistryClient {
             let token = token.clone();
 
             join_set.spawn(async move {
-                let _permit = sem
-                    .acquire_owned()
-                    .await
-                    .expect("semaphore closed");
+                let _permit = sem.acquire_owned().await.expect("semaphore closed");
 
                 let digest = &layer_desc.digest;
                 let digest_key = digest.replace(':', "_");
@@ -535,9 +532,7 @@ impl RegistryClient {
 
                 // Wrap the byte stream with a size cap.
                 let limited = LimitedStream::new(
-                    response
-                        .bytes_stream()
-                        .map(|r| r.map_err(io::Error::other)),
+                    response.bytes_stream().map(|r| r.map_err(io::Error::other)),
                     MAX_LAYER_SIZE,
                 );
 
@@ -546,10 +541,8 @@ impl RegistryClient {
 
                 // Bridge async → sync for tar/gz extraction.
                 tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-                    let sync_reader = SyncIoBridge::new_with_handle(
-                        StreamReader::new(limited),
-                        handle,
-                    );
+                    let sync_reader =
+                        SyncIoBridge::new_with_handle(StreamReader::new(limited), handle);
 
                     // Byte flow:
                     // HTTP → LimitedStream → StreamReader → SyncIoBridge
@@ -587,13 +580,9 @@ impl RegistryClient {
                     // Verify digest before committing or surfacing extract error.
                     // A digest mismatch is the root cause — prefer it over gz errors.
                     let actual_hex = hashing_reader.finalize();
-                    let expected_hex = digest_owned
-                        .strip_prefix("sha256:")
-                        .ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "digest missing sha256: prefix: {digest_owned}"
-                            )
-                        })?;
+                    let expected_hex = digest_owned.strip_prefix("sha256:").ok_or_else(|| {
+                        anyhow::anyhow!("digest missing sha256: prefix: {digest_owned}")
+                    })?;
 
                     let digest_ok = actual_hex == expected_hex;
 
@@ -622,8 +611,7 @@ impl RegistryClient {
                                 "layer: failed to clean up tmp dir after extract error"
                             );
                         }
-                        return Err(e)
-                            .with_context(|| format!("extract layer {digest_owned}"));
+                        return Err(e).with_context(|| format!("extract layer {digest_owned}"));
                     }
 
                     // Atomic rename: tmp → final dest.
@@ -634,9 +622,8 @@ impl RegistryClient {
                             return Ok(());
                         }
                         let _ = std::fs::remove_dir_all(&tmp_dir);
-                        return Err(e).with_context(|| {
-                            format!("rename {tmp_dir:?} → {layer_dir:?}")
-                        });
+                        return Err(e)
+                            .with_context(|| format!("rename {tmp_dir:?} → {layer_dir:?}"));
                     }
 
                     Ok(())
@@ -1616,8 +1603,8 @@ mod tests {
     mod limited_stream {
         use super::super::LimitedStream;
         use bytes::Bytes;
-        use futures::stream;
         use futures::StreamExt;
+        use futures::stream;
 
         fn bytes_stream(
             chunks: Vec<Vec<u8>>,

@@ -326,10 +326,7 @@ pub fn command_runnable_from_workspace(
         format!("{} {}", cmd, args.join(" "))
     };
 
-    let result = Command::new(cmd)
-        .args(args)
-        .current_dir(&root)
-        .output();
+    let result = Command::new(cmd).args(args).current_dir(&root).output();
 
     match result {
         Ok(output) if output.status.success() => CommandProbeResult {
@@ -416,11 +413,13 @@ mod tests {
     fn workspace_root_finds_minibox_workspace() {
         // Start from this file's crate directory — workspace root is two levels up.
         let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let root = workspace_root(&crate_dir)
-            .expect("should find workspace root from crate dir");
+        let root = workspace_root(&crate_dir).expect("should find workspace root from crate dir");
         // The workspace Cargo.toml must contain [workspace].
         let content = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
-        assert!(content.contains("[workspace]"), "root Cargo.toml must have [workspace]");
+        assert!(
+            content.contains("[workspace]"),
+            "root Cargo.toml must have [workspace]"
+        );
     }
 
     #[test]
@@ -470,11 +469,7 @@ mod tests {
     fn command_runnable_failure_includes_workspace_root() {
         let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let root = workspace_root(&crate_dir).expect("workspace root");
-        let result = command_runnable_from_workspace(
-            &root,
-            "this-binary-does-not-exist-xyz",
-            &[],
-        );
+        let result = command_runnable_from_workspace(&root, "this-binary-does-not-exist-xyz", &[]);
         assert!(!result.success, "missing binary should not succeed");
         assert!(
             result.diagnostic.contains(root.to_str().unwrap()),
