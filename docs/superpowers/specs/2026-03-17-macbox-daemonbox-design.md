@@ -8,7 +8,7 @@ compile compco# macbox + daemonbox Design Spec
 
 ## Problem
 
-`miniboxd` has a `compile_error!("miniboxd requires Linux")` guard in `main.rs`. The Colima adapters in `linuxbox` are fully implemented and tested, but they are unreachable from macOS because there is no macOS-native daemon binary to wire them into. Running the daemon on macOS currently requires SSHing into a Colima VM to compile and execute a Linux binary — fragile, slow, and not the right UX.
+`miniboxd` has a `compile_error!("miniboxd requires Linux")` guard in `main.rs`. The Colima adapters in `minibox` are fully implemented and tested, but they are unreachable from macOS because there is no macOS-native daemon binary to wire them into. Running the daemon on macOS currently requires SSHing into a Colima VM to compile and execute a Linux binary — fragile, slow, and not the right UX.
 
 Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`) lives inside the `miniboxd` binary crate, making it impossible for a second daemon binary to share it without duplication.
 
@@ -48,10 +48,10 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 │     (depends only on domain port traits)             │
 ├─────────────────────────────────────────────────────┤
 │              Domain Ports (traits)                   │
-│           linuxbox/src/domain.rs                  │
+│           minibox/src/domain.rs                       │
 ├─────────────────────────────────────────────────────┤
 │              Driven Adapters                         │
-│  linuxbox/src/adapters/ (Linux, GKE, Colima)      │
+│  minibox/src/adapters/ (Linux, GKE, Colima)           │
 │  macbox (VM lifecycle, macOS paths, adapter helpers) │
 └─────────────────────────────────────────────────────┘
 ```
@@ -72,7 +72,7 @@ Separately, the daemon application logic (`handler.rs`, `state.rs`, `server.rs`)
 - `state.rs` — in-memory `DaemonState` (container records, spawn semaphore)
 - `server.rs` — Unix socket listener, `SO_PEERCRED` auth, per-connection task
 
-**Dependencies:** `linuxbox`, `tokio`, `serde_json`, `tracing`, `nix` (POSIX subset: signal, wait, socket), `uuid`, `chrono`, `anyhow`
+**Dependencies:** `minibox`, `tokio`, `serde_json`, `tracing`, `nix` (POSIX subset: signal, wait, socket), `uuid`, `chrono`, `anyhow`
 
 **What it does NOT contain:** any `compile_error!` guards; any concrete adapter types; any path defaults.
 
@@ -120,7 +120,7 @@ pub enum ColimaStatus {
 }
 ```
 
-**Dependencies:** `daemonbox` (for `HandlerDependencies`), `linuxbox` (for Colima adapter types), `anyhow`, `thiserror`, `tokio`, `tracing`
+**Dependencies:** `daemonbox` (for `HandlerDependencies`), `minibox` (for Colima adapter types), `anyhow`, `thiserror`, `tokio`, `tracing`
 
 **Platform gate:** `#[cfg(target_os = "macos")]` on the crate — compile error on non-macOS.
 
@@ -185,11 +185,11 @@ The `compile_error!("miniboxd requires Linux")` guard stays in `miniboxd/main.rs
 ## Dependency Graph
 
 ```
-miniboxd    ──► daemonbox  ──► linuxbox
-macboxd     ──► daemonbox  ──► linuxbox
+miniboxd    ──► daemonbox  ──► minibox
+macboxd     ──► daemonbox  ──► minibox
 macboxd     ──► macbox     ──► daemonbox
-                               linuxbox
-minibox-cli ──► linuxbox   (unchanged)
+                               minibox
+minibox-cli ──► minibox        (unchanged)
 ```
 
 `macbox` depends on `daemonbox` because `HandlerDependencies` lives in `daemonbox/handler.rs` after the move. `macbox::colima_deps()` constructs and returns it.

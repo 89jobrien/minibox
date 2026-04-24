@@ -1,7 +1,8 @@
 ---
-status: active
-note: Framework still evolving
+status: done
+note: Framework fully shipped — 17+ e2e commits, cgroup/daemon/CLI layers complete
 ---
+
 # E2E Test Infrastructure Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -76,12 +77,12 @@ git commit -m "feat: make CLI socket path configurable via MINIBOX_SOCKET_PATH e
 
 **Files:**
 
-- Create: `crates/linuxbox/src/preflight.rs`
-- Modify: `crates/linuxbox/src/lib.rs`
+- Create: `crates/minibox/src/preflight.rs`
+- Modify: `crates/minibox/src/lib.rs`
 
 - [ ] **Step 1: Add module declaration**
 
-In `crates/linuxbox/src/lib.rs`, add after the existing modules:
+In `crates/minibox/src/lib.rs`, add after the existing modules:
 
 ```rust
 pub mod preflight;
@@ -91,7 +92,7 @@ Note: do NOT gate this behind `#[cfg(target_os = "linux")]` — the probe functi
 
 - [ ] **Step 2: Create preflight.rs with HostCapabilities struct and probe()**
 
-Create `crates/linuxbox/src/preflight.rs`:
+Create `crates/minibox/src/preflight.rs`:
 
 ````rust
 //! Host capability probing for test infrastructure and diagnostics.
@@ -209,9 +210,9 @@ pub fn format_report(caps: &HostCapabilities) -> String {
 /// Skip-friendly macro for tests. Usage:
 ///
 /// ```rust,ignore
-/// let caps = linuxbox::preflight::probe();
-/// linuxbox::require_capability!(caps, is_root, "requires root");
-/// linuxbox::require_capability!(caps, cgroups_v2, "requires cgroups v2");
+/// let caps = minibox::preflight::probe();
+/// minibox::require_capability!(caps, is_root, "requires root");
+/// minibox::require_capability!(caps, cgroups_v2, "requires cgroups v2");
 /// ```
 #[macro_export]
 macro_rules! require_capability {
@@ -355,13 +356,13 @@ mod tests {
 
 - [ ] **Step 3: Verify it compiles and unit tests pass**
 
-Run: `cargo test -p linuxbox preflight`
+Run: `cargo test -p minibox preflight`
 Expected: 3 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/linuxbox/src/preflight.rs crates/linuxbox/src/lib.rs
+git add crates/minibox/src/preflight.rs crates/minibox/src/lib.rs
 git commit -m "feat: add preflight host capability probing module"
 ```
 
@@ -383,10 +384,10 @@ default:
 
 # Preflight capability check
 doctor:
-    @cargo test -p linuxbox preflight::tests -- --nocapture 2>&1 || true
+    @cargo test -p minibox preflight::tests -- --nocapture 2>&1 || true
     @echo ""
     @echo "--- Host Capabilities Report ---"
-    @cargo test -p linuxbox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+    @cargo test -p minibox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
 
 # Build release binaries
 build:
@@ -483,10 +484,10 @@ Create `crates/miniboxd/tests/cgroup_tests.rs` with the guard, helpers, and firs
 
 #![cfg(target_os = "linux")]
 
-use linuxbox::adapters::CgroupV2Limiter;
-use linuxbox::domain::{ResourceConfig, ResourceLimiter};
-use linuxbox::preflight;
-use linuxbox::require_capability;
+use minibox::adapters::CgroupV2Limiter;
+use minibox::domain::{ResourceConfig, ResourceLimiter};
+use minibox::preflight;
+use minibox::require_capability;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -1079,8 +1080,8 @@ Create `crates/miniboxd/tests/e2e_tests.rs`:
 
 #![cfg(target_os = "linux")]
 
-use linuxbox::preflight;
-use linuxbox::require_capability;
+use minibox::preflight;
+use minibox::require_capability;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -1827,8 +1828,8 @@ just nuke-test-state    # Kill orphans, remove cgroups/mounts
 
 - `crates/miniboxd/tests/handler_tests.rs` — handler logic with mock adapters
 - `crates/miniboxd/tests/conformance_tests.rs` — trait contract verification with mocks
-- `crates/linuxbox/src/protocol.rs` — protocol serialization
-- `crates/linuxbox/src/preflight.rs` — kernel version parsing
+- `crates/minibox/src/protocol.rs` — protocol serialization
+- `crates/minibox/src/preflight.rs` — kernel version parsing
 
 **Run:** `just test-unit`
 
@@ -1861,7 +1862,7 @@ then runs CLI commands as subprocesses. RAII cleanup on drop.
 
 ## Preflight / Doctor
 
-The preflight module (`crates/linuxbox/src/preflight.rs`) probes the host for
+The preflight module (`crates/minibox/src/preflight.rs`) probes the host for
 capabilities needed by integration and e2e tests. Run `just doctor` to see a report.
 
 Tests use `require_capability!` to skip gracefully when prerequisites are missing.

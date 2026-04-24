@@ -30,7 +30,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig, ResourceLimiter,
+    ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
     RuntimeCapabilities, SpawnResult,
 };
 use minibox_core::{adapt, as_any};
@@ -91,8 +91,8 @@ impl CopyFilesystem {
     }
 }
 
-impl FilesystemProvider for CopyFilesystem {
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+impl minibox_core::domain::RootfsSetup for CopyFilesystem {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
             .with_context(|| format!("creating merged dir {merged:?}"))?;
@@ -113,13 +113,11 @@ impl FilesystemProvider for CopyFilesystem {
             }
         }
 
-        Ok(merged)
-    }
-
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        // proot handles the fake chroot — nothing to do here.
-        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: merged,
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
@@ -128,6 +126,14 @@ impl FilesystemProvider for CopyFilesystem {
             std::fs::remove_dir_all(container_dir)
                 .with_context(|| format!("removing container dir {container_dir:?}"))?;
         }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for CopyFilesystem {
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        // proot handles the fake chroot — nothing to do here.
+        debug!("copy filesystem: pivot_root is a no-op (proot handles fake chroot)");
         Ok(())
     }
 }
@@ -230,7 +236,8 @@ impl ProotRuntime {
     /// Checks `MINIBOX_PROOT_PATH` first, then searches `PATH` for `proot`.
     pub fn from_env() -> Result<Self> {
         if let Ok(path) = std::env::var("MINIBOX_PROOT_PATH") {
-            return Self::new(path);
+            return Self::new(&path)
+                .with_context(|| format!("MINIBOX_PROOT_PATH points to invalid binary {path:?}"));
         }
 
         // Search PATH for proot
@@ -336,6 +343,7 @@ as_any!(ProotRuntime);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::domain::{ChildInit, RootfsSetup};
     use tempfile::TempDir;
 
     // -- NoopLimiter tests --------------------------------------------------
@@ -377,8 +385,8 @@ mod tests {
         let fs = CopyFilesystem::new();
         let merged = fs.setup_rootfs(&[], &container_dir).unwrap();
 
-        assert!(merged.exists());
-        assert!(merged.ends_with("merged"));
+        assert!(merged.merged_dir.exists());
+        assert!(merged.merged_dir.ends_with("merged"));
     }
 
     #[test]
@@ -405,17 +413,17 @@ mod tests {
 
         // layer2 should overwrite layer1's hostname
         assert_eq!(
-            std::fs::read_to_string(merged.join("etc/hostname")).unwrap(),
+            std::fs::read_to_string(merged.merged_dir.join("etc/hostname")).unwrap(),
             "layer2-host"
         );
         // layer1's base file should be preserved
         assert_eq!(
-            std::fs::read_to_string(merged.join("etc/base")).unwrap(),
+            std::fs::read_to_string(merged.merged_dir.join("etc/base")).unwrap(),
             "from-layer1"
         );
         // layer2's extra file should be present
         assert_eq!(
-            std::fs::read_to_string(merged.join("etc/extra")).unwrap(),
+            std::fs::read_to_string(merged.merged_dir.join("etc/extra")).unwrap(),
             "from-layer2"
         );
     }
@@ -438,7 +446,7 @@ mod tests {
             let fs = CopyFilesystem::new();
             let merged = fs.setup_rootfs(&[layer], &container_dir).unwrap();
 
-            let metadata = std::fs::metadata(merged.join("bin/run.sh")).unwrap();
+            let metadata = std::fs::metadata(merged.merged_dir.join("bin/run.sh")).unwrap();
             let mode = metadata.permissions().mode() & 0o777;
             assert_eq!(mode, 0o755);
         }
@@ -457,7 +465,7 @@ mod tests {
         let fs = CopyFilesystem::new();
         let merged = fs.setup_rootfs(&[layer], &container_dir).unwrap();
 
-        let link = std::fs::read_link(merged.join("usr/bin/python")).unwrap();
+        let link = std::fs::read_link(merged.merged_dir.join("usr/bin/python")).unwrap();
         assert_eq!(link, PathBuf::from("python3"));
     }
 
@@ -593,7 +601,7 @@ mod tests {
         let result = fs.setup_rootfs(&[fake_layer], &container_dir);
         assert!(result.is_ok(), "expected Ok, got {result:?}");
         assert!(
-            result.unwrap().exists(),
+            result.unwrap().merged_dir.exists(),
             "merged dir should exist even after skipping bad layer"
         );
     }

@@ -22,16 +22,68 @@ fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(temp_dir: &TempDir) -> Arc<daemonbox::handler::HandlerDependencies> {
+    use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(daemonbox::handler::HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -39,6 +91,7 @@ fn make_record(id: &str) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
+            name: None,
             image: "alpine:latest".to_string(),
             command: "/bin/sh".to_string(),
             state: "Created".to_string(),
@@ -49,6 +102,8 @@ fn make_record(id: &str) -> ContainerRecord {
         rootfs_path: PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/fake"),
         post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
     }
 }
 

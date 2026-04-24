@@ -1,7 +1,7 @@
 //! Shared test fixtures for adapter and integration tests.
 //!
 //! This module provides builder utilities and temporary directory fixtures
-//! to simplify test setup across the linuxbox test suite.
+//! to simplify test setup across the minibox test suite.
 //!
 //! # Usage
 //!

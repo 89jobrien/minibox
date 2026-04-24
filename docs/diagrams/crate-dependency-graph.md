@@ -1,107 +1,142 @@
-# Crate dependency graph
+# Crate Dependency Graph
 
-Shows the workspace crate relationships. Platform‑specific dependencies are gated at compile time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and `linuxbox` are platform‑agnostic and compiled everywhere. `minibox-cli` is also platform‑agnostic (it only speaks JSON over a socket/pipe).
+Shows the workspace crate relationships. Platform-specific dependencies are gated at compile
+time — `macbox` is only compiled on macOS, `winbox` only on Windows. `daemonbox` and
+`minibox-core` are platform-agnostic. `minibox` is a thin re-export facade over `linuxbox`,
+which contains the actual Linux adapter implementations. New in 2026-Q2: `searchbox`,
+`zoektbox`, `tailbox`, `minibox-agent`, `dashbox`, `dockerbox`, `minibox-secrets`, `minibox-llm`.
 
 ## Mermaid
 
 ```mermaid
 flowchart LR
-    %% Nodes
-    miniboxd["miniboxd\n(unified binary)"]
-    minibox_cli["minibox-cli\n(platform-agnostic)"]
-    minibox_bench["minibox-bench\n(platform-agnostic)"]
+    subgraph binaries["Binaries"]
+        miniboxd["miniboxd\n(unified daemon)"]
+        mbx["mbx\n(CLI binary)"]
+        minibox_bench["minibox-bench"]
+        miniboxctl["miniboxctl\n(HTTP API, WIP)"]
+        dockerboxd["dockerboxd\n(Docker shim)"]
+        dashbox["dashbox\n(TUI dashboard)"]
+        searchboxd["searchboxd\n(MCP stdio server)"]
+    end
 
-    macbox["macbox\n[cfg(target_os = \"macos\")]"]
-    winbox["winbox\n[cfg(target_os = \"windows\")]"]
-    daemonbox["daemonbox\n(platform-agnostic)"]
+    subgraph platform["Platform Crates"]
+        macbox["macbox\n[cfg(macos)]"]
+        winbox["winbox\n[cfg(windows)]"]
+    end
 
-    linuxbox["linuxbox\n(platform-agnostic core)"]
-    minibox_macros["minibox-macros\n(proc-macro)"]
-    nix["nix\n[cfg(unix)]"]
+    subgraph daemon["Daemon"]
+        daemonbox["daemonbox\n(platform-agnostic\nhandler + state + server)"]
+    end
 
-    %% Edges (cfg shown as short labels)
+    subgraph core["Core"]
+        minibox_core["minibox-core\n(protocol + domain traits)"]
+        minibox["minibox\n(re-export facade\nover linuxbox)"]
+        linuxbox["linuxbox\n(Linux adapters)"]
+        minibox_macros["minibox-macros\n(proc-macro)"]
+        minibox_oci["minibox-oci\n(OCI types)"]
+    end
+
+    subgraph services["Service / Feature Crates"]
+        searchbox["searchbox\n(SearchProvider port + adapters)"]
+        zoektbox["zoektbox\n(Zoekt lifecycle)"]
+        tailbox["tailbox\n(Tailnet adapter)"]
+        dockerbox["dockerbox\n(Docker API shim lib)"]
+        minibox_agent["minibox-agent\n(AI agent runtime)"]
+        minibox_llm["minibox-llm\n(LLM client)"]
+        minibox_secrets["minibox-secrets\n(credential store)"]
+    end
+
+    subgraph devtools["Dev / Test"]
+        minibox_testers["minibox-testers\n(shared test helpers)"]
+        nix["nix\n[cfg(unix)]"]
+    end
+
     miniboxd -->|"linux"| linuxbox
     miniboxd -->|"linux"| nix
     miniboxd -->|"macos"| macbox
     miniboxd -->|"windows"| winbox
+    miniboxd --> daemonbox
+    miniboxd -->|"tailnet feature"| tailbox
 
     macbox --> daemonbox
-    macbox --> linuxbox
-
+    macbox --> minibox_core
     winbox --> daemonbox
-    winbox --> linuxbox
+    winbox --> minibox_core
 
-    daemonbox --> linuxbox
+    daemonbox --> minibox_core
 
-    minibox_cli --> linuxbox
-    minibox_bench --> linuxbox
-
+    minibox --> linuxbox
+    linuxbox --> minibox_core
+    linuxbox --> minibox_oci
     linuxbox --> minibox_macros
 
-    %% Soft edge style for macro
-    linkStyle 9 stroke-dasharray: 4 2
+    mbx --> minibox_core
+    minibox_bench --> linuxbox
+    miniboxctl --> minibox_core
+    dockerboxd --> dockerbox
+    dockerbox --> minibox_core
 
-    %% Classes
+    searchboxd --> searchbox
+    searchbox --> zoektbox
+    searchbox --> minibox_core
+
+    minibox_agent --> minibox_llm
+    minibox_agent --> minibox_secrets
+    minibox_agent --> minibox_core
+    tailbox --> minibox_secrets
+    tailbox --> minibox_core
+
     classDef binary fill:#e2e3e5,stroke:#6c757d,color:#000;
-    classDef shim_macos fill:#d4edda,stroke:#155724,color:#000;
-    classDef shim_windows fill:#cce5ff,stroke:#004085,color:#000;
-    classDef shim_unix fill:#fff3cd,stroke:#856404,color:#000;
-    classDef core fill:#f8d7da,stroke:#721c24,color:#000;
-    classDef macro fill:#e2d9f3,stroke:#4b3c82,color:#000;
+    classDef platform_mac fill:#d4edda,stroke:#155724,color:#000;
+    classDef platform_win fill:#cce5ff,stroke:#004085,color:#000;
+    classDef daemon_crate fill:#fff3cd,stroke:#856404,color:#000;
+    classDef core_crate fill:#f8d7da,stroke:#721c24,color:#000;
+    classDef macro_crate fill:#e2d9f3,stroke:#4b3c82,color:#000;
+    classDef service_crate fill:#fde8d8,stroke:#a0522d,color:#000;
+    classDef new_crate fill:#ffe0b2,stroke:#e65100,color:#000;
     classDef external fill:#f0f0f0,stroke:#999,color:#000,font-style:italic;
 
-    class miniboxd,minibox_cli,minibox_bench binary;
-    class macbox shim_macos;
-    class winbox shim_windows;
-    class daemonbox shim_unix;
-    class linuxbox core;
-    class minibox_macros macro;
-    class nix external;
+    class miniboxd,mbx,minibox_bench,miniboxctl,dockerboxd,dashbox,searchboxd binary;
+    class macbox platform_mac;
+    class winbox platform_win;
+    class daemonbox daemon_crate;
+    class minibox_core,minibox,linuxbox,minibox_oci core_crate;
+    class minibox_macros macro_crate;
+    class minibox_agent,minibox_llm,minibox_secrets,dockerbox service_crate;
+    class searchbox,zoektbox,tailbox new_crate;
+    class minibox_testers,nix external;
 ```
 
-## ASCII (fallback)
+## ASCII
 
-```text
-┌─────────────┐  [linux]  ┌───────────────┐
-│             ├──────────►│  linuxbox  │
-│             │  [linux]  └───────────────┘
-│             ├──────────►  nix
-│  miniboxd   │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
-│  (unified   │  [macos]  │    macbox     ├─►│ daemonbox  ├─►│  linuxbox  │
-│   binary)   ├──────────►│               ├─►└────────────┘  └───────────────┘
-│             │           └───────────────┘
-│             │           ┌───────────────┐  ┌────────────┐  ┌───────────────┐
-│             │  [win]    │    winbox     ├─►│ daemonbox  ├─►│  linuxbox  │
-│             ├──────────►│               ├─►└────────────┘  └───────────────┘
-└─────────────┘           └───────────────┘
-
-┌─────────────────┐
-│   minibox-cli   ├──────────────────────────────────────────►  linuxbox
-└─────────────────┘
-
-┌──────────────────┐
-│   minibox-bench  ├─────────────────────────────────────────►  linuxbox
-└──────────────────┘
-
-┌──────────────────┐
-│  minibox-macros  │  <--  used by linuxbox
-└──────────────────┘
 ```
+BINARIES
+  miniboxd ──[linux]──► linuxbox ──► minibox-core
+           ──[linux]──► nix
+           ──[macos]──► macbox ──► daemonbox ──► minibox-core
+           ──[win]────► winbox ──► daemonbox
+           ────────────► daemonbox
+           ──[tailnet]──► tailbox ──► minibox-secrets ──► minibox-core
+  mbx (CLI binary), miniboxctl ───────────────────────► minibox-core
+  minibox-bench ──────────────────────────────────────► linuxbox
+  dockerboxd ──► dockerbox ──────────────────────────► minibox-core
+  searchboxd ──► searchbox ──► zoektbox
+                           ──► minibox-core
 
-## Getting started
+CORE
+  minibox-core  ← canonical protocol + domain traits
+  linuxbox      ← Linux adapters (namespaces, cgroups, overlay, OCI)
+  minibox       ← thin re-export facade: `pub use linuxbox::*`
+  minibox-oci   ← OCI image types
+  minibox-macros ← proc-macros (as_any!, adapt!)
 
-```bash
-# Check the workspace builds
-cargo check
-
-# Run the unified daemon
-cargo run -p miniboxd
-
-# Use the CLI against a running daemon
-cargo run -p minibox-cli -- --help
+SERVICE / FEATURE (2026-Q2 additions marked *)
+  searchbox*    ← SearchProvider port + Zoekt/fan-out/fs adapters
+  zoektbox*     ← Zoekt binary lifecycle (download, verify, deploy)
+  tailbox*      ← Tailnet/Tailscale NetworkProvider adapter
+  minibox-agent ← AI agent runtime (wired to crux)
+  minibox-llm   ← Multi-provider LLM client
+  minibox-secrets ← Credential store (env/keyring/1Password/Bitwarden)
+  dockerbox     ← Docker API shim library
 ```
-
-For more detailed usage, flags, and configuration examples, see the individual crate READMEs under `crates/`.
-```
-
-Want a second `README-slides.md` variant with a darker background‑friendly Mermaid theme for your slide generator?

@@ -3,11 +3,13 @@
 Central orientation document for AI agents starting a new session. Update the
 **"Current state"** and **"Next up"** sections at the end of each session.
 
-**Last updated:** 2026-03-26
+**Last updated:** 2026-04-11 (EOD)
 **Current version:** 0.1.0 (workspace Cargo.toml)
 **Changelog:** `docs/PRERELEASE_CHANGELOG.md` (v0.0.1 – v0.0.14)
 
 ---
+
+<!--joe::todo: t1::render mermaid in tui diagrams screen; t2::SSO-like auth, invite-only?, magic email?;-->
 
 ## What is minibox?
 
@@ -21,52 +23,70 @@ filesystem. Daemon/client architecture over a Unix socket (JSON-over-newline pro
 
 ```
 crates/
-  linuxbox/      — domain traits + adapters (compiles everywhere)
-  minibox-macros/   — proc macros: as_any!, default_new!, adapt!
-  daemonbox/        — handler/state/server (Unix-safe; macOS/Linux)
-  miniboxd/         — unified daemon binary; dispatches by platform
-                      Linux  → native handler via daemonbox
-                      macOS  → macbox::start()
-                      Windows → winbox::start()
-  macbox/           — macOS daemon: Colima preflight, adapter wiring, start()
-  winbox/           — Windows daemon stub: Named Pipe paths, start() stub
-  minibox-cli/      — CLI client (platform-aware socket/pipe path)
-  minibox-bench/    — benchmark harness (linuxbox only)
-  xtask/            — dev tool: pre-commit, test-unit, e2e-suite, coverage
+  minibox-core/    — cross-platform shared types: protocol, domain traits, errors, image mgmt
+  minibox/             — Linux container primitives (namespaces, cgroups, overlay, process); re-exports minibox-core
+                     renamed from linuxbox → mbx → minibox; any linuxbox:: or mbx:: ref is stale
+  minibox-macros/  — proc macros: as_any!, default_new!, adapt!
+  daemonbox/       — handler/state/server (Unix-safe; macOS/Linux)
+  miniboxd/        — unified daemon binary; dispatches by platform
+                     Linux  → native handler via daemonbox
+                     macOS  → macbox::start()
+                     Windows → winbox::start()
+  macbox/          — macOS daemon: Colima adapter suite + VZ.framework adapter suite (--features vz)
+                     VZ branch: MINIBOX_ADAPTER=vz boots Alpine VM, routes cmds over vsock
+  winbox/          — Windows daemon stub: Named Pipe paths, start() stub
+  minibox-cli/     — CLI client (platform-aware socket/pipe path)
+  minibox-client/  — shared client library (socket connection, error types)
+                     Fixed 2026-03-28: default_socket_path() now returns /tmp/minibox/miniboxd.sock on macOS
+  minibox-llm/     — multi-provider LLM client with structured output and fallback chains
+  minibox-secrets/ — typed credential store (env, keyring, 1Password, Bitwarden adapters)
+  minibox-bench/   — benchmark harness
+  dashbox/         — Ratatui TUI dashboard (6 tabs: Agents, Bench, History, Git, Todos, CI)
+  crates/xtask/    — dev tool: pre-commit, test-unit, e2e-suite, coverage, build-vm-image
+                     Modularised 2026-03-29: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs
+miniboxctl/            — axum-based control plane (WIP)
 ```
 
 **Dependency graph:**
 
 ```
-miniboxd  ──[linux]──► linuxbox
-          ──[macos]──► macbox ──► daemonbox ──► linuxbox
-          ──[win]────► winbox ──► daemonbox ──► linuxbox
-minibox-cli ─────────────────────────────────► linuxbox
-minibox-bench ───────────────────────────────► linuxbox
+miniboxd  ──[linux]──► minibox ──► minibox-core
+          ──[macos]──► macbox ──► daemonbox ──► minibox
+          ──[win]────► winbox ──► daemonbox ──► minibox
+minibox-cli ──► minibox-client ──► minibox
+minibox-bench ──────────────────► minibox
+minibox-llm (standalone)
+minibox-secrets (standalone)
+miniboxctl (standalone, axum)
 ```
 
 ---
 
 ## Current test counts
 
-| Suite | Count | Platform |
-|---|---|---|
-| linuxbox unit | ~102 | any |
-| minibox-cli unit | 11 | any |
-| daemonbox handler tests | 12 | any |
-| daemonbox conformance tests | 16 (+3 ignored) | any |
-| cgroup integration | 16 | Linux + root |
-| e2e daemon+CLI | 14 | Linux + root |
-| existing integration | 8 | Linux + root |
+| Suite                                                    | Count                      | Platform     |
+| -------------------------------------------------------- | -------------------------- | ------------ |
+| minibox unit                                             | 88 (+1 ignored)            | any          |
+| minibox-cli                                              | 36                         | any          |
+| daemonbox lib                                            | 27 (1 failing — see below) | any          |
+| daemonbox integration (handler + conformance + proptest) | 108 (+3 ignored)           | any          |
+| minibox-llm                                              | 27                         | any          |
+| minibox-secrets                                          | 32                         | any          |
+| cgroup integration                                       | 16                         | Linux + root |
+| e2e daemon+CLI                                           | 14                         | Linux + root |
+| existing integration                                     | 8                          | Linux + root |
+
+**Known test failure:** `daemonbox::server::tests::test_is_terminal_response_for_each_variant` —
+likely needs updating after a protocol change (new response variant not marked terminal/non-terminal).
 
 Coverage snapshot (2026-03-25, `cargo xtask prepush`):
 
-| File | fn% | line% | Notes |
-|---|---|---|---|
-| `daemonbox/src/handler.rs` | 67.5% | 55% | Biggest gap — error paths in run/pull/stop/rm |
-| `linuxbox/src/adapters/ghcr.rs` | 74.5% | 89.7% | New; 4 wiremock tests added this session |
-| `daemonbox/src/server.rs` | 100% | 90.6% | Healthy |
-| `linuxbox/src/adapters/registry.rs` | 89.5% | 85.8% | Good |
+| File                               | fn%   | line% | Notes                                         |
+| ---------------------------------- | ----- | ----- | --------------------------------------------- |
+| `daemonbox/src/handler.rs`         | 67.5% | 55%   | Biggest gap — error paths in run/pull/stop/rm |
+| `minibox/src/adapters/ghcr.rs`     | 74.5% | 89.7% | New; 4 wiremock tests added this session      |
+| `daemonbox/src/server.rs`          | 100%  | 90.6% | Healthy                                       |
+| `minibox/src/adapters/registry.rs` | 89.5% | 85.8% | Good                                          |
 
 Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 `crates/miniboxd/tests/` during daemonbox extraction, 2026-03-18).
@@ -76,7 +96,7 @@ Test files for handler/conformance live in `crates/daemonbox/tests/` (moved from
 ## Git Workflow (3-tier stability pipeline)
 
 **Spec:** `docs/superpowers/specs/2026-03-26-git-workflow-design.md`
-**Status:** Approved, not yet implemented.
+**Status:** Implemented. Branches `next` and `stable` exist. `phased-deployment.yml` is live.
 
 ```
 main (develop) ──auto──► next (validated) ──manual──► stable (release) ──► v* tag
@@ -86,23 +106,24 @@ main (develop) ──auto──► next (validated) ──manual──► stable
 - `next`: Auto-promoted from `main` on green CI. Full test + audit gates.
 - `stable`: Manual promote. Maestro-consumable. Tagged releases cut here.
 
-**Remotes (pending migration):** `origin` should point to GitHub (currently Gitea).
-Use `git push github main` until remotes are swapped.
+**Remote:** `origin` → `git@github.com:89jobrien/minibox.git` (migration from Gitea complete).
 
 ## CI
 
-Workflows: `ci.yml`, `phased-deployment.yml` (pending), `release.yml`, `nightly.yml`
+Workflows: `ci.yml`, `phased-deployment.yml`, `release.yml`, `nightly.yml`
 
-Current `ci.yml` jobs:
-- **audit** (ubuntu-latest): `cargo audit`
-- **deny** (ubuntu-latest): `cargo deny`
-- **machete** (ubuntu-latest): `cargo machete`
-- **test-unit** (self-hosted `minibox` runner / jobrien-vm): `cargo xtask test-unit`
+Current `ci.yml` jobs (branch-conditional — see CLAUDE.md for full matrix):
 
-The e2e job was removed on 2026-03-26 (run regression — empty stdout from `minibox run`).
-Re-add as a `stable`-tier gate once fixed.
+- All branches: `cargo check --workspace` + `cargo fmt --all --check` + clippy
+- `next` + `stable`: above + `cargo xtask test-unit` + audit/deny/machete
+- `stable` only: above + `cargo geiger`
+
+`phased-deployment.yml`: auto-promote `main→next` on green CI; manual `next→stable` via `workflow_dispatch`; hotfix backmerge.
+
+E2e CI job restored (commit `0b862ad`, 2026-03-27) after streaming regression fix.
 
 **CI phases for self-hosted runner:**
+
 - Phase 1 (now): non-compile gates (audit/deny/machete/geiger)
 - Phase 2 (future): compile + test inside minibox containers (dogfooding)
 
@@ -114,7 +135,7 @@ Re-add as a `stable`-tier gate once fixed.
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
 cargo xtask test-unit
 
 # Full pre-commit gate:
@@ -128,14 +149,18 @@ platform-gated code that fails on non-target platforms. Always use `-p` flags.
 
 ## Key architectural decisions
 
-| Decision | Rationale |
-|---|---|
-| `daemonbox` is Unix-only (no Windows dep on it) | Windows uses Named Pipe proxy (`winboxd`), not a daemonbox consumer. Avoids large conditional-compilation surface. |
-| `miniboxd/src/lib.rs` is a re-export shim | Backward compat after daemonbox extraction; let existing tests compile without surgery. |
-| `ServerListener` + `PeerCreds` traits in daemonbox | Generic `run_server<L, F>` accept loop; `UnixServerListener` is the Linux/macOS impl; future `NamedPipeListener` for Windows. |
-| `MINIBOX_ADAPTER` env var selects adapter suite | `native` (Linux namespaces) or `gke` (proot, unprivileged). |
-| `ImageRef` routes to registry | `[REGISTRY/]NAMESPACE/NAME[:TAG]` — Docker Hub default, ghcr.io if registry prefix is `ghcr.io`. |
-| CLI streaming via `ephemeral: true` | `ContainerOutput` / `ContainerStopped` messages stream stdout/stderr; CLI exits with container exit code. |
+| Decision                                           | Rationale                                                                                |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `daemonbox` is Unix-only (no Windows dep on it)    | Windows uses Named Pipe proxy (`winboxd`), not a daemonbox consumer. Avoids large        |
+|                                                    | conditional-compilation surface.                                                         |
+| `miniboxd/src/lib.rs` is a re-export shim          | Backward compat after daemonbox extraction; lets existing tests compile without surgery. |
+| `ServerListener` + `PeerCreds` traits in daemonbox | Generic `run_server<L, F>` accept loop; `UnixServerListener` is the Linux/macOS impl;    |
+|                                                    | future `NamedPipeListener` for Windows.                                                  |
+| `MINIBOX_ADAPTER` env var selects adapter suite    | `native` (Linux namespaces), `gke` (proot, unprivileged), `colima` (macOS via            |
+|                                                    | limactl), `vz` (macOS VZ.framework VM — requires `--features vz` at compile time).       |
+| `ImageRef` routes to registry                      | `[REGISTRY/]NAMESPACE/NAME[:TAG]` — Docker Hub default, ghcr.io if prefix matches.       |
+| CLI streaming via `ephemeral: true`                | `ContainerOutput` / `ContainerStopped` stream stdout/stderr; CLI exits with container    |
+|                                                    | exit code.                                                                               |
 
 ---
 
@@ -169,83 +194,379 @@ All items below are merged to `main`:
   - P2: 4 wiremock behavioural tests (cache hit/miss, versioned-tag auth, streaming storage)
   - P3: `GHCR_ORG_ALLOWLIST` env var to restrict which org/repos a shared PAT can pull
   - P3: data/runtime dirs created with `mode(0o700)` to protect layer contents on shared hosts
+- [x] 3-tier git workflow: `next`/`stable` branches, `phased-deployment.yml`, remote swap to GitHub
+- [x] E2e streaming regression fix + CI job restored (2026-03-27, commit `0b862ad`)
+- [x] E2e harness hardened: `serial_test` + polling instead of fixed sleeps (commit `bd41fdf`)
+- [x] Bind mounts + privileged mode end-to-end (CLI `--privileged`, `-v`/`--volume`, `--mount` → protocol → handler → process)
+- [x] Samply/cargo-flamegraph wired into bench pipeline (commit `9c503f9`)
+- [x] `minibox-client` crate (shared client library)
+- [x] `minibox-llm` crate (multi-provider LLM client)
+- [x] `minibox-secrets` crate (typed credential store)
+- [x] `miniboxctl` axum control plane skeleton
+- [x] `xtask` moved to `crates/xtask/` (2026-03-28)
+- [x] macOS socket path fix: `minibox-client` now defaults to `/tmp/minibox/miniboxd.sock` on macOS (2026-03-28)
+- [x] `ContainerConfig` missing `mounts`/`privileged` fields fixed in `minibox/src/container/mod.rs` (2026-03-28)
+- [x] musl cross-compile wired: `x86_64-linux-musl-gcc` linker in `.cargo/config.toml`, `brew install filosottile/musl-cross/musl-cross` (2026-03-28)
+- [x] `just trace` recipe working end-to-end on macOS via `colima ssh` (2026-03-28)
+- [x] Vision: minibox owns the full container stack on every OS — no Colima/Docker/nerdctl dependency (issues #40–#45, 2026-03-28)
+- [x] `linuxbox` → `mbx` → `minibox` crate rename (completed 2026-04-21; any linuxbox:: ref is stale)
+- [x] VZ.framework adapter suite — `macbox` now owns full macOS VM stack (2026-03-29):
+  - `xtask build-vm-image`: Alpine aarch64 virt kernel + rootfs + musl agent cross-compile
+  - `VzVm::boot`: objc2-virtualization, VZLinuxBootLoader, virtiofs shares, vsock
+  - `VzProxy`: JSON-over-vsock, context-aware terminal detection
+  - `VzRegistry`, `VzRuntime`, `VzFilesystem`, `VzLimiter` domain adapters
+  - Smoke test: `macbox/tests/vz_adapter_smoke.rs`
+  - Wired: `MINIBOX_ADAPTER=vz` + `--features vz`
+- [x] `xtask` modularised: gates.rs, bench.rs, cleanup.rs, flamegraph.rs, vm_image.rs (2026-03-29)
+- [x] `dashbox` Ratatui TUI dashboard with 6 tabs (2026-03-29); Metrics tab + Grafana dashboard added (2026-04-02)
+- [x] VZ isolation test suite (`vz_isolation_tests.rs`) — 11 behavioral tests covering overlay, cgroups, namespaces, rootfs (2026-04-01, commit `b53c7c6`):
+  - `harness = false` + custom `main()` calling `dispatch_main()` on OS main thread — fixes indefinite hang caused by VZ.framework completion handlers needing a live GCD main queue
+  - `entitlements/vz-test.entitlements` (`com.apple.security.virtualization`) + codesign step in `just test-vz-isolation`
+  - Tests run, surface real errors, then exit — no more silent hang
+  - **Blocked:** `VZErrorInternal(code=1)` is a confirmed Apple OS bug in VZ.framework on macOS 26 ARM64 (also affects Podman, apple/container — see [apple/container#1254](https://github.com/apple/container/issues/1254)). No user-space workaround. Will unblock when Apple ships a fix.
+- [x] `vsock connectToPort:completionHandler:` dispatched on GCD main queue (2026-04-01, commit `a733344`) — fixes vsock hang on Tahoe
+- [x] `test-linux` dogfood infrastructure (2026-04-01, feature/test-linux-dogfood):
+  - `LoadImage { path, name, tag }` / `ImageLoaded { image }` protocol variants (both protocol files)
+  - `ImageLoader` domain trait port + `NativeImageLoader` adapter (OCI tarball → `ImageStore`)
+  - `ColimaRegistry` implements `ImageLoader` (delegates to `nerdctl load -i <path>` via `LimaExecutor`)
+  - `HandlerDependencies.image_loader: DynImageLoader` + `handle_load_image()` handler
+  - Composition roots wired: `macbox` uses `ColimaRegistry`, `miniboxd` native uses `NativeImageLoader`
+  - `minibox load <path>` CLI subcommand
+  - `cargo xtask build-test-image` — cross-compiles 6 binaries for `aarch64-unknown-linux-musl`, fetches Alpine base layer from Docker Hub, assembles OCI tarball at `$HOME/.minibox/test-image/minibox-tester.tar`; cached by mtime, `--force` bypasses
+  - `cargo xtask test-linux` / `just test-linux` — orchestrates build-image → load → `minibox run --privileged minibox-tester /run-tests.sh`
+
+---
+
+## April 2: merged to main
+
+### Dashbox Metrics tab + Grafana dashboard
+
+- `crates/dashbox/src/data/metrics.rs` — `MetricsSource` polling miniboxd Prometheus endpoint; Prometheus text format hand-parsed
+- `crates/dashbox/src/tabs/metrics.rs` — `MetricsTab` rendering status bar + counters + duration tables
+- `Tab::Metrics` wired into `app.rs` as tab 8
+- `grafana/minibox-dashboard.json` — importable Grafana dashboard (4 panels)
+
+### 4 phases, 17 tasks (from plan — all verified in codebase)
+
+Phase 1: Container Freeze/Pause
+
+- CgroupManager::pause()/resume() via cgroup.freeze
+- ContainerState::Paused with validated state transitions
+- PauseContainer/ResumeContainer protocol + handle_pause/handle_resume handlers
+- minibox pause <id> / minibox resume <id> CLI commands
+
+Phase 2: Container Events
+
+- EventSink/EventSource ports + BroadcastEventBroker adapter (tokio broadcast, 1024-cap)
+- NoopEventSink for tests; DynEventSink/DynEventSource type aliases
+- Lifecycle events emitted: Created, Started, Stopped, OomKilled, Paused, Resumed
+- SubscribeEvents protocol + streaming handle_subscribe_events
+- minibox events CLI — streams JSON-lines to stdout
+
+Phase 3: Image GC + Leases
+
+- ImageStore::list_all_images(), delete_image(), image_size_bytes()
+- DiskLeaseService + ImageLeaseService trait (disk-persisted, TTL-based)
+- ImageGc + ImageGarbageCollector trait with dry-run support
+- Prune/RemoveImage protocol + handlers with in-use protection
+- minibox prune [--dry-run] / minibox rmi <image> CLI commands
+
+Phase 4: Bridge Networking
+
+- IpAllocator (BTreeSet-based, skips network+gateway, release/reuse)
+- BridgeNetwork adapter: setup() (veth pair, bridge, NAT), attach() (nsenter), cleanup(), stats()
+- Port mapping via iptables DNAT with idempotent add/remove
+- MINIBOX_NETWORK_MODE=bridge wiring in miniboxd
+- Ignored integration test for Linux root environments
+
+## Issue backlog timeline
+
+All open issues in execution order. Update status as issues close.
+
+### Tier 1 — Quick wins (no daemon/Linux required)
+
+| #   | Title                                                | Size | Status |
+| --- | ---------------------------------------------------- | ---- | ------ |
+| #4  | GHA CI: add fmt+clippy gates                         | S    | closed |
+| #7  | save_bench_results: avoid full Value parse/serialize | S    | closed |
+| #8  | Adapter microbench: single tokio runtime per suite   | S    | closed |
+| #9  | VPS: replace sshpass with 1Password SSH agent        | S    | closed |
+| #10 | Bench artifacts: aggregates only, raw opt-in         | M    | closed |
+| #12 | has_image_sync: eliminate per-call String alloc      | XS   | closed |
+| #13 | Proptest DaemonState: avoid disk I/O per iteration   | S    | closed |
+
+### Tier 2 — minibox-dagu fixes
+
+| #   | Title                                            | Size | Status |
+| --- | ------------------------------------------------ | ---- | ------ |
+| #31 | Add .gitmodules or document nested repo          | XS   | open   |
+| #35 | Dockerfile: use dagu base image not alpine       | XS   | open   |
+| #36 | executor.go: pass Env/MemoryLimitBytes/CpuWeight | S    | open   |
+
+### Tier 3 — Linux-only tests (run on VPS to verify)
+
+| #   | Title                             | Size | Status |
+| --- | --------------------------------- | ---- | ------ |
+| #22 | Native adapter isolation tests    | M    | open   |
+| #23 | GKE adapter isolation tests       | M    | open   |
+| #24 | Container lifecycle failure tests | M    | open   |
+
+### Tier 4 — Core runtime features (Linux + daemon)
+
+| #   | Title                                               | Size | Status |
+| --- | --------------------------------------------------- | ---- | ------ |
+| #17 | Named containers                                    | M    | open   |
+| #18 | Container log capture + `logs` command              | M    | open   |
+| #21 | Shared OCI image-pulling library (crate extraction) | M    | open   |
+| #20 | Container networking (veth/bridge)                  | L    | open   |
+| #16 | exec into running containers (setns)                | L    | open   |
+| #19 | PTY/stdio piping for interactive containers         | L    | open   |
+
+### Tier 5 — vz macOS VM stack (milestone: #44)
+
+| #   | Title                                           | Size | Status     |
+| --- | ----------------------------------------------- | ---- | ---------- |
+| #40 | VZ: provision + start Linux VM                  | L    | done       |
+| #41 | VZ: minibox-agent in-VM daemon                  | L    | done       |
+| #42 | VZ: vsock I/O bridge                            | M    | done       |
+| #43 | VZ: virtiofs host-path mounts                   | M    | done       |
+| #44 | Full cross-OS container stack (macOS milestone) | —    | macOS done |
+
+### Tier 6 — Windows
+
+| #   | Title                         | Size | Status |
+| --- | ----------------------------- | ---- | ------ |
+| #45 | winbox: Hyper-V/WSL2 Linux VM | XL   | open   |
 
 ---
 
 ## Next up
 
-### Implement 3-tier git workflow (spec approved)
+### In progress — krun adapter Phase 2 (2026-04-23)
 
-Spec: `docs/superpowers/specs/2026-03-26-git-workflow-design.md`
+Tests and implementation for `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` in `crates/macbox/`.
+Spec: `docs/superpowers/specs/2026-04-23-krun-adapter-conformance.md`
+Test gate: `cargo xtask test-krun-conformance`
 
-Migration checklist:
-1. Swap remotes: `origin` → `gitea`, `github` → `origin`
-2. Create `next` and `stable` branches from current `main` HEAD
-3. Enable auto-delete head branches in GitHub repo settings
-4. Write `phased-deployment.yml` (auto-promote + manual promote + hotfix backmerge)
-5. Update `ci.yml` with branch-conditional gates
-6. Set `CARGO_TARGET_DIR` in `.envrc` / mise config
-7. Add post-job cleanup to CI for self-hosted runner
-8. Update CLAUDE.md with new branching model
+Phase status:
 
-### e2e run regression (CI blocker)
+- [x] K-S-01..06: SmolvmProcess shim (passing)
+- [x] K-R-01: create() returns non-empty ID (passing)
+- [ ] K-R-02..10: KrunRuntime lifecycle (in progress)
+- [ ] K-F-01..03: KrunFilesystem
+- [ ] K-L-01..05: KrunLimiter
+- [ ] K-I-01..05: KrunRegistry (Phase 2d, not started)
+- [ ] K-H-01..05: HandlerDependencies integration (Phase 3, not started)
 
-4 e2e tests fail with empty stdout / non-zero exit from `minibox run`:
-`test_e2e_run_echo`, `test_e2e_run_with_memory_limit`, `test_e2e_run_with_cpu_weight`,
-`test_e2e_ps_shows_container`. The e2e job was removed from CI to unblock Quality; fix
-before re-adding.
+### DONE (2026-04-11) — pre-push commit range resolver
 
-Suspected area: the streaming ephemeral-run path in `daemonbox/src/handler.rs`
-(`handle_run_streaming` → `run_inner_capture`). The network/overlay/cgroup machinery
-all works (10 other e2e tests pass). The failure is specific to `run` producing output.
-Start by running `just test-e2e` on jobrien-vm with `RUST_LOG=debug` and reading daemon
-stderr captured by `DaemonFixture`.
+`.githooks/pre-push` created and executable. Ports the ref/range resolution logic
+from HashiCorp's vault pre-push hook, stripped of all enterprise checks. Reads git
+stdin refs and prints one resolved commit range per ref to stdout:
 
-### handler.rs coverage gap (highest ROI next target)
+- `local_oid == zero` → deletion, skip silently
+- `remote_oid == zero` → new branch: `merge-base(HEAD, main)..local_oid`
+- otherwise → existing branch: `remote_oid..local_oid`
 
-`daemonbox/src/handler.rs` is at 67.5% function / 55% line coverage — the biggest real
-gap in the codebase. The uncovered 13 functions are almost certainly error branches in
-`handle_run`, `handle_pull`, `handle_stop`, `handle_rm`: image-not-found, container-
-already-stopped, registry failure, spawn_blocking join errors, etc. Add unit tests in
-`crates/daemonbox/tests/handler_*.rs` using mock adapters from `minibox_core::adapters::mocks`.
+Merge-base fallback: `git rev-list --max-parents=0 HEAD` if `main` doesn't exist.
+Output is consumed by downstream tooling; obfsck integration is a follow-on.
+
+Spec: `docs/superpowers/specs/2026-04-11-pre-push-range-resolver-design.md`
+
+### In progress — commit/build/push conformance matrix (2026-04-09)
+
+Goal: extend the existing cross-platform conformance suite to verify
+`ContainerCommitter`, `ImageBuilder`, and `ImagePusher` across the two backends
+that currently share those ports: `linux-native` and `colima`.
+
+Execution order is now tracked in `doob` under project `minibox`:
+
+#### Phase 1 — shared test scaffolding
+
+| Priority | Task                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------ |
+| 5        | Define the conformance boundary around commit/build/push for `linux-native` and `colima`.              |
+| 5        | Add a test-only backend descriptor with capability flags and adapter constructors.                     |
+| 5        | Add shared fixture helpers for minimal stored images, writable upper dirs, build contexts, and pushes. |
+
+#### Phase 2 — backend-agnostic test bodies
+
+| Priority | Task                                                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 4        | Extract commit conformance tests: success, returned metadata, store artifacts, backend-consistent results.             |
+| 4        | Extract build conformance tests: minimal Dockerfile build, stored image result, metadata preservation, skip semantics. |
+| 4        | Extract push conformance tests: local test-registry push, reported digest, visible tag, transport hidden by port.      |
+| 4        | Add a serializable matrix result model: backend, capability, status (`pass`/`fail`/`skip`), optional message/path.     |
+
+#### Phase 3 — reporting, wiring, validation
+
+| Priority | Task                                                                                         |
+| -------- | -------------------------------------------------------------------------------------------- |
+| 3        | Emit Markdown and JSON reports under `artifacts/conformance/`.                               |
+| 3        | Wire the suite into the existing conformance entry point and `cargo xtask test-unit`.        |
+| 2        | Validate on macOS Colima, then verify `linux-native` coverage on a real Linux host or in CI. |
+
+Scope constraints:
+
+- Keep Linux-only namespace/cgroup/bridge/root tests separate as kernel-truth tests.
+- Do not add `vz` to the matrix until its commit/build/push path exists.
+
+### DONE (2026-04-01) — test-linux dogfood infrastructure
+
+`feature/test-linux-dogfood` merged to main.
+
+Full flow: `cargo xtask test-linux` builds a cross-compiled `minibox-tester` OCI image, loads it into minibox via `minibox load`, then runs `minibox run --privileged minibox-tester /run-tests.sh` to execute all Linux test suites (cgroup, integration, e2e, sandbox) inside a Colima-backed container on macOS.
+
+Key new commands:
+
+- `cargo xtask build-test-image [--force]` — build + cache `minibox-tester.tar`
+- `cargo xtask test-linux` / `just test-linux` — full dogfood run
+- `minibox load <path> [--name <name>] [--tag <tag>]` — load local OCI tarball
+
+### Open — doob tasks (2026-04-03)
+
+#### P1 — Act on soon
+
+| Tags        | Task                                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ci,workflow | Enforce 3-tier git workflow (main→next→stable) with CI automation: branch protections, PR target rules, tagging expectations. Currently prose-only.  |
+| bench       | Add env-var toggles + fallbacks to bench/profiling pipeline (samply/cargo-flamegraph). `BROWSER=firefox` is hardcoded — brittle across environments. |
+| ci          | `main` is 7 commits ahead of `next` — phased-deployment auto-promote blocked. Trigger once CI is green.                                              |
+
+#### P2
+
+| Tags          | Task                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ci,e2e        | Enforce e2e serialization explicitly in CI runner config so local dev and CI are identical.                                |
+| ci,e2e        | Add e2e regression test for `minibox run` streaming failure mode — prevent CI job removal under pressure again.            |
+| observability | Harden OTEL/Prometheus telemetry boundary: add a thin telemetry module, document integration points and cardinality rules. |
+
+#### P3
+
+| Tags             | Task                                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ci,**blocking**  | Fix phased-deployment CI: HTTP 403 on `gh run list` — `GITHUB_TOKEN` needs `actions: read` permission in `phased-deployment.yml`. Run: https://github.com/89jobrien/minibox/actions/runs/23622830548 |
+| ci,security      | Remove `\|\| true` from `cargo geiger` in stable CI gate — makes unsafe audit informational-only.                                                                                                    |
+| ci               | Add unit tests to `main` branch CI gate — currently only run on `next`+`stable`; regressions land silently.                                                                                          |
+| e2e,**blocking** | Fix `minibox run` e2e regression — CI job removed to unblock but underlying failure unresolved. Reproduces on Linux+root via `just test-e2e`.                                                        |
+| minibox-llm      | Document `invoke!`/`ainvoke!` macros with examples in README or crate docs.                                                                                                                          |
+
+### Open — sentinel items (2026-04-03)
+
+#### handler.rs suggestions (no blockers)
+
+| Location                | Issue                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --- | ----------------------------------------------------------------------------------------- |
+| `handler.rs:464–466`    | `with_context(…).map_err(                                                                                                                        | e   | e.to_string())`discards the anyhow chain — use`map_err` directly with a formatted message |
+| `handler.rs` — metrics  | `exec`/`push`/`commit`/`load_image` handlers duplicate increment-counter + record-histogram pair in ok and error arms; extract an inline helper  |
+| `handler.rs:844`        | `minibox_active_containers` gauge not updated in the reaper task — will drift stale on unattended container exit                                 |
+| `handler.rs` — coverage | New metrics paths in `handle_exec`, `handle_push`, `handle_commit`, `handle_load_image` have no tests; widens the existing 55% line coverage gap |
+
+#### dashbox sentinel items (low priority, no blockers)
+
+Six code quality issues flagged by sentinel, all in `crates/dashbox/`:
+
+| File                     | Issue                                                         |
+| ------------------------ | ------------------------------------------------------------- |
+| `main.rs:24-35`          | Terminal setup not panic-safe — wrap in RAII drop guard       |
+| `data/todos.rs:51-53`    | `doob` exit status not checked before parsing stdout          |
+| `data/ci.rs:56-58`       | `gh run list` exit status not checked; stderr not captured    |
+| `data/git.rs:62`         | `rev-list .unwrap_or_default()` silently masks detached HEAD  |
+| `src/command.rs:100-101` | `BackgroundCommand` discards stderr via `Stdio::null()`       |
+| `src/command.rs:52-54`   | Sentinel thread spawns only to `drop(tx)`; should drop inline |
+
+### DONE (2026-03-27, session started same day) - Daemonbox test failure fix + handler coverage
+
+**Fixed test failure** (commit f57b5c9):
+
+- `test_is_terminal_response_for_each_variant` was missing Success, ContainerCreated, ContainerList variants
+- Updated `is_terminal_response()` to include all terminal variants (all except ContainerOutput)
+
+**Started handler.rs coverage improvement** (commit 7475cf6):
+
+- Added 2 new error path tests: `test_run_empty_image_no_layers`, `test_pull_registry_failure_with_tag`
+- Test count increased 51→52 handler tests
+- Documented handler testing patterns in CLAUDE.md for future sessions (commit f910dbd)
+
+`daemonbox/src/handler.rs` is still at ~67.5% function / 55% line coverage. Additional opportunities:
+
+- Directory creation failure paths
+- Cleanup-after-error (filesystem/cgroup rollback)
+- Network setup edge cases
+
+More error scenarios can be added incrementally using existing mock builder patterns.
+
+### minibox-owned VM stack (macOS / Windows) — #40–#45
+
+macOS VZ.framework stack is **complete and merged** (2026-03-29). Remaining work:
+
+| Issue | Title                                                | Status                              |
+| ----- | ---------------------------------------------------- | ----------------------------------- |
+| #44   | minibox owns the full stack on every OS              | done —macOS done                    |
+| #40   | Provision/boot VM via Apple Virtualization.Framework | done —Done — VzVm::boot             |
+| #41   | minibox-agent — in-VM daemon over vsock              | done —Done — miniboxd as musl agent |
+| #42   | vsock I/O bridge — stream stdout/stderr host↔VM      | done —Done — VzProxy                |
+| #43   | virtiofs mounts — share OCI layers + bind mounts     | done —Done — 3 virtiofs shares      |
+| #45   | Windows: Hyper-V / WSL2 kernel path                  | Open                                |
+
+**VZ status (2026-04-01):** Test harness is complete and correct. Blocked by confirmed Apple OS bug — `VZErrorInternal(code=1)` on `startWithCompletionHandler` on macOS 26 ARM64. Affects all VZ.framework users (Podman, apple/container). Monitor [apple/container#1254](https://github.com/apple/container/issues/1254) for resolution. No code changes needed on our side when Apple ships the fix — `just test-vz-isolation` should pass as-is.
 
 ### QEMU osdep hardening (from QEMU `util/` audit, 2026-03-21)
 
 Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal architecture.
 
-| Item | Priority | Plan / Notes |
-|---|---|---|
-| Audit CLOEXEC on daemon listener socket | 1 | Quick security check — verify `daemonbox/src/server.rs` listener sets CLOEXEC. Rust's `UnixListener` does this by default on Linux but confirm. |
-| Race-safe PID file for miniboxd | 2 | open + fstat + fcntl(F_SETLK) + stat-verify-inode + ftruncate + write PID. Reference: QEMU `oslib-posix.c:qemu_write_pidfile()`. |
-| Systemd socket activation | 3 | Read `LISTEN_PID`/`LISTEN_FDS`, set CLOEXEC on passed FDs, clear env. ~30 lines. Reference: QEMU `systemd.c:check_socket_activation()`. |
-| Human-readable size parsing for CLI | 3 | Parse "512M", "2G", "1.5T" for `--memory` flags. Reference: QEMU `cutils.c:qemu_strtosz()`. |
+| Item                                    | Priority | Plan / Notes                                                                     |
+| --------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| Audit CLOEXEC on daemon listener socket | 1        | Verify `daemonbox/src/server.rs` listener sets CLOEXEC. Rust's `UnixListener`    |
+|                                         |          | does this by default on Linux but confirm.                                       |
+| Race-safe PID file for miniboxd         | 2        | open + fstat + fcntl(F_SETLK) + stat-verify-inode + ftruncate + write PID.       |
+|                                         |          | Reference: QEMU `oslib-posix.c:qemu_write_pidfile()`.                            |
+| Systemd socket activation               | 3        | Read `LISTEN_PID`/`LISTEN_FDS`, set CLOEXEC on passed FDs, clear env. ~30 lines. |
+|                                         |          | Reference: QEMU `systemd.c:check_socket_activation()`.                           |
+| Human-readable size parsing for CLI     | 3        | Parse "512M", "2G", "1.5T" for `--memory` flags.                                 |
+|                                         |          | Reference: QEMU `cutils.c:qemu_strtosz()`.                                       |
+
+### License files (quick win — no blockers)
+
+minibox has `license = "MIT"` in `Cargo.toml` but no `LICENSE` file in the repo, and the license should be upgraded to dual MIT/Apache-2.0 to match Rust ecosystem convention.
+
+Steps (reference: notfiles was done 2026-03-31):
+
+1. Change `Cargo.toml` root to `[workspace.package]` with `license = "MIT OR Apache-2.0"`, add `license.workspace = true` to all crate `Cargo.toml` files
+2. Add `LICENSE-MIT` (copyright `2026 Joseph O'Brien`) and `LICENSE-APACHE` (full canonical text from apache.org — **do not use curl, it truncates; write directly**)
+3. Add `## License` section to README (dual-license boilerplate + contribution clause)
+4. Commit and push to `origin` (GitHub)
+
+See `notfiles/LICENSE-MIT`, `notfiles/LICENSE-APACHE`, and `notfiles/README.md` for exact content to copy.
 
 ### Ready to execute (no blockers)
 
-| Item | Plan / Notes |
-|---|---|
-| Linux CI job (self-hosted runner) | Use `mbx:minibox-ci` skill; runner is on jobrien-vm (currently unreachable — SSH timeout as of 2026-03-26) |
-| `WslRuntime` executor injection seam | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters (same pattern as Colima `LimaExecutor`) so they can be unit-tested without real WSL |
-| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time; contract is documented in CLAUDE.md |
+| Item                                   | Plan / Notes                                                                     |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| Linux CI job (self-hosted runner)      | Use `minibox:minibox-ci` skill; runner is on jobrien-vm (SSH timeout 2026-03-26) |
+| `WslRuntime` executor injection seam   | Add `Arc<dyn Fn(&[&str]) -> Result<String>>` to WSL2/Docker Desktop adapters     |
+|                                        | (same pattern as Colima `LimaExecutor`) so they can be unit-tested without WSL   |
+| Compile-time tracing field enforcement | Macros/wrappers that enforce canonical field names at compile time;              |
+|                                        | contract is documented in CLAUDE.md                                              |
 
 ### Blocked on hardware
 
-| Item | Blocked on |
-|---|---|
-| `macboxd` e2e tests (`MacboxFixture`) | macOS + Colima machine |
+| Item                                       | Blocked on                |
+| ------------------------------------------ | ------------------------- |
+| `macboxd` e2e tests (`MacboxFixture`)      | macOS + Colima machine    |
 | `winboxd` Named Pipe accept loop (Phase 2) | Windows machine with WSL2 |
 
 ### Future / not started
 
-| Item | Notes |
-|---|---|
-| State persistence | `StateStore` trait exists; HashMap in `state.rs` is current impl |
-| `exec` into running container | Needs `setns(2)` + output streaming; blocks maestro integration |
-| Container log capture | Stdout/stderr discarded post-`execvp`; needed for `maestro-minibox` Phase 1 |
-| Named containers | `ContainerName` field on `RunContainer`; needed for maestro integration |
-| Networking (bridge/veth) | No networking setup; containers get isolated net namespace only |
-| `minibox-orch` agent orchestrator | See `docs/minibox-orch-design.md`; needs exec/logs/named containers first |
-| Native Windows backend | `winboxd` WSL2 proxy is a stepping stone; no plan yet |
+| Item                              | Notes                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| State persistence                 | `StateStore` trait exists; HashMap in `state.rs` is current impl            |
+| `exec` into running container     | Needs `setns(2)` + output streaming; blocks maestro integration             |
+| Container log capture             | Stdout/stderr discarded post-`execvp`; needed for `maestro-minibox` Phase 1 |
+| Named containers                  | `ContainerName` field on `RunContainer`; needed for maestro integration     |
+| Networking (bridge/veth)          | No networking setup; containers get isolated net namespace only             |
+| `minibox-orch` agent orchestrator | See `docs/minibox-orch-design.md`; needs exec/logs/named containers first   |
+| Native Windows backend            | `winboxd` WSL2 proxy is a stepping stone; no plan yet                       |
 
 ---
 
@@ -256,19 +577,21 @@ Patterns borrowed from QEMU's OS-dependency layer, adapted to Rust/hexagonal arc
 - No `exec` command — cannot run commands in existing containers
 - No persistent state — daemon restart loses all container records
 - No Dockerfile support — OCI image-only workflow
-- `docker_desktop` and `wsl2` adapters exist in `linuxbox` but are **not wired** into `miniboxd`
+- `docker_desktop` and `wsl2` adapters exist in `minibox` but are **not wired** into `miniboxd`
+- VZ adapter is wired; VM image is built (`~/.minibox/vm/`); test harness is ready — blocked on Apple OS bug `VZErrorInternal(code=1)` on macOS 26 ARM64 (see [apple/container#1254](https://github.com/apple/container/issues/1254))
 
 ---
 
 ## Runtime paths
 
-| Path | Purpose |
-|---|---|
-| `/run/minibox/miniboxd.sock` | Unix socket (Linux/macOS) |
-| `\\.\pipe\miniboxd` | Named Pipe (Windows, future) |
-| `/var/lib/minibox/images/` | Image layer storage (root) |
-| `~/.mbx/cache/` | Image layer storage (non-root) |
-| `/sys/fs/cgroup/minibox.slice/miniboxd.service/` | Container cgroup root |
+| Path                                             | Purpose                        |
+| ------------------------------------------------ | ------------------------------ |
+| `/run/minibox/miniboxd.sock`                     | Unix socket (Linux)            |
+| `/tmp/minibox/miniboxd.sock`                     | Unix socket (macOS)            |
+| `\\.\pipe\miniboxd`                              | Named Pipe (Windows, future)   |
+| `/var/lib/minibox/images/`                       | Image layer storage (root)     |
+| `~/.minibox/cache/`                              | Image layer storage (non-root) |
+| `/sys/fs/cgroup/minibox.slice/miniboxd.service/` | Container cgroup root          |
 
 Override with: `MINIBOX_SOCKET_PATH`, `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MINIBOX_CGROUP_ROOT`
 
@@ -276,22 +599,22 @@ Override with: `MINIBOX_SOCKET_PATH`, `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MI
 
 ## Docs map
 
-| Doc | Status | Purpose |
-|---|---|---|
-| `CLAUDE.md` | Current | Primary agent instructions, architecture, tracing contract |
-| `HANDOFF.md` | Current (update each session) | Agent orientation — this file |
-| `docs/PRERELEASE_CHANGELOG.md` | Current | Per-version change history |
-| `docs/TESTING.md` | Current | Test strategy and layer reference |
-| `docs/SECURITY.md` | Current | Threat model, disclosure process |
-| `docs/SECURITY_FIXES.md` | Historical | Record of 2026-03-15 security hardening |
-| `docs/SECURITY_TESTING.md` | Current | Security test procedures |
-| `docs/cgroup-findings.md` | Historical | Debug record for cgroup supervisor leaf fix |
-| `docs/CODEBASE_ANALYSIS.md` | Partial (2026-03-17, some issues resolved) | Full audit findings |
-| `docs/vps-usage.md` | Current | systemd deploy guide |
-| `docs/diagrams/` | Current | Crate graph, hexagonal arch, lifecycle diagrams |
-| `docs/superpowers/plans/` | All have status frontmatter | Implementation plans |
-| `docs/plans/` | All have status frontmatter | Feature plans |
-| `docs/minibox-orch-design.md` | `status: future` | Agent orchestrator design |
-| `docs/minibox-orch-handoff.md` | `status: future` | Agent orchestrator impl spec |
-| `docs/handoff-2026-03-18.md` | `status: superseded` | Historical session handoff |
-| `docs/archive/` | Archived | Stale docs (TEST_RESULTS, ZOMBIENET_PATTERNS) |
+| Doc                            | Status                                     | Purpose                                                    |
+| ------------------------------ | ------------------------------------------ | ---------------------------------------------------------- |
+| `CLAUDE.md`                    | Current                                    | Primary agent instructions, architecture, tracing contract |
+| `HANDOFF.md`                   | Current (update each session)              | Agent orientation — this file                              |
+| `docs/PRERELEASE_CHANGELOG.md` | Current                                    | Per-version change history                                 |
+| `docs/TESTING.md`              | Current                                    | Test strategy and layer reference                          |
+| `docs/SECURITY.md`             | Current                                    | Threat model, disclosure process                           |
+| `docs/SECURITY_FIXES.md`       | Historical                                 | Record of 2026-03-15 security hardening                    |
+| `docs/SECURITY_TESTING.md`     | Current                                    | Security test procedures                                   |
+| `docs/cgroup-findings.md`      | Historical                                 | Debug record for cgroup supervisor leaf fix                |
+| `docs/CODEBASE_ANALYSIS.md`    | Partial (2026-03-17, some issues resolved) | Full audit findings                                        |
+| `docs/vps-usage.md`            | Current                                    | systemd deploy guide                                       |
+| `docs/diagrams/`               | Current                                    | Crate graph, hexagonal arch, lifecycle diagrams            |
+| `docs/superpowers/plans/`      | All have status frontmatter                | Implementation plans                                       |
+| `docs/plans/`                  | All have status frontmatter                | Feature plans                                              |
+| `docs/minibox-orch-design.md`  | `status: future`                           | Agent orchestrator design                                  |
+| `docs/minibox-orch-handoff.md` | `status: future`                           | Agent orchestrator impl spec                               |
+| `docs/handoff-2026-03-18.md`   | `status: superseded`                       | Historical session handoff                                 |
+| `docs/archive/`                | Archived                                   | Stale docs (TEST_RESULTS, ZOMBIENET_PATTERNS)              |

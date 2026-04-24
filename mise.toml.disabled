@@ -1,0 +1,547 @@
+[tools]
+rust = "1.91.1"
+
+[tasks]
+
+# ── All Platforms ─────────────────────────────────────────────────────────────
+
+[tasks."all:ci"]
+description = "Snapshot current Gitea CI status for minibox"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+GITEA_URL="http://100.105.75.7:3000"
+REPO="joe/minibox"
+VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
+TOKEN_NAME="ci-snap-$$"
+
+# Generate a short-lived API token via the VPS
+TOKEN=$(ssh jobrien-vm \
+  "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
+    --username joe --token-name $TOKEN_NAME --raw \
+    --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
+
+[[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
+
+cleanup() {
+  curl -sf -X DELETE -H "Authorization: token $TOKEN" \
+    "$GITEA_URL/api/v1/users/joe/tokens/$TOKEN_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# Fetch runs + active jobs in parallel
+RUNS=$(curl -sf -H "Authorization: token $TOKEN" \
+  "$GITEA_URL/api/v1/repos/$REPO/actions/runs?limit=15")
+JOBS=$(curl -sf -H "Authorization: token $TOKEN" \
+  "$GITEA_URL/api/v1/repos/$REPO/actions/tasks?limit=20" 2>/dev/null || echo '{}')
+
+python3 <<PYEOF
+import json, datetime, sys
+
+runs = json.loads('''$RUNS''').get("workflow_runs", [])
+tasks = json.loads('''$JOBS''').get("workflow_tasks", [])
+
+# Index active task names by run_id
+active = {}
+for t in tasks:
+    rid = t.get("run_id")
+    if t.get("status") in ("in_progress", "queued", "waiting"):
+        active.setdefault(rid, []).append(t.get("name", ""))
+
+def icon(status, conclusion):
+    if status == "completed":
+        return {"success": "✓", "failure": "✗", "cancelled": "○"}.get(conclusion or "", "?")
+    return {"in_progress": "●", "queued": "◌", "waiting": "⋯"}.get(status, "?")
+
+def fmt_time(ts):
+    if not ts:
+        return ""
+    try:
+        dt = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.strftime("%m-%d %H:%M")
+    except Exception:
+        return ts[:16]
+
+print(f"{'#':>4}  {'':2}  {' STATUS/RESULT':<20}  {'TIME':12}  TITLE")
+print("─" * 82)
+for r in runs:
+    rid   = r.get("id", "")
+    stat  = r.get("status", "")
+    conc  = r.get("conclusion", "") or ""
+    title = r.get("display_title", "")[:48]
+    ts    = fmt_time(r.get("created_at", ""))
+    ic    = icon(stat, conc)
+    label = f"{stat}/{conc}" if conc else stat
+    print(f"{rid:>4}  {ic:2}  {label:<20}  {ts:12}  {title}")
+    for job in active.get(rid, []):
+        print(f"{'':>4}  {'':2}  {'  ↳ ' + job}")
+PYEOF
+"""
+
+[tasks."all:ci:set-secret"]
+description = "Set a Gitea Actions secret (usage: mise run all:ci:set-secret -- NAME value)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+GITEA_URL="http://100.105.75.7:3000"
+REPO="joe/minibox"
+SECRET_NAME="${1:?usage: mise run all:ci:set-secret -- NAME value}"
+SECRET_VALUE="${2:?usage: mise run all:ci:set-secret -- NAME value}"
+
+VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
+TOKEN_NAME="ci-secret-$$"
+
+# Pass password via stdin to avoid it appearing on the remote command line
+TOKEN=$(printf '%s\n' "$VPS_PASS" | ssh jobrien-vm \
+  "sudo -Su git -S /usr/local/bin/gitea admin user generate-access-token \
+    --username joe --token-name $TOKEN_NAME --raw \
+    --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
+
+[[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
+
+# Fetch token ID so we can delete by ID (not name) per Gitea API spec
+TOKEN_ID=$(curl -sf -H "Authorization: token $TOKEN" \
+  "$GITEA_URL/api/v1/users/joe/tokens" \
+  | python3 -c "import json,sys; ts=json.load(sys.stdin); print(next((str(t['id']) for t in ts if t['name']=='$TOKEN_NAME'), ''))")
+
+cleanup() {
+  local target="${TOKEN_ID:-$TOKEN_NAME}"
+  curl -sf -X DELETE -H "Authorization: token $TOKEN" \
+    "$GITEA_URL/api/v1/users/joe/tokens/$target" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+BODY=$(python3 -c "import json, sys; print(json.dumps({'data': sys.argv[1]}))" "$SECRET_VALUE")
+
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+  -H "Authorization: token $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$BODY" \
+  "$GITEA_URL/api/v1/repos/$REPO/actions/secrets/$SECRET_NAME")
+
+[[ "$STATUS" == "201" || "$STATUS" == "204" ]] \
+  && echo "✓ $SECRET_NAME set (HTTP $STATUS)" \
+  || { echo "error: HTTP $STATUS setting $SECRET_NAME" >&2; exit 1; }
+"""
+
+[tasks."all:ci-setup"]
+description = "One-time setup: install cargo-deny + cargo-audit, prune stale cargo cache"
+run = """
+#!/usr/bin/env bash
+set -e
+echo "Installing cargo-deny..."
+command -v cargo-deny >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-deny --locked
+echo "Installing cargo-audit..."
+command -v cargo-audit >/dev/null 2>&1 || ~/.local/bin/mise exec -- cargo install cargo-audit --locked
+echo "Running disk hygiene..."
+rm -rf ~/.cargo/registry/src || true
+find ~/.cargo/registry/cache -name "*.crate" -atime +60 -delete 2>/dev/null || true
+echo "✓ CI setup complete"
+"""
+
+[tasks."all:bench:setup"]
+description = "One-time setup: clone minibox repo on VPS and compile minibox-bench"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+GITEA_URL="http://100.105.75.7:3000"
+VPS_PASS=$(op item get jobrien-vm --account=my.1password.com --fields password --reveal 2>/dev/null)
+TOKEN_NAME="bench-setup-$$"
+
+TOKEN=$(ssh jobrien-vm \
+  "echo '$VPS_PASS' | sudo -Su git /usr/local/bin/gitea admin user generate-access-token \
+    --username joe --token-name $TOKEN_NAME --raw \
+    --config /var/lib/gitea/custom/conf/app.ini 2>/dev/null")
+
+[[ -z "$TOKEN" ]] && { echo "error: could not generate Gitea token" >&2; exit 1; }
+
+cleanup() {
+  curl -sf -X DELETE -H "Authorization: token $TOKEN" \
+    "$GITEA_URL/api/v1/users/joe/tokens/$TOKEN_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+ssh jobrien-vm "GITEA_TOKEN=$TOKEN bash -s" <<'ENDSSH'
+set -euo pipefail
+
+REPO_DIR=~/minibox
+CLONE_URL="http://joe:${GITEA_TOKEN}@100.105.75.7:3000/joe/minibox"
+
+if [ -d "$REPO_DIR/.git" ]; then
+  echo "Pulling latest..."
+  git -C "$REPO_DIR" remote set-url origin "$CLONE_URL"
+  git -C "$REPO_DIR" pull
+else
+  echo "Cloning repo..."
+  git clone "$CLONE_URL" "$REPO_DIR"
+fi
+
+# Strip credentials from remote URL after clone
+git -C "$REPO_DIR" remote set-url origin "http://100.105.75.7:3000/joe/minibox"
+
+CURRENT_SHA=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo "")
+BUILT_SHA=$(cat "$REPO_DIR/.bench-built-sha" 2>/dev/null || echo "")
+BENCH_BIN="$REPO_DIR/target/release/minibox-bench"
+
+if [ "$CURRENT_SHA" = "$BUILT_SHA" ] && [ -f "$BENCH_BIN" ]; then
+  echo "✓ minibox-bench up to date (${CURRENT_SHA:0:8}), skipping build"
+else
+  echo "Building minibox-bench (${CURRENT_SHA:0:8})..."
+  cd "$REPO_DIR"
+  ~/.local/bin/mise trust
+  ~/.local/bin/mise exec -- cargo build --release -p minibox-bench
+  echo "$CURRENT_SHA" > "$REPO_DIR/.bench-built-sha"
+  echo "✓ minibox-bench built"
+fi
+ENDSSH
+"""
+
+[tasks."all:bench"]
+description = "Run minibox-bench on VPS and post results as a Gitea commit comment"
+run = "cargo xtask bench-vps"
+
+[tasks."all:test-e2e-vps"]
+description = "Run e2e suite on VPS — pulls latest main, runs as root"
+run = "ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH=\"/home/dev/.cargo/bin:$PATH\" cargo xtask test-e2e-suite'"
+
+[tasks."all:ssh-vps"]
+description = "SSH into jobrien-vm and cd into ~/minibox (key auth via 1Password agent)"
+run = "ssh -t jobrien-vm 'cd ~/minibox && exec $SHELL -l'"
+
+[tasks."all:commit"]
+description = "Stage all + commit (triggers pre-commit hook). Usage: mise run all:commit -- 'message'"
+run = """
+#!/usr/bin/env bash
+set -e
+MSG="${1:?usage: mise run all:commit -- 'message'}"
+git add -A
+git commit -m "$MSG"
+"""
+
+[tasks."all:meta-agent"]
+description = "Design + spawn parallel agents for any task. Usage: mise run all:meta-agent -- 'your task'"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+TASK="${1:?usage: mise run all:meta-agent -- 'your task description'}"
+uv run scripts/meta-agent.py "$TASK"
+"""
+
+[tasks."all:push"]
+description = "Push with pre-push sync check then clean artifacts. Usage: mise run all:push -- [git-push-args]"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+uv run scripts/sync-check.py
+git push "$@"
+cargo xtask clean-artifacts
+"""
+
+[tasks."all:standup"]
+description = "Automated standup via devkit. Usage: mise run all:standup -- [hours]"
+run = """
+#!/usr/bin/env bash
+HOURS="${1:-24}"
+devkit standup --since "${HOURS}h"
+"""
+
+[tasks."all:dash"]
+description = "Launch dashbox TUI dashboard"
+run = "cargo run -p dashbox --release"
+
+[tasks."all:dashboard"]
+description = "Agent run history and metrics dashboard (legacy Rich)"
+run = "uv run scripts/dashboard.py"
+
+[tasks."all:demo-pull"]
+description = "Pull an OCI image from Docker Hub — any platform, no daemon required. Usage: mise run all:demo-pull -- [image]"
+run = """
+#!/usr/bin/env bash
+IMAGE="${1:-alpine}"
+cargo run --release --example pull -p minibox -- "$IMAGE"
+"""
+
+[tasks."all:demo-showcase"]
+description = "Pull 15 real images, run a probe in each, show timings + metrics, clean up"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+spin() {
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+}
+
+step "building"
+if [[ "$(uname)" == "Linux" ]]; then
+    cargo build --release -p minibox -p minibox-cli -p miniboxd --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+else
+    cargo build --release -p minibox --example showcase \
+        2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+fi
+ok "binaries ready"; echo ""
+
+if [[ "$(uname)" == "Linux" ]]; then
+    step "starting daemon"
+    sudo ./target/release/miniboxd &>/dev/null &
+    DAEMON_PID=$!
+    trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+    spin "waiting for daemon..." & SPIN=$!
+    until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+    kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+    printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+    sudo MINIBOX_DATA_DIR=/var/lib/minibox \
+        ./target/release/examples/showcase \
+        --run ./target/release/minibox --sudo-run --cleanup
+else
+    ./target/release/examples/showcase --cleanup
+fi
+'''
+
+# ── Linux Only ────────────────────────────────────────────────────────────────
+
+[tasks."linux:fix-socket"]
+description = "Build miniboxd and fix Unix socket permissions (Linux, root)"
+run = """
+#!/usr/bin/env bash
+set -e
+cargo build --release -p miniboxd
+bash ops/fix-minibox-socket.sh
+"""
+
+[tasks."linux:smoke"]
+description = "Quick daemon smoke test — start, list containers, stop (Linux, root)"
+run = "bash -lc 'set -euo pipefail; sudo ./target/release/miniboxd & pid=$!; sleep 1; sudo ./target/release/minibox ps; sudo kill $pid; wait $pid || true'"
+
+[tasks."linux:demo-hello"]
+description = "Hello World: build, start daemon, pull alpine, stream a greeting, stop daemon (Linux, root)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
+hdr() { printf "\n${B}${C}  ╭─────────────────────────────────────────╮\n  │  %-39s  │\n  ╰─────────────────────────────────────────╯${R}\n\n" "$1"; }
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+spin() {
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+}
+
+if [[ "$(uname)" != "Linux" ]]; then
+    printf "  ${C}linux:demo-hello requires Linux + root — try: mise run all:demo-pull${R}\n"; exit 1
+fi
+
+hdr "minibox · hello world"
+
+step "building"
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+ok "binaries ready"; echo ""
+
+step "starting daemon"
+sudo ./target/release/miniboxd &>/dev/null &
+DAEMON_PID=$!
+trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+spin "waiting for daemon..." & SPIN=$!
+until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+
+step "pulling alpine"
+sudo ./target/release/minibox pull alpine; echo ""
+
+step "running container"
+sudo ./target/release/minibox run alpine -- /bin/echo "Hello from Minibox!"
+echo ""; ok "done"; echo ""
+'''
+
+[tasks."linux:demo-isolation"]
+description = "Namespace isolation demo: UTS + PID + mount isolation vs host (Linux, root)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; Y='\033[33m'; BL='\033[34m'; D='\033[2m'; R='\033[0m'
+hdr() { printf "\n${B}${C}  ╭─────────────────────────────────────────╮\n  │  %-39s  │\n  ╰─────────────────────────────────────────╯${R}\n\n" "$1"; }
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+row()  { printf "  ${D}%-10s${R}  ${Y}%-26s${R}  ${G}%-26s${R}\n" "$1" "$2" "$3"; }
+spin() {
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+}
+
+if [[ "$(uname)" != "Linux" ]]; then
+    printf "  ${C}linux:demo-isolation requires Linux + root — try: mise run all:demo-pull${R}\n"; exit 1
+fi
+
+hdr "minibox · namespace isolation"
+
+step "building"
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+ok "binaries ready"; echo ""
+
+step "starting daemon"
+sudo ./target/release/miniboxd &>/dev/null &
+DAEMON_PID=$!
+trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+spin "waiting for daemon..." & SPIN=$!
+until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+
+step "pulling alpine"
+sudo ./target/release/minibox pull alpine 2>&1 | tail -1
+ok "image ready"; echo ""
+
+step "sampling host and container environments"
+HOST_HN=$(hostname)
+HOST_OS=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2 || uname -s)
+HOST_P1=$(cat /proc/1/comm)
+HOST_U="$(id -u) ($(id -un))"
+COUT=$(sudo ./target/release/minibox run alpine -- /bin/sh -c \
+    'printf "%s\n%s\n%s\n%s\n" "$(hostname)" "$(cat /etc/alpine-release)" "$(cat /proc/1/comm)" "$(id -u)"' 2>/dev/null)
+C_HN=$(printf '%s' "$COUT" | sed -n '1p')
+C_VER=$(printf '%s' "$COUT" | sed -n '2p')
+C_P1=$(printf '%s' "$COUT" | sed -n '3p')
+C_U=$(printf '%s' "$COUT" | sed -n '4p')
+
+echo ""
+printf "  ${D}%-10s  ${B}${Y}%-26s  ${B}${G}%-26s${R}\n" "" "HOST" "CONTAINER (alpine)"
+printf "  ${D}%-10s  %-26s  %-26s${R}\n" "" "──────────────────────────" "──────────────────────────"
+row "hostname" "$HOST_HN" "$C_HN"
+row "os"       "$HOST_OS" "Alpine Linux $C_VER"
+row "pid 1"    "$HOST_P1" "$C_P1"
+row "user"     "$HOST_U"  "$C_U (root)"
+echo ""
+ok "done · three namespaces isolated, one shared kernel"
+echo ""
+'''
+
+[tasks."linux:dogfood"]
+description = "Spin up a container, validate runtime isolation, then run the unit test suite (Linux, root)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; Y='\033[33m'; BL='\033[34m'; R='\033[0m'
+hdr() { printf "\n${B}${C}  ╭─────────────────────────────────────────╮\n  │  %-39s  │\n  ╰─────────────────────────────────────────╯${R}\n\n" "$1"; }
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+fail() { printf "  ${Y}✗${R}  %s\n" "$1"; exit 1; }
+spin() {
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') i=0 msg="$1"
+    while true; do printf "\r     ${C}${frames[$i]}${R}  %s" "$msg"; i=$(( (i+1)%10 )); sleep 0.08; done
+}
+
+if [[ "$(uname)" != "Linux" ]]; then
+    printf "  ${C}linux:dogfood requires Linux + root (container runtime) — run on VPS or CI${R}\n"; exit 1
+fi
+
+hdr "minibox · dogfood"
+
+step "building"
+cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+ok "binaries ready"; echo ""
+
+step "starting daemon"
+sudo ./target/release/miniboxd &>/dev/null &
+DAEMON_PID=$!
+trap 'sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+spin "waiting for daemon..." & SPIN=$!
+until sudo bash -c '[ -S /run/minibox/miniboxd.sock ]' 2>/dev/null; do sleep 0.05; done
+kill $SPIN 2>/dev/null; wait $SPIN 2>/dev/null || true
+printf "\r  ${G}✓${R}  daemon ready                        \n\n"
+
+step "pulling alpine"
+sudo ./target/release/minibox pull alpine 2>&1 | tail -1
+ok "image ready"; echo ""
+
+step "validating runtime isolation"
+CONTAINER_OS=$(sudo ./target/release/minibox run alpine -- /bin/sh -c \
+    'printf "os=%s pid1=%s user=%s\n" "$(cat /etc/alpine-release)" "$(cat /proc/1/comm)" "$(id -u)"' 2>/dev/null)
+if [[ "$CONTAINER_OS" == os=* ]]; then
+    ok "container reports: $CONTAINER_OS"
+else
+    fail "container did not produce expected output"
+fi
+echo ""
+
+step "stopping daemon"
+sudo kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true
+trap - EXIT
+ok "daemon stopped"; echo ""
+
+step "running unit test suite (host)"
+cargo xtask test-unit
+echo ""
+ok "all dogfood checks passed"
+echo ""
+'''
+
+# ── macOS Only ────────────────────────────────────────────────────────────────
+
+[tasks."macos:bench"]
+description = "Start macOS daemon (Colima), run all benchmark suites, append to bench.jsonl, open report"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+C='\033[36m'; B='\033[1m'; G='\033[32m'; BL='\033[34m'; R='\033[0m'
+step() { printf "  ${B}${BL}▸${R}  ${B}%s${R}\n" "$1"; }
+ok()   { printf "  ${G}✓${R}  %s\n" "$1"; }
+
+if [[ "$(uname)" != "Darwin" ]]; then
+    printf "  ${C}macos:bench requires macOS — use all:bench for VPS runs${R}\n"; exit 1
+fi
+
+if ! colima status &>/dev/null; then
+    printf "  ${C}Colima is not running — start it with: colima start${R}\n"; exit 1
+fi
+
+step "building"
+cargo build --release -p miniboxd -p minibox-cli 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+ok "binaries ready"; echo ""
+
+step "starting daemon"
+./target/release/miniboxd &>/dev/null &
+DAEMON_PID=$!
+trap 'kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true' EXIT
+until [ -S /tmp/minibox/miniboxd.sock ] 2>/dev/null; do sleep 0.05; done
+ok "daemon ready"; echo ""
+
+step "running benchmarks (all suites)"
+cargo xtask bench
+echo ""
+
+step "stopping daemon"
+kill $DAEMON_PID 2>/dev/null; wait $DAEMON_PID 2>/dev/null || true
+trap - EXIT
+ok "daemon stopped"; echo ""
+
+step "opening report"
+cargo xtask bench-report
+open bench/results/report.html
+'''
+
+[tasks."macos:bench-report"]
+description = "Regenerate bench/results/report.html from bench.jsonl and open it"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cargo xtask bench-report
+open bench/results/report.html
+'''
+
+[tasks."macos:flamegraph"]
+description = "Profile bench binary with samply — builds first, suite selectable. Usage: mise run macos:flamegraph -- [--suite codec|adapter]"
+run = """
+#!/usr/bin/env bash
+cargo xtask flamegraph "$@"
+"""
+
+[tasks.dockerbox]
+description = "Run dockerboxd (Docker API shim for minibox)"
+run = "cargo run -p dockerbox"

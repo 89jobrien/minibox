@@ -1,0 +1,33 @@
+name: Conformance
+
+on:
+  push:
+    branches: [next, stable]
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    name: conformance suite
+    runs-on: [self-hosted, minibox]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo xtask test-conformance
+        run: ~/.local/bin/mise exec -- cargo xtask test-conformance
+
+      - name: upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: artifacts/conformance/
+          retention-days: 30
+
+      - name: post summary
+        if: always()
+        run: |
+          REPORT=artifacts/conformance/report.md
+          if [ -f "$REPORT" ]; then
+            echo "## Conformance Report" >> "$GITHUB_STEP_SUMMARY"
+            python3 -c "import sys; sys.stdout.write(open('$REPORT').read())" >> "$GITHUB_STEP_SUMMARY"
+          fi

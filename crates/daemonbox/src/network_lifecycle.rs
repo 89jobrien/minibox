@@ -54,7 +54,7 @@ impl NetworkLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::adapters::mocks::MockNetwork;
+    use minibox::adapters::mocks::MockNetwork;
     use std::sync::Arc;
 
     #[tokio::test]

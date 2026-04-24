@@ -3,8 +3,8 @@
 //! Complements proptest_suite.rs (which covers basic roundtrip invariants)
 //! with targeted edge-case properties.
 
-use linuxbox::domain::ContainerId;
-use linuxbox::protocol::{
+use minibox::domain::ContainerId;
+use minibox::protocol::{
     DaemonRequest, DaemonResponse, OutputStreamKind, decode_request, decode_response,
     encode_request, encode_response,
 };
@@ -79,6 +79,11 @@ proptest! {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -97,6 +102,11 @@ proptest! {
             cpu_weight: Some(u64::MAX),
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

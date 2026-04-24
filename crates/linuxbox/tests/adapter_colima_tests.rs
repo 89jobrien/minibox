@@ -5,10 +5,10 @@
 //! domain trait interface, verifying that the adapter correctly translates trait
 //! calls into the expected Lima shell commands and handles responses properly.
 
-use linuxbox::adapters::{ColimaRegistry, ColimaRuntime};
-use linuxbox::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceLimiter,
+use minibox::adapters::{ColimaRegistry, ColimaRuntime};
+use minibox::domain::{
+    ChildInit, ContainerHooks, ContainerRuntime, ContainerSpawnConfig, ImageRegistry,
+    ResourceLimiter, RootfsSetup,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -58,7 +58,7 @@ async fn registry_pull_image_propagates_executor_error() {
     }));
 
     let result = registry
-        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
         .await;
     assert!(
         result.is_err(),
@@ -87,7 +87,7 @@ async fn registry_pull_image_parses_inspect_output() {
     }));
 
     let metadata = registry
-        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
         .await
         .expect("pull_image should succeed with valid executor output");
 
@@ -313,6 +313,8 @@ async fn runtime_spawn_process_extracts_pid_from_executor_output() {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let result = runtime
@@ -339,6 +341,8 @@ async fn runtime_spawn_process_errors_on_invalid_pid() {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -362,6 +366,8 @@ async fn runtime_spawn_process_propagates_executor_error() {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -399,6 +405,8 @@ async fn runtime_spawn_script_embeds_args() {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let result = runtime.spawn_process(&config).await.unwrap();
@@ -421,14 +429,13 @@ async fn runtime_spawn_script_embeds_args() {
 // ============================================================================
 // ColimaFilesystem and ColimaLimiter — trait-level tests
 //
-// Neither ColimaFilesystem nor ColimaLimiter expose `with_executor()` publicly.
-// We test them by constructing them without a VM and observing the expected
-// failure mode: the `limactl` binary is absent in the test environment, so
-// every call that requires the VM must return an error.  This verifies that
-// the adapters propagate infrastructure errors rather than silently succeeding.
+// Both adapters expose `with_executor()` for injecting a test seam (see
+// ColimaRegistry/ColimaRuntime pattern).  The tests below exercise both the
+// injected-executor path (verifying correct command construction) and the
+// no-executor path (where limactl is absent, verifying error propagation).
 // ============================================================================
 
-use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter};
+use minibox::adapters::{ColimaFilesystem, ColimaLimiter};
 
 /// setup_rootfs must pass the overlay mount as argv so spaced macOS paths work.
 #[test]
@@ -453,7 +460,7 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
         .expect("setup_rootfs should succeed with injected executor");
 
     assert_eq!(
-        merged,
+        merged.merged_dir,
         PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
     );
 
@@ -527,7 +534,7 @@ fn filesystem_cleanup_uses_sudo_umount() {
 /// ResourceLimiter::create must use sudo for cgroup setup and writes.
 #[test]
 fn limiter_create_uses_sudo_for_cgroup_operations() {
-    use linuxbox::domain::ResourceConfig;
+    use minibox::domain::ResourceConfig;
     use std::sync::{Arc, Mutex};
 
     let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));

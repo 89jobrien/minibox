@@ -29,8 +29,8 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry,
+    ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -61,6 +61,17 @@ fn lima_home() -> String {
 }
 
 fn limactl_command(path: &str) -> Command {
+    // limactl refuses to run as root. When miniboxd is started via sudo,
+    // SUDO_USER is set to the original user. Drop back to that user so
+    // limactl can reach the Lima socket in their home directory.
+    if nix::unistd::geteuid().is_root()
+        && let Ok(sudo_user) = std::env::var("SUDO_USER")
+    {
+        let mut cmd = Command::new("sudo");
+        cmd.args(["-u", &sudo_user, "--", path]);
+        cmd.env("LIMA_HOME", lima_home());
+        return cmd;
+    }
     let mut cmd = Command::new(path);
     cmd.env("LIMA_HOME", lima_home());
     cmd
@@ -185,9 +196,20 @@ impl ImageRegistry for ColimaRegistry {
     ///
     /// Runs `nerdctl image inspect <name>:<tag>` and treats a non-zero exit code as absent.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        let full_name = format!("{name}:{tag}");
-        let result = self.lima_exec(&["nerdctl", "image", "inspect", &full_name]);
-        result.is_ok()
+        // Strip "library/" prefix — nerdctl and docker both omit it for official images.
+        let short_name = name.strip_prefix("library/").unwrap_or(name);
+        let full_name = format!("{short_name}:{tag}");
+        // Use `images --filter` which works with both nerdctl-as-docker and real docker.
+        // `image inspect` can fail even when the image exists (nerdctl docker-compat quirk).
+        self.lima_exec(&[
+            "docker",
+            "images",
+            "--filter",
+            &format!("reference={full_name}"),
+            "--quiet",
+        ])
+        .map(|out| !out.trim().is_empty())
+        .unwrap_or(false)
     }
 
     /// Pull the image via `nerdctl` inside the VM and return its metadata.
@@ -299,6 +321,23 @@ impl ImageRegistry for ColimaRegistry {
     }
 }
 
+#[async_trait]
+impl ImageLoader for ColimaRegistry {
+    /// Load a local OCI tarball into the Colima VM's containerd image store.
+    ///
+    /// The tarball path must be reachable from inside the Lima VM.
+    /// Lima automatically shares `/tmp` and `$HOME`, so paths under those
+    /// directories work without extra configuration.
+    async fn load_image(&self, path: &std::path::Path, _name: &str, _tag: &str) -> Result<()> {
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| anyhow!("non-UTF-8 path: {}", path.display()))?;
+        self.lima_exec(&["nerdctl", "load", "-i", path_str])
+            .map(|_| ())
+            .map_err(|e| anyhow!("nerdctl load failed: {e}"))
+    }
+}
+
 // ============================================================================
 // Colima Filesystem Adapter
 // ============================================================================
@@ -360,7 +399,7 @@ impl ColimaFilesystem {
     }
 }
 
-impl FilesystemProvider for ColimaFilesystem {
+impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
     /// Create an overlay mount inside the Lima VM and return the merged directory path.
     ///
     /// Creates `upper/`, `work/`, and `merged/` subdirectories under
@@ -371,7 +410,7 @@ impl FilesystemProvider for ColimaFilesystem {
     ///
     /// Returns an error if any `mkdir -p` or `mount -t overlay` command fails
     /// inside the VM (e.g. insufficient privileges or kernel module not loaded).
-    fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         // Concatenate all layer paths as colon-separated lowerdir value.
         let lower_dirs = layers
             .iter()
@@ -410,17 +449,17 @@ impl FilesystemProvider for ColimaFilesystem {
             &merged_dir.to_string_lossy(),
         ])?;
 
-        Ok(merged_dir)
-    }
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("colima_instance".to_string(), self.instance.clone());
 
-    /// No-op: `pivot_root` is handled by the container runtime inside the VM.
-    ///
-    /// In the Colima adapter the actual `pivot_root(2)` call is performed by
-    /// the `unshare`/`chroot` invocation in [`ColimaRuntime::spawn_process`],
-    /// not by the filesystem provider layer.
-    fn pivot_root(&self, new_root: &Path) -> Result<()> {
-        let _ = new_root;
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir,
+            rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
+                upper_dir,
+                metadata,
+            }),
+            source_image_ref: None,
+        })
     }
 
     /// Unmount the overlay and remove the container directory inside the VM.
@@ -435,6 +474,14 @@ impl FilesystemProvider for ColimaFilesystem {
         self.lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
         self.lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
 
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for ColimaFilesystem {
+    /// No-op: `pivot_root` is handled inside the Lima VM by the container runtime.
+    fn pivot_root(&self, new_root: &Path) -> Result<()> {
+        let _ = new_root;
         Ok(())
     }
 }
@@ -723,6 +770,65 @@ impl ColimaRuntime {
     }
 }
 
+/// Validate that all bind mount host paths are accessible inside the Lima VM.
+///
+/// Lima shares `$HOME` and `/tmp` into the VM by default. Paths outside those
+/// prefixes are not visible and will cause silent mount failures.
+pub(crate) fn validate_lima_paths(
+    mounts: &[minibox_core::domain::BindMount],
+) -> anyhow::Result<()> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home_path = std::path::Path::new(&home);
+
+    for m in mounts {
+        let p = &m.host_path;
+        let in_home = p.starts_with(home_path);
+        let in_tmp = p.starts_with("/tmp");
+        if !in_home && !in_tmp {
+            anyhow::bail!(
+                "bind mount source {:?} is not accessible inside the Lima VM.\n\
+                 hint: Lima shares $HOME ({}) and /tmp — move the source or add it to lima.yaml shared dirs.",
+                p,
+                home
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Build the shell snippet that mounts one bind mount inside the Lima VM.
+///
+/// The snippet is injected into the spawn script before the `unshare` call.
+/// It targets rootfs-relative paths so after chroot the container sees them at
+/// `container_path`.
+///
+/// The exported rootfs is read-only at this stage, so the target must already
+/// exist in the image. Creating it lazily with `mkdir -p` fails for paths like
+/// `/workspace` and obscures the real problem.
+pub(crate) fn bind_mount_shell_snippet(
+    m: &minibox_core::domain::BindMount,
+    rootfs: &std::path::Path,
+) -> String {
+    let host = m.host_path.display();
+    let container_rel = m
+        .container_path
+        .strip_prefix("/")
+        .unwrap_or(&m.container_path);
+    let target = rootfs.join(container_rel);
+    let target_display = target.display();
+    let target_check = format!(
+        "sudo test -e '{target_display}' || (echo 'bind mount target {target_display} does not exist in image rootfs' >&2; exit 1)"
+    );
+
+    if m.read_only {
+        format!(
+            "{target_check} && sudo mount --bind '{host}' '{target_display}' && sudo mount -o remount,ro,bind '{target_display}'"
+        )
+    } else {
+        format!("{target_check} && sudo mount --bind '{host}' '{target_display}'")
+    }
+}
+
 #[async_trait]
 impl ContainerRuntime for ColimaRuntime {
     /// Return the runtime capabilities advertised by this adapter.
@@ -764,6 +870,23 @@ impl ContainerRuntime for ColimaRuntime {
             .collect::<Vec<_>>()
             .join(" ");
 
+        // Validate that all bind mount host paths are Lima-accessible.
+        validate_lima_paths(&config.mounts)?;
+
+        // Build bind mount shell commands.
+        let bind_mount_cmds: String = config
+            .mounts
+            .iter()
+            .map(|m| bind_mount_shell_snippet(m, &config.rootfs))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let privileged_flag = if config.privileged {
+            " --keep-caps"
+        } else {
+            ""
+        };
+
         if self.spawner.is_some() && config.capture_output {
             // Streaming path: foreground exec with piped stdout.
             // Uses `exec unshare` so the spawned process replaces the shell,
@@ -772,7 +895,8 @@ impl ContainerRuntime for ColimaRuntime {
                 r#"ROOTFS={rootfs}
 COMMAND={command}
 ARGS=({args})
-exec sudo unshare --pid --mount --uts --ipc --net \
+{bind_mount_cmds}
+exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
     --fork --kill-child \
     chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
 "#
@@ -824,7 +948,9 @@ exec sudo unshare --pid --mount --uts --ipc --net \
             COMMAND={command}
             ARGS=({args})
 
-            sudo unshare --pid --mount --uts --ipc --net \
+            {bind_mount_cmds}
+
+            sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
                 --fork --kill-child \
                 chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
 
@@ -981,6 +1107,40 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn colima_load_image_calls_nerdctl_load() {
+        let called_args: Arc<std::sync::Mutex<Vec<String>>> =
+            Arc::new(std::sync::Mutex::new(vec![]));
+        let called_clone = Arc::clone(&called_args);
+
+        let loader = ColimaRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+            called_clone
+                .lock()
+                .unwrap()
+                .extend(args.iter().map(|s| s.to_string()));
+            Ok(String::new())
+        }));
+
+        let result = loader
+            .load_image(
+                std::path::Path::new("/tmp/minibox-tester.tar"),
+                "minibox-tester",
+                "latest",
+            )
+            .await;
+        assert!(result.is_ok(), "load_image failed: {result:?}");
+
+        let args = called_args.lock().unwrap();
+        assert!(
+            args.iter().any(|a| a == "nerdctl"),
+            "expected nerdctl call, got: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a == "load"),
+            "expected 'load' arg, got: {args:?}"
+        );
+    }
+
     /// spawn_process must include config.args in the shell script sent to the
     /// Lima VM.  The current implementation only substitutes $COMMAND and
     /// silently drops all arguments.
@@ -1011,6 +1171,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime.spawn_process(&config).await.unwrap();
@@ -1224,6 +1386,8 @@ mod tests {
             capture_output: true,
             skip_network_namespace: false,
             hooks: ContainerHooks::default(),
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime
@@ -1245,5 +1409,89 @@ mod tests {
             output.contains("hello from container"),
             "output was: {output}"
         );
+    }
+}
+
+#[cfg(test)]
+mod bind_mount_tests {
+    use super::*;
+    use minibox_core::domain::BindMount;
+    use std::path::PathBuf;
+
+    fn home_dir() -> PathBuf {
+        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()))
+    }
+
+    #[test]
+    fn validate_lima_paths_accepts_home_subdir() {
+        let home = home_dir();
+        let mounts = vec![BindMount {
+            host_path: home.join("some/project/bin"),
+            container_path: PathBuf::from("/bin"),
+            read_only: false,
+        }];
+        validate_lima_paths(&mounts).expect("home subdir should be accepted");
+    }
+
+    #[test]
+    fn validate_lima_paths_accepts_tmp_subdir() {
+        let mounts = vec![BindMount {
+            host_path: PathBuf::from("/tmp/minibox-test"),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }];
+        validate_lima_paths(&mounts).expect("tmp subdir should be accepted");
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_opt() {
+        let mounts = vec![BindMount {
+            host_path: PathBuf::from("/opt/homebrew/bin"),
+            container_path: PathBuf::from("/bin"),
+            read_only: false,
+        }];
+        let err = validate_lima_paths(&mounts).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Lima") || msg.contains("accessible"),
+            "expected Lima path error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_lima_paths_empty_mounts_passes() {
+        validate_lima_paths(&[]).expect("empty mounts should pass");
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_rw() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("test -e"), "snippet: {snippet}");
+        assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
+        assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
+        assert!(snippet.contains("/rootfs/guest"), "snippet: {snippet}");
+        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_ro() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest"),
+            read_only: true,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        assert!(snippet.contains("test -e"), "snippet: {snippet}");
+        assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
+        assert!(
+            snippet.contains("remount,ro,bind") || snippet.contains("remount,bind,ro"),
+            "snippet: {snippet}"
+        );
+        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
     }
 }

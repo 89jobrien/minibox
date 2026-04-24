@@ -62,8 +62,8 @@ use async_trait::async_trait;
 use minibox_core::{
     as_any,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ResourceConfig,
-        ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ResourceConfig, ResourceLimiter, RootfsLayout,
+        RuntimeCapabilities, SpawnResult,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -265,7 +265,7 @@ impl Wsl2Filesystem {
     }
 }
 
-impl FilesystemProvider for Wsl2Filesystem {
+impl minibox_core::domain::RootfsSetup for Wsl2Filesystem {
     /// Set up the container rootfs overlay inside WSL2 and return the merged path.
     ///
     /// Translates all layer paths and the container directory to WSL2 paths,
@@ -277,7 +277,7 @@ impl FilesystemProvider for Wsl2Filesystem {
     ///
     /// Returns an error if path translation fails, if the helper command fails,
     /// or if the JSON response cannot be parsed.
-    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         debug!(
             layers = ?image_layers,
             container_dir = ?container_dir,
@@ -304,17 +304,11 @@ impl FilesystemProvider for Wsl2Filesystem {
 
         let response: Wsl2FilesystemSetupResponse = serde_json::from_str(&output)?;
 
-        Ok(Path::new(&response.merged_path).to_path_buf())
-    }
-
-    /// No-op: `pivot_root` is performed by the helper inside the container process.
-    ///
-    /// When the container process is already running inside WSL2, the Linux
-    /// helper handles `pivot_root(2)` directly as part of the spawn sequence.
-    /// This adapter layer has nothing to do.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        debug!("wsl2: pivot_root delegated to helper (called inside container)");
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: Path::new(&response.merged_path).to_path_buf(),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     /// Tear down the container overlay and remove the container directory in WSL2.
@@ -337,6 +331,14 @@ impl FilesystemProvider for Wsl2Filesystem {
             &container_dir_wsl,
         ])?;
 
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for Wsl2Filesystem {
+    /// No-op: `pivot_root` is performed by the helper inside the container process.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        debug!("wsl2: pivot_root delegated to helper (called inside container)");
         Ok(())
     }
 }

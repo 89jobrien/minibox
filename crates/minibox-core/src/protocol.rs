@@ -37,8 +37,17 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::NetworkMode;
+use crate::domain::{BindMount, NetworkMode, SessionId};
 use serde::{Deserialize, Serialize};
+
+/// Serializable registry credentials for protocol transport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum PushCredentials {
+    Anonymous,
+    Basic { username: String, password: String },
+    Token { token: String },
+}
 
 // ---------------------------------------------------------------------------
 // Requests (CLI -> Daemon)
@@ -71,11 +80,51 @@ pub enum DaemonRequest {
         /// `NetworkMode::None` (isolated namespace, no network connectivity).
         #[serde(default)]
         network: Option<NetworkMode>,
+        /// Environment variables to set inside the container, in `KEY=VALUE` form.
+        ///
+        /// These are merged with the container's default environment (PATH, TERM).
+        /// User-supplied values take precedence over defaults for duplicate keys.
+        #[serde(default)]
+        env: Vec<String>,
+        /// Bind mounts to apply inside the container.
+        ///
+        /// Each entry is mounted before `pivot_root` in the container's mount namespace.
+        /// On the Colima adapter, host paths must be under `$HOME` or `/tmp`.
+        #[serde(default)]
+        mounts: Vec<BindMount>,
+        /// If `true`, the container process runs with a full Linux capability set.
+        ///
+        /// Required for Docker-in-Docker (DinD) use cases where the inner process
+        /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
+        #[serde(default)]
+        privileged: bool,
+        /// Optional human-readable name for the container.
+        ///
+        /// When set, the container can be referenced by name in `stop` and `rm`
+        /// commands in addition to its auto-generated ID.  Names must be unique;
+        /// if a container with the same name already exists the request fails.
+        #[serde(default)]
+        name: Option<String>,
+        /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
+        #[serde(default)]
+        tty: bool,
     },
 
     /// Stop a running container by ID.
     Stop {
         /// Container ID (short UUID).
+        id: String,
+    },
+
+    /// Freeze all processes in a running container via cgroup.freeze.
+    PauseContainer {
+        /// Container ID to pause.
+        id: String,
+    },
+
+    /// Thaw a paused container.
+    ResumeContainer {
+        /// Container ID to resume.
         id: String,
     },
 
@@ -95,6 +144,140 @@ pub enum DaemonRequest {
         /// Image tag. Defaults to `"latest"` when `None`.
         tag: Option<String>,
     },
+
+    /// Load a local OCI image tarball into the daemon's image store.
+    LoadImage {
+        /// Absolute path to the OCI tarball on the host filesystem.
+        path: String,
+        /// Image name to register (e.g. `"minibox-tester"`).
+        name: String,
+        /// Image tag to register (e.g. `"latest"`).
+        tag: String,
+    },
+
+    /// Execute a command inside an already-running container.
+    Exec {
+        /// ID of the target container (must be in Running state).
+        container_id: String,
+        /// Command and arguments to execute.
+        cmd: Vec<String>,
+        /// Additional environment variables in `KEY=VALUE` form.
+        #[serde(default)]
+        env: Vec<String>,
+        /// Working directory inside the container. Defaults to `/`.
+        #[serde(default)]
+        working_dir: Option<String>,
+        /// If `true`, allocate a pseudo-TTY for the exec process.
+        #[serde(default)]
+        tty: bool,
+    },
+
+    /// Send raw bytes to a running exec or run session stdin (base64-encoded).
+    SendInput { session_id: SessionId, data: String },
+
+    /// Notify the daemon the client terminal was resized.
+    ResizePty {
+        session_id: SessionId,
+        cols: u16,
+        rows: u16,
+    },
+
+    /// Push a locally-stored image to a remote OCI registry.
+    Push {
+        /// Image reference to push (e.g. `"docker.io/library/ubuntu:22.04"`).
+        image_ref: String,
+        /// Credentials for authenticating to the target registry.
+        credentials: PushCredentials,
+    },
+
+    /// Snapshot a container's filesystem changes into a new local image.
+    Commit {
+        container_id: String,
+        target_image: String,
+        #[serde(default)]
+        author: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        #[serde(default)]
+        env_overrides: Vec<String>,
+        #[serde(default)]
+        cmd_override: Option<Vec<String>>,
+    },
+
+    /// Build an image from a Dockerfile.
+    Build {
+        /// Dockerfile content (as string).
+        dockerfile: String,
+        /// Build context directory path on the daemon host.
+        context_path: String,
+        /// Target tag for the built image.
+        tag: String,
+        /// Build-time argument overrides.
+        #[serde(default)]
+        build_args: Vec<(String, String)>,
+        /// When `true`, skip any cached layers.
+        #[serde(default)]
+        no_cache: bool,
+    },
+
+    /// Subscribe to the container event stream.
+    ///
+    /// The daemon will send `Event` responses until the connection closes.
+    SubscribeEvents,
+
+    /// Remove unused images (optionally dry-run).
+    Prune {
+        #[serde(default)]
+        dry_run: bool,
+    },
+
+    /// Remove a specific image by reference.
+    RemoveImage {
+        /// Image reference, e.g. `"alpine:latest"`.
+        image_ref: String,
+    },
+
+    /// Retrieve stored log output for a container.
+    ///
+    /// The daemon will send zero or more `LogLine` responses followed by
+    /// `Success { message: "end of log" }` (when `follow: false`).
+    ContainerLogs {
+        /// Container ID or name to retrieve logs for.
+        container_id: String,
+        /// If `true`, keep the connection open and stream new output as it
+        /// arrives (not yet implemented — reserved for future use).
+        #[serde(default)]
+        follow: bool,
+    },
+
+    /// Run a crux pipeline inside a container.
+    ///
+    /// Higher-level than `Run` — bundles image pull + container create +
+    /// pipeline execution + trace collection.
+    RunPipeline {
+        /// Path to the `.cruxx` pipeline file (host-side).
+        pipeline_path: String,
+        /// Optional JSON input to the pipeline.
+        #[serde(default)]
+        input: Option<serde_json::Value>,
+        /// Container image to use. Defaults to `cruxx-runtime:latest`.
+        #[serde(default)]
+        image: Option<String>,
+        /// Token/step/time budget for the pipeline execution.
+        #[serde(default)]
+        budget: Option<serde_json::Value>,
+        /// Additional environment variables as (KEY, VALUE) pairs.
+        #[serde(default)]
+        env: Vec<(String, String)>,
+        /// Maximum container nesting depth (daemon-enforced).
+        /// Defaults to 3. Requests exceeding this are rejected.
+        #[serde(default = "default_max_depth")]
+        max_depth: u32,
+    },
+}
+
+fn default_max_depth() -> u32 {
+    3
 }
 
 // ---------------------------------------------------------------------------
@@ -130,10 +313,28 @@ pub enum DaemonResponse {
         message: String,
     },
 
+    /// Confirmation that a container was paused.
+    ContainerPaused {
+        /// The container ID.
+        id: String,
+    },
+
+    /// Confirmation that a container was resumed.
+    ContainerResumed {
+        /// The container ID.
+        id: String,
+    },
+
     /// Response to a [`DaemonRequest::List`] request.
     ContainerList {
         /// All containers known to the daemon.
         containers: Vec<ContainerInfo>,
+    },
+
+    /// Confirmation that a local image tarball was loaded successfully.
+    ImageLoaded {
+        /// The image reference that was registered, e.g. `"minibox-tester:latest"`.
+        image: String,
     },
 
     /// An error occurred processing the request.
@@ -162,6 +363,91 @@ pub enum DaemonResponse {
         /// Exit code of the container process.
         exit_code: i32,
     },
+
+    /// Sent once after exec setup completes, before any output arrives.
+    ///
+    /// Non-terminal: output chunks and a final `ContainerStopped` follow.
+    ExecStarted {
+        /// Unique identifier for this exec instance.
+        exec_id: String,
+    },
+
+    /// Push progress update for a single layer.
+    ///
+    /// Non-terminal: sent zero or more times during a push operation before
+    /// the final `Success` or `Error`.
+    PushProgress {
+        /// Digest of the layer being uploaded.
+        layer_digest: String,
+        /// Bytes uploaded so far for this layer.
+        bytes_uploaded: u64,
+        /// Total bytes in this layer.
+        total_bytes: u64,
+    },
+
+    /// Streaming build log line.
+    ///
+    /// Non-terminal: sent once per Dockerfile step before `BuildComplete`.
+    BuildOutput {
+        /// 1-based step index.
+        step: u32,
+        /// Total steps in the Dockerfile.
+        total_steps: u32,
+        /// Human-readable step description.
+        message: String,
+    },
+
+    /// Build completed successfully.
+    BuildComplete {
+        /// Content-addressable ID of the new image.
+        image_id: String,
+        /// Tag applied to the built image.
+        tag: String,
+    },
+
+    /// A container lifecycle event.
+    ///
+    /// Non-terminal: sent zero or more times until the connection closes.
+    /// Emitted in response to [`DaemonRequest::SubscribeEvents`].
+    Event {
+        /// The container lifecycle event payload.
+        event: crate::events::ContainerEvent,
+    },
+
+    /// Result of a prune operation.
+    Pruned {
+        /// Image refs that were (or would be) removed.
+        removed: Vec<String>,
+        /// Bytes freed (or that would be freed in dry-run mode).
+        freed_bytes: u64,
+        /// True if this was a dry run.
+        dry_run: bool,
+    },
+
+    /// A single line of stored log output.
+    ///
+    /// Non-terminal: sent zero or more times before the terminal `Success`
+    /// (or `Error`) response from a [`DaemonRequest::ContainerLogs`] request.
+    LogLine {
+        /// Which stream the line originated from.
+        stream: OutputStreamKind,
+        /// The log line content (without trailing newline).
+        line: String,
+    },
+
+    /// Pipeline execution completed.
+    ///
+    /// Terminal response for `RunPipeline` requests. The `trace` field
+    /// contains the full execution trace serialized as JSON — consumers
+    /// deserialize into their concrete trace type.
+    PipelineComplete {
+        /// Serialized execution trace (crux-agnostic JSON).
+        trace: serde_json::Value,
+        /// Container ID that ran the pipeline.
+        container_id: String,
+        /// Exit code of the `crux run` process.
+        exit_code: i32,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +459,9 @@ pub enum DaemonResponse {
 pub struct ContainerInfo {
     /// Short UUID identifying the container.
     pub id: String,
+    /// Optional human-readable name assigned at creation time.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Image name.
     pub image: String,
     /// Full command line as a single space-separated string.
@@ -247,6 +536,11 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -285,6 +579,11 @@ mod tests {
             cpu_weight: Some(500),
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -432,6 +731,7 @@ mod tests {
         let containers = vec![
             ContainerInfo {
                 id: "abc123".to_string(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "running".to_string(),
@@ -440,6 +740,7 @@ mod tests {
             },
             ContainerInfo {
                 id: "def456".to_string(),
+                name: None,
                 image: "ubuntu:22.04".to_string(),
                 command: "/bin/bash".to_string(),
                 state: "stopped".to_string(),
@@ -469,10 +770,6 @@ mod tests {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // JSON format validation tests (security)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_request_json_has_type_tag() {
         let req = DaemonRequest::Run {
@@ -483,6 +780,11 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -551,10 +853,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // -----------------------------------------------------------------------
-    // Edge cases and boundary tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_run_request_empty_command() {
         let req = DaemonRequest::Run {
@@ -565,6 +863,11 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -588,6 +891,11 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -607,6 +915,7 @@ mod tests {
     fn test_container_info_special_characters() {
         let info = ContainerInfo {
             id: "abc123".to_string(),
+            name: None,
             image: "test/image:v1.0-alpha".to_string(),
             command: "/bin/sh -c 'echo \"hello world\"'".to_string(),
             state: "running".to_string(),
@@ -698,10 +1007,6 @@ mod tests {
         assert_eq!(stderr, r#""stderr""#);
     }
 
-    // -----------------------------------------------------------------------
-    // Network mode protocol tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn run_request_with_network_mode_roundtrip() {
         use crate::domain::NetworkMode;
@@ -713,6 +1018,11 @@ mod tests {
             cpu_weight: None,
             ephemeral: false,
             network: Some(NetworkMode::Host),
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -729,6 +1039,420 @@ mod tests {
         match req {
             DaemonRequest::Run { network, .. } => assert_eq!(network, None),
             _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn run_request_with_mounts_roundtrip() {
+        use crate::domain::BindMount;
+        use std::path::PathBuf;
+        let req = DaemonRequest::Run {
+            image: "ubuntu".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![BindMount {
+                host_path: PathBuf::from("/tmp/foo"),
+                container_path: PathBuf::from("/bar"),
+                read_only: false,
+            }],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
+        };
+        let encoded = encode_request(&req).unwrap();
+        let decoded = decode_request(&encoded).unwrap();
+        match decoded {
+            DaemonRequest::Run {
+                mounts, privileged, ..
+            } => {
+                assert_eq!(mounts.len(), 1);
+                assert_eq!(mounts[0].host_path, PathBuf::from("/tmp/foo"));
+                assert_eq!(mounts[0].container_path, PathBuf::from("/bar"));
+                assert!(!mounts[0].read_only);
+                assert!(!privileged);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn run_request_privileged_roundtrip() {
+        let req = DaemonRequest::Run {
+            image: "ubuntu".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: true,
+            env: vec![],
+            name: None,
+            tty: false,
+        };
+        let encoded = encode_request(&req).unwrap();
+        let decoded = decode_request(&encoded).unwrap();
+        match decoded {
+            DaemonRequest::Run {
+                privileged, mounts, ..
+            } => {
+                assert!(privileged);
+                assert!(mounts.is_empty());
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn container_logs_request_roundtrip() {
+        let req = DaemonRequest::ContainerLogs {
+            container_id: "abc123".to_string(),
+            follow: false,
+        };
+        let encoded = encode_request(&req).expect("encode");
+        let decoded = decode_request(&encoded).expect("decode");
+        match decoded {
+            DaemonRequest::ContainerLogs {
+                container_id,
+                follow,
+            } => {
+                assert_eq!(container_id, "abc123");
+                assert!(!follow);
+            }
+            _ => panic!("expected ContainerLogs"),
+        }
+    }
+
+    #[test]
+    fn container_logs_request_follow_defaults_false() {
+        let json = r#"{"type":"ContainerLogs","container_id":"abc"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::ContainerLogs { follow, .. } => assert!(!follow),
+            _ => panic!("expected ContainerLogs"),
+        }
+    }
+
+    #[test]
+    fn log_line_response_roundtrip() {
+        let resp = DaemonResponse::LogLine {
+            stream: OutputStreamKind::Stderr,
+            line: "error: something bad".to_string(),
+        };
+        let json = serde_json::to_string(&resp).expect("serialize");
+        assert!(json.contains("\"type\":\"LogLine\""));
+        let back: DaemonResponse = serde_json::from_str(&json).expect("deserialize");
+        match back {
+            DaemonResponse::LogLine { stream, line } => {
+                assert_eq!(stream, OutputStreamKind::Stderr);
+                assert_eq!(line, "error: something bad");
+            }
+            _ => panic!("expected LogLine"),
+        }
+    }
+
+    #[test]
+    fn run_request_old_json_without_mounts_defaults() {
+        // Old clients that don't send mounts/privileged must still deserialize.
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run {
+                mounts, privileged, ..
+            } => {
+                assert!(mounts.is_empty());
+                assert!(!privileged);
+            }
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn send_input_roundtrip() {
+        use base64::Engine as _;
+        let bytes = b"ls\n";
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let req = DaemonRequest::SendInput {
+            session_id: crate::domain::SessionId::from("sess1"),
+            data: data.clone(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"type\":\"SendInput\""), "{json}");
+        let back: DaemonRequest = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonRequest::SendInput { data: d, .. } => assert_eq!(d, data),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn resize_pty_roundtrip() {
+        let req = DaemonRequest::ResizePty {
+            session_id: crate::domain::SessionId::from("sess1"),
+            cols: 120,
+            rows: 40,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"type\":\"ResizePty\""), "{json}");
+        let back: DaemonRequest = serde_json::from_str(&json).unwrap();
+        match back {
+            DaemonRequest::ResizePty { cols, rows, .. } => {
+                assert_eq!(cols, 120);
+                assert_eq!(rows, 40);
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn run_request_tty_defaults_false() {
+        // Old clients omitting `tty` must still deserialise cleanly.
+        let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        match req {
+            DaemonRequest::Run { tty, .. } => assert!(!tty),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Wire format snapshot tests — catch serialization drift
+    //
+    // Each test pins the exact JSON representation of a protocol variant.
+    // If the serde output changes (field renamed, tag changed, etc.) these
+    // tests fail immediately rather than silently breaking the wire protocol.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn wire_snapshot_run_request() {
+        let req = DaemonRequest::Run {
+            image: "library/alpine".to_string(),
+            tag: Some("3.18".to_string()),
+            command: vec!["sh".to_string(), "-c".to_string(), "echo hi".to_string()],
+            memory_limit_bytes: Some(134217728),
+            cpu_weight: Some(100),
+            ephemeral: true,
+            network: None,
+            env: vec!["FOO=bar".to_string()],
+            mounts: vec![],
+            privileged: false,
+            name: Some("my-container".to_string()),
+            tty: false,
+        };
+        let json = serde_json::to_string(&req).expect("serialize");
+        // Pin the type discriminant and required fields.
+        assert!(json.contains("\"type\":\"Run\""), "type tag: {json}");
+        assert!(
+            json.contains("\"image\":\"library/alpine\""),
+            "image: {json}"
+        );
+        assert!(json.contains("\"tag\":\"3.18\""), "tag: {json}");
+        assert!(json.contains("\"ephemeral\":true"), "ephemeral: {json}");
+        assert!(
+            json.contains("\"memory_limit_bytes\":134217728"),
+            "memory: {json}"
+        );
+        assert!(json.contains("\"cpu_weight\":100"), "cpu: {json}");
+        assert!(json.contains("\"name\":\"my-container\""), "name: {json}");
+        // Verify it round-trips back to the same JSON.
+        let decoded: DaemonRequest = serde_json::from_str(&json).expect("deserialize");
+        let re_encoded = serde_json::to_string(&decoded).expect("re-serialize");
+        assert_eq!(
+            json, re_encoded,
+            "wire format is not stable across roundtrip"
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_stop_request() {
+        let json = serde_json::to_string(&DaemonRequest::Stop {
+            id: "abc123def456".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Stop","id":"abc123def456"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_list_request() {
+        let json = serde_json::to_string(&DaemonRequest::List).expect("serialize");
+        assert_eq!(json, r#"{"type":"List"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_pull_request() {
+        let json = serde_json::to_string(&DaemonRequest::Pull {
+            image: "library/nginx".to_string(),
+            tag: Some("stable".to_string()),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"Pull","image":"library/nginx","tag":"stable"}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_created_response() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerCreated {
+            id: "deadbeef1234".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerCreated","id":"deadbeef1234"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_success_response() {
+        let json = serde_json::to_string(&DaemonResponse::Success {
+            message: "stopped".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Success","message":"stopped"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_error_response() {
+        let json = serde_json::to_string(&DaemonResponse::Error {
+            message: "container not found".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(json, r#"{"type":"Error","message":"container not found"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_container_output_stdout() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: "aGVsbG8=".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"ContainerOutput","stream":"stdout","data":"aGVsbG8="}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_output_stderr() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stderr,
+            data: "ZXJyb3I=".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"ContainerOutput","stream":"stderr","data":"ZXJyb3I="}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_container_stopped_response() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 0 })
+            .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":0}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_container_stopped_nonzero_exit() {
+        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 137 })
+            .expect("serialize");
+        assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":137}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_push_credentials_anonymous() {
+        let json = serde_json::to_string(&PushCredentials::Anonymous).expect("serialize");
+        assert_eq!(json, r#"{"type":"Anonymous"}"#);
+    }
+
+    #[test]
+    fn wire_snapshot_push_credentials_basic() {
+        let json = serde_json::to_string(&PushCredentials::Basic {
+            username: "user".to_string(),
+            password: "s3cr3t".to_string(),
+        })
+        .expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"Basic","username":"user","password":"s3cr3t"}"#
+        );
+    }
+
+    #[test]
+    fn wire_snapshot_send_input_request() {
+        use crate::domain::SessionId;
+        let json = serde_json::to_string(&DaemonRequest::SendInput {
+            session_id: SessionId::from("sess-abc"),
+            data: "bHMK".to_string(),
+        })
+        .expect("serialize");
+        assert!(json.contains("\"type\":\"SendInput\""), "{json}");
+        assert!(json.contains("\"session_id\":\"sess-abc\""), "{json}");
+        assert!(json.contains("\"data\":\"bHMK\""), "{json}");
+    }
+
+    #[test]
+    fn wire_snapshot_resize_pty_request() {
+        use crate::domain::SessionId;
+        let json = serde_json::to_string(&DaemonRequest::ResizePty {
+            session_id: SessionId::from("sess-abc"),
+            cols: 200,
+            rows: 50,
+        })
+        .expect("serialize");
+        assert!(json.contains("\"type\":\"ResizePty\""), "{json}");
+        assert!(json.contains("\"cols\":200"), "{json}");
+        assert!(json.contains("\"rows\":50"), "{json}");
+    }
+
+    /// Verify that all protocol field names have not changed since last known
+    /// good state. Any addition of a field with `#[serde(default)]` is fine
+    /// (old clients omitting it still decode). Renaming a field is a breaking
+    /// change and will cause this test to fail.
+    #[test]
+    fn wire_format_run_request_field_names_stable() {
+        let req = DaemonRequest::Run {
+            image: "i".to_string(),
+            tag: None,
+            command: vec![],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            env: vec![],
+            mounts: vec![],
+            privileged: false,
+            name: None,
+            tty: false,
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
+        let obj = v.as_object().expect("object");
+        // Check every field name that must exist in the wire format.
+        for field in &[
+            "type",
+            "image",
+            "tag",
+            "command",
+            "memory_limit_bytes",
+            "cpu_weight",
+            "ephemeral",
+            "network",
+            "env",
+            "mounts",
+            "privileged",
+            "name",
+            "tty",
+        ] {
+            assert!(
+                obj.contains_key(*field),
+                "missing field {field} in Run wire format"
+            );
         }
     }
 }

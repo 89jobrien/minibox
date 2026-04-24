@@ -33,7 +33,7 @@ use crate::adapt;
 use crate::domain::{
     ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
     LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
-    RuntimeCapabilities, SpawnResult,
+    RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -111,7 +111,8 @@ impl MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(image.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == image && t == tag)
     }
 }
 
@@ -123,7 +124,8 @@ impl ImageRegistry for MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(name.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == name && t == tag)
     }
 
     /// Simulate an image pull.
@@ -232,12 +234,12 @@ impl MockFilesystem {
     }
 }
 
-impl FilesystemProvider for MockFilesystem {
+impl crate::domain::RootfsSetup for MockFilesystem {
     /// Simulate rootfs setup by returning `container_dir/merged`.
     ///
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let mut state = self.state.lock().unwrap();
         state.setup_count += 1;
 
@@ -245,16 +247,11 @@ impl FilesystemProvider for MockFilesystem {
             anyhow::bail!("mock filesystem setup failure");
         }
 
-        Ok(container_dir.join("merged"))
-    }
-
-    /// Simulate `pivot_root` — succeeds unless configured to fail.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        let state = self.state.lock().unwrap();
-        if !state.pivot_should_succeed {
-            anyhow::bail!("mock pivot_root failure");
-        }
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     /// Simulate filesystem cleanup.
@@ -267,6 +264,17 @@ impl FilesystemProvider for MockFilesystem {
 
         if !state.cleanup_should_succeed {
             anyhow::bail!("mock cleanup failure");
+        }
+        Ok(())
+    }
+}
+
+impl crate::domain::ChildInit for MockFilesystem {
+    /// Simulate `pivot_root` — succeeds unless configured to fail.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        let state = self.state.lock().unwrap();
+        if !state.pivot_should_succeed {
+            anyhow::bail!("mock pivot_root failure");
         }
         Ok(())
     }
@@ -645,19 +653,18 @@ impl FailableFilesystemMock {
     }
 }
 
-impl FilesystemProvider for FailableFilesystemMock {
+impl crate::domain::RootfsSetup for FailableFilesystemMock {
     /// Simulate rootfs setup, honouring the current failure toggle.
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         self.setup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_setup.load(Ordering::SeqCst) {
             anyhow::bail!("injected setup failure");
         }
-        Ok(container_dir.join("merged"))
-    }
-
-    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     /// Simulate filesystem cleanup, honouring the current failure toggle.
@@ -670,14 +677,109 @@ impl FilesystemProvider for FailableFilesystemMock {
     }
 }
 
+impl crate::domain::ChildInit for FailableFilesystemMock {
+    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        Ok(())
+    }
+}
+
 // Register FailableFilesystemMock separately — it only implements
 // FilesystemProvider, not the full four-trait set.
 adapt!(FailableFilesystemMock);
 
+// ---------------------------------------------------------------------------
+// RecordingMetricsRecorder
+// ---------------------------------------------------------------------------
+
+/// Test double that captures all metric calls for assertion.
+///
+/// Thread-safe via `Mutex`. Intended for unit tests that need to verify
+/// specific metrics were emitted with correct names, values, and labels.
+#[derive(Debug, Clone)]
+pub struct RecordingMetricsRecorder {
+    state: Arc<Mutex<RecordingMetricsState>>,
+}
+
+#[derive(Debug, Default)]
+struct RecordingMetricsState {
+    counters: Vec<(String, Vec<(String, String)>)>,
+    histograms: Vec<(String, f64, Vec<(String, String)>)>,
+    gauges: Vec<(String, f64, Vec<(String, String)>)>,
+}
+
+impl RecordingMetricsRecorder {
+    /// Create a new recorder with empty state.
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(RecordingMetricsState::default())),
+        }
+    }
+
+    /// Return all recorded counter increments as `(name, labels)` pairs.
+    pub fn counters(&self) -> Vec<(String, Vec<(String, String)>)> {
+        self.state.lock().unwrap().counters.clone()
+    }
+
+    /// Return all recorded histogram observations as `(name, value, labels)` triples.
+    pub fn histograms(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+        self.state.lock().unwrap().histograms.clone()
+    }
+
+    /// Return all recorded gauge settings as `(name, value, labels)` triples.
+    pub fn gauges(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+        self.state.lock().unwrap().gauges.clone()
+    }
+}
+
+impl Default for RecordingMetricsRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
+    fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .counters
+            .push((name.to_string(), owned_labels));
+    }
+
+    fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .histograms
+            .push((name.to_string(), value, owned_labels));
+    }
+
+    fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
+        let owned_labels: Vec<(String, String)> = labels
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        self.state
+            .lock()
+            .unwrap()
+            .gauges
+            .push((name.to_string(), value, owned_labels));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ContainerHooks;
+    use crate::domain::{ChildInit, ContainerHooks, MetricsRecorder, RootfsSetup};
 
     #[test]
     fn mock_registry_has_image_sync_cached() {
@@ -700,6 +802,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
         let result = runtime.spawn_process_sync(&cfg).unwrap();
         assert_eq!(result.pid, 10000);
@@ -774,6 +878,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -829,6 +935,58 @@ mod tests {
         let result = net.cleanup("container-1").await;
         assert!(result.is_ok());
         assert_eq!(net.cleanup_count(), 1);
+    }
+
+    // --- RecordingMetricsRecorder tests ---
+
+    #[test]
+    fn recording_metrics_captures_counter() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "run"), ("status", "ok")],
+        );
+        recorder.increment_counter(
+            "minibox_container_ops_total",
+            &[("op", "stop"), ("status", "ok")],
+        );
+
+        let counters = recorder.counters();
+        assert_eq!(counters.len(), 2);
+        assert_eq!(counters[0].0, "minibox_container_ops_total");
+        assert_eq!(
+            counters[0].1,
+            vec![
+                ("op".to_string(), "run".to_string()),
+                ("status".to_string(), "ok".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn recording_metrics_captures_histogram() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.record_histogram(
+            "minibox_container_op_duration_seconds",
+            0.5,
+            &[("op", "run")],
+        );
+
+        let histograms = recorder.histograms();
+        assert_eq!(histograms.len(), 1);
+        assert_eq!(histograms[0].0, "minibox_container_op_duration_seconds");
+        assert!((histograms[0].1 - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn recording_metrics_captures_gauge() {
+        let recorder = RecordingMetricsRecorder::new();
+        recorder.set_gauge("minibox_active_containers", 3.0, &[("adapter", "native")]);
+
+        let gauges = recorder.gauges();
+        assert_eq!(gauges.len(), 1);
+        assert_eq!(gauges[0].0, "minibox_active_containers");
+        assert!((gauges[0].1 - 3.0).abs() < f64::EPSILON);
     }
 }
 
@@ -891,5 +1049,231 @@ mod macro_contract_tests {
                 .downcast_ref::<MockRuntime>()
                 .is_some()
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockContainerCommitter  (#67)
+// ---------------------------------------------------------------------------
+
+use crate::domain::{
+    CommitConfig, ContainerCommitter, ContainerId, ImagePusher, PushProgress, PushResult,
+    RegistryCredentials,
+};
+
+/// In-memory mock for [`ContainerCommitter`].
+///
+/// Parses the `name:tag` target ref and returns synthetic [`ImageMetadata`].
+/// Tracks commit call count for assertion.
+pub struct MockContainerCommitter {
+    call_count: AtomicUsize,
+}
+
+impl MockContainerCommitter {
+    /// Create a new, unconfigured mock committer.
+    pub fn new() -> Self {
+        Self {
+            call_count: AtomicUsize::new(0),
+        }
+    }
+
+    /// Number of times `commit` has been called.
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MockContainerCommitter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockContainerCommitter);
+
+#[async_trait]
+impl ContainerCommitter for MockContainerCommitter {
+    async fn commit(
+        &self,
+        _container_id: &ContainerId,
+        target_ref: &str,
+        _config: &CommitConfig,
+    ) -> anyhow::Result<ImageMetadata> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        // Parse "name:tag" — fall back to "name:latest" if no colon.
+        let (name, tag) = if let Some((n, t)) = target_ref.rsplit_once(':') {
+            (n.to_string(), t.to_string())
+        } else {
+            (target_ref.to_string(), "latest".to_string())
+        };
+        Ok(ImageMetadata {
+            name,
+            tag,
+            layers: vec![LayerInfo {
+                digest: "sha256:mock000000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
+                size: 1024,
+            }],
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockImageBuilder  (#71)
+// ---------------------------------------------------------------------------
+
+use crate::domain::{BuildConfig, BuildContext, BuildProgress, ImageBuilder};
+
+/// In-memory mock for [`ImageBuilder`].
+///
+/// Parses `config.tag` as `"name:tag"` and returns synthetic [`ImageMetadata`].
+pub struct MockImageBuilder {
+    call_count: AtomicUsize,
+}
+
+impl MockImageBuilder {
+    /// Create a new mock builder.
+    pub fn new() -> Self {
+        Self {
+            call_count: AtomicUsize::new(0),
+        }
+    }
+
+    /// Number of times `build_image` has been called.
+    pub fn call_count(&self) -> usize {
+        self.call_count.load(Ordering::SeqCst)
+    }
+}
+
+impl Default for MockImageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockImageBuilder);
+
+#[async_trait]
+impl ImageBuilder for MockImageBuilder {
+    async fn build_image(
+        &self,
+        _context: &BuildContext,
+        config: &BuildConfig,
+        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+    ) -> anyhow::Result<ImageMetadata> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        let _ = progress_tx
+            .send(BuildProgress {
+                step: 1,
+                total_steps: 1,
+                message: "mock build step".to_string(),
+            })
+            .await;
+
+        let (name, tag) = if let Some((n, t)) = config.tag.rsplit_once(':') {
+            (n.to_string(), t.to_string())
+        } else {
+            (config.tag.clone(), "latest".to_string())
+        };
+        Ok(ImageMetadata {
+            name,
+            tag,
+            layers: vec![LayerInfo {
+                digest: "sha256:build00000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
+                size: 2048,
+            }],
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MockImagePusher  (#62)
+// ---------------------------------------------------------------------------
+
+/// State shared between the mock pusher and test handles.
+struct MockImagePusherState {
+    /// Tags that have been "pushed" — keyed by the full image ref string.
+    pushed_tags: Vec<String>,
+    /// Digest returned by the most recent push.
+    last_digest: Option<String>,
+}
+
+/// In-memory mock for [`ImagePusher`].
+///
+/// Records all pushes; does not perform any network I/O.
+/// The owning test can hold an `Arc<MockImagePusher>` and observe recorded
+/// state via `has_tag` and `last_pushed_digest` after calls complete.
+pub struct MockImagePusher {
+    state: Mutex<MockImagePusherState>,
+}
+
+impl MockImagePusher {
+    /// Create a new mock pusher with no recorded state.
+    pub fn new() -> Self {
+        Self {
+            state: Mutex::new(MockImagePusherState {
+                pushed_tags: vec![],
+                last_digest: None,
+            }),
+        }
+    }
+
+    /// Returns `true` if `image_ref` has been pushed at least once.
+    pub fn has_tag(&self, image_ref: &str) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .pushed_tags
+            .contains(&image_ref.to_string())
+    }
+
+    /// Returns the digest reported by the most recent push, or `None`.
+    pub fn last_pushed_digest(&self) -> Option<String> {
+        self.state.lock().unwrap().last_digest.clone()
+    }
+}
+
+impl Default for MockImagePusher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+crate::as_any!(MockImagePusher);
+
+#[async_trait]
+impl ImagePusher for MockImagePusher {
+    async fn push_image(
+        &self,
+        image_ref: &crate::image::reference::ImageRef,
+        _credentials: &RegistryCredentials,
+        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+    ) -> anyhow::Result<PushResult> {
+        let digest =
+            "sha256:push000000000000000000000000000000000000000000000000000000000000".to_string();
+        let ref_str = format!(
+            "{}/{}/{}:{}",
+            image_ref.registry, image_ref.namespace, image_ref.name, image_ref.tag
+        );
+
+        if let Some(tx) = progress_tx {
+            let _ = tx
+                .send(PushProgress {
+                    layer_digest: digest.clone(),
+                    bytes_uploaded: 1024,
+                    total_bytes: 1024,
+                })
+                .await;
+        }
+
+        let mut state = self.state.lock().unwrap();
+        state.pushed_tags.push(ref_str);
+        state.last_digest = Some(digest.clone());
+
+        Ok(PushResult {
+            digest,
+            size_bytes: 1024,
+        })
     }
 }

@@ -16,8 +16,8 @@ use async_trait::async_trait;
 use minibox_core::{
     adapt,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-        ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, ResourceConfig,
+        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use std::path::{Path, PathBuf};
@@ -75,19 +75,25 @@ impl HcsFilesystem {
     }
 }
 
-impl FilesystemProvider for HcsFilesystem {
+impl minibox_core::domain::RootfsSetup for HcsFilesystem {
     /// Not yet implemented — always returns an error.
-    fn setup_rootfs(&self, _image_layers: &[PathBuf], _container_dir: &Path) -> Result<PathBuf> {
-        anyhow::bail!("HcsFilesystem: not yet implemented (Phase 2)")
-    }
-
-    /// Not yet implemented — always returns an error.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+    fn setup_rootfs(
+        &self,
+        _image_layers: &[PathBuf],
+        _container_dir: &Path,
+    ) -> Result<RootfsLayout> {
         anyhow::bail!("HcsFilesystem: not yet implemented (Phase 2)")
     }
 
     /// Not yet implemented — always returns an error.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
+        anyhow::bail!("HcsFilesystem: not yet implemented (Phase 2)")
+    }
+}
+
+impl minibox_core::domain::ChildInit for HcsFilesystem {
+    /// Not yet implemented — always returns an error.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         anyhow::bail!("HcsFilesystem: not yet implemented (Phase 2)")
     }
 }

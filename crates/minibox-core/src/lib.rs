@@ -22,9 +22,17 @@
 pub mod adapters;
 pub mod domain;
 pub mod error;
-pub mod image;
+pub mod events;
 pub mod preflight;
 pub mod protocol;
+pub mod trace;
+pub mod tracing_init;
+
+pub use tracing_init::init_tracing;
+
+// Image handling is provided by the standalone minibox-oci crate.
+// Re-export the full module so existing `minibox_core::image::*` paths continue to work.
+pub use minibox_oci::image;
 
 pub use error::MiniboxError;
 pub use minibox_macros::{adapt, as_any, default_new, require_capability};

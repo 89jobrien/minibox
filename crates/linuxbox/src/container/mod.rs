@@ -150,10 +150,12 @@ impl Container {
                 "TERM=xterm".into(),
             ],
             namespace_config: NamespaceConfig::all(),
-            cgroup_path: cgroup_manager.cgroup_path.clone(),
+            cgroup_path: cgroup_manager.cgroup_path().to_path_buf(),
             hostname: format!("minibox-{}", &self.id[..8]),
             capture_output: false,
             pre_exec_hooks: vec![],
+            mounts: vec![],
+            privileged: false,
         };
 
         let spawn = spawn_container_process(process_config)

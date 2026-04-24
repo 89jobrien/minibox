@@ -7,7 +7,7 @@ note: Never built; channel-based streaming shipped instead
 
 **Date:** 2026-03-17
 **Status:** Design
-**Scope:** `linuxbox/src/protocol.rs`, `miniboxd/src/server.rs`, `minibox-cli/src/`
+**Scope:** `minibox/src/protocol.rs`, `miniboxd/src/server.rs`, `minibox-cli/src/`
 
 ---
 

@@ -1,28 +1,35 @@
-# linuxbox
+# minibox
 
-Linux-specific container runtime: namespaces, cgroups v2, overlay filesystem, and process management.
+Re-export facade crate for the minibox container runtime.
 
-## Modules
+Re-exports the public surface of `linuxbox` and `minibox-core` under the `minibox` crate name
+so that consumers (integration tests, `daemonbox`, `miniboxd`) can depend on a single,
+stable import path that survives internal renames.
 
-- **container/** — Namespace setup, cgroup creation, overlay mounts, pivot_root, exec
-- **image/** — OCI layer extraction with path traversal protection, image reference parsing, Docker Hub registry client
-- **adapters/** — Platform-specific adapter implementations (native Linux, colima, gke, docker-desktop, vf, hcs, wsl2)
-- **domain.rs** — Re-exports all `minibox-core` domain traits
+## What lives here
 
-## Key Functions
+| Upstream crate   | What is re-exported                                             |
+| ---------------- | --------------------------------------------------------------- |
+| `linuxbox`       | All public items (`pub use linuxbox::*`)                        |
+| `minibox-core`   | Domain traits and protocol types (via `linuxbox` re-exports)    |
 
-- `create_overlay()` — Set up readonly layers + read-write container filesystem
-- `setup_cgroup()` — Create cgroup v2 group and apply memory/CPU limits
-- `create_container_namespaces()` — Fork child in isolated PID/mount/network/UTS/IPC/user namespace
-- `extract_layer()` — Safely extract tar.gz layer with validation against path traversal attacks
+Direct code additions to this crate are intentionally kept to zero — the crate is a thin
+shim only.
 
-## Adapters
+## Why this exists
 
-Select runtime with `MINIBOX_ADAPTER` env var:
-- `native` — Linux namespaces, overlay, cgroups v2 (requires root, Linux only)
-- `gke` — proot + copy filesystem (unprivileged, GKE-safe)
-- `colima` — macOS via limactl/nerdctl
+The Linux container primitives live in `linuxbox` so that `miniboxd` can conditionally
+compile them only on Linux while the `minibox` name remains stable for consumers. This
+indirection also makes future renames transparent to downstream crates.
 
-## Security
+## Usage
 
-All paths derived from tar entries or user input are validated via `validate_layer_path()`. Symlinks are rewritten to prevent absolute traversal. Device nodes, pipes, and setuid/setgid bits are stripped before extraction.
+```toml
+[dependencies]
+minibox = { path = "../minibox" }
+```
+
+```rust
+use minibox::domain::ContainerRuntime;
+use minibox::protocol::DaemonRequest;
+```

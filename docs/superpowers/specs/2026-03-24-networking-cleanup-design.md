@@ -12,7 +12,7 @@ Four improvements identified from devloop analysis of the container networking f
 3. Add `NetworkProvider` conformance tests
 4. Add Colima env var + manifest.json regression tests
 
-The `minibox-lib` → `linuxbox` rename has been completed and documented in CLAUDE.md.
+The `minibox-lib` → `minibox` rename has been completed and documented in CLAUDE.md.
 
 ---
 
@@ -81,7 +81,8 @@ impl NetworkLifecycle {
 
 Expand existing `///` doc comments:
 
-**`linuxbox/src/domain/networking.rs`** — `NetworkMode` enum variants:
+**`minibox/src/domain/networking.rs`** — `NetworkMode` enum variants:
+
 - `None` — Container gets an isolated network namespace with no interfaces configured. Cannot reach the host network or internet. **This is the default.**
 - `Bridge` — veth pair attached to a Linux bridge (`minibox0` by default). Container gets a private IP and can reach the host via the bridge.
 - `Host` — Container shares the host network namespace. All host ports are accessible.
@@ -89,16 +90,18 @@ Expand existing `///` doc comments:
 
 **`NetworkConfig`** — document that `Default` yields `NetworkMode::None` with sensible bridge/subnet defaults for when a real network mode is later selected.
 
-**`linuxbox/src/protocol.rs`** — `DaemonRequest::Run.network` field:
+**`minibox/src/protocol.rs`** — `DaemonRequest::Run.network` field:
+
 - Document that `None` (`Option::None`) maps to `NetworkConfig::default()`, which selects `NetworkMode::None` (isolated namespace, no connectivity).
 
 **`minibox-cli/src/main.rs`** — expand `--network` flag help text (brief version already exists):
+
 - Append: "'none' runs the container in an isolated namespace with no network connectivity."
 
 ### Scope
 
-- Modify: `crates/linuxbox/src/domain/networking.rs`
-- Modify: `crates/linuxbox/src/protocol.rs`
+- Modify: `crates/minibox/src/domain/networking.rs`
+- Modify: `crates/minibox/src/protocol.rs`
 - Modify: `crates/minibox-cli/src/main.rs`
 - Doc comment expansions only, no logic changes
 
@@ -108,13 +111,13 @@ Expand existing `///` doc comments:
 
 ### Problem
 
-`conformance_tests.rs` validates all domain adapter traits (ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime, Handler) but has no *direct trait-level* tests for `NetworkProvider`. While handler conformance tests exercise the provider indirectly via `MockNetwork`, there are no tests that call `setup`/`attach`/`cleanup` directly on the provider, documenting the contract at the conformance level.
+`conformance_tests.rs` validates all domain adapter traits (ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime, Handler) but has no _direct trait-level_ tests for `NetworkProvider`. While handler conformance tests exercise the provider indirectly via `MockNetwork`, there are no tests that call `setup`/`attach`/`cleanup` directly on the provider, documenting the contract at the conformance level.
 
 `handler_tests.rs` already has `test_network_setup_called_on_run` verifying setup call-count via `MockNetwork`. The conformance suite should include a matching assertion at the conformance level — it documents the requirement independently of the handler test suite.
 
 ### Solution
 
-Add a `NetworkProvider` conformance section to `crates/daemonbox/tests/conformance_tests.rs` using `MockNetwork` (already exists in `linuxbox::adapters::mocks`):
+Add a `NetworkProvider` conformance section to `crates/daemonbox/tests/conformance_tests.rs` using `MockNetwork` (already exists in `minibox::adapters::mocks`):
 
 ```rust
 // NetworkProvider conformance — direct trait-level tests
@@ -145,7 +148,7 @@ The `colima_home()` / `lima_home()` / `limactl_command()` helpers added in the l
 
 ### Solution
 
-**Env var resolution tests** — add to `crates/linuxbox/src/adapters/colima.rs` `#[cfg(test)] mod tests` (the only location that can access private functions):
+**Env var resolution tests** — add to `crates/minibox/src/adapters/colima.rs` `#[cfg(test)] mod tests` (the only location that can access private functions):
 
 ```rust
 fn colima_home_defaults_to_home_dot_colima()
@@ -157,7 +160,7 @@ fn limactl_command_injects_lima_home_into_env()
 
 These join the existing `static ENV_MUTEX: Mutex<()>` guard already present in `colima.rs`'s inline `mod tests` (not in `adapter_colima_tests.rs`). All env var mutations are serialized through this mutex.
 
-**Manifest.json extraction tests** — add to `crates/linuxbox/tests/adapter_colima_tests.rs` (can test `ColimaRegistry` via injected executor):
+**Manifest.json extraction tests** — add to `crates/minibox/tests/adapter_colima_tests.rs` (can test `ColimaRegistry` via injected executor):
 
 ```rust
 fn get_image_layers_parses_manifest_json_to_locate_layers()
@@ -169,8 +172,8 @@ These inject a mock executor returning canned `manifest.json` and simulate the l
 
 ### Scope
 
-- Modify: `crates/linuxbox/src/adapters/colima.rs` (env var tests in inline `mod tests`)
-- Modify: `crates/linuxbox/tests/adapter_colima_tests.rs` (manifest.json extraction tests)
+- Modify: `crates/minibox/src/adapters/colima.rs` (env var tests in inline `mod tests`)
+- Modify: `crates/minibox/tests/adapter_colima_tests.rs` (manifest.json extraction tests)
 - No new files
 
 ---

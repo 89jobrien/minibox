@@ -15,7 +15,7 @@
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                        Binary Layer                                │ │
 │  │  ┌──────────────────────┐  ┌───────────────────────────────────┐  │ │
-│  │  │   cmd/agentbox/      │  │   cmd/mbx-commit-msg/             │  │ │
+│  │  │   cmd/agentbox/      │  │   cmd/minibox-commit-msg/             │  │ │
 │  │  │   • council           │  │   • standalone commit-msg tool    │  │ │
 │  │  │   • meta-agent        │  │                                   │  │ │
 │  │  └──────────┬───────────┘  └──────────────┬────────────────────┘  │ │
@@ -66,7 +66,7 @@
     │  Adapter  │         │  Adapter   │         │   Adapter    │
     │           │         │            │         │              │
     │ cmd/      │         │ cmd/       │         │  (future)    │
-    │ agentbox  │         │ mbx-       │         │  HTTP API    │
+    │ agentbox  │         │ minibox-       │         │  HTTP API    │
     │           │         │ commit-msg │         │  gRPC        │
     └────┬─────┘         └─────┬──────┘         └──────────────┘
          │                     │
@@ -96,7 +96,7 @@
     └────┬────┘ └───┬────┘ └──┬─────┘ └────┬────┘ └─────┬────┘
          │          │         │             │            │
          ▼          ▼         ▼             ▼            ▼
-      claude      Anthropic  Go          git CLI     ~/.mbx/
+      claude      Anthropic  Go          git CLI     ~/.minibox/
       CLI         Messages   channels                ├─ agent-runs.jsonl
       subprocess  API                                └─ ai-logs/*.md
 ```
@@ -131,7 +131,7 @@
                               └─────────┬───────────┘
                                         │
                            ┌────────────▼────────────┐
-                           │   WriteRun("running")   │──→ ~/.mbx/agent-runs.jsonl
+                           │   WriteRun("running")   │──→ ~/.minibox/agent-runs.jsonl
                            └────────────┬────────────┘
                                         │
                                         ▼
@@ -185,8 +185,8 @@
               └──────────────────────┬───────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(council)   │──→ ~/.mbx/ai-logs/{sha}-council-core.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(council)   │──→ ~/.minibox/ai-logs/{sha}-council-core.md
                         └─────────────────────────┘
 ```
 
@@ -279,8 +279,8 @@
   └──────────────────────────────────┬──────────────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(meta)      │──→ ~/.mbx/ai-logs/{sha}-meta-agent.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(meta)      │──→ ~/.minibox/ai-logs/{sha}-meta-agent.md
                         └─────────────────────────┘
 ```
 
@@ -407,7 +407,7 @@
              │                                    │
              ▼                                    ▼
   ┌──────────────────────────┐      ┌──────────────────────────────────┐
-  │ ~/.mbx/agent-runs.jsonl  │      │ ~/.mbx/ai-logs/                  │
+  │ ~/.minibox/agent-runs.jsonl  │      │ ~/.minibox/ai-logs/                  │
   │                          │      │                                  │
   │ Append-only JSONL:       │      │ One file per run:                │
   │                          │      │ {sha}-council-core.md            │
@@ -538,7 +538,7 @@
 ## 10. Commit Message Flow
 
 ```
-  User: mbx-commit-msg -a -c -y
+  User: minibox-commit-msg -a -c -y
          │
          ├─ -a: git add -A
          ├─ -c: commit after generating
@@ -675,13 +675,13 @@
        ├──→ internal/orchestrator/ (context, fmt, strings, sync, encoding/json)
        ├──→ internal/tools/        (context, fmt)
        ├──→ cmd/agentbox/          (flag, fmt, os, time)
-       └──→ cmd/mbx-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
+       └──→ cmd/minibox-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
 
 
   Internal Dependency Graph:
 
   cmd/agentbox ──────┐
-  cmd/mbx-commit-msg ┤
+  cmd/minibox-commit-msg ┤
                      │
                      ├──→ internal/orchestrator
                      │    ├──→ internal/domain
@@ -719,7 +719,7 @@
   │  ┌─────────────┐                                                   │
   │  │ Container   │  agentbox binary + claude CLI                     │
   │  │             │  Go channels pub/sub                              │
-  │  │  agentbox   │  ~/.mbx/ output files                             │
+  │  │  agentbox   │  ~/.minibox/ output files                             │
   │  │  council    │                                                   │
   │  │             │  All in one process                               │
   │  └─────────────┘                                                   │

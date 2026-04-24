@@ -1,0 +1,306 @@
+project: minibox
+id: minibox
+updated: 2026-04-24
+log:
+- date: 20260424:192000
+  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
+  commits: []
+  session: 27
+items:
+- id: minibox-7
+  doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
+  name: vz-apple-bug-blocker
+  priority: P2
+  status: blocked
+  title: 'bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64'
+  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships a fix.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 61
+    url: https://github.com/89jobrien/minibox/issues/61
+  - date: 2026-04-01
+    type: blocker
+    field: null
+    value: null
+    reviewed: null
+    note: VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
+  - date: 2026-04-06
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: captured in doob — todo id 34l16mxn2y29do1562s9
+- id: minibox-33
+  doob_uuid: null
+  name: winbox-hyper-v-wsl2
+  priority: P1
+  status: open
+  title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
+  description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 45
+    url: https://github.com/89jobrien/minibox/issues/45
+- id: minibox-43
+  doob_uuid: null
+  name: vz-virtiofs-mounts
+  priority: P2
+  status: blocked
+  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
+  description: 'GH #66, #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 66
+    url: https://github.com/89jobrien/minibox/issues/66
+- id: minibox-46
+  doob_uuid: null
+  name: pty-stdio-plan
+  priority: P1
+  status: open
+  title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
+  description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md. Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full PTY fork/exec wiring deferred — requires Linux root.'
+  files:
+  - crates/minibox-core/src/domain.rs
+  - crates/minibox/src/container/process.rs
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 70
+    url: https://github.com/89jobrien/minibox/issues/70
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 83
+    url: https://github.com/89jobrien/minibox/issues/83
+- id: minibox-52
+  doob_uuid: null
+  name: vz-vm-provision
+  priority: P2
+  status: blocked
+  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
+  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 76
+    url: https://github.com/89jobrien/minibox/issues/76
+- id: minibox-53
+  doob_uuid: null
+  name: vz-minibox-agent
+  priority: P2
+  status: blocked
+  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
+  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 78
+    url: https://github.com/89jobrien/minibox/issues/78
+- id: minibox-54
+  doob_uuid: null
+  name: vz-vsock-bridge
+  priority: P2
+  status: blocked
+  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
+  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr forwarded as ContainerOutput protocol messages.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 81
+    url: https://github.com/89jobrien/minibox/issues/81
+- id: minibox-55
+  doob_uuid: null
+  name: vz-full-stack
+  priority: P1
+  status: open
+  title: 'feat: minibox owns the full container stack on every OS'
+  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 87
+    url: https://github.com/89jobrien/minibox/issues/87
+- id: minibox-65
+  doob_uuid: null
+  name: vz-virtiofs
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
+  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 75
+    url: https://github.com/89jobrien/minibox/issues/75
+- id: minibox-66
+  doob_uuid: null
+  name: vz-agent
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
+  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 88
+    url: https://github.com/89jobrien/minibox/issues/88
+- id: minibox-67
+  doob_uuid: null
+  name: vz-io-bridge
+  priority: P2
+  status: blocked
+  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
+  description: 'GH #93: Blocked by minibox-agent and vsock bridge implementation.'
+  files: []
+  completed: null
+  extra:
+  - date: null
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 93
+    url: https://github.com/89jobrien/minibox/issues/93
+- id: minibox-agent-llm-api
+  doob_uuid: null
+  name: minibox-agent-llm-api
+  priority: P1
+  status: open
+  title: Extend minibox-llm with infer() API, then re-land minibox-agent
+  description: |
+    feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
+  files:
+  - crates/minibox-llm/src/provider.rs
+  - crates/minibox-llm/src/types.rs
+  - crates/minibox-agent/src/agent.rs
+  - crates/minibox-agent/src/conversation.rs
+  completed: null
+  extra:
+  - date: null
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
+- id: minibox-77
+  doob_uuid: null
+  name: publish-core-crates
+  priority: P1
+  status: open
+  title: 'chore: publish minibox-core and minibox-client to crates.io'
+  description: Prerequisite for moving dockerbox to minibox-plugins without cross-workspace path deps. Once published, dockerbox can use versioned deps instead of path deps.
+  files:
+  - crates/minibox-core/Cargo.toml
+  - crates/minibox-client/Cargo.toml
+  completed: null
+  extra:
+  - date: 2026-04-24
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: dockerbox stays in main workspace until core crates are published. dashbox already moved to minibox-plugins (zero deps).
+- id: minibox-78
+  doob_uuid: null
+  name: ci-all-features
+  priority: P2
+  status: open
+  title: 'feat(ci): add cargo test --all-features job to CI'
+  description: Add a cargo test --all-features job to ci.yml to catch feature-flag-specific regressions. Edit .github/workflows/ci.yml.
+  files:
+  - .github/workflows/ci.yml
+  completed: null
+  extra: []
+- date: 20260424:152652
+  summary: 'Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features.'
+  commits:
+  - e5f178d
+  - ed1def8
+  session: 26
+- date: 20260424:000000
+  summary: 'Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore).'
+  commits:
+  - caa1b50
+  - 295b7cd
+  - ce75dab
+  - 260dcaf
+  - 5bfcb70
+  session: 25
+- date: 20260423:232521
+  summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items.'
+  commits: []
+  session: 24
+- date: 20260423:150355
+  summary: 'chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale; 10 missing-status plans flagged as LANDED.'
+  commits: []
+  session: 23
+- date: 20260423:185322
+  summary: 'chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests, 3 fuzz targets, READMEs for 7 crates.'
+  commits: []
+  session: 22

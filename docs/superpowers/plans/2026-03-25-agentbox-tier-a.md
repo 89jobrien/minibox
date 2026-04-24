@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Agentbox Tier A Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -14,79 +18,80 @@
 
 ### Foundation (Tasks 1–4)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/go.mod` | Go module definition |
-| `agentbox/internal/domain/types.go` | Domain types: Message, AgentConfig, AgentResult, AgentRun, AgentReport, Commit, ProjectContext |
-| `agentbox/internal/domain/interfaces.go` | Port interfaces: LlmProvider, MessageBroker, AgentRunner, ContextProvider, ResultWriter |
-| `agentbox/internal/domain/types_test.go` | Tests for domain type serialization |
+| File                                     | Responsibility                                                                                 |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `agentbox/go.mod`                        | Go module definition                                                                           |
+| `agentbox/internal/domain/types.go`      | Domain types: Message, AgentConfig, AgentResult, AgentRun, AgentReport, Commit, ProjectContext |
+| `agentbox/internal/domain/interfaces.go` | Port interfaces: LlmProvider, MessageBroker, AgentRunner, ContextProvider, ResultWriter        |
+| `agentbox/internal/domain/types_test.go` | Tests for domain type serialization                                                            |
 
 ### LLM Layer (Tasks 5–7)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/llm/provider.go` | CompletionRequest/CompletionResponse types, LlmProvider re-export |
-| `agentbox/internal/llm/anthropic.go` | AnthropicProvider wrapping official SDK |
-| `agentbox/internal/llm/anthropic_test.go` | Unit test with mock HTTP |
-| `agentbox/internal/llm/chain.go` | FallbackChain: sequential provider fallback |
-| `agentbox/internal/llm/chain_test.go` | Tests with mock providers |
-| `agentbox/internal/llm/retry.go` | RetryingProvider: exponential backoff |
-| `agentbox/internal/llm/retry_test.go` | Tests for retry logic |
+| File                                      | Responsibility                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| `agentbox/internal/llm/provider.go`       | CompletionRequest/CompletionResponse types, LlmProvider re-export |
+| `agentbox/internal/llm/anthropic.go`      | AnthropicProvider wrapping official SDK                           |
+| `agentbox/internal/llm/anthropic_test.go` | Unit test with mock HTTP                                          |
+| `agentbox/internal/llm/chain.go`          | FallbackChain: sequential provider fallback                       |
+| `agentbox/internal/llm/chain_test.go`     | Tests with mock providers                                         |
+| `agentbox/internal/llm/retry.go`          | RetryingProvider: exponential backoff                             |
+| `agentbox/internal/llm/retry_test.go`     | Tests for retry logic                                             |
 
 ### Pub/Sub (Task 8)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/pubsub/broker.go` | ChannelBroker: in-process Go channel broker |
-| `agentbox/internal/pubsub/message.go` | Message envelope type + JSONL serialization |
+| File                                      | Responsibility                                            |
+| ----------------------------------------- | --------------------------------------------------------- |
+| `agentbox/internal/pubsub/broker.go`      | ChannelBroker: in-process Go channel broker               |
+| `agentbox/internal/pubsub/message.go`     | Message envelope type + JSONL serialization               |
 | `agentbox/internal/pubsub/broker_test.go` | Tests for pub/sub routing, dynamic topics, close behavior |
 
 ### Context & Output (Tasks 9–10)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/context/git.go` | GitContextProvider: git log, diff, branch, project rules |
-| `agentbox/internal/context/git_test.go` | Tests with fixture data |
-| `agentbox/internal/output/jsonl.go` | JSONL writer for ~/.mbx/agent-runs.jsonl |
-| `agentbox/internal/output/report.go` | Markdown report writer for ~/.mbx/ai-logs/ |
-| `agentbox/internal/output/dual.go` | DualWriter: pub/sub + file output |
-| `agentbox/internal/output/jsonl_test.go` | Tests for JSONL format compatibility |
+| File                                     | Responsibility                                           |
+| ---------------------------------------- | -------------------------------------------------------- |
+| `agentbox/internal/context/git.go`       | GitContextProvider: git log, diff, branch, project rules |
+| `agentbox/internal/context/git_test.go`  | Tests with fixture data                                  |
+| `agentbox/internal/output/jsonl.go`      | JSONL writer for ~/.minibox/agent-runs.jsonl             |
+| `agentbox/internal/output/report.go`     | Markdown report writer for ~/.minibox/ai-logs/           |
+| `agentbox/internal/output/dual.go`       | DualWriter: pub/sub + file output                        |
+| `agentbox/internal/output/jsonl_test.go` | Tests for JSONL format compatibility                     |
 
 ### Agent SDK Wrapper (Task 11)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/agent/sdk.go` | ClaudeSDKRunner wrapping severity1/claude-agent-sdk-go |
-| `agentbox/internal/agent/sdk_test.go` | Tests with mock iterator |
+| File                                  | Responsibility                                         |
+| ------------------------------------- | ------------------------------------------------------ |
+| `agentbox/internal/agent/sdk.go`      | ClaudeSDKRunner wrapping severity1/claude-agent-sdk-go |
+| `agentbox/internal/agent/sdk_test.go` | Tests with mock iterator                               |
 
 ### Orchestration Agents (Tasks 12–13)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/orchestrator/council.go` | Council agent: multi-role analysis + synthesis |
-| `agentbox/internal/orchestrator/council_test.go` | Tests with mock AgentRunner |
-| `agentbox/internal/orchestrator/meta.go` | Meta-agent: design + spawn + synthesize |
-| `agentbox/internal/orchestrator/meta_test.go` | Tests with mock AgentRunner + MessageBroker |
+| File                                             | Responsibility                                 |
+| ------------------------------------------------ | ---------------------------------------------- |
+| `agentbox/internal/orchestrator/council.go`      | Council agent: multi-role analysis + synthesis |
+| `agentbox/internal/orchestrator/council_test.go` | Tests with mock AgentRunner                    |
+| `agentbox/internal/orchestrator/meta.go`         | Meta-agent: design + spawn + synthesize        |
+| `agentbox/internal/orchestrator/meta_test.go`    | Tests with mock AgentRunner + MessageBroker    |
 
 ### Tool Agent (Task 14)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/internal/tools/commitmsg.go` | Commit message generator |
+| File                                        | Responsibility                 |
+| ------------------------------------------- | ------------------------------ |
+| `agentbox/internal/tools/commitmsg.go`      | Commit message generator       |
 | `agentbox/internal/tools/commitmsg_test.go` | Tests with mock context/runner |
 
 ### Binaries & Integration (Tasks 15–16)
 
-| File | Responsibility |
-|------|---------------|
-| `agentbox/cmd/agentbox/main.go` | Orchestration binary: subcommand dispatch |
-| `agentbox/cmd/mbx-commit-msg/main.go` | Standalone commit-msg binary |
+| File                                      | Responsibility                            |
+| ----------------------------------------- | ----------------------------------------- |
+| `agentbox/cmd/agentbox/main.go`           | Orchestration binary: subcommand dispatch |
+| `agentbox/cmd/minibox-commit-msg/main.go` | Standalone commit-msg binary              |
 
 ---
 
 ## Task 1: Go Module Initialization
 
 **Files:**
+
 - Create: `agentbox/go.mod`
 - Create: `agentbox/internal/domain/types.go`
 - Create: `agentbox/internal/domain/interfaces.go`
@@ -249,6 +254,7 @@ git commit -m "feat(agentbox): initialize Go module with domain types and interf
 ## Task 2: Domain Type Tests
 
 **Files:**
+
 - Create: `agentbox/internal/domain/types_test.go`
 
 - [ ] **Step 1: Write tests for Message serialization**
@@ -343,6 +349,7 @@ git commit -m "test(agentbox): add domain type serialization tests"
 ## Task 3: Pub/Sub Core
 
 **Files:**
+
 - Create: `agentbox/internal/pubsub/message.go`
 - Create: `agentbox/internal/pubsub/broker.go`
 - Create: `agentbox/internal/pubsub/broker_test.go`
@@ -559,6 +566,7 @@ git commit -m "feat(agentbox): add pub/sub core with ChannelBroker"
 ## Task 4: Output Writers
 
 **Files:**
+
 - Create: `agentbox/internal/output/jsonl.go`
 - Create: `agentbox/internal/output/report.go`
 - Create: `agentbox/internal/output/dual.go`
@@ -777,12 +785,12 @@ type DualWriter struct {
 	report *ReportWriter
 }
 
-// NewDualWriter creates a writer targeting ~/.mbx/ paths.
+// NewDualWriter creates a writer targeting ~/.minibox/ paths.
 func NewDualWriter() *DualWriter {
 	home, _ := os.UserHomeDir()
 	return &DualWriter{
-		jsonl:  NewJSONLWriter(filepath.Join(home, ".mbx", "agent-runs.jsonl")),
-		report: NewReportWriter(filepath.Join(home, ".mbx", "ai-logs")),
+		jsonl:  NewJSONLWriter(filepath.Join(home, ".minibox", "agent-runs.jsonl")),
+		report: NewReportWriter(filepath.Join(home, ".minibox", "ai-logs")),
 	}
 }
 
@@ -815,6 +823,7 @@ git commit -m "feat(agentbox): add JSONL and markdown output writers"
 ## Task 5: LLM Provider — Anthropic
 
 **Files:**
+
 - Create: `agentbox/internal/llm/provider.go`
 - Create: `agentbox/internal/llm/anthropic.go`
 - Create: `agentbox/internal/llm/anthropic_test.go`
@@ -977,6 +986,7 @@ git commit -m "feat(agentbox): add Anthropic LLM provider wrapping official SDK"
 ## Task 6: FallbackChain
 
 **Files:**
+
 - Create: `agentbox/internal/llm/chain.go`
 - Create: `agentbox/internal/llm/chain_test.go`
 
@@ -1143,6 +1153,7 @@ git commit -m "feat(agentbox): add FallbackChain with sequential provider fallba
 ## Task 7: RetryingProvider
 
 **Files:**
+
 - Create: `agentbox/internal/llm/retry.go`
 - Create: `agentbox/internal/llm/retry_test.go`
 
@@ -1311,6 +1322,7 @@ git commit -m "feat(agentbox): add RetryingProvider with exponential backoff"
 ## Task 8: Context Provider
 
 **Files:**
+
 - Create: `agentbox/internal/context/git.go`
 - Create: `agentbox/internal/context/git_test.go`
 
@@ -1370,7 +1382,7 @@ Expected: FAIL
 
 - [ ] **Step 3: Implement git.go**
 
-```go
+````go
 package gitctx
 
 import (
@@ -1499,7 +1511,7 @@ func (p *GitProvider) ProjectRules(_ context.Context) (domain.ProjectContext, er
 		Structure: structure.String(),
 	}, nil
 }
-```
+````
 
 - [ ] **Step 4: Run test**
 
@@ -1521,6 +1533,7 @@ git commit -m "feat(agentbox): add GitContextProvider for repo context discovery
 ## Task 9: Agent SDK Wrapper
 
 **Files:**
+
 - Create: `agentbox/internal/agent/sdk.go`
 - Create: `agentbox/internal/agent/sdk_test.go`
 
@@ -1653,6 +1666,7 @@ git commit -m "feat(agentbox): add ClaudeSDKRunner wrapping claude-agent-sdk-go"
 ## Task 10: Council Agent
 
 **Files:**
+
 - Create: `agentbox/internal/orchestrator/council.go`
 - Create: `agentbox/internal/orchestrator/council_test.go`
 
@@ -1920,12 +1934,13 @@ git commit -m "feat(agentbox): add council agent with 5 roles and synthesis"
 ## Task 11: Meta-Agent
 
 **Files:**
+
 - Create: `agentbox/internal/orchestrator/meta.go`
 - Create: `agentbox/internal/orchestrator/meta_test.go`
 
 - [ ] **Step 1: Write meta-agent tests**
 
-```go
+````go
 package orchestrator
 
 import (
@@ -2017,7 +2032,7 @@ func marshalJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
-```
+````
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -2029,7 +2044,7 @@ Expected: FAIL
 
 - [ ] **Step 3: Implement meta.go**
 
-```go
+````go
 package orchestrator
 
 import (
@@ -2190,7 +2205,7 @@ func (m *MetaAgent) RunParallel(ctx context.Context, plan []AgentSpec) (map[stri
 	}
 	return outputs, nil
 }
-```
+````
 
 - [ ] **Step 4: Run tests**
 
@@ -2212,6 +2227,7 @@ git commit -m "feat(agentbox): add meta-agent with design-spawn-synthesize workf
 ## Task 12: Commit Message Tool Agent
 
 **Files:**
+
 - Create: `agentbox/internal/tools/commitmsg.go`
 - Create: `agentbox/internal/tools/commitmsg_test.go`
 
@@ -2279,7 +2295,7 @@ Expected: FAIL
 
 - [ ] **Step 3: Implement commitmsg.go**
 
-```go
+````go
 package tools
 
 import (
@@ -2323,7 +2339,7 @@ func (c *CommitMsg) Generate(ctx context.Context, input CommitMsgContext) (strin
 		"- Follow the existing commit style shown in the recent log\n" +
 		"- Use conventional commits format: `type(scope): description`\n" +
 		"  Types: feat, fix, docs, refactor, test, chore, perf, ci\n" +
-		"  Scope: crate name, module, or area (e.g. linuxbox, standup, justfile)\n" +
+		"  Scope: crate name, module, or area (e.g. minibox, standup, justfile)\n" +
 		"- First line: ≤72 chars, imperative mood, no period\n" +
 		"- If the change warrants it, add a blank line then a short body (2–4 lines max)\n" +
 		"- Do NOT add 'Co-Authored-By' lines — those are added separately\n" +
@@ -2356,7 +2372,7 @@ func orDefault(s, def string) string {
 	}
 	return s
 }
-```
+````
 
 - [ ] **Step 4: Run tests**
 
@@ -2378,6 +2394,7 @@ git commit -m "feat(agentbox): add commit message tool agent"
 ## Task 13: Orchestration Binary (cmd/agentbox)
 
 **Files:**
+
 - Create: `agentbox/cmd/agentbox/main.go`
 
 - [ ] **Step 1: Implement main.go with subcommand dispatch**
@@ -2645,7 +2662,8 @@ git commit -m "feat(agentbox): add orchestration binary with council and meta-ag
 ## Task 14: Standalone Commit-Msg Binary
 
 **Files:**
-- Create: `agentbox/cmd/mbx-commit-msg/main.go`
+
+- Create: `agentbox/cmd/minibox-commit-msg/main.go`
 
 - [ ] **Step 1: Implement standalone binary**
 
@@ -2768,7 +2786,7 @@ func gitRun(args ...string) string {
 
 ```bash
 cd /Users/joe/dev/minibox/agentbox
-go build ./cmd/mbx-commit-msg/
+go build ./cmd/minibox-commit-msg/
 ```
 
 Expected: no errors
@@ -2776,8 +2794,8 @@ Expected: no errors
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agentbox/cmd/mbx-commit-msg/
-git commit -m "feat(agentbox): add standalone mbx-commit-msg binary"
+git add agentbox/cmd/minibox-commit-msg/
+git commit -m "feat(agentbox): add standalone minibox-commit-msg binary"
 ```
 
 ---
@@ -2785,6 +2803,7 @@ git commit -m "feat(agentbox): add standalone mbx-commit-msg binary"
 ## Task 15: Build Integration
 
 **Files:**
+
 - Modify: `Justfile`
 
 - [ ] **Step 1: Add agentbox build and run recipes to Justfile**
@@ -2796,7 +2815,7 @@ Add the following recipes to the Justfile:
 
 # Build all agentbox binaries
 agentbox-build:
-    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/mbx-commit-msg/
+    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/minibox-commit-msg/
 
 # Run agentbox tests
 agentbox-test:
@@ -2812,7 +2831,7 @@ agentbox-meta-agent *ARGS:
 
 # Generate commit message (Go)
 agentbox-commit-msg *ARGS:
-    cd agentbox && go run ./cmd/mbx-commit-msg/ {{ARGS}}
+    cd agentbox && go run ./cmd/minibox-commit-msg/ {{ARGS}}
 ```
 
 - [ ] **Step 2: Verify recipes work**
@@ -2847,7 +2866,7 @@ Expected: all tests pass
 
 ```bash
 go build ./cmd/agentbox/
-go build ./cmd/mbx-commit-msg/
+go build ./cmd/minibox-commit-msg/
 ```
 
 Expected: both binaries compile

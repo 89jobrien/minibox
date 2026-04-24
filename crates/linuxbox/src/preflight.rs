@@ -114,7 +114,7 @@ pub fn format_report(caps: &HostCapabilities) -> String {
 /// Resolve the active data directory using the same logic as the daemon.
 ///
 /// Checks `MINIBOX_DATA_DIR` first, then falls back to `/var/lib/minibox`
-/// for root or `~/.mbx/cache` for non-root users.
+/// for root or `~/.minibox/cache` for non-root users.
 fn active_data_dir() -> std::path::PathBuf {
     if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
         return std::path::PathBuf::from(explicit);
@@ -128,7 +128,7 @@ fn active_data_dir() -> std::path::PathBuf {
         std::path::PathBuf::from("/var/lib/minibox")
     } else {
         std::env::var("HOME")
-            .map(|h| std::path::PathBuf::from(h).join(".mbx/cache"))
+            .map(|h| std::path::PathBuf::from(h).join(".minibox/cache"))
             .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/minibox"))
     }
 }

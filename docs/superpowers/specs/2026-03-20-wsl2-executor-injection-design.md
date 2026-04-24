@@ -13,7 +13,7 @@ installation, following the proven LimaExecutor pattern from colima.rs.
 
 ## Scope
 
-`crates/linuxbox/src/adapters/wsl2.rs` only. Docker Desktop adapter is out of scope.
+`crates/minibox/src/adapters/wsl2.rs` only. Docker Desktop adapter is out of scope.
 
 ## Structural Observation
 
@@ -120,13 +120,14 @@ pub fn with_executor(mut self, executor: WslExecutor) -> Self {
 
 Added in `#[cfg(test)]` at the bottom of `wsl2.rs`. Correct trait method names:
 
-| Struct | Method under test | Annotation |
-|---|---|---|
-| `Wsl2Runtime` | `spawn_process` (async) | `#[tokio::test]` |
-| `Wsl2Filesystem` | `setup_rootfs` | `#[test]` |
-| `Wsl2Limiter` | `create` | `#[test]` |
+| Struct           | Method under test       | Annotation       |
+| ---------------- | ----------------------- | ---------------- |
+| `Wsl2Runtime`    | `spawn_process` (async) | `#[tokio::test]` |
+| `Wsl2Filesystem` | `setup_rootfs`          | `#[test]`        |
+| `Wsl2Limiter`    | `create`                | `#[test]`        |
 
 For the `spawn_process` test, the executor must handle three calls in order:
+
 1. `["wslpath", "-u", <rootfs_path>]` — from `windows_to_wsl_path` for rootfs
 2. `["wslpath", "-u", <cgroup_path>]` — from `windows_to_wsl_path` for cgroup_path
 3. `["sudo", <helper_path>, "spawn", <json>]` — the actual spawn call

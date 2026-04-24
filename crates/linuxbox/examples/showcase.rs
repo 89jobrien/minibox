@@ -3,11 +3,11 @@
 //! Pulls work on any platform. Container runs require miniboxd running (Linux).
 //!
 //! Usage:
-//!   cargo run --release --example showcase -p linuxbox
-//!   cargo run --release --example showcase -p linuxbox -- --run /path/to/minibox
-//!   cargo run --release --example showcase -p linuxbox -- --run ./target/release/minibox --cleanup
+//!   cargo run --release --example showcase -p minibox
+//!   cargo run --release --example showcase -p minibox -- --run /path/to/minibox
+//!   cargo run --release --example showcase -p minibox -- --run ./target/release/minibox --cleanup
 
-use linuxbox::{
+use minibox::{
     adapters::DockerHubRegistry,
     domain::ImageRegistry,
     image::{ImageStore, reference::ImageRef},
@@ -260,7 +260,7 @@ async fn main() -> anyhow::Result<()> {
             PathBuf::from(d)
         } else {
             std::env::var("HOME")
-                .map(|h| PathBuf::from(h).join(".mbx/cache"))
+                .map(|h| PathBuf::from(h).join(".minibox/cache"))
                 .unwrap_or_else(|_| PathBuf::from("/tmp/minibox-demo"))
         };
         base.join("images")

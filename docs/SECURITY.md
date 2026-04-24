@@ -102,7 +102,36 @@ We use CVSS 3.1 scoring:
 - Request rate limiting not yet implemented
 - No request throttling per client
 
-#### 2. Container Runtime
+#### 2. mbxctl HTTP API (Control Plane)
+
+**Attack Vectors:**
+
+- Unauthenticated job creation — any process with network access can run containers
+- Request body DoS
+
+**Mitigations:**
+
+- 1 MB request body limit (`DefaultBodyLimit`)
+- Systemd unit binds `localhost:9999` by default (not 0.0.0.0)
+
+**Known Limitation — No Authentication:**
+
+`mbxctl` exposes an **unauthenticated** HTTP API. Anyone with network access to the
+listen address can create, query, and delete container jobs. This is intentional for
+local/trusted-network deployments but must be addressed before any internet-facing use.
+
+Recommended mitigations for production deployments:
+
+- Keep the default `localhost:9999` bind and access via SSH tunnel
+- Add a reverse proxy with mTLS or shared-secret header (e.g. `X-API-Key`)
+- Firewall the port if binding to a non-loopback interface
+
+**Residual Risks:**
+
+- No authentication mechanism built in
+- No rate limiting per client
+
+#### 3. Container Runtime
 
 **Attack Vectors:**
 

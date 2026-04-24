@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tracing::{debug, error, info, warn};
 
-use crate::handler::{self, HandlerDependencies};
+use crate::handler::{self, HandlerDependencies, handle_resize_pty, handle_send_input};
 use crate::state::DaemonState;
 
 // SECURITY: Maximum request size to prevent memory exhaustion
@@ -42,6 +42,50 @@ pub trait ServerListener: Send + 'static {
     fn accept(
         &self,
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
+}
+
+/// Determine whether a connection should be accepted given peer credentials
+/// and the `require_root_auth` flag.
+///
+/// This is the single source of truth for the SO_PEERCRED gate so the logic
+/// can be unit-tested without a real socket.
+///
+/// # Rules
+///
+/// | `require_root_auth` | `creds`       | Result  |
+/// |---------------------|---------------|---------|
+/// | `false`             | any / None    | allowed |
+/// | `true`              | None          | allowed (warning logged at call site) |
+/// | `true`              | Some(uid = 0) | allowed |
+/// | `true`              | Some(uid > 0) | denied  |
+pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
+    if !require_root_auth {
+        return true;
+    }
+    match creds {
+        None => true, // credentials unavailable — warn logged by caller
+        Some(c) => c.uid == 0,
+    }
+}
+
+/// Log resolved startup configuration at `info` level.
+///
+/// Call this once after path resolution is complete and before binding the socket.
+/// Structured fields follow the project tracing contract: `key = value`, lowercase
+/// verb-noun message, no embedded values in the message string.
+///
+/// # Arguments
+///
+/// * `socket_path` — resolved Unix socket path (after env-var expansion)
+/// * `data_dir` — resolved data directory for images and container state
+/// * `cgroup_root` — resolved cgroup root used for per-container cgroups
+pub fn log_startup_info(socket_path: &str, data_dir: &str, cgroup_root: &str) {
+    info!(
+        socket_path = socket_path,
+        data_dir = data_dir,
+        cgroup_root = cgroup_root,
+        "server: startup configuration resolved"
+    );
 }
 
 /// Run the daemon accept loop until `shutdown` resolves.
@@ -80,17 +124,28 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, peer_creds)) => {
-                        if let Some(ref creds) = peer_creds {
-                            if require_root_auth && creds.uid != 0 {
-                                warn!(uid = creds.uid, pid = creds.pid, "server: rejecting non-root connection");
-                                continue;
+                        if !is_authorized(peer_creds.as_ref(), require_root_auth) {
+                            // is_authorized returns false only when creds is Some and uid != 0
+                            let creds = peer_creds
+                                .as_ref()
+                                .expect("is_authorized false requires Some(creds)");
+                            warn!(
+                                uid = creds.uid,
+                                pid = creds.pid,
+                                "server: rejecting non-root connection"
+                            );
+                            continue;
+                        }
+                        match &peer_creds {
+                            Some(creds) => {
+                                info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
                             }
-                            info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
-                        } else {
-                            if require_root_auth {
-                                warn!("server: peer credentials unavailable; require_root_auth bypassed");
+                            None => {
+                                if require_root_auth {
+                                    warn!("server: peer credentials unavailable; require_root_auth bypassed");
+                                }
+                                info!("server: accepted connection (no peer credentials)");
                             }
-                            info!("server: accepted connection (no peer credentials)");
                         }
                         let state_clone = Arc::clone(&state);
                         let deps_clone = Arc::clone(&deps);
@@ -179,11 +234,14 @@ where
             }
             Err(e) => {
                 warn!("failed to parse request '{trimmed}': {e}");
-                let _ = tx
-                    .send(DaemonResponse::Error {
+                send_terminal_response(
+                    &tx,
+                    "parse_error",
+                    DaemonResponse::Error {
                         message: format!("invalid request: {e}"),
-                    })
-                    .await;
+                    },
+                )
+                .await;
             }
         }
 
@@ -212,10 +270,51 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// Non-streaming responses always terminate immediately. Streaming responses
-/// (`ContainerOutput`) continue until `ContainerStopped` (which is terminal).
+/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
+/// as the first message, followed by `ContainerOutput` chunks and then
+/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
+/// server loop exits naturally when `rx.recv()` returns `None`.
 fn is_terminal_response(r: &DaemonResponse) -> bool {
-    !matches!(r, DaemonResponse::ContainerOutput { .. })
+    matches!(
+        r,
+        DaemonResponse::ContainerStopped { .. }
+            | DaemonResponse::Error { .. }
+            | DaemonResponse::Success { .. }
+            | DaemonResponse::ContainerList { .. }
+            | DaemonResponse::ImageLoaded { .. }
+            | DaemonResponse::BuildComplete { .. }
+            | DaemonResponse::ContainerPaused { .. }
+            | DaemonResponse::ContainerResumed { .. }
+            | DaemonResponse::Pruned { .. }
+            | DaemonResponse::PipelineComplete { .. }
+    )
+    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
+    // Event are non-terminal.
+}
+
+/// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
+/// when the receiver has already been dropped (client disconnected before the
+/// handler finished computing the response).
+///
+/// Use this instead of `let _ = tx.send(...).await` so dropped connections are
+/// observable in logs rather than silently swallowed.  Mirrors the `send_error`
+/// helper in [`crate::handler`].
+///
+/// # Issue #118
+///
+/// Eliminates the silent-channel-discard footgun documented in `CLAUDE.md`.
+/// Every single-response dispatch arm must use this function.
+async fn send_terminal_response(
+    tx: &tokio::sync::mpsc::Sender<DaemonResponse>,
+    context: &str,
+    response: DaemonResponse,
+) {
+    if tx.send(response).await.is_err() {
+        warn!(
+            context,
+            "client disconnected before terminal response could be sent"
+        );
+    }
 }
 
 /// Route a parsed [`DaemonRequest`] to the appropriate handler, sending all
@@ -239,6 +338,11 @@ async fn dispatch(
             cpu_weight,
             ephemeral,
             network,
+            mounts,
+            privileged,
+            env,
+            name,
+            tty: _,
         } => {
             handler::handle_run(
                 image,
@@ -248,6 +352,10 @@ async fn dispatch(
                 cpu_weight,
                 ephemeral,
                 network,
+                mounts,
+                privileged,
+                env,
+                name,
                 state,
                 deps,
                 tx,
@@ -256,19 +364,146 @@ async fn dispatch(
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Stop", response).await;
+        }
+        DaemonRequest::PauseContainer { id } => {
+            let response =
+                handler::handle_pause(id, state, Arc::clone(&deps.events.event_sink)).await;
+            send_terminal_response(&tx, "PauseContainer", response).await;
+        }
+        DaemonRequest::ResumeContainer { id } => {
+            let response =
+                handler::handle_resume(id, state, Arc::clone(&deps.events.event_sink)).await;
+            send_terminal_response(&tx, "ResumeContainer", response).await;
         }
         DaemonRequest::Remove { id } => {
             let response = handler::handle_remove(id, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Remove", response).await;
         }
         DaemonRequest::List => {
             let response = handler::handle_list(state).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "List", response).await;
         }
         DaemonRequest::Pull { image, tag } => {
             let response = handler::handle_pull(image, tag, state, deps).await;
-            let _ = tx.send(response).await;
+            send_terminal_response(&tx, "Pull", response).await;
+        }
+        DaemonRequest::LoadImage { path, name, tag } => {
+            let response = handler::handle_load_image(path, name, tag, state, deps).await;
+            send_terminal_response(&tx, "LoadImage", response).await;
+        }
+        DaemonRequest::Exec {
+            container_id,
+            cmd,
+            env,
+            working_dir,
+            tty,
+        } => {
+            handler::handle_exec(container_id, cmd, env, working_dir, tty, state, deps, tx).await;
+        }
+        DaemonRequest::Push {
+            image_ref,
+            credentials,
+        } => {
+            handler::handle_push(image_ref, credentials, state, deps, tx).await;
+        }
+        DaemonRequest::Commit {
+            container_id,
+            target_image,
+            author,
+            message,
+            env_overrides,
+            cmd_override,
+        } => {
+            handler::handle_commit(
+                container_id,
+                target_image,
+                author,
+                message,
+                env_overrides,
+                cmd_override,
+                state,
+                deps,
+                tx,
+            )
+            .await;
+        }
+        DaemonRequest::Build {
+            dockerfile,
+            context_path,
+            tag,
+            build_args,
+            no_cache,
+        } => {
+            handler::handle_build(
+                dockerfile,
+                context_path,
+                tag,
+                build_args,
+                no_cache,
+                state,
+                deps,
+                tx,
+            )
+            .await;
+        }
+        DaemonRequest::SubscribeEvents => {
+            tokio::spawn(handler::handle_subscribe_events(
+                Arc::clone(&deps.events.event_source),
+                tx,
+            ));
+        }
+        DaemonRequest::Prune { dry_run } => {
+            tokio::spawn(handler::handle_prune(
+                dry_run,
+                Arc::clone(&state),
+                Arc::clone(&deps.image.image_gc),
+                Arc::clone(&deps.events.event_sink),
+                tx,
+            ));
+        }
+        DaemonRequest::RemoveImage { image_ref } => {
+            tokio::spawn(handler::handle_remove_image(
+                image_ref,
+                Arc::clone(&state),
+                Arc::clone(&deps.image.image_store),
+                Arc::clone(&deps.events.event_sink),
+                tx,
+            ));
+        }
+        DaemonRequest::ContainerLogs {
+            container_id,
+            follow,
+        } => {
+            handler::handle_logs(container_id, follow, state, deps, tx).await;
+        }
+        DaemonRequest::SendInput { session_id, data } => {
+            let deps = Arc::clone(&deps);
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                handle_send_input(session_id, data, deps, tx).await;
+            });
+        }
+        DaemonRequest::ResizePty {
+            session_id,
+            cols,
+            rows,
+        } => {
+            let deps = Arc::clone(&deps);
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                handle_resize_pty(session_id, cols, rows, deps, tx).await;
+            });
+        }
+        DaemonRequest::RunPipeline { .. } => {
+            send_terminal_response(
+                &tx,
+                "RunPipeline",
+                DaemonResponse::Error {
+                    message: "RunPipeline is not yet implemented".to_string(),
+                },
+            )
+            .await;
         }
     }
 }
@@ -276,14 +511,34 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linuxbox::adapters::mocks::{
+    use minibox::adapters::mocks::{
         MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
     };
+    use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::image::ImageStore;
     use minibox_core::protocol::{DaemonRequest, DaemonResponse};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    // ─── test-only no-op GC ─────────────────────────────────────────────────
+
+    struct NoopImageGc;
+
+    #[async_trait::async_trait]
+    impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+        async fn prune(
+            &self,
+            dry_run: bool,
+            _in_use: &[String],
+        ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+            Ok(minibox_core::image::gc::PruneReport {
+                removed: vec![],
+                freed_bytes: 0,
+                dry_run,
+            })
+        }
+    }
 
     // ─── helpers ────────────────────────────────────────────────────────────
 
@@ -295,15 +550,51 @@ mod tests {
     ) {
         let store = ImageStore::new(tmp.path().join("images")).expect("create ImageStore");
         let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
+        let image_store =
+            Arc::new(ImageStore::new(tmp.path().join("images")).expect("create ImageStore"));
+        let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
+            Arc::new(NoopImageGc);
         let deps = Arc::new(crate::handler::HandlerDependencies {
-            registry: Arc::new(MockRegistry::new()),
-            ghcr_registry: Arc::new(MockRegistry::new()),
-            filesystem: Arc::new(MockFilesystem::new()),
-            resource_limiter: Arc::new(MockLimiter::new()),
-            runtime: Arc::new(MockRuntime::new()),
-            network_provider: Arc::new(MockNetwork::new()),
-            containers_base: tmp.path().join("containers"),
-            run_containers_base: tmp.path().join("run"),
+            image: crate::handler::ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    Arc::new(MockRegistry::new()),
+                    [(
+                        "ghcr.io",
+                        Arc::new(MockRegistry::new()) as minibox_core::domain::DynImageRegistry,
+                    )],
+                )),
+                image_loader: Arc::new(crate::handler::NoopImageLoader),
+                image_gc,
+                image_store,
+            },
+            lifecycle: crate::handler::LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: crate::handler::ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    crate::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: crate::handler::BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: crate::handler::EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: crate::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
         });
         (state, deps)
     }
@@ -347,12 +638,165 @@ mod tests {
 
     // ─── is_terminal_response ────────────────────────────────────────────────
 
+    /// Exhaustive coverage test: every `DaemonResponse` variant must appear in
+    /// this test.  The inner `match` has no wildcard arm so the compiler will
+    /// emit an error if a new variant is ever added without updating this test
+    /// AND updating `is_terminal_response`.
+    #[test]
+    fn test_is_terminal_response_all_variants() {
+        // Build one instance of every variant and assert the expected terminal
+        // status.  The match below is non-exhaustive-arm-free on purpose: the
+        // compiler will catch any missing variant at compile time.
+        let variants: &[(DaemonResponse, bool)] = &[
+            (
+                DaemonResponse::ContainerCreated {
+                    id: "abc".to_string(),
+                },
+                false, // non-terminal: ephemeral runs follow with ContainerOutput chunks
+            ),
+            (
+                DaemonResponse::Success {
+                    message: "ok".to_string(),
+                },
+                true,
+            ),
+            (DaemonResponse::ContainerList { containers: vec![] }, true),
+            (
+                DaemonResponse::Error {
+                    message: "boom".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerOutput {
+                    stream: minibox_core::protocol::OutputStreamKind::Stdout,
+                    data: "dGVzdA==".to_string(),
+                },
+                false,
+            ),
+            (DaemonResponse::ContainerStopped { exit_code: 0 }, true),
+            (
+                DaemonResponse::ImageLoaded {
+                    image: "minibox-tester:latest".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ExecStarted {
+                    exec_id: "exec001".to_string(),
+                },
+                false, // non-terminal: output and ContainerStopped follow
+            ),
+            (
+                DaemonResponse::PushProgress {
+                    layer_digest: "sha256:abc".to_string(),
+                    bytes_uploaded: 100,
+                    total_bytes: 1000,
+                },
+                false, // non-terminal
+            ),
+            (
+                DaemonResponse::BuildOutput {
+                    step: 1,
+                    total_steps: 3,
+                    message: "Step 1/3: FROM alpine".to_string(),
+                },
+                false, // non-terminal
+            ),
+            (
+                DaemonResponse::BuildComplete {
+                    image_id: "sha256:deadbeef".to_string(),
+                    tag: "myapp:latest".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerPaused {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerResumed {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::Event {
+                    event: minibox_core::events::ContainerEvent::Started {
+                        id: "abc".to_string(),
+                        pid: 1,
+                        timestamp: std::time::SystemTime::UNIX_EPOCH,
+                    },
+                },
+                false, // non-terminal: streaming
+            ),
+            (
+                DaemonResponse::Pruned {
+                    removed: vec![],
+                    freed_bytes: 0,
+                    dry_run: false,
+                },
+                true,
+            ),
+            (
+                DaemonResponse::LogLine {
+                    stream: minibox_core::protocol::OutputStreamKind::Stdout,
+                    line: "hello".to_string(),
+                },
+                false, // non-terminal: more lines may follow
+            ),
+            (
+                DaemonResponse::PipelineComplete {
+                    trace: serde_json::json!({"steps": [], "result": "ok"}),
+                    container_id: "abc123".to_string(),
+                    exit_code: 0,
+                },
+                true, // terminal: pipeline execution finished
+            ),
+        ];
+
+        for (variant, expected_terminal) in variants {
+            // Verify is_terminal_response returns the expected value.
+            assert_eq!(
+                is_terminal_response(variant),
+                *expected_terminal,
+                "unexpected terminal status for variant: {variant:?}",
+            );
+
+            // Exhaustiveness guard: this match must cover every arm with no
+            // wildcard.  If you add a new DaemonResponse variant, the compiler
+            // will refuse to compile until you add it here AND in the `variants`
+            // slice above.
+            let _exhaustiveness_guard: bool = match variant {
+                DaemonResponse::ContainerCreated { .. } => false,
+                DaemonResponse::Success { .. } => true,
+                DaemonResponse::ContainerList { .. } => true,
+                DaemonResponse::Error { .. } => true,
+                DaemonResponse::ContainerOutput { .. } => false,
+                DaemonResponse::ContainerStopped { .. } => true,
+                DaemonResponse::ImageLoaded { .. } => true,
+                DaemonResponse::ExecStarted { .. } => false,
+                DaemonResponse::PushProgress { .. } => false,
+                DaemonResponse::BuildOutput { .. } => false,
+                DaemonResponse::BuildComplete { .. } => true,
+                DaemonResponse::ContainerPaused { .. } => true,
+                DaemonResponse::ContainerResumed { .. } => true,
+                DaemonResponse::Event { .. } => false,
+                DaemonResponse::Pruned { .. } => true,
+                DaemonResponse::LogLine { .. } => false,
+                DaemonResponse::PipelineComplete { .. } => true,
+            };
+        }
+    }
+
     #[test]
     fn test_is_terminal_response_for_each_variant() {
         // ContainerOutput is the only non-terminal response
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerOutput {
-                stream: linuxbox::protocol::OutputStreamKind::Stdout,
+                stream: minibox::protocol::OutputStreamKind::Stdout,
                 data: "dGVzdA==".to_string(),
             }),
             "ContainerOutput must be non-terminal"
@@ -372,10 +816,10 @@ mod tests {
             "Error must be terminal"
         );
         assert!(
-            is_terminal_response(&DaemonResponse::ContainerCreated {
+            !is_terminal_response(&DaemonResponse::ContainerCreated {
                 id: "abc".to_string()
             }),
-            "ContainerCreated must be terminal"
+            "ContainerCreated must be non-terminal (ephemeral runs follow with ContainerOutput)"
         );
         assert!(
             is_terminal_response(&DaemonResponse::ContainerStopped { exit_code: 0 }),
@@ -384,6 +828,12 @@ mod tests {
         assert!(
             is_terminal_response(&DaemonResponse::ContainerList { containers: vec![] }),
             "ContainerList must be terminal"
+        );
+        assert!(
+            is_terminal_response(&DaemonResponse::ImageLoaded {
+                image: "minibox-tester:latest".to_string()
+            }),
+            "ImageLoaded must be terminal"
         );
     }
 
@@ -810,5 +1260,48 @@ mod tests {
 
         // Server should have shut down via the shutdown future, not timed out
         assert!(result.is_ok(), "server should not have timed out");
+    }
+
+    // ─── send_terminal_response ──────────────────────────────────────────────
+
+    /// Issue #118: `send_terminal_response` must NOT panic when the receiver is
+    /// already dropped (client disconnected before the handler finished).
+    #[tokio::test]
+    async fn test_send_terminal_response_does_not_panic_on_dropped_receiver() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+        // Drop the receiver — simulates a client that disconnected early.
+        drop(rx);
+
+        // Must not panic; must return gracefully.
+        send_terminal_response(
+            &tx,
+            "test_context",
+            DaemonResponse::Success {
+                message: "ok".to_string(),
+            },
+        )
+        .await;
+    }
+
+    /// Issue #118: `send_terminal_response` must deliver the response when the
+    /// receiver is still alive.
+    #[tokio::test]
+    async fn test_send_terminal_response_delivers_when_receiver_alive() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+
+        send_terminal_response(
+            &tx,
+            "test_context",
+            DaemonResponse::Success {
+                message: "delivered".to_string(),
+            },
+        )
+        .await;
+
+        let received = rx.recv().await.expect("expected a response");
+        assert!(
+            matches!(received, DaemonResponse::Success { ref message } if message == "delivered"),
+            "unexpected response: {received:?}"
+        );
     }
 }

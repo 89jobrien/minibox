@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Environment Variable Flow — Minibox</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #ddd; padding-bottom: .4rem; }
+  h2 { font-size: 1.1rem; color: #555; margin-top: 2rem; }
+  pre { background: #f6f8fa; border: 1px solid #ddd; border-radius: 6px; padding: 1rem; font-size: .85rem; overflow-x: auto; line-height: 1.5; }
+  .mermaid { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; }
+  p { line-height: 1.6; }
+  nav { font-size: .85rem; margin-bottom: 1.5rem; }
+  nav a { color: #0066cc; text-decoration: none; margin-right: 1rem; }
+  nav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="crate-dependency-graph.html">Crate Deps</a>
+  <a href="hexagonal-architecture.html">Hexagonal Architecture</a>
+  <a href="platform-adapter-selection.html">Adapter Selection</a>
+  <a href="container-lifecycle.html">Container Lifecycle</a>
+  <a href="mbxctl-sse-pipeline.html">SSE Pipeline</a>
+  <a href="env-var-flow.html">Env Var Flow</a>
+</nav>
+
+<h1>Environment Variable Flow</h1>
+
+<p>Traces how user-supplied env vars travel from the CLI or mbxctl HTTP API
+all the way to <code>execve(2)</code> inside the container process.</p>
+
+<h2>Diagram</h2>
+<div class="mermaid">
+flowchart TD
+    CLI["mbx CLI\nrun.rs\nDaemonRequest::Run { env: vec![] }"]
+    mbxctl["mbxctl\nCreateJobRequest { env: [&quot;FOO=bar&quot;] }\n→ DaemonRequest::Run { env }"]
+
+    protocol["Protocol layer\nminibox-core/protocol.rs\nDaemonRequest::Run {\n  env: Vec&lt;String&gt;  // #[serde(default)]\n}"]
+
+    server["daemonbox/server.rs\ndispatch() destructures env\npasses to handle_run()"]
+
+    handler["daemonbox/handler.rs\nhandle_run(env)\n  → handle_run_streaming(env)\n    → run_inner_capture(env)\n      container_env = [PATH, TERM] + env\n  → run_inner(env)\n      container_env = [PATH, TERM] + env"]
+
+    spawnconfig["ContainerSpawnConfig { env: container_env }"]
+
+    adapter["Runtime adapter\nspawn_process(config)\n  → spawn_blocking(child_init)"]
+
+    child["child_init()\nBuild envp: Vec&lt;CString&gt;\nfrom config.env\nlinuxbox/src/container/process.rs"]
+
+    execve["execve(cmd, argv, envp)\nContainer process starts\nwith explicit environment"]
+
+    CLI --> protocol
+    mbxctl --> protocol
+    protocol --> server
+    server --> handler
+    handler --> spawnconfig
+    spawnconfig --> adapter
+    adapter --> child
+    child --> execve
+
+    classDef proto fill:#fff3cd,stroke:#856404,color:#000;
+    classDef handler fill:#d4edda,stroke:#155724,color:#000;
+    classDef kernel fill:#f8d7da,stroke:#721c24,color:#000;
+    classDef input fill:#cce5ff,stroke:#004085,color:#000;
+
+    class CLI,mbxctl input;
+    class protocol,server proto;
+    class handler,spawnconfig,adapter,child handler;
+    class execve kernel;
+</div>
+
+<h2>Why execve not execvp</h2>
+
+<p><code>execvp</code> inherits the <strong>parent process</strong> environment (the daemon's env), which
+leaks host secrets into containers. <code>execve</code> takes an explicit <code>envp</code> argument,
+giving the container exactly the vars listed in <code>ContainerSpawnConfig::env</code> —
+no more, no less.</p>
+
+<p>Defaults (<code>PATH</code>, <code>TERM</code>) are prepended in <code>handler.rs</code> before the user vars so
+they can be overridden by the caller (e.g. <code>env: ["PATH=/custom/bin"]</code> replaces
+the default).</p>
+
+<h2>ASCII</h2>
+<pre>
+  mbx CLI                  mbxctl HTTP API
+  run.rs                   POST /jobs {"env":["FOO=bar"]}
+  env: vec![]                    │
+       │                         │
+       └──────────┬──────────────┘
+                  │
+                  ▼
+         DaemonRequest::Run
+         { env: Vec&lt;String&gt; }      ← #[serde(default)] → empty if omitted
+         JSON over Unix socket
+                  │
+                  ▼
+         daemonbox/server.rs
+         dispatch() → handle_run(…, env, …)
+                  │
+                  ▼
+         daemonbox/handler.rs
+         container_env = [
+           "PATH=/usr/local/sbin:…",  ← always prepended
+           "TERM=xterm",              ← always prepended
+           …user env vars…            ← appended from request
+         ]
+         ContainerSpawnConfig { env: container_env }
+                  │
+                  ▼
+         linuxbox/src/container/process.rs
+         child_init()
+         envp: Vec&lt;CString&gt; built from config.env
+                  │
+                  ▼
+         execve(cmd, argv, envp)    ← explicit envp, no parent inheritance
+</pre>
+
+<script>mermaid.initialize({ startOnLoad: true, theme: 'neutral' });</script>
+</body>
+</html>

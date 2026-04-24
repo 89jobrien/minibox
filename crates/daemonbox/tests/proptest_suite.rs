@@ -8,6 +8,8 @@ use daemonbox::state::{ContainerRecord, DaemonState};
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::DynImageRegistry;
 use minibox_core::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 
@@ -17,6 +19,22 @@ static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 fn runtime() -> &'static tokio::runtime::Runtime {
     RT.get_or_init(|| tokio::runtime::Runtime::new().expect("tokio runtime"))
+}
+
+// ── Shared TempDir ────────────────────────────────────────────────────────────
+//
+// A single TempDir shared across all proptest iterations avoids the overhead
+// of creating and destroying a temporary directory for each of the 256+
+// iterations proptest runs per property. DaemonState still writes state.json
+// to disk on each add/remove, but the write overwrites the same file rather
+// than creating a new directory subtree each time.
+
+static TMPDIR: OnceLock<tempfile::TempDir> = OnceLock::new();
+
+fn shared_tmp() -> &'static Path {
+    TMPDIR
+        .get_or_init(|| tempfile::TempDir::new().expect("shared proptest TempDir"))
+        .path()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,22 +52,73 @@ fn runtime_is_shared_not_per_call() {
 // Mock adapters always succeed. containers_base/run_containers_base are never
 // created or accessed in "unknown ID" tests because handlers return early on
 // ContainerNotFound before touching the filesystem.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
+    use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+
+    let image_store = Arc::new(minibox_core::image::ImageStore::new(tmp.join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: tmp.join("containers"),
-        run_containers_base: tmp.join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.join("containers"),
+            run_containers_base: tmp.join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
-// DaemonState::save_to_disk fires on every add/remove — each proptest
-// case performs disk I/O to the TempDir. This is expected and fast
-// because TempDir is on a local filesystem.
+// Each proptest iteration creates a fresh DaemonState pointing at the shared
+// TempDir. save_to_disk still fires on add/remove but overwrites the same
+// file, avoiding per-iteration tmpdir lifecycle costs.
 fn make_state(tmp: &Path) -> Arc<DaemonState> {
     let image_store = ImageStore::new(tmp.join("images")).expect("ImageStore::new");
     Arc::new(DaemonState::new(image_store, tmp))
@@ -59,6 +128,7 @@ fn make_record(id: &str) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
+            name: None,
             image: "test-image".into(),
             command: String::new(),
             state: "created".into(),
@@ -69,6 +139,8 @@ fn make_record(id: &str) -> ContainerRecord {
         rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
     }
 }
 
@@ -85,8 +157,7 @@ proptest! {
 
     #[test]
     fn state_add_then_get_finds_record(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
         let record = make_record(&id);
 
         runtime().block_on(state.add_container(record));
@@ -102,8 +173,7 @@ proptest! {
 
     #[test]
     fn state_remove_after_add_returns_none(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         runtime().block_on(state.add_container(make_record(&id)));
         runtime().block_on(state.remove_container(&id));
@@ -120,8 +190,7 @@ proptest! {
     fn state_list_count_matches_adds(
         ids in proptest::collection::hash_set(arb_container_id(), 1..=8)
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &ids {
             runtime().block_on(state.add_container(make_record(id)));
@@ -140,8 +209,7 @@ proptest! {
         adds in proptest::collection::hash_set(arb_container_id(), 1..=8),
         remove_count in 0_usize..=8_usize,
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &adds {
             runtime().block_on(state.add_container(make_record(id)));
@@ -167,10 +235,9 @@ proptest! {
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
     #[test]
     fn handle_stop_unknown_id_is_error(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
-
-        let deps = make_deps(tmp.path());
+        let tmp = shared_tmp();
+        let state = make_state(tmp);
+        let deps = make_deps(tmp);
         let resp = runtime().block_on(handle_stop(id.clone(), state, deps));
 
         prop_assert!(
@@ -184,9 +251,9 @@ proptest! {
     #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
     #[test]
     fn handle_remove_unknown_id_is_error(id in arb_container_id()) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
-        let deps = make_deps(tmp.path());
+        let tmp = shared_tmp();
+        let state = make_state(tmp);
+        let deps = make_deps(tmp);
 
         let resp = runtime().block_on(handle_remove(id.clone(), state, deps));
 
@@ -203,8 +270,7 @@ proptest! {
     fn handle_list_always_returns_container_list(
         ids in proptest::collection::hash_set(arb_container_id(), 0..=5)
     ) {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let state = make_state(tmp.path());
+        let state = make_state(shared_tmp());
 
         for id in &ids {
             runtime().block_on(state.add_container(make_record(id)));

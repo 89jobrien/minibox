@@ -1,0 +1,40 @@
+pipeline: minibox_conformance
+# Run the conformance suite and post a summary, mirroring .github/workflows/conformance.yml.
+# Requires: mise on PATH, cargo xtask test-conformance must pass on the current platform.
+#
+# Run: cruxx run .crux/conformance.crux
+# Override report dir: cruxx run .crux/conformance.crux --input '{"artifact_dir":"artifacts/conformance"}'
+budget: { calls: 8 }
+
+steps:
+  - step: run_conformance
+    handler: shell::capture
+    args:
+      cmd: "~/.local/bin/mise exec -- cargo xtask test-conformance"
+    # ERR step if the suite fails — stops the pipeline here.
+    # shell::capture retains stdout/stderr in the trace for diagnosis.
+
+  - step: check_report
+    handler: shell::capture
+    args:
+      cmd: >-
+        REPORT=artifacts/conformance/report.md;
+        if [ -f "$REPORT" ]; then
+          echo "report_found";
+        else
+          echo "report_missing";
+          exit 1;
+        fi
+    # ERR if the report file was not written — indicates xtask didn't produce output.
+
+  - step: post_summary
+    handler: shell::capture
+    args:
+      cmd: >-
+        REPORT=artifacts/conformance/report.md;
+        echo "## Conformance Report";
+        python3 -c "import sys; sys.stdout.write(open('$REPORT').read())"
+    # Mirrors the GHA `post summary` step. Output appears in the crux trace.
+
+  - step: summary
+    handler: ctrl::log

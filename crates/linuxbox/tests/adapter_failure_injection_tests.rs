@@ -3,12 +3,12 @@
 //! Verifies error propagation and cleanup behavior when adapters
 //! fail at different points in the container lifecycle.
 
-use linuxbox::adapters::mocks::{
+use minibox::adapters::mocks::{
     FailableFilesystemMock, MockFilesystem, MockLimiter, MockRegistry, MockRuntime,
 };
-use linuxbox::domain::{
-    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+use minibox::domain::{
+    ContainerHooks, ContainerRuntime, ContainerSpawnConfig, ImageRegistry, ResourceConfig,
+    ResourceLimiter, RootfsSetup,
 };
 use std::path::{Path, PathBuf};
 
@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 async fn test_registry_pull_failure_returns_descriptive_error() {
     let registry = MockRegistry::new().with_pull_failure();
     let result = registry
-        .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
         .await;
     assert!(result.is_err());
     assert!(
@@ -94,7 +94,7 @@ fn test_limiter_failure_after_successful_setup_requires_cleanup() {
     // Filesystem setup succeeds
     let rootfs = fs.setup_rootfs(&[], Path::new("/container")).unwrap();
     assert!(
-        rootfs.ends_with("merged"),
+        rootfs.merged_dir.ends_with("merged"),
         "rootfs path must end with 'merged'"
     );
 
@@ -126,7 +126,7 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         .unwrap();
 
     let config = ContainerSpawnConfig {
-        rootfs,
+        rootfs: rootfs.merged_dir,
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
@@ -135,6 +135,8 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
+        mounts: vec![],    // placeholder — Task 6 replaces this
+        privileged: false, // placeholder — Task 6 replaces this
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -211,7 +213,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // First pull succeeds
     assert!(
         registry
-            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
             .await
             .is_ok()
     );
@@ -226,7 +228,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // Second pull also succeeds (re-pull)
     assert!(
         registry
-            .pull_image(&linuxbox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
             .await
             .is_ok()
     );

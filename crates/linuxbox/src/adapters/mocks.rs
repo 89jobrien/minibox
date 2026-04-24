@@ -12,8 +12,8 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use linuxbox::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
-//! use linuxbox::domain::*;
+//! use minibox::adapters::mocks::{MockRegistry, MockFilesystem, MockLimiter, MockRuntime};
+//! use minibox::domain::*;
 //! use std::sync::Arc;
 //!
 //! #[tokio::test]
@@ -33,8 +33,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-    LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
+    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, LayerInfo, NetworkConfig,
+    NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter, RootfsLayout,
     RuntimeCapabilities, SpawnResult,
 };
 use std::path::{Path, PathBuf};
@@ -122,7 +122,8 @@ impl MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(image.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == image && t == tag)
     }
 }
 
@@ -134,7 +135,8 @@ impl ImageRegistry for MockRegistry {
             .lock()
             .unwrap()
             .cached_images
-            .contains(&(name.to_string(), tag.to_string()))
+            .iter()
+            .any(|(n, t)| n == name && t == tag)
     }
 
     /// Simulate an image pull.
@@ -250,12 +252,12 @@ impl MockFilesystem {
     }
 }
 
-impl FilesystemProvider for MockFilesystem {
+impl minibox_core::domain::RootfsSetup for MockFilesystem {
     /// Simulate rootfs setup by returning `container_dir/merged`.
     ///
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let mut state = self.state.lock().unwrap();
         state.setup_count += 1;
 
@@ -263,16 +265,11 @@ impl FilesystemProvider for MockFilesystem {
             anyhow::bail!("mock filesystem setup failure");
         }
 
-        Ok(container_dir.join("merged"))
-    }
-
-    /// Simulate `pivot_root` — succeeds unless configured to fail.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        let state = self.state.lock().unwrap();
-        if !state.pivot_should_succeed {
-            anyhow::bail!("mock pivot_root failure");
-        }
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     /// Simulate filesystem cleanup.
@@ -285,6 +282,17 @@ impl FilesystemProvider for MockFilesystem {
 
         if !state.cleanup_should_succeed {
             anyhow::bail!("mock cleanup failure");
+        }
+        Ok(())
+    }
+}
+
+impl minibox_core::domain::ChildInit for MockFilesystem {
+    /// Simulate `pivot_root` — succeeds unless configured to fail.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        let state = self.state.lock().unwrap();
+        if !state.pivot_should_succeed {
+            anyhow::bail!("mock pivot_root failure");
         }
         Ok(())
     }
@@ -671,19 +679,18 @@ impl FailableFilesystemMock {
     }
 }
 
-impl FilesystemProvider for FailableFilesystemMock {
+impl minibox_core::domain::RootfsSetup for FailableFilesystemMock {
     /// Simulate rootfs setup, honouring the current failure toggle.
-    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<PathBuf> {
+    fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         self.setup_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail_setup.load(Ordering::SeqCst) {
             anyhow::bail!("injected setup failure");
         }
-        Ok(container_dir.join("merged"))
-    }
-
-    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        Ok(())
+        Ok(RootfsLayout {
+            merged_dir: container_dir.join("merged"),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
     }
 
     /// Simulate filesystem cleanup, honouring the current failure toggle.
@@ -696,6 +703,13 @@ impl FilesystemProvider for FailableFilesystemMock {
     }
 }
 
+impl minibox_core::domain::ChildInit for FailableFilesystemMock {
+    /// Always succeeds — `pivot_root` failure injection is not supported by this mock.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+        Ok(())
+    }
+}
+
 // Register FailableFilesystemMock separately — it only implements
 // FilesystemProvider, not the full four-trait set.
 adapt!(FailableFilesystemMock);
@@ -703,7 +717,7 @@ adapt!(FailableFilesystemMock);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minibox_core::domain::ContainerHooks;
+    use minibox_core::domain::{ContainerHooks, RootfsSetup};
 
     #[test]
     fn mock_registry_has_image_sync_cached() {
@@ -726,6 +740,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],
+            privileged: false,
         };
         let result = runtime.spawn_process_sync(&cfg).unwrap();
         assert_eq!(result.pid, 10000);
@@ -800,6 +816,8 @@ mod tests {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],
+            privileged: false,
         };
 
         let result = runtime.spawn_process(&config).await;

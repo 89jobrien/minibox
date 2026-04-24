@@ -1,0 +1,57 @@
+pipeline: minibox_preflight
+# Validate the minibox development environment.
+# No input required — run with: cruxx run .crux/preflight.crux
+# Each check is a named step in the trace, pass/fail visible in output.
+budget: { calls: 12 }
+
+steps:
+  - step: check_shell
+    handler: shell::exec
+    args:
+      cmd: "which nu && echo ok || echo fail"
+
+  - step: check_cargo
+    handler: shell::exec
+    args:
+      cmd: "which cargo && echo ok || echo fail"
+
+  - step: check_just
+    handler: shell::exec
+    args:
+      cmd: "which just && echo ok || echo fail"
+
+  - step: check_rustup
+    handler: shell::exec
+    args:
+      cmd: "which rustup && echo ok || echo fail"
+
+  - step: check_toolchain
+    handler: shell::exec
+    args:
+      cmd: "cargo --version > /dev/null 2>&1 && echo ok || echo fail"
+
+  - step: check_cargo_target_dir
+    handler: shell::exec
+    args:
+      cmd: "test -n \"$CARGO_TARGET_DIR\" && echo ok || echo fail"
+
+  - step: check_xtask
+    handler: shell::exec
+    args:
+      cmd: "test -f crates/xtask/Cargo.toml && echo ok || echo fail"
+
+  - step: check_op
+    handler: shell::exec
+    args:
+      cmd: "which op && echo ok || echo fail"
+
+  - step: check_1password
+    handler: shell::exec
+    args:
+      cmd: "op account list > /dev/null 2>&1 && echo ok || echo fail"
+
+  - step: check_git_clean
+    handler: git::status
+
+  - step: summary
+    handler: ctrl::log

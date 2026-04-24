@@ -39,8 +39,8 @@ use tracing::debug;
 /// # Example
 ///
 /// ```rust,ignore
-/// use linuxbox::adapters::CgroupV2Limiter;
-/// use linuxbox::domain::{ResourceConfig, ResourceLimiter};
+/// use minibox::adapters::CgroupV2Limiter;
+/// use minibox::domain::{ResourceConfig, ResourceLimiter};
 ///
 /// let limiter = CgroupV2Limiter::new();
 ///
@@ -94,7 +94,7 @@ impl ResourceLimiter for CgroupV2Limiter {
         manager.create()?;
 
         // Return the cgroup path as a string
-        Ok(manager.cgroup_path.display().to_string())
+        Ok(manager.cgroup_path().display().to_string())
     }
 
     fn add_process(&self, container_id: &str, pid: u32) -> Result<()> {

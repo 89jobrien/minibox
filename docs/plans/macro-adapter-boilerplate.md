@@ -8,7 +8,7 @@ note: adapt!/as_any! shipped in minibox-macros; design predates actual structure
 
 **Date:** 2026-03-17
 **Status:** Design
-**Scope:** `linuxbox/src/adapters/`, `linuxbox/src/domain.rs`
+**Scope:** `minibox/src/adapters/`, `minibox/src/domain.rs`
 
 ---
 
@@ -48,7 +48,7 @@ integration plan, 2–3 new adapter structs are expected (e.g., `MiniboxContaine
 
 ## Design
 
-Two `macro_rules!` macros in `linuxbox/src/adapters/mod.rs`, exported from the crate root.
+Two `macro_rules!` macros in `minibox/src/adapters/mod.rs`, exported from the crate root.
 
 ### Macro 1: `as_any!`
 
@@ -125,7 +125,7 @@ adapt!(ColimaRegistry, ColimaFilesystem, ColimaLimiter, ColimaRuntime);
 
 ## Placement
 
-- Macro definitions: `linuxbox/src/macros.rs` (new file), re-exported from `lib.rs` via `pub use macros::*`
+- Macro definitions: `minibox/src/macros.rs` (new file), re-exported from `lib.rs` via `pub use macros::*`
 - `#[macro_export]` makes them available crate-wide without explicit `use`
 
 ## Why `macro_rules!` (not proc macro)

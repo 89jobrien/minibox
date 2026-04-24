@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Container Networking Phase 1: NetworkMode + None/Host Adapters
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -15,7 +19,8 @@
 ### Task 1: Add `NetworkMode` enum to domain
 
 **Files:**
-- Modify: `crates/linuxbox/src/domain/networking.rs:1-178`
+
+- Modify: `crates/minibox/src/domain/networking.rs:1-178`
 
 - [ ] **Step 1: Write the test for NetworkMode serde round-trip**
 
@@ -50,7 +55,7 @@ mod tests {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p linuxbox domain::networking::tests --no-run 2>&1 | head -20`
+Run: `cargo test -p minibox domain::networking::tests --no-run 2>&1 | head -20`
 Expected: compile error — `NetworkMode` not defined
 
 - [ ] **Step 3: Add `NetworkMode` enum and update `NetworkConfig`**
@@ -79,13 +84,13 @@ Add `pub mode: NetworkMode` as the first field in `NetworkConfig`, and update `D
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo test -p linuxbox domain::networking::tests -- --nocapture`
+Run: `cargo test -p minibox domain::networking::tests -- --nocapture`
 Expected: 3 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/src/domain/networking.rs
+git add crates/minibox/src/domain/networking.rs
 git commit -m "feat(domain): add NetworkMode enum to NetworkConfig"
 ```
 
@@ -94,12 +99,13 @@ git commit -m "feat(domain): add NetworkMode enum to NetworkConfig"
 ### Task 2: Add `DynNetworkProvider` type alias and mock
 
 **Files:**
-- Modify: `crates/linuxbox/src/domain.rs:72-84`
-- Modify: `crates/linuxbox/src/adapters/mocks.rs`
+
+- Modify: `crates/minibox/src/domain.rs:72-84`
+- Modify: `crates/minibox/src/adapters/mocks.rs`
 
 - [ ] **Step 1: Write test for MockNetwork**
 
-Add to `crates/linuxbox/src/adapters/mocks.rs` test module:
+Add to `crates/minibox/src/adapters/mocks.rs` test module:
 
 ```rust
 #[tokio::test]
@@ -122,7 +128,7 @@ async fn test_mock_network_cleanup() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p linuxbox mocks::tests::test_mock_network --no-run 2>&1 | head -20`
+Run: `cargo test -p minibox mocks::tests::test_mock_network --no-run 2>&1 | head -20`
 Expected: compile error — `MockNetwork` not defined
 
 - [ ] **Step 3: Add `DynNetworkProvider` alias to `domain.rs`**
@@ -235,13 +241,13 @@ Add `NetworkConfig` and `NetworkProvider` to the imports at top of mocks.rs.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cargo test -p linuxbox mocks::tests::test_mock_network -- --nocapture`
+Run: `cargo test -p minibox mocks::tests::test_mock_network -- --nocapture`
 Expected: 2 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/domain.rs crates/linuxbox/src/adapters/mocks.rs
+git add crates/minibox/src/domain.rs crates/minibox/src/adapters/mocks.rs
 git commit -m "feat(domain): add DynNetworkProvider alias and MockNetwork adapter"
 ```
 
@@ -250,13 +256,14 @@ git commit -m "feat(domain): add DynNetworkProvider alias and MockNetwork adapte
 ### Task 3: Implement `NoopNetwork` adapter
 
 **Files:**
-- Create: `crates/linuxbox/src/adapters/network/mod.rs`
-- Create: `crates/linuxbox/src/adapters/network/none.rs`
-- Modify: `crates/linuxbox/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/network/mod.rs`
+- Create: `crates/minibox/src/adapters/network/none.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write tests for NoopNetwork**
 
-Create `crates/linuxbox/src/adapters/network/none.rs` with tests at bottom:
+Create `crates/minibox/src/adapters/network/none.rs` with tests at bottom:
 
 ```rust
 #[cfg(test)]
@@ -363,13 +370,13 @@ pub use network::NoopNetwork;
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cargo test -p linuxbox adapters::network::none::tests -- --nocapture`
+Run: `cargo test -p minibox adapters::network::none::tests -- --nocapture`
 Expected: 4 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/network/ crates/linuxbox/src/adapters/mod.rs
+git add crates/minibox/src/adapters/network/ crates/minibox/src/adapters/mod.rs
 git commit -m "feat(adapters): add NoopNetwork adapter for NetworkMode::None"
 ```
 
@@ -378,13 +385,14 @@ git commit -m "feat(adapters): add NoopNetwork adapter for NetworkMode::None"
 ### Task 4: Implement `HostNetwork` adapter
 
 **Files:**
-- Create: `crates/linuxbox/src/adapters/network/host.rs`
-- Modify: `crates/linuxbox/src/adapters/network/mod.rs`
-- Modify: `crates/linuxbox/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/network/host.rs`
+- Modify: `crates/minibox/src/adapters/network/mod.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write tests for HostNetwork**
 
-Create `crates/linuxbox/src/adapters/network/host.rs` with tests:
+Create `crates/minibox/src/adapters/network/host.rs` with tests:
 
 ```rust
 #[cfg(test)]
@@ -488,13 +496,13 @@ pub use network::{HostNetwork, NoopNetwork};
 
 - [ ] **Step 4: Run tests**
 
-Run: `cargo test -p linuxbox adapters::network -- --nocapture`
+Run: `cargo test -p minibox adapters::network -- --nocapture`
 Expected: 7 tests pass (4 noop + 3 host)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/network/ crates/linuxbox/src/adapters/mod.rs
+git add crates/minibox/src/adapters/network/ crates/minibox/src/adapters/mod.rs
 git commit -m "feat(adapters): add HostNetwork adapter for NetworkMode::Host"
 ```
 
@@ -503,7 +511,8 @@ git commit -m "feat(adapters): add HostNetwork adapter for NetworkMode::Host"
 ### Task 5: Add `network` field to protocol
 
 **Files:**
-- Modify: `crates/linuxbox/src/protocol.rs:49-91`
+
+- Modify: `crates/minibox/src/protocol.rs:49-91`
 
 - [ ] **Step 1: Write test for protocol round-trip with network field**
 
@@ -549,7 +558,7 @@ fn run_request_without_network_defaults_to_none() {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p linuxbox protocol::tests::run_request_with_network --no-run 2>&1 | head -20`
+Run: `cargo test -p minibox protocol::tests::run_request_with_network --no-run 2>&1 | head -20`
 Expected: compile error — no `network` field in `Run`
 
 - [ ] **Step 3: Add `network` field to `DaemonRequest::Run`**
@@ -568,6 +577,7 @@ Add `use crate::domain::NetworkMode;` to the imports at the top of `protocol.rs`
 - [ ] **Step 4: Fix all existing code that constructs/destructures `DaemonRequest::Run`**
 
 Update all match arms and constructors across the codebase to include `network`:
+
 - `crates/daemonbox/src/server.rs` — `dispatch()` function destructure
 - `crates/daemonbox/src/handler.rs` — `handle_run()` signature and callers
 - `crates/minibox-cli/src/commands/run.rs` — `execute()` request construction
@@ -577,13 +587,13 @@ For all existing `Run` constructions, add `network: None`.
 
 - [ ] **Step 5: Run full test suite**
 
-Run: `cargo test -p linuxbox -p minibox-cli -p daemonbox -- --nocapture`
+Run: `cargo test -p minibox -p minibox-cli -p daemonbox -- --nocapture`
 Expected: all tests pass including new network round-trip tests
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/linuxbox/src/protocol.rs crates/daemonbox/src/server.rs crates/daemonbox/src/handler.rs crates/minibox-cli/src/commands/run.rs
+git add crates/minibox/src/protocol.rs crates/daemonbox/src/server.rs crates/daemonbox/src/handler.rs crates/minibox-cli/src/commands/run.rs
 git commit -m "feat(protocol): add network field to DaemonRequest::Run"
 ```
 
@@ -592,6 +602,7 @@ git commit -m "feat(protocol): add network field to DaemonRequest::Run"
 ### Task 6: Add `network_provider` to `HandlerDependencies`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs:56-70`
 - Modify: `crates/miniboxd/src/main.rs:274-313`
 
@@ -615,7 +626,7 @@ pub network_provider: DynNetworkProvider,
 Add to imports:
 
 ```rust
-use linuxbox::domain::DynNetworkProvider;
+use minibox::domain::DynNetworkProvider;
 ```
 
 - [ ] **Step 3: Update all `HandlerDependencies` construction sites**
@@ -623,7 +634,7 @@ use linuxbox::domain::DynNetworkProvider;
 In `miniboxd/src/main.rs`, add `network_provider` to each `HandlerDependencies` construction. All three adapter suites (Native, Gke, Colima) get `NoopNetwork` for now:
 
 ```rust
-use linuxbox::adapters::NoopNetwork;
+use minibox::adapters::NoopNetwork;
 
 // In each HandlerDependencies { ... }:
 network_provider: Arc::new(NoopNetwork::new()),
@@ -657,6 +668,7 @@ git commit -m "feat(handler): add network_provider to HandlerDependencies"
 ### Task 7: Wire network lifecycle into handler
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs` — `run_inner_capture()` and `run_inner()`
 
 - [ ] **Step 1: Write test for network setup/cleanup in handler**
@@ -737,7 +749,7 @@ Expected: all tests pass
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/daemonbox/src/handler.rs crates/linuxbox/src/domain.rs crates/linuxbox/src/container/
+git add crates/daemonbox/src/handler.rs crates/minibox/src/domain.rs crates/minibox/src/container/
 git commit -m "feat(handler): wire network lifecycle (setup/attach/cleanup) into container run"
 ```
 
@@ -746,6 +758,7 @@ git commit -m "feat(handler): wire network lifecycle (setup/attach/cleanup) into
 ### Task 8: Add `--network` CLI flag
 
 **Files:**
+
 - Modify: `crates/minibox-cli/src/main.rs:52-71`
 - Modify: `crates/minibox-cli/src/commands/run.rs:35-48`
 
@@ -789,7 +802,7 @@ network: String,
 In `commands/run.rs`, parse the string to `NetworkMode` and add to the request:
 
 ```rust
-use linuxbox::domain::NetworkMode;
+use minibox::domain::NetworkMode;
 
 let network_mode = match network.as_str() {
     "none" => NetworkMode::None,
@@ -842,7 +855,7 @@ Expected: no formatting issues
 
 - [ ] **Step 2: Run clippy**
 
-Run: `cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings`
+Run: `cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings`
 Expected: no warnings
 
 - [ ] **Step 3: Run full unit test suite**
@@ -865,18 +878,18 @@ git commit -m "chore: fix lint and formatting for networking phase 1"
 
 ## File Map
 
-| Action | Path | Purpose |
-|--------|------|---------|
-| Modify | `crates/linuxbox/src/domain/networking.rs` | Add `NetworkMode` enum, update `NetworkConfig` |
-| Modify | `crates/linuxbox/src/domain.rs` | Add `DynNetworkProvider` type alias |
-| Create | `crates/linuxbox/src/adapters/network/mod.rs` | Network adapter module dispatch |
-| Create | `crates/linuxbox/src/adapters/network/none.rs` | `NoopNetwork` adapter |
-| Create | `crates/linuxbox/src/adapters/network/host.rs` | `HostNetwork` adapter |
-| Modify | `crates/linuxbox/src/adapters/mod.rs` | Re-export network adapters |
-| Modify | `crates/linuxbox/src/adapters/mocks.rs` | Add `MockNetwork` |
-| Modify | `crates/linuxbox/src/protocol.rs` | Add `network` field to `Run` request |
-| Modify | `crates/daemonbox/src/handler.rs` | Add `network_provider` to deps, wire lifecycle |
-| Modify | `crates/miniboxd/src/main.rs` | Inject `NoopNetwork` as default provider |
-| Modify | `crates/minibox-cli/src/main.rs` | Add `--network` CLI flag |
-| Modify | `crates/minibox-cli/src/commands/run.rs` | Parse and send network mode |
-| Modify | `crates/linuxbox/src/domain.rs` | Add `skip_network_namespace` to spawn config |
+| Action | Path                                          | Purpose                                        |
+| ------ | --------------------------------------------- | ---------------------------------------------- |
+| Modify | `crates/minibox/src/domain/networking.rs`     | Add `NetworkMode` enum, update `NetworkConfig` |
+| Modify | `crates/minibox/src/domain.rs`                | Add `DynNetworkProvider` type alias            |
+| Create | `crates/minibox/src/adapters/network/mod.rs`  | Network adapter module dispatch                |
+| Create | `crates/minibox/src/adapters/network/none.rs` | `NoopNetwork` adapter                          |
+| Create | `crates/minibox/src/adapters/network/host.rs` | `HostNetwork` adapter                          |
+| Modify | `crates/minibox/src/adapters/mod.rs`          | Re-export network adapters                     |
+| Modify | `crates/minibox/src/adapters/mocks.rs`        | Add `MockNetwork`                              |
+| Modify | `crates/minibox/src/protocol.rs`              | Add `network` field to `Run` request           |
+| Modify | `crates/daemonbox/src/handler.rs`             | Add `network_provider` to deps, wire lifecycle |
+| Modify | `crates/miniboxd/src/main.rs`                 | Inject `NoopNetwork` as default provider       |
+| Modify | `crates/minibox-cli/src/main.rs`              | Add `--network` CLI flag                       |
+| Modify | `crates/minibox-cli/src/commands/run.rs`      | Parse and send network mode                    |
+| Modify | `crates/minibox/src/domain.rs`                | Add `skip_network_namespace` to spawn config   |

@@ -5,7 +5,12 @@
 //! - `mocks`: Mock test doubles for all four domain traits (behind `test-utils` feature)
 //! - `test_fixtures`: Shared test setup helpers (behind `test-utils` feature)
 
+mod noop_exec;
 mod registry;
+mod registry_router;
+
+pub use noop_exec::NoopExecRuntime;
+pub use registry_router::HostnameRegistryRouter;
 
 /// Mock adapters for all domain traits, for use in tests.
 ///
@@ -20,5 +25,12 @@ pub mod mocks;
 /// these fixtures in their own integration tests.
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_fixtures;
+
+/// Conformance test infrastructure for commit/build/push adapter backends.
+///
+/// Provides [`conformance::BackendDescriptor`] and shared fixture helpers.
+/// Enabled via the `test-utils` Cargo feature.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod conformance;
 
 pub use registry::DockerHubRegistry;

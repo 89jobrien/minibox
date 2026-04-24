@@ -14,12 +14,12 @@ type DualWriter struct {
 	report *ReportWriter
 }
 
-// NewDualWriter creates a writer targeting ~/.mbx/ paths.
+// NewDualWriter creates a writer targeting ~/.minibox/ paths.
 func NewDualWriter() *DualWriter {
 	home, _ := os.UserHomeDir()
 	return &DualWriter{
-		jsonl:  NewJSONLWriter(filepath.Join(home, ".mbx", "agent-runs.jsonl")),
-		report: NewReportWriter(filepath.Join(home, ".mbx", "ai-logs")),
+		jsonl:  NewJSONLWriter(filepath.Join(home, ".minibox", "agent-runs.jsonl")),
+		report: NewReportWriter(filepath.Join(home, ".minibox", "ai-logs")),
 	}
 }
 

@@ -1,3 +1,9 @@
+---
+status: done
+completed: "2026-03-21"
+branch: main
+---
+
 # Testing Strategy Expansion Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -13,30 +19,38 @@
 ## File Structure
 
 ### Phase 1: Adapter Isolation Testing
+
 New test files:
-- `crates/linuxbox/tests/adapter_native_tests.rs` — native adapter tests (cgroups, overlay, namespace setup)
-- `crates/linuxbox/tests/adapter_gke_tests.rs` — GKE adapter tests (proot, copy FS)
-- `crates/linuxbox/tests/adapter_colima_tests.rs` — Colima adapter tests (Colima VM specifics)
-- `crates/linuxbox/src/adapters/test_fixtures.rs` — Shared test fixtures, mock builders
+
+- `crates/minibox/tests/adapter_native_tests.rs` — native adapter tests (cgroups, overlay, namespace setup)
+- `crates/minibox/tests/adapter_gke_tests.rs` — GKE adapter tests (proot, copy FS)
+- `crates/minibox/tests/adapter_colima_tests.rs` — Colima adapter tests (Colima VM specifics)
+- `crates/minibox/src/adapters/test_fixtures.rs` — Shared test fixtures, mock builders
 - `crates/daemonbox/tests/handler_adapter_swap_tests.rs` — Handler tests with mock adapter swaps
 
 Modified files:
-- `crates/linuxbox/src/adapters/mocks.rs` — Extend mocks with failure injection helpers
-- `crates/linuxbox/src/adapters/mod.rs` — Export test_fixtures module
+
+- `crates/minibox/src/adapters/mocks.rs` — Extend mocks with failure injection helpers
+- `crates/minibox/src/adapters/mod.rs` — Export test_fixtures module
 
 ### Phase 2: Property-Based Testing
+
 New test files:
-- `crates/linuxbox/tests/protocol_codec_properties.rs` — Extended codec roundtrip + edge cases
-- `crates/linuxbox/tests/path_validation_properties.rs` — Path traversal, symlinks, normalization
-- `crates/linuxbox/tests/image_manifest_properties.rs` — Manifest parsing invariants
-- `crates/linuxbox/tests/cgroup_boundary_properties.rs` — Resource limit boundaries, overflow handling
+
+- `crates/minibox/tests/protocol_codec_properties.rs` — Extended codec roundtrip + edge cases
+- `crates/minibox/tests/path_validation_properties.rs` — Path traversal, symlinks, normalization
+- `crates/minibox/tests/image_manifest_properties.rs` — Manifest parsing invariants
+- `crates/minibox/tests/cgroup_boundary_properties.rs` — Resource limit boundaries, overflow handling
 
 Modified files:
-- `crates/linuxbox/tests/proptest_suite.rs` — Consolidate existing + new properties into suites
+
+- `crates/minibox/tests/proptest_suite.rs` — Consolidate existing + new properties into suites
 
 ### Phase 3: Chaos & Fault Injection
+
 New test files:
-- `crates/linuxbox/tests/adapter_failure_injection_tests.rs` — Adapter failures (incomplete pulls, cgroup errors)
+
+- `crates/minibox/tests/adapter_failure_injection_tests.rs` — Adapter failures (incomplete pulls, cgroup errors)
 - `crates/miniboxd/tests/container_lifecycle_failure_tests.rs` — Lifecycle failures (zombie processes, incomplete cleanup)
 - `crates/daemonbox/tests/daemon_recovery_tests.rs` — Daemon crash & recovery scenarios
 - `crates/miniboxd/tests/resource_exhaustion_tests.rs` — Memory/disk exhaustion handling
@@ -52,7 +66,8 @@ New test files:
 ### Task 1: Create native adapter test suite (filesystem + namespace setup)
 
 **Files:**
-- Create: `crates/linuxbox/tests/adapter_native_tests.rs`
+
+- Create: `crates/minibox/tests/adapter_native_tests.rs`
 
 **Steps:**
 
@@ -78,16 +93,16 @@ async fn test_native_adapter_overlay_mount_succeeds_with_valid_layers() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p linuxbox --test adapter_native_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_native_tests -- --nocapture`
 Expected: FAIL — function `create_native_filesystem_adapter` not found
 
 - [ ] **Step 3: Implement native adapter test fixture**
 
-In `crates/linuxbox/tests/adapter_native_tests.rs`:
+In `crates/minibox/tests/adapter_native_tests.rs`:
 
 ```rust
-use linuxbox::adapters::native_filesystem::NativeFilesystemProvider;
-use linuxbox::domain::FilesystemProvider;
+use minibox::adapters::native_filesystem::NativeFilesystemProvider;
+use minibox::domain::FilesystemProvider;
 use std::path::Path;
 
 fn create_native_filesystem_adapter(base_dir: &Path) -> Arc<dyn FilesystemProvider> {
@@ -126,13 +141,13 @@ fn test_native_adapter_normalizes_paths_with_dot_components() {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cargo test -p linuxbox --test adapter_native_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_native_tests -- --nocapture`
 Expected: PASS (or IGNORE for root-required tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/adapter_native_tests.rs
+git add crates/minibox/tests/adapter_native_tests.rs
 git commit -m "test(adapters): add native filesystem adapter isolation tests"
 ```
 
@@ -141,7 +156,8 @@ git commit -m "test(adapters): add native filesystem adapter isolation tests"
 ### Task 2: Create GKE adapter test suite (proot, copy FS)
 
 **Files:**
-- Create: `crates/linuxbox/tests/adapter_gke_tests.rs`
+
+- Create: `crates/minibox/tests/adapter_gke_tests.rs`
 
 **Steps:**
 
@@ -169,16 +185,16 @@ async fn test_gke_adapter_copy_fs_preserves_layer_contents() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p linuxbox --test adapter_gke_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_gke_tests -- --nocapture`
 Expected: FAIL — function `create_gke_filesystem_adapter` not found
 
 - [ ] **Step 3: Implement GKE adapter test fixture**
 
-In `crates/linuxbox/tests/adapter_gke_tests.rs`:
+In `crates/minibox/tests/adapter_gke_tests.rs`:
 
 ```rust
-use linuxbox::adapters::gke::GkeFilesystemProvider;
-use linuxbox::domain::FilesystemProvider;
+use minibox::adapters::gke::GkeFilesystemProvider;
+use minibox::domain::FilesystemProvider;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -222,13 +238,13 @@ fn test_gke_adapter_copy_fs_respects_size_limits() {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cargo test -p linuxbox --test adapter_gke_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_gke_tests -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/adapter_gke_tests.rs
+git add crates/minibox/tests/adapter_gke_tests.rs
 git commit -m "test(adapters): add GKE adapter isolation tests with copy FS validation"
 ```
 
@@ -237,7 +253,8 @@ git commit -m "test(adapters): add GKE adapter isolation tests with copy FS vali
 ### Task 3: Create Colima adapter test suite
 
 **Files:**
-- Create: `crates/linuxbox/tests/adapter_colima_tests.rs`
+
+- Create: `crates/minibox/tests/adapter_colima_tests.rs`
 
 **Steps:**
 
@@ -256,16 +273,16 @@ fn test_colima_adapter_finds_correct_block_device_for_cgroup_limits() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p linuxbox --test adapter_colima_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_colima_tests -- --nocapture`
 Expected: FAIL
 
 - [ ] **Step 3: Implement Colima adapter test fixture with mocked sysfs**
 
-In `crates/linuxbox/tests/adapter_colima_tests.rs`:
+In `crates/minibox/tests/adapter_colima_tests.rs`:
 
 ```rust
-use linuxbox::adapters::colima::ColimaResourceLimiter;
-use linuxbox::domain::ResourceLimiter;
+use minibox::adapters::colima::ColimaResourceLimiter;
+use minibox::domain::ResourceLimiter;
 use std::sync::Arc;
 
 fn create_colima_cgroup_adapter() -> Arc<dyn ResourceLimiter> {
@@ -305,13 +322,13 @@ fn test_colima_adapter_rejects_invalid_cgroup_pid() {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cargo test -p linuxbox --test adapter_colima_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_colima_tests -- --nocapture`
 Expected: PASS (skipped on non-macOS)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/adapter_colima_tests.rs
+git add crates/minibox/tests/adapter_colima_tests.rs
 git commit -m "test(adapters): add Colima adapter tests with block device detection"
 ```
 
@@ -320,14 +337,15 @@ git commit -m "test(adapters): add Colima adapter tests with block device detect
 ### Task 4: Create shared test fixtures module
 
 **Files:**
-- Create: `crates/linuxbox/src/adapters/test_fixtures.rs`
-- Modify: `crates/linuxbox/src/adapters/mod.rs`
+
+- Create: `crates/minibox/src/adapters/test_fixtures.rs`
+- Modify: `crates/minibox/src/adapters/mod.rs`
 
 **Steps:**
 
 - [ ] **Step 1: Write test fixtures for mock builder pattern**
 
-In `crates/linuxbox/src/adapters/test_fixtures.rs`:
+In `crates/minibox/src/adapters/test_fixtures.rs`:
 
 ```rust
 //! Test fixtures and builders for adapter testing.
@@ -453,7 +471,7 @@ mod tests {
 
 - [ ] **Step 2: Export test_fixtures in mod.rs**
 
-In `crates/linuxbox/src/adapters/mod.rs`, add:
+In `crates/minibox/src/adapters/mod.rs`, add:
 
 ```rust
 #[cfg(test)]
@@ -462,13 +480,13 @@ pub mod test_fixtures;
 
 - [ ] **Step 3: Run test to verify fixtures work**
 
-Run: `cargo test -p linuxbox adapters::test_fixtures -- --nocapture`
+Run: `cargo test -p minibox adapters::test_fixtures -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/test_fixtures.rs crates/linuxbox/src/adapters/mod.rs
+git add crates/minibox/src/adapters/test_fixtures.rs crates/minibox/src/adapters/mod.rs
 git commit -m "test(fixtures): add mock adapter builder and temp container fixtures"
 ```
 
@@ -477,13 +495,14 @@ git commit -m "test(fixtures): add mock adapter builder and temp container fixtu
 ### Task 5: Extend mocks with failure injection helpers
 
 **Files:**
-- Modify: `crates/linuxbox/src/adapters/mocks.rs`
+
+- Modify: `crates/minibox/src/adapters/mocks.rs`
 
 **Steps:**
 
 - [ ] **Step 1: Add failure injection struct**
 
-In `crates/linuxbox/src/adapters/mocks.rs`, add after existing mocks:
+In `crates/minibox/src/adapters/mocks.rs`, add after existing mocks:
 
 ```rust
 /// Mock with controllable failure injection for testing error paths.
@@ -550,13 +569,13 @@ async fn test_failable_mock_can_inject_mount_failure() {
 
 - [ ] **Step 3: Run test to verify it passes**
 
-Run: `cargo test -p linuxbox adapters::mocks -- --nocapture`
+Run: `cargo test -p minibox adapters::mocks -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/mocks.rs
+git add crates/minibox/src/adapters/mocks.rs
 git commit -m "test(mocks): add failable mock with atomic failure injection"
 ```
 
@@ -565,6 +584,7 @@ git commit -m "test(mocks): add failable mock with atomic failure injection"
 ### Task 6: Create handler tests with mock adapter swaps
 
 **Files:**
+
 - Create: `crates/daemonbox/tests/handler_adapter_swap_tests.rs`
 
 **Steps:**
@@ -575,8 +595,8 @@ git commit -m "test(mocks): add failable mock with atomic failure injection"
 #[tokio::test]
 async fn test_handler_run_container_with_mock_filesystem_adapter() {
     use daemonbox::handler::Handler;
-    use linuxbox::adapters::test_fixtures::MockAdapterBuilder;
-    use linuxbox::protocol::DaemonRequest;
+    use minibox::adapters::test_fixtures::MockAdapterBuilder;
+    use minibox::protocol::DaemonRequest;
 
     let (fs_mock, limiter_mock, registry_mock) = MockAdapterBuilder::new().build();
 
@@ -602,8 +622,8 @@ async fn test_handler_run_container_with_mock_filesystem_adapter() {
 #[tokio::test]
 async fn test_handler_gracefully_handles_filesystem_mount_failure() {
     use daemonbox::handler::Handler;
-    use linuxbox::adapters::test_fixtures::MockAdapterBuilder;
-    use linuxbox::protocol::DaemonRequest;
+    use minibox::adapters::test_fixtures::MockAdapterBuilder;
+    use minibox::protocol::DaemonRequest;
 
     let (fs_mock, limiter_mock, registry_mock) = MockAdapterBuilder::new()
         .with_mount_failure()
@@ -646,9 +666,9 @@ git commit -m "test(handler): add adapter swap tests with mock fixtures"
 - [ ] **Task 7: Run full Phase 1 test suite**
 
 ```bash
-cargo test -p linuxbox --test adapter_native_tests
-cargo test -p linuxbox --test adapter_gke_tests
-cargo test -p linuxbox --test adapter_colima_tests
+cargo test -p minibox --test adapter_native_tests
+cargo test -p minibox --test adapter_gke_tests
+cargo test -p minibox --test adapter_colima_tests
 cargo test -p daemonbox --test handler_adapter_swap_tests
 ```
 
@@ -656,12 +676,13 @@ Expected: All tests pass (native/gke/colima may skip on non-Linux)
 
 - [ ] **Task 8: Verify adapter contract documentation**
 
-Create `crates/linuxbox/src/adapters/ADAPTER_CONTRACT.md`:
+Create `crates/minibox/src/adapters/ADAPTER_CONTRACT.md`:
 
 ```markdown
 # Adapter Contract
 
 Each adapter must implement the following domain traits:
+
 - `FilesystemProvider`: Mount/unmount container root, validate paths
 - `ResourceLimiter`: Set memory/CPU limits via cgroups
 - `ImageRegistry`: Pull images, resolve manifests
@@ -669,11 +690,11 @@ Each adapter must implement the following domain traits:
 
 ## Test Matrix
 
-| Adapter  | Unit Tests | Integration | Notes |
-|----------|-----------|-------------|-------|
-| native   | ✓         | ✓ (Linux+root) | Full feature set |
-| gke      | ✓         | ✗ (requires GKE) | Copy FS, no overlay |
-| colima   | ✓         | ✗ (macOS only) | VM-specific device handling |
+| Adapter | Unit Tests | Integration      | Notes                       |
+| ------- | ---------- | ---------------- | --------------------------- |
+| native  | ✓          | ✓ (Linux+root)   | Full feature set            |
+| gke     | ✓          | ✗ (requires GKE) | Copy FS, no overlay         |
+| colima  | ✓          | ✗ (macOS only)   | VM-specific device handling |
 ```
 
 - [ ] **Task 9: Update Justfile with Phase 1 target**
@@ -683,20 +704,21 @@ Add to `Justfile`:
 ```bash
 # Adapter isolation tests (any platform)
 test-adapters:
-    cargo test -p linuxbox --test adapter_native_tests
-    cargo test -p linuxbox --test adapter_gke_tests
-    cargo test -p linuxbox --test adapter_colima_tests
+    cargo test -p minibox --test adapter_native_tests
+    cargo test -p minibox --test adapter_gke_tests
+    cargo test -p minibox --test adapter_colima_tests
     cargo test -p daemonbox --test handler_adapter_swap_tests
 ```
 
 - [ ] **Task 10: Final commit**
 
 ```bash
-git add crates/linuxbox/src/adapters/ADAPTER_CONTRACT.md Justfile
+git add crates/minibox/src/adapters/ADAPTER_CONTRACT.md Justfile
 git commit -m "docs(adapters): document adapter contract and test matrix"
 ```
 
 **Phase 1 Summary:**
+
 - ✅ 4 adapter test suites (≥5 tests each = 20+ new tests)
 - ✅ Shared mock fixtures and builder pattern
 - ✅ Handler tests with adapter swaps
@@ -714,7 +736,8 @@ git commit -m "docs(adapters): document adapter contract and test matrix"
 ### Task 1-3: Extend protocol codec properties
 
 **Files:**
-- Create: `crates/linuxbox/tests/protocol_codec_properties.rs`
+
+- Create: `crates/minibox/tests/protocol_codec_properties.rs`
 
 **Steps:**
 
@@ -722,7 +745,7 @@ git commit -m "docs(adapters): document adapter contract and test matrix"
 
 ```rust
 use proptest::prelude::*;
-use linuxbox::protocol::{DaemonRequest, encode_request, decode_request};
+use minibox::protocol::{DaemonRequest, encode_request, decode_request};
 
 proptest! {
     #[test]
@@ -797,13 +820,13 @@ proptest! {
 
 - [ ] **Step 4: Run property tests with multiple iterations**
 
-Run: `cargo test -p linuxbox --test protocol_codec_properties -- --nocapture`
+Run: `cargo test -p minibox --test protocol_codec_properties -- --nocapture`
 Expected: PASS (hundreds of test cases)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/protocol_codec_properties.rs
+git add crates/minibox/tests/protocol_codec_properties.rs
 git commit -m "test(properties): add protocol codec roundtrip properties with edge cases"
 ```
 
@@ -812,7 +835,8 @@ git commit -m "test(properties): add protocol codec roundtrip properties with ed
 ### Task 4-6: Path validation properties
 
 **Files:**
-- Create: `crates/linuxbox/tests/path_validation_properties.rs`
+
+- Create: `crates/minibox/tests/path_validation_properties.rs`
 
 **Steps:**
 
@@ -820,7 +844,7 @@ git commit -m "test(properties): add protocol codec roundtrip properties with ed
 
 ```rust
 use proptest::prelude::*;
-use linuxbox::container::filesystem::validate_layer_path;
+use minibox::container::filesystem::validate_layer_path;
 use std::path::Path;
 
 proptest! {
@@ -877,13 +901,13 @@ proptest! {
 
 - [ ] **Step 4: Run property tests**
 
-Run: `cargo test -p linuxbox --test path_validation_properties -- --nocapture`
+Run: `cargo test -p minibox --test path_validation_properties -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/path_validation_properties.rs
+git add crates/minibox/tests/path_validation_properties.rs
 git commit -m "test(properties): add path validation security properties"
 ```
 
@@ -892,7 +916,8 @@ git commit -m "test(properties): add path validation security properties"
 ### Task 7-9: Image manifest parsing properties
 
 **Files:**
-- Create: `crates/linuxbox/tests/image_manifest_properties.rs`
+
+- Create: `crates/minibox/tests/image_manifest_properties.rs`
 
 **Steps:**
 
@@ -900,7 +925,7 @@ git commit -m "test(properties): add path validation security properties"
 
 ```rust
 use proptest::prelude::*;
-use linuxbox::image::manifest::{OciManifest, parse_manifest, encode_manifest};
+use minibox::image::manifest::{OciManifest, parse_manifest, encode_manifest};
 
 proptest! {
     #[test]
@@ -981,13 +1006,13 @@ proptest! {
 
 - [ ] **Step 4: Run property tests**
 
-Run: `cargo test -p linuxbox --test image_manifest_properties -- --nocapture`
+Run: `cargo test -p minibox --test image_manifest_properties -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/image_manifest_properties.rs
+git add crates/minibox/tests/image_manifest_properties.rs
 git commit -m "test(properties): add image manifest parsing properties with size limits"
 ```
 
@@ -996,7 +1021,8 @@ git commit -m "test(properties): add image manifest parsing properties with size
 ### Task 10-12: Cgroup boundary properties
 
 **Files:**
-- Create: `crates/linuxbox/tests/cgroup_boundary_properties.rs`
+
+- Create: `crates/minibox/tests/cgroup_boundary_properties.rs`
 
 **Steps:**
 
@@ -1004,7 +1030,7 @@ git commit -m "test(properties): add image manifest parsing properties with size
 
 ```rust
 use proptest::prelude::*;
-use linuxbox::container::cgroups::{validate_memory_limit, set_memory_limit};
+use minibox::container::cgroups::{validate_memory_limit, set_memory_limit};
 
 proptest! {
     #[test]
@@ -1079,13 +1105,13 @@ proptest! {
 
 - [ ] **Step 4: Run property tests**
 
-Run: `cargo test -p linuxbox --test cgroup_boundary_properties -- --nocapture`
+Run: `cargo test -p minibox --test cgroup_boundary_properties -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/cgroup_boundary_properties.rs
+git add crates/minibox/tests/cgroup_boundary_properties.rs
 git commit -m "test(properties): add cgroup boundary and overflow properties"
 ```
 
@@ -1096,17 +1122,17 @@ git commit -m "test(properties): add cgroup boundary and overflow properties"
 - [ ] **Run all property-based tests**
 
 ```bash
-cargo test -p linuxbox --test protocol_codec_properties
-cargo test -p linuxbox --test path_validation_properties
-cargo test -p linuxbox --test image_manifest_properties
-cargo test -p linuxbox --test cgroup_boundary_properties
+cargo test -p minibox --test protocol_codec_properties
+cargo test -p minibox --test path_validation_properties
+cargo test -p minibox --test image_manifest_properties
+cargo test -p minibox --test cgroup_boundary_properties
 ```
 
 Expected: All pass, 256+ iterations per property
 
 - [ ] **Update proptest_suite.rs with cross-references**
 
-Add to `crates/linuxbox/tests/proptest_suite.rs`:
+Add to `crates/minibox/tests/proptest_suite.rs`:
 
 ```rust
 //! # Property-Based Test Suites
@@ -1122,11 +1148,12 @@ Add to `crates/linuxbox/tests/proptest_suite.rs`:
 - [ ] **Final commit**
 
 ```bash
-git add crates/linuxbox/tests/proptest_suite.rs
+git add crates/minibox/tests/proptest_suite.rs
 git commit -m "docs(properties): consolidate property-based test documentation"
 ```
 
 **Phase 2 Summary:**
+
 - ✅ 4 property suites (≥3 properties each = 12+ new properties)
 - ✅ Edge case coverage: UTF-8, large buffers, boundary values, overflow
 - ✅ Security properties: path traversal, symlink rewriting, cgroup validation
@@ -1143,7 +1170,8 @@ git commit -m "docs(properties): consolidate property-based test documentation"
 ### Task 1-4: Adapter failure injection tests
 
 **Files:**
-- Create: `crates/linuxbox/tests/adapter_failure_injection_tests.rs`
+
+- Create: `crates/minibox/tests/adapter_failure_injection_tests.rs`
 
 **Steps:**
 
@@ -1152,8 +1180,8 @@ git commit -m "docs(properties): consolidate property-based test documentation"
 ```rust
 #[tokio::test]
 async fn test_adapter_handles_incomplete_layer_download_with_cleanup() {
-    use linuxbox::adapters::mocks::FailableImageRegistryMock;
-    use linuxbox::domain::ImageRegistry;
+    use minibox::adapters::mocks::FailableImageRegistryMock;
+    use minibox::domain::ImageRegistry;
 
     let registry = FailableImageRegistryMock::new();
     registry.fail_after_layers(2); // Fail on layer 3
@@ -1179,7 +1207,7 @@ async fn test_adapter_handles_incomplete_layer_download_with_cleanup() {
 ```rust
 #[tokio::test]
 async fn test_limiter_handles_cgroup_creation_failure() {
-    use linuxbox::adapters::mocks::FailingResourceLimiterMock;
+    use minibox::adapters::mocks::FailingResourceLimiterMock;
 
     let limiter = FailingResourceLimiterMock::new();
 
@@ -1193,7 +1221,7 @@ async fn test_limiter_handles_cgroup_creation_failure() {
 ```rust
 #[tokio::test]
 async fn test_filesystem_adapter_cleans_up_layers_on_mount_failure() {
-    use linuxbox::adapters::mocks::FailableFilesystemMock;
+    use minibox::adapters::mocks::FailableFilesystemMock;
 
     let fs = FailableFilesystemMock::new();
     fs.set_fail_on_mount();
@@ -1213,13 +1241,13 @@ async fn test_filesystem_adapter_cleans_up_layers_on_mount_failure() {
 
 - [ ] **Step 4: Run failure injection tests**
 
-Run: `cargo test -p linuxbox --test adapter_failure_injection_tests -- --nocapture`
+Run: `cargo test -p minibox --test adapter_failure_injection_tests -- --nocapture`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/linuxbox/tests/adapter_failure_injection_tests.rs
+git add crates/minibox/tests/adapter_failure_injection_tests.rs
 git commit -m "test(chaos): add adapter failure injection with cleanup verification"
 ```
 
@@ -1228,6 +1256,7 @@ git commit -m "test(chaos): add adapter failure injection with cleanup verificat
 ### Task 5-8: Container lifecycle failure tests
 
 **Files:**
+
 - Create: `crates/miniboxd/tests/container_lifecycle_failure_tests.rs`
 
 **Steps:**
@@ -1240,7 +1269,7 @@ git commit -m "test(chaos): add adapter failure injection with cleanup verificat
 #[ignore] // Requires root
 async fn test_container_handler_reaps_zombie_process_on_crash() {
     use daemonbox::handler::Handler;
-    use linuxbox::adapters::test_fixtures::MockAdapterBuilder;
+    use minibox::adapters::test_fixtures::MockAdapterBuilder;
 
     let (fs, limiter, registry) = MockAdapterBuilder::new().build();
     let handler = Handler::new(fs, limiter, registry);
@@ -1312,6 +1341,7 @@ git commit -m "test(chaos): add container lifecycle failure and cleanup tests"
 ### Task 9-12: Daemon recovery tests
 
 **Files:**
+
 - Create: `crates/daemonbox/tests/daemon_recovery_tests.rs`
 
 **Steps:**
@@ -1412,7 +1442,7 @@ git commit -m "test(chaos): add daemon recovery and resilience tests"
 - [ ] **Run all chaos/fault injection tests**
 
 ```bash
-cargo test -p linuxbox --test adapter_failure_injection_tests
+cargo test -p minibox --test adapter_failure_injection_tests
 cargo test -p miniboxd --test container_lifecycle_failure_tests
 cargo test -p daemonbox --test daemon_recovery_tests
 ```
@@ -1428,16 +1458,16 @@ Create `docs/failure-modes.md`:
 
 ## Phase 3: Chaos & Fault Injection
 
-| Failure Mode | Test | Adapter | Recovery |
-|---|---|---|---|
-| Incomplete image pull | adapter_failure_injection_tests | ImageRegistry | Cleanup layers ✓ |
-| Cgroup creation fails | adapter_failure_injection_tests | ResourceLimiter | Skip cgroup limits ✓ |
-| Overlay mount fails | adapter_failure_injection_tests | FilesystemProvider | Cleanup layers ✓ |
-| Container process crashes | container_lifecycle_failure_tests | ContainerRuntime | Reap zombie ✓ |
-| Overlay mount left stale | container_lifecycle_failure_tests | FilesystemProvider | Forced unmount ✓ |
-| Malformed request JSON | daemon_recovery_tests | Server | Reject + continue ✓ |
-| Client abrupt disconnect | daemon_recovery_tests | Server | Graceful cleanup ✓ |
-| Rapid sequential requests | daemon_recovery_tests | Server | Queue handling ✓ |
+| Failure Mode              | Test                              | Adapter            | Recovery             |
+| ------------------------- | --------------------------------- | ------------------ | -------------------- |
+| Incomplete image pull     | adapter_failure_injection_tests   | ImageRegistry      | Cleanup layers ✓     |
+| Cgroup creation fails     | adapter_failure_injection_tests   | ResourceLimiter    | Skip cgroup limits ✓ |
+| Overlay mount fails       | adapter_failure_injection_tests   | FilesystemProvider | Cleanup layers ✓     |
+| Container process crashes | container_lifecycle_failure_tests | ContainerRuntime   | Reap zombie ✓        |
+| Overlay mount left stale  | container_lifecycle_failure_tests | FilesystemProvider | Forced unmount ✓     |
+| Malformed request JSON    | daemon_recovery_tests             | Server             | Reject + continue ✓  |
+| Client abrupt disconnect  | daemon_recovery_tests             | Server             | Graceful cleanup ✓   |
+| Rapid sequential requests | daemon_recovery_tests             | Server             | Queue handling ✓     |
 ```
 
 - [ ] **Final commit**
@@ -1448,6 +1478,7 @@ git commit -m "docs(chaos): add failure mode coverage matrix"
 ```
 
 **Phase 3 Summary:**
+
 - ✅ 3 failure test suites (≥3 failure modes each = 9+ new tests)
 - ✅ Cleanup verification for all failure paths
 - ✅ Server resilience to malformed input
@@ -1458,12 +1489,12 @@ git commit -m "docs(chaos): add failure mode coverage matrix"
 
 ## Overall Summary
 
-| Phase | Focus | New Tests | New Iterations | Dependencies |
-|---|---|---|---|---|
-| 1: Adapter Isolation | Port implementation | +25 | N/A | None |
-| 2: Property-Based | Invariant coverage | +12 properties | 3000+ | Phase 1 fixtures |
-| 3: Chaos & Fault | Failure recovery | +15 | N/A | Phase 1 + 2 |
-| **TOTAL** | **Full coverage** | **+52 tests** | **3000+ iterations** | **Sequential phases** |
+| Phase                | Focus               | New Tests      | New Iterations       | Dependencies          |
+| -------------------- | ------------------- | -------------- | -------------------- | --------------------- |
+| 1: Adapter Isolation | Port implementation | +25            | N/A                  | None                  |
+| 2: Property-Based    | Invariant coverage  | +12 properties | 3000+                | Phase 1 fixtures      |
+| 3: Chaos & Fault     | Failure recovery    | +15            | N/A                  | Phase 1 + 2           |
+| **TOTAL**            | **Full coverage**   | **+52 tests**  | **3000+ iterations** | **Sequential phases** |
 
 ### Test Command Reference
 
@@ -1472,13 +1503,13 @@ git commit -m "docs(chaos): add failure mode coverage matrix"
 just test-adapters
 
 # After Phase 2
-cargo test -p linuxbox --test protocol_codec_properties
-cargo test -p linuxbox --test path_validation_properties
-cargo test -p linuxbox --test image_manifest_properties
-cargo test -p linuxbox --test cgroup_boundary_properties
+cargo test -p minibox --test protocol_codec_properties
+cargo test -p minibox --test path_validation_properties
+cargo test -p minibox --test image_manifest_properties
+cargo test -p minibox --test cgroup_boundary_properties
 
 # After Phase 3
-cargo test -p linuxbox --test adapter_failure_injection_tests
+cargo test -p minibox --test adapter_failure_injection_tests
 cargo test -p miniboxd --test container_lifecycle_failure_tests
 cargo test -p daemonbox --test daemon_recovery_tests
 

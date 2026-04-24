@@ -28,9 +28,9 @@ use tracing::debug;
 /// # Example
 ///
 /// ```rust,ignore
-/// use linuxbox::adapters::DockerHubRegistry;
-/// use linuxbox::domain::ImageRegistry;
-/// use linuxbox::image::ImageStore;
+/// use minibox::adapters::DockerHubRegistry;
+/// use minibox::domain::ImageRegistry;
+/// use minibox::image::ImageStore;
 /// use std::sync::Arc;
 ///
 /// #[tokio::main]

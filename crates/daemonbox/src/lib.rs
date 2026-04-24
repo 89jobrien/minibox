@@ -7,3 +7,4 @@ pub mod handler;
 pub mod network_lifecycle;
 pub mod server;
 pub mod state;
+pub mod telemetry;

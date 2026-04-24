@@ -7,10 +7,10 @@
 //! Run with: `cargo bench --bench trait_overhead`
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use linuxbox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
-use linuxbox::domain::{
+use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use minibox::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
-    ResourceConfig, ResourceLimiter,
+    ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -91,6 +91,8 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
@@ -111,6 +113,8 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
+            mounts: vec![],    // placeholder — Task 6 replaces this
+            privileged: false, // placeholder — Task 6 replaces this
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));

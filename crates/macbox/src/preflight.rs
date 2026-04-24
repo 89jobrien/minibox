@@ -48,6 +48,14 @@ pub fn default_executor() -> Executor {
         let out = std::process::Command::new(args[0])
             .args(&args[1..])
             .output()?;
+        if !out.status.success() {
+            anyhow::bail!(
+                "command {:?} exited with {}: {}",
+                args,
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+        }
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     })
 }

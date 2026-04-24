@@ -1,0 +1,13 @@
+pipeline: minibox_cargo_fmt
+# Auto-format a Rust file after edit.
+# Input: { "file": "<path to edited .rs file>" }
+# Run via post-edit hook: cruxx run .crux/cargo-fmt.crux --input '{"file":"$FILE"}'
+budget: { calls: 4 }
+
+steps:
+  - step: fmt
+    handler: shell::capture
+    args:
+      cmd: "cargo fmt --manifest-path {{ input.manifest }} -- {{ input.file }}"
+      env:
+        CARGO_TARGET_DIR: "{{ input.target_dir }}"

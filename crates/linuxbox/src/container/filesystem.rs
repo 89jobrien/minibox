@@ -47,7 +47,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 /// Both checks must pass for the path to be considered safe. The function
 /// returns an error whose message includes `"path traversal"` so callers and
 /// tests can match on it reliably.
-fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
+pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
     // Reject paths with parent directory components
     if has_parent_dir_component(path) {
         anyhow::bail!(
@@ -311,6 +311,159 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Bind mount setup (child process, inside new mount namespace)
+// ---------------------------------------------------------------------------
+
+/// Apply host-path bind mounts into the container rootfs.
+///
+/// Must be called inside the child process's new mount namespace, after
+/// `setup_overlay` but before `pivot_root_to`. Each `BindMount` is
+/// applied as an `MS_BIND | MS_REC` mount from `host_path` to
+/// `rootfs/container_path`. If `read_only`, a remount with `MS_RDONLY` is
+/// applied immediately after.
+///
+/// On any failure the already-applied mounts are cleaned up (best-effort)
+/// before returning the error.
+pub fn apply_bind_mounts(
+    mounts: &[minibox_core::domain::BindMount],
+    rootfs: &Path,
+) -> anyhow::Result<()> {
+    for (i, m) in mounts.iter().enumerate() {
+        if let Err(e) = apply_one_bind_mount(m, rootfs) {
+            // Best-effort cleanup of already-applied mounts.
+            unmount_bind_mounts(&mounts[..i], rootfs);
+            return Err(e);
+        }
+    }
+    Ok(())
+}
+
+fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> anyhow::Result<()> {
+    use anyhow::Context as _;
+
+    // Canonicalize host path — fails fast if the path does not exist.
+    let host_canonical = m.host_path.canonicalize().with_context(|| {
+        format!(
+            "bind mount source {:?} does not exist or is not accessible",
+            m.host_path
+        )
+    })?;
+
+    // Strip leading "/" from container_path so it can be joined to rootfs.
+    let container_rel = m
+        .container_path
+        .strip_prefix("/")
+        .unwrap_or(&m.container_path);
+
+    // Reject container_path with ".." components before any filesystem access.
+    if has_parent_dir_component(container_rel) {
+        anyhow::bail!(
+            "path traversal attempt: bind mount container_path contains '..' component: {:?}",
+            m.container_path
+        );
+    }
+
+    let target = rootfs.join(container_rel);
+
+    // Create the mount target if it does not exist.
+    if !target.exists() {
+        if host_canonical.is_dir() {
+            fs::create_dir_all(&target).with_context(|| {
+                format!("failed to create bind mount target directory {:?}", target)
+            })?;
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).with_context(|| {
+                    format!("failed to create parent for bind mount target {:?}", target)
+                })?;
+            }
+            fs::write(&target, b"")
+                .with_context(|| format!("failed to create bind mount target file {:?}", target))?;
+        }
+    }
+
+    // Verify the resolved target stays within rootfs (guards against symlink-based
+    // traversal through an existing container layer before pivot_root).
+    let canonical_rootfs = rootfs
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize rootfs {:?}", rootfs))?;
+    let canonical_target = target
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize bind mount target {:?}", target))?;
+    if !canonical_target.starts_with(&canonical_rootfs) {
+        anyhow::bail!(
+            "path traversal attempt: bind mount target {:?} escapes rootfs {:?}",
+            m.container_path,
+            rootfs
+        );
+    }
+
+    // Apply the bind mount.
+    mount(
+        Some(host_canonical.as_path()),
+        canonical_target.as_path(),
+        None::<&str>,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
+        None::<&str>,
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "bind".into(),
+        target: target.display().to_string(),
+        source,
+    })
+    .with_context(|| format!("bind mount {:?} -> {:?} failed", host_canonical, target))?;
+
+    if m.read_only {
+        mount(
+            None::<&str>,
+            canonical_target.as_path(),
+            None::<&str>,
+            MsFlags::MS_BIND | MsFlags::MS_RDONLY | MsFlags::MS_REMOUNT,
+            None::<&str>,
+        )
+        .map_err(|source| FilesystemError::Mount {
+            fs: "bind-ro-remount".into(),
+            target: target.display().to_string(),
+            source,
+        })
+        .with_context(|| format!("read-only remount of bind mount {:?} failed", target))?;
+    }
+
+    debug!(
+        host_path = %host_canonical.display(),
+        container_path = %m.container_path.display(),
+        read_only = m.read_only,
+        "filesystem: bind mount applied"
+    );
+    Ok(())
+}
+
+/// Unmount bind mounts in reverse order. Best-effort: logs warnings on failure.
+///
+/// Called automatically by `apply_bind_mounts` on partial failure, and
+/// should be called by the parent process in cleanup (before `cleanup_mounts`).
+pub fn cleanup_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path) {
+    unmount_bind_mounts(mounts, rootfs);
+}
+
+fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path) {
+    for m in mounts.iter().rev() {
+        let container_rel = m
+            .container_path
+            .strip_prefix("/")
+            .unwrap_or(&m.container_path);
+        let target = rootfs.join(container_rel);
+        if let Err(e) = umount2(target.as_path(), MntFlags::MNT_DETACH) {
+            warn!(
+                target = %target.display(),
+                error = %e,
+                "filesystem: bind mount cleanup failed (best-effort)"
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Cleanup (parent process, post container exit)
 // ---------------------------------------------------------------------------
 
@@ -437,5 +590,191 @@ mod tests {
         let base = TempDir::new().unwrap();
         // The base dir itself counts as within base
         validate_layer_path(base.path(), base.path()).unwrap();
+    }
+
+    // ── validate_layer_path: symlink escape ─────────────────────────────────
+
+    /// Issue #123: a symlink inside `base_dir` that points *outside* must be
+    /// rejected — this is the canonical symlink-escape attack.
+    ///
+    /// The protection relies on `std::fs::canonicalize` following symlinks and
+    /// verifying the resulting path still starts with `canonical_base`.
+    #[cfg(unix)]
+    #[test]
+    fn symlink_pointing_outside_base_is_rejected() {
+        use std::os::unix::fs::symlink;
+        let outside = TempDir::new().unwrap();
+        let base = TempDir::new().unwrap();
+        // base/evil -> outside_dir  (symlink escaping base)
+        let link_path = base.path().join("evil");
+        symlink(outside.path(), &link_path).unwrap();
+
+        let err = validate_layer_path(&link_path, base.path())
+            .expect_err("symlink escaping base must be rejected");
+        assert!(
+            err.to_string().contains("path traversal") || err.to_string().contains("outside"),
+            "expected traversal/outside error, got: {err}"
+        );
+    }
+
+    // ── proptest: validate_layer_path ────────────────────────────────────────
+
+    mod proptest_validate_layer_path {
+        use super::*;
+        use proptest::prelude::*;
+        use tempfile::TempDir;
+
+        proptest! {
+            #![proptest_config(proptest::prelude::ProptestConfig {
+                failure_persistence: None,
+                ..proptest::prelude::ProptestConfig::default()
+            })]
+
+            /// Any path containing a `..` component must always be rejected.
+            #[test]
+            fn dotdot_paths_always_rejected(
+                prefix in "[a-z]{1,8}",
+                suffix in "[a-z]{1,8}",
+            ) {
+                let dir = TempDir::new().unwrap();
+                let evil = dir.path().join(format!("{prefix}/../../{suffix}"));
+                let result = validate_layer_path(&evil, dir.path());
+                prop_assert!(result.is_err(), "expected rejection for {:?}", evil);
+            }
+        }
+    }
+
+    // ── apply_bind_mounts ────────────────────────────────────────────────────
+    // These tests require Linux (MS_BIND is Linux-only) and root.
+    // Run with: sudo cargo test -p minibox container::filesystem::tests
+
+    #[cfg(target_os = "linux")]
+    mod bind_mount_tests {
+        use super::*;
+        use minibox_core::domain::BindMount;
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        #[test]
+        fn apply_bind_mounts_mounts_directory() {
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+
+            // Write a sentinel file into the host directory.
+            std::fs::write(host_dir.path().join("sentinel.txt"), b"hello").unwrap();
+
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/data"),
+                read_only: false,
+            }];
+
+            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+
+            // The sentinel should be visible at rootfs/data/sentinel.txt
+            let sentinel = rootfs.path().join("data").join("sentinel.txt");
+            assert!(sentinel.exists(), "bind mount not visible at target");
+
+            cleanup_bind_mounts(&mounts, rootfs.path());
+        }
+
+        #[test]
+        fn apply_bind_mounts_read_only() {
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/ro"),
+                read_only: true,
+            }];
+
+            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+
+            // Writing to the read-only mount should fail.
+            let result = std::fs::write(rootfs.path().join("ro").join("test.txt"), b"fail");
+            assert!(result.is_err(), "expected write to read-only mount to fail");
+
+            cleanup_bind_mounts(&mounts, rootfs.path());
+        }
+
+        #[test]
+        fn apply_bind_mounts_nonexistent_host_path_fails() {
+            let rootfs = TempDir::new().unwrap();
+            let mounts = vec![BindMount {
+                host_path: PathBuf::from("/nonexistent/path/that/does/not/exist"),
+                container_path: PathBuf::from("/data"),
+                read_only: false,
+            }];
+            let result = apply_bind_mounts(&mounts, rootfs.path());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn apply_bind_mounts_rejects_dotdot_in_container_path() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+            // "/../../../etc" after strip_prefix("/") → "../../../etc" — must be rejected.
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/../../../etc"),
+                read_only: false,
+            }];
+            let result = apply_bind_mounts(&mounts, rootfs.path());
+            assert!(result.is_err());
+            let msg = format!("{:#}", result.unwrap_err());
+            assert!(
+                msg.contains("path traversal"),
+                "expected 'path traversal' in error, got: {msg}"
+            );
+        }
+
+        #[test]
+        fn apply_bind_mounts_rejects_relative_dotdot_container_path() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("../escape"),
+                read_only: false,
+            }];
+            let result = apply_bind_mounts(&mounts, rootfs.path());
+            assert!(result.is_err());
+            let msg = format!("{:#}", result.unwrap_err());
+            assert!(
+                msg.contains("path traversal"),
+                "expected 'path traversal' in error, got: {msg}"
+            );
+        }
+
+        #[test]
+        fn apply_bind_mounts_creates_target_dir() {
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/nested/dir/target"),
+                read_only: false,
+            }];
+
+            // Target dir does not exist yet — apply_bind_mounts must create it.
+            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+            assert!(rootfs.path().join("nested/dir/target").is_dir());
+
+            cleanup_bind_mounts(&mounts, rootfs.path());
+        }
     }
 }

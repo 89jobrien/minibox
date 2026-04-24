@@ -5,7 +5,7 @@
 
 ## Overview
 
-Pre-baked OCI images containing the Rust toolchain and CI tooling. Images are published to `ghcr.io` via a scheduled GHA workflow and pulled locally to `~/.mbx/cache/`. The goal is zero cold-start compilation in CI — all toolchain and dependency layers are pre-built into the image.
+Pre-baked OCI images containing the Rust toolchain and CI tooling. Images are published to `ghcr.io` via a scheduled GHA workflow and pulled locally to `~/.minibox/cache/`. The goal is zero cold-start compilation in CI — all toolchain and dependency layers are pre-built into the image.
 
 ---
 
@@ -79,7 +79,7 @@ name: Publish CI Image
 
 on:
   schedule:
-    - cron: '0 2 * * 0'   # Weekly, Sunday 02:00 UTC
+    - cron: "0 2 * * 0" # Weekly, Sunday 02:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -172,7 +172,7 @@ pull-ci-image:   cargo xtask pull-ci-image
 ## Image Location
 
 ```
-~/.mbx/cache/images/ghcr.io/<org>/minibox-rust-ci/stable/
+~/.minibox/cache/images/ghcr.io/<org>/minibox-rust-ci/stable/
   manifest.json
   layers/
     sha256:<digest>/     # debian base
@@ -187,11 +187,11 @@ Layer sharing: if `debian:bookworm-slim` is already cached from another pull, it
 
 ## Versioning
 
-| Tag              | Meaning                                       |
-| ---------------- | --------------------------------------------- |
-| `stable`         | Latest stable Rust toolchain (always updated) |
-| `YYYY-MM-DD`     | Date-stamped build (e.g. `2026-03-23`)        |
-| `sha-<short>`    | Pinned to specific image build (e.g. `sha-abc1234`) |
+| Tag           | Meaning                                             |
+| ------------- | --------------------------------------------------- |
+| `stable`      | Latest stable Rust toolchain (always updated)       |
+| `YYYY-MM-DD`  | Date-stamped build (e.g. `2026-03-23`)              |
+| `sha-<short>` | Pinned to specific image build (e.g. `sha-abc1234`) |
 
 Hooks and CI reference `stable` by default. Date and SHA tags are produced automatically by `docker/metadata-action` on every publish run. Use SHA tags for reproducibility when debugging a specific build.
 
@@ -208,7 +208,7 @@ Hooks and CI reference `stable` by default. Date and SHA tags are produced autom
 
 ## Success Criteria
 
-- `minibox pull ghcr.io/<org>/minibox-rust-ci:stable` downloads and caches image in `~/.mbx/cache/`
+- `minibox pull ghcr.io/<org>/minibox-rust-ci:stable` downloads and caches image in `~/.minibox/cache/`
 - Image contains `cargo`, `rustfmt`, `clippy`, `cargo-nextest`, `cargo-llvm-cov`, `samply`, `cargo-deny`, `cargo-audit`
 - `just build-ci-image` builds locally without pushing
 - Weekly publish workflow runs without manual intervention

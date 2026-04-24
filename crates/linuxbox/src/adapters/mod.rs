@@ -57,15 +57,21 @@
 //! - [`ColimaFilesystem`]: Colima-based filesystem provider
 //! - [`ColimaLimiter`]: Colima-based resource limiter
 //!
+//! **Cross-Platform (macOS via SmolVM):**
+//! - [`SmolVmRegistry`]: SmolVM implementation of [`ImageRegistry`]
+//! - [`SmolVmRuntime`]: SmolVM lightweight VM runtime
+//! - [`SmolVmFilesystem`]: SmolVM-based filesystem provider (no-op on host)
+//! - [`SmolVmLimiter`]: SmolVM-based resource limiter (no-op on host)
+//!
 //! # Usage
 //!
 //! Adapters are typically instantiated in the composition root (main.rs) and
 //! injected into the business logic layer:
 //!
 //! ```rust,ignore
-//! use linuxbox::adapters::DockerHubRegistry;
-//! use linuxbox::domain::DynImageRegistry;
-//! use linuxbox::image::ImageStore;
+//! use minibox::adapters::DockerHubRegistry;
+//! use minibox::domain::DynImageRegistry;
+//! use minibox::image::ImageStore;
 //! use std::sync::Arc;
 //!
 //! let store = Arc::new(ImageStore::new("/var/lib/minibox/images")?);
@@ -74,7 +80,18 @@
 //! );
 //! ```
 
-// Platform-native adapters (Linux only)
+// Cross-platform adapters that operate on shared domain/state contracts.
+pub mod builder;
+pub use builder::MiniboxImageBuilder;
+
+pub mod commit;
+pub use commit::{OverlayCommitAdapter, commit_upper_dir_to_image};
+
+#[cfg(target_os = "linux")]
+pub mod exec;
+#[cfg(target_os = "linux")]
+pub use exec::NativeExecRuntime;
+
 #[cfg(target_os = "linux")]
 mod filesystem;
 #[cfg(target_os = "linux")]
@@ -88,8 +105,10 @@ mod gke;
 
 // Cross-platform adapters
 mod colima;
+mod colima_push;
 mod docker_desktop;
 mod hcs;
+mod smolvm;
 mod vf;
 mod wsl2;
 
@@ -98,6 +117,14 @@ pub mod network;
 
 // GitHub Container Registry adapter (cross-platform)
 pub mod ghcr;
+
+// Native OCI tarball loader
+pub mod image_loader;
+pub use image_loader::NativeImageLoader;
+
+// OCI push adapter
+pub mod push;
+pub use push::OciPushAdapter;
 
 // Test doubles (always available for testing)
 pub mod mocks;
@@ -115,17 +142,18 @@ pub use registry::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
 
-// GKE unprivileged exports (Linux only at runtime, but compile-check everywhere)
-#[cfg(target_os = "linux")]
+// GKE unprivileged exports (available on all platforms for testing)
 pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 
 // Cross-platform exports (always available)
 pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
 };
+pub use colima_push::{ColimaImagePusher, colima_image_pusher};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
 pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};
+pub use smolvm::{SmolVmExecutor, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
 pub use wsl2::{Wsl2Filesystem, Wsl2Limiter, Wsl2Runtime};

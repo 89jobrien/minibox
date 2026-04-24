@@ -1,3 +1,8 @@
+---
+status: archived
+note: No commit evidence found; sshpass tmpfile pattern not implemented as of 2026-04-23
+---
+
 # VPS Automation Safety Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -12,16 +17,17 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
+| File                | Change                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `xtask/src/main.rs` | `bench_vps()` — add `--commit`/`--push` flag parsing; `ssh_sudo_script()` — replace `-p` with `-f <tmpfile>` |
-| `xtask/Cargo.toml` | Add `tempfile` dependency if not already present |
+| `xtask/Cargo.toml`  | Add `tempfile` dependency if not already present                                                             |
 
 ---
 
 ### Task 1: Add `--commit` / `--push` flags to `bench_vps`
 
 **Files:**
+
 - Modify: `xtask/src/main.rs` — `main()` dispatch and `bench_vps()` (line ~379)
 
 - [ ] **Step 1: Write a failing test**
@@ -146,6 +152,7 @@ git commit -m "fix(bench): make bench-vps --commit/--push opt-in, default off"
 ### Task 2: Replace `sshpass -p` with `sshpass -f <tmpfile>`
 
 **Files:**
+
 - Modify: `xtask/src/main.rs` — `ssh_sudo_script()` (line ~331) and the two `sshpass` calls in `bench_vps()` for `scp`
 - Possibly modify: `xtask/Cargo.toml` — add `tempfile` if not present
 
@@ -331,6 +338,7 @@ git commit -m "fix(security): replace sshpass -p with -f tmpfile to prevent cred
 ### Task 3: Update CLAUDE.md quick reference
 
 **Files:**
+
 - Modify: `CLAUDE.md` — bench-vps entry in the quick reference table
 
 - [ ] **Step 1: Find the bench-vps reference**

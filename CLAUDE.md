@@ -10,6 +10,8 @@ Minibox is a Docker-like container runtime written in Rust featuring daemon/clie
 
 This workspace uses **Rust 2024 edition**. Watch for: match ergonomics changes, `unsafe` required for `set_var`/`remove_var`, `FromRawFd` scope differences. Always run `cargo clippy` and `cargo test` after generating code.
 
+**Critical:** See [`rules/rust-patterns.md`](rules/rust-patterns.md) for Minibox-specific patterns (error handling, path validation, async/sync boundaries, tracing discipline). This is a must-read before writing container code.
+
 ## Build and Development Commands
 
 ### Python Scripts
@@ -20,27 +22,14 @@ All scripts in `scripts/` use `#!/usr/bin/env -S uv run` + PEP 723 inline deps. 
 
 All `scripts/*.py` SDK scripts (`council.py`, `ai-review.py`, `meta-agent.py`, etc.) require an interactive terminal — they fail with "Command failed with exit code 1" when run via `run_in_background`. Always run them foreground/interactively.
 
-### scripts/ conventions
-
-- **Shared libraries** (`agent_log.py`, `bench_data.py`): no shebang, no PEP 723 block — imported by agent scripts via `sys.path.insert(0, os.path.dirname(__file__))`. All agent scripts must use `agent_log` for telemetry (never duplicate logging inline).
-- **AI agent scripts** (`*-agent.py`, `council.py`, etc.): `#!/usr/bin/env -S uv run` + PEP 723 inline deps + `claude-agent-sdk` dependency. Always log via `agent_log.log_start`/`log_complete`.
-- **TUI scripts** (`dashboard.py`): same uv pattern but use `rich` instead of `claude-agent-sdk`. Dashboard reads both `~/.mbx/agent-runs.jsonl` (agents) and `bench/results/` (benchmarks).
-
-- `just meta-agent "task"` — design + spawn parallel agents for any task; fetches + caches SDK docs, discovers repo context
-- `just council [base] [mode]` — multi-role branch analysis (core: 3 roles, extensive: 5 roles) + synthesis
-- `just ai-review [base]` — security/correctness review of diff vs base branch
 - `just gen-tests <TraitName>` — scaffold unit tests for a new domain trait adapter
 - `just diagnose [--container <id>]` — diagnose container failure from logs + cgroup state
-- `just bench-agent <subcmd>` — AI bench analysis: `report`, `compare [sha...]`, `regress`, `cleanup [--dry-run]`, `trigger [--vps]`
 - `just sync-check` — fetch + rebase onto origin/main, auto-resolve obvious conflicts (wired into `just push`)
-- `just commit-msg [--all]` — AI-generated conventional commit message from staged diff + commit history
-- `mise run all:standup [-- N]` — time-block standup from git activity across ~/dev/ repos (N = hours, default 24)
-- `mise run all:dashboard` — agent + bench dashboard (reads ~/.mbx/agent-runs.jsonl + bench/results/)
 
 ### mise.toml vs Justfile Convention
 
-- **Justfile** — AI agent commands: build, lint, test gates, CI gates, AI agent scripts (`meta-agent`, `council`, `ai-review`, `gen-tests`, `diagnose`, `bench-agent`, `sync-check`, `commit-msg`), cleanup
-- **mise.toml** — Human commands: interactive demos, ops tasks (`ssh-vps`, `fix-socket`, `smoke`), git ops (`commit`, `push`), human reports (`standup`, `dashboard`)
+- **Justfile** — build, lint, test gates, CI gates, cleanup
+- **mise.toml** — interactive demos, ops tasks (`ssh-vps`, `fix-socket`, `smoke`), git ops (`commit`, `push`)
 
 **mise.toml script gotcha:** Bash scripts with ANSI escape codes (e.g. `\033[36m`) **must** use `run = '''...'''` (TOML literal string) not `run = """..."""` — TOML interprets `\0` as an invalid escape in double-quoted strings.
 
@@ -57,13 +46,19 @@ cargo build --release
 # Build specific crate
 cargo build -p linuxbox
 cargo build -p miniboxd
-cargo build -p minibox-cli
+cargo build -p mbx
 
 # Check all crates without building
 cargo check --workspace
+
+# Build macOS VM image (Alpine kernel + agent, macOS only — required before MINIBOX_ADAPTER=vz)
+cargo xtask build-vm-image          # cached, skips if already built
+cargo xtask build-vm-image --force  # re-download + recompile
+just build-vm-image                 # shorthand
+just build-vm-image force           # force rebuild
 ```
 
-Binaries output to `target/release/miniboxd` and `target/release/minibox`.
+Binaries output to `target/release/miniboxd` and `target/release/mbx`.
 
 ### Running the Daemon and CLI
 
@@ -72,11 +67,11 @@ Binaries output to `target/release/miniboxd` and `target/release/minibox`.
 sudo ./target/release/miniboxd
 
 # CLI commands (daemon must be running)
-sudo ./target/release/minibox pull alpine
-sudo ./target/release/minibox run alpine -- /bin/echo "Hello"
-sudo ./target/release/minibox ps
-sudo ./target/release/minibox stop <container_id>
-sudo ./target/release/minibox rm <container_id>
+sudo ./target/release/mbx pull alpine
+sudo ./target/release/mbx run alpine -- /bin/echo "Hello"
+sudo ./target/release/mbx ps
+sudo ./target/release/mbx stop <container_id>
+sudo ./target/release/mbx rm <container_id>
 ```
 
 ### Testing
@@ -96,7 +91,7 @@ cargo test --workspace
 cargo test -p linuxbox
 
 # Run specific test module
-cargo test -p linuxbox protocol::tests
+cargo test -p minibox-core protocol::tests
 
 # Run with output
 cargo test -- --nocapture
@@ -120,54 +115,81 @@ cargo xtask bench-vps               # run bench on VPS, fetch results (no git si
 cargo xtask bench-vps --commit      # ... and commit results locally
 cargo xtask bench-vps --commit --push  # ... and push to remote
 
-# Run microbenchmarks (no daemon, any platform)
-./target/release/minibox-bench --suite codec    # protocol encode/decode (nanosecond, 36 cases)
-./target/release/minibox-bench --suite adapter  # trait-object overhead (nanosecond, 10 cases)
-cargo bench -p linuxbox          # criterion benches (local HTML reports only, not saved)
-
-# Bench result pipeline: bench.jsonl is append-only history; latest.json is canonical current
-# snapshot for devloop — both must stay in sync (see save_bench_results in xtask/src/main.rs)
+# Run criterion benches (linuxbox has inline [[bench]] targets)
+cargo bench -p linuxbox         # trait_overhead + protocol_codec (local HTML reports only)
 ```
 
 **Test Status:**
 
-- Unit + conformance: 155 lib tests + 11 cli tests + 22 handler + 16 conformance + 13 minibox-llm + 36 minibox-secrets passing (257 total via nextest, 4 skipped on macOS)
+- Unit + conformance: ~300+ tests via nextest (run `cargo nextest run --lib` for current count; 4 skipped on macOS)
 - Property-based: 8 daemonbox proptest properties + 25 linuxbox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
 - Existing integration: 8 tests (Linux+root)
 - Specs/plans: `docs/superpowers/specs/`, `docs/superpowers/plans/` — check `git log` to see if a plan was already executed before treating it as pending
 
-**macOS quality gates** (`miniboxd` compiles via `macbox::start()` dispatch — `cargo check --workspace` works):
+### Before Committing
+
+**One-command pre-commit gate** (macOS):
+
+```bash
+cargo xtask pre-commit
+```
+
+This runs: `cargo fmt --all --check` + clippy (all crates) + `cargo build --release` (macOS-safe).
+
+**On Linux**, use `cargo xtask prepush` for full coverage including `cargo xtask test-unit` + llvm-cov report.
+
+**macOS quality gates** (what `cargo xtask pre-commit` runs):
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -p minibox-secrets -- -D warnings
+cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p daemonbox -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 ```
+
+### Handler Testing Patterns
+
+**Channel-based responses**: `handle_run` sends responses via channel, not direct return. Use `handle_run_once()` test helper (defined in handler_tests.rs) to recover single response.
+
+**Mock adapter builders**: Configure mocks at creation time via builder methods (`.with_empty_layers()`, `.with_pull_failure()`, `.with_cached_image()`) — don't try to mutate after construction.
+
+**Mock registry type casting**: When storing `Arc<MockRegistry>` in `Arc<dyn ImageRegistry>`, use explicit cast: `Arc::clone(&mock) as Arc<dyn minibox_core::domain::ImageRegistry>`.
+
+**Test file organization**: Handler tests in `crates/daemonbox/tests/handler_tests.rs`. Test helpers (`create_test_deps_with_dir`, `create_test_state_with_dir`) are in that file.
+
+### Coverage Focus Areas
+
+`handler.rs` (daemonbox) is at 67.5% function / 55% line coverage — biggest gap in codebase. Error path tests (image pull failure, empty image, registry unreachable) have good ROI. Use `cargo xtask prepush` to generate llvm-cov coverage report.
 
 ## Architecture Overview
 
 ### Workspace Structure
 
-Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups), `macbox` (macOS Colima), `winbox` (Windows stub). All are platform-conditional deps in `miniboxd`.
+Platform crates follow the `{platform}box` naming convention: `linuxbox` (Linux namespaces/cgroups),
+`macbox` (macOS Colima/VZ/krun), `winbox` (Windows stub). All are platform-conditional deps in
+`miniboxd`.
 
-Eleven crates in cargo workspace:
+12 crates in cargo workspace:
 
-1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types, image management (`ImageStore`, `RegistryClient`), preflight; re-exported by linuxbox for macro compatibility
-2. **linuxbox** (library): Linux-specific container primitives and adapters (namespaces, cgroups, overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!` macros expand to `crate::domain::AsAny` at call sites inside linuxbox
-   (formerly `minibox-lib` — renamed 2026-03-23; git history before this date uses the old name)
-3. **minibox-macros** (proc-macro): Derive macros used by linuxbox
-4. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
-4. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS, `winbox::start()` on Windows
-6. **macbox** (library): macOS daemon implementation (Colima adapter suite)
-7. **winbox** (library): Windows daemon implementation (stub)
-8. **minibox-cli** (binary): CLI client sending commands to daemon
-9. **minibox-llm** (library): Multi-provider LLM client with structured output and fallback chains
-10. **minibox-bench** (binary): Benchmark harness
-11. **minibox-secrets** (library): Typed credential store — `CredentialProvider` port + adapters for env, OS keyring, 1Password (`op` CLI), and Bitwarden (`bw` CLI); SHA-256 audit hashes; expiry-aware provider chain
-
-(`xtask` is also a workspace member but is a dev-tool, not a shipped crate)
+1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types,
+   image management (`ImageStore`, `RegistryClient`), preflight; re-exported by linuxbox for macro
+   compatibility
+2. **minibox-oci** (library): OCI image types and operations
+3. **linuxbox** (library): Linux-specific container primitives and adapters (namespaces, cgroups,
+   overlay, process). Re-exports `minibox-core` — **do not remove re-exports** — `as_any!`/`adapt!`
+   macros expand to `crate::domain::AsAny` at call sites inside linuxbox
+   (formerly `minibox` — renamed 2026-04-21; git history before this date uses the old name)
+4. **minibox-macros** (proc-macro): Derive macros used by linuxbox
+5. **daemonbox** (library): Handler, state, Unix socket server — extracted from miniboxd
+6. **miniboxd** (binary): Async daemon entry point; dispatches to `macbox::start()` on macOS,
+   `winbox::start()` on Windows
+7. **macbox** (library): macOS daemon implementation (Colima adapter suite + VZ + krun backends)
+8. **winbox** (library): Windows daemon implementation (stub)
+9. **mbx** (binary): CLI client sending commands to daemon (formerly `minibox-cli`)
+10. **minibox-client** (library): Unix socket client — `DaemonClient`, `DaemonResponseStream`
+11. **minibox-testers** (library): Test infrastructure — mocks, fixtures, conformance helpers
+12. **xtask** (dev-tool): Pre-commit gate, test suites, conformance, build-vm-image; not shipped
 
 ### Critical Design Patterns
 
@@ -175,15 +197,19 @@ Eleven crates in cargo workspace:
 
 **Core library split**: Cross-platform types live in `minibox-core`; linuxbox re-exports them. Prefer `use minibox_core::protocol::*` in new code outside linuxbox rather than going through the re-export.
 
-**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and `colima` (macOS via limactl/nerdctl). Wired in `miniboxd/src/main.rs`.
+**Adapter Suites**: `MINIBOX_ADAPTER` env var selects between `native` (Linux namespaces, overlay
+FS, cgroups v2, requires root), `gke` (proot, copy FS, no-op limiter, unprivileged), and
+`colima` (macOS via limactl/nerdctl — experimental). The `vz` adapter is wired in `macbox` but
+blocked by a VZErrorInternal Apple bug on macOS 26 ARM64 (GH #61); `krun` is next (in progress).
+Wired in `miniboxd/src/main.rs`.
 
 **Async/Sync Boundary**: Daemon uses Tokio async for socket I/O (`server.rs`) but spawns blocking tasks for container operations (fork/clone syscalls cannot be async). Container creation in `handler.rs` uses `tokio::task::spawn_blocking`.
 
-**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `linuxbox/src/protocol.rs` using serde with `#[serde(tag = "type")]` for tagged enums.
+**Protocol**: JSON-over-newline on Unix socket (`/run/minibox/miniboxd.sock`). Each message is single JSON object terminated by `\n`. Types defined in `minibox-core/src/protocol.rs` (canonical source) using serde with `#[serde(tag = "type")]` for tagged enums. `linuxbox` re-exports via `pub use minibox_core::protocol`.
 
-**State Management**: In-memory HashMap in `miniboxd/src/state.rs` tracks containers. Not persisted - daemon restart loses all records. Container state machine: Created → Running → Stopped.
+**State Management**: `DaemonState` in `daemonbox/src/state.rs` tracks containers in a HashMap and persists to disk via `save_to_disk` on every add/remove (atomic rename, no fsync). State survives daemon restart; running processes are not reattached. See `docs/STATE_MODEL.md` for full persistence contract. Container state machine: Created → Running → Paused → Stopped.
 
-**CLI streaming** — `minibox run` uses `ephemeral: true` and streams stdout/stderr back to the terminal in real time via `ContainerOutput`/`ContainerStopped` protocol messages. The CLI exits with the container's exit code. Non-ephemeral runs (daemon-direct) still return immediately with a container ID.
+**CLI streaming** — `mbx run` uses `ephemeral: true` and streams stdout/stderr back to the terminal in real time via `ContainerOutput`/`ContainerStopped` protocol messages. The CLI exits with the container's exit code. Non-ephemeral runs (daemon-direct) still return immediately with a container ID.
 
 **Image Storage**: Layers stored as extracted directories in `/var/lib/minibox/images/{image}/{digest}/`. Overlay filesystem stacks layers (read-only lower dirs) + container-specific upper/work dirs.
 
@@ -238,6 +264,10 @@ Eleven crates in cargo workspace:
 - `server.rs`: Unix socket listener with SO_PEERCRED auth; channel-based streaming dispatch
 - `handler.rs`: Request routing; `handle_run_streaming` for ephemeral containers (Linux)
 - `state.rs`: In-memory container tracking
+
+### DaemonResponse Protocol Notes
+
+Current variants: `ContainerCreated`, `Success`, `Error`, `ContainerList`, `ContainerStopped`, `ContainerOutput`. **Terminal vs non-terminal**: Only `ContainerOutput` is non-terminal (can be sent multiple times during streaming). All other variants end streaming/request. If adding new variant, update `is_terminal_response()` in `server.rs` to include it in the match.
 
 ## Security Considerations
 
@@ -312,14 +342,31 @@ Image pulls enforce limits to prevent DoS:
 
 ## Current Limitations
 
-Understanding these helps prioritize feature development:
+See `docs/FEATURE_MATRIX.md` for the full per-platform breakdown. Key constraints as of
+2026-04-19:
 
-- **No networking setup**: Containers get isolated network namespace but no bridge/veth configuration
-- **No user namespace remapping**: Runs as root inside containers (no rootless support)
-- **No persistent state**: Daemon restart loses all container records
-- **No exec command**: Cannot run commands in existing containers
-- **No Dockerfile support**: Image-only workflow
-- **Adapter wiring incomplete**: `docker_desktop`, `wsl`, `vf`, and `hcs` adapters exist in `linuxbox/src/adapters/` but are not wired into `miniboxd`. `MINIBOX_ADAPTER` accepts `native`, `gke`, or `colima`; the rest are library-only.
+- **Networking is opt-in and experimental**: Bridge networking (`MINIBOX_NETWORK_MODE=bridge`)
+  is wired but has limited test coverage. Containers get an isolated network namespace by
+  default with no external connectivity. Port forwarding and in-container DNS are not
+  implemented.
+- **No user namespace remapping**: Runs as root inside containers (no rootless support).
+- **Container records persist across restarts, but running processes do not reattach**: State
+  is saved to disk and loaded at startup. Containers that were running when the daemon stopped
+  appear as records but are not reattached — their PIDs are gone.
+- **Exec is Linux native only**: `minibox exec` / `handle_exec` uses `setns` and is wired only
+  for the `native` adapter. GKE, Colima, and macOS adapters return an error.
+- **No Dockerfile parser**: `MiniboxImageBuilder` exists but there is no Dockerfile DSL. Build
+  support is experimental and native-only.
+- **Push/commit are experimental and native-only**: `OciPushAdapter` and `overlay_commit_adapter`
+  are wired in the native suite only and have limited test coverage.
+- **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist as
+  library code but are not wired into `miniboxd`. Passing unrecognized values to
+  `MINIBOX_ADAPTER` causes the daemon to exit at startup.
+- **Windows is a stub**: `winbox::start()` returns an error unconditionally. Phase 2 work
+  (Named Pipe server, HCS/WSL2 adapter wiring) has not started.
+- **Protocol types**: `DaemonRequest`/`DaemonResponse` are defined in
+  `minibox-core/src/protocol.rs` (single source of truth). `linuxbox` re-exports via
+  `pub use minibox_core::protocol`.
 
 ## Tracing Contract
 
@@ -327,12 +374,12 @@ All structured events follow these conventions. When adding new `warn!`/`info!`/
 
 ### Severity discipline
 
-| Level | Usage |
-|---|---|
-| `error!` | Unrecoverable failures: container init crash, fatal exec errors |
-| `warn!` | Security rejections, degraded behaviour, best-effort failures (unmount, cgroup cleanup, signal) |
-| `info!` | Lifecycle milestones: container start/stop/remove, image pull phases, overlay mount, pivot_root |
-| `debug!` | Implementation detail: syscall arguments, byte counts, internal state transitions |
+| Level    | Usage                                                                                           |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| `error!` | Unrecoverable failures: container init crash, fatal exec errors                                 |
+| `warn!`  | Security rejections, degraded behaviour, best-effort failures (unmount, cgroup cleanup, signal) |
+| `info!`  | Lifecycle milestones: container start/stop/remove, image pull phases, overlay mount, pivot_root |
+| `debug!` | Implementation detail: syscall arguments, byte counts, internal state transitions               |
 
 ### Event message convention
 
@@ -340,23 +387,37 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 
 ### Canonical field names
 
-| Field | Type | Used in |
-|---|---|---|
-| `pid` | u32 | Container process ID |
-| `child_pid` | i32 | Cloned child PID (`namespace.rs`) |
-| `clone_flags` | i32 | Raw `clone(2)` flags (`namespace.rs`) |
-| `container_id` | &str | Container UUID |
-| `entry` | &Path | Tar entry path (all `layer.rs` security events) → `ImageError::DeviceNodeRejected.entry` / `SymlinkTraversalRejected.entry` |
-| `kind` | &EntryType | Tar entry type (device node rejection) |
-| `target` / `original_target` | &Path | Symlink target before rewrite → `ImageError::SymlinkTraversalRejected.target` |
-| `rewritten_target` | &Path | Symlink target after absolute→relative rewrite |
-| `mode_before` / `mode_after` | u32 | Raw permission bits (octal) before/after strip |
-| `new_root` | &Path | `pivot_root` destination path |
-| `fds_closed` | usize | Extra FDs closed before exec (`process.rs`) |
-| `command` | &str | Container entrypoint command |
-| `rootfs` | &Path | Container rootfs path |
+| Field                        | Type       | Used in                                                                                                                     |
+| ---------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `pid`                        | u32        | Container process ID                                                                                                        |
+| `child_pid`                  | i32        | Cloned child PID (`namespace.rs`)                                                                                           |
+| `clone_flags`                | i32        | Raw `clone(2)` flags (`namespace.rs`)                                                                                       |
+| `container_id`               | &str       | Container UUID                                                                                                              |
+| `entry`                      | &Path      | Tar entry path (all `layer.rs` security events) → `ImageError::DeviceNodeRejected.entry` / `SymlinkTraversalRejected.entry` |
+| `kind`                       | &EntryType | Tar entry type (device node rejection)                                                                                      |
+| `target` / `original_target` | &Path      | Symlink target before rewrite → `ImageError::SymlinkTraversalRejected.target`                                               |
+| `rewritten_target`           | &Path      | Symlink target after absolute→relative rewrite                                                                              |
+| `mode_before` / `mode_after` | u32        | Raw permission bits (octal) before/after strip                                                                              |
+| `new_root`                   | &Path      | `pivot_root` destination path                                                                                               |
+| `fds_closed`                 | usize      | Extra FDs closed before exec (`process.rs`)                                                                                 |
+| `command`                    | &str       | Container entrypoint command                                                                                                |
+| `rootfs`                     | &Path      | Container rootfs path                                                                                                       |
 
 **Rule**: use `key = value` structured fields for queryable data — never embed structured values in the message string (e.g. use `pid = pid_value`, not `"PID={pid}"` in the message).
+
+## Crate Renaming Gotcha
+
+- When renaming a crate directory, `Cargo.toml` workspace `members` paths must match the actual
+  directory name. If they diverge, `cargo check` fails with "failed to read Cargo.toml / No such
+  file or directory". Fix: `mv crates/old crates/new`.
+- `cargo fix --lib -p <crate>` only fixes lib targets. Add `--tests` to also fix integration test
+  files, or use `--allow-dirty` to fix everything in-tree.
+
+## FilesystemProvider Supertrait
+
+`FilesystemProvider` is a marker supertrait combining `RootfsSetup + ChildInit`. `setup_rootfs`
+is defined on `RootfsSetup` — import `RootfsSetup` explicitly wherever `setup_rootfs` is called
+(benches, tests). Importing `FilesystemProvider` alone is not sufficient.
 
 ## Debugging
 
@@ -376,7 +437,28 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 ### Macro and doctest gotchas
 
 - **`as_any!` macro uses `crate::domain::AsAny`** — `crate` in `macro_rules!` resolves at the call site (linuxbox), not the defining crate (minibox-macros). This is intentional. Clippy warns with `crate_in_macro_def`; suppress with `#[allow(clippy::crate_in_macro_def)]`, do not change to `$crate`.
-- **Private fn doctests** — mark with ```` ```ignore ```` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
+- **`adapt!` requires `new() -> Self`** — `adapt!` calls `default_new!` which implements `Default` via `Self::new()`. Any adapter whose `new()` returns `Result<Self>` must use `as_any!` only — do NOT use `adapt!` for it.
+- **Private fn doctests** — mark with ` ```ignore ` (not `no_run`); private functions aren't accessible in doctest context and will fail to compile.
+
+### Protocol gotchas (relevant when modifying `protocol.rs` or `handler.rs`)
+
+- **Single `DaemonRequest` definition** — canonical source is `crates/minibox-core/src/protocol.rs`. `linuxbox` re-exports it. Wire format snapshot tests in minibox-core pin serialization. When adding a field, update `minibox-core/src/protocol.rs` and add a snapshot test.
+- **`HandlerDependencies` construction sites** — Adding fields to `HandlerDependencies` in `handler.rs` requires updating all three adapter suites in `miniboxd/src/main.rs` (native, gke, colima). These are Linux-only (`#[cfg(target_os = "linux")]`) and won't fail on macOS `cargo check`.
+- **`handle_run` param chain** — Adding a parameter requires updating in order: `server.rs` dispatch pattern match → `handle_run` → `handle_run_streaming` → `run_inner_capture`; and separately `run_inner`. All five sites must change together.
+- **`#[serde(default)]` for backward-compatible protocol additions** — New fields on `DaemonRequest` variants must use `#[serde(default)]` so existing JSON clients that omit the field continue to work.
+- **Silent channel-send discards are a bug** — never use `let _ = tx.send(...).await` in handler
+  code. Use `if tx.send(...).await.is_err() { warn!("handle_run: client disconnected before
+<context> could be sent"); }` so dropped connections are observable in logs.
+- **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
+- **Linux-only clippy lints** — Files under `#![cfg(target_os = "linux")]` (e.g. `bridge.rs`) are invisible to macOS clippy. Lints like `clone_on_copy` and `collapsible_if` only surface on Linux CI runners — always check CI after touching the adapter layer.
+
+### macbox/vz gotchas (relevant when modifying `crates/macbox/src/vz/` or merging the vz branch)
+
+- **`MINIBOX_ADAPTER=vz` requires compile-time feature** — must build with `--features vz` for `macbox`/`miniboxd`; the env var alone at runtime is not enough.
+- **Duplicate `pub mod vz;` after merges** — `crates/macbox/src/lib.rs` should have exactly one `#[cfg(feature = "vz")] pub mod vz;`. Merges that touch this file can silently introduce a duplicate unconditional declaration; `cargo check` catches it immediately.
+- **`minibox` → `linuxbox` rename (2026-04-21)** — any `minibox::` lib crate reference (in code,
+  notes, or plans) is stale; use `linuxbox::` (e.g. `linuxbox::adapters::NoopNetwork`). The CLI
+  binary was also renamed: `minibox-cli` → `mbx`.
 
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
@@ -385,6 +467,7 @@ Messages use `"<subsystem>: <verb> <noun>"` lowercase prefix — e.g. `"tar: rej
 - **`close_extra_fds` uses `close_range(2)` fast path** — tries the syscall first (kernel 5.9+, QEMU-inspired). Falls back to `/proc/self/fd` iteration which must collect FD numbers into a `Vec` before closing (iterating and closing in the loop would close `ReadDir`'s own FD).
 - **Absolute symlink rewrite in `layer.rs`** — `strip_prefix("/")` gives a path relative to the container root, not the symlink's directory. Use `relative_path(entry_dir, abs_target)` (defined in `layer.rs`) to get the correct relative target; otherwise busybox applet symlinks resolve to non-existent paths (e.g. `/bin/bin/busybox`).
 - **Tar root entries** — `"."` and `"./"` entries in OCI layers must be skipped before path validation; `Path::join("./")` normalizes the CurDir component away, causing a false path-escape error.
+- **`child_init` uses `execve` not `execvp`** — `execvp` inherits the daemon's host environment into the container. `child_init` calls `execve` with an explicit `envp` built from `config.env`. Do not revert to `execvp`.
 
 ### Cgroup v2 gotchas (relevant when modifying `cgroups.rs`)
 
@@ -431,7 +514,7 @@ RUST_LOG=debug sudo ./target/release/miniboxd
 
 When extending minibox:
 
-1. **Protocol changes**: Update `protocol.rs` types first, then implement in `handler.rs`
+1. **Protocol changes**: Update `minibox-core/src/protocol.rs` types first, then implement in `handler.rs`
 2. **Container primitives**: Add to `linuxbox/src/container/`, use nix crate for syscalls
 3. **Image operations**: Extend `linuxbox/src/image/` modules
 4. **State persistence**: Consider replacing HashMap in `state.rs` with serialized storage
@@ -445,33 +528,80 @@ Gate Linux-only deps with `[target.'cfg(target_os = "linux")'.dependencies]`, no
 
 `recipe.json` is a cargo-chef artifact that embeds crate names — update manually after any crate rename (or regenerate with `cargo chef prepare --recipe-path recipe.json`).
 
+## Conformance Suite
+
+Branch: `feat/conformance-suite` — Phases 1–3 complete as of 2026-04-11.
+
+- Entry point: `cargo xtask test-conformance` — runs suite, prints artifact paths
+- Reports written to `artifacts/conformance/` (gitignored; CI uploads as artifacts)
+- `CONFORMANCE_ARTIFACT_DIR` — override report output directory
+- `CONFORMANCE_PUSH_REGISTRY=localhost:5000` — enable Tier 2 push tests (requires live registry)
+- `CONFORMANCE_COLIMA=1` — enable Colima backend tests
+- See `docs/conformance.md` for capability matrix and full usage
+
 ## Environment Variables
 
 Override runtime paths (useful for testing and non-standard deployments):
 
-- `MINIBOX_DATA_DIR` — image/container storage. UID-aware default: `~/.mbx/cache/` for non-root, `/var/lib/minibox` for root. Explicit env var overrides both.
+- `MINIBOX_DATA_DIR` — image/container storage. UID-aware default: `~/.minibox/cache/` for non-root, `/var/lib/minibox` for root. Explicit env var overrides both.
 - `MINIBOX_RUN_DIR` — socket/runtime dir (default: `/run/minibox`)
 - `MINIBOX_SOCKET_PATH` — Unix socket path
 - `MINIBOX_CGROUP_ROOT` — cgroup root for containers (default: `/sys/fs/cgroup/minibox.slice/miniboxd.service`)
-- `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, or `colima`
+- `MINIBOX_ADAPTER` — adapter suite: `native` (default), `gke`, `colima`, or `vz`
+
+### Committing `.ctx/HANDOFF.*.*.yaml`
+
+Use `git add -f .ctx/HANDOFF.minibox.workspace.yaml` — the directory is gitignored and negation
+exceptions don't auto-apply without `-f`. The global obfsck hook must have `:!.ctx/HANDOFF.*.*.yaml`
+(bare path) alongside `:!**/.ctx/HANDOFF.*.*.yaml` — the `**/` form alone does not match top-level
+dirs. If obfsck blocks the commit, add the bare exclusion to `~/.config/git/hooks/pre-commit`.
+
+## Git Workflow (3-tier stability pipeline)
+
+```
+main (develop) ──auto──► next (validated) ──manual──► stable (release) ──► v* tag
+```
+
+- **`main`**: Active R&D. Must compile. Direct push or PR merge.
+- **`next`**: Auto-promoted from `main` on green CI. Full test + audit gates.
+- **`stable`**: Maestro-consumable. Tagged releases (`v*`) cut here.
+- **`feature/*`, `hotfix/*`, `chore/*`**: Short-lived, target `main`. Auto-deleted on merge.
+
+Every commit on every branch must compile. `origin` is GitHub (`git@github.com:89jobrien/minibox.git`).
+
+**Shared target dir**: `CARGO_TARGET_DIR=~/.minibox/cache/target/` (set in `.envrc`). Worktrees share the same cache.
 
 ## GitHub Actions CI
 
-`.github/workflows/ci.yml` — macOS job (`macos-latest`): `cargo fmt --all --check` + clippy (all crates) + `cargo xtask test-unit`. No Linux job yet (self-hosted runner planned).
+Workflows in `.github/workflows/`:
 
-## Gitea CI
+- **`ci.yml`** — Quality gates, branch-conditional:
+  - All branches: `cargo check --workspace` + `cargo fmt --all --check` + clippy
+  - `next` + `stable`: above + `cargo xtask test-unit` + audit/deny/machete
+  - `stable` only: above + `cargo geiger`
+- **`phased-deployment.yml`** — Auto-promote `main→next` on green CI; manual promote `next→stable` via `workflow_dispatch`; hotfix backmerge `stable→next→main`
+- **`release.yml`** — Triggered by `v*` tag on `stable`; cross-compile musl binaries; GitHub Release
+- **`nightly.yml`** — Daily `cargo geiger` unsafe audit (informational)
 
-CI runs on self-hosted Gitea Actions (jobrien-vm). Pipeline: `cargo deny check` + `cargo audit` only — no compilation (VPS has 2 CPUs, no swap; Rust builds saturate it).
+`deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
 
-- `deny.toml` — `licenses.private.ignore = false` by default; unpublished workspace crates (e.g. `xtask`) need `license = "MIT"` in Cargo.toml or they fail as unlicensed
-- Gitea context vars are `gitea.repository`, `gitea.run_id`, `gitea.sha` — not `github.*`
-- `GITEA_` prefix is reserved for secrets; use other names (e.g. `CI_AGENT_TOKEN`)
 - Check CI status: `mise run all:ci`
+
+## macOS Path Gotchas
+
+- `dirs::config_dir()` on macOS resolves to `~/Library/Application Support/`, not `~/.config/`.
+  Any crate using `dirs` for config paths must account for this in docs and setup instructions.
+
+## Serde/Default Gotcha
+
+- `#[derive(Default)]` ignores `#[serde(default = "fn")]` field annotations — derived `Default`
+  uses `u16::default()` (0), not the serde default fn. When a struct has field-level serde
+  defaults AND is used as `#[serde(default)]` on its parent, implement `Default` manually.
 
 ## Skills Available
 
 Global minibox skills available across all projects:
 
-- `mbx:minibox-ci`: CI operations — self-hosted runner management, GHA diagnostics, xtask gates
+- `minibox:minibox-ci`: CI operations — self-hosted runner management, GHA diagnostics, xtask gates
 
-Invoke with `/` prefix, e.g., `/mbx:minibox-ci`.
+Invoke with `/` prefix, e.g., `/minibox:minibox-ci`.

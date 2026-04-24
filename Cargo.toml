@@ -1,27 +1,27 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/minibox-oci",
     "crates/minibox-core",
     "crates/linuxbox",
     "crates/miniboxd",
-    "crates/minibox-cli",
-    "crates/minibox-bench",
+    "crates/mbx",
     "crates/minibox-macros",
     "crates/daemonbox",
     "crates/macbox",
     "crates/winbox",
-    "crates/minibox-llm",
-    "crates/minibox-secrets",
     "crates/minibox-client",
-    "xtask",
-    "mbxctl",
+    "crates/xtask",
+    "crates/minibox-testers",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.20.0"
 edition = "2024"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 rust-version = "1.85"
+repository = "https://github.com/89jobrien/minibox"
+homepage = "https://github.com/89jobrien/minibox"
 
 [workspace.dependencies]
 # Shared across workspace
@@ -32,6 +32,20 @@ anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Traces (OTEL bridge + OTLP export)
+opentelemetry = "0.31"
+opentelemetry_sdk = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.32"
+
+# Metrics (direct Prometheus client — NOT the discontinued opentelemetry-prometheus)
+prometheus-client = "0.23"
+
+# Infrastructure
+axum = { version = "0.8", features = ["tokio"] }
+dashmap = "6"
+
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -40,7 +54,7 @@ sha2 = "0.10"
 hex = "0.4"
 flate2 = "1"
 tar = "0.4"
-nix = { version = "0.29", features = ["sched", "mount", "fs", "signal", "process", "hostname", "user", "socket"] }
+nix = { version = "0.29", features = ["sched", "mount", "fs", "signal", "process", "hostname", "user", "socket", "term"] }
 libc = "0.2"
 bytes = "1"
 futures = "0.3"
@@ -49,15 +63,19 @@ async-trait = "0.1"
 walkdir = "2"
 base64 = "0.22"
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+pin-project-lite = "0.2"
+ipnet = "2"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["async_tokio"] }
 
-# Internal crates
-minibox-core = { path = "crates/minibox-core" }
+# Internal crates (version = path for local dev; version required for crates.io publish)
+minibox-oci = { path = "crates/minibox-oci", version = "0.20.0" }
+minibox-core = { path = "crates/minibox-core", version = "0.20.0" }
 linuxbox = { path = "crates/linuxbox" }
-minibox-macros = { path = "crates/minibox-macros" }
-minibox-client = { path = "crates/minibox-client" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.20.0" }
+minibox-client = { path = "crates/minibox-client", version = "0.20.0" }
 daemonbox = { path = "crates/daemonbox" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
@@ -67,6 +85,8 @@ keyring = "3"
 wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
 assert_cmd = "2"    # dev-only: CLI subprocess testing
 predicates = "3"    # dev-only: assert_cmd predicate helpers
+proptest = "1"      # dev-only: property-based testing
+serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
+insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
 
-# Internal crates (secrets)
-minibox-secrets = { path = "crates/minibox-secrets" }
+minibox-testers = { path = "crates/minibox-testers" }

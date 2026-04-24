@@ -241,6 +241,146 @@ fn probe_minibox_slice() -> bool {
         .unwrap_or(false)
 }
 
+// ---------------------------------------------------------------------------
+// Workspace-aware helpers
+// ---------------------------------------------------------------------------
+
+/// Result from probing whether a command can run from a workspace directory.
+#[derive(Debug, Clone)]
+pub struct CommandProbeResult {
+    /// The workspace root that was used as the working directory.
+    pub workspace_root: std::path::PathBuf,
+    /// The command that was executed.
+    pub command: String,
+    /// Whether the command was found on `$PATH` and exited successfully.
+    pub success: bool,
+    /// Human-readable explanation of what happened.
+    pub diagnostic: String,
+}
+
+/// Walk upward from `start` to find the nearest directory containing a
+/// `Cargo.toml` with a `[workspace]` table.
+///
+/// Returns `None` if the filesystem root is reached without finding one.
+pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
+    let mut dir = start.to_path_buf();
+    // Canonicalize if possible so we get an absolute path.
+    if let Ok(c) = dir.canonicalize() {
+        dir = c;
+    }
+    loop {
+        let candidate = dir.join("Cargo.toml");
+        if candidate.exists()
+            && let Ok(content) = std::fs::read_to_string(&candidate)
+            && content.contains("[workspace]")
+        {
+            return Some(dir);
+        }
+        match dir.parent() {
+            Some(p) => dir = p.to_path_buf(),
+            None => return None,
+        }
+    }
+}
+
+/// Check whether a crate named `crate_name` exists anywhere within `workspace_root`.
+///
+/// Walks `workspace_root/crates/` (if present) and the root itself, looking for
+/// a `Cargo.toml` that contains `name = "<crate_name>"`.
+///
+/// Returns `false` if `workspace_root` is not a directory or no match is found.
+pub fn workspace_crate_exists(workspace_root: &Path, crate_name: &str) -> bool {
+    // Search root Cargo.toml first (single-crate workspace).
+    if crate_name_matches(&workspace_root.join("Cargo.toml"), crate_name) {
+        return true;
+    }
+    // Search crates/ subdirectory.
+    let crates_dir = workspace_root.join("crates");
+    if let Ok(entries) = std::fs::read_dir(&crates_dir) {
+        for entry in entries.flatten() {
+            let toml = entry.path().join("Cargo.toml");
+            if crate_name_matches(&toml, crate_name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Probe whether `cmd` (with `args`) runs successfully when invoked with
+/// `workspace_root` as the working directory.
+///
+/// The returned `CommandProbeResult` always contains a human-readable
+/// `diagnostic` string that includes the resolved `workspace_root` path,
+/// the command attempted, and whether the failure was a missing binary or a
+/// non-zero exit.
+pub fn command_runnable_from_workspace(
+    workspace_root: &Path,
+    cmd: &str,
+    args: &[&str],
+) -> CommandProbeResult {
+    let root = workspace_root.to_path_buf();
+    let command_str = if args.is_empty() {
+        cmd.to_string()
+    } else {
+        format!("{} {}", cmd, args.join(" "))
+    };
+
+    let result = Command::new(cmd).args(args).current_dir(&root).output();
+
+    match result {
+        Ok(output) if output.status.success() => CommandProbeResult {
+            workspace_root: root.clone(),
+            command: command_str.clone(),
+            success: true,
+            diagnostic: format!(
+                "OK: `{}` succeeded (workspace: {})",
+                command_str,
+                root.display()
+            ),
+        },
+        Ok(output) => {
+            let code = output
+                .status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "signal".to_string());
+            CommandProbeResult {
+                workspace_root: root.clone(),
+                command: command_str.clone(),
+                success: false,
+                diagnostic: format!(
+                    "FAIL: `{}` exited with code {} (workspace: {})",
+                    command_str,
+                    code,
+                    root.display()
+                ),
+            }
+        }
+        Err(e) => CommandProbeResult {
+            workspace_root: root.clone(),
+            command: command_str.clone(),
+            success: false,
+            diagnostic: format!(
+                "FAIL: `{}` could not be launched — {} (workspace: {})",
+                command_str,
+                e,
+                root.display()
+            ),
+        },
+    }
+}
+
+/// Return `true` when the `Cargo.toml` at `path` contains `name = "crate_name"`.
+fn crate_name_matches(path: &Path, crate_name: &str) -> bool {
+    if !path.exists() {
+        return false;
+    }
+    std::fs::read_to_string(path)
+        .map(|s| s.contains(&format!("name = \"{crate_name}\"")))
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,5 +405,76 @@ mod tests {
         let caps = probe();
         let report = format_report(&caps);
         assert!(report.contains("Minibox Host Capabilities"));
+    }
+
+    // ----- workspace_root -----
+
+    #[test]
+    fn workspace_root_finds_minibox_workspace() {
+        // Start from this file's crate directory — workspace root is two levels up.
+        let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = workspace_root(&crate_dir).expect("should find workspace root from crate dir");
+        // The workspace Cargo.toml must contain [workspace].
+        let content = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert!(
+            content.contains("[workspace]"),
+            "root Cargo.toml must have [workspace]"
+        );
+    }
+
+    #[test]
+    fn workspace_root_returns_none_for_tmp() {
+        // /tmp has no Cargo.toml — should return None.
+        let result = workspace_root(std::path::Path::new("/tmp"));
+        assert!(result.is_none(), "expected None for /tmp, got {:?}", result);
+    }
+
+    // ----- workspace_crate_exists -----
+
+    #[test]
+    fn workspace_crate_exists_finds_minibox_core() {
+        let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = workspace_root(&crate_dir).expect("workspace root");
+        assert!(
+            workspace_crate_exists(&root, "minibox-core"),
+            "minibox-core should exist in workspace"
+        );
+    }
+
+    #[test]
+    fn workspace_crate_exists_returns_false_for_unknown() {
+        let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = workspace_root(&crate_dir).expect("workspace root");
+        assert!(
+            !workspace_crate_exists(&root, "this-crate-does-not-exist-xyz"),
+            "unknown crate should not be found"
+        );
+    }
+
+    // ----- command_runnable_from_workspace -----
+
+    #[test]
+    fn command_runnable_detects_cargo_version() {
+        let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = workspace_root(&crate_dir).expect("workspace root");
+        let result = command_runnable_from_workspace(&root, "cargo", &["--version"]);
+        assert!(result.success, "cargo --version should succeed");
+        assert!(
+            result.diagnostic.contains(root.to_str().unwrap()),
+            "diagnostic must include workspace root path"
+        );
+    }
+
+    #[test]
+    fn command_runnable_failure_includes_workspace_root() {
+        let crate_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = workspace_root(&crate_dir).expect("workspace root");
+        let result = command_runnable_from_workspace(&root, "this-binary-does-not-exist-xyz", &[]);
+        assert!(!result.success, "missing binary should not succeed");
+        assert!(
+            result.diagnostic.contains(root.to_str().unwrap()),
+            "failure diagnostic must include workspace root: {}",
+            result.diagnostic
+        );
     }
 }

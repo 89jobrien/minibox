@@ -11,6 +11,8 @@ use daemonbox::state::DaemonState;
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{DynImageRegistry, DynNetworkProvider};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -40,6 +42,10 @@ async fn handle_run_once(
         cpu_weight,
         ephemeral,
         None,
+        vec![],
+        false,
+        vec![],
+        None,
         state,
         deps,
         tx,
@@ -48,22 +54,74 @@ async fn handle_run_once(
     rx.recv().await.expect("handler sent no response")
 }
 
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
 fn make_deps(
-    registry: MockRegistry,
+    registry: Arc<MockRegistry>,
     filesystem: MockFilesystem,
     resource_limiter: MockLimiter,
     runtime: MockRuntime,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
+    use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(registry),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(filesystem),
-        resource_limiter: Arc::new(resource_limiter),
-        runtime: Arc::new(runtime),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: tmp.path().join("containers"),
-        run_containers_base: tmp.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                registry as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(filesystem),
+            resource_limiter: Arc::new(resource_limiter),
+            runtime: Arc::new(runtime),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers"),
+            run_containers_base: tmp.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -78,14 +136,58 @@ fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
 
 #[tokio::test]
 async fn test_run_with_all_success_adapters() {
+    use minibox_core::domain::DynImageRegistry;
+
     let tmp = TempDir::new().unwrap();
-    let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
-        MockFilesystem::new(),
-        MockLimiter::new(),
-        MockRuntime::new(),
-        &tmp,
-    );
+    // Keep an Arc to the mock registry so we can inspect pull_count() after the run.
+    let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
+
+    // Rebuild deps with the Arc we're holding so pull_count is observable.
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+    let deps = {
+        use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+        use minibox_core::adapters::HostnameRegistryRouter;
+        Arc::new(daemonbox::handler::HandlerDependencies {
+            image: ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    mock_registry.clone() as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc),
+                image_store,
+            },
+            lifecycle: LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+        })
+    };
     let state = make_state(&tmp);
 
     let response = handle_run_once(
@@ -113,12 +215,7 @@ async fn test_run_with_all_success_adapters() {
     }
 
     // Image was pre-cached, so no pull should have been issued
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
-    assert_eq!(registry.pull_count(), 0);
+    assert_eq!(mock_registry.pull_count(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +227,7 @@ async fn test_run_with_registry_pull_failure() {
     let tmp = TempDir::new().unwrap();
     // Registry has no cached image AND will fail on pull — handler must propagate the error.
     let deps = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -169,7 +266,7 @@ async fn test_run_with_registry_pull_failure() {
 async fn test_run_with_filesystem_setup_failure() {
     let tmp = TempDir::new().unwrap();
     let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+        Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new().with_setup_failure(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -208,7 +305,7 @@ async fn test_run_with_filesystem_setup_failure() {
 async fn test_run_with_limiter_create_failure() {
     let tmp = TempDir::new().unwrap();
     let deps = make_deps(
-        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+        Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new(),
         MockLimiter::new().with_create_failure(),
         MockRuntime::new(),
@@ -249,7 +346,7 @@ async fn test_list_works_with_failing_adapters() {
     // All adapters configured to fail — list should still return an empty list
     // because it only touches DaemonState, not any infrastructure adapter.
     let _deps = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new().with_setup_failure(),
         MockLimiter::new().with_create_failure(),
         MockRuntime::new().with_spawn_failure(),
@@ -277,7 +374,7 @@ async fn test_stop_unknown_container_returns_error() {
     let state = make_state(&tmp);
 
     let deps = make_deps(
-        MockRegistry::new(),
+        Arc::new(MockRegistry::new()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),
@@ -308,13 +405,55 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     let tmp = TempDir::new().unwrap();
 
     // First request: registry succeeds (image not cached, pulled on demand).
-    let deps_ok = make_deps(
-        MockRegistry::new(), // no cached image, but pull succeeds
-        MockFilesystem::new(),
-        MockLimiter::new(),
-        MockRuntime::new(),
-        &tmp,
-    );
+    // Hold an Arc to the registry so we can inspect pull_count() after the run.
+    let mock_registry_ok = Arc::new(MockRegistry::new());
+    let deps_ok = {
+        use daemonbox::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
+        use minibox_core::adapters::HostnameRegistryRouter;
+        use minibox_core::domain::DynImageRegistry;
+
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+        Arc::new(daemonbox::handler::HandlerDependencies {
+            image: ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    mock_registry_ok.clone() as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc),
+                image_store,
+            },
+            lifecycle: LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+        })
+    };
     let state = make_state(&tmp);
 
     let ok_response = handle_run_once(
@@ -334,13 +473,8 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         "expected ContainerCreated for success deps, got {ok_response:?}"
     );
 
-    let registry_ok = deps_ok
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
     assert_eq!(
-        registry_ok.pull_count(),
+        mock_registry_ok.pull_count(),
         1,
         "pull should have been called once"
     );
@@ -348,7 +482,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     // Second request: registry fails on pull — completely separate deps.
     let tmp2 = TempDir::new().unwrap();
     let deps_fail = make_deps(
-        MockRegistry::new().with_pull_failure(),
+        Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),
         MockLimiter::new(),
         MockRuntime::new(),

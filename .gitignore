@@ -4,47 +4,55 @@
 !CLAUDE.md
 !HANDOFF.md
 !CHANGELOG.md
-!docs/STANDUP.md
-!docs/TESTING.md
-!docs/SECURITY.md
-!docs/PRERELEASE_CHANGELOG.md
-!docs/CODEBASE_ANALYSIS.md
-!docs/vps-usage.md
-!docs/cgroup-findings.md
-!docs/minibox-orch-design.md
-!docs/minibox-orch-handoff.md
+!docs/STATE_MODEL.md
+!docs/SOCKET_PATHS.md
 !docs/handoff-*.md
+!docs/conformance.md
+!docs/FEATURE_MATRIX.md
+!docs/STABILITY_CHECKLIST.md
 !docs/plans/*.md
-!docs/plans/
 !docs/superpowers/**/*.md
-!docs/superpowers/
-!docs/diagrams/*.md
+!docs/minibox-agent-design.md
+!docs/parallel-layer-pulls-design.md
+!docs/dagu-integration.md
 !docs/diagrams/
 !docs/archive/*.md
 !docs/archive/
+*.csv
+fuzz/*
+!fuzz/fuzz_targets/
 
 # Claude Code local configuration
 .claude/
 .worktrees/
 .superpowers/
+.remember/
+.cargo-ai/*
+!.cargo-ai/*.json
 
 # Go build artifacts (agentbox)
-agentbox/agentbox
-agentbox/mbx-commit-msg
+agentbox/bin/
 
 # Rust build artifacts
 /target/
 **/*.rs.bk
 *.pdb
+*.rlib
+rust_out
+rust_out.*
+repro.rs
 
 # Cargo
-Cargo.lock is committed for binary projects
+# Cargo.lock is committed for binary projects
 # Remove the line below if this becomes a library
 # Cargo.lock
 
 # Runtime directories (daemon creates these)
 /var/lib/minibox/
 /run/minibox/
+
+# uftrace trace data
+/traces/
 
 # Generated artifacts / recipes
 /recipe.json
@@ -53,12 +61,19 @@ Cargo.lock is committed for binary projects
 /profile.json.gz
 /artifacts/
 
-# Benchmark output — track only the latest snapshot for devloop
+# Benchmark output — only the canonical snapshot is versioned.
+# Historical runs (bench.jsonl) are pushed to CI artifacts or external storage;
+# they must NOT accumulate in the repo (retention policy: CI artifact, 90 days).
 /bench/results/*.json
+/bench/results/*.jsonl
 /bench/results/*.txt
+/bench/results/*.html
 !/bench/results/latest.json
+# Timestamped result directories
+/bench/results/*/
 
-# Testing
+# Profiling
+/bench/profiles/
 *.profraw
 *.profdata
 
@@ -81,7 +96,7 @@ Thumbs.db
 .env.local
 *.log
 *.pid
-*.json
+
 
 # Documentation build
 /target/doc/
@@ -91,10 +106,19 @@ Thumbs.db
 *.orig
 .envrc
 
-# Python*.pyc
+# Python
+*.pyc
 *.pyo
 *.pyd
 __pycache__/
 *.venv/
 *.pytest_cache/
 .firecrawl/
+.ctx/
+!.ctx/HANDOFF.*.yaml
+!.ctx/HANDOFF.*.*.yaml
+!.ctx/handoff.*.config.toml.example
+.ctx/HANDOFF.state.yaml
+.ctx/HANDOFF.md
+.ctx/HANDOVER.md
+.tmp-dogfood/

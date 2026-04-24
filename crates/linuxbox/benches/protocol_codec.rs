@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use linuxbox::protocol::{
+use minibox::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
     encode_response,
 };
@@ -13,6 +13,11 @@ fn small_run_request() -> DaemonRequest {
         cpu_weight: None,
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
+        env: vec![],
+        name: None,
+        tty: false,
     }
 }
 
@@ -28,6 +33,11 @@ fn large_run_request() -> DaemonRequest {
         cpu_weight: Some(7500),
         ephemeral: false,
         network: None,
+        mounts: vec![],
+        privileged: false,
+        env: vec![],
+        name: None,
+        tty: false,
     }
 }
 
@@ -124,6 +134,7 @@ fn large_container_list_response() -> DaemonResponse {
 fn make_container_info(i: usize) -> ContainerInfo {
     ContainerInfo {
         id: format!("{:016x}", i),
+        name: None,
         image: format!("library/image-{}", i),
         command: format!("echo hello {}", i),
         state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),

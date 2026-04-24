@@ -21,15 +21,64 @@
 #![cfg(target_os = "linux")]
 
 use linuxbox::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NoopNetwork, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, NoopNetwork,
+    OverlayFilesystem,
 };
 use linuxbox::image::ImageStore;
 use linuxbox::protocol::DaemonResponse;
-use miniboxd::handler::{self, HandlerDependencies};
+use miniboxd::handler::{self, ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
+use tokio::sync::mpsc;
+
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
+async fn handle_run_once(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let (tx, mut rx) = mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    rx.recv().await.expect("handler sent no response")
+}
 
 /// Helper to create real infrastructure dependencies with temporary storage.
 fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
@@ -38,17 +87,30 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
     let image_store = ImageStore::new(&images_dir).expect("failed to create image store");
     let state = Arc::new(DaemonState::new(image_store, temp_dir.path()));
 
+    let docker_registry = Arc::new(
+        DockerHubRegistry::new(Arc::clone(&state.image_store)).expect("failed to create registry"),
+    );
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(
-            DockerHubRegistry::new(Arc::clone(&state.image_store))
-                .expect("failed to create registry"),
-        ),
+        registry: Arc::clone(&docker_registry) as _,
+        ghcr_registry: Arc::clone(&docker_registry) as _,
         filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
         resource_limiter: Arc::new(CgroupV2Limiter::new()),
         runtime: Arc::new(LinuxNamespaceRuntime::new()),
         network_provider: Arc::new(NoopNetwork::new()),
+        image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+        exec_runtime: None,
+        image_pusher: None,
+        commit_adapter: None,
+        image_builder: None,
+        event_sink: Arc::new(minibox_core::events::NoopEventSink),
+        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+        image_gc: Arc::new(NoopImageGc),
+        image_store: Arc::clone(&state.image_store),
+        policy: ContainerPolicy::default(),
+        pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
+        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
     });
 
     (deps, state, temp_dir)
@@ -156,13 +218,12 @@ async fn test_run_simple_container() {
     .await;
 
     // Run a simple echo command
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec!["/bin/echo".to_string(), "hello from container".to_string()],
         None,
         None,
-        false,
         state.clone(),
         deps,
     )
@@ -199,7 +260,7 @@ async fn test_run_container_with_resource_limits() {
     .await;
 
     // Run with strict resource limits
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec![
@@ -209,7 +270,6 @@ async fn test_run_container_with_resource_limits() {
         ],
         Some(128 * 1024 * 1024), // 128MB memory limit
         Some(250),               // CPU weight 250 (quarter of default)
-        false,
         state.clone(),
         deps,
     )
@@ -254,13 +314,12 @@ async fn test_container_removal_cleanup() {
     .await;
 
     // Create and run container
-    let response = handler::handle_run(
+    let response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec!["/bin/true".to_string()],
         None,
         None,
-        false,
         state.clone(),
         deps.clone(),
     )
@@ -275,7 +334,9 @@ async fn test_container_removal_cleanup() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Mark as stopped (normally done by reaper)
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .await;
 
     // Remove container
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
@@ -333,13 +394,13 @@ async fn test_overlay_filesystem_setup() {
         .expect("failed to setup rootfs");
 
     // Verify merged directory exists and contains expected files
-    assert!(rootfs.exists(), "rootfs should exist");
+    assert!(rootfs.merged_dir.exists(), "rootfs should exist");
     assert!(
-        rootfs.join("bin").exists(),
+        rootfs.merged_dir.join("bin").exists(),
         "bin directory should exist in rootfs"
     );
     assert!(
-        rootfs.join("etc").exists(),
+        rootfs.merged_dir.join("etc").exists(),
         "etc directory should exist in rootfs"
     );
 
@@ -375,7 +436,7 @@ async fn test_complete_container_lifecycle() {
     assert!(state.image_store.has_image("library/alpine", "latest"));
 
     // 3. Run container with resource limits
-    let run_response = handler::handle_run(
+    let run_response = handle_run_once(
         "alpine".to_string(),
         Some("latest".to_string()),
         vec![
@@ -385,7 +446,6 @@ async fn test_complete_container_lifecycle() {
         ],
         Some(256 * 1024 * 1024), // 256MB
         Some(500),               // CPU weight 500
-        false,
         state.clone(),
         deps.clone(),
     )
@@ -412,7 +472,9 @@ async fn test_complete_container_lifecycle() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // 6. Mark as stopped and remove
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .await;
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
 
@@ -448,7 +510,7 @@ async fn test_multiple_concurrent_containers() {
         let deps_clone = deps.clone();
 
         let task = tokio::spawn(async move {
-            handler::handle_run(
+            handle_run_once(
                 "alpine".to_string(),
                 Some("latest".to_string()),
                 vec![
@@ -458,7 +520,6 @@ async fn test_multiple_concurrent_containers() {
                 ],
                 Some(64 * 1024 * 1024), // 64MB per container
                 None,
-                false,
                 state_clone,
                 deps_clone,
             )
@@ -495,7 +556,9 @@ async fn test_multiple_concurrent_containers() {
     // Cleanup all containers
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
-        state.update_container_state(&id, "Stopped").await;
+        state
+            .update_container_state(&id, daemonbox::state::ContainerState::Stopped)
+            .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }
 }

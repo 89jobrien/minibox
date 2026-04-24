@@ -17,14 +17,14 @@ miniboxd starts
       │      │                                                 │
       │    MINIBOX_ADAPTER?                                    │
       │      ├── native (default) → namespaces + cgroups v2    │
-      │      ├── docker                                        │
       │      ├── gke              → proot + copy FS            │
       │      └── colima           → Colima/limactl delegate    │
+      │                             (available on Linux too)   │
       │                                                        │
       ├─── macOS ───────────────────────────────────────────── ┤
       │      │                                                 │
       │    macbox::preflight()                                 │
-      │      ├── MINIBOX_ADAPTER=vf  OR  VF available  ───────►│ Virtualization.framework
+      │      ├── MINIBOX_ADAPTER=vz  OR  VF available  ───────►│ Virtualization.framework
       │      ├── MINIBOX_ADAPTER=colima  OR  Colima running ──►│ Colima delegate
       │      └── neither ──────────────────────────────────── ►│ FATAL: no backend
       │                                                        │
@@ -48,10 +48,10 @@ flowchart TD
 
     linux_env -->|native / unset| native["Native\nnamespaces + overlay + cgroups v2"]
     linux_env -->|gke| gke["GKE\nproot + copy FS + no-op limiter"]
-    linux_env -->|colima| colima_linux["Colima\nlimactl delegate"]
+    linux_env -->|colima| colima_linux["Colima\nlimactl delegate\n(also valid on Linux)"]
 
     mac_pre --> mac_env{MINIBOX_ADAPTER set?}
-    mac_env -->|vf| vf["Virtualization.framework\nshared Linux VM"]
+    mac_env -->|vz| vf["Virtualization.framework\nshared Linux VM"]
     mac_env -->|colima| colima_mac["Colima\nlimactl delegate"]
     mac_env -->|unset| mac_probe{VF available?}
     mac_probe -->|yes| vf

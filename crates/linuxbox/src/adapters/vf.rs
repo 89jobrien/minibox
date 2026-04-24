@@ -17,8 +17,8 @@ use async_trait::async_trait;
 use minibox_core::{
     adapt,
     domain::{
-        ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
-        ResourceConfig, ResourceLimiter, RuntimeCapabilities, SpawnResult,
+        ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, ResourceConfig,
+        ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
     },
 };
 use std::path::{Path, PathBuf};
@@ -76,19 +76,25 @@ impl VfFilesystem {
     }
 }
 
-impl FilesystemProvider for VfFilesystem {
+impl minibox_core::domain::RootfsSetup for VfFilesystem {
     /// Not yet implemented — always returns an error.
-    fn setup_rootfs(&self, _image_layers: &[PathBuf], _container_dir: &Path) -> Result<PathBuf> {
-        anyhow::bail!("VfFilesystem: not yet implemented (Phase 2)")
-    }
-
-    /// Not yet implemented — always returns an error.
-    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
+    fn setup_rootfs(
+        &self,
+        _image_layers: &[PathBuf],
+        _container_dir: &Path,
+    ) -> Result<RootfsLayout> {
         anyhow::bail!("VfFilesystem: not yet implemented (Phase 2)")
     }
 
     /// Not yet implemented — always returns an error.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
+        anyhow::bail!("VfFilesystem: not yet implemented (Phase 2)")
+    }
+}
+
+impl minibox_core::domain::ChildInit for VfFilesystem {
+    /// Not yet implemented — always returns an error.
+    fn pivot_root(&self, _new_root: &Path) -> Result<()> {
         anyhow::bail!("VfFilesystem: not yet implemented (Phase 2)")
     }
 }

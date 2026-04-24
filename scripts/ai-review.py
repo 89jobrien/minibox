@@ -18,9 +18,13 @@ from pathlib import Path
 
 import sys as _sys
 import os as _os
+
+# Insert scripts/ dir so agent_log can be imported as a sibling module.
 _sys.path.insert(0, _os.path.dirname(__file__))
 import agent_log
 
+# Strip env vars that interfere with the SDK or contain unresolved op:// refs.
+# Done at startup so all subsequent imports see a clean environment.
 _os.environ.pop("CLAUDECODE", None)
 if _os.environ.get("ANTHROPIC_API_KEY", "").startswith("op://"):
     _os.environ.pop("ANTHROPIC_API_KEY")
@@ -29,10 +33,32 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 
 
 def get_diff(base: str) -> str:
-    result = subprocess.run(["git", "diff", f"{base}...HEAD"], capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(
+            ["git", "diff", f"{base}...HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(
+            f"error: git diff failed (base ref '{base}' may not exist locally).\n"
+            f"  stderr: {e.stderr.strip()}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if result.stdout.strip():
         return result.stdout
-    result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, check=True)
+
+    try:
+        result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(
+            f"error: git diff HEAD failed.\n  stderr: {e.stderr.strip()}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return result.stdout
 
 
@@ -69,20 +95,25 @@ If no issues, say so clearly.
     run_id = agent_log.log_start("ai-review", {"base": args.base})
     start = time.monotonic()
     output_parts: list[str] = []
+    full_output: str = ""
 
-    async for message in query(
-        prompt=prompt,
-        options=ClaudeAgentOptions(
-            allowed_tools=["Read", "Glob", "Grep"],
-            permission_mode="default",
-        ),
-    ):
-        if hasattr(message, "result"):
-            print(message.result)
-            output_parts.append(message.result)
+    try:
+        async for message in query(
+            prompt=prompt,
+            options=ClaudeAgentOptions(
+                allowed_tools=["Read", "Glob", "Grep"],
+                permission_mode="default",
+            ),
+        ):
+            if hasattr(message, "result"):
+                print(message.result)
+                output_parts.append(message.result)
+    finally:
+        # Always emit telemetry, even if the query is interrupted or raises.
+        elapsed = time.monotonic() - start
+        full_output = "\n".join(output_parts)
+        agent_log.log_complete(run_id, "ai-review", {"base": args.base}, full_output, elapsed)
 
-    full_output = "\n".join(output_parts)
-    agent_log.log_complete(run_id, "ai-review", {"base": args.base}, full_output, time.monotonic() - start)
     log_path = agent_log.save_commit_log(sha, "ai-review", full_output, {
         "base": args.base,
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),

@@ -4,13 +4,54 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]
+
 [dependencies]
 daemonbox = { workspace = true }
 minibox-core = { workspace = true }
 linuxbox = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
+serde_json = { workspace = true }
+libc = "0.2"
+which = "6"
+uuid = { workspace = true }
+block2 = { version = "0.6", optional = true }
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true, features = ["NSString", "NSURL", "NSArray", "NSFileHandle"] }
+objc2-virtualization = { version = "0.3", optional = true, features = [
+    "VZBootLoader",
+    "VZDirectoryShare",
+    "VZDirectorySharingDeviceConfiguration",
+    "VZSerialPortAttachment",
+    "VZSerialPortConfiguration",
+    "VZSharedDirectory",
+    "VZSocketDevice",
+    "VZSocketDeviceConfiguration",
+    "VZVirtualMachine",
+    "VZVirtualMachineConfiguration",
+    "VZVirtioSocketConnection",
+    "VZVirtioSocketDevice",
+    "VZVirtioSocketDeviceConfiguration",
+] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+base64 = { workspace = true }
+hostname = "0.4"
+
+[[test]]
+name = "vz_isolation_tests"
+harness = false
+
+[[test]]
+name = "krun_conformance_tests"
+
+[[test]]
+name = "krun_adapter_conformance"

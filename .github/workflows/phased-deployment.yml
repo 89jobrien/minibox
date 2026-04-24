@@ -1,0 +1,121 @@
+name: Phased Deployment Pipeline
+
+on:
+  push:
+    branches: [main, next, stable]
+  workflow_dispatch:
+    inputs:
+      promote_to:
+        description: 'Promote next → stable'
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - stable
+
+permissions:
+  contents: write
+  issues: write
+  actions: read
+
+jobs:
+  auto-promote-main:
+    name: Auto-promote main → next
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Wait for Quality CI
+        run: |
+          SHA="${{ github.sha }}"
+          echo "Waiting for CI on ${SHA}..."
+          for i in $(seq 1 30); do
+            STATUS=$(gh run list --branch main --workflow ci.yml --commit "$SHA" --limit 1 --json conclusion --jq '.[0].conclusion // empty')
+            if [ "$STATUS" = "success" ]; then
+              echo "CI passed. Proceeding with promotion."
+              exit 0
+            elif [ "$STATUS" = "failure" ]; then
+              echo "CI failed. Skipping promotion."
+              exit 1
+            fi
+            echo "Attempt $i: CI status='${STATUS:-pending}', waiting 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for CI."
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      - name: Fast-forward next to main
+        id: promote
+        run: |
+          git fetch origin next
+          git checkout next
+          git merge --ff-only origin/main || echo "FF_FAILED=true" >> "$GITHUB_ENV"
+      - name: Push next
+        if: env.FF_FAILED != 'true'
+        run: git push origin next
+      - name: Open issue on ff failure
+        if: env.FF_FAILED == 'true'
+        run: |
+          gh issue create \
+            --title "Auto-promote main → next failed (ff-only)" \
+            --body "Fast-forward merge of main into next failed. Manual intervention needed. SHA: ${{ github.sha }}" \
+            --label "ci"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manual-promote-next:
+    name: Manual promote next → stable
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      - name: Promote next → stable
+        run: |
+          git fetch origin
+          git checkout stable
+          git merge --ff-only origin/next
+          git push origin stable
+
+  hotfix-backmerge:
+    name: Hotfix backmerge
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/stable' && github.event_name == 'push' && contains(github.event.head_commit.message, '[hotfix]')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      - name: Backmerge stable → next → main
+        id: backmerge
+        run: |
+          git fetch origin
+          git checkout next && git merge origin/stable && git push origin next || echo "CONFLICT=next" >> "$GITHUB_ENV"
+          git checkout main && git merge origin/next && git push origin main || echo "CONFLICT=main" >> "$GITHUB_ENV"
+      - name: Open issue on conflict
+        if: env.CONFLICT != ''
+        run: |
+          gh issue create \
+            --title "Hotfix backmerge conflict at ${{ env.CONFLICT }}" \
+            --body "Hotfix backmerge from stable failed at ${{ env.CONFLICT }}. Manual merge needed. SHA: ${{ github.sha }}" \
+            --label "ci"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

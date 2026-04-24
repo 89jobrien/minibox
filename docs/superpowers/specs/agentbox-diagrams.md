@@ -8,95 +8,99 @@
 
 ## 1. System Overview
 
+Shows the four-layer module structure of the `agentbox/` Go module: Binary (CLI entry points), Orchestration (council/meta-agent logic + tool adapters + SDK runner), Infrastructure (LLM provider, git context, JSONL output, pub/sub broker), and Domain (shared interfaces and types). Each layer depends only on layers below it; the Domain layer has no outward dependencies.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          agentbox/ Go module                           │
-│                                                                        │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                        Binary Layer                                │ │
-│  │  ┌──────────────────────┐  ┌───────────────────────────────────┐  │ │
-│  │  │   cmd/agentbox/      │  │   cmd/mbx-commit-msg/             │  │ │
-│  │  │   • council           │  │   • standalone commit-msg tool    │  │ │
-│  │  │   • meta-agent        │  │                                   │  │ │
-│  │  └──────────┬───────────┘  └──────────────┬────────────────────┘  │ │
-│  └─────────────┼─────────────────────────────┼───────────────────────┘ │
-│                │                             │                         │
-│  ┌─────────────▼─────────────────────────────▼───────────────────────┐ │
-│  │                     Orchestration Layer                            │ │
+┌───────────────────────────────────────────────────────────────────────┐
+│                          agentbox/ Go module                          │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                        Binary Layer                              │ │
+│  │  ┌───────────────────────┐  ┌─────────────────────────────────┐  │ │
+│  │  │   cmd/agentbox/       │  │   cmd/minibox-commit-msg/           │  │ │
+│  │  │   • council           │  │   • standalone commit-msg tool  │  │ │
+│  │  │   • meta-agent        │  │                                 │  │ │
+│  │  └──────────┬────────────┘  └──────────────┬──────────────────┘  │ │
+│  └─────────────┼──────────────────────────────┼─────────────────────┘ │
+│                │                              │                       │
+│  ┌─────────────▼──────────────────────────────▼─────────────────────┐ │
+│  │                     Orchestration Layer                          │ │
 │  │  ┌─────────────────────┐  ┌──────────────────┐  ┌──────────────┐ │ │
-│  │  │ orchestrator/       │  │ tools/            │  │ agent/       │ │ │
-│  │  │ • Council           │  │ • CommitMsg       │  │ • SDKRunner  │ │ │
-│  │  │ • MetaAgent         │  │                   │  │              │ │ │
-│  │  └────────┬────────────┘  └────────┬─────────┘  └──────┬───────┘ │ │
-│  └───────────┼────────────────────────┼────────────────────┼─────────┘ │
-│              │                        │                    │           │
-│  ┌───────────▼────────────────────────▼────────────────────▼─────────┐ │
-│  │                     Infrastructure Layer                          │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │ │
-│  │  │ llm/     │  │ context/ │  │ output/  │  │ pubsub/          │ │ │
-│  │  │ Anthropic│  │ Git CLI  │  │ JSONL    │  │ ChannelBroker    │ │ │
-│  │  │ Chain    │  │ Rules    │  │ Report   │  │ (Go channels)    │ │ │
-│  │  │ Retry    │  │ Diff     │  │ Dual     │  │                  │ │ │
-│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘ │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-│                                                                        │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │                        Domain Layer                                │ │
-│  │  domain/types.go      Message, AgentConfig, AgentResult, AgentRun │ │
-│  │  domain/interfaces.go AgentRunner, LlmProvider, MessageBroker,    │ │
-│  │                       ContextProvider, ResultWriter               │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+│  │  │ orchestrator/       │  │ tools/           │  │ agent/       │ │ │
+│  │  │ • Council           │  │ • CommitMsg      │  │ • SDKRunner  │ │ │
+│  │  │ • MetaAgent         │  │                  │  │              │ │ │
+│  │  └────────┬────────────┘  └────────┬─────────┘  └───────┬──────┘ │ │
+│  └───────────┼────────────────────────┼────────────────────┼────────┘ │
+│              │                        │                    │          │
+│  ┌───────────▼────────────────────────▼────────────────────▼────────┐ │
+│  │                     Infrastructure Layer                         │ │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │ │
+│  │  │ llm/     │  │ context/ │  │ output/  │  │ pubsub/          │  │ │
+│  │  │ Anthropic│  │ Git CLI  │  │ JSONL    │  │ ChannelBroker    │  │ │
+│  │  │ Chain    │  │ Rules    │  │ Report   │  │ (Go channels)    │  │ │
+│  │  │ Retry    │  │ Diff     │  │ Dual     │  │                  │  │ │
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘  │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │                        Domain Layer                              │ │
+│  │  domain/types.go     Message, AgentConfig, AgentResult, AgentRun │ │
+│  │  domain/interfaces.go AgentRunner, LlmProvider, MessageBroker,   │ │
+│  │                       ContextProvider, ResultWriter              │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 2. Hexagonal Architecture — Ports and Adapters
 
+Shows the ports-and-adapters (hexagonal) design. The Domain Core defines five Go interfaces (ports). Driving adapters on the left (`cmd/agentbox`, `cmd/minibox-commit-msg`, future HTTP/gRPC) invoke the core. Driven adapters on the right implement each port: `ClaudeSDKRunner` for agent execution, `AnthropicProvider` for LLM calls, `ChannelBroker` for pub/sub, `GitProvider` for branch context, and `DualWriter` for JSONL + Markdown output. Swapping any adapter requires no changes to the domain core.
+
 ```
-                    ┌─────────────────────────────────┐
+                    ┌──────────────────────────────────┐
                     │         Domain Ports             │
                     │       (Go interfaces)            │
-                    └──────────┬──────────────────────┘
+                    └──────────┬───────────────────────┘
                                │
          ┌─────────────────────┼──────────────────────┐
          │                     │                      │
-    ┌────▼─────┐         ┌─────▼──────┐         ┌────▼─────────┐
+    ┌────▼──────┐         ┌────▼───────┐         ┌────▼─────────┐
     │  Driving  │         │  Driving   │         │   Driving    │
     │  Adapter  │         │  Adapter   │         │   Adapter    │
     │           │         │            │         │              │
     │ cmd/      │         │ cmd/       │         │  (future)    │
-    │ agentbox  │         │ mbx-       │         │  HTTP API    │
+    │ agentbox  │         │ minibox-       │         │  HTTP API    │
     │           │         │ commit-msg │         │  gRPC        │
-    └────┬─────┘         └─────┬──────┘         └──────────────┘
-         │                     │
-         └──────────┬──────────┘
-                    │
-              ┌─────▼─────────────────────────────────────────────┐
+    └────┬──────┘         └─────┬──────┘         └──────────────┘
+         │                      │
+         └───────────┬──────────┘
+                     │
+              ┌──────▼─────────────────────────────────────────────┐
               │              Domain Core                           │
               │                                                    │
-              │  AgentRunner ─── Run(ctx, AgentConfig) → Result   │
-              │  LlmProvider ── Complete(ctx, Request) → Response │
-              │  MessageBroker ─ Publish / Subscribe / Close      │
-              │  ContextProvider ─ GitLog / Diff / BranchContext  │
+              │  AgentRunner ─── Run(ctx, AgentConfig) → Result    │
+              │  LlmProvider ── Complete(ctx, Request) → Response  │
+              │  MessageBroker ─ Publish / Subscribe / Close       │
+              │  ContextProvider ─ GitLog / Diff / BranchContext   │
               │  ResultWriter ── WriteRun / WriteReport            │
               └─────┬──────────────────────────────────────────────┘
                     │
          ┌──────────┼──────────┬──────────────┬────────────┐
          │          │          │              │            │
-    ┌────▼────┐ ┌───▼────┐ ┌──▼──────┐ ┌────▼────┐ ┌─────▼────┐
-    │ Driven  │ │ Driven │ │ Driven  │ │ Driven  │ │  Driven  │
-    │ Adapter │ │ Adapter│ │ Adapter │ │ Adapter │ │  Adapter │
-    │         │ │        │ │         │ │         │ │          │
-    │ Claude  │ │Anthropic│ │ Channel│ │  Git    │ │   Dual   │
-    │ SDK     │ │  SDK   │ │ Broker │ │ Provider│ │  Writer  │
-    │ Runner  │ │  +     │ │        │ │  (CLI)  │ │ JSONL +  │
-    │         │ │ Chain  │ │ (future│ │         │ │ Markdown │
-    │         │ │ +Retry │ │  NATS) │ │         │ │          │
-    └────┬────┘ └───┬────┘ └──┬─────┘ └────┬────┘ └─────┬────┘
+    ┌────▼────┐ ┌───▼─────┐ ┌──▼──────┐ ┌─────▼───┐ ┌──────▼───┐
+    │ Driven  │ │ Driven  │ │ Driven  │ │ Driven  │ │  Driven  │
+    │ Adapter │ │ Adapter │ │ Adapter │ │ Adapter │ │  Adapter │
+    │         │ │         │ │         │ │         │ │          │
+    │ Claude  │ │Anthropic│ │ Channel │ │  Git    │ │   Dual   │
+    │ SDK     │ │  SDK    │ │ Broker  │ │ Provider│ │  Writer  │
+    │ Runner  │ │  +      │ │         │ │  (CLI)  │ │ JSONL +  │
+    │         │ │ Chain   │ │ (future │ │         │ │ Markdown │
+    │         │ │ +Retry  │ │  NATS)  │ │         │ │          │
+    └────┬────┘ └───┬─────┘ └─┬───────┘ └───┬─────┘ └────┬─────┘
          │          │         │             │            │
          ▼          ▼         ▼             ▼            ▼
-      claude      Anthropic  Go          git CLI     ~/.mbx/
+      claude      Anthropic  Go          git CLI     ~/.minibox/
       CLI         Messages   channels                ├─ agent-runs.jsonl
       subprocess  API                                └─ ai-logs/*.md
 ```
@@ -104,6 +108,8 @@
 ---
 
 ## 3. Council Data Flow
+
+End-to-end sequence for `agentbox council`. After parsing flags, three adapters are wired in parallel: SDK runner, git context provider, and output writer. `BranchContext()` runs `git log`/`git diff` to build the review payload. Three reviewer roles (Strict Critic, Creative Explorer, General Analyst) each receive the same branch context and run sequentially as independent SDK queries with read-only tool access. Their scored outputs feed a final `RunSynthesis` call that produces a weighted verdict, which is written to both the JSONL telemetry log and a per-SHA Markdown report.
 
 ```
                           User: agentbox council --base main --mode core
@@ -117,46 +123,46 @@
                     ┌─────────────────────┼───────────────────────┐
                     │                     │                       │
                     ▼                     ▼                       ▼
-          ┌─────────────────┐  ┌──────────────────┐   ┌──────────────────┐
+          ┌─────────────────┐  ┌───────────────────┐   ┌──────────────────┐
           │ ClaudeSDKRunner │  │  GitProvider      │   │   DualWriter     │
           │ (AgentRunner)   │  │  (ContextProvider)│   │  (ResultWriter)  │
-          └─────────────────┘  └────────┬─────────┘   └──────────────────┘
+          └─────────────────┘  └────────┬──────────┘   └──────────────────┘
                                         │
                                         ▼
-                              ┌─────────────────────┐
+                              ┌──────────────────────┐
                               │  BranchContext()     │
                               │  git log main...HEAD │
                               │  git diff main...HEAD│
                               │  git rev-parse HEAD  │
-                              └─────────┬───────────┘
+                              └─────────┬────────────┘
                                         │
                            ┌────────────▼────────────┐
-                           │   WriteRun("running")   │──→ ~/.mbx/agent-runs.jsonl
+                           │   WriteRun("running")   │──→ ~/.minibox/agent-runs.jsonl
                            └────────────┬────────────┘
                                         │
                                         ▼
               ┌──────────────────────────────────────────────────┐
               │              RunRoles (sequential)               │
               │                                                  │
-              │   ┌──────────────┐  ┌──────────────────────┐    │
+              │   ┌──────────────┐  ┌───────────────────────┐    │
               │   │ Strict       │  │ role.Prompt +         │    │
               │   │ Critic       │─▶│ "Analyse this branch" │───▶│ SDK
               │   │              │  │ + branchContext       │    │ Query
-              │   └──────────────┘  └──────────────────────┘    │
+              │   └──────────────┘  └───────────────────────┘    │
               │                                                  │
-              │   ┌──────────────┐  ┌──────────────────────┐    │
+              │   ┌──────────────┐  ┌───────────────────────┐    │
               │   │ Creative     │  │ role.Prompt +         │    │
               │   │ Explorer     │─▶│ "Analyse this branch" │───▶│ SDK
               │   │              │  │ + branchContext       │    │ Query
-              │   └──────────────┘  └──────────────────────┘    │
+              │   └──────────────┘  └───────────────────────┘    │
               │                                                  │
-              │   ┌──────────────┐  ┌──────────────────────┐    │
+              │   ┌──────────────┐  ┌───────────────────────┐    │
               │   │ General      │  │ role.Prompt +         │    │
               │   │ Analyst      │─▶│ "Analyse this branch" │───▶│ SDK
               │   │              │  │ + branchContext       │    │ Query
-              │   └──────────────┘  └──────────────────────┘    │
+              │   └──────────────┘  └───────────────────────┘    │
               │                                                  │
-              │   Tools: ["Read", "Glob", "Grep"] (read-only)   │
+              │   Tools: ["Read", "Glob", "Grep"] (read-only)    │
               └──────────────────────┬───────────────────────────┘
                                      │
                                      ▼
@@ -170,13 +176,13 @@
               ┌──────────────────────────────────────────────────┐
               │              RunSynthesis                        │
               │                                                  │
-              │  SynthesisPrompt(roleOutputs, branchCtx)        │
+              │  SynthesisPrompt(roleOutputs, branchCtx)         │
               │  ┌────────────────────────────────────────────┐  │
               │  │ "You are synthesising a multi-role council │  │
               │  │  code review into a final verdict."        │  │
               │  │                                            │  │
               │  │  Required sections:                        │  │
-              │  │  • Health Scores (weighted avg, 1.5× critic│) │
+              │  │  • Health Scores (weighted 1.5× critic)    │  │
               │  │  • Areas of Consensus                      │  │
               │  │  • Areas of Tension (dialectic format)     │  │
               │  │  • Balanced Recommendations (top 3–5)      │  │
@@ -185,8 +191,8 @@
               └──────────────────────┬───────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(council)   │──→ ~/.mbx/ai-logs/{sha}-council-core.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(council)   │──→ ~/.minibox/ai-logs/{sha}-council-core.md
                         └─────────────────────────┘
 ```
 
@@ -194,63 +200,65 @@
 
 ## 4. Meta-Agent Data Flow
 
+Three-phase pipeline for `agentbox meta-agent`. Phase 1 (Design): a designer SDK query reads the repo and outputs a JSON array of 2–5 specialized sub-agents, each with a distinct role, prompt, and tool list; malformed JSON falls back to a single analyst. Phase 2 (Parallel Execution): each sub-agent runs in its own goroutine with an independent SDK query; results are collected via a channel and `WaitGroup`. Phase 3 (Synthesis): all sub-agent outputs are merged by a final SDK call that produces a deduplicated, ranked report, then written to disk.
+
 ```
           User: agentbox meta-agent "Find memory leaks in async handlers"
                                      │
                                      ▼
   ┌──────────────────────────────────────────────────────────────────────┐
-  │ PHASE 1: DESIGN                                                     │
+  │ PHASE 1: DESIGN                                                      │
   │                                                                      │
-  │   ┌──────────────────────────────────────────────────────────────┐  │
-  │   │ DesignerPrompt(task, repoContext)                            │  │
-  │   │                                                              │  │
-  │   │ "You are a meta-agent designer. Given a task, repo context, │  │
-  │   │  design 2–5 parallel agents with distinct concerns.          │  │
-  │   │  Output ONLY valid JSON array."                              │  │
-  │   │                                                              │  │
-  │   │ → SDK Query (tools: Read, Glob, Grep)                       │  │
-  │   └──────────────────────────┬───────────────────────────────────┘  │
-  │                              │                                      │
-  │                              ▼                                      │
-  │   ┌──────────────────────────────────────────────────────────────┐  │
-  │   │ ParseAgentPlan(json_output)                                  │  │
-  │   │                                                              │  │
-  │   │ [                                                            │  │
-  │   │   {"name":"async-tracer",  "role":"Trace async lifetimes",  │  │
-  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]},          │  │
-  │   │   {"name":"cgroup-checker","role":"Check resource limits",  │  │
-  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]},          │  │
-  │   │   {"name":"test-scanner", "role":"Find missing tests",      │  │
-  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]}           │  │
-  │   │ ]                                                            │  │
-  │   │                                                              │  │
-  │   │ Fallback: if parse fails → single "analyst" agent           │  │
-  │   └──────────────────────────┬───────────────────────────────────┘  │
-  └──────────────────────────────┼──────────────────────────────────────┘
+  │   ┌───────────────────────────────────────────────────────────────┐  │
+  │   │ DesignerPrompt(task, repoContext)                             │  │
+  │   │                                                               │  │
+  │   │ "You are a meta-agent designer. Given a task, repo context,   │  │
+  │   │  design 2–5 parallel agents with distinct concerns.           │  │
+  │   │  Output ONLY valid JSON array."                               │  │
+  │   │                                                               │  │
+  │   │ → SDK Query (tools: Read, Glob, Grep)                         │  │
+  │   └──────────────────────────┬────────────────────────────────────┘  │
+  │                              │                                       │
+  │                              ▼                                       │
+  │   ┌───────────────────────────────────────────────────────────────┐  │
+  │   │ ParseAgentPlan(json_output)                                   │  │
+  │   │                                                               │  │
+  │   │ [                                                             │  │
+  │   │   {"name":"async-tracer",  "role":"Trace async lifetimes",    │  │
+  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]},           │  │
+  │   │   {"name":"cgroup-checker","role":"Check resource limits",    │  │
+  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]},           │  │
+  │   │   {"name":"test-scanner", "role":"Find missing tests",        │  │
+  │   │    "prompt":"...", "tools":["Read","Glob","Grep"]}            │  │
+  │   │ ]                                                             │  │
+  │   │                                                               │  │
+  │   │ Fallback: if parse fails → single "analyst" agent             │  │
+  │   └──────────────────────────┬────────────────────────────────────┘  │
+  └──────────────────────────────┼───────────────────────────────────────┘
                                  │
                                  ▼
   ┌──────────────────────────────────────────────────────────────────────┐
-  │ PHASE 2: PARALLEL EXECUTION                                         │
+  │ PHASE 2: PARALLEL EXECUTION                                          │
   │                                                                      │
-  │   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
-  │   │   goroutine 1    │  │   goroutine 2    │  │   goroutine 3    │ │
-  │   │                  │  │                  │  │                  │ │
-  │   │  async-tracer    │  │  cgroup-checker  │  │  test-scanner   │ │
-  │   │  ┌────────────┐  │  │  ┌────────────┐  │  │  ┌────────────┐  │ │
-  │   │  │ SDK Query  │  │  │  │ SDK Query  │  │  │  │ SDK Query  │  │ │
-  │   │  │ Read,Glob  │  │  │  │ Read,Glob  │  │  │  │ Read,Glob  │  │ │
-  │   │  │ Grep       │  │  │  │ Grep       │  │  │  │ Grep       │  │ │
-  │   │  └─────┬──────┘  │  │  └─────┬──────┘  │  │  └─────┬──────┘  │ │
-  │   │        │         │  │        │         │  │        │         │ │
-  │   └────────┼─────────┘  └────────┼─────────┘  └────────┼─────────┘ │
-  │            │                     │                      │           │
-  │            └─────────────────────┼──────────────────────┘           │
-  │                                  │                                  │
-  │                       ┌──────────▼──────────┐                      │
-  │                       │  results channel    │                      │
-  │                       │  + WaitGroup.Wait() │                      │
-  │                       └──────────┬──────────┘                      │
-  └──────────────────────────────────┼──────────────────────────────────┘
+  │   ┌──────────────────┐  ┌──────────────────┐  ┌───────────────────┐  │
+  │   │   goroutine 1    │  │   goroutine 2    │  │   goroutine 3     │  │
+  │   │                  │  │                  │  │                   │  │
+  │   │  async-tracer    │  │  cgroup-checker  │  │  test-scanner     │  │
+  │   │  ┌────────────┐  │  │  ┌────────────┐  │  │  ┌────────────┐   │  │
+  │   │  │ SDK Query  │  │  │  │ SDK Query  │  │  │  │ SDK Query  │   │  │
+  │   │  │ Read,Glob  │  │  │  │ Read,Glob  │  │  │  │ Read,Glob  │   │  │
+  │   │  │ Grep       │  │  │  │ Grep       │  │  │  │ Grep       │   │  │
+  │   │  └─────┬──────┘  │  │  └─────┬──────┘  │  │  └─────┬──────┘   │  │
+  │   │        │         │  │        │         │  │        │          │  │
+  │   └────────┼─────────┘  └────────┼─────────┘  └────────┼──────────┘  │
+  │            │                     │                     │             │
+  │            └─────────────────────┼─────────────────────┘             │
+  │                                  │                                   │
+  │                       ┌──────────▼──────────┐                        │
+  │                       │  results channel    │                        │
+  │                       │  + WaitGroup.Wait() │                        │
+  │                       └──────────┬──────────┘                        │
+  └──────────────────────────────────┼───────────────────────────────────┘
                                      │
                                      ▼
                          map[string]string {
@@ -263,7 +271,7 @@
   ┌──────────────────────────────────────────────────────────────────────┐
   │ PHASE 3: SYNTHESIS                                                   │
   │                                                                      │
-  │  MetaSynthesisPrompt(task, agentOutputs)                            │
+  │  MetaSynthesisPrompt(task, agentOutputs)                             │
   │  ┌────────────────────────────────────────────────────────────────┐  │
   │  │ "Synthesize outputs from multiple parallel agents into a       │  │
   │  │  single coherent report."                                      │  │
@@ -275,18 +283,20 @@
   │  │  • Open Questions                                              │  │
   │  └────────────────────────────────────────────────────────────────┘  │
   │                                                                      │
-  │  → SDK Query → Final synthesized report                             │
-  └──────────────────────────────────┬──────────────────────────────────┘
+  │  → SDK Query → Final synthesized report                              │
+  └──────────────────────────────────┬───────────────────────────────────┘
                                      │
                         ┌────────────▼────────────┐
-                        │  WriteRun("complete")   │──→ ~/.mbx/agent-runs.jsonl
-                        │  WriteReport(meta)      │──→ ~/.mbx/ai-logs/{sha}-meta-agent.md
+                        │  WriteRun("complete")   │──→ ~/.minibox/agent-runs.jsonl
+                        │  WriteReport(meta)      │──→ ~/.minibox/ai-logs/{sha}-meta-agent.md
                         └─────────────────────────┘
 ```
 
 ---
 
 ## 5. LLM Provider Stack
+
+Shows the two-layer resilience wrapper around `AnthropicProvider`. `RetryingProvider` wraps any inner provider and retries with exponential backoff (1s, 2s, …, max 30s) before giving up. `FallbackChain` tries a prioritized list of providers in order, returning the first success and surfacing a combined error only if all fail. `AnthropicProvider` is the concrete leaf: it calls `anthropic.Client.Messages.New()`, extracts text blocks, and returns a `CompletionResponse{Text, Provider}`.
 
 ```
                           CompletionRequest
@@ -345,6 +355,8 @@
 
 ## 6. Agent SDK Execution Model
 
+Illustrates how `ClaudeSDKRunner` translates an `AgentConfig` into a running Claude Code subprocess. `configToQueryOptions` maps the config's tool list and system prompt into SDK query options; `claudecode.Query()` spawns the `claude` CLI as a child process communicating over NDJSON stdin/stdout. The model runs its own agentic loop (think → tool use → observe → respond). The runner iterates the message stream, collecting `ResultMessage` values until `ErrNoMore`, and returns a single `AgentResult`.
+
 ```
                          AgentConfig
                          {Name, Prompt, Tools, SystemPrompt}
@@ -363,7 +375,7 @@
                     ┌───────────▼───────────┐
                     │  claude CLI process   │  ← spawned as subprocess
                     │                       │
-                    │  NDJSON stdin/stdout   │
+                    │  NDJSON stdin/stdout  │
                     │                       │
                     │  Claude model         │
                     │  ┌─────────────────┐  │
@@ -395,6 +407,8 @@
 
 ## 7. Output Pipeline
 
+Shows the dual-write fan-out at the end of every orchestrator run. `WriteRun` appends a JSONL record (start + completion with `duration_s` and full `output`) to the append-only `~/.minibox/agent-runs.jsonl` file consumed by `dashboard.py` and standup scripts. `WriteReport` writes a human-readable Markdown file per run to `~/.minibox/ai-logs/` named by commit SHA and script type. Both paths are wired through `DualWriter`, which implements `ResultWriter` and delegates to `JSONLWriter` and `ReportWriter` respectively.
+
 ```
   Orchestrator completes
          │
@@ -407,7 +421,7 @@
              │                                    │
              ▼                                    ▼
   ┌──────────────────────────┐      ┌──────────────────────────────────┐
-  │ ~/.mbx/agent-runs.jsonl  │      │ ~/.mbx/ai-logs/                  │
+  │ ~/.minibox/agent-runs.jsonl  │      │ ~/.minibox/ai-logs/                  │
   │                          │      │                                  │
   │ Append-only JSONL:       │      │ One file per run:                │
   │                          │      │ {sha}-council-core.md            │
@@ -444,19 +458,21 @@
 
 ## 8. Pub/Sub Topology (Tier A — In-Process)
 
+Describes `ChannelBroker`, the Tier A `MessageBroker` implementation. It maintains a `topics` map of string → `[]chan Message`. `Publish` is non-blocking: it attempts a channel send and silently drops messages to slow subscribers rather than blocking the publisher. `Subscribe` appends a new buffered channel (size 64) to a topic. `Close` closes all channels and clears the map. The lower half shows the Tier B upgrade path: replacing `ChannelBroker` with `NATSBroker` behind the same `domain.MessageBroker` interface requires no changes to orchestrators.
+
 ```
   Current state: ChannelBroker (Go channels, buffered 64)
 
   ┌──────────────────────────────────────────────────┐
-  │              ChannelBroker                        │
+  │              ChannelBroker                       │
   │                                                  │
   │  topics map:                                     │
   │                                                  │
-  │  "agent.output"  ──→ [ch1, ch2]                 │
-  │  "task.complete" ──→ [ch3]                      │
-  │  "state.update"  ──→ [ch4, ch5, ch6]            │
+  │  "agent.output"  ──→ [ch1, ch2]                  │
+  │  "task.complete" ──→ [ch3]                       │
+  │  "state.update"  ──→ [ch4, ch5, ch6]             │
   │                                                  │
-  │  Publish("agent.output", msg)                   │
+  │  Publish("agent.output", msg)                    │
   │  ├─ RLock                                        │
   │  ├─ for each ch in topics["agent.output"]:       │
   │  │   select:                                     │
@@ -498,6 +514,8 @@
 
 ## 9. Tool Allowlist Convention
 
+Documents which tools each orchestrator grants to SDK agents and how tool safety is enforced. All read-only orchestrators (council, commit-msg) are limited to `Read`, `Glob`, `Grep`. Meta-agent spawned sub-agents default to read-only but the designer LLM may grant `Bash`, `Write`, `Edit` for modifier agents. After `parseAgentPlan` parses the designer's JSON output, each requested tool is validated against a static allowlist; unknown tools are rejected and empty tool lists fall back to the read-only default. The sanitized tool list is passed to `ClaudeSDKRunner` via `WithAllowedTools`, which the `claude` CLI enforces at the subprocess level.
+
 ```
   Orchestrator                 Tools Granted           Permission Level
   ─────────────────────────── ────────────────────── ──────────────────
@@ -537,8 +555,10 @@
 
 ## 10. Commit Message Flow
 
+End-to-end sequence for `minibox-commit-msg`. The tool first verifies there is staged content (`git diff --cached`), collecting diff, stat, branch name, recent log, and working-tree status. If the diff exceeds 64 KB, only the stat summary is sent to reduce token cost. `CommitMsg.Generate()` calls the SDK with a conventional-commit prompt (type(scope): description, ≤72 chars, imperative mood). The generated message is printed to stdout; with `-c -y`, a `Co-Authored-By` trailer is appended and `git commit` runs automatically.
+
 ```
-  User: mbx-commit-msg -a -c -y
+  User: minibox-commit-msg -a -c -y
          │
          ├─ -a: git add -A
          ├─ -c: commit after generating
@@ -579,7 +599,7 @@
   │  • ≤72 chars, imperative, no period         │
   │  • NO Co-Authored-By (added separately)     │
   │                                             │
-  │  → SDK Query → commit message              │
+  │  → SDK Query → commit message               │
   └─────────────────────┬───────────────────────┘
                         │
                         ▼
@@ -604,12 +624,14 @@
 
 ## 11. Telemetry Record Format
 
+Shows the two-record lifecycle for each agent run in `agent-runs.jsonl`. A "running" record is written immediately at start (allowing crash detection by looking for runs with no matching "complete" record). A "complete" record is appended on success with `duration_s` and the full `output` text. The lower section shows the companion per-run Markdown report format written to `ai-logs/`: a frontmatter header (base, mode, date) followed by the full multi-role analysis and synthesis narrative.
+
 ```
   JSONL Record Lifecycle (agent-runs.jsonl):
 
   Run Start:
   ┌──────────────────────────────────────────────────────────────────┐
-  │ {"run_id":"2026-03-26T14:30:45Z",                               │
+  │ {"run_id":"2026-03-26T14:30:45Z",                                │
   │  "script":"council",                                             │
   │  "args":{"base":"main","mode":"core"},                           │
   │  "status":"running"}                                             │
@@ -617,12 +639,12 @@
 
   Run Complete:
   ┌──────────────────────────────────────────────────────────────────┐
-  │ {"run_id":"2026-03-26T14:30:45Z",                               │
+  │ {"run_id":"2026-03-26T14:30:45Z",                                │
   │  "script":"council",                                             │
   │  "args":{"base":"main","mode":"core"},                           │
   │  "status":"complete",                                            │
   │  "duration_s":120.5,                                             │
-  │  "output":"## Strict Critic\nScore: 0.72\n..."}                 │
+  │  "output":"## Strict Critic\nScore: 0.72\n..."}                  │
   └──────────────────────────────────────────────────────────────────┘
 
 
@@ -633,7 +655,7 @@
   │                                                                  │
   │ - **base**: main                                                 │
   │ - **mode**: core                                                 │
-  │ - **date**: 2026-03-26 14:30                                    │
+  │ - **date**: 2026-03-26 14:30                                     │
   │                                                                  │
   │ ---                                                              │
   │                                                                  │
@@ -655,6 +677,8 @@
 
 ## 12. Dependency Graph
 
+Maps all import relationships across the module. Two external dependencies: `anthropic-sdk-go` (used only in `internal/llm/`) and `claude-agent-sdk-go` (used only in `internal/agent/`). All other packages use only the Go standard library. The internal graph shows a strict DAG: both binaries import from the orchestration and infrastructure packages, which all converge downward on `internal/domain` — the only package with no outward dependencies. This structure prevents import cycles and ensures domain types are never coupled to infrastructure.
+
 ```
   External Dependencies:
 
@@ -675,13 +699,13 @@
        ├──→ internal/orchestrator/ (context, fmt, strings, sync, encoding/json)
        ├──→ internal/tools/        (context, fmt)
        ├──→ cmd/agentbox/          (flag, fmt, os, time)
-       └──→ cmd/mbx-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
+       └──→ cmd/minibox-commit-msg/   (flag, fmt, os, os/exec, time, bufio, strings)
 
 
   Internal Dependency Graph:
 
   cmd/agentbox ──────┐
-  cmd/mbx-commit-msg ┤
+  cmd/minibox-commit-msg ┤
                      │
                      ├──→ internal/orchestrator
                      │    ├──→ internal/domain
@@ -712,41 +736,43 @@
 
 ## 13. Tier A → B → C Evolution
 
+Roadmap for agentbox's three deployment tiers. Tier A (current): a single Go binary runs all agents in-process using Go channels; output goes to `~/.minibox/` files. Tier B (future): `agentboxd` becomes a standalone daemon communicating with `miniboxd` over NATS; individual council/review/commit agents are separate processes dispatched by the daemon. Tier C (future): a capability registry stores agent manifests (inputs, outputs, tool allowlists) that can be auto-discovered via OCI labels or a NATS service registry, enabling dynamic agent composition without code changes.
+
 ```
-  ┌─────────────────────────────────────────────────────────────────────┐
+  ┌────────────────────────────────────────────────────────────────────┐
   │ TIER A (current): In-Container Agents                              │
-  │                                                                     │
+  │                                                                    │
   │  ┌─────────────┐                                                   │
   │  │ Container   │  agentbox binary + claude CLI                     │
   │  │             │  Go channels pub/sub                              │
-  │  │  agentbox   │  ~/.mbx/ output files                             │
+  │  │  agentbox   │  ~/.minibox/ output files                             │
   │  │  council    │                                                   │
   │  │             │  All in one process                               │
   │  └─────────────┘                                                   │
-  └─────────────────────────────────────────────────────────────────────┘
+  └────────────────────────────────────────────────────────────────────┘
                           │
                           ▼
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ TIER B (future): Agent Runtime Daemon                              │
-  │                                                                     │
-  │  ┌─────────────┐    NATS    ┌─────────────┐                       │
-  │  │ miniboxd    │◀──────────▶│ agentboxd   │                       │
-  │  │ (container  │            │ (agent      │                       │
-  │  │  runtime)   │            │  runtime)   │                       │
-  │  └─────────────┘            └──────┬──────┘                       │
-  │                                    │                               │
-  │                         ┌──────────┼──────────┐                   │
-  │                         ▼          ▼          ▼                   │
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ TIER B (future): Agent Runtime Daemon                            │
+  │                                                                  │
+  │  ┌─────────────┐    NATS    ┌─────────────┐                      │
+  │  │ miniboxd    │◀──────────▶│ agentboxd   │                      │
+  │  │ (container  │            │ (agent      │                      │
+  │  │  runtime)   │            │  runtime)   │                      │
+  │  └─────────────┘            └──────┬──────┘                      │
+  │                                    │                             │
+  │                         ┌──────────┼──────────┐                  │
+  │                         ▼          ▼          ▼                  │
   │                    ┌─────────┐ ┌────────┐ ┌────────┐             │
   │                    │ council │ │ review │ │ commit │             │
   │                    │ agent   │ │ agent  │ │ agent  │             │
   │                    └─────────┘ └────────┘ └────────┘             │
-  └─────────────────────────────────────────────────────────────────────┘
+  └──────────────────────────────────────────────────────────────────┘
                           │
                           ▼
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ TIER C (future): Discoverable Tool Agents                          │
-  │                                                                     │
+  ┌───────────────────────────────────────────────────────────────────┐
+  │ TIER C (future): Discoverable Tool Agents                         │
+  │                                                                   │
   │  ┌─────────────┐         ┌─────────────────────────┐              │
   │  │ Registry    │         │ Capability Manifests    │              │
   │  │             │         │                         │              │
@@ -760,7 +786,7 @@
   │  └─────────────┘         │   outputs: [findings]   │              │
   │                          │   tools: [Read,Glob]    │              │
   │  Auto-discovery via      └─────────────────────────┘              │
-  │  OCI labels or NATS                                                │
-  │  service registry                                                  │
-  └─────────────────────────────────────────────────────────────────────┘
+  │  OCI labels or NATS                                               │
+  │  service registry                                                 │
+  └───────────────────────────────────────────────────────────────────┘
 ```

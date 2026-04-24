@@ -4,6 +4,7 @@ completed: "2026-03-18"
 branch: main
 note: daemonbox extracted and live
 ---
+
 # daemonbox — Extract Shared Daemon Logic Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -14,7 +15,7 @@ note: daemonbox extracted and live
 
 **Platform note:** `daemonbox` compiles on Linux and macOS (both are unix, both have `tokio::net::UnixStream`). It does not need to compile on Windows — `winboxd` is a Named Pipe proxy that does not embed `daemonbox`.
 
-**Tech Stack:** Rust workspace, `linuxbox` (domain traits), `tokio`, `nix`, `serde`/`serde_json`, `uuid`, `chrono`, `anyhow`, `tracing`.
+**Tech Stack:** Rust workspace, `minibox` (domain traits), `tokio`, `nix`, `serde`/`serde_json`, `uuid`, `chrono`, `anyhow`, `tracing`.
 
 **Spec:** `docs/superpowers/specs/2026-03-17-macbox-daemonbox-design.md`
 
@@ -26,35 +27,36 @@ note: daemonbox extracted and live
 
 ### New files
 
-| File                              | Responsibility                                                              |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `crates/daemonbox/Cargo.toml`     | Crate manifest                                                              |
-| `crates/daemonbox/src/lib.rs`     | `pub mod handler; pub mod server; pub mod state;`                           |
+| File                              | Responsibility                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `crates/daemonbox/Cargo.toml`     | Crate manifest                                                                           |
+| `crates/daemonbox/src/lib.rs`     | `pub mod handler; pub mod server; pub mod state;`                                        |
 | `crates/daemonbox/src/handler.rs` | Copied verbatim from `miniboxd/src/handler.rs` — request handlers, `HandlerDependencies` |
-| `crates/daemonbox/src/state.rs`   | Copied verbatim from `miniboxd/src/state.rs` — `DaemonState`, `ContainerRecord` |
-| `crates/daemonbox/src/server.rs`  | Copied verbatim from `miniboxd/src/server.rs` — Unix socket connection handler |
+| `crates/daemonbox/src/state.rs`   | Copied verbatim from `miniboxd/src/state.rs` — `DaemonState`, `ContainerRecord`          |
+| `crates/daemonbox/src/server.rs`  | Copied verbatim from `miniboxd/src/server.rs` — Unix socket connection handler           |
 
 ### Modified files
 
-| File                          | Change                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------- |
-| `Cargo.toml`                  | Add `daemonbox` to `[workspace]` members and `[workspace.dependencies]`            |
-| `crates/miniboxd/Cargo.toml`  | Add `daemonbox = { workspace = true }` to `[dependencies]`                         |
-| `crates/miniboxd/src/lib.rs`  | Replace module declarations with `pub use daemonbox::{handler, server, state};`    |
+| File                         | Change                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `Cargo.toml`                 | Add `daemonbox` to `[workspace]` members and `[workspace.dependencies]`         |
+| `crates/miniboxd/Cargo.toml` | Add `daemonbox = { workspace = true }` to `[dependencies]`                      |
+| `crates/miniboxd/src/lib.rs` | Replace module declarations with `pub use daemonbox::{handler, server, state};` |
 
 ### Deleted files
 
-| File                              | When                                       |
-| --------------------------------- | ------------------------------------------ |
-| `crates/miniboxd/src/handler.rs`  | After verified compile with shim (Task 3)  |
-| `crates/miniboxd/src/state.rs`    | After verified compile with shim (Task 3)  |
-| `crates/miniboxd/src/server.rs`   | After verified compile with shim (Task 3)  |
+| File                             | When                                      |
+| -------------------------------- | ----------------------------------------- |
+| `crates/miniboxd/src/handler.rs` | After verified compile with shim (Task 3) |
+| `crates/miniboxd/src/state.rs`   | After verified compile with shim (Task 3) |
+| `crates/miniboxd/src/server.rs`  | After verified compile with shim (Task 3) |
 
 ---
 
 ## Task 1: Scaffold the `daemonbox` crate
 
 **Files:**
+
 - Create: `crates/daemonbox/Cargo.toml`
 - Create: `crates/daemonbox/src/lib.rs` (stub)
 - Modify: `Cargo.toml` (root)
@@ -91,7 +93,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-linuxbox = { workspace = true }
+minibox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -146,11 +148,12 @@ git commit -m "chore: scaffold daemonbox crate (empty placeholders)"
 ## Task 2: Copy source files into `daemonbox`
 
 **Files:**
+
 - Modify: `crates/daemonbox/src/handler.rs` (replace placeholder with content from `miniboxd`)
 - Modify: `crates/daemonbox/src/state.rs` (replace placeholder with content from `miniboxd`)
 - Modify: `crates/daemonbox/src/server.rs` (replace placeholder with content from `miniboxd`)
 
-The three files contain only `use crate::...` and `use linuxbox::...` references — no `use miniboxd::` references — so they can be copied verbatim and will compile immediately in the new crate.
+The three files contain only `use crate::...` and `use minibox::...` references — no `use miniboxd::` references — so they can be copied verbatim and will compile immediately in the new crate.
 
 - [ ] **Step 1: Copy `handler.rs`**
 
@@ -202,6 +205,7 @@ git commit -m "feat: populate daemonbox with handler/state/server (copies from m
 ## Task 3: Wire `miniboxd` to `daemonbox` and delete originals
 
 **Files:**
+
 - Modify: `crates/miniboxd/Cargo.toml`
 - Modify: `crates/miniboxd/src/lib.rs`
 - Delete: `crates/miniboxd/src/handler.rs`
@@ -315,11 +319,11 @@ git commit -m "refactor: extract handler/state/server into daemonbox crate"
 
 ## Verification Summary
 
-| Check                        | Command                                           | Platform     | Expected                       |
-| ---------------------------- | ------------------------------------------------- | ------------ | ------------------------------ |
-| daemonbox compiles           | `cargo check -p daemonbox`                        | Linux/macOS  | No errors                      |
-| miniboxd compiles            | `cargo check -p miniboxd`                         | Linux        | No errors                      |
-| miniboxd tests pass          | `cargo nextest run -p miniboxd`                   | Linux        | All pass (12 handler tests etc) |
-| linuxbox unaffected       | `cargo check -p linuxbox`                      | any          | No errors                      |
-| clippy clean                 | `cargo clippy -p daemonbox -p miniboxd -D warnings` | Linux      | No warnings                    |
-| fmt clean                    | `cargo fmt -p daemonbox --check`                  | any          | No diff                        |
+| Check               | Command                                             | Platform    | Expected                        |
+| ------------------- | --------------------------------------------------- | ----------- | ------------------------------- |
+| daemonbox compiles  | `cargo check -p daemonbox`                          | Linux/macOS | No errors                       |
+| miniboxd compiles   | `cargo check -p miniboxd`                           | Linux       | No errors                       |
+| miniboxd tests pass | `cargo nextest run -p miniboxd`                     | Linux       | All pass (12 handler tests etc) |
+| minibox unaffected  | `cargo check -p minibox`                            | any         | No errors                       |
+| clippy clean        | `cargo clippy -p daemonbox -p miniboxd -D warnings` | Linux       | No warnings                     |
+| fmt clean           | `cargo fmt -p daemonbox --check`                    | any         | No diff                         |

@@ -45,7 +45,7 @@ graph TB
 
     subgraph "Platform Libraries"
         daemonbox["daemonbox<br/><i>handler, server, state</i>"]
-        linuxbox["linuxbox<br/><i>Linux adapters + container</i>"]
+        minibox["minibox<br/><i>Linux adapters + container</i>"]
         macbox["macbox<br/><i>macOS Colima</i>"]
         winbox["winbox<br/><i>Windows stub</i>"]
     end
@@ -62,17 +62,17 @@ graph TB
     end
 
     miniboxd --> daemonbox
-    miniboxd --> linuxbox
+    miniboxd --> minibox
     miniboxd --> macbox
     miniboxd --> winbox
     cli --> client
     cli --> core
     client --> core
     daemonbox --> core
-    daemonbox --> linuxbox
-    linuxbox --> core
-    linuxbox --> macros
-    bench --> linuxbox
+    daemonbox --> minibox
+    minibox --> core
+    minibox --> macros
+    bench --> minibox
     bench --> core
 ```
 
@@ -80,7 +80,7 @@ graph TB
 
 ## 2. Crate Dependency Graph
 
-Each crate has a specific responsibility. The most important architectural decision is the split between `minibox-core` (cross-platform types) and `linuxbox` (Linux-specific implementations). Linuxbox re-exports core's `domain`, `image`, and `protocol` modules — this is intentional because the `as_any!` and `adapt!` proc macros expand to `crate::domain::AsAny`, which resolves at the call site (linuxbox), not the defining crate (minibox-macros).
+Each crate has a specific responsibility. The most important architectural decision is the split between `minibox-core` (cross-platform types) and `minibox` (Linux-specific implementations). minibox re-exports core's `domain`, `image`, and `protocol` modules — this is intentional because the `as_any!` and `adapt!` proc macros expand to `crate::domain::AsAny`, which resolves at the call site (minibox), not the defining crate (minibox-macros).
 
 ```mermaid
 graph LR
@@ -91,7 +91,7 @@ graph LR
 
     subgraph "Infrastructure"
         DB[daemonbox]
-        LB[linuxbox]
+        LB[minibox]
         MB[macbox]
         WB[winbox]
     end
@@ -131,7 +131,7 @@ graph LR
     style DB fill:#f3e5f5
 ```
 
-**Key re-export chain**: `linuxbox` re-exports `minibox_core::{domain, image, protocol}`. This is load-bearing — removing these re-exports breaks macro expansion in every adapter file. The `#[allow(clippy::crate_in_macro_def)]` suppression on `as_any!` is intentional; `crate` in `macro_rules!` resolves at the call site by design.
+**Key re-export chain**: `minibox` re-exports `minibox_core::{domain, image, protocol}`. This is load-bearing — removing these re-exports breaks macro expansion in every adapter file. The `#[allow(clippy::crate_in_macro_def)]` suppression on `as_any!` is intentional; `crate` in `macro_rules!` resolves at the call site by design.
 
 ---
 
@@ -195,12 +195,12 @@ graph TB
 
 **Domain traits** (defined in `minibox-core/src/domain.rs`):
 
-| Trait | Methods | Purpose |
-|-------|---------|---------|
-| `ImageRegistry` | `has_image`, `pull_image`, `get_image_layers` | Abstract image storage and retrieval |
-| `FilesystemProvider` | `setup_rootfs`, `pivot_root` | Abstract container filesystem creation |
-| `ResourceLimiter` | `create`, `cleanup` | Abstract resource limit enforcement |
-| `ContainerRuntime` | `spawn_process` | Abstract container process creation |
+| Trait                | Methods                                       | Purpose                                |
+| -------------------- | --------------------------------------------- | -------------------------------------- |
+| `ImageRegistry`      | `has_image`, `pull_image`, `get_image_layers` | Abstract image storage and retrieval   |
+| `FilesystemProvider` | `setup_rootfs`, `pivot_root`                  | Abstract container filesystem creation |
+| `ResourceLimiter`    | `create`, `cleanup`                           | Abstract resource limit enforcement    |
+| `ContainerRuntime`   | `spawn_process`                               | Abstract container process creation    |
 
 ---
 
@@ -245,7 +245,7 @@ graph TD
     style COLIMA fill:#e1bee7
 ```
 
-**Library-only adapters** (not yet wired into miniboxd): `docker_desktop`, `wsl2`, `vf` (Virtualization.framework), `hcs` (Windows HCS). These exist as code in `linuxbox/src/adapters/` but have no entry in the adapter suite selection logic.
+**Library-only adapters** (not yet wired into miniboxd): `docker_desktop`, `wsl2`, `vf` (Virtualization.framework), `hcs` (Windows HCS). These exist as code in `minibox/src/adapters/` but have no entry in the adapter suite selection logic.
 
 ---
 
@@ -445,24 +445,24 @@ sequenceDiagram
 
 **Request types** (`DaemonRequest` enum):
 
-| Variant | Fields | Description |
-|---------|--------|-------------|
-| `Run` | `image`, `tag`, `command`, `memory_limit_bytes`, `cpu_weight`, `ephemeral`, `network` | Create and start a container |
-| `Pull` | `image`, `tag` | Download an image without running |
-| `Stop` | `id` | Send SIGTERM then SIGKILL to a running container |
-| `Remove` | `id` | Clean up a stopped container's resources |
-| `List` | (none) | List all tracked containers |
+| Variant  | Fields                                                                                | Description                                      |
+| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `Run`    | `image`, `tag`, `command`, `memory_limit_bytes`, `cpu_weight`, `ephemeral`, `network` | Create and start a container                     |
+| `Pull`   | `image`, `tag`                                                                        | Download an image without running                |
+| `Stop`   | `id`                                                                                  | Send SIGTERM then SIGKILL to a running container |
+| `Remove` | `id`                                                                                  | Clean up a stopped container's resources         |
+| `List`   | (none)                                                                                | List all tracked containers                      |
 
 **Response types** (`DaemonResponse` enum):
 
-| Variant | Fields | Description |
-|---------|--------|-------------|
-| `ContainerCreated` | `id` | Container created, process about to spawn |
-| `ContainerOutput` | `stream` (Stdout/Stderr), `data` (base64) | Real-time output chunk from ephemeral container |
-| `ContainerStopped` | `exit_code` | Container process exited |
-| `ContainerList` | `containers: Vec<ContainerInfo>` | All tracked containers |
-| `Success` | `message` | Generic success acknowledgment |
-| `Error` | `message` | Operation failed |
+| Variant            | Fields                                    | Description                                     |
+| ------------------ | ----------------------------------------- | ----------------------------------------------- |
+| `ContainerCreated` | `id`                                      | Container created, process about to spawn       |
+| `ContainerOutput`  | `stream` (Stdout/Stderr), `data` (base64) | Real-time output chunk from ephemeral container |
+| `ContainerStopped` | `exit_code`                               | Container process exited                        |
+| `ContainerList`    | `containers: Vec<ContainerInfo>`          | All tracked containers                          |
+| `Success`          | `message`                                 | Generic success acknowledgment                  |
+| `Error`            | `message`                                 | Operation failed                                |
 
 ---
 
@@ -503,16 +503,16 @@ stateDiagram-v2
 
 **ContainerRecord** fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `info.id` | `String` | 16-character UUID hex |
-| `info.image` | `String` | `image:tag` |
-| `info.command` | `String` | Space-separated command |
-| `info.state` | `String` | Created / Running / Stopped |
-| `info.created_at` | `String` | ISO 8601 timestamp |
-| `info.pid` | `Option<u32>` | Host PID (set when Running) |
-| `rootfs_path` | `PathBuf` | Overlay merged dir |
-| `cgroup_path` | `PathBuf` | cgroup v2 dir |
+| Field             | Type          | Description                 |
+| ----------------- | ------------- | --------------------------- |
+| `info.id`         | `String`      | 16-character UUID hex       |
+| `info.image`      | `String`      | `image:tag`                 |
+| `info.command`    | `String`      | Space-separated command     |
+| `info.state`      | `String`      | Created / Running / Stopped |
+| `info.created_at` | `String`      | ISO 8601 timestamp          |
+| `info.pid`        | `Option<u32>` | Host PID (set when Running) |
+| `rootfs_path`     | `PathBuf`     | Overlay merged dir          |
+| `cgroup_path`     | `PathBuf`     | cgroup v2 dir               |
 
 ---
 
@@ -555,6 +555,7 @@ graph TB
 ```
 
 **Mount command equivalent:**
+
 ```
 mount -t overlay overlay \
   -o lowerdir=layer2:layer1,upperdir=upper,workdir=work \
@@ -563,6 +564,7 @@ mount -t overlay overlay \
 ```
 
 **Cleanup sequence on container remove:**
+
 1. `umount2(merged, MNT_DETACH)` — detach overlay mount
 2. `rm -rf /var/lib/minibox/containers/{id}/` — delete upper/work/merged dirs
 3. `rm -rf /sys/fs/cgroup/minibox/{id}/` — delete cgroup directory
@@ -609,15 +611,16 @@ graph TB
 
 **What each namespace isolates:**
 
-| Namespace | Flag | Isolation |
-|-----------|------|-----------|
-| PID | `CLONE_NEWPID` | Process ID space. Container's PID 1 only sees its own descendants in `/proc`. |
-| Mount | `CLONE_NEWNS` | Mount table. After `pivot_root`, the host filesystem is invisible. |
-| UTS | `CLONE_NEWUTS` | Hostname and NIS domain. Container gets hostname "minibox". |
-| IPC | `CLONE_NEWIPC` | System V IPC, POSIX message queues. No cross-container shared memory. |
-| Network | `CLONE_NEWNET` | Network interfaces, routing tables, iptables. Only loopback available. |
+| Namespace | Flag           | Isolation                                                                     |
+| --------- | -------------- | ----------------------------------------------------------------------------- |
+| PID       | `CLONE_NEWPID` | Process ID space. Container's PID 1 only sees its own descendants in `/proc`. |
+| Mount     | `CLONE_NEWNS`  | Mount table. After `pivot_root`, the host filesystem is invisible.            |
+| UTS       | `CLONE_NEWUTS` | Hostname and NIS domain. Container gets hostname "minibox".                   |
+| IPC       | `CLONE_NEWIPC` | System V IPC, POSIX message queues. No cross-container shared memory.         |
+| Network   | `CLONE_NEWNET` | Network interfaces, routing tables, iptables. Only loopback available.        |
 
 **Missing namespaces** (potential future work):
+
 - **User namespace** (`CLONE_NEWUSER`): Would enable rootless containers by mapping UID 0 inside to an unprivileged UID outside.
 - **Cgroup namespace** (`CLONE_NEWCGROUP`): Would virtualize `/sys/fs/cgroup` so the container sees itself as the cgroup root.
 
@@ -650,14 +653,15 @@ graph TB
 
 **Resource controls per container:**
 
-| File | Default | Description |
-|------|---------|-------------|
-| `memory.max` | `max` (unlimited) | Hard memory limit. Kernel OOM-kills on breach. |
-| `cpu.weight` | `100` | Relative CPU share (1–10000). Only matters under contention. |
-| `pids.max` | `1024` | Maximum process count. Prevents fork bombs. |
-| `io.max` | (not set by default) | Block I/O limits. Requires real block device `MAJOR:MINOR`. |
+| File         | Default              | Description                                                  |
+| ------------ | -------------------- | ------------------------------------------------------------ |
+| `memory.max` | `max` (unlimited)    | Hard memory limit. Kernel OOM-kills on breach.               |
+| `cpu.weight` | `100`                | Relative CPU share (1–10000). Only matters under contention. |
+| `pids.max`   | `1024`               | Maximum process count. Prevents fork bombs.                  |
+| `io.max`     | (not set by default) | Block I/O limits. Requires real block device `MAJOR:MINOR`.  |
 
 **Gotchas:**
+
 - `io.max` requires the `MAJOR:MINOR` of a real block device. In Colima VMs, the virtio disk is `253:0` (vda), not `8:0` (sda). Use `find_first_block_device()` which reads `/sys/block/*/dev`.
 - PID 0 is silently accepted by kernel 6.8 when written to `cgroup.procs`, but it's never valid. Minibox validates explicitly before writing.
 - The "no internal process" rule is enforced by cgroup v2: if the daemon's PID is in `miniboxd.service/cgroup.procs`, container cgroup creation under `miniboxd.service/` fails. The `supervisor/` leaf cgroup solves this.
@@ -721,18 +725,18 @@ flowchart TB
 
 **Threat model summary:**
 
-| Threat | Mitigation | Location |
-|--------|-----------|----------|
-| Path traversal (Zip Slip) | Reject `..`, canonicalize, prefix check | `layer.rs` |
-| Absolute symlink host leak | Rewrite to relative path | `layer.rs:relative_path()` |
-| Device node injection | Reject Block/Char entry types | `layer.rs` |
-| Privilege escalation via setuid | Strip setuid/setgid bits from extracted files | `layer.rs` |
-| Unauthorized daemon access | SO_PEERCRED UID==0 check | `server.rs` |
-| Cgroup escape | /sys mounted read-only | `filesystem.rs` |
-| Fork bomb | pids.max=1024 | `cgroups.rs` |
-| Memory exhaustion | memory.max enforcement | `cgroups.rs` |
-| Host FD leak to container | close_range(3, ~0U) or /proc/self/fd scan | `process.rs` |
-| Mount propagation escape | MS_REC\|MS_PRIVATE before pivot_root | `filesystem.rs` |
+| Threat                          | Mitigation                                    | Location                   |
+| ------------------------------- | --------------------------------------------- | -------------------------- |
+| Path traversal (Zip Slip)       | Reject `..`, canonicalize, prefix check       | `layer.rs`                 |
+| Absolute symlink host leak      | Rewrite to relative path                      | `layer.rs:relative_path()` |
+| Device node injection           | Reject Block/Char entry types                 | `layer.rs`                 |
+| Privilege escalation via setuid | Strip setuid/setgid bits from extracted files | `layer.rs`                 |
+| Unauthorized daemon access      | SO_PEERCRED UID==0 check                      | `server.rs`                |
+| Cgroup escape                   | /sys mounted read-only                        | `filesystem.rs`            |
+| Fork bomb                       | pids.max=1024                                 | `cgroups.rs`               |
+| Memory exhaustion               | memory.max enforcement                        | `cgroups.rs`               |
+| Host FD leak to container       | close_range(3, ~0U) or /proc/self/fd scan     | `process.rs`               |
+| Mount propagation escape        | MS_REC\|MS_PRIVATE before pivot_root          | `filesystem.rs`            |
 
 ---
 
@@ -820,6 +824,7 @@ flowchart TB
 ```
 
 **Error handling conventions:**
+
 - Every fallible operation uses `.context("description")?` (anyhow)
 - No `.unwrap()` in production code — panics would crash all running containers
 - Cleanup failures are logged at `warn!` level but don't propagate (best-effort cleanup)
@@ -875,14 +880,14 @@ graph TB
 
 **Environment variable overrides:**
 
-| Variable | Default (root) | Default (non-root) | Description |
-|----------|---------------|-------------------|-------------|
-| `MINIBOX_DATA_DIR` | `/var/lib/minibox` | `~/.mbx/cache/` | Image and container storage |
-| `MINIBOX_RUN_DIR` | `/run/minibox` | `/run/minibox` | Socket and runtime state |
-| `MINIBOX_SOCKET_PATH` | `$RUN_DIR/miniboxd.sock` | — | Unix socket path |
-| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox` | — | cgroup root for containers |
-| `MINIBOX_SOCKET_MODE` | `0600` | — | Socket file permissions |
-| `MINIBOX_SOCKET_GROUP` | (none) | — | Socket group ownership |
+| Variable               | Default (root)           | Default (non-root)  | Description                 |
+| ---------------------- | ------------------------ | ------------------- | --------------------------- |
+| `MINIBOX_DATA_DIR`     | `/var/lib/minibox`       | `~/.minibox/cache/` | Image and container storage |
+| `MINIBOX_RUN_DIR`      | `/run/minibox`           | `/run/minibox`      | Socket and runtime state    |
+| `MINIBOX_SOCKET_PATH`  | `$RUN_DIR/miniboxd.sock` | —                   | Unix socket path            |
+| `MINIBOX_CGROUP_ROOT`  | `/sys/fs/cgroup/minibox` | —                   | cgroup root for containers  |
+| `MINIBOX_SOCKET_MODE`  | `0600`                   | —                   | Socket file permissions     |
+| `MINIBOX_SOCKET_GROUP` | (none)                   | —                   | Socket group ownership      |
 
 ---
 
@@ -908,6 +913,7 @@ graph LR
 ```
 
 **Correct usage:**
+
 ```rust
 tracing::info!(
     container_id = %id,
@@ -918,6 +924,7 @@ tracing::info!(
 ```
 
 **Wrong usage:**
+
 ```rust
 // Values embedded in message — not queryable by log aggregators
 tracing::info!("Container {} started with PID {}", id, pid);
@@ -925,19 +932,19 @@ tracing::info!("Container {} started with PID {}", id, pid);
 
 **Canonical structured fields:**
 
-| Field | Type | Context |
-|-------|------|---------|
-| `container_id` | `&str` | All container operations |
-| `pid` / `child_pid` | `u32` / `i32` | Process lifecycle, clone result |
-| `clone_flags` | `i32` | namespace.rs |
-| `entry` | `&Path` | Tar security events |
-| `kind` | `&EntryType` | Device node rejection |
-| `target` / `rewritten_target` | `&Path` | Symlink rewrite events |
-| `new_root` | `&Path` | pivot_root destination |
-| `fds_closed` | `usize` | close_extra_fds count |
-| `command` | `&str` | Container entrypoint |
-| `rootfs` | `&Path` | Container rootfs path |
-| `mode_before` / `mode_after` | `u32` | Permission bit changes (octal) |
+| Field                         | Type          | Context                         |
+| ----------------------------- | ------------- | ------------------------------- |
+| `container_id`                | `&str`        | All container operations        |
+| `pid` / `child_pid`           | `u32` / `i32` | Process lifecycle, clone result |
+| `clone_flags`                 | `i32`         | namespace.rs                    |
+| `entry`                       | `&Path`       | Tar security events             |
+| `kind`                        | `&EntryType`  | Device node rejection           |
+| `target` / `rewritten_target` | `&Path`       | Symlink rewrite events          |
+| `new_root`                    | `&Path`       | pivot_root destination          |
+| `fds_closed`                  | `usize`       | close_extra_fds count           |
+| `command`                     | `&str`        | Container entrypoint            |
+| `rootfs`                      | `&Path`       | Container rootfs path           |
+| `mode_before` / `mode_after`  | `u32`         | Permission bit changes (octal)  |
 
 ---
 
@@ -982,11 +989,12 @@ flowchart TD
 ```
 
 **Compile gate convention:**
+
 - `#[cfg(target_os = "linux")]` — Linux-only: container module (namespaces, cgroups, overlay, process)
 - `#[cfg(unix)]` — Unix-wide: preflight checks, signal handling, socket permissions
 - `#[cfg(test)]` — Test fixtures, mock adapters
 
-**Platform crate naming**: `{platform}box` — `linuxbox`, `macbox`, `winbox`. This convention should be followed for future platforms.
+**Platform crate naming**: `{platform}box` — `minibox`, `macbox`, `winbox`. This convention should be followed for future platforms.
 
 ---
 
@@ -1035,23 +1043,25 @@ graph TB
 
 **Test commands:**
 
-| Command | Platform | What it runs |
-|---------|----------|-------------|
-| `cargo xtask test-unit` / `just test-unit` | Any | Unit + conformance (257 tests) |
-| `cargo xtask test-property` | Any | Proptest property tests (33 tests) |
-| `just test-integration` | Linux + root | Cgroup + overlay integration (24 tests) |
-| `just test-e2e` / `cargo xtask test-e2e-suite` | Linux + root | Full daemon + CLI (14 tests) |
-| `cargo xtask pre-commit` | macOS-safe | fmt-check + clippy + release build |
-| `cargo xtask prepush` | Any | nextest + llvm-cov coverage |
+| Command                                        | Platform     | What it runs                            |
+| ---------------------------------------------- | ------------ | --------------------------------------- |
+| `cargo xtask test-unit` / `just test-unit`     | Any          | Unit + conformance (257 tests)          |
+| `cargo xtask test-property`                    | Any          | Proptest property tests (33 tests)      |
+| `just test-integration`                        | Linux + root | Cgroup + overlay integration (24 tests) |
+| `just test-e2e` / `cargo xtask test-e2e-suite` | Linux + root | Full daemon + CLI (14 tests)            |
+| `cargo xtask pre-commit`                       | macOS-safe   | fmt-check + clippy + release build      |
+| `cargo xtask prepush`                          | Any          | nextest + llvm-cov coverage             |
 
 **macOS quality gates** (run in CI on `macos-latest`):
+
 ```
 cargo fmt --all --check
-cargo clippy -p linuxbox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 ```
 
 **Testing gotchas:**
+
 - `std::env::set_var`/`remove_var` are `unsafe` in Rust 2024 — wrap in `unsafe {}` and serialize with a `static Mutex<()>` guard
 - Proptest `FileFailurePersistence` warning in integration tests — suppress with `failure_persistence: None`
 - `DaemonState` fixture requires `ImageStore::new(tmp.join("images"))` + a `data_dir` path

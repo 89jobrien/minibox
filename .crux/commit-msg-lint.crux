@@ -1,0 +1,20 @@
+pipeline: minibox_commit_msg_lint
+# Validate a commit message follows conventional-commit format.
+# Input: { "msg_file": "<path to .git/COMMIT_EDITMSG>" }
+# Run via git commit-msg hook: cruxx run .crux/commit-msg-lint.crux --input "{\"msg_file\":\"$1\"}"
+budget: { calls: 4 }
+
+steps:
+  - step: read_msg
+    handler: shell::capture
+    args:
+      cmd: "cat {{ input.msg_file }}"
+
+  - step: check_format
+    handler: shell::capture
+    args:
+      # Conventional commit: type(scope): subject — scope optional
+      cmd: >-
+        echo '{{ steps.read_msg.output.stdout }}' |
+        grep -qE '^(feat|fix|docs|chore|refactor|test|style|ci|perf|revert)(\(.+\))?: .{1,72}$'
+        && echo ok || (echo "commit-msg: does not match conventional commit format" >&2; exit 1)

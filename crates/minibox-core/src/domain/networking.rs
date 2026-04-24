@@ -24,6 +24,21 @@ pub enum NetworkMode {
     Tailnet,
 }
 
+/// Selects between gateway and per-container Tailscale device allocation.
+///
+/// **Default is `Gateway`** — the daemon joins the tailnet once and containers
+/// route through it. Use `PerContainer` to give each container its own tailnet
+/// identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TailnetMode {
+    /// One shared `tailscale::Device` for the daemon; containers share its tailnet
+    /// IP but are not individually visible on the tailnet.
+    #[default]
+    Gateway,
+    /// Each container gets its own `tailscale::Device` and a distinct tailnet IP.
+    PerContainer,
+}
+
 /// Abstraction for container networking operations.
 ///
 /// Implementations might include Linux bridge networking, CNI plugins,
@@ -118,6 +133,23 @@ pub struct NetworkConfig {
 
     /// Enable IPv6 support
     pub ipv6_enabled: bool,
+
+    /// Inline Tailscale auth key. Takes precedence over secret lookup.
+    /// Only used when `mode == NetworkMode::Tailnet`.
+    /// `skip_serializing` prevents accidental key exposure in debug logs.
+    #[serde(default, skip_serializing)]
+    pub tailnet_auth_key: Option<String>,
+
+    /// minibox-secrets key name for Tailscale auth key lookup.
+    /// Defaults to `"tailscale-auth-key"` when `None`.
+    /// Only used when `mode == NetworkMode::Tailnet`.
+    #[serde(default)]
+    pub tailnet_secret_name: Option<String>,
+
+    /// Tailnet networking mode: shared gateway device or per-container device.
+    /// Only used when `mode == NetworkMode::Tailnet`.
+    #[serde(default)]
+    pub tailnet_mode: TailnetMode,
 }
 
 impl Default for NetworkConfig {
@@ -130,6 +162,9 @@ impl Default for NetworkConfig {
             port_mappings: Vec::new(),
             dns_servers: vec!["8.8.8.8".to_string(), "8.8.4.4".to_string()],
             ipv6_enabled: false,
+            tailnet_auth_key: None,
+            tailnet_secret_name: None,
+            tailnet_mode: TailnetMode::Gateway,
         }
     }
 }
@@ -202,6 +237,44 @@ pub struct NetworkStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tailnet_mode_serde_roundtrip() {
+        for mode in [TailnetMode::Gateway, TailnetMode::PerContainer] {
+            let json = serde_json::to_string(&mode).expect("serialize");
+            let back: TailnetMode = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(mode, back);
+        }
+    }
+
+    #[test]
+    fn tailnet_mode_default_is_gateway() {
+        assert_eq!(TailnetMode::default(), TailnetMode::Gateway);
+    }
+
+    #[test]
+    fn network_config_tailnet_fields_default_to_none_and_gateway() {
+        let cfg = NetworkConfig::default();
+        assert!(cfg.tailnet_auth_key.is_none());
+        assert!(cfg.tailnet_secret_name.is_none());
+        assert_eq!(cfg.tailnet_mode, TailnetMode::Gateway);
+    }
+
+    #[test]
+    fn network_config_old_json_omitting_tailnet_fields_deserialises() {
+        let json = r#"{
+            "mode": "Bridge",
+            "bridge_name": "minibox0",
+            "subnet": "172.18.0.0/16",
+            "container_ip": null,
+            "port_mappings": [],
+            "dns_servers": [],
+            "ipv6_enabled": false
+        }"#;
+        let cfg: NetworkConfig = serde_json::from_str(json).expect("deserialise");
+        assert_eq!(cfg.tailnet_mode, TailnetMode::Gateway);
+        assert!(cfg.tailnet_auth_key.is_none());
+    }
 
     #[test]
     fn network_mode_serde_roundtrip() {

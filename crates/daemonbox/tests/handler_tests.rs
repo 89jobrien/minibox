@@ -3,12 +3,16 @@
 //! These tests demonstrate the testability benefits of hexagonal architecture.
 //! All tests run without real infrastructure (no Docker Hub, cgroups, or Linux).
 
-use daemonbox::handler::{self, HandlerDependencies};
-use daemonbox::state::DaemonState;
+use daemonbox::handler::{
+    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
+    handle_resize_pty, handle_send_input,
+};
+use daemonbox::state::{ContainerState, DaemonState};
 use linuxbox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
-use minibox_core::domain::NetworkMode;
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{DynImageRegistry, NetworkMode};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -41,6 +45,10 @@ async fn handle_run_once(
         cpu_weight,
         ephemeral,
         None,
+        vec![],
+        false,
+        vec![],
+        None,
         state,
         deps,
         tx,
@@ -49,17 +57,130 @@ async fn handle_run_once(
     rx.recv().await.expect("handler sent no response")
 }
 
+/// No-op image GC for tests.
+struct NoopImageGc;
+
+#[async_trait::async_trait]
+impl minibox_core::image::gc::ImageGarbageCollector for NoopImageGc {
+    async fn prune(
+        &self,
+        dry_run: bool,
+        _in_use: &[String],
+    ) -> anyhow::Result<minibox_core::image::gc::PruneReport> {
+        Ok(minibox_core::image::gc::PruneReport {
+            removed: vec![],
+            freed_bytes: 0,
+            dry_run,
+        })
+    }
+}
+
+/// Low-level builder: creates `HandlerDependencies` with the given registry_router,
+/// image_store, and network_provider; all other fields use sensible mock defaults.
+///
+/// Used by tests that need to customise individual adapter components.
+fn build_deps(
+    registry_router: minibox_core::domain::DynRegistryRouter,
+    image_store: Arc<minibox_core::image::ImageStore>,
+    network_provider: minibox_core::domain::DynNetworkProvider,
+    containers_base: std::path::PathBuf,
+    run_containers_base: std::path::PathBuf,
+) -> Arc<HandlerDependencies> {
+    Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router,
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider,
+            containers_base,
+            run_containers_base,
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    })
+}
+
+/// Convenience wrapper: standard mock deps with a given registry and image_store.
+fn build_deps_with_registry(
+    registry_router: minibox_core::domain::DynRegistryRouter,
+    image_store: Arc<minibox_core::image::ImageStore>,
+    temp_dir: &TempDir,
+) -> Arc<HandlerDependencies> {
+    build_deps(
+        registry_router,
+        image_store,
+        Arc::new(MockNetwork::new()),
+        temp_dir.path().join("containers"),
+        temp_dir.path().join("run"),
+    )
+}
+
 /// Helper to create test dependencies with mocks.
 fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: daemonbox::handler::ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -76,14 +197,24 @@ fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
 #[tokio::test]
 async fn test_handle_pull_success() {
     let temp_dir = TempDir::new().unwrap();
-    let deps = create_test_deps_with_dir(&temp_dir);
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            mock_registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        image_store,
+        &temp_dir,
+    );
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
         state,
-        deps.clone(),
+        deps,
     )
     .await;
 
@@ -95,12 +226,7 @@ async fn test_handle_pull_success() {
         _ => panic!("expected Success response, got {response:?}"),
     }
 
-    // Verify pull was called
-    let registry = deps.registry.clone();
-    let mock_registry = registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .expect("should be MockRegistry");
+    // Verify pull was called via the locally retained mock reference
     assert_eq!(mock_registry.pull_count(), 1);
 }
 
@@ -125,14 +251,45 @@ async fn test_handle_pull_with_library_prefix() {
 async fn test_handle_pull_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -153,15 +310,47 @@ async fn test_handle_pull_failure() {
 #[tokio::test]
 async fn test_handle_run_with_cached_image() {
     let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                mock_registry.clone() as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -191,18 +380,54 @@ async fn test_handle_run_with_cached_image() {
     }
 
     // Image was cached, so pull should NOT have been called
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
-    assert_eq!(registry.pull_count(), 0);
+    assert_eq!(mock_registry.pull_count(), 0);
 }
 
 #[tokio::test]
 async fn test_handle_run_pulls_uncached_image() {
     let temp_dir = TempDir::new().unwrap();
-    let deps = create_test_deps_with_dir(&temp_dir); // Image not cached
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                mock_registry.clone() as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    }); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handle_run_once(
@@ -225,26 +450,53 @@ async fn test_handle_run_pulls_uncached_image() {
     }
 
     // Image was not cached, so pull SHOULD have been called
-    let registry = deps
-        .registry
-        .as_any()
-        .downcast_ref::<MockRegistry>()
-        .unwrap();
-    assert_eq!(registry.pull_count(), 1);
+    assert_eq!(mock_registry.pull_count(), 1);
 }
 
 #[tokio::test]
 async fn test_handle_run_filesystem_setup_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -272,14 +524,46 @@ async fn test_handle_run_filesystem_setup_failure() {
 async fn test_handle_run_resource_limiter_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -307,14 +591,46 @@ async fn test_handle_run_resource_limiter_failure() {
 async fn test_handle_run_runtime_spawn_failure() {
     let temp_dir = TempDir::new().unwrap();
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -377,7 +693,10 @@ async fn test_handle_remove_success() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Mark it as stopped (handler requires this)
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Now remove it
     let remove_response =
@@ -396,6 +715,7 @@ async fn test_handle_remove_success() {
 
     // Verify cleanup was called
     let filesystem = deps
+        .lifecycle
         .filesystem
         .as_any()
         .downcast_ref::<MockFilesystem>()
@@ -403,6 +723,7 @@ async fn test_handle_remove_success() {
     assert_eq!(filesystem.cleanup_count(), 1);
 
     let limiter = deps
+        .lifecycle
         .resource_limiter
         .as_any()
         .downcast_ref::<MockLimiter>()
@@ -451,7 +772,10 @@ async fn test_handle_remove_running_container() {
     };
 
     // Directly mark as Running (deterministic — no sleep/race with async spawn)
-    state.update_container_state(&container_id, "Running").await;
+    state
+        .update_container_state(&container_id, ContainerState::Running)
+        .await
+        .ok();
 
     // Try to remove while still running
     let response = handler::handle_remove(container_id, state, deps).await;
@@ -522,7 +846,10 @@ async fn test_full_container_lifecycle() {
 
     // 4. Stop container (simulated by updating state)
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&container_id, "Stopped").await;
+    state
+        .update_container_state(&container_id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // 5. Remove container
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
@@ -542,15 +869,46 @@ fn create_test_deps_with_network(
     temp_dir: &TempDir,
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).unwrap());
     Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: network,
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: network,
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     })
 }
 
@@ -627,6 +985,10 @@ async fn test_handle_run_explicit_network_none() {
         None,
         false,
         Some(NetworkMode::None),
+        vec![],
+        false,
+        vec![],
+        None,
         state,
         deps,
         tx,
@@ -727,7 +1089,7 @@ async fn test_run_creates_container_directories() {
 
     let id = extract_container_id(&response);
     // containers_base/{id} should exist
-    let container_dir = deps.containers_base.join(&id);
+    let container_dir = deps.lifecycle.containers_base.join(&id);
     assert!(
         container_dir.exists(),
         "container dir should exist: {}",
@@ -834,6 +1196,10 @@ async fn test_run_with_network_mode_host() {
         None,
         false,
         Some(NetworkMode::Host),
+        vec![],
+        false,
+        vec![],
+        None,
         state,
         deps,
         tx,
@@ -880,14 +1246,45 @@ async fn test_remove_with_filesystem_cleanup_failure() {
 
     // Build deps with the failable mock (setup succeeds by default).
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: failable_fs.clone(),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: failable_fs.clone(),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -906,7 +1303,10 @@ async fn test_remove_with_filesystem_cleanup_failure() {
     let id = extract_container_id(&response);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Now toggle cleanup to fail.
     failable_fs.set_fail_cleanup(true);
@@ -1003,19 +1403,50 @@ async fn test_list_after_run() {
 async fn test_handle_run_empty_image_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        // Image is "pre-cached" so the pull is skipped, but get_image_layers returns empty.
-        registry: Arc::new(
-            MockRegistry::new()
-                .with_cached_image("library/alpine", "latest")
-                .with_empty_layers(),
-        ),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            // Image is "pre-cached" so the pull is skipped, but get_image_layers returns empty.
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(
+                    MockRegistry::new()
+                        .with_cached_image("library/alpine", "latest")
+                        .with_empty_layers(),
+                ) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1065,6 +1496,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Created".to_string(),
@@ -1075,6 +1507,8 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
         })
         .await;
 
@@ -1099,14 +1533,45 @@ async fn test_handle_stop_container_without_pid_returns_error() {
 async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new().with_cleanup_failure()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new().with_cleanup_failure()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1125,7 +1590,10 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     let id = extract_container_id(&create_response);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // Remove should succeed despite cgroup cleanup failure.
     let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
@@ -1216,14 +1684,45 @@ async fn test_handle_run_pull_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
         // Not cached + pull always fails → ImagePullFailed domain error.
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1274,6 +1773,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Running".to_string(),
@@ -1284,6 +1784,8 @@ async fn test_handle_stop_dead_pid_succeeds() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
         })
         .await;
 
@@ -1323,14 +1825,45 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
     let docker_registry = Arc::new(MockRegistry::new());
     let ghcr_registry = Arc::new(MockRegistry::new());
     let deps = Arc::new(HandlerDependencies {
-        registry: docker_registry.clone(),
-        ghcr_registry: ghcr_registry.clone(),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                docker_registry.clone() as DynImageRegistry,
+                [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1366,14 +1899,45 @@ async fn test_handle_run_routes_to_ghcr_registry() {
     let docker_registry = Arc::new(MockRegistry::new());
     let ghcr_registry = Arc::new(MockRegistry::new());
     let deps = Arc::new(HandlerDependencies {
-        registry: docker_registry.clone(),
-        ghcr_registry: ghcr_registry.clone(),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                docker_registry.clone() as DynImageRegistry,
+                [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1409,14 +1973,45 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
     let ghcr_registry =
         Arc::new(MockRegistry::new().with_cached_image("ghcr.io/org/myimage", "latest"));
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: ghcr_registry.clone(),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", ghcr_registry.clone() as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1445,14 +2040,48 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
 async fn test_handle_run_ghcr_pull_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [(
+                    "ghcr.io",
+                    Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                )],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1499,6 +2128,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Running".to_string(),
@@ -1509,6 +2139,8 @@ async fn test_handle_stop_triggers_network_cleanup() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
         })
         .await;
 
@@ -1547,7 +2179,10 @@ async fn test_handle_remove_triggers_network_cleanup() {
     .await;
     let id = extract_container_id(&response);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    state.update_container_state(&id, "Stopped").await;
+    state
+        .update_container_state(&id, ContainerState::Stopped)
+        .await
+        .ok();
 
     // network_provider.setup() was called during run (count=1).
     // After remove, cleanup should also be called.
@@ -1658,6 +2293,7 @@ async fn test_handle_remove_created_container_succeeds() {
         .add_container(ContainerRecord {
             info: ContainerInfo {
                 id: container_id.clone(),
+                name: None,
                 image: "alpine:latest".to_string(),
                 command: "/bin/sh".to_string(),
                 state: "Created".to_string(),
@@ -1668,6 +2304,8 @@ async fn test_handle_remove_created_container_succeeds() {
             rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
         })
         .await;
 
@@ -1688,14 +2326,45 @@ async fn test_handle_remove_created_container_succeeds() {
 async fn test_handle_remove_failed_container_succeeds() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new().with_spawn_failure()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1733,14 +2402,48 @@ async fn test_handle_remove_failed_container_succeeds() {
 async fn test_handle_pull_ghcr_failure_returns_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new()),
-        ghcr_registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [(
+                    "ghcr.io",
+                    Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                )],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1940,14 +2643,46 @@ async fn test_daemon_wait_for_exit_multiple_containers() {
 async fn test_handle_run_ephemeral_dispatches_streaming_path() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()), // returns output_reader=None
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()), // returns output_reader=None
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1959,6 +2694,10 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         None,
         None,
         true, // ephemeral=true → streaming path
+        None,
+        vec![],
+        false,
+        vec![],
         None,
         state,
         deps,
@@ -1990,14 +2729,45 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
 async fn test_handle_run_ephemeral_pull_failure_sends_error() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::new(MockRegistry::new().with_pull_failure()),
-        ghcr_registry: Arc::new(MockRegistry::new()),
-        filesystem: Arc::new(MockFilesystem::new()),
-        resource_limiter: Arc::new(MockLimiter::new()),
-        runtime: Arc::new(MockRuntime::new()),
-        network_provider: Arc::new(MockNetwork::new()),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2010,6 +2780,10 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         None,
         true, // ephemeral=true
         None,
+        vec![],
+        false,
+        vec![],
+        None,
         state,
         deps,
         tx,
@@ -2020,5 +2794,2758 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
     assert!(
         matches!(response, DaemonResponse::Error { .. }),
         "ephemeral run with pull failure must produce Error, got: {response:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error path tests for missing coverage
+// ---------------------------------------------------------------------------
+
+/// When registry has no layers for an image, handle_run produces an Error.
+#[tokio::test]
+async fn test_run_empty_image_no_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_empty_layers());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::clone(&mock_registry) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            // The error should mention no layers or empty image
+            assert!(
+                message.contains("no layers")
+                    || message.contains("empty")
+                    || message.contains("Empty"),
+                "expected empty image error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response for empty image, got {other:?}"),
+    }
+}
+
+/// Pulling an image that fails at the registry produces an Error.
+#[tokio::test]
+async fn test_pull_registry_failure_with_tag() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new().with_pull_failure());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::clone(&mock_registry) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "testimage".to_string(),
+        Some("v1.0".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("pull") || message.contains("failed"),
+                "expected pull failure, got: {message}"
+            );
+        }
+        _ => panic!("expected Error response for pull failure, got {response:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Regression: minibox run streaming protocol order (2026-03-27)
+//
+// Root causes that were fixed:
+// 1. is_terminal_response returned true for ContainerCreated → connection closed early
+// 2. handle_run_streaming never emitted ContainerCreated before streaming output
+// 3. CLI run.rs returned Ok(()) on ContainerCreated instead of continuing
+//
+// This test verifies the full streaming sequence when the runtime successfully
+// spawns a container:  ContainerCreated → ContainerOutput → ContainerStopped
+// ---------------------------------------------------------------------------
+
+/// A test-only runtime that returns a real Unix pipe so the streaming path
+/// in handle_run_streaming can be exercised end-to-end with known output.
+///
+/// `spawn_process` writes `payload` bytes to the write end of the pipe and
+/// closes it, simulating a container that produces output and then exits.
+/// `waitpid` on the fake PID will return ECHILD → exit_code = -1.
+#[cfg(unix)]
+struct PipedMockRuntime {
+    payload: Vec<u8>,
+}
+
+#[cfg(unix)]
+impl minibox_core::domain::AsAny for PipedMockRuntime {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(unix)]
+#[async_trait::async_trait]
+impl minibox_core::domain::ContainerRuntime for PipedMockRuntime {
+    fn capabilities(&self) -> minibox_core::domain::RuntimeCapabilities {
+        minibox_core::domain::RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: false,
+            supports_network_isolation: false,
+            max_containers: None,
+        }
+    }
+
+    async fn spawn_process(
+        &self,
+        _config: &minibox_core::domain::ContainerSpawnConfig,
+    ) -> anyhow::Result<minibox_core::domain::SpawnResult> {
+        use std::io::Write;
+        use std::os::unix::io::{FromRawFd, IntoRawFd, OwnedFd};
+
+        let (read_fd, write_fd) = nix::unistd::pipe().expect("pipe");
+        // Write the payload into the pipe synchronously, then close the write
+        // end so the drain loop sees EOF immediately.
+        let write_raw = write_fd.into_raw_fd();
+        {
+            // SAFETY: write_raw is the write end of our pipe, valid until close.
+            let mut w = unsafe { std::fs::File::from_raw_fd(write_raw) };
+            w.write_all(&self.payload).expect("write payload");
+            // File::drop closes write_raw here.
+        }
+        let read_raw = read_fd.into_raw_fd();
+        // SAFETY: read_raw is the read end of our pipe, transferred to OwnedFd.
+        let output_reader = unsafe { OwnedFd::from_raw_fd(read_raw) };
+        Ok(minibox_core::domain::SpawnResult {
+            pid: u32::MAX, // fake PID; waitpid will return ECHILD → exit_code -1
+            output_reader: Some(output_reader),
+        })
+    }
+}
+
+/// Regression: handle_run_streaming emits ContainerCreated as the FIRST message.
+///
+/// Before the fix, handle_run_streaming never emitted ContainerCreated at all —
+/// the CLI had no way to learn the container ID until ContainerStopped.
+/// This test verifies the correct streaming sequence:
+///   ContainerCreated → ContainerOutput(s) → ContainerStopped
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_run_streaming_emits_container_created_first() {
+    let payload = b"hello from container\n";
+    let temp_dir = TempDir::new().expect("tempdir");
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"))
+                    as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(PipedMockRuntime {
+                payload: payload.to_vec(),
+            }),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        true, // ephemeral — triggers streaming path
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Collect all responses until channel closes.
+    let mut responses = Vec::new();
+    while let Some(r) = rx.recv().await {
+        responses.push(r);
+    }
+
+    // Regression (1): ContainerCreated must be the very first message.
+    assert!(
+        !responses.is_empty(),
+        "streaming run must send at least one response"
+    );
+    match &responses[0] {
+        DaemonResponse::ContainerCreated { id } => {
+            assert!(!id.is_empty(), "ContainerCreated id must not be empty");
+        }
+        other => {
+            panic!("regression: first streaming message must be ContainerCreated, got: {other:?}")
+        }
+    }
+
+    // Regression (2): ContainerStopped must be the last message (terminal).
+    let last = responses.last().expect("at least one response");
+    assert!(
+        matches!(last, DaemonResponse::ContainerStopped { .. }),
+        "last streaming message must be ContainerStopped, got: {last:?}"
+    );
+
+    // The output from the pipe must appear as ContainerOutput between the two.
+    let output_bytes: Vec<u8> = responses
+        .iter()
+        .filter_map(|r| {
+            if let DaemonResponse::ContainerOutput { data, .. } = r {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(data).ok()
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect();
+    assert_eq!(
+        output_bytes, payload,
+        "streaming output must match the pipe payload"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SIGTERM / process-group signal contract tests
+// ---------------------------------------------------------------------------
+
+/// `handle_stop` on a container whose PID is already dead succeeds immediately.
+///
+/// Documents the fast path: both the SIGTERM to the process group and the
+/// `kill(pid, None)` probe return `ESRCH`, so the poll loop exits on the first
+/// iteration and the container state transitions to "Stopped".
+///
+/// This is the common case for short-lived containers (e.g. `/bin/true`) that
+/// finish before `stop` is called.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_dead_pid_exits_immediately() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // PID 999_997 is virtually certain not to exist on any test host.
+    let container_id = "sigterm_dead_pid01".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/true".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(999_997),
+            },
+            pid: Some(999_997),
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let before = tokio::time::Instant::now();
+    let response = handler::handle_stop(container_id.clone(), state.clone(), deps).await;
+    let elapsed = before.elapsed();
+
+    // Must succeed.
+    match response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("stopped"),
+                "expected 'stopped' in: {message}"
+            );
+        }
+        other => panic!("expected Success, got: {other:?}"),
+    }
+
+    // Must be fast — dead PID exits the poll loop on the first probe (≤250 ms
+    // sleep interval + small epsilon).  If this takes >1 s something is wrong.
+    assert!(
+        elapsed.as_secs() < 1,
+        "stop of dead PID took {}ms, expected <1s",
+        elapsed.as_millis()
+    );
+
+    let record = state
+        .get_container(&container_id)
+        .await
+        .expect("container still in state");
+    assert_eq!(record.info.state, "Stopped");
+}
+
+/// `handle_stop` on a container with no PID returns an error.
+///
+/// Documents the `record.pid.ok_or_else(...)` branch: a container in "Created"
+/// state that was never started has no PID and cannot be signalled.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_container_no_pid_returns_error() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "sigterm_nopid0001".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Created".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let response = handler::handle_stop(container_id, state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("no PID")
+                    || message.contains("not running")
+                    || message.contains("no pid"),
+                "expected a 'no PID' / 'not running' error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got: {other:?}"),
+    }
+}
+
+/// Stopping a non-existent container returns an error.
+///
+/// Documents the `ContainerNotFound` path in `stop_inner`: if the container ID
+/// has no record in state, the handler returns an `Error` response.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_stop_unknown_container_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_stop("does_not_exist_xyz".to_string(), state, deps).await;
+
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found")
+                    || message.contains("NotFound")
+                    || message.contains("does_not_exist"),
+                "expected a 'not found' error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got: {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// handle_load_image Tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_load_image_success() {
+    let tmp = TempDir::new().unwrap();
+
+    struct OkLoader;
+    #[async_trait::async_trait]
+    impl minibox_core::domain::ImageLoader for OkLoader {
+        async fn load_image(&self, _p: &std::path::Path, _n: &str, _t: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    let deps = Arc::try_unwrap(create_test_deps_with_dir(&tmp))
+        .unwrap_or_else(|_| panic!("Arc had other refs"))
+        .with_image_loader(Arc::new(OkLoader) as minibox_core::domain::DynImageLoader);
+    let state = create_test_state_with_dir(&tmp);
+
+    let response = handler::handle_load_image(
+        "fake.tar".to_string(),
+        "minibox-tester".to_string(),
+        "latest".to_string(),
+        state,
+        Arc::new(deps),
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::ImageLoaded { .. }),
+        "expected ImageLoaded, got: {response:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_load_image_failure() {
+    let tmp = TempDir::new().unwrap();
+
+    struct FailLoader;
+    #[async_trait::async_trait]
+    impl minibox_core::domain::ImageLoader for FailLoader {
+        async fn load_image(&self, _p: &std::path::Path, _n: &str, _t: &str) -> anyhow::Result<()> {
+            anyhow::bail!("file not found")
+        }
+    }
+
+    let deps = Arc::try_unwrap(create_test_deps_with_dir(&tmp))
+        .unwrap_or_else(|_| panic!("Arc had other refs"))
+        .with_image_loader(Arc::new(FailLoader) as minibox_core::domain::DynImageLoader);
+    let state = create_test_state_with_dir(&tmp);
+
+    let response = handler::handle_load_image(
+        "/nonexistent/fake.tar".to_string(),
+        "minibox-tester".to_string(),
+        "latest".to_string(),
+        state,
+        Arc::new(deps),
+    )
+    .await;
+
+    assert!(
+        matches!(response, DaemonResponse::Error { .. }),
+        "expected Error, got: {response:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_pause / handle_resume Tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_pause_nonexistent_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_pause(
+        "doesnotexist".to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "got: {resp:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_resume_nonexistent_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_resume(
+        "doesnotexist".to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "got: {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Task 1: ContainerPolicy tests (auth-policy-gate)
+// ---------------------------------------------------------------------------
+
+use daemonbox::handler::ContainerPolicy;
+use minibox_core::domain::BindMount;
+
+fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<HandlerDependencies> {
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).unwrap());
+    Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_pol"),
+            run_containers_base: temp_dir.path().join("run_pol"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy,
+    })
+}
+
+/// Default policy denies bind mounts.
+#[tokio::test]
+async fn test_policy_denies_bind_mount_by_default() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let bind_mount = BindMount {
+        host_path: std::path::PathBuf::from("/tmp/host"),
+        container_path: std::path::PathBuf::from("/mnt/host"),
+        read_only: false,
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![bind_mount],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("bind mount") || message.contains("policy"),
+                "expected policy error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// Default policy denies privileged containers.
+#[tokio::test]
+async fn test_policy_denies_privileged_by_default() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        true, // privileged
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("privileged") || message.contains("policy"),
+                "expected policy error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// Default policy allows plain containers (no mounts, not privileged).
+#[tokio::test]
+async fn test_policy_allows_plain_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "plain container should pass policy, got {resp:?}"
+    );
+}
+
+/// Policy configured with allow_bind_mounts=true permits bind mounts.
+#[tokio::test]
+async fn test_policy_can_be_configured_to_allow_mounts() {
+    let temp_dir = TempDir::new().unwrap();
+    let policy = ContainerPolicy {
+        allow_bind_mounts: true,
+        allow_privileged: false,
+    };
+    let deps = make_deps_with_policy(&temp_dir, policy);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let bind_mount = BindMount {
+        host_path: std::path::PathBuf::from("/tmp/host"),
+        container_path: std::path::PathBuf::from("/mnt/host"),
+        read_only: false,
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![bind_mount],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "policy with allow_bind_mounts should permit bind mounts, got {resp:?}"
+    );
+}
+
+/// Policy configured with allow_privileged=true permits privileged containers.
+#[tokio::test]
+async fn test_policy_can_be_configured_to_allow_privileged() {
+    let temp_dir = TempDir::new().unwrap();
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: true,
+    };
+    let deps = make_deps_with_policy(&temp_dir, policy);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        true, // privileged
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::ContainerCreated { .. }),
+        "policy with allow_privileged should permit privileged, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Task 2: handler coverage gap tests
+// ---------------------------------------------------------------------------
+
+/// handle_run with a registry that fails pull → Error response.
+#[tokio::test]
+async fn test_handle_run_image_pull_failure() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_pf"),
+            run_containers_base: temp_dir.path().join("run_pf"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "pull failure should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_run with an image that has no layers → Error response.
+#[tokio::test]
+async fn test_handle_run_empty_layers() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_empty_layers()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_el"),
+            run_containers_base: temp_dir.path().join("run_el"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "empty layers should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_pull for a non-existent image (pull failure) → Error response.
+#[tokio::test]
+async fn test_handle_pull_nonexistent_image() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_ni"),
+            run_containers_base: temp_dir.path().join("run_ni"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: ContainerPolicy::default(),
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_pull(
+        "does-not-exist".to_string(),
+        Some("latest".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "nonexistent image pull should return Error, got {resp:?}"
+    );
+}
+
+/// handle_stop with an unknown container ID → Error response.
+#[tokio::test]
+async fn test_handle_stop_nonexistent_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_stop("nonexistent-id-xyz".to_string(), state, deps).await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// handle_remove with an unknown container ID → Error response.
+#[tokio::test]
+async fn test_handle_rm_nonexistent_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handler::handle_remove("nonexistent-id-xyz".to_string(), state, deps).await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// handle_logs Tests
+// ---------------------------------------------------------------------------
+
+/// handle_logs for unknown container_id → Error response.
+#[tokio::test]
+async fn test_handle_logs_unknown_container() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_logs("nonexistent-id".to_string(), false, state, deps, tx).await;
+
+    let resp = rx.recv().await.expect("handle_logs sent no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found") || message.contains("nonexistent"),
+                "expected not-found error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {resp:?}"),
+    }
+}
+
+/// handle_logs for known container with log files → LogLine + Success.
+#[tokio::test]
+async fn test_handle_logs_reads_log_files() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Register a container in state.
+    let container_id = "logtest001logtest001";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    // Write log files to the expected path.
+    let container_dir = temp_dir.path().join("containers").join(container_id);
+    std::fs::create_dir_all(&container_dir).unwrap();
+    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n").unwrap();
+    std::fs::write(container_dir.join("stderr.log"), "err line\n").unwrap();
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
+    handler::handle_logs(container_id.to_string(), false, state, deps, tx).await;
+
+    let mut log_lines = Vec::new();
+    let mut got_success = false;
+    while let Some(resp) = rx.recv().await {
+        match resp {
+            DaemonResponse::LogLine { stream: _, line } => log_lines.push(line),
+            DaemonResponse::Success { .. } => {
+                got_success = true;
+                break;
+            }
+            other => panic!("unexpected response: {other:?}"),
+        }
+    }
+
+    assert!(got_success, "expected terminal Success");
+    assert!(log_lines.contains(&"line one".to_string()));
+    assert!(log_lines.contains(&"line two".to_string()));
+    assert!(log_lines.contains(&"err line".to_string()));
+}
+
+// ---------------------------------------------------------------------------
+// PtySessionRegistry — SendInput / ResizePty handler tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn send_input_unknown_session_returns_error() {
+    use base64::Engine as _;
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    let data = base64::engine::general_purpose::STANDARD.encode(b"hello");
+    handle_send_input(
+        minibox_core::domain::SessionId::from("no-such-session"),
+        data,
+        deps,
+        tx,
+    )
+    .await;
+    let resp = rx.recv().await.unwrap();
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for unknown session, got {resp:?}"
+    );
+}
+
+#[tokio::test]
+async fn resize_pty_unknown_session_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+    handle_resize_pty(
+        minibox_core::domain::SessionId::from("no-such-session"),
+        80,
+        24,
+        deps,
+        tx,
+    )
+    .await;
+    let resp = rx.recv().await.unwrap();
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for unknown session, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Additional error-path tests for handle_pause / handle_resume (#116)
+// ---------------------------------------------------------------------------
+
+/// Pausing a stopped container returns an Error — the container must be Running.
+#[tokio::test]
+async fn test_pause_stopped_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let container_id = "pausetest001abc01";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not running") || message.contains("Stopped"),
+                "expected 'not running' error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error for stopped container, got {resp:?}"),
+    }
+}
+
+/// Resuming a running (non-paused) container returns an Error.
+///
+/// Only containers in state `Paused` can be resumed.
+#[tokio::test]
+async fn test_resume_running_container_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let container_id = "resumetest001abc0";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(12345),
+        },
+        pid: Some(12345),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not paused") || message.contains("Running"),
+                "expected 'not paused' error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error for non-paused container, got {resp:?}"),
+    }
+}
+
+/// Pausing a Running container whose cgroup directory does not exist returns an Error.
+///
+/// `handle_pause` writes `1` to `{cgroup_path}/cgroup.freeze`. If the cgroup
+/// dir is absent the write must fail gracefully rather than panic.
+#[tokio::test]
+async fn test_pause_missing_cgroup_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    // Point cgroup_path at a directory that does not exist.
+    let nonexistent_cgroup = tmp.path().join("no-such-cgroup-dir");
+
+    let container_id = "pausecgrouptest001";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99999),
+        },
+        pid: Some(99999),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: nonexistent_cgroup,
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("pause failed") || message.contains("No such file"),
+                "expected cgroup write error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error when cgroup path is absent, got {resp:?}"),
+    }
+}
+
+/// Resuming a Paused container whose cgroup directory does not exist returns an Error.
+///
+/// Mirrors `test_pause_missing_cgroup_returns_error` for the resume path.
+#[tokio::test]
+async fn test_resume_missing_cgroup_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let nonexistent_cgroup = tmp.path().join("no-such-cgroup-resume");
+
+    let container_id = "resumecgrouptest01";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Paused".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99998),
+        },
+        pid: Some(99998),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: nonexistent_cgroup,
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        state,
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("resume failed") || message.contains("No such file"),
+                "expected cgroup write error, got: {message}"
+            );
+        }
+        _ => panic!("expected Error when cgroup path is absent, got {resp:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// validate_policy unit tests (#116, #123)
+// ---------------------------------------------------------------------------
+
+/// Plain container (no mounts, not privileged) passes any policy configuration.
+#[test]
+fn test_validate_policy_plain_container_always_allowed() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+
+    let policy = ContainerPolicy::default(); // deny-all defaults
+    assert!(
+        validate_policy(&[], false, &policy).is_ok(),
+        "plain container must always pass policy"
+    );
+}
+
+/// `validate_policy` rejects bind mounts when `allow_bind_mounts` is false.
+#[test]
+fn test_validate_policy_denies_bind_mount() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+    use minibox_core::domain::BindMount;
+
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: false,
+    };
+    let mounts = vec![BindMount {
+        host_path: std::path::PathBuf::from("/tmp/data"),
+        container_path: std::path::PathBuf::from("/data"),
+        read_only: false,
+    }];
+    let err = validate_policy(&mounts, false, &policy).unwrap_err();
+    assert!(
+        err.contains("bind mount") || err.contains("policy"),
+        "expected bind-mount policy error, got: {err}"
+    );
+}
+
+/// `validate_policy` rejects privileged=true when `allow_privileged` is false.
+#[test]
+fn test_validate_policy_denies_privileged() {
+    use daemonbox::handler::{ContainerPolicy, validate_policy};
+
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: false,
+    };
+    let err = validate_policy(&[], true, &policy).unwrap_err();
+    assert!(
+        err.contains("privileged") || err.contains("policy"),
+        "expected privileged policy error, got: {err}"
+    );
+}
+
+/// handle_run rejects a second container that tries to claim an already-used name.
+#[tokio::test]
+async fn test_handle_run_duplicate_container_name_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // First run — claims name "mybox".
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mybox".to_string()),
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx1,
+    )
+    .await;
+    let first = rx1.recv().await.expect("first run: no response");
+    assert!(
+        matches!(first, DaemonResponse::ContainerCreated { .. }),
+        "first run should succeed, got {first:?}"
+    );
+
+    // Second run with the same name must be rejected.
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mybox".to_string()),
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx2,
+    )
+    .await;
+    let second = rx2.recv().await.expect("second run: no response");
+    assert!(
+        matches!(second, DaemonResponse::Error { .. }),
+        "duplicate name should produce Error, got {second:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_push Tests
+// ---------------------------------------------------------------------------
+
+/// handle_push with no image_pusher wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_push_no_pusher_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_push(
+        "docker.io/library/alpine:latest".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_push with an invalid image ref → Error.
+#[tokio::test]
+async fn test_handle_push_invalid_image_ref_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_pusher =
+            Some(Arc::clone(&mock_pusher) as minibox_core::domain::DynImagePusher);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_push(
+        "".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid ref, got {resp:?}"
+    );
+}
+
+/// handle_push with a valid pusher and valid image ref → Success.
+#[tokio::test]
+async fn test_handle_push_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_pusher =
+            Some(Arc::clone(&mock_pusher) as minibox_core::domain::DynImagePusher);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+
+    handler::handle_push(
+        "docker.io/library/alpine:latest".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain until terminal (Success or Error).
+    let mut terminal = None;
+    while let Ok(Some(r)) =
+        tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await
+    {
+        if !matches!(r, DaemonResponse::PushProgress { .. }) {
+            terminal = Some(r);
+            break;
+        }
+    }
+    assert!(
+        matches!(terminal, Some(DaemonResponse::Success { .. })),
+        "expected Success, got {terminal:?}"
+    );
+    assert!(mock_pusher.has_tag("docker.io/library/alpine:latest"));
+}
+
+// ---------------------------------------------------------------------------
+// handle_commit Tests
+// ---------------------------------------------------------------------------
+
+/// handle_commit with no commit_adapter wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_commit_no_adapter_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_commit with invalid container id → Error.
+#[tokio::test]
+async fn test_handle_commit_invalid_container_id_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "".to_string(), // empty → invalid ContainerId
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid container id, got {resp:?}"
+    );
+}
+
+/// handle_commit with valid adapter and valid container id → Success.
+#[tokio::test]
+async fn test_handle_commit_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        Some("test-author".to_string()),
+        Some("test commit".to_string()),
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("myimage:v1")),
+        "expected Success with target image, got {resp:?}"
+    );
+    assert_eq!(mock_committer.call_count(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// handle_build Tests
+// ---------------------------------------------------------------------------
+
+/// handle_build with no image_builder wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_build_no_builder_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_build(
+        "FROM alpine\nRUN echo hi".to_string(),
+        temp_dir.path().to_str().unwrap().to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+/// handle_build with a relative context_path → Error.
+#[tokio::test]
+async fn test_handle_build_relative_context_path_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_build(
+        "FROM alpine".to_string(),
+        "relative/path".to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("absolute")),
+        "expected 'absolute' path error, got {resp:?}"
+    );
+}
+
+/// handle_build with valid builder and absolute context path → BuildComplete.
+#[tokio::test]
+async fn test_handle_build_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+
+    handler::handle_build(
+        "FROM alpine\nRUN echo hi".to_string(),
+        temp_dir.path().to_str().unwrap().to_string(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain until terminal response.
+    let mut terminal = None;
+    while let Ok(Some(r)) =
+        tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await
+    {
+        if !matches!(r, DaemonResponse::BuildOutput { .. }) {
+            terminal = Some(r);
+            break;
+        }
+    }
+    assert!(
+        matches!(
+            terminal,
+            Some(DaemonResponse::BuildComplete { ref tag, .. }) if tag == "myimage:latest"
+        ),
+        "expected BuildComplete, got {terminal:?}"
+    );
+    assert_eq!(mock_builder.call_count(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// handle_exec Tests
+// ---------------------------------------------------------------------------
+
+/// handle_exec with no exec_runtime wired → Error "not supported".
+#[tokio::test]
+async fn test_handle_exec_no_runtime_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir); // exec_runtime: None
+    let state = create_test_state_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_exec(
+        "abc123def456abcd".to_string(),
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not supported")),
+        "expected 'not supported' error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_send_input happy path — channel registered, bytes delivered (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// Registering a stdin channel then calling handle_send_input delivers
+/// decoded bytes to the channel and returns Success.
+///
+/// Covers the `reg.stdin.get(...)` Some arm and final Success send in
+/// handle_send_input — both previously uncovered.
+#[tokio::test]
+async fn test_handle_send_input_delivers_bytes_and_returns_success() {
+    use base64::Engine as _;
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let session_id = "test-session-send-01";
+    let (stdin_tx, mut stdin_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+    {
+        let mut reg = deps.exec.pty_sessions.lock().await;
+        reg.stdin.insert(session_id.to_string(), stdin_tx);
+    }
+
+    let payload = b"hello world";
+    let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::from(session_id),
+        encoded,
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    let received = stdin_rx
+        .recv()
+        .await
+        .expect("stdin channel must receive bytes");
+    assert_eq!(&received[..], payload, "delivered bytes must match payload");
+
+    let resp = rx.recv().await.expect("no response from handle_send_input");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("input")),
+        "expected Success with 'input' in message, got {resp:?}"
+    );
+}
+
+/// handle_send_input with invalid base64 returns Error.
+#[tokio::test]
+async fn test_handle_send_input_invalid_base64_returns_error() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::from("any-session"),
+        "!!!not-base64!!!".to_string(),
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error for invalid base64, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_resize_pty happy path — channel registered, resize delivered (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// Registering a resize channel then calling handle_resize_pty delivers
+/// (cols, rows) and returns Success — both previously uncovered.
+#[tokio::test]
+async fn test_handle_resize_pty_delivers_size_and_returns_success() {
+    let tmp = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let session_id = "test-session-resize-01";
+    let (resize_tx, mut resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
+    {
+        let mut reg = deps.exec.pty_sessions.lock().await;
+        reg.resize.insert(session_id.to_string(), resize_tx);
+    }
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_resize_pty(
+        minibox_core::domain::SessionId::from(session_id),
+        132,
+        50,
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    let (cols, rows) = resize_rx
+        .recv()
+        .await
+        .expect("resize channel must receive size");
+    assert_eq!((cols, rows), (132, 50), "resize dimensions must match");
+
+    let resp = rx.recv().await.expect("no response from handle_resize_pty");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("resize")),
+        "expected Success with 'resize' in message, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_pause / handle_resume success paths (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// handle_pause on a Running container with a writable cgroup dir returns
+/// ContainerPaused and transitions state to Paused.
+#[tokio::test]
+async fn test_handle_pause_running_container_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let cgroup_dir = tmp.path().join("fake-cgroup-pause");
+    std::fs::create_dir_all(&cgroup_dir).unwrap();
+
+    let container_id = "pausesuccesstest01";
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Running".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(99997),
+            },
+            pid: Some(99997),
+            rootfs_path: tmp.path().join("fake-rootfs"),
+            cgroup_path: cgroup_dir.clone(),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let resp = handler::handle_pause(
+        container_id.to_string(),
+        Arc::clone(&state),
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerPaused { ref id } if id == container_id),
+        "expected ContainerPaused, got {resp:?}"
+    );
+
+    let record = state
+        .get_container(container_id)
+        .await
+        .expect("container must still exist");
+    assert_eq!(
+        record.info.state, "Paused",
+        "state should be Paused after handle_pause"
+    );
+}
+
+/// handle_resume on a Paused container with a writable cgroup dir returns
+/// ContainerResumed and transitions state to Running.
+#[tokio::test]
+async fn test_handle_resume_paused_container_succeeds() {
+    use daemonbox::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let cgroup_dir = tmp.path().join("fake-cgroup-resume");
+    std::fs::create_dir_all(&cgroup_dir).unwrap();
+    std::fs::write(cgroup_dir.join("cgroup.freeze"), "1\n").unwrap();
+
+    let container_id = "resumesuccesstest1";
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Paused".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: Some(99996),
+            },
+            pid: Some(99996),
+            rootfs_path: tmp.path().join("fake-rootfs"),
+            cgroup_path: cgroup_dir.clone(),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        })
+        .await;
+
+    let resp = handler::handle_resume(
+        container_id.to_string(),
+        Arc::clone(&state),
+        Arc::new(minibox_core::events::NoopEventSink),
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::ContainerResumed { ref id } if id == container_id),
+        "expected ContainerResumed, got {resp:?}"
+    );
+
+    let record = state
+        .get_container(container_id)
+        .await
+        .expect("container must still exist");
+    assert_eq!(
+        record.info.state, "Running",
+        "state should be Running after handle_resume"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PtySessionRegistry::cleanup unit test (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// cleanup removes both the resize and stdin channels for the target session
+/// while leaving all other sessions intact.
+#[tokio::test]
+async fn test_pty_session_registry_cleanup_removes_only_target_session() {
+    use daemonbox::handler::PtySessionRegistry;
+
+    let mut registry = PtySessionRegistry::default();
+
+    let (resize_tx_a, _) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
+    let (stdin_tx_a, _) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+    let (resize_tx_b, _) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
+    let (stdin_tx_b, _) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+
+    registry.resize.insert("session-a".to_string(), resize_tx_a);
+    registry.stdin.insert("session-a".to_string(), stdin_tx_a);
+    registry.resize.insert("session-b".to_string(), resize_tx_b);
+    registry.stdin.insert("session-b".to_string(), stdin_tx_b);
+
+    registry.cleanup("session-a");
+
+    assert!(
+        !registry.resize.contains_key("session-a"),
+        "session-a resize must be removed"
+    );
+    assert!(
+        !registry.stdin.contains_key("session-a"),
+        "session-a stdin must be removed"
+    );
+    assert!(
+        registry.resize.contains_key("session-b"),
+        "session-b resize must remain"
+    );
+    assert!(
+        registry.stdin.contains_key("session-b"),
+        "session-b stdin must remain"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// send_error dropped-receiver path (#116/#129)
+// ---------------------------------------------------------------------------
+
+/// When the response channel receiver is dropped before handle_run sends its
+/// terminal error response, the `if tx.send(...).await.is_err()` warn path
+/// must not panic.
+#[tokio::test]
+async fn test_handler_with_dropped_receiver_does_not_panic() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+
+    let deps_fail = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(tmp.path().join("img_dr")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers_dr"),
+            run_containers_base: tmp.path().join("run_dr"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+    });
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+    drop(rx); // closed — any send returns Err, triggering the warn path
+
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps_fail,
+        tx,
+    )
+    .await;
+    // No panic = warn path exercised correctly.
+}
+
+// ---------------------------------------------------------------------------
+// Error-path tests: handle_run — infrastructure adapter failures
+// ---------------------------------------------------------------------------
+
+/// handle_run with a filesystem that fails setup_rootfs → Error response (variant 2).
+#[tokio::test]
+async fn test_handle_run_filesystem_setup_failure_v2() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_fs")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new().with_setup_failure()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_fs"),
+            run_containers_base: temp_dir.path().join("run_fs"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "filesystem setup failure should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_run with a resource limiter that fails create → Error response.
+#[tokio::test]
+async fn test_handle_run_limiter_create_failure() {
+    let temp_dir = TempDir::new().unwrap();
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_lc")).unwrap());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new().with_create_failure()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_lc"),
+            run_containers_base: temp_dir.path().join("run_lc"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let resp = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "limiter create failure should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_run — bind-mount denied by default policy → Error response.
+#[tokio::test]
+async fn test_handle_run_bind_mount_denied_by_policy() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_bm")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_bm"),
+            run_containers_base: temp_dir.path().join("run_bm"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![BindMount {
+            host_path: std::path::PathBuf::from("/tmp/data"),
+            container_path: std::path::PathBuf::from("/data"),
+            read_only: false,
+        }],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("bind mount")),
+        "bind mount policy denial should produce Error, got {resp:?}"
+    );
+}
+
+/// handle_run — privileged mode denied by default policy → Error response.
+#[tokio::test]
+async fn test_handle_run_privileged_denied_by_policy() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_pr")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers_pr"),
+            run_containers_base: temp_dir.path().join("run_pr"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        },
+    });
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        true, // privileged=true, policy denies it
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("privileged")),
+        "privileged policy denial should produce Error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error-path tests: handle_remove — running container
+// ---------------------------------------------------------------------------
+
+/// handle_remove on a Running container → Error (AlreadyRunning).
+#[tokio::test]
+async fn test_handle_remove_running_container_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let container_id = "removerunning001ab";
+    let record = daemonbox::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(12345),
+        },
+        pid: Some(12345),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    let resp = handler::handle_remove(container_id.to_string(), state, deps).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "removing a Running container should produce Error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error-path tests: handle_pull — invalid image reference
+// ---------------------------------------------------------------------------
+
+/// handle_pull with an empty image string (invalid ref) → Error response (variant 2).
+#[tokio::test]
+async fn test_handle_pull_invalid_image_ref_returns_error_v2() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // An empty string is not a valid image reference.
+    let resp = handler::handle_pull("".to_string(), None, state, deps).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "invalid image ref should produce Error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error-path tests: handle_load_image — loader failure
+// ---------------------------------------------------------------------------
+
+/// Failing image loader used in load_image error-path tests.
+struct FailingImageLoader;
+
+#[async_trait::async_trait]
+impl minibox_core::domain::ImageLoader for FailingImageLoader {
+    async fn load_image(
+        &self,
+        _path: &std::path::Path,
+        _name: &str,
+        _tag: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("mock image loader failure")
+    }
+}
+
+/// handle_load_image with a loader that always fails → Error response.
+#[tokio::test]
+async fn test_handle_load_image_loader_failure() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.image.image_loader = Arc::new(FailingImageLoader);
+        Arc::new(d)
+    };
+
+    let resp = handler::handle_load_image(
+        "/tmp/nonexistent.tar".to_string(),
+        "myimage".to_string(),
+        "latest".to_string(),
+        state,
+        deps,
+    )
+    .await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { .. }),
+        "image loader failure should produce Error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Issue #134 — bridge networking, exec error path, persistence semantics
+// ---------------------------------------------------------------------------
+
+/// handle_run with NetworkMode::Bridge calls network_provider.setup() once.
+///
+/// Guards that the bridge network code path is exercised end-to-end through
+/// the handler without requiring any Linux-only syscalls.
+#[tokio::test]
+async fn test_handle_run_bridge_network_mode_calls_setup() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        Some(NetworkMode::Bridge),
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let _resp = rx.recv().await.expect("handler sent no response");
+    assert_eq!(
+        mock_network.setup_count(),
+        1,
+        "network_provider.setup() must be called once for NetworkMode::Bridge"
+    );
+}
+
+/// ExecRuntime adapter that always returns Err — used in exec error-path tests.
+struct FailingExecRuntime;
+
+#[async_trait::async_trait]
+impl minibox_core::domain::ExecRuntime for FailingExecRuntime {
+    async fn run_in_container(
+        &self,
+        _container_id: &minibox_core::domain::ContainerId,
+        _spec: minibox_core::domain::ExecSpec,
+        _tx: tokio::sync::mpsc::Sender<minibox_core::protocol::DaemonResponse>,
+    ) -> anyhow::Result<minibox_core::domain::ExecHandle> {
+        anyhow::bail!("mock exec runtime failure: setns not supported")
+    }
+}
+
+impl minibox_core::domain::AsAny for FailingExecRuntime {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// handle_exec with an exec_runtime that returns Err → DaemonResponse::Error.
+///
+/// Covers the Err arm of exec_rt.run_in_container() in handle_exec.
+#[tokio::test]
+async fn test_handle_exec_with_runtime_returning_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.exec.exec_runtime = Some(Arc::new(FailingExecRuntime));
+        Arc::new(d)
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_exec(
+        "abc123def456abcd".to_string(),
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("exec failed")),
+        "exec_runtime error should produce 'exec failed' Error response, got {resp:?}"
+    );
+}
+
+/// add_container triggers save_to_disk; a new DaemonState loaded from the same
+/// directory via load_from_disk must contain the same container record.
+///
+/// Guards the persistence contract documented in docs/STATE_MODEL.md.
+#[tokio::test]
+async fn test_daemon_state_persistence_survives_restart() {
+    let tmp = TempDir::new().unwrap();
+
+    let container_id = "persist-test-00001a";
+    {
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let state = DaemonState::new(image_store, tmp.path());
+        let record = daemonbox::state::ContainerRecord {
+            info: minibox_core::protocol::ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        };
+        state.add_container(record).await;
+    }
+
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let state2 = DaemonState::new(image_store2, tmp.path());
+    state2.load_from_disk().await;
+
+    let container = state2.get_container(container_id).await;
+    assert!(
+        container.is_some(),
+        "container record must survive daemon restart"
+    );
+    assert_eq!(
+        container.unwrap().info.id,
+        container_id,
+        "restored container must have the same id"
+    );
+}
+
+/// remove_container triggers save_to_disk; a new DaemonState loaded from the
+/// same directory must not contain the removed record.
+#[tokio::test]
+async fn test_daemon_state_remove_persists_to_disk() {
+    let tmp = TempDir::new().unwrap();
+
+    let container_id = "remove-persist-0001";
+    {
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let state = DaemonState::new(image_store, tmp.path());
+        let record = daemonbox::state::ContainerRecord {
+            info: minibox_core::protocol::ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        };
+        state.add_container(record).await;
+        state.remove_container(container_id).await;
+    }
+
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let state2 = DaemonState::new(image_store2, tmp.path());
+    state2.load_from_disk().await;
+
+    assert!(
+        state2.get_container(container_id).await.is_none(),
+        "removed container must not appear after restart"
     );
 }

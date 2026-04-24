@@ -75,6 +75,39 @@ impl DaemonResponseStream {
     }
 }
 
+/// A write-only connection that sends a single [`DaemonRequest`] and discards the response.
+///
+/// Used for fire-and-forget fire-and-forget messages like `SendInput` and `ResizePty` where the
+/// caller does not need to inspect the daemon's `Success`/`Error` reply.
+pub struct DaemonWriter {
+    socket_path: std::path::PathBuf,
+}
+
+impl DaemonWriter {
+    pub fn with_socket(path: impl AsRef<Path>) -> Self {
+        Self {
+            socket_path: path.as_ref().to_path_buf(),
+        }
+    }
+
+    /// Send `request` to the daemon and return immediately without reading the response.
+    pub async fn send(&self, request: DaemonRequest) -> Result<()> {
+        let mut stream = UnixStream::connect(&self.socket_path)
+            .await
+            .map_err(ClientError::ConnectionFailed)?;
+        let payload = serde_json::to_string(&request)?;
+        stream
+            .write_all(format!("{}\n", payload).as_bytes())
+            .await
+            .map_err(ClientError::ConnectionFailed)?;
+        stream
+            .flush()
+            .await
+            .map_err(ClientError::ConnectionFailed)?;
+        Ok(())
+    }
+}
+
 impl Default for DaemonClient {
     fn default() -> Self {
         Self::new().expect("failed to create default client")

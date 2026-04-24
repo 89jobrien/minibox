@@ -8,7 +8,7 @@
 
 ## Overview
 
-Three-tier stability pipeline for minibox: `main` (develop) → `next` (validated) → `stable` (release). Every commit on every branch must compile. Designed to support future Maestro integration (linuxbox as Cargo dependency) and self-hosted CI via minibox containers.
+Three-tier stability pipeline for minibox: `main` (develop) → `next` (validated) → `stable` (release). Every commit on every branch must compile. Designed to support future Maestro integration (minibox as Cargo dependency) and self-hosted CI via minibox containers.
 
 ## Branch Model
 
@@ -22,14 +22,14 @@ chore/*    ──┴──► main (develop) ──auto──► next (validated
 
 ### Branch Purposes
 
-| Branch | Role | Who commits | Deletion policy |
-|--------|------|-------------|-----------------|
-| `main` | Active R&D. All feature work merges here. | Direct push or PR merge | Never deleted |
-| `next` | Validated accumulator. Auto-promoted from `main` when CI green. | GitHub Actions only | Never deleted |
-| `stable` | Maestro-consumable. API-stable linuxbox crate. Tagged releases cut here. | Manual promote from `next` | Never deleted |
-| `feature/*` | Short-lived topic branches | Developer | Deleted after merge |
-| `hotfix/*` | Emergency fixes targeting `stable` | Developer | Deleted after merge; backmerged down |
-| `chore/*` | Non-functional changes (docs, CI, deps) | Developer | Deleted after merge |
+| Branch      | Role                                                                    | Who commits                | Deletion policy                      |
+| ----------- | ----------------------------------------------------------------------- | -------------------------- | ------------------------------------ |
+| `main`      | Active R&D. All feature work merges here.                               | Direct push or PR merge    | Never deleted                        |
+| `next`      | Validated accumulator. Auto-promoted from `main` when CI green.         | GitHub Actions only        | Never deleted                        |
+| `stable`    | Maestro-consumable. API-stable minibox crate. Tagged releases cut here. | Manual promote from `next` | Never deleted                        |
+| `feature/*` | Short-lived topic branches                                              | Developer                  | Deleted after merge                  |
+| `hotfix/*`  | Emergency fixes targeting `stable`                                      | Developer                  | Deleted after merge; backmerged down |
+| `chore/*`   | Non-functional changes (docs, CI, deps)                                 | Developer                  | Deleted after merge                  |
 
 ### Invariant
 
@@ -39,25 +39,25 @@ Every commit on every branch must compile. No exceptions.
 
 ### Local Hooks (developer machine)
 
-| Hook | Command | Equivalent tier |
-|------|---------|-----------------|
-| pre-commit | `cargo xtask pre-commit` (fmt-check + clippy + release build) | `main` gate |
-| pre-push | `cargo xtask prepush` (nextest + llvm-cov coverage) | `next` gate |
+| Hook       | Command                                                       | Equivalent tier |
+| ---------- | ------------------------------------------------------------- | --------------- |
+| pre-commit | `cargo xtask pre-commit` (fmt-check + clippy + release build) | `main` gate     |
+| pre-push   | `cargo xtask prepush` (nextest + llvm-cov coverage)           | `next` gate     |
 
 ### Remote CI (GitHub Actions)
 
 CI mirrors the local hooks as server-side enforcement. Force-push or `--no-verify` cannot bypass remote gates.
 
-| Gate | Local hook | `main` CI | `next` CI | `stable` CI |
-|------|-----------|-----------|-----------|-------------|
-| fmt + clippy + check | pre-commit | x | x | x |
-| nextest + coverage | pre-push | | x | x |
-| snapshot check (`cargo insta test --check`) | pre-push | | x | x |
-| audit + deny + machete | | | x | x |
-| bench run + regression report (warn, not gate) | | | x | x |
-| e2e suite (Phase 2) | | | | x |
-| geiger (unsafe audit) | | | | x |
-| Manual review | | | | x |
+| Gate                                           | Local hook | `main` CI | `next` CI | `stable` CI |
+| ---------------------------------------------- | ---------- | --------- | --------- | ----------- |
+| fmt + clippy + check                           | pre-commit | x         | x         | x           |
+| nextest + coverage                             | pre-push   |           | x         | x           |
+| snapshot check (`cargo insta test --check`)    | pre-push   |           | x         | x           |
+| audit + deny + machete                         |            |           | x         | x           |
+| bench run + regression report (warn, not gate) |            |           | x         | x           |
+| e2e suite (Phase 2)                            |            |           |           | x           |
+| geiger (unsafe audit)                          |            |           |           | x           |
+| Manual review                                  |            |           |           | x           |
 
 ### Snapshot Testing
 
@@ -79,12 +79,14 @@ Protocol wire format and CLI output are snapshot-tested via `insta`. Snapshots c
 ### CI Phases (self-hosted runner on jobrien-vm)
 
 **Phase 1 (immediate):** Non-compile gates only. Fast, low-resource, no `target/` needed.
+
 - `cargo audit`
 - `cargo deny`
 - `cargo machete`
 - `cargo geiger`
 
 **Phase 2 (future):** Compile + test inside minibox containers on the runner.
+
 - `cargo xtask test-unit`
 - `cargo xtask test-e2e-suite`
 - Shared `CARGO_TARGET_DIR` mount for incremental builds
@@ -97,6 +99,7 @@ Protocol wire format and CLI output are snapshot-tested via `insta`. Snapshots c
 Triggers: push to `main`, `next`, `stable`, `feature/*`, `hotfix/*`, `chore/*` + PRs to `main`, `next`.
 
 Jobs:
+
 - **compile-check** (all branches): `cargo check --workspace && cargo fmt --all --check && cargo clippy ...`
 - **test-unit** (`next`, `stable` only): `cargo xtask test-unit` on self-hosted runner
 - **audit** (`next`, `stable`): `cargo audit`
@@ -109,6 +112,7 @@ Jobs:
 Triggers: push to `main`, `next`, `stable`.
 
 Jobs:
+
 - **auto-promote-main**: On green `main` CI, fast-forward merge `main` into `next`. GitHub Actions bot only.
 - **manual-promote-next**: `workflow_dispatch` to promote `next` → `stable`. Requires manual trigger.
 - **hotfix-backmerge**: When a `[hotfix]` commit lands on `stable`, auto-backmerge `stable → next → main`.
@@ -118,6 +122,7 @@ Jobs:
 Trigger: `v*` tag on `stable`.
 
 Jobs:
+
 - Cross-compile musl binaries (x86_64 + aarch64)
 - Create GitHub Release with artifacts
 
@@ -126,35 +131,40 @@ Jobs:
 Trigger: cron (daily 02:00 UTC).
 
 Jobs:
+
 - `cargo geiger` unsafe audit (informational, does not block)
 
 ## Remotes
 
-| Remote | URL | Role |
-|--------|-----|------|
-| `origin` | `git@github.com:89jobrien/minibox.git` | Primary (swap from Gitea) |
-| `gitea` | `ssh://git@100.105.75.7:2222/joe/minibox.git` | Mirror (when VM is back) |
+| Remote   | URL                                           | Role                      |
+| -------- | --------------------------------------------- | ------------------------- |
+| `origin` | `git@github.com:89jobrien/minibox.git`        | Primary (swap from Gitea) |
+| `gitea`  | `ssh://git@100.105.75.7:2222/joe/minibox.git` | Mirror (when VM is back)  |
 
 **Action required:** Swap `origin` to point to GitHub. Rename current `origin` to `gitea`.
 
 ## Cleanup Automation
 
 ### Merged branches
+
 - GitHub repo setting: auto-delete head branch on PR merge
 - Local: `git fetch --prune` removes stale remote-tracking refs
 
 ### Stale worktrees
+
 - `.worktrees/` dirs from completed feature branches
 - post-merge hook or periodic: `git worktree prune`
 
 ### Build artifacts on runner
+
 - Post-job step: `cargo xtask clean-artifacts`
 - Nightly cron: full `target/` wipe on runner (cold builds are rare — nightly at worst)
 - Pre-e2e step (Phase 2): `cargo xtask nuke-test-state` (kill orphans, unmount overlays, clean cgroups/tmp)
 
 ### Shared target directory
+
 - Runner: `CARGO_TARGET_DIR=/var/lib/minibox/cache/target/`
-- Local dev: `CARGO_TARGET_DIR=~/.mbx/cache/target/`
+- Local dev: `CARGO_TARGET_DIR=~/.minibox/cache/target/`
 - Worktrees share the same `target/` — no per-worktree duplication
 - Phase 2: minibox containers mount the shared dir as a volume
 
@@ -188,9 +198,9 @@ When a commit with `[hotfix]` lands on `stable`:
 
 ## Maestro Integration (future)
 
-Maestro will consume minibox as a **Cargo library** (`linuxbox` crate). The `stable` branch represents API stability:
+Maestro will consume minibox as a **Cargo library** (`minibox` crate). The `stable` branch represents API stability:
 
-- Semver on `stable` tags: breaking changes to `linuxbox` public API require a minor version bump (pre-1.0) or major bump (post-1.0)
+- Semver on `stable` tags: breaking changes to `minibox` public API require a minor version bump (pre-1.0) or major bump (post-1.0)
 - Maestro's `maestro-cli` Cargo.toml would pin to a minibox release tag or git rev on `stable`
 - No binary distribution needed for Maestro integration — direct crate dependency
 

@@ -3,29 +3,32 @@ name = "minibox-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+description = "Cross-platform shared types, domain traits, and protocol for the minibox container runtime"
+repository.workspace = true
+homepage.workspace = true
 
 [features]
-# Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use
-# in dev-dependencies of other crates without cfg(test) restrictions.
-test-utils = []
+# Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
+# dev-dependencies of other crates without cfg(test) restrictions.
+# tempfile is pulled in as a real dependency because test_fixtures.rs and
+# conformance.rs compile as library code (not cfg(test)) under this feature.
+test-utils = ["dep:tempfile"]
 
 [dependencies]
+minibox-oci = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
-flate2 = { workspace = true }
-tar = { workspace = true }
-bytes = { workspace = true }
-futures = { workspace = true }
-tempfile = { workspace = true }
 async-trait = { workspace = true }
+uuid = { workspace = true }
 minibox-macros = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
@@ -33,3 +36,6 @@ nix = { workspace = true }
 [dev-dependencies]
 wiremock = { workspace = true }
 proptest = "1"
+base64 = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
