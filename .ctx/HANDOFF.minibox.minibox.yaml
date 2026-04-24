@@ -35,7 +35,7 @@ items:
 - id: minibox-33
   doob_uuid: null
   name: winbox-hyper-v-wsl2
-  priority: P2
+  priority: P1
   status: open
   title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
   description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
@@ -53,7 +53,7 @@ items:
 - id: minibox-34
   doob_uuid: null
   name: mbx-dagu-tier2
-  priority: P2
+  priority: P1
   status: open
   title: 'Tier 2 mbx-dagu fixes (#31, #35, #36)'
   description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
@@ -89,7 +89,7 @@ items:
 - id: minibox-46
   doob_uuid: null
   name: pty-stdio-plan
-  priority: P2
+  priority: P1
   status: open
   title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
   description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md. Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full PTY fork/exec wiring deferred — requires Linux root.'
@@ -171,7 +171,7 @@ items:
 - id: minibox-55
   doob_uuid: null
   name: vz-full-stack
-  priority: P2
+  priority: P1
   status: open
   title: 'feat: minibox owns the full container stack on every OS'
   description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
@@ -189,7 +189,7 @@ items:
 - id: minibox-58
   doob_uuid: null
   name: release-ci-gate
-  priority: P2
+  priority: P1
   status: open
   title: 'bug(ci): no CI gate required before merging release version bumps (#55)'
   description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI. Add a GitHub check preventing main→next promotion until full test suite passes.'
@@ -261,7 +261,7 @@ items:
 - id: minibox-68
   doob_uuid: null
   name: vm-image-overlay
-  priority: P2
+  priority: P1
   status: open
   title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
   description: 'GH #107: Add install_overlay() to vm_image.rs. Deferred — VZ stack blocked by #61.'
@@ -280,7 +280,7 @@ items:
 - id: minibox-69
   doob_uuid: null
   name: tailbox-wiring-complete
-  priority: P2
+  priority: P1
   status: open
   title: 'feat(tailbox): complete tailnet integration wiring — miniboxd feature flag + auth chain + gateway routing'
   description: 'tailbox crate implemented: TailnetNetwork adapter, TailnetConfig, auth key resolution chain (1Password→env→file), gateway IP caching, per-container network setup/cleanup. miniboxd wired with tailnet feature flag. Uncommitted changes remain in daemonbox conformance tests, colima adapter, domain.rs, xtask preflight.'
@@ -301,7 +301,7 @@ items:
 - id: minibox-76
   doob_uuid: null
   name: class-diagram-generator
-  priority: P2
+  priority: P1
   status: open
   title: 'feat(docs): Rust class diagram generator script for docs/diagrams.html'
   description: |
@@ -334,7 +334,7 @@ items:
 - id: minibox-72
   doob_uuid: null
   name: feature-matrix-sot
-  priority: P2
+  priority: P1
   status: open
   title: Make FEATURE_MATRIX.md single source of truth — trim README/CLAUDE to summaries
   description: 'GH #131: Centralize per-platform status in docs/FEATURE_MATRIX.md. Reduce README/CLAUDE.md to summary-level statements with links.'
@@ -355,7 +355,7 @@ items:
 - id: minibox-73
   doob_uuid: null
   name: ci-stability-gates
-  priority: P2
+  priority: P1
   status: open
   title: Add CI enforcement for stability checklist gates
   description: 'GH #133: doc-sync validation, adapter integration test requirements, handler coverage thresholds as CI checks.'
@@ -373,7 +373,7 @@ items:
 - id: minibox-74
   doob_uuid: null
   name: experimental-surface-tests
-  priority: P2
+  priority: P1
   status: open
   title: 'Add tests for experimental surfaces: bridge networking, exec, persistence'
   description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence semantics (records survive restart, processes do not reattach).'
@@ -418,7 +418,7 @@ items:
 - id: parallel-layer-pulls-port
   doob_uuid: null
   name: parallel-layer-pulls-port
-  priority: P2
+  priority: P1
   status: open
   title: Port feat/parallel-layer-pulls to linuxbox (crate rename required)
   description: |
@@ -439,7 +439,7 @@ items:
 - id: minibox-agent-llm-api
   doob_uuid: null
   name: minibox-agent-llm-api
-  priority: P2
+  priority: P1
   status: open
   title: Extend minibox-llm with infer() API, then re-land minibox-agent
   description: |
