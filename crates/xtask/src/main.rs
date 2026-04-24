@@ -7,8 +7,6 @@
 //! | Module      | Responsibility                                              |
 //! |-------------|-------------------------------------------------------------|
 //! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
-//! | `bench`     | Benchmark orchestration: local run, VPS run, diff, report  |
-//! | `flamegraph`| Profiling: samply (macOS) / cargo-flamegraph (Linux)        |
 //! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
 //! | `vm_image`  | VM image build: Alpine kernel + minibox agent (macOS/vz)    |
 //! | `vm_run`    | VM boot: interactive shell or test execution under QEMU      |
@@ -17,12 +15,9 @@ use anyhow::{Result, bail};
 use std::{env, path::Path};
 use xshell::Shell;
 
-mod bench;
-mod bench_types;
 mod bump;
 mod cas;
 mod cleanup;
-mod flamegraph;
 mod gates;
 mod preflight;
 mod test_image;
@@ -63,24 +58,6 @@ fn main() -> Result<()> {
         Some("test-sandbox") => gates::test_sandbox(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
         Some("nuke-test-state") => cleanup::nuke_test_state(&sh),
-        Some("bench") => {
-            let extra: Vec<String> = env::args().skip(2).collect();
-            bench::bench(&sh, &extra)
-        }
-        Some("bench-vps") => {
-            let extra: Vec<String> = env::args().skip(2).collect();
-            bench::bench_vps(&sh, &extra)
-        }
-        Some("bench-diff") => {
-            let extra: Vec<String> = env::args().skip(2).collect();
-            bench::bench_diff(&extra)
-        }
-        Some("bench-report") => bench::bench_report(),
-        Some("bench-sync") => bench::bench_sync(),
-        Some("flamegraph") => {
-            let extra: Vec<String> = env::args().skip(2).collect();
-            flamegraph::flamegraph(&sh, &extra)
-        }
         Some("build-vm-image") => {
             let force = env::args().any(|a| a == "--force");
             let vm_dir = vm_image::default_vm_dir();
@@ -143,18 +120,6 @@ fn main() -> Result<()> {
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
-            eprintln!("  bench            run benchmark binary (local, dry-run safe)");
-            eprintln!(
-                "  bench-vps        run benchmark on VPS, append to bench/results/bench.jsonl"
-            );
-            eprintln!("  bench-diff       diff two bench JSON files (default: HEAD vs previous)");
-            eprintln!(
-                "  bench-report     generate HTML report from bench/results/bench.jsonl
-  bench-sync       rsync VPS bench.jsonl and merge new entries locally"
-            );
-            eprintln!(
-                "  flamegraph       profile bench binary with samply (macOS) or cargo-flamegraph (Linux)"
-            );
             eprintln!(
                 "  build-vm-image   download Alpine kernel/rootfs, cross-compile agent, build initramfs"
             );
