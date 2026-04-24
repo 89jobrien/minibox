@@ -19,7 +19,7 @@
 use crate::krun::process::SmolvmProcess;
 use anyhow::{Context, Result, bail};
 use minibox_core::domain::{
-    AsAny, ContainerRuntime, RuntimeCapabilities, SpawnResult, ContainerSpawnConfig,
+    AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
 };
 use std::collections::HashMap;
 use std::sync::Arc;

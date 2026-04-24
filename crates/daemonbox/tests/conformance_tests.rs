@@ -1579,12 +1579,10 @@ mod krun_suite {
 
     /// Build `HandlerDependencies` wired with krun adapters.
     fn krun_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
-        let image_store = Arc::new(
-            ImageStore::new(temp_dir.path().join("images")).expect("image store"),
-        );
-        let registry = Arc::new(
-            KrunRegistry::new(Arc::clone(&image_store)).expect("krun registry"),
-        );
+        let image_store =
+            Arc::new(ImageStore::new(temp_dir.path().join("images")).expect("image store"));
+        let registry =
+            Arc::new(KrunRegistry::new(Arc::clone(&image_store)).expect("krun registry"));
         let registry_port: DynImageRegistry = registry.clone();
 
         Arc::new(HandlerDependencies {
@@ -1846,8 +1844,7 @@ mod krun_suite {
         };
 
         let stop_response =
-            handler::handle_stop(container_id.clone(), Arc::clone(&state), Arc::clone(&deps))
-                .await;
+            handler::handle_stop(container_id.clone(), Arc::clone(&state), Arc::clone(&deps)).await;
         assert!(
             matches!(stop_response, DaemonResponse::Success { .. }),
             "K-H-05: handle_stop must return Success, got: {stop_response:?}"

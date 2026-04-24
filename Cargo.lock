@@ -894,6 +894,7 @@ dependencies = [
  "base64",
  "chrono",
  "dashmap",
+ "macbox",
  "minibox",
  "minibox-core",
  "minibox-testers",
@@ -2311,6 +2312,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "which",
 ]
 
