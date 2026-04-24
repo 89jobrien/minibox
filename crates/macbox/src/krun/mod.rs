@@ -6,4 +6,5 @@
 pub mod filesystem;
 pub mod limiter;
 pub mod process;
+pub mod registry;
 pub mod runtime;

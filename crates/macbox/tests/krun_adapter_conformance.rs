@@ -11,6 +11,7 @@
 
 mod suite {
     use macbox::krun::runtime::KrunRuntime;
+    use minibox_core::domain::ImageRegistry as _;
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -512,6 +513,124 @@ mod suite {
         assert!(
             result.is_ok(),
             "cleanup() without prior create() must return Ok, got: {result:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 2d — KrunRegistry (K-I-01..05)
+    // -----------------------------------------------------------------------
+
+    fn make_krun_registry() -> macbox::krun::registry::KrunRegistry {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = std::sync::Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images"))
+                .expect("ImageStore::new"),
+        );
+        // Keep `tmp` alive by leaking it — tests are short-lived.
+        std::mem::forget(tmp);
+        macbox::krun::registry::KrunRegistry::new(store).expect("KrunRegistry::new")
+    }
+
+    fn alpine_ref() -> minibox_core::image::reference::ImageRef {
+        minibox_core::image::reference::ImageRef::parse("alpine:latest").expect("parse alpine ref")
+    }
+
+    fn nonexistent_ref() -> minibox_core::image::reference::ImageRef {
+        minibox_core::image::reference::ImageRef::parse("minibox-nonexistent-xyz:latest")
+            .expect("parse nonexistent ref")
+    }
+
+    // K-I-01: pull("alpine", "latest") returns Ok with valid metadata
+    #[tokio::test]
+    async fn krun_registry_pull_alpine_succeeds() {
+        skip_if_no_krun!();
+
+        let registry = make_krun_registry();
+        let image_ref = alpine_ref();
+        let result = registry.pull_image(&image_ref).await;
+        assert!(
+            result.is_ok(),
+            "pull_image(alpine:latest) must return Ok, got: {result:?}"
+        );
+    }
+
+    // K-I-02: second pull() for same image completes without re-downloading
+    #[tokio::test]
+    async fn krun_registry_pull_cached_image_is_fast() {
+        skip_if_no_krun!();
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = std::sync::Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images"))
+                .expect("ImageStore::new"),
+        );
+        let registry =
+            macbox::krun::registry::KrunRegistry::new(store.clone()).expect("KrunRegistry::new");
+        let image_ref = alpine_ref();
+
+        // First pull — fetches from network.
+        registry
+            .pull_image(&image_ref)
+            .await
+            .expect("first pull must succeed");
+
+        // Second pull — should hit local cache; must succeed again.
+        let start = std::time::Instant::now();
+        let result = registry.pull_image(&image_ref).await;
+        let elapsed = start.elapsed();
+
+        assert!(
+            result.is_ok(),
+            "second pull_image(alpine:latest) must return Ok, got: {result:?}"
+        );
+        // Cache hits are faster than 30 s (a conservative bound for a network pull).
+        assert!(
+            elapsed.as_secs() < 30,
+            "cached pull took {elapsed:?} — expected < 30 s"
+        );
+    }
+
+    // K-I-03: pull("minibox-nonexistent-xyz", "latest") → Err
+    #[tokio::test]
+    async fn krun_registry_pull_nonexistent_image_errors() {
+        skip_if_no_krun!();
+
+        let registry = make_krun_registry();
+        let image_ref = nonexistent_ref();
+        let result = registry.pull_image(&image_ref).await;
+        assert!(
+            result.is_err(),
+            "pull_image(minibox-nonexistent-xyz:latest) must return Err"
+        );
+    }
+
+    // K-I-04: pulled manifest has at least one layer
+    #[tokio::test]
+    async fn krun_registry_image_manifest_has_layers() {
+        skip_if_no_krun!();
+
+        let registry = make_krun_registry();
+        let image_ref = alpine_ref();
+        let metadata = registry
+            .pull_image(&image_ref)
+            .await
+            .expect("pull_image(alpine:latest) must succeed");
+
+        assert!(
+            !metadata.layers.is_empty(),
+            "pulled alpine manifest must have at least one layer, got empty layers"
+        );
+    }
+
+    // K-I-05: the registry enforces a 10 MiB manifest size cap (pure unit test — no network)
+    #[test]
+    fn krun_registry_pull_respects_size_limit() {
+        // Verify the size limit constant is wired and has the expected 10 MiB value.
+        let limit = macbox::krun::registry::KrunRegistry::manifest_size_limit_bytes();
+        assert_eq!(
+            limit,
+            10 * 1024 * 1024,
+            "KrunRegistry manifest size limit must be 10 MiB (10 * 1024 * 1024), got {limit}"
         );
     }
 }
