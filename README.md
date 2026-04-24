@@ -2,12 +2,14 @@
 
 > Terminal‑first tooling for sandboxed dev environments on macOS, Linux, and Windows.
 
-> Disclaimer: I primarily use the CLI and try to keep parity for the TUI but no promises.  
 > Designed to be a solid tool/command/skill target for AI agents.
 
-`minibox` is a workspace of Rust crates that provide a unified daemon (`miniboxd`), platform shims, and a shared core library for building sandboxed development workflows.
+`minibox` is a workspace of Rust crates that provide a unified daemon (`miniboxd`), platform shims,
+and a shared core library for building sandboxed development workflows.
 
-The project is currently pushing toward stronger dogfooding: agent-facing control surfaces, sandboxed code execution, and a self-hosted CI flow that uses minibox to manage its own test environments. See `docs/ROADMAP.md` for the active roadmap.
+The project is pushing toward agent-facing control surfaces, sandboxed code execution, and a
+self-hosted CI flow that uses minibox to manage its own test environments. See `docs/ROADMAP.md`
+for the active roadmap.
 
 ## Features
 
@@ -26,9 +28,8 @@ The project is currently pushing toward stronger dogfooding: agent-facing contro
 - **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub), `daemonbox` (shared
   handler + server).
 - **Core library (`minibox`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
-- **JSON CLI (`minibox-cli`)** – Thin client over Unix socket.
+- **JSON CLI (`mbx`)** – Thin client over Unix socket.
 - **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
-- **Bench tooling (`minibox-bench`)** – Codec + adapter microbenchmarks.
 
 ### Experimental (wired, limited coverage)
 
@@ -41,13 +42,10 @@ The project is currently pushing toward stronger dogfooding: agent-facing contro
   `cargo xtask build-vm-image`.
 - **Observability** – OpenTelemetry OTLP (`feature = "otel"`); Prometheus `/metrics`
   (`feature = "metrics"`); compile-time opt-in.
-- **Docker API shim** – `dockerboxd` translates Docker API calls to minibox protocol; log
-  streaming is a stub.
 
 ### Tooling (not part of the runtime)
 
-- **Dashbox TUI** – Ratatui dashboard (`just dash`).
-- **Agentbox** – Go orchestration agents (council, meta-agent, commit-msg) using Claude Agent SDK.
+- **xtask** – Dev tool: pre-commit gate, test suites, conformance, build-vm-image.
 
 ### Not yet implemented
 
@@ -78,11 +76,13 @@ See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 
 ## Near-Term Roadmap
 
-- Docker API shim: wire remaining `dockerbox` exec endpoints (POST /exec, GET /exec/:id/json) to unblock Maestro Docker test suite
-- Docker parity: wire commit/build/push adapters end-to-end into `miniboxd` (conformance suite phases 1–3 shipped; adapter wiring is the remaining gap)
 - MCP control surface: expose pull/run/ps/stop/rm cleanly enough for Claude-style agent workflows
-- Sandboxed AI execution: run generated scripts and tests inside disposable minibox containers instead of on the host
-- CI dogfooding: let the CI agent provision, stream, and tear down its own minibox-managed test environment
+- Docker parity: wire commit/build/push adapters end-to-end into `miniboxd` (conformance suite
+  phases 1–3 shipped; adapter wiring is the remaining gap)
+- Sandboxed AI execution: run generated scripts and tests inside disposable minibox containers
+  instead of on the host
+- CI dogfooding: let the CI agent provision, stream, and tear down its own minibox-managed test
+  environment
 - Windows: WSL2 remains the most practical path; native HCS is still secondary
 
 ---
@@ -112,8 +112,8 @@ cargo build --release
 sudo ./target/release/miniboxd
 
 # Pull and run
-sudo ./target/release/minibox pull alpine
-sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
+sudo ./target/release/mbx pull alpine
+sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
 ```
 
 **Systemd deployment:**
@@ -121,7 +121,7 @@ sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
 ```bash
 sudo ./ops/install-systemd.sh
 sudo systemctl enable --now miniboxd
-sudo /usr/local/bin/minibox ps
+sudo /usr/local/bin/mbx ps
 ```
 
 **Current dogfood path:**
@@ -131,7 +131,7 @@ sudo /usr/local/bin/minibox ps
 cargo xtask build-test-image
 
 # Load a local OCI tarball into minibox
-sudo ./target/release/minibox load ~/.minibox/test-image/minibox-tester.tar --name minibox-tester
+sudo ./target/release/mbx load ~/.minibox/test-image/minibox-tester.tar --name minibox-tester
 
 # Run the Linux suite inside minibox
 cargo xtask test-linux
@@ -141,31 +141,21 @@ cargo xtask test-linux
 
 ## Crate Structure
 
-| Crate             | Type    | Description                                                       |
-| ----------------- | ------- | ----------------------------------------------------------------- |
-| `minibox-core`      | Library | Protocol, domain traits, image types, error types                  |
-| `minibox-oci`       | Library | OCI image types and operations (extracted from minibox)            |
-| `minibox`           | Library | Linux primitives, adapters, image management; re-exports core      |
-| `daemonbox`         | Library | Handler, state, Unix socket server, NetworkLifecycle               |
-| `miniboxd`          | Binary  | Async daemon — Unix socket listener, platform dispatch             |
-| `minibox-cli`       | Binary  | CLI client                                                         |
-| `minibox-macros`    | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                  |
-| `minibox-llm`       | Library | Multi-provider LLM client (Anthropic/OpenAI/Gemini) with fallback  |
-| `minibox-bench`     | Binary  | Benchmark harness (codec + adapter + parallel suites)              |
-| `minibox-client`    | Library | Low-level Unix socket client                                       |
-| `minibox-secrets`   | Library | Typed credential store with validation & audit hashes              |
-| `minibox-agent`     | Library | AI agent runtime — error types, LLM providers, agentic steps       |
-| `minibox-testers`   | Library | Test infrastructure — mocks, fixtures, conformance helpers         |
-| `macbox`            | Library | macOS daemon (Colima adapter suite + VZ.framework adapter)         |
-| `winbox`            | Library | Windows daemon implementation (stub)                               |
-| `dockerbox`         | Library | Docker API shim (`dockerboxd`) — translates Docker API to minibox  |
-| `tailbox`           | Library | Tailscale/tailnet adapter — auth, config, experiments              |
-| `dashbox`           | Binary  | Ratatui TUI dashboard (6 tabs: Agents, Bench, History, Git, Todos, CI) |
-| `miniboxctl`        | Binary  | SSE-based streaming CLI (dagu integration)                         |
-| `zoektbox`          | Library | Zoekt-based code search adapter                                    |
-| `searchbox`         | Library | Unified search port (zoekt + local)                                |
+| Crate             | Type    | Description                                                            |
+| ----------------- | ------- | ---------------------------------------------------------------------- |
+| `minibox-core`    | Library | Protocol, domain traits, image types, error types                      |
+| `minibox-oci`     | Library | OCI image types and operations                                         |
+| `linuxbox`        | Library | Linux primitives, adapters, image management; re-exports core          |
+| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle                   |
+| `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch                 |
+| `mbx`             | Binary  | CLI client                                                             |
+| `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                      |
+| `minibox-client`  | Library | Low-level Unix socket client                                           |
+| `minibox-testers` | Library | Test infrastructure — mocks, fixtures, conformance helpers             |
+| `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework + krun adapters)     |
+| `winbox`          | Library | Windows daemon implementation (stub)                                   |
 
-**Key modules in `minibox`:**
+**Key modules in `linuxbox`:**
 
 | Module         | Purpose                                                                                   |
 | -------------- | ----------------------------------------------------------------------------------------- |
@@ -173,7 +163,6 @@ cargo xtask test-linux
 | `adapters/`    | Concrete adapter implementations + mocks                                                  |
 | `container/`   | Namespace setup, cgroups, overlay FS, process spawn                                       |
 | `image/`       | Docker Hub v2 API client, OCI manifest parsing, tar extraction                            |
-| `protocol.rs`  | JSON-over-newline request/response types                                                  |
 | `preflight.rs` | Host capability probing (`just doctor`)                                                   |
 
 ---
@@ -186,7 +175,7 @@ cargo xtask test-linux
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
 │  ┌─────────────┐   JSON/Unix    ┌──────────────────────┐   │
-│  │   minibox   │ ─────────────▶ │      miniboxd        │   │
+│  │     mbx     │ ─────────────▶ │      miniboxd        │   │
 │  │   (CLI)     │                │                      │   │
 │  └─────────────┘                │  ┌────────────────┐  │   │
 │                                 │  │    Handlers    │  │   │
@@ -267,41 +256,41 @@ observability status across all supported targets.
 
 ```bash
 # Pull an image
-sudo minibox pull alpine
-sudo minibox pull ubuntu -t 22.04
+sudo mbx pull alpine
+sudo mbx pull ubuntu -t 22.04
 
 # Run a container
-sudo minibox run alpine -- /bin/echo "Hello!"
-sudo minibox run alpine --memory 536870912 --cpu-weight 500 -- /bin/sh
-sudo minibox run --name mybox alpine -- /bin/sh   # named container
-sudo minibox run -it alpine -- /bin/sh            # interactive PTY
-sudo minibox run -v /host/path:/container/path alpine -- /bin/sh  # bind mount
+sudo mbx run alpine -- /bin/echo "Hello!"
+sudo mbx run alpine --memory 536870912 --cpu-weight 500 -- /bin/sh
+sudo mbx run --name mybox alpine -- /bin/sh   # named container
+sudo mbx run -it alpine -- /bin/sh            # interactive PTY
+sudo mbx run -v /host/path:/container/path alpine -- /bin/sh  # bind mount
 
 # List running containers
-sudo minibox ps
+sudo mbx ps
 
 # Exec into a running container
-sudo minibox exec <container_id> -- /bin/sh
-sudo minibox exec -it mybox -- /bin/bash          # interactive PTY
+sudo mbx exec <container_id> -- /bin/sh
+sudo mbx exec -it mybox -- /bin/bash          # interactive PTY
 
 # Retrieve logs
-sudo minibox logs <container_id>
+sudo mbx logs <container_id>
 
 # Stream lifecycle events
-sudo minibox events
+sudo mbx events
 
 # Stop / remove
-sudo minibox stop <container_id>
-sudo minibox pause <container_id>
-sudo minibox resume <container_id>
-sudo minibox rm <container_id>
+sudo mbx stop <container_id>
+sudo mbx pause <container_id>
+sudo mbx resume <container_id>
+sudo mbx rm <container_id>
 
 # Load local OCI tarball
-sudo minibox load ./minibox-tester.tar --name minibox-tester
+sudo mbx load ./minibox-tester.tar --name minibox-tester
 
 # Image management
-sudo minibox prune          # GC unused images
-sudo minibox rmi <image>    # remove specific image
+sudo mbx prune          # GC unused images
+sudo mbx rmi <image>    # remove specific image
 ```
 
 **Daemon flags:**
@@ -430,13 +419,14 @@ implementing the trait and wiring the adapter into `HandlerDependencies`.
 
 ## Agent Direction
 
-Minibox is increasingly being shaped as infrastructure for agent workflows, not just a human CLI:
+Minibox is increasingly shaped as infrastructure for agent workflows, not just a human CLI:
 
-- `miniboxctl` is the first controller-shaped surface: a small HTTP/SSE wrapper over `miniboxd` for long-running job orchestration
-- the next layer is an MCP-friendly control surface so an agent can drive image pulls, container lifecycle, and log streaming directly
-- the longer-term dogfood goal is to run agent-generated code and CI jobs inside minibox-managed containers by default
+- the next layer is an MCP-friendly control surface so an agent can drive image pulls, container
+  lifecycle, and log streaming directly
+- the longer-term dogfood goal is to run agent-generated code and CI jobs inside minibox-managed
+  containers by default
 
-That work is tracked in `docs/ROADMAP.md` and the `minibox` doob backlog.
+That work is tracked in `docs/ROADMAP.md`.
 
 ---
 

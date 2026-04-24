@@ -8,13 +8,13 @@ It supersedes any conflicting claims in CLAUDE.md or README.md.
 - Handlers: `crates/daemonbox/src/handler.rs` (`handle_run` L317, `handle_exec` L1819,
   `handle_logs` L1605, `handle_load_image` L1755, `handle_push` L2018, `handle_commit` L2116,
   `handle_build` L2210)
-- Adapter structs: `crates/minibox/src/adapters/` — `runtime.rs` (`LinuxNamespaceRuntime`),
+- Adapter structs: `crates/linuxbox/src/adapters/` — `runtime.rs` (`LinuxNamespaceRuntime`),
   `filesystem.rs` (`OverlayFilesystem`), `limiter.rs` (`CgroupV2Limiter`), `gke.rs`
   (`ProotRuntime`, `CopyFilesystem`, `NoopLimiter`), `colima.rs` (`ColimaRuntime`)
 - Image management: `crates/minibox-oci/src/image/gc.rs` (`ImageGc`),
   `crates/minibox-oci/src/image/lease.rs` (`DiskLeaseService`),
-  `crates/minibox/src/adapters/push.rs` (`OciPushAdapter`),
-  `crates/minibox/src/adapters/builder.rs` (`MiniboxImageBuilder`)
+  `crates/linuxbox/src/adapters/push.rs` (`OciPushAdapter`),
+  `crates/linuxbox/src/adapters/builder.rs` (`MiniboxImageBuilder`)
 - Events: `crates/minibox-core/src/events.rs` (`BroadcastEventBroker`)
 - Daemon entry: `crates/miniboxd/src/main.rs`; platform dispatch: `crates/macbox/src/`,
   `crates/winbox/src/`
