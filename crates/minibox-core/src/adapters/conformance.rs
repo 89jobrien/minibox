@@ -62,8 +62,7 @@ use tempfile::TempDir;
 /// The `make_*` fields hold `Box<dyn Fn() -> …>` rather than the adapters
 /// themselves so that:
 /// - Construction is deferred until the test actually needs the adapter.
-/// - Each test invocation gets a fresh adapter instance (no shared mutable
-///   state leaking between test cases).
+/// - Each test invocation gets a fresh adapter instance (no shared mutable state leaking between test cases).
 ///
 /// The closures take no arguments — all required context (image store paths,
 /// daemon state handles, etc.) must be captured from the surrounding fixture.

@@ -1889,7 +1889,9 @@ mod pause_resume_conformance {
         state_str: &str,
         cgroup_dir: &std::path::Path,
     ) -> ContainerRecord {
-        tokio::fs::create_dir_all(cgroup_dir).await.expect("create cgroup dir");
+        tokio::fs::create_dir_all(cgroup_dir)
+            .await
+            .expect("create cgroup dir");
         tokio::fs::write(cgroup_dir.join("cgroup.freeze"), "0\n")
             .await
             .expect("write cgroup.freeze");
@@ -2087,15 +2089,13 @@ mod pause_resume_conformance {
         let record = make_record_with_cgroup(id, "Running", &cgroup_dir).await;
         state.add_container(record).await;
 
-        let pause_resp =
-            handler::handle_pause(id.to_string(), state.clone(), noop_sink()).await;
+        let pause_resp = handler::handle_pause(id.to_string(), state.clone(), noop_sink()).await;
         assert!(
             matches!(pause_resp, DaemonResponse::ContainerPaused { .. }),
             "pause must succeed in round-trip test, got: {pause_resp:?}"
         );
 
-        let resume_resp =
-            handler::handle_resume(id.to_string(), state.clone(), noop_sink()).await;
+        let resume_resp = handler::handle_resume(id.to_string(), state.clone(), noop_sink()).await;
         assert!(
             matches!(resume_resp, DaemonResponse::ContainerResumed { .. }),
             "resume must succeed in round-trip test, got: {resume_resp:?}"

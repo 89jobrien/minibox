@@ -16,7 +16,6 @@ members = [
     "crates/minibox-client",
     "crates/xtask",
     "crates/miniboxctl",
-    "crates/dashbox",
     "crates/dockerbox",
     "crates/minibox-testers",
 ]

@@ -194,7 +194,7 @@ items:
   title: 'bug(ci): no CI gate required before merging release version bumps (#55)'
   description: 'GH #55: Already resolved by c0c41e4 — phased-deployment.yml polls gh run list --workflow ci.yml --commit SHA; exits 1 on failure or timeout. Stronger than proposed: checks exact commit SHA, not latest on branch.'
   files: []
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: github-issue
@@ -267,7 +267,7 @@ items:
   description: 'GH #107: install_overlay() already implemented at vm_image.rs:589, called in build_vm_image and build_vm_image_with_platform. Tests cover noop, copy, overwrite.'
   files:
   - crates/xtask/src/vm_image.rs
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: github-issue
@@ -296,7 +296,7 @@ items:
   - crates/minibox-core/src/domain.rs
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra: []
 - id: minibox-76
   doob_uuid: null
@@ -321,7 +321,7 @@ items:
   files:
   - crates/daemonbox/src/handler.rs
   - crates/daemonbox/tests/handler_tests.rs
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: github-issue
@@ -378,7 +378,7 @@ items:
   title: 'Add tests for experimental surfaces: bridge networking, exec, persistence'
   description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence semantics (records survive restart, processes do not reattach).'
   files: []
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: github-issue
@@ -401,7 +401,7 @@ items:
   - crates/macbox/tests/krun_conformance_tests.rs
   - crates/macbox/src/lib.rs
   - crates/miniboxd/src/main.rs
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: note
@@ -428,7 +428,7 @@ items:
   - crates/linuxbox/src/image/layer.rs
   - crates/linuxbox/src/error.rs
   - crates/linuxbox/Cargo.toml
-  completed: '2026-04-24'
+  completed: 2026-04-24
   extra:
   - date: null
     type: note

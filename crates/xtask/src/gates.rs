@@ -7,7 +7,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox --fix --allow-dirty --allow-staged"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
@@ -16,12 +16,12 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox -- -D warnings"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -- -D warnings"
     )
     .run()
     .context("lint failed")?;
     cmd!(sh,
-        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p minibox-bench -p tailbox -p dockerbox -p dashbox"
+        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p minibox-bench -p tailbox -p dockerbox"
     ).run().context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
