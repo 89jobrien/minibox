@@ -1,6 +1,6 @@
 ---
-status: active
-note: Framework still evolving
+status: done
+note: Framework fully shipped — 17+ e2e commits, cgroup/daemon/CLI layers complete
 ---
 
 # E2E Test Infrastructure Implementation Plan

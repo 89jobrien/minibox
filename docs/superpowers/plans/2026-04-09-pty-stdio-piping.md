@@ -1,3 +1,8 @@
+---
+status: done
+note: Landed via feat/pty-stdio-piping (89664da); domain types, protocol variants, CLI flags shipped
+---
+
 # PTY/Stdio Piping for Interactive Containers — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

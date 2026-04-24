@@ -1671,7 +1671,7 @@ mod krun_suite {
     async fn krun_handle_run_returns_container_created() {
         skip_if_no_krun!();
 
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("tempdir");
         let state = krun_state(&tmp);
         let deps = krun_deps(&tmp);
 
@@ -1704,7 +1704,7 @@ mod krun_suite {
     async fn krun_handle_run_ephemeral_streams_output() {
         skip_if_no_krun!();
 
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("tempdir");
         let state = krun_state(&tmp);
         let deps = krun_deps(&tmp);
 
@@ -1754,7 +1754,7 @@ mod krun_suite {
     async fn krun_handle_run_error_path_returns_error_response() {
         skip_if_no_krun!();
 
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("tempdir");
         let state = krun_state(&tmp);
         let deps = krun_deps(&tmp);
 
@@ -1783,7 +1783,7 @@ mod krun_suite {
     async fn krun_handle_ps_lists_running_container() {
         skip_if_no_krun!();
 
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("tempdir");
         let state = krun_state(&tmp);
         let deps = krun_deps(&tmp);
 
@@ -1824,7 +1824,7 @@ mod krun_suite {
     async fn krun_handle_stop_terminates_container() {
         skip_if_no_krun!();
 
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("tempdir");
         let state = krun_state(&tmp);
         let deps = krun_deps(&tmp);
 
@@ -1862,5 +1862,250 @@ mod krun_suite {
             }
             other => panic!("K-H-05: handle_ps returned unexpected: {other:?}"),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Issue #142 — Pause/resume handler conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for `handle_pause` and `handle_resume`.
+///
+/// These handlers write to `cgroup_path/cgroup.freeze` on disk, so each test
+/// creates a real tmpdir cgroup directory and injects a `ContainerRecord` with
+/// that path via `state.add_container`.
+#[cfg(test)]
+mod pause_resume_conformance {
+    use super::*;
+    use daemonbox::state::{ContainerRecord, ContainerState};
+    use minibox_core::events::NoopEventSink;
+    use minibox_core::protocol::{ContainerInfo, DaemonResponse};
+
+    /// Build a `ContainerRecord` whose `cgroup_path` points to `cgroup_dir`.
+    /// The `cgroup.freeze` file is created inside that directory so
+    /// `handle_pause`/`handle_resume` can write to it.
+    async fn make_record_with_cgroup(
+        id: &str,
+        state_str: &str,
+        cgroup_dir: &std::path::Path,
+    ) -> ContainerRecord {
+        tokio::fs::create_dir_all(cgroup_dir).await.expect("create cgroup dir");
+        tokio::fs::write(cgroup_dir.join("cgroup.freeze"), "0\n")
+            .await
+            .expect("write cgroup.freeze");
+        ContainerRecord {
+            info: ContainerInfo {
+                id: id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: state_str.to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: Some(12345),
+            },
+            pid: Some(12345),
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: cgroup_dir.to_path_buf(),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: Some("alpine:latest".to_string()),
+        }
+    }
+
+    fn noop_sink() -> std::sync::Arc<dyn minibox_core::events::EventSink> {
+        std::sync::Arc::new(NoopEventSink)
+    }
+
+    // ── pause happy path ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn pause_running_container_returns_paused() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("pause-test-1");
+        let id = "pausetest0000001";
+
+        let record = make_record_with_cgroup(id, "Running", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let response = handler::handle_pause(id.to_string(), state.clone(), noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::ContainerPaused { .. }),
+            "pausing a running container must return ContainerPaused, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn pause_updates_state_to_paused() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("pause-test-2");
+        let id = "pausetest0000002";
+
+        let record = make_record_with_cgroup(id, "Running", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        handler::handle_pause(id.to_string(), state.clone(), noop_sink()).await;
+
+        let updated = state.get_container(id).await.expect("container must exist");
+        assert_eq!(
+            updated.info.state,
+            ContainerState::Paused.as_str(),
+            "container state must be Paused after handle_pause"
+        );
+    }
+
+    // ── pause error paths ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn pause_nonexistent_container_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+
+        let response =
+            handler::handle_pause("nonexistent-id-xx".to_string(), state, noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "pausing nonexistent container must return Error, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn pause_stopped_container_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("pause-test-4");
+        let id = "pausetest0000004";
+
+        let record = make_record_with_cgroup(id, "Stopped", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let response = handler::handle_pause(id.to_string(), state, noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "pausing a stopped container must return Error, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn pause_already_paused_container_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("pause-test-5");
+        let id = "pausetest0000005";
+
+        let record = make_record_with_cgroup(id, "Paused", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let response = handler::handle_pause(id.to_string(), state, noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "pausing an already-paused container must return Error, got: {response:?}"
+        );
+    }
+
+    // ── resume happy path ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resume_paused_container_returns_resumed() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("resume-test-1");
+        let id = "resumetest000001";
+
+        let record = make_record_with_cgroup(id, "Paused", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let response = handler::handle_resume(id.to_string(), state.clone(), noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::ContainerResumed { .. }),
+            "resuming a paused container must return ContainerResumed, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_updates_state_to_running() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("resume-test-2");
+        let id = "resumetest000002";
+
+        let record = make_record_with_cgroup(id, "Paused", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        handler::handle_resume(id.to_string(), state.clone(), noop_sink()).await;
+
+        let updated = state.get_container(id).await.expect("container must exist");
+        assert_eq!(
+            updated.info.state,
+            ContainerState::Running.as_str(),
+            "container state must be Running after handle_resume"
+        );
+    }
+
+    // ── resume error paths ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn resume_nonexistent_container_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+
+        let response =
+            handler::handle_resume("nonexistent-id-xx".to_string(), state, noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "resuming nonexistent container must return Error, got: {response:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn resume_running_container_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("resume-test-4");
+        let id = "resumetest000004";
+
+        let record = make_record_with_cgroup(id, "Running", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let response = handler::handle_resume(id.to_string(), state, noop_sink()).await;
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "resuming a running container must return Error, got: {response:?}"
+        );
+    }
+
+    // ── round-trip ───────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn pause_then_resume_round_trip_restores_running_state() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = mock_state(&tmp);
+        let cgroup_dir = tmp.path().join("cgroup").join("roundtrip-test-1");
+        let id = "roundtriptest001";
+
+        let record = make_record_with_cgroup(id, "Running", &cgroup_dir).await;
+        state.add_container(record).await;
+
+        let pause_resp =
+            handler::handle_pause(id.to_string(), state.clone(), noop_sink()).await;
+        assert!(
+            matches!(pause_resp, DaemonResponse::ContainerPaused { .. }),
+            "pause must succeed in round-trip test, got: {pause_resp:?}"
+        );
+
+        let resume_resp =
+            handler::handle_resume(id.to_string(), state.clone(), noop_sink()).await;
+        assert!(
+            matches!(resume_resp, DaemonResponse::ContainerResumed { .. }),
+            "resume must succeed in round-trip test, got: {resume_resp:?}"
+        );
+
+        let final_record = state.get_container(id).await.expect("container must exist");
+        assert_eq!(
+            final_record.info.state,
+            ContainerState::Running.as_str(),
+            "container must be Running after pause→resume round-trip"
+        );
     }
 }

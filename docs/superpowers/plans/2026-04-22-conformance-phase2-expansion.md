@@ -1,3 +1,8 @@
+---
+status: done
+note: All 7 tasks complete — ConformanceCapability trait, error-path/GC/resource/runtime tests all landed
+---
+
 # Conformance Suite Phase 2: Expansion Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
