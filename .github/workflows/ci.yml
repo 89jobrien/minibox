@@ -62,6 +62,16 @@ jobs:
       - name: cargo xtask test-unit
         run: ~/.local/bin/mise exec -- cargo xtask test-unit
 
+  coverage-check:
+    name: handler coverage (>= 80%)
+    runs-on: [self-hosted, minibox]
+    needs: test-unit
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo xtask coverage-check
+        run: ~/.local/bin/mise exec -- cargo xtask coverage-check
+
   geiger:
     name: unsafe audit (geiger)
     runs-on: ubuntu-latest
