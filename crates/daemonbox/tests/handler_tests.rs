@@ -5363,3 +5363,193 @@ async fn test_handle_load_image_loader_failure() {
         "image loader failure should produce Error, got {resp:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Issue #134 — bridge networking, exec error path, persistence semantics
+// ---------------------------------------------------------------------------
+
+/// handle_run with NetworkMode::Bridge calls network_provider.setup() once.
+///
+/// Guards that the bridge network code path is exercised end-to-end through
+/// the handler without requiring any Linux-only syscalls.
+#[tokio::test]
+async fn test_handle_run_bridge_network_mode_calls_setup() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_network = Arc::new(MockNetwork::new());
+    let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false,
+        Some(NetworkMode::Bridge),
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let _resp = rx.recv().await.expect("handler sent no response");
+    assert_eq!(
+        mock_network.setup_count(),
+        1,
+        "network_provider.setup() must be called once for NetworkMode::Bridge"
+    );
+}
+
+/// ExecRuntime adapter that always returns Err — used in exec error-path tests.
+struct FailingExecRuntime;
+
+#[async_trait::async_trait]
+impl minibox_core::domain::ExecRuntime for FailingExecRuntime {
+    async fn run_in_container(
+        &self,
+        _container_id: &minibox_core::domain::ContainerId,
+        _spec: minibox_core::domain::ExecSpec,
+        _tx: tokio::sync::mpsc::Sender<minibox_core::protocol::DaemonResponse>,
+    ) -> anyhow::Result<minibox_core::domain::ExecHandle> {
+        anyhow::bail!("mock exec runtime failure: setns not supported")
+    }
+}
+
+impl minibox_core::domain::AsAny for FailingExecRuntime {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// handle_exec with an exec_runtime that returns Err → DaemonResponse::Error.
+///
+/// Covers the Err arm of exec_rt.run_in_container() in handle_exec.
+#[tokio::test]
+async fn test_handle_exec_with_runtime_returning_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.exec.exec_runtime = Some(Arc::new(FailingExecRuntime));
+        Arc::new(d)
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_exec(
+        "abc123def456abcd".to_string(),
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("exec failed")),
+        "exec_runtime error should produce 'exec failed' Error response, got {resp:?}"
+    );
+}
+
+/// add_container triggers save_to_disk; a new DaemonState loaded from the same
+/// directory via load_from_disk must contain the same container record.
+///
+/// Guards the persistence contract documented in docs/STATE_MODEL.md.
+#[tokio::test]
+async fn test_daemon_state_persistence_survives_restart() {
+    let tmp = TempDir::new().unwrap();
+
+    let container_id = "persist-test-00001a";
+    {
+        let image_store =
+            minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let state = DaemonState::new(image_store, tmp.path());
+        let record = daemonbox::state::ContainerRecord {
+            info: minibox_core::protocol::ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        };
+        state.add_container(record).await;
+    }
+
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let state2 = DaemonState::new(image_store2, tmp.path());
+    state2.load_from_disk().await;
+
+    let container = state2.get_container(container_id).await;
+    assert!(
+        container.is_some(),
+        "container record must survive daemon restart"
+    );
+    assert_eq!(
+        container.unwrap().info.id,
+        container_id,
+        "restored container must have the same id"
+    );
+}
+
+/// remove_container triggers save_to_disk; a new DaemonState loaded from the
+/// same directory must not contain the removed record.
+#[tokio::test]
+async fn test_daemon_state_remove_persists_to_disk() {
+    let tmp = TempDir::new().unwrap();
+
+    let container_id = "remove-persist-0001";
+    {
+        let image_store =
+            minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let state = DaemonState::new(image_store, tmp.path());
+        let record = daemonbox::state::ContainerRecord {
+            info: minibox_core::protocol::ContainerInfo {
+                id: container_id.to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+            cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+        };
+        state.add_container(record).await;
+        state.remove_container(container_id).await;
+    }
+
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let state2 = DaemonState::new(image_store2, tmp.path());
+    state2.load_from_disk().await;
+
+    assert!(
+        state2.get_container(container_id).await.is_none(),
+        "removed container must not appear after restart"
+    );
+}
