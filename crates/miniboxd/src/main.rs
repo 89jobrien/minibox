@@ -399,14 +399,7 @@ async fn main() -> Result<()> {
         daemonbox::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
     };
     #[cfg(not(feature = "otel"))]
-    {
-        use tracing_subscriber::EnvFilter;
-        tracing_subscriber::fmt()
-            .with_env_filter(
-                EnvFilter::from_default_env().add_directive("miniboxd=info".parse().unwrap()),
-            )
-            .init();
-    }
+    minibox_core::init_tracing();
 
     info!("miniboxd starting");
 

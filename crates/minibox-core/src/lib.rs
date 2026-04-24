@@ -26,6 +26,9 @@ pub mod events;
 pub mod preflight;
 pub mod protocol;
 pub mod trace;
+pub mod tracing_init;
+
+pub use tracing_init::init_tracing;
 
 // Image handling is provided by the standalone minibox-oci crate.
 // Re-export the full module so existing `minibox_core::image::*` paths continue to work.
