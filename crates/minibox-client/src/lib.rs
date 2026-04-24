@@ -7,7 +7,7 @@
 //!
 //! ```ignore
 //! use minibox_client::DaemonClient;
-//! use minibox::protocol::DaemonRequest;
+//! use linuxbox::protocol::DaemonRequest;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {

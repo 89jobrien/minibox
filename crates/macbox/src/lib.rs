@@ -30,7 +30,7 @@ use krun::filesystem::KrunFilesystem;
 use krun::limiter::KrunLimiter;
 use krun::registry::KrunRegistry;
 use krun::runtime::KrunRuntime;
-use minibox::adapters::{
+use linuxbox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
@@ -66,15 +66,15 @@ fn build_colima_handler_dependencies(
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
     let image_loader: DynImageLoader = registry.clone();
-    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = linuxbox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
     );
-    let image_builder = minibox::adapters::builder::minibox_image_builder(
+    let image_builder = linuxbox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.clone(),
     );
-    let image_pusher = minibox::adapters::colima_image_pusher(
+    let image_pusher = linuxbox::adapters::colima_image_pusher(
         Arc::clone(&state.image_store),
         Arc::clone(&image_loader),
         data_dir.join("exports"),
@@ -565,7 +565,7 @@ async fn start_vz(
         filesystem: Arc::new(VzFilesystem::new(Arc::clone(&vm_arc))),
         resource_limiter: Arc::new(VzLimiter::new(Arc::clone(&vm_arc))),
         runtime: Arc::new(VzRuntime::new(Arc::clone(&vm_arc))),
-        network_provider: Arc::new(minibox::adapters::NoopNetwork::new()),
+        network_provider: Arc::new(linuxbox::adapters::NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
         metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),

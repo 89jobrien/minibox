@@ -153,7 +153,7 @@ pub trait MetricsRecorder: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use minibox::domain::ImageRegistry;
+/// use linuxbox::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,
@@ -926,7 +926,7 @@ impl From<&str> for SessionId {
 ///
 /// This is a domain value type — no channel fields, no tokio types.
 /// Channel wiring (stdin relay, PTY resize) belongs in the infrastructure
-/// adapter layer (`minibox::adapters::exec`).
+/// adapter layer (`linuxbox::adapters::exec`).
 #[derive(Debug, Clone)]
 pub struct ExecSpec {
     pub cmd: Vec<String>,

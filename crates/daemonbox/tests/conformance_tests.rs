@@ -153,7 +153,7 @@ fn mock_deps_with_network(
 }
 
 fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = linuxbox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -186,7 +186,7 @@ mod conformance {
     async fn registry_must_handle_pull_failures_gracefully() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let image_ref = minibox::ImageRef::parse("alpine").unwrap();
+        let image_ref = linuxbox::ImageRef::parse("alpine").unwrap();
         let result = registry.pull_image(&image_ref).await;
         assert!(
             result.is_err(),
@@ -1599,7 +1599,7 @@ mod krun_suite {
                 filesystem: Arc::new(KrunFilesystem::new()),
                 resource_limiter: Arc::new(KrunLimiter::new()),
                 runtime: Arc::new(KrunRuntime::new()),
-                network_provider: Arc::new(minibox::adapters::NoopNetwork::new()),
+                network_provider: Arc::new(linuxbox::adapters::NoopNetwork::new()),
                 containers_base: temp_dir.path().join("containers"),
                 run_containers_base: temp_dir.path().join("run"),
             },

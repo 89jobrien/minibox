@@ -16,8 +16,8 @@
 mod helpers;
 use helpers::SandboxClient;
 
-use minibox::preflight;
-use minibox::require_capability;
+use linuxbox::preflight;
+use linuxbox::require_capability;
 use std::sync::{Mutex, OnceLock};
 
 // ---------------------------------------------------------------------------

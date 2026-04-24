@@ -42,7 +42,7 @@ struct Cli {
 
 /// Available minibox subcommands.
 ///
-/// Each variant maps directly to a [`minibox::protocol::DaemonRequest`]
+/// Each variant maps directly to a [`linuxbox::protocol::DaemonRequest`]
 /// variant sent over the Unix socket.
 #[derive(Subcommand)]
 enum Commands {
