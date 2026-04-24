@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260423:232521
+updated: 2026-04-24
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -315,13 +315,13 @@ items:
   doob_uuid: null
   name: handler-coverage-80pct
   priority: P1
-  status: open
+  status: done
   title: Increase daemonbox/handler.rs coverage to 80% function threshold
   description: 'GH #129: handler.rs at ~67.5% function / ~55% line. Added duplicate container name error-path test (session 14). Remaining gap: channel send failures require test-only Sender infrastructure not yet built. 82 tests passing.'
   files:
   - crates/daemonbox/src/handler.rs
   - crates/daemonbox/tests/handler_tests.rs
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: github-issue
@@ -392,41 +392,29 @@ items:
   doob_uuid: null
   name: krun-adapter-full
   priority: P1
-  status: open
-  title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring — cross-platform
-    (macOS HVF + Linux KVM)'
-  description: "SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done\
-    \ (5eb03e8). libkrun is the unified adapter for BOTH macOS (HVF) and Linux (KVM).\
-    \ Conformance doc written: docs/superpowers/specs/2026-04-23-krun-adapter-conformance.md\
-    \ — 31 tests across 4 phases (K-S existing, K-R/K-F/K-L/K-I domain ports, K-H\
-    \ handler integration). TDD order: K-R-01 (create returns ID) → K-R-02 (output)\
-    \ → K-R-03..10 (lifecycle) → K-F → K-L → K-I → K-H. Wire start_krun() from\
-    \ both macbox and miniboxd dispatch (platform-agnostic branch). Remove vz feature\
-    \ + vz/ module code. Open: krunbox crate vs macbox; Linux CI /dev/kvm; libkrun\
-    \ version pinning. Platform spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md"
+  status: done
+  title: 'feat(krun): KrunRuntime/Filesystem/Limiter adapters + start_krun() wiring — cross-platform (macOS HVF + Linux KVM)'
+  description: 'SmolvmProcess (spawn/wait/stdout/stop) and 6 conformance tests done (5eb03e8). libkrun is the unified adapter for BOTH macOS (HVF) and Linux (KVM). Conformance doc written: docs/superpowers/specs/2026-04-23-krun-adapter-conformance.md — 31 tests across 4 phases (K-S existing, K-R/K-F/K-L/K-I domain ports, K-H handler integration). TDD order: K-R-01 (create returns ID) → K-R-02 (output) → K-R-03..10 (lifecycle) → K-F → K-L → K-I → K-H. Wire start_krun() from both macbox and miniboxd dispatch (platform-agnostic branch). Remove vz feature + vz/ module code. Open: krunbox crate vs macbox; Linux CI /dev/kvm; libkrun version pinning. Platform spec: docs/superpowers/specs/2026-04-23-qemu-cross-platform-design.md'
   files:
   - crates/macbox/src/krun/process.rs
   - crates/macbox/src/krun/mod.rs
   - crates/macbox/tests/krun_conformance_tests.rs
   - crates/macbox/src/lib.rs
   - crates/miniboxd/src/main.rs
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: note
     field: null
     value: null
     reviewed: null
-    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1
-      required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
+    note: 'Run conformance suite: cargo xtask test-krun-conformance (--test-threads=1 required — smolvm agent socket collision). smolvm at /Users/joe/.local/bin/smolvm.'
   - date: 20260423:233500
     type: note
     field: null
     value: null
     reviewed: null
-    note: 'libkrun is cross-platform: macOS uses HVF, Linux uses KVM — same adapter,
-      same domain port. miniboxd wiring needs a platform-agnostic start_krun() callable
-      from both OS dispatch paths. krunbox crate placement TBD.'
+    note: 'libkrun is cross-platform: macOS uses HVF, Linux uses KVM — same adapter, same domain port. miniboxd wiring needs a platform-agnostic start_krun() callable from both OS dispatch paths. krunbox crate placement TBD.'
 - id: parallel-layer-pulls-port
   doob_uuid: null
   name: parallel-layer-pulls-port
@@ -470,6 +458,12 @@ items:
     reviewed: null
     note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
 log:
+- date: 20260424:000000
+  summary: 'P1 close: minibox-70 (handler-coverage-80pct) confirmed at 80.00% function / 77.93% line via cargo llvm-cov nextest — target met by prior session test additions. minibox-75 (krun-adapter-full) confirmed landed via commits 6f72236+1c171f4+d0fa9df (Phase 3 wiring + fmt cleanup). Both marked done.'
+  commits:
+  - 1c171f4
+  - d0fa9df
+  session: 25
 - date: 20260423:232521
   summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items — 71 todos wired with blocks/blocked_by in topological order covering VZ, mac dogfood, conformance, handler/CI, linuxbox rename, run_review, and PTY chains.'
   commits: []
