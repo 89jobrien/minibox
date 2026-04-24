@@ -26,8 +26,8 @@ cargo xtask bench-vps --commit --push   # ... and push to remote
 ### VM Image (macOS/vz adapter)
 
 ```bash
-cargo xtask build-vm-image        # download Alpine + cross-compile agent (cached)
-cargo xtask build-vm-image --force # force re-download and recompile
+cargo xtask build-vm-image          # download Alpine + cross-compile agent (cached)
+cargo xtask build-vm-image --force  # force re-download and recompile
 ```
 
 ### Test Infrastructure
@@ -46,11 +46,11 @@ cargo xtask clean-artifacts       # remove non-critical build outputs
 
 ## Modules
 
-| Module | Responsibility |
-|--------|---------------|
-| `gates.rs` | Quality gate implementations (fmt, clippy, nextest, coverage) |
-| `bench.rs` | Benchmark run, result persistence, VPS orchestration |
-| `vm_image.rs` | Alpine download, agent cross-compile, VM image assembly |
-| `test_image.rs` | OCI test image build and Linux dogfood test runner |
-| `flamegraph.rs` | samply/flamegraph profiling integration |
-| `cleanup.rs` | Test state cleanup (cgroups, overlays, orphan processes) |
+| Module          | Responsibility                                                |
+| --------------- | ------------------------------------------------------------- |
+| `gates.rs`      | Quality gate implementations (fmt, clippy, nextest, coverage) |
+| `bench.rs`      | Benchmark run, result persistence, VPS orchestration          |
+| `vm_image.rs`   | Alpine download, agent cross-compile, VM image assembly       |
+| `test_image.rs` | OCI test image build and Linux dogfood test runner            |
+| `flamegraph.rs` | samply/flamegraph profiling integration                       |
+| `cleanup.rs`    | Test state cleanup (cgroups, overlays, orphan processes)      |

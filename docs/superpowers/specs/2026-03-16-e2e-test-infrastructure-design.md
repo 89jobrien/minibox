@@ -26,21 +26,21 @@ Automated test infrastructure for minibox covering three layers: preflight capab
 ```
 ┌─────────────────────────────────────────────┐
 │  E2E Tests (e2e_tests.rs)                   │
-│  Start real miniboxd + minibox CLI binaries  │
-│  Test full stack through Unix socket         │
+│  Start real miniboxd + minibox CLI binaries │
+│  Test full stack through Unix socket        │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
-│  Integration Tests (cgroup_tests.rs)         │
-│  Test domain traits against real cgroupfs,   │
-│  overlay FS, Docker Hub                      │
+│  Integration Tests (cgroup_tests.rs)        │
+│  Test domain traits against real cgroupfs,  │
+│  overlay FS, Docker Hub                     │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
-│  Preflight (preflight.rs)                    │
-│  Probe host capabilities, gate tests         │
+│  Preflight (preflight.rs)                   │
+│  Probe host capabilities, gate tests        │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
-│  Unit Tests (existing, unchanged)            │
-│  Mock-based, platform-agnostic               │
+│  Unit Tests (existing, unchanged)           │
+│  Mock-based, platform-agnostic              │
 └─────────────────────────────────────────────┘
 ```
 
