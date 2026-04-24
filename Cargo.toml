@@ -13,17 +13,13 @@ members = [
     "crates/macbox",
     "crates/tailbox",
     "crates/winbox",
-    "crates/minibox-llm",
     "crates/minibox-secrets",
     "crates/minibox-client",
     "crates/xtask",
     "crates/miniboxctl",
     "crates/dashbox",
     "crates/dockerbox",
-    "crates/minibox-agent",
     "crates/minibox-testers",
-    "crates/zoektbox",
-    "crates/searchbox",
 ]
 
 [workspace.package]
@@ -102,5 +98,3 @@ insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
 # Internal crates (secrets)
 minibox-secrets = { path = "crates/minibox-secrets" }
 minibox-testers = { path = "crates/minibox-testers" }
-zoektbox = { path = "crates/zoektbox" }
-searchbox = { path = "crates/searchbox" }

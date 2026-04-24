@@ -7,7 +7,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     cmd!(
         sh,
-        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox -p zoektbox -p searchbox --fix --allow-dirty --allow-staged"
+        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
@@ -16,12 +16,12 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox -p zoektbox -p searchbox -- -D warnings"
+        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p macbox -p miniboxd -p tailbox -p dockerbox -p dashbox -- -D warnings"
     )
     .run()
     .context("lint failed")?;
     cmd!(sh,
-        "cargo build --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox -p minibox-bench -p tailbox -p dockerbox -p dashbox -p zoektbox -p searchbox"
+        "cargo build --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p minibox-bench -p tailbox -p dockerbox -p dashbox"
     ).run().context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
@@ -31,13 +31,13 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox -p tailbox -p dockerbox -p zoektbox -p searchbox"
+        "cargo nextest run --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox -p tailbox -p dockerbox"
     )
     .run()
     .context("nextest failed")?;
     cmd!(
         sh,
-        "cargo llvm-cov nextest -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox --html"
+        "cargo llvm-cov nextest -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox --html"
     )
     .run()
     .context("coverage failed")?;
@@ -53,7 +53,7 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-llm -p minibox-secrets -p daemonbox --lib"
+        "cargo test --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p minibox-secrets -p daemonbox --lib"
     )
     .run()
     .context("lib tests failed")?;
@@ -290,7 +290,11 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
     let coverage = parse_handler_fn_coverage(&stdout)
         .context("could not find handler.rs function coverage in llvm-cov output")?;
 
-    let status = if coverage >= THRESHOLD { "PASS" } else { "FAIL" };
+    let status = if coverage >= THRESHOLD {
+        "PASS"
+    } else {
+        "FAIL"
+    };
     eprintln!(
         "handler.rs function coverage: {coverage:.2}% (threshold: {THRESHOLD:.2}%) [{status}]"
     );
