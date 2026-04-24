@@ -6,17 +6,12 @@ members = [
     "crates/minibox",
     "crates/miniboxd",
     "crates/mbx",
-    "crates/minibox-bench",
     "crates/minibox-macros",
     "crates/daemonbox",
     "crates/macbox",
-    "crates/tailbox",
     "crates/winbox",
-    "crates/minibox-secrets",
     "crates/minibox-client",
     "crates/xtask",
-    "crates/miniboxctl",
-    "crates/dockerbox",
     "crates/minibox-testers",
 ]
 
@@ -94,6 +89,4 @@ proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
 
-# Internal crates (secrets)
-minibox-secrets = { path = "crates/minibox-secrets" }
 minibox-testers = { path = "crates/minibox-testers" }

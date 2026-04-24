@@ -212,7 +212,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b52af3cb4058c895d37317bb27508dccc8e5f2d39454016b297bf4a400597b8"
 dependencies = [
  "axum-core",
- "axum-macros",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -256,17 +255,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "axum-macros"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604fde5e028fea851ce1d8570bbdc034bec850d157f7569d10f347d06808c05c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -766,7 +754,7 @@ dependencies = [
  "dashmap",
  "macbox",
  "minibox",
- "minibox-core",
+ "minibox-core 0.19.0",
  "minibox-testers",
  "nix",
  "opentelemetry",
@@ -960,32 +948,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "dockerbox"
-version = "0.19.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64",
- "bytes",
- "chrono",
- "futures",
- "http-body-util",
- "minibox-client",
- "minibox-core",
- "nix",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -1917,16 +1879,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyring"
-version = "3.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
-dependencies = [
- "log",
- "zeroize",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2008,7 +1960,7 @@ dependencies = [
  "hostname",
  "libc",
  "minibox",
- "minibox-core",
+ "minibox-core 0.19.0",
  "objc2",
  "objc2-foundation",
  "objc2-virtualization",
@@ -2053,7 +2005,7 @@ dependencies = [
  "clap",
  "libc",
  "minibox-client",
- "minibox-core",
+ "minibox-core 0.19.0",
  "nix",
  "predicates",
  "proptest",
@@ -2105,8 +2057,8 @@ dependencies = [
  "hex",
  "ipnet",
  "libc",
- "minibox-core",
- "minibox-macros",
+ "minibox-core 0.19.0",
+ "minibox-macros 0.19.0",
  "minibox-testers",
  "nix",
  "proptest",
@@ -2126,23 +2078,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "minibox-bench"
-version = "0.19.0"
-dependencies = [
- "chrono",
- "minibox",
- "minibox-core",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
 name = "minibox-client"
 version = "0.19.0"
 dependencies = [
- "minibox-core",
+ "minibox-core 0.19.0",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
@@ -2156,8 +2095,8 @@ dependencies = [
  "async-trait",
  "base64",
  "insta",
- "minibox-macros",
- "minibox-oci",
+ "minibox-macros 0.19.0",
+ "minibox-oci 0.19.0",
  "nix",
  "proptest",
  "reqwest",
@@ -2173,8 +2112,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-core"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c48d16b854041b3a1ed61228169d838936227623ede17cc1487d864a3b971ea"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "minibox-macros 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "minibox-oci 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nix",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "minibox-macros"
 version = "0.19.0"
+
+[[package]]
+name = "minibox-macros"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9a47f03e7fa013cf3c0af62c35feb1fc573944853ad0911d4c266877351918c"
 
 [[package]]
 name = "minibox-oci"
@@ -2187,7 +2153,7 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
- "minibox-macros",
+ "minibox-macros 0.19.0",
  "pin-project-lite",
  "proptest",
  "reqwest",
@@ -2205,13 +2171,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-oci"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8ff3bf68af0702db43c3d3ecc8723ee7ab7c09162a8227bd6e2d7ed684d594"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "flate2",
+ "futures",
+ "hex",
+ "minibox-macros 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pin-project-lite",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "minibox-secrets"
 version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66b237dc2757df1e4d8111b32173b6e42df23e394dbc8c18db6bdce367017124"
 dependencies = [
  "async-trait",
  "chrono",
  "hex",
- "keyring",
  "secrecy",
  "serde_json",
  "sha2",
@@ -2228,33 +2221,11 @@ dependencies = [
  "async-trait",
  "daemonbox",
  "minibox",
- "minibox-core",
+ "minibox-core 0.19.0",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "miniboxctl"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "chrono",
- "clap",
- "futures",
- "http-body-util",
- "minibox-core",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -2267,7 +2238,7 @@ dependencies = [
  "libc",
  "macbox",
  "minibox",
- "minibox-core",
+ "minibox-core 0.19.0",
  "minibox-testers",
  "nix",
  "proptest",
@@ -3735,16 +3706,16 @@ dependencies = [
 [[package]]
 name = "tailbox"
 version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44e8e23be906e8f504a45b016c897ef2b5c59504a4066864cdad59d45dadb299"
 dependencies = [
  "anyhow",
  "async-trait",
- "minibox-core",
+ "minibox-core 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "minibox-secrets",
- "proptest",
  "secrecy",
  "serde_json",
  "tailscale",
- "tempfile",
  "tokio",
  "tracing",
 ]
@@ -4709,7 +4680,6 @@ checksum = "a68d3c8f01c0cfa54a75291d83601161799e4a89a39e0929f4b0354d88757a37"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",
- "serde_core",
  "wasm-bindgen",
 ]
 
@@ -4940,7 +4910,7 @@ dependencies = [
  "anyhow",
  "daemonbox",
  "dirs",
- "minibox-core",
+ "minibox-core 0.19.0",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

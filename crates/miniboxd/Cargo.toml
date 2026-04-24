@@ -19,7 +19,7 @@ otel    = ["daemonbox/otel"]
 tailnet = ["dep:tailbox"]
 
 [dependencies]
-tailbox = { path = "../tailbox", optional = true }
+tailbox = { version = "0.19.0", optional = true }
 daemonbox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
