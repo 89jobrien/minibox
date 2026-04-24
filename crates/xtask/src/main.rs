@@ -123,6 +123,7 @@ fn main() -> Result<()> {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
         }
+        Some("coverage-check") => gates::coverage_check(&sh),
         Some("test-linux") => test_image::test_linux(&sh),
         Some(other) => bail!("unknown task: {other}"),
         None => {
@@ -168,6 +169,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
+            eprintln!("  coverage-check   llvm-cov daemonbox; fail if handler.rs fns < 80%");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             Ok(())
         }

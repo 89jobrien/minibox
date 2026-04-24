@@ -261,6 +261,72 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Coverage-check gate: run llvm-cov on daemonbox, parse handler.rs function coverage,
+/// and exit non-zero when it falls below the 80% threshold.
+///
+/// The function scrapes the per-file summary line emitted by `cargo llvm-cov` in its
+/// default text output, which looks like:
+///
+/// ```text
+/// handler.rs          |  80.00 |  ...  |  82.35 |  ...
+/// ```
+///
+/// Column order (0-based): Filename | Line% | Line hits/total | Function% | ...
+/// We look for the function-coverage column (index 3) on the `handler.rs` row.
+pub fn coverage_check(sh: &Shell) -> Result<()> {
+    const THRESHOLD: f64 = 80.0;
+
+    // Run llvm-cov with text output so we can parse per-file function coverage.
+    let output = cmd!(sh, "cargo llvm-cov nextest --package daemonbox --text")
+        .output()
+        .context("cargo llvm-cov nextest failed")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("cargo llvm-cov nextest failed:\n{stderr}");
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let coverage = parse_handler_fn_coverage(&stdout)
+        .context("could not find handler.rs function coverage in llvm-cov output")?;
+
+    let status = if coverage >= THRESHOLD { "PASS" } else { "FAIL" };
+    eprintln!(
+        "handler.rs function coverage: {coverage:.2}% (threshold: {THRESHOLD:.2}%) [{status}]"
+    );
+
+    if coverage < THRESHOLD {
+        anyhow::bail!(
+            "handler.rs function coverage {coverage:.2}% is below the {THRESHOLD:.2}% threshold"
+        );
+    }
+
+    Ok(())
+}
+
+/// Parse the function-coverage percentage for `handler.rs` from `cargo llvm-cov --text` output.
+///
+/// The text table has pipe-delimited columns. We look for a row whose first column contains
+/// `handler.rs` and return the value from the "Fns%" column (column index 3, 1-based: 4th).
+fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
+    for line in output.lines() {
+        // Only process lines that mention the target file.
+        if !line.contains("handler.rs") {
+            continue;
+        }
+        // Columns are pipe-separated; trim whitespace around each segment.
+        let cols: Vec<&str> = line.split('|').map(str::trim).collect();
+        // Expected layout: Filename | Line% | Lines | Fns% | Fns | ...
+        // Index:              0         1       2       3      4
+        if cols.len() >= 4
+            && let Ok(pct) = cols[3].trim_end_matches('%').parse::<f64>()
+        {
+            return Some(pct);
+        }
+    }
+    None
+}
+
 /// Find the most recently modified test binary matching a name prefix (no `.d` extension)
 pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> {
     let dir = Path::new(deps_dir);
