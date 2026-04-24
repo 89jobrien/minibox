@@ -1524,3 +1524,346 @@ mod error_path_conformance {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3 — krun handler integration tests (K-H-01..05)
+// ---------------------------------------------------------------------------
+//
+// These tests wire KrunRuntime/KrunFilesystem/KrunLimiter/KrunRegistry from
+// macbox into HandlerDependencies and validate handle_run produces correct
+// protocol responses.
+//
+// Gate: MINIBOX_KRUN_TESTS=1 + hypervisor availability.
+// --test-threads=1 required: parallel krun invocations share per-process state.
+mod krun_suite {
+    use daemonbox::handler::{self, HandlerDependencies};
+    use daemonbox::state::DaemonState;
+    use macbox::krun::filesystem::KrunFilesystem;
+    use macbox::krun::limiter::KrunLimiter;
+    use macbox::krun::registry::KrunRegistry;
+    use macbox::krun::runtime::KrunRuntime;
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+    use minibox_core::image::ImageStore;
+    use minibox_core::protocol::DaemonResponse;
+    use minibox_testers::helpers::NoopImageGc;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    fn krun_available() -> bool {
+        #[cfg(target_os = "macos")]
+        return true;
+
+        #[cfg(target_os = "linux")]
+        return std::path::Path::new("/dev/kvm").exists()
+            && std::fs::metadata("/dev/kvm")
+                .map(|m| !m.permissions().readonly())
+                .unwrap_or(false);
+
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        return false;
+    }
+
+    macro_rules! skip_if_no_krun {
+        () => {
+            if std::env::var("MINIBOX_KRUN_TESTS").as_deref() != Ok("1") {
+                eprintln!("SKIP: set MINIBOX_KRUN_TESTS=1 to run krun conformance tests");
+                return;
+            }
+            if !krun_available() {
+                eprintln!("SKIP: no hypervisor available (macOS HVF or Linux /dev/kvm)");
+                return;
+            }
+        };
+    }
+
+    /// Build `HandlerDependencies` wired with krun adapters.
+    fn krun_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+        let image_store = Arc::new(
+            ImageStore::new(temp_dir.path().join("images")).expect("image store"),
+        );
+        let registry = Arc::new(
+            KrunRegistry::new(Arc::clone(&image_store)).expect("krun registry"),
+        );
+        let registry_port: DynImageRegistry = registry.clone();
+
+        Arc::new(HandlerDependencies {
+            image: daemonbox::handler::ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    registry_port,
+                    std::iter::empty::<(&str, DynImageRegistry)>(),
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc::new()),
+                image_store,
+            },
+            lifecycle: daemonbox::handler::LifecycleDeps {
+                filesystem: Arc::new(KrunFilesystem::new()),
+                resource_limiter: Arc::new(KrunLimiter::new()),
+                runtime: Arc::new(KrunRuntime::new()),
+                network_provider: Arc::new(minibox::adapters::NoopNetwork::new()),
+                containers_base: temp_dir.path().join("containers"),
+                run_containers_base: temp_dir.path().join("run"),
+            },
+            exec: daemonbox::handler::ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: daemonbox::handler::BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: daemonbox::handler::EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts: false,
+                allow_privileged: false,
+            },
+        })
+    }
+
+    fn krun_state(temp_dir: &TempDir) -> Arc<DaemonState> {
+        let image_store =
+            ImageStore::new(temp_dir.path().join("state-images")).expect("state image store");
+        Arc::new(DaemonState::new(image_store, temp_dir.path()))
+    }
+
+    async fn handle_run_once(
+        image: String,
+        tag: Option<String>,
+        command: Vec<String>,
+        ephemeral: bool,
+        state: Arc<DaemonState>,
+        deps: Arc<HandlerDependencies>,
+    ) -> DaemonResponse {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+        handler::handle_run(
+            image,
+            tag,
+            command,
+            None,
+            None,
+            ephemeral,
+            None,
+            vec![],
+            false,
+            vec![],
+            None,
+            state,
+            deps,
+            tx,
+        )
+        .await;
+        rx.recv().await.expect("handler sent no response")
+    }
+
+    // -----------------------------------------------------------------------
+    // K-H-01: handle_run(ephemeral=false) → DaemonResponse::ContainerCreated
+    // -----------------------------------------------------------------------
+
+    /// `handle_run` with `ephemeral=false` and the krun adapter suite must
+    /// return `DaemonResponse::ContainerCreated` with a non-empty container ID.
+    #[tokio::test]
+    async fn krun_handle_run_returns_container_created() {
+        skip_if_no_krun!();
+
+        let tmp = TempDir::new().unwrap();
+        let state = krun_state(&tmp);
+        let deps = krun_deps(&tmp);
+
+        let response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/true".to_string()],
+            false,
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::ContainerCreated { .. }),
+            "K-H-01: expected ContainerCreated, got: {response:?}"
+        );
+        if let DaemonResponse::ContainerCreated { id } = response {
+            assert!(!id.is_empty(), "K-H-01: container ID must not be empty");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // K-H-02: handle_run(ephemeral=true) → ≥1 ContainerOutput + ContainerStopped
+    // -----------------------------------------------------------------------
+
+    /// `handle_run` with `ephemeral=true` must stream at least one
+    /// `ContainerOutput` followed by a terminal `ContainerStopped` response.
+    #[tokio::test]
+    async fn krun_handle_run_ephemeral_streams_output() {
+        skip_if_no_krun!();
+
+        let tmp = TempDir::new().unwrap();
+        let state = krun_state(&tmp);
+        let deps = krun_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+        handler::handle_run(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/echo".to_string(), "krun-phase3".to_string()],
+            None,
+            None,
+            true,
+            None,
+            vec![],
+            false,
+            vec![],
+            None,
+            state,
+            deps,
+            tx,
+        )
+        .await;
+
+        let mut saw_output = false;
+        let mut saw_stopped = false;
+        while let Some(msg) = rx.recv().await {
+            match &msg {
+                DaemonResponse::ContainerOutput { .. } => saw_output = true,
+                DaemonResponse::ContainerStopped { .. } => {
+                    saw_stopped = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_output, "K-H-02: expected at least one ContainerOutput");
+        assert!(saw_stopped, "K-H-02: expected ContainerStopped");
+    }
+
+    // -----------------------------------------------------------------------
+    // K-H-03: handle_run with invalid image → DaemonResponse::Error
+    // -----------------------------------------------------------------------
+
+    /// `handle_run` with a nonexistent image must return `DaemonResponse::Error`
+    /// rather than panicking or returning a success variant.
+    #[tokio::test]
+    async fn krun_handle_run_error_path_returns_error_response() {
+        skip_if_no_krun!();
+
+        let tmp = TempDir::new().unwrap();
+        let state = krun_state(&tmp);
+        let deps = krun_deps(&tmp);
+
+        let response = handle_run_once(
+            "minibox-nonexistent-krun-image-xyz".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/true".to_string()],
+            false,
+            state,
+            deps,
+        )
+        .await;
+
+        assert!(
+            matches!(response, DaemonResponse::Error { .. }),
+            "K-H-03: expected Error for invalid image, got: {response:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // K-H-04: After handle_run, handle_ps includes the container
+    // -----------------------------------------------------------------------
+
+    /// After `handle_run(ephemeral=false)`, `handle_ps` must list the container.
+    #[tokio::test]
+    async fn krun_handle_ps_lists_running_container() {
+        skip_if_no_krun!();
+
+        let tmp = TempDir::new().unwrap();
+        let state = krun_state(&tmp);
+        let deps = krun_deps(&tmp);
+
+        let response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/true".to_string()],
+            false,
+            Arc::clone(&state),
+            Arc::clone(&deps),
+        )
+        .await;
+
+        let container_id = match response {
+            DaemonResponse::ContainerCreated { id } => id,
+            other => panic!("K-H-04: expected ContainerCreated, got: {other:?}"),
+        };
+
+        let ps_response = handler::handle_list(Arc::clone(&state)).await;
+        match ps_response {
+            DaemonResponse::ContainerList { containers } => {
+                assert!(
+                    containers.iter().any(|c| c.id == container_id),
+                    "K-H-04: container {container_id} not found in ps output: {containers:?}"
+                );
+            }
+            other => panic!("K-H-04: handle_ps returned unexpected: {other:?}"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // K-H-05: handle_stop after handle_run → container transitions to Stopped
+    // -----------------------------------------------------------------------
+
+    /// `handle_stop` after a successful `handle_run` must transition the
+    /// container to Stopped state.
+    #[tokio::test]
+    async fn krun_handle_stop_terminates_container() {
+        skip_if_no_krun!();
+
+        let tmp = TempDir::new().unwrap();
+        let state = krun_state(&tmp);
+        let deps = krun_deps(&tmp);
+
+        let response = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sleep".to_string(), "30".to_string()],
+            false,
+            Arc::clone(&state),
+            Arc::clone(&deps),
+        )
+        .await;
+
+        let container_id = match response {
+            DaemonResponse::ContainerCreated { id } => id,
+            other => panic!("K-H-05: expected ContainerCreated, got: {other:?}"),
+        };
+
+        let stop_response =
+            handler::handle_stop(container_id.clone(), Arc::clone(&state), Arc::clone(&deps))
+                .await;
+        assert!(
+            matches!(stop_response, DaemonResponse::Success { .. }),
+            "K-H-05: handle_stop must return Success, got: {stop_response:?}"
+        );
+
+        let ps_response = handler::handle_list(Arc::clone(&state)).await;
+        match ps_response {
+            DaemonResponse::ContainerList { containers } => {
+                if let Some(c) = containers.iter().find(|c| c.id == container_id) {
+                    assert_eq!(
+                        c.state, "stopped",
+                        "K-H-05: container must be in Stopped state"
+                    );
+                }
+            }
+            other => panic!("K-H-05: handle_ps returned unexpected: {other:?}"),
+        }
+    }
+}

@@ -18,6 +18,9 @@
 
 use crate::krun::process::SmolvmProcess;
 use anyhow::{Context, Result, bail};
+use minibox_core::domain::{
+    AsAny, ContainerRuntime, RuntimeCapabilities, SpawnResult, ContainerSpawnConfig,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -184,5 +187,57 @@ impl KrunRuntime {
 impl Default for KrunRuntime {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AsAny for KrunRuntime {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[async_trait::async_trait]
+impl ContainerRuntime for KrunRuntime {
+    fn capabilities(&self) -> RuntimeCapabilities {
+        RuntimeCapabilities {
+            supports_user_namespaces: false,
+            supports_cgroups_v2: false,
+            supports_overlay_fs: false,
+            supports_network_isolation: true,
+            max_containers: None,
+        }
+    }
+
+    /// Spawn a container via the krun/smolvm microVM backend.
+    ///
+    /// Uses the rootfs path as the image identifier passed to smolvm, and
+    /// returns a synthetic PID (1) since krun manages its own process tree
+    /// inside the VM rather than exposing a host-side PID.
+    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
+        let env: Vec<(String, String)> = config
+            .env
+            .iter()
+            .filter_map(|e| {
+                let mut parts = e.splitn(2, '=');
+                let k = parts.next()?.to_owned();
+                let v = parts.next().unwrap_or("").to_owned();
+                Some((k, v))
+            })
+            .collect();
+
+        // Build the full command: [command] + args
+        let mut command = vec![config.command.clone()];
+        command.extend(config.args.clone());
+
+        // Use the rootfs path as the smolvm image identifier.
+        let image = config.rootfs.to_string_lossy().to_string();
+
+        let id = self.create(&image, &command, &env).await?;
+        self.start(&id).await?;
+
+        Ok(SpawnResult {
+            pid: 1,
+            output_reader: None,
+        })
     }
 }

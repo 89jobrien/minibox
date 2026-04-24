@@ -26,6 +26,10 @@ pub mod vz;
 use anyhow::{Context, Result};
 use daemonbox::handler::HandlerDependencies;
 use daemonbox::state::DaemonState;
+use krun::filesystem::KrunFilesystem;
+use krun::limiter::KrunLimiter;
+use krun::registry::KrunRegistry;
+use krun::runtime::KrunRuntime;
 use minibox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
@@ -225,6 +229,19 @@ pub async fn start() -> Result<()> {
         .await;
     }
 
+    // ── krun branch ──────────────────────────────────────────────────────
+    if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("krun") {
+        return start_krun(
+            socket_path,
+            images_dir,
+            containers_dir,
+            run_containers_dir,
+            state,
+            image_gc,
+        )
+        .await;
+    }
+
     // ── Dependency Injection — Colima adapter suite ──────────────────────
 
     // Shared executor closure — runs fire-and-forget commands inside the Lima VM.
@@ -311,6 +328,111 @@ pub async fn start() -> Result<()> {
         warn!(error = %e, path = %socket_path.display(), "socket: cleanup on shutdown failed");
     }
     info!("miniboxd (macOS) stopped");
+    Ok(())
+}
+
+/// Start the macOS daemon using the krun/smolvm adapter suite.
+///
+/// Selected when `MINIBOX_ADAPTER=krun` is set. Wires `KrunRegistry`,
+/// `KrunFilesystem`, `KrunLimiter`, and `KrunRuntime` into
+/// [`HandlerDependencies`] and runs the standard socket server accept loop.
+///
+/// The krun backend delegates container execution to `smolvm` (a thin
+/// wrapper over libkrun) rather than Linux namespaces or Colima.
+async fn start_krun(
+    socket_path: std::path::PathBuf,
+    _images_dir: std::path::PathBuf,
+    containers_dir: std::path::PathBuf,
+    run_containers_dir: std::path::PathBuf,
+    state: Arc<DaemonState>,
+    image_gc: Arc<dyn ImageGarbageCollector>,
+) -> Result<()> {
+    info!("miniboxd (macOS/krun) starting");
+
+    let registry = Arc::new(
+        KrunRegistry::new(Arc::clone(&state.image_store))
+            .context("krun: creating registry adapter")?,
+    );
+    let registry_port: DynImageRegistry = registry;
+
+    let deps = Arc::new(HandlerDependencies {
+        image: daemonbox::handler::ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                registry_port,
+                std::iter::empty::<(&str, DynImageRegistry)>(),
+            )),
+            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_gc,
+            image_store: Arc::clone(&state.image_store),
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(KrunFilesystem::new()),
+            resource_limiter: Arc::new(KrunLimiter::new()),
+            runtime: Arc::new(KrunRuntime::new()),
+            network_provider: Arc::new(NoopNetwork::new()),
+            containers_base: containers_dir,
+            run_containers_base: run_containers_dir,
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                daemonbox::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: daemonbox::handler::ContainerPolicy::default(),
+    });
+
+    // ── Socket ───────────────────────────────────────────────────────────
+    if socket_path.exists() {
+        warn!(path = %socket_path.display(), "socket: removing stale socket");
+        std::fs::remove_file(&socket_path)
+            .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
+    }
+
+    let raw_listener = UnixListener::bind(&socket_path)
+        .with_context(|| format!("krun: binding Unix socket at {}", socket_path.display()))?;
+
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| {
+                format!(
+                    "krun: setting socket permissions on {}",
+                    socket_path.display()
+                )
+            })?;
+    }
+
+    info!("krun: listening on {}", socket_path.display());
+
+    let shutdown = async {
+        tokio::signal::ctrl_c().await.ok();
+        info!("krun: received Ctrl-C, shutting down");
+    };
+
+    daemonbox::server::run_server(
+        MacUnixListener(raw_listener),
+        state,
+        deps,
+        false, // require_root_auth — krun operations run in the VM
+        shutdown,
+    )
+    .await?;
+
+    if let Err(e) = std::fs::remove_file(&socket_path) {
+        warn!(error = %e, path = %socket_path.display(), "socket: cleanup on shutdown failed");
+    }
+    info!("miniboxd (macOS/krun) stopped");
     Ok(())
 }
 

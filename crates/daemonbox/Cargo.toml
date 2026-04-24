@@ -52,3 +52,4 @@ tokio = { workspace = true }
 minibox-core = { workspace = true, features = ["test-utils"] }
 minibox-testers = { workspace = true }
 async-trait = { workspace = true }
+macbox = { workspace = true }
