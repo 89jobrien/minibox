@@ -1,5 +1,5 @@
 use crate::error::LlmError;
-use crate::types::{CompletionRequest, CompletionResponse};
+use crate::types::{CompletionRequest, CompletionResponse, InferenceRequest, InferenceResponse};
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -25,6 +25,25 @@ pub trait LlmProvider: Send + Sync {
     /// source so that [`RetryingProvider`](crate::RetryingProvider) can classify
     /// them correctly via [`LlmError::is_transient`](crate::LlmError::is_transient).
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse, LlmError>;
+
+    /// Send a multi-turn inference request with optional tool definitions.
+    ///
+    /// This is a separate path from [`complete`](Self::complete): it supports
+    /// conversation history, structured content blocks, and tool-use cycles.
+    ///
+    /// The default implementation returns an error so existing providers that
+    /// only implement `complete` continue to compile without changes. Override
+    /// this method in providers that support the Anthropic Messages API or
+    /// equivalent multi-turn, tool-use interfaces.
+    async fn infer(
+        &self,
+        _request: &InferenceRequest,
+    ) -> Result<InferenceResponse, LlmError> {
+        Err(LlmError::AllProvidersFailed(format!(
+            "{}: infer() not implemented for this provider",
+            self.name()
+        )))
+    }
 }
 
 /// HTTP-level configuration applied when constructing a provider's `reqwest` client.

@@ -106,9 +106,9 @@ impl Trajectory {
             let msg_has_image = matches!(&s.message, MessageContent::Parts(parts)
                 if parts.iter().any(|p| matches!(p, ContentPart::Image { .. })));
 
-            let obs_has_image = s.observation.as_ref().map_or(false, |obs| {
+            let obs_has_image = s.observation.as_ref().is_some_and(|obs| {
                 obs.results.iter().any(|r| {
-                    r.content.as_ref().map_or(false, |c| {
+                    r.content.as_ref().is_some_and(|c| {
                         matches!(c, MessageContent::Parts(parts)
                             if parts.iter().any(|p| matches!(p, ContentPart::Image { .. })))
                     })

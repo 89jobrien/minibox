@@ -2,7 +2,10 @@ use async_trait::async_trait;
 
 use crate::error::LlmError;
 use crate::provider::LlmProvider;
-use crate::types::{CompletionRequest, CompletionResponse, Usage};
+use crate::types::{
+    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
+    Message, Role, StopReason, ToolDefinition, Usage,
+};
 
 /// LLM provider backed by the Anthropic Messages API.
 ///
@@ -182,6 +185,194 @@ impl LlmProvider for AnthropicProvider {
             provider: self.name().to_string(),
             usage,
         })
+    }
+
+    /// Send a multi-turn inference request to the Anthropic Messages API.
+    ///
+    /// Maps [`InferenceRequest`] to Anthropic's wire format: messages are
+    /// serialised as `{ role, content: [...] }` arrays, tool definitions as
+    /// Anthropic tool objects. The response content blocks are parsed back into
+    /// [`ContentBlock`] values.
+    async fn infer(
+        &self,
+        request: &InferenceRequest,
+    ) -> Result<InferenceResponse, LlmError> {
+        let start = std::time::Instant::now();
+        tracing::debug!(
+            provider = self.name(),
+            model = %self.model,
+            max_tokens = request.max_tokens,
+            messages = request.messages.len(),
+            tools = request.tools.len(),
+            "llm: sending infer request"
+        );
+
+        let messages = build_anthropic_messages(&request.messages);
+        let tools = build_anthropic_tools(&request.tools);
+
+        let mut body = serde_json::json!({
+            "model": self.model,
+            "max_tokens": request.max_tokens,
+            "messages": messages,
+        });
+
+        if let Some(system) = &request.system {
+            body["system"] = serde_json::json!(system);
+        }
+
+        if !tools.is_empty() {
+            body["tools"] = serde_json::Value::Array(tools);
+        }
+
+        if let Some(temp) = request.temperature {
+            body["temperature"] = serde_json::json!(temp);
+        }
+
+        let resp = self
+            .client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| LlmError::ProviderError {
+                provider: self.name().to_string(),
+                source: Box::new(e),
+            })?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body_text = resp.text().await.unwrap_or_default();
+            let message = serde_json::from_str::<serde_json::Value>(&body_text)
+                .ok()
+                .and_then(|v| v["error"]["message"].as_str().map(String::from))
+                .unwrap_or_else(|| body_text.clone());
+            return Err(LlmError::ProviderError {
+                provider: self.name().to_string(),
+                source: Box::new(crate::error::HttpStatusError {
+                    status: status.as_u16(),
+                    body: message,
+                }),
+            });
+        }
+
+        let resp_body: serde_json::Value =
+            resp.json().await.map_err(|e| LlmError::ProviderError {
+                provider: self.name().to_string(),
+                source: Box::new(e),
+            })?;
+
+        let content = parse_anthropic_content(&resp_body);
+        let stop_reason = parse_stop_reason(resp_body["stop_reason"].as_str().unwrap_or(""));
+        let usage = resp_body["usage"].as_object().map(|u| Usage {
+            input_tokens: u["input_tokens"].as_u64().unwrap_or(0) as u32,
+            output_tokens: u["output_tokens"].as_u64().unwrap_or(0) as u32,
+        });
+
+        tracing::debug!(
+            provider = self.name(),
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            input_tokens = usage.as_ref().map(|u| u.input_tokens),
+            output_tokens = usage.as_ref().map(|u| u.output_tokens),
+            "llm: infer response received"
+        );
+
+        Ok(InferenceResponse {
+            content,
+            stop_reason,
+            usage,
+            provider: self.name().to_string(),
+        })
+    }
+}
+
+/// Serialize [`Message`] list to Anthropic wire format.
+fn build_anthropic_messages(messages: &[Message]) -> Vec<serde_json::Value> {
+    messages
+        .iter()
+        .map(|m| {
+            let role = match m.role {
+                Role::User | Role::System => "user",
+                Role::Assistant => "assistant",
+            };
+            let content: Vec<serde_json::Value> = m
+                .content
+                .iter()
+                .map(|block| match block {
+                    ContentBlock::Text { text } => {
+                        serde_json::json!({"type": "text", "text": text})
+                    }
+                    ContentBlock::ToolUse { id, name, input } => {
+                        serde_json::json!({
+                            "type": "tool_use",
+                            "id": id,
+                            "name": name,
+                            "input": input,
+                        })
+                    }
+                    ContentBlock::ToolResult {
+                        tool_use_id,
+                        content,
+                    } => {
+                        serde_json::json!({
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": content,
+                        })
+                    }
+                })
+                .collect();
+            serde_json::json!({"role": role, "content": content})
+        })
+        .collect()
+}
+
+/// Serialize [`ToolDefinition`] list to Anthropic wire format.
+fn build_anthropic_tools(tools: &[ToolDefinition]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.input_schema,
+            })
+        })
+        .collect()
+}
+
+/// Parse Anthropic response content blocks into [`ContentBlock`] values.
+fn parse_anthropic_content(resp: &serde_json::Value) -> Vec<ContentBlock> {
+    resp["content"]
+        .as_array()
+        .map(|blocks| {
+            blocks
+                .iter()
+                .filter_map(|b| match b["type"].as_str()? {
+                    "text" => Some(ContentBlock::Text {
+                        text: b["text"].as_str().unwrap_or("").to_owned(),
+                    }),
+                    "tool_use" => Some(ContentBlock::ToolUse {
+                        id: b["id"].as_str().unwrap_or("").to_owned(),
+                        name: b["name"].as_str().unwrap_or("").to_owned(),
+                        input: b["input"].clone(),
+                    }),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Map Anthropic stop_reason string to [`StopReason`].
+fn parse_stop_reason(raw: &str) -> StopReason {
+    match raw {
+        "end_turn" => StopReason::EndTurn,
+        "tool_use" => StopReason::ToolUse,
+        "max_tokens" => StopReason::MaxTokens,
+        _ => StopReason::Other,
     }
 }
 

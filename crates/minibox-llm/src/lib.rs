@@ -82,7 +82,10 @@ pub use chain::FallbackChain;
 pub use error::{HttpStatusError, LlmError};
 pub use provider::{LlmProvider, ProviderConfig};
 pub use retry::{RetryConfig, RetryingProvider};
-pub use types::{CompletionRequest, CompletionResponse, JsonSchema, Usage};
+pub use types::{
+    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
+    JsonSchema, Message, Role, StopReason, ToolDefinition, Usage,
+};
 
 /// Async LLM invocation macro. Returns a `Future` that resolves to
 /// `Result<CompletionResponse, LlmError>`.
