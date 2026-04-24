@@ -141,7 +141,7 @@ proptest! {
         let expected = blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. }));
         let resp = InferenceResponse {
             content: blocks,
-            stop_reason: "end_turn".to_string(),
+            stop_reason: minibox_agent::message::StopReason::EndTurn,
             usage: None,
             provider: "test".to_string(),
         };

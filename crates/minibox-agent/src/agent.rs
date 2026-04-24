@@ -3,35 +3,18 @@
 //!
 //! # Architecture
 //!
-//! - Port: [`minibox_llm::LlmProvider`] (async inference)
+//! - Port: [`minibox_llm::LlmProvider`] (async inference, with `infer()`)
 //! - Port: [`crate::tools::ToolExecutor`] (tool execution)
 //! - Domain: [`Agent`] — orchestrates the loop, fires events, captures observations
 //!
 //! The agent never imports infrastructure crates directly; both ports are
 //! injected as `Box<dyn …>`.
 
-use async_trait::async_trait;
-
-use crate::message::{ContentBlock, InferenceRequest, InferenceResponse, Message, ToolDefinition};
-use minibox_llm::LlmError;
-
-/// Port: an LLM backend that supports multi-turn conversation with tool use.
-///
-/// This is distinct from [`minibox_llm::LlmProvider`], which is a single-turn
-/// text-completion interface. Adapters that wrap a provider supporting structured
-/// tool-use (e.g. Anthropic's messages API) implement this trait.
-#[async_trait]
-pub trait InferenceLlmProvider: Send + Sync {
-    /// Human-readable name identifying this provider.
-    fn name(&self) -> &str;
-
-    /// Send a multi-turn inference request and return the model's response.
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, LlmError>;
-}
-
+use crate::message::{ContentBlock, InferenceRequest, Message, ToolDefinition};
 use crate::events::{Event, EventContext, EventManager};
 use crate::observation::{Observation, ObservationManager};
 use crate::tools::{ToolExecutor, ToolInput};
+use minibox_llm::LlmProvider;
 
 /// Hard limit on tool-use rounds per `run_turn()` call to prevent infinite loops.
 const MAX_TOOL_ROUNDS: usize = 50;
@@ -65,7 +48,7 @@ pub enum AgentLoopError {
 /// Constructed via [`Agent::new`]; holds `Box<dyn …>` ports so there is no
 /// generic-parameter explosion at call sites.
 pub struct Agent {
-    llm: Box<dyn InferenceLlmProvider>,
+    llm: Box<dyn LlmProvider>,
     tools: Box<dyn ToolExecutor>,
     events: EventManager,
     system: Option<String>,
@@ -75,7 +58,7 @@ pub struct Agent {
 impl Agent {
     /// Create a new agent.
     pub fn new(
-        llm: Box<dyn InferenceLlmProvider>,
+        llm: Box<dyn LlmProvider>,
         tools: Box<dyn ToolExecutor>,
         system: Option<String>,
         tool_defs: Vec<ToolDefinition>,
@@ -187,15 +170,15 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::InferenceResponse;
+    use crate::message::{InferenceResponse, StopReason};
     use crate::tools::{InMemoryToolExecutor, ToolOutput};
-    use minibox_llm::LlmError;
+    use minibox_llm::{CompletionRequest, CompletionResponse, LlmError, LlmProvider};
 
     use async_trait::async_trait;
 
     // ── Mock LlmProvider ─────────────────────────────────────────────────────
 
-    /// Returns a scripted sequence of InferenceResponses.
+    /// Returns a scripted sequence of InferenceResponses via `infer()`.
     struct ScriptedLlm {
         responses: std::sync::Mutex<std::collections::VecDeque<InferenceResponse>>,
     }
@@ -209,12 +192,24 @@ mod tests {
     }
 
     #[async_trait]
-    impl InferenceLlmProvider for ScriptedLlm {
+    impl LlmProvider for ScriptedLlm {
         fn name(&self) -> &str {
             "scripted"
         }
 
-        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse, LlmError> {
+        async fn complete(
+            &self,
+            _request: &CompletionRequest,
+        ) -> Result<CompletionResponse, LlmError> {
+            Err(LlmError::AllProvidersFailed(
+                "ScriptedLlm only implements infer()".into(),
+            ))
+        }
+
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, LlmError> {
             self.responses
                 .lock()
                 .expect("lock")
@@ -228,7 +223,7 @@ mod tests {
             content: vec![ContentBlock::Text {
                 text: text.to_owned(),
             }],
-            stop_reason: "end_turn".to_owned(),
+            stop_reason: StopReason::EndTurn,
             usage: None,
             provider: "scripted".to_owned(),
         }
@@ -241,7 +236,7 @@ mod tests {
                 name: name.to_owned(),
                 input,
             }],
-            stop_reason: "tool_use".to_owned(),
+            stop_reason: StopReason::ToolUse,
             usage: None,
             provider: "scripted".to_owned(),
         }
