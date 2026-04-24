@@ -9,9 +9,11 @@ repository.workspace = true
 homepage.workspace = true
 
 [features]
-# Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use
-# in dev-dependencies of other crates without cfg(test) restrictions.
-test-utils = []
+# Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
+# dev-dependencies of other crates without cfg(test) restrictions.
+# tempfile is pulled in as a real dependency because test_fixtures.rs and
+# conformance.rs compile as library code (not cfg(test)) under this feature.
+test-utils = ["dep:tempfile"]
 
 [dependencies]
 minibox-oci = { workspace = true }
@@ -26,6 +28,7 @@ reqwest = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 minibox-macros = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }

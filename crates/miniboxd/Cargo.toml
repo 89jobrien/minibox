@@ -16,10 +16,11 @@ path = "src/main.rs"
 default = ["metrics", "otel"]
 metrics = ["daemonbox/metrics"]
 otel    = ["daemonbox/otel"]
-tailnet = ["dep:tailbox"]
+# tailnet feature is declared for cfg(feature = "tailnet") gating in main.rs;
+# the tailbox crate was moved to minibox-plugins — enable separately when available.
+tailnet = []
 
 [dependencies]
-tailbox = { version = "0.19.0", optional = true }
 daemonbox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
