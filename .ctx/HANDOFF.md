@@ -32,6 +32,11 @@
 
 ## Log
 
+- 20260424: refactor(minibox): absorbed crates/linuxbox into crates/minibox — 78 files migrated,
+  linuxbox crate deleted, pre-commit gate clean, committed 03774be on feat/tracing-init.
+  init_tracing() (MINIBOX_TRACE_LEVEL), security regression tests, preflight helpers also landed
+  this session. Branch needs PR → main. parallel-layer-pulls-port HANDOFF item: dependency on
+  linuxbox now resolved (content is in crates/minibox).
 - 20260423:232521: chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items — 71 todos wired with blocks/blocked_by in topological order covering VZ, mac dogfood, conformance, handler/CI, linuxbox rename, run_review, and PTY chains.
 - 20260423:150355: chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale (vps-automation-safety, no commit evidence); 10 missing-status plans flagged as LANDED (ci-agent-hardening, llm-timeouts-retries, minibox-llm, sandbox-tests, tailnet-integration, test-linux-dogfood, crux-minibox-integration, minibox-testers-migration, searchbox, qemu-cross-platform); pty-stdio-piping partial (domain types only); conformance-phase2 in progress; testing-strategy-expansion has no evidence. No code changes this session.
 - 20260423:185322: chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests for AgentError and TailnetConfig, 3 new fuzz targets (parse_www_authenticate, parse_manifest, agent_message_decode), READMEs for 7 crates (mbx updated, minibox/minibox-agent/minibox-testers/tailbox/zoektbox/searchbox added). All 103 tests pass, fuzz workspace checks clean.
