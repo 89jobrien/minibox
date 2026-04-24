@@ -54,7 +54,7 @@ items:
   doob_uuid: null
   name: mbx-dagu-tier2
   priority: P1
-  status: open
+  status: done
   title: 'Tier 2 mbx-dagu fixes (#31, #35, #36)'
   description: 'GH #31, #35, #36: Add .gitmodules or document nested repo. Dockerfile use dagu base image not alpine. executor.go pass Env/MemoryLimitBytes/CpuWeight.'
   files: []
@@ -262,12 +262,12 @@ items:
   doob_uuid: null
   name: vm-image-overlay
   priority: P1
-  status: open
+  status: done
   title: 'feat(xtask): VM image rootfs overlay directory (~/.mbx/vm/overlay/)'
-  description: 'GH #107: Add install_overlay() to vm_image.rs. Deferred — VZ stack blocked by #61.'
+  description: 'GH #107: install_overlay() already implemented at vm_image.rs:589, called in build_vm_image and build_vm_image_with_platform. Tests cover noop, copy, overwrite.'
   files:
   - crates/xtask/src/vm_image.rs
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: github-issue
@@ -302,7 +302,7 @@ items:
   doob_uuid: null
   name: class-diagram-generator
   priority: P1
-  status: open
+  status: done
   title: 'feat(docs): Rust class diagram generator script for docs/diagrams.html'
   description: |
     Write a script (uv/rust-script) that parses workspace crate sources and emits Mermaid classDiagram blocks for structs, enums, and traits. Scope TBD: fields (pub only vs all), relationships (implements/contains), per-crate vs grouped. Output appended to docs/diagrams.html as new diagram cards. Plan discussion started but scope questions unanswered — resume with user to nail scope before writing script.
@@ -335,7 +335,7 @@ items:
   doob_uuid: null
   name: feature-matrix-sot
   priority: P1
-  status: open
+  status: done
   title: Make FEATURE_MATRIX.md single source of truth — trim README/CLAUDE to summaries
   description: 'GH #131: Centralize per-platform status in docs/FEATURE_MATRIX.md. Reduce README/CLAUDE.md to summary-level statements with links.'
   files:
@@ -356,7 +356,7 @@ items:
   doob_uuid: null
   name: ci-stability-gates
   priority: P1
-  status: open
+  status: done
   title: Add CI enforcement for stability checklist gates
   description: 'GH #133: doc-sync validation, adapter integration test requirements, handler coverage thresholds as CI checks.'
   files: []
@@ -440,7 +440,7 @@ items:
   doob_uuid: null
   name: minibox-agent-llm-api
   priority: P1
-  status: open
+  status: done
   title: Extend minibox-llm with infer() API, then re-land minibox-agent
   description: |
     feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
