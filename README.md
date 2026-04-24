@@ -251,61 +251,15 @@ miniboxd starts
 
 ## Platform Support
 
-### Adapter Wiring Status
+Four adapter suites are shipped: `native` (Linux namespaces + cgroups v2 + overlayfs), `gke`
+(unprivileged pods via proot + copy-FS), `colima` (macOS via limactl/nerdctl), and `vz` (macOS
+Virtualization.framework — experimental). Additional adapters (`docker_desktop`, `wsl2`, `vf`,
+`hcs`) exist as library code but are not wired into the daemon. Passing an unrecognized
+`MINIBOX_ADAPTER` value causes the daemon to exit at startup.
 
-See [`docs/FEATURE_MATRIX.md` — Adapter Wiring Summary](docs/FEATURE_MATRIX.md) for the full
-per-adapter status table. Passing an unwired `MINIBOX_ADAPTER` value causes the daemon to exit
-at startup with an error.
-
----
-
-### Linux (Native)
-
-**Requirements:** Linux 5.0+ (4.0+ minimum), cgroups v2, overlayfs, root.
-
-| Adapter                 | Implementation                         |
-| ----------------------- | -------------------------------------- |
-| `DockerHubRegistry`     | Docker Hub v2 API with anonymous auth  |
-| `OverlayFilesystem`     | Linux overlayfs via `mount()`          |
-| `CgroupV2Limiter`       | cgroups v2 unified hierarchy           |
-| `LinuxNamespaceRuntime` | `clone()` syscall with namespace flags |
-
----
-
-### GKE (Unprivileged Pods)
-
-Standard GKE pods lack `CAP_SYS_ADMIN`, which blocks `mount()`, `pivot_root()`, namespace-flagged `clone()`, and cgroup writes. The GKE adapter suite works within those constraints:
-
-| Adapter          | Implementation                              |
-| ---------------- | ------------------------------------------- |
-| `ProotRuntime`   | ptrace-based fake chroot via `proot` binary |
-| `CopyFilesystem` | Plain file copy instead of overlay mount    |
-| `NoopLimiter`    | No-op (cgroup access unavailable)           |
-
-```bash
-MINIBOX_ADAPTER=gke miniboxd
-MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke miniboxd
-```
-
-**Requirements:** GKE Standard cluster (not Autopilot), `proot` binary in container image.
-
----
-
-### macOS (Colima)
-
-`ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`, `ColimaLimiter` are implemented, tested, and wired into the daemon.
-
-**Requirements:** `brew install colima`, `colima start`.
-
-- `ColimaRegistry` — image ops via `nerdctl`, layers exported to Lima-shared `/tmp/minibox-layers/`
-- `ColimaRuntime` — container spawn via `limactl shell` + chroot
-- `ColimaFilesystem` / `ColimaLimiter` — overlay and cgroups via limactl
-
----
-
-### macOS (Docker Desktop) / Windows (WSL2) — Library only
-
-Adapters are implemented in `minibox` but not yet wired into `miniboxd`. `MINIBOX_ADAPTER=docker-desktop` and `MINIBOX_ADAPTER=wsl` are not currently accepted by the daemon.
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform and
+per-adapter capability breakdown, including isolation, networking, image management, and
+observability status across all supported targets.
 
 ---
 
