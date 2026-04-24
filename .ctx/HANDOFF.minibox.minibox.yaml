@@ -1,6 +1,11 @@
 project: minibox
 id: minibox
-updated: 20260424:152652
+updated: 2026-04-24
+log:
+- date: 20260424:192000
+  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
+  commits: []
+  session: 27
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -249,7 +254,7 @@ items:
   priority: P1
   status: open
   title: 'chore: publish minibox-core and minibox-client to crates.io'
-  description: 'Prerequisite for moving dockerbox to minibox-plugins without cross-workspace path deps. Once published, dockerbox can use versioned deps instead of path deps.'
+  description: Prerequisite for moving dockerbox to minibox-plugins without cross-workspace path deps. Once published, dockerbox can use versioned deps instead of path deps.
   files:
   - crates/minibox-core/Cargo.toml
   - crates/minibox-client/Cargo.toml
@@ -267,33 +272,25 @@ items:
   priority: P2
   status: open
   title: 'feat(ci): add cargo test --all-features job to CI'
-  description: 'Add a cargo test --all-features job to ci.yml to catch feature-flag-specific regressions. Edit .github/workflows/ci.yml.'
+  description: Add a cargo test --all-features job to ci.yml to catch feature-flag-specific regressions. Edit .github/workflows/ci.yml.
   files:
   - .github/workflows/ci.yml
   completed: null
   extra: []
-log:
 - date: 20260424:152652
   summary: 'Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features.'
   commits:
-  - sha: e5f178d
-    branch: main
-  - sha: ed1def8
-    branch: main
+  - e5f178d
+  - ed1def8
   session: 26
 - date: 20260424:000000
   summary: 'Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore).'
   commits:
-  - sha: caa1b50
-    branch: main
-  - sha: 295b7cd
-    branch: main
-  - sha: ce75dab
-    branch: main
-  - sha: 260dcaf
-    branch: main
-  - sha: 5bfcb70
-    branch: main
+  - caa1b50
+  - 295b7cd
+  - ce75dab
+  - 260dcaf
+  - 5bfcb70
   session: 25
 - date: 20260423:232521
   summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items.'
