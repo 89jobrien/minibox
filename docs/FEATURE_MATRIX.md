@@ -115,6 +115,8 @@ For the authoritative last-modified date, run: `git log -1 --format="%ci" -- doc
 | Linux                | ✓ Shipped      | Primary target; all core features                                    |
 | macOS (Colima)       | ~ Experimental | Delegates to `limactl`/`nerdctl`; exec/logs limited                  |
 | macOS (VZ.framework) | ~ Experimental | Requires `--features vz` + `cargo xtask build-vm-image`              |
+| macOS (krun/HVF)     | L In progress  | `KrunRuntime`/`KrunFilesystem`/`KrunLimiter` in `crates/macbox/`; Phase 2 active |
+| Linux (krun/KVM)     | L In progress  | Same krun adapter suite; KVM backend; Phase 2 active                 |
 | Windows              | S Stub         | `winbox::start()` returns error unconditionally (`crates/winbox/src/lib.rs`); Phase 2 not started |
 
 ## Adapter Wiring Summary (Linux daemon only)
@@ -130,3 +132,25 @@ For the authoritative last-modified date, run: `git log -1 --format="%ci" -- doc
 | `hcs` adapter                                                     | not accepted            | No    | Library only            |
 
 Passing an unrecognized value to `MINIBOX_ADAPTER` causes the daemon to exit at startup.
+
+## krun Adapter Capability Matrix
+
+Cross-platform capability comparison for the krun adapter (Phase 2 in progress). Test gate:
+`cargo xtask test-krun-conformance`.
+
+| Capability                  | krun   | native | colima  | Notes                                |
+| --------------------------- | ------ | ------ | ------- | ------------------------------------ |
+| Run container (alpine)      | L      | ✓      | ✓       | K-R-01 passing; K-R-02..10 in progress |
+| Capture stdout              | L      | ✓      | ✓       | K-R-03 in progress                   |
+| Env var injection           | L      | ✓      | ✓       | K-R-04 in progress                   |
+| Memory limit                | L      | ✓      | —       | krun: VM config; native: cgroup v2  |
+| CPU weight                  | L      | ✓      | —       | krun: VM vcpu count; native: cgroup |
+| Namespace isolation         | via VM | ✓      | via OCI |                                      |
+| Rootfs overlay              | via VM | ✓      | —       | krun: virtiofs; native: overlay FS  |
+| Exec into running container | —      | ✓      | —       | Phase 4 (not started)               |
+| Bind mounts                 | —      | ✓      | —       | Phase 4 — virtiofs bind mounts      |
+| macOS ARM64 (HVF)           | L      | —      | ✓       | krun uses Apple Hypervisor framework |
+| Linux x86_64 (KVM)          | L      | ✓      | —       | krun uses KVM                        |
+| Linux ARM64 (KVM)           | L      | ✓      | —       | krun uses KVM                        |
+
+Legend: L = library/in-progress (wired in macbox, not yet wired into miniboxd).

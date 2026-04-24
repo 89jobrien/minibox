@@ -133,6 +133,9 @@ fn main() -> Result<()> {
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
+            eprintln!(
+                "  test-krun-conformance krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)"
+            );
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
             eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");

@@ -21,6 +21,7 @@ dirs = { workspace = true }
 serde_json = { workspace = true }
 libc = "0.2"
 which = "6"
+uuid = { workspace = true }
 block2 = { version = "0.6", optional = true }
 objc2 = { version = "0.6", optional = true }
 objc2-foundation = { version = "0.3", optional = true, features = ["NSString", "NSURL", "NSArray", "NSFileHandle"] }
@@ -51,3 +52,6 @@ harness = false
 
 [[test]]
 name = "krun_conformance_tests"
+
+[[test]]
+name = "krun_adapter_conformance"

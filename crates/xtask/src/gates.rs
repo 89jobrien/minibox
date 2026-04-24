@@ -157,16 +157,23 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// krun adapter conformance tests (macOS, requires smolvm on PATH).
+/// krun adapter conformance tests (macOS HVF / Linux KVM, requires MINIBOX_KRUN_TESTS=1).
 ///
-/// Run serially — parallel smolvm invocations collide on the agent socket.
+/// Run serially — parallel krun invocations collide on the VM hypervisor socket.
 pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
+    let _env = sh.push_env("MINIBOX_KRUN_TESTS", "1");
     cmd!(
         sh,
-        "cargo test --release -p macbox --test krun_conformance_tests -- --test-threads=1"
+        "cargo test -p macbox --test krun_conformance_tests -- --test-threads=1"
     )
     .run()
     .context("krun_conformance_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test -p macbox --test krun_adapter_conformance -- --test-threads=1"
+    )
+    .run()
+    .context("krun_adapter_conformance tests failed")?;
     eprintln!("krun conformance suite passed");
     Ok(())
 }

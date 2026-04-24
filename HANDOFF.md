@@ -342,6 +342,22 @@ All open issues in execution order. Update status as issues close.
 
 ## Next up
 
+### In progress — krun adapter Phase 2 (2026-04-23)
+
+Tests and implementation for `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` in `crates/macbox/`.
+Spec: `docs/superpowers/specs/2026-04-23-krun-adapter-conformance.md`
+Test gate: `cargo xtask test-krun-conformance`
+
+Phase status:
+
+- [x] K-S-01..06: SmolvmProcess shim (passing)
+- [x] K-R-01: create() returns non-empty ID (passing)
+- [ ] K-R-02..10: KrunRuntime lifecycle (in progress)
+- [ ] K-F-01..03: KrunFilesystem
+- [ ] K-L-01..05: KrunLimiter
+- [ ] K-I-01..05: KrunRegistry (Phase 2d, not started)
+- [ ] K-H-01..05: HandlerDependencies integration (Phase 3, not started)
+
 ### DONE (2026-04-11) — pre-push commit range resolver
 
 `.githooks/pre-push` created and executable. Ports the ref/range resolution logic
