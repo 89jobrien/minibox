@@ -44,6 +44,30 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Determine whether a connection should be accepted given peer credentials
+/// and the `require_root_auth` flag.
+///
+/// This is the single source of truth for the SO_PEERCRED gate so the logic
+/// can be unit-tested without a real socket.
+///
+/// # Rules
+///
+/// | `require_root_auth` | `creds`       | Result  |
+/// |---------------------|---------------|---------|
+/// | `false`             | any / None    | allowed |
+/// | `true`              | None          | allowed (warning logged at call site) |
+/// | `true`              | Some(uid = 0) | allowed |
+/// | `true`              | Some(uid > 0) | denied  |
+pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
+    if !require_root_auth {
+        return true;
+    }
+    match creds {
+        None => true, // credentials unavailable — warn logged by caller
+        Some(c) => c.uid == 0,
+    }
+}
+
 /// Log resolved startup configuration at `info` level.
 ///
 /// Call this once after path resolution is complete and before binding the socket.
@@ -100,17 +124,28 @@ where
             accept_result = listener.accept() => {
                 match accept_result {
                     Ok((stream, peer_creds)) => {
-                        if let Some(ref creds) = peer_creds {
-                            if require_root_auth && creds.uid != 0 {
-                                warn!(uid = creds.uid, pid = creds.pid, "server: rejecting non-root connection");
-                                continue;
+                        if !is_authorized(peer_creds.as_ref(), require_root_auth) {
+                            // is_authorized returns false only when creds is Some and uid != 0
+                            let creds = peer_creds
+                                .as_ref()
+                                .expect("is_authorized false requires Some(creds)");
+                            warn!(
+                                uid = creds.uid,
+                                pid = creds.pid,
+                                "server: rejecting non-root connection"
+                            );
+                            continue;
+                        }
+                        match &peer_creds {
+                            Some(creds) => {
+                                info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
                             }
-                            info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
-                        } else {
-                            if require_root_auth {
-                                warn!("server: peer credentials unavailable; require_root_auth bypassed");
+                            None => {
+                                if require_root_auth {
+                                    warn!("server: peer credentials unavailable; require_root_auth bypassed");
+                                }
+                                info!("server: accepted connection (no peer credentials)");
                             }
-                            info!("server: accepted connection (no peer credentials)");
                         }
                         let state_clone = Arc::clone(&state);
                         let deps_clone = Arc::clone(&deps);

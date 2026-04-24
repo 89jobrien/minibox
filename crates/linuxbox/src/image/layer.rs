@@ -709,6 +709,161 @@ mod tests {
         );
     }
 
+    // ---------------------------------------------------------------------------
+    // security_regression — named suite for CI-pinned security invariants
+    // ---------------------------------------------------------------------------
+    //
+    // Each test here corresponds to a documented security gotcha. Failures are
+    // intentional regressions — do NOT delete or loosen these tests; update the
+    // implementation instead.
+
+    #[cfg(test)]
+    mod security_regression {
+        use super::*;
+        use tempfile::TempDir;
+
+        // -- Tar path traversal (Zip Slip) ------------------------------------
+
+        /// An entry with a leading `../` must be rejected before any FS access.
+        #[test]
+        fn zip_slip_dotdot_prefix_rejected() {
+            let dest = TempDir::new().unwrap();
+            let tar_gz = raw_tar_gz_with_filename("../zip_slip_escape.txt");
+            let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("..") || err.to_string().contains("traversal"),
+                "expected path-traversal error for ../prefix, got: {err}"
+            );
+            assert!(
+                !dest.path().parent().unwrap().join("zip_slip_escape.txt").exists(),
+                "escaped file must not exist outside dest"
+            );
+        }
+
+        /// A nested `../../` traversal must also be rejected.
+        #[test]
+        fn zip_slip_nested_dotdot_rejected() {
+            let dest = TempDir::new().unwrap();
+            let err =
+                validate_tar_entry_path(Path::new("safe/../../escape"), dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("..") || err.to_string().contains("traversal"),
+                "expected traversal error, got: {err}"
+            );
+        }
+
+        /// An absolute path entry (`/etc/passwd`) must be rejected.
+        #[test]
+        fn absolute_path_entry_rejected() {
+            let dest = TempDir::new().unwrap();
+            let err =
+                validate_tar_entry_path(Path::new("/etc/passwd"), dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("absolute"),
+                "expected 'absolute' in: {err}"
+            );
+        }
+
+        // -- Device node extraction ------------------------------------------
+
+        /// Block device entries must be rejected — they allow host device access
+        /// if the daemon runs as root and the container chroots.
+        #[test]
+        fn block_device_rejected() {
+            use tar::EntryType;
+            let dest = TempDir::new().unwrap();
+            let tar_gz = tar_gz_with_device("dev/sda", EntryType::Block);
+            let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("device"),
+                "expected 'device' in block-device rejection: {err}"
+            );
+        }
+
+        /// Character device entries must be rejected for the same reason.
+        #[test]
+        fn char_device_rejected() {
+            use tar::EntryType;
+            let dest = TempDir::new().unwrap();
+            let tar_gz = tar_gz_with_device("dev/null", EntryType::Char);
+            let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("device"),
+                "expected 'device' in char-device rejection: {err}"
+            );
+        }
+
+        // -- Absolute symlink host leakage -----------------------------------
+
+        /// An absolute symlink whose target contains `..` after stripping the
+        /// leading `/` must be rejected — it would escape the container root.
+        #[cfg(unix)]
+        #[test]
+        fn absolute_symlink_with_parent_traversal_rejected() {
+            let dest = TempDir::new().unwrap();
+            let tar_gz = tar_gz_with_symlink("evil_link", "/../../etc/shadow");
+            let err = extract_layer(&tar_gz, dest.path()).unwrap_err();
+            assert!(
+                err.to_string().contains("traversal") || err.to_string().contains(".."),
+                "expected traversal error for escaping absolute symlink, got: {err}"
+            );
+        }
+
+        /// A valid absolute symlink (e.g. busybox applet) must be REWRITTEN to
+        /// relative — not rejected and not left as an absolute path on the host.
+        #[cfg(unix)]
+        #[test]
+        fn absolute_symlink_rewritten_not_left_absolute() {
+            let dest = TempDir::new().unwrap();
+            let tar_gz = tar_gz_with_symlink("bin/sh", "/bin/busybox");
+            extract_layer(&tar_gz, dest.path()).unwrap();
+            let link = dest.path().join("bin/sh");
+            assert!(link.symlink_metadata().is_ok(), "symlink must exist");
+            let target = std::fs::read_link(&link).unwrap();
+            assert!(
+                !target.is_absolute(),
+                "absolute symlink must be rewritten to relative, got: {target:?}"
+            );
+        }
+
+        // -- Setuid stripping ------------------------------------------------
+        //
+        // NOTE: The tar crate's `unpack_in` on macOS may or may not apply the
+        // mode from the header depending on the platform and umask. The security
+        // invariant here is that `extract_layer` *does not error* on setuid
+        // entries — permission stripping is best-effort (logged as warn), and
+        // the file is still extracted safely.
+
+        /// A regular file with setuid bit (04755) in the header must be extracted
+        /// without error. The setuid bit stripping is logged; the file contents
+        /// are preserved.
+        #[test]
+        fn setuid_file_extracted_without_error() {
+            use flate2::{Compression, write::GzEncoder};
+            use std::io::Write;
+            use tar::{Builder, EntryType, Header};
+
+            let gz = GzEncoder::new(Vec::new(), Compression::default());
+            let mut ar = Builder::new(gz);
+            let mut h = Header::new_gnu();
+            h.set_path("usr/bin/sudo").unwrap();
+            let content = b"fake sudo binary";
+            h.set_size(content.len() as u64);
+            h.set_entry_type(EntryType::Regular);
+            h.set_mode(0o4755); // setuid + rwxr-xr-x
+            h.set_cksum();
+            ar.append(&h, &content[..]).unwrap();
+            let tar_gz = ar.into_inner().unwrap().finish().unwrap();
+
+            let dest = TempDir::new().unwrap();
+            // Must not return an error — setuid is stripped silently.
+            extract_layer(&tar_gz, dest.path()).unwrap();
+            let extracted = dest.path().join("usr/bin/sudo");
+            assert!(extracted.exists(), "setuid file must still be extracted");
+            assert_eq!(std::fs::read(&extracted).unwrap(), content);
+        }
+    }
+
     #[cfg(test)]
     mod proptest_tests {
         use super::*;
