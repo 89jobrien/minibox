@@ -190,11 +190,11 @@ items:
   doob_uuid: null
   name: release-ci-gate
   priority: P1
-  status: open
+  status: done
   title: 'bug(ci): no CI gate required before merging release version bumps (#55)'
-  description: 'GH #55: Version bumps in Cargo.toml can be merged without green CI. Add a GitHub check preventing main→next promotion until full test suite passes.'
+  description: 'GH #55: Already resolved by c0c41e4 — phased-deployment.yml polls gh run list --workflow ci.yml --commit SHA; exits 1 on failure or timeout. Stronger than proposed: checks exact commit SHA, not latest on branch.'
   files: []
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: github-issue
@@ -281,7 +281,7 @@ items:
   doob_uuid: null
   name: tailbox-wiring-complete
   priority: P1
-  status: open
+  status: done
   title: 'feat(tailbox): complete tailnet integration wiring — miniboxd feature flag + auth chain + gateway routing'
   description: 'tailbox crate implemented: TailnetNetwork adapter, TailnetConfig, auth key resolution chain (1Password→env→file), gateway IP caching, per-container network setup/cleanup. miniboxd wired with tailnet feature flag. Uncommitted changes remain in daemonbox conformance tests, colima adapter, domain.rs, xtask preflight.'
   files:
@@ -296,7 +296,7 @@ items:
   - crates/minibox-core/src/domain.rs
   - crates/xtask/src/main.rs
   - crates/xtask/src/preflight.rs
-  completed: null
+  completed: '2026-04-24'
   extra: []
 - id: minibox-76
   doob_uuid: null
@@ -374,11 +374,11 @@ items:
   doob_uuid: null
   name: experimental-surface-tests
   priority: P1
-  status: open
+  status: done
   title: 'Add tests for experimental surfaces: bridge networking, exec, persistence'
   description: 'GH #134: Bridge networking, exec (setns-based native-only), persistence semantics (records survive restart, processes do not reattach).'
   files: []
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: github-issue
@@ -419,8 +419,8 @@ items:
   doob_uuid: null
   name: parallel-layer-pulls-port
   priority: P1
-  status: open
-  title: Port feat/parallel-layer-pulls to linuxbox (crate rename required)
+  status: done
+  title: Port feat/parallel-layer-pulls to minibox-oci (HashingReader, LimitedStream, JoinSet+Semaphore)
   description: |
     Branch feat/parallel-layer-pulls has 7 commits (63fcc48..bc7a764) targeting crates/minibox-lib/ (old name). All changes must be ported to crates/linuxbox/. Key features: HashingReader<R> (transparent SHA-256 streaming), LimitedStream<S> (async size cap), parallel JoinSet+Semaphore layer pulls (MAX_CONCURRENT_LAYERS=4), atomic tmp-dir+rename for each layer, digest verify before rename, extract_layer accepts impl Read. Design captured in docs/parallel-layer-pulls-design.md.
   files:
@@ -428,7 +428,7 @@ items:
   - crates/linuxbox/src/image/layer.rs
   - crates/linuxbox/src/error.rs
   - crates/linuxbox/Cargo.toml
-  completed: null
+  completed: '2026-04-24'
   extra:
   - date: null
     type: note
@@ -459,10 +459,13 @@ items:
     note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
 log:
 - date: 20260424:000000
-  summary: 'P1 close: minibox-70 (handler-coverage-80pct) confirmed at 80.00% function / 77.93% line via cargo llvm-cov nextest — target met by prior session test additions. minibox-75 (krun-adapter-full) confirmed landed via commits 6f72236+1c171f4+d0fa9df (Phase 3 wiring + fmt cleanup). Both marked done.'
+  summary: 'Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore).'
   commits:
-  - 1c171f4
-  - d0fa9df
+  - caa1b50
+  - 295b7cd
+  - ce75dab
+  - 260dcaf
+  - 5bfcb70
   session: 25
 - date: 20260423:232521
   summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items — 71 todos wired with blocks/blocked_by in topological order covering VZ, mac dogfood, conformance, handler/CI, linuxbox rename, run_review, and PTY chains.'
