@@ -1,7 +1,7 @@
 # KrunRuntime Adapter Conformance Specification
 
 **Date:** 2026-04-23
-**Status:** In Progress — Phase 1 complete, Phase 2 active
+**Status:** Complete — Phases 1-3 done (K-S, K-R, K-F, K-L, K-I, K-H all passing)
 **Adapter:** `MINIBOX_ADAPTER=krun`
 **Platforms:** macOS ARM64 (HVF), Linux x86_64/ARM64 (KVM)
 
