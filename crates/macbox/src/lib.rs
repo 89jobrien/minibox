@@ -133,6 +133,51 @@ fn build_colima_handler_dependencies(
 /// `None` for `PeerCreds`). This means the UID-based root-auth guard is
 /// disabled on macOS — container operations are delegated to the Colima VM
 /// anyway, so the attack surface is limited to whoever can reach the socket.
+/// Extract peer credentials from a connected Unix socket fd.
+///
+/// On macOS, uses `getpeereid(2)` (pid unavailable, returns 0 sentinel).
+/// On Linux, uses `SO_PEERCRED` via `getsockopt`.
+#[cfg(target_os = "macos")]
+fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::PeerCreds> {
+    let mut uid: libc::uid_t = 0;
+    let mut gid: libc::gid_t = 0;
+    // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
+    // call on any connected Unix domain socket.
+    if unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
+        Some(daemonbox::server::PeerCreds { uid, pid: 0 })
+    } else {
+        tracing::warn!("getpeereid failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::PeerCreds> {
+    use std::mem;
+    let mut cred: libc::ucred = unsafe { mem::zeroed() };
+    let mut len = mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: fd is a valid connected Unix socket fd. getsockopt with
+    // SO_PEERCRED is safe on any connected Unix domain socket.
+    let ret = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            &mut cred as *mut _ as *mut libc::c_void,
+            &mut len,
+        )
+    };
+    if ret == 0 {
+        Some(daemonbox::server::PeerCreds {
+            uid: cred.uid,
+            pid: cred.pid as u32,
+        })
+    } else {
+        tracing::warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
 struct MacUnixListener(UnixListener);
 
 impl daemonbox::server::ServerListener for MacUnixListener {
@@ -140,20 +185,8 @@ impl daemonbox::server::ServerListener for MacUnixListener {
 
     async fn accept(&self) -> anyhow::Result<(Self::Stream, Option<daemonbox::server::PeerCreds>)> {
         let (stream, _addr) = self.0.accept().await?;
-        // macOS does not expose SO_PEERCRED via nix, but does support getpeereid(2)
-        // which returns the effective uid/gid of the peer. pid is not available on
-        // macOS via this interface; we use 0 as a sentinel (never a real daemon pid).
         use std::os::unix::io::AsRawFd;
-        let mut uid: libc::uid_t = 0;
-        let mut gid: libc::gid_t = 0;
-        // SAFETY: stream.as_raw_fd() is a valid connected Unix socket fd owned by
-        // `stream`. getpeereid is safe to call on any connected Unix domain socket.
-        let creds = if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } == 0 {
-            Some(daemonbox::server::PeerCreds { uid, pid: 0 })
-        } else {
-            tracing::warn!("getpeereid failed: {}", std::io::Error::last_os_error());
-            None
-        };
+        let creds = get_peer_creds(stream.as_raw_fd());
         Ok((stream, creds))
     }
 }
