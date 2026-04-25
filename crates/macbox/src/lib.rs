@@ -170,7 +170,7 @@ fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::Pee
     if ret == 0 {
         Some(daemonbox::server::PeerCreds {
             uid: cred.uid,
-            pid: cred.pid as u32,
+            pid: cred.pid,
         })
     } else {
         tracing::warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
