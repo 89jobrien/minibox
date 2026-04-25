@@ -127,6 +127,7 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
             pre_exec_hooks: config.hooks.pre_exec.clone(),
             mounts: config.mounts.clone(),
             privileged: config.privileged,
+            pty: None,
         };
 
         // IMPORTANT: spawn_container_process uses blocking syscalls (clone/fork)
@@ -196,6 +197,7 @@ mod tests {
             pre_exec_hooks: spawn_config.hooks.pre_exec.clone(),
             mounts: spawn_config.mounts.clone(),
             privileged: spawn_config.privileged,
+            pty: None,
         };
 
         assert_eq!(container_config.mounts.len(), 1);

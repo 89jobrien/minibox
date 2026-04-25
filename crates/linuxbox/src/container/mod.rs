@@ -156,6 +156,7 @@ impl Container {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
+            pty: None,
         };
 
         let spawn = spawn_container_process(process_config)

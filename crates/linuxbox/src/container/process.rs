@@ -481,6 +481,7 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
+            pty: None,
         };
         assert!(!cfg.privileged);
         assert!(cfg.mounts.is_empty());
@@ -500,6 +501,7 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
+            pty: None,
         };
         assert!(cfg.privileged);
     }
