@@ -75,10 +75,9 @@ jobs:
     needs: compile-check
     steps:
       - uses: actions/checkout@v4
-      - name: ensure cargo-nextest
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          which cargo-nextest || cargo install cargo-nextest --locked
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
       - name: cargo nextest run (unit tests)
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
