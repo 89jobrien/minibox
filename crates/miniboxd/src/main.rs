@@ -588,7 +588,8 @@ async fn main() -> Result<()> {
                     image_builder: None,
                 },
                 events: daemonbox::handler::EventDeps {
-                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_sink: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSource>,
                     metrics: metrics_recorder.clone(),
@@ -632,7 +633,8 @@ async fn main() -> Result<()> {
                     image_builder: None,
                 },
                 events: daemonbox::handler::EventDeps {
-                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_sink: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSource>,
                     metrics: metrics_recorder.clone(),
@@ -676,7 +678,8 @@ async fn main() -> Result<()> {
                     image_builder: None,
                 },
                 events: daemonbox::handler::EventDeps {
-                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_sink: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSource>,
                     metrics: metrics_recorder.clone(),
