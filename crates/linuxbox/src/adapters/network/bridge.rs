@@ -561,12 +561,14 @@ mod tests {
     /// Issue #134: exhausted pool must return `None`, never panic.
     #[test]
     fn ip_allocator_exhaustion_returns_none() {
-        // /30 has only 2 usable host addresses (.2 and .3); .1 is gateway.
-        let subnet: ipnet::IpNet = "192.168.1.0/30".parse().unwrap();
+        // /29 gives hosts .1-.6 (ipnet excludes network .0 and broadcast .7).
+        // Gateway .1 is reserved, leaving 5 usable addresses (.2-.6).
+        let subnet: ipnet::IpNet = "192.168.1.0/29".parse().unwrap();
         let mut alloc = IpAllocator::new(subnet);
 
-        assert!(alloc.allocate().is_some(), "first allocation must succeed");
-        assert!(alloc.allocate().is_some(), "second allocation must succeed");
+        for i in 1..=5 {
+            assert!(alloc.allocate().is_some(), "allocation {i} must succeed");
+        }
         assert!(
             alloc.allocate().is_none(),
             "pool exhausted — must return None"
