@@ -31,8 +31,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test --all-features
-        run: cargo test --all-features --workspace --lib --doc
+      - name: cargo test --all-features (lib)
+        run: cargo test --all-features --workspace --lib
+      - name: cargo test --all-features (doc)
+        run: cargo test --all-features --workspace --doc
 
   audit:
     name: cargo audit
@@ -71,7 +73,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: cargo xtask test-unit
-        run: ~/.local/bin/mise exec -- cargo xtask test-unit
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask test-unit
 
   coverage-check:
     name: handler coverage (>= 80%)
@@ -81,7 +85,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: cargo xtask coverage-check
-        run: ~/.local/bin/mise exec -- cargo xtask coverage-check
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask coverage-check
 
   geiger:
     name: unsafe audit (geiger)
@@ -118,4 +124,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: cargo xtask test-e2e-suite
-        run: ~/.local/bin/mise exec -- cargo xtask test-e2e-suite
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask test-e2e-suite
