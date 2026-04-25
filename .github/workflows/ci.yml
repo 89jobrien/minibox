@@ -31,9 +31,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo test --all-features (lib, exclude macOS-only crates)
-        run: cargo test --all-features --workspace --exclude macbox --lib
-      - name: cargo test --all-features (doc, exclude macOS-only crates)
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
+        run: cargo nextest run --all-features --workspace --exclude macbox --lib
+      - name: cargo test --all-features (doc)
         run: cargo test --all-features --workspace --exclude macbox --doc
 
   audit:
@@ -75,8 +78,7 @@ jobs:
       - name: cargo nextest run (unit tests)
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo nextest run --workspace --lib 2>/dev/null \
-            || cargo test --workspace --lib
+          cargo nextest run --workspace --lib
 
   coverage-check:
     name: handler coverage (>= 80%)
