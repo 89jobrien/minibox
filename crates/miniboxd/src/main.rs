@@ -256,27 +256,37 @@ fn build_native_handler_dependencies(
     );
 
     Ok(Arc::new(HandlerDependencies {
-        registry_router,
-        filesystem: Arc::new(OverlayFilesystem::new()),
-        resource_limiter: Arc::new(CgroupV2Limiter::new()),
-        runtime: Arc::new(LinuxNamespaceRuntime::new()),
-        network_provider: native_network,
-        containers_base: containers_dir,
-        run_containers_base: run_containers_dir,
-        metrics: metrics_recorder,
-        image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-        exec_runtime: Some(linuxbox::adapters::exec::native_exec_runtime(
-            Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
-        )),
-        event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
-        event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
-        image_gc,
-        image_store: Arc::clone(&state.image_store),
-        image_pusher: Some(image_pusher),
-        commit_adapter: Some(commit_adapter),
-        image_builder: Some(image_builder),
+        image: daemonbox::handler::ImageDeps {
+            registry_router,
+            image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+            image_gc,
+            image_store: Arc::clone(&state.image_store),
+        },
+        lifecycle: daemonbox::handler::LifecycleDeps {
+            filesystem: Arc::new(OverlayFilesystem::new()),
+            resource_limiter: Arc::new(CgroupV2Limiter::new()),
+            runtime: Arc::new(LinuxNamespaceRuntime::new()),
+            network_provider: native_network,
+            containers_base: containers_dir,
+            run_containers_base: run_containers_dir,
+        },
+        exec: daemonbox::handler::ExecDeps {
+            exec_runtime: Some(linuxbox::adapters::exec::native_exec_runtime(
+                Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+            )),
+            pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+        },
+        build: daemonbox::handler::BuildDeps {
+            image_pusher: Some(image_pusher),
+            commit_adapter: Some(commit_adapter),
+            image_builder: Some(image_builder),
+        },
+        events: daemonbox::handler::EventDeps {
+            event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+            event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
+            metrics: metrics_recorder,
+        },
         policy: ContainerPolicy::default(),
-        pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
     }))
 }
 
@@ -554,26 +564,36 @@ async fn main() -> Result<()> {
             let proot_runtime =
                 ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
             Arc::new(HandlerDependencies {
-                registry_router,
-                filesystem: Arc::new(CopyFilesystem::new()),
-                resource_limiter: Arc::new(NoopLimiter::new()),
-                runtime: Arc::new(proot_runtime),
-                network_provider: Arc::new(NoopNetwork::new()),
-                containers_base: containers_dir.clone(),
-                run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: metrics_recorder.clone(),
-                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-                exec_runtime: None,
-                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
-                event_source: Arc::clone(&event_broker)
-                    as Arc<dyn minibox_core::events::EventSource>,
-                image_gc: Arc::clone(&image_gc),
-                image_store: Arc::clone(&state.image_store),
-                image_pusher: None,
-                commit_adapter: None,
-                image_builder: None,
+                image: daemonbox::handler::ImageDeps {
+                    registry_router,
+                    image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                    image_gc: Arc::clone(&image_gc),
+                    image_store: Arc::clone(&state.image_store),
+                },
+                lifecycle: daemonbox::handler::LifecycleDeps {
+                    filesystem: Arc::new(CopyFilesystem::new()),
+                    resource_limiter: Arc::new(NoopLimiter::new()),
+                    runtime: Arc::new(proot_runtime),
+                    network_provider: Arc::new(NoopNetwork::new()),
+                    containers_base: containers_dir.clone(),
+                    run_containers_base: PathBuf::from(&run_containers_dir),
+                },
+                exec: daemonbox::handler::ExecDeps {
+                    exec_runtime: None,
+                    pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+                },
+                build: daemonbox::handler::BuildDeps {
+                    image_pusher: None,
+                    commit_adapter: None,
+                    image_builder: None,
+                },
+                events: daemonbox::handler::EventDeps {
+                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_source: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSource>,
+                    metrics: metrics_recorder.clone(),
+                },
                 policy: ContainerPolicy::default(),
-                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
         AdapterSuite::Colima => {
@@ -588,26 +608,36 @@ async fn main() -> Result<()> {
                 )],
             ));
             Arc::new(HandlerDependencies {
-                registry_router,
-                filesystem: Arc::new(ColimaFilesystem::new()),
-                resource_limiter: Arc::new(ColimaLimiter::new()),
-                runtime: Arc::new(ColimaRuntime::new()),
-                network_provider: Arc::new(NoopNetwork::new()),
-                containers_base: containers_dir.clone(),
-                run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: metrics_recorder.clone(),
-                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-                exec_runtime: None,
-                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
-                event_source: Arc::clone(&event_broker)
-                    as Arc<dyn minibox_core::events::EventSource>,
-                image_gc: Arc::clone(&image_gc),
-                image_store: Arc::clone(&state.image_store),
-                image_pusher: None,
-                commit_adapter: None,
-                image_builder: None,
+                image: daemonbox::handler::ImageDeps {
+                    registry_router,
+                    image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                    image_gc: Arc::clone(&image_gc),
+                    image_store: Arc::clone(&state.image_store),
+                },
+                lifecycle: daemonbox::handler::LifecycleDeps {
+                    filesystem: Arc::new(ColimaFilesystem::new()),
+                    resource_limiter: Arc::new(ColimaLimiter::new()),
+                    runtime: Arc::new(ColimaRuntime::new()),
+                    network_provider: Arc::new(NoopNetwork::new()),
+                    containers_base: containers_dir.clone(),
+                    run_containers_base: PathBuf::from(&run_containers_dir),
+                },
+                exec: daemonbox::handler::ExecDeps {
+                    exec_runtime: None,
+                    pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+                },
+                build: daemonbox::handler::BuildDeps {
+                    image_pusher: None,
+                    commit_adapter: None,
+                    image_builder: None,
+                },
+                events: daemonbox::handler::EventDeps {
+                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_source: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSource>,
+                    metrics: metrics_recorder.clone(),
+                },
                 policy: ContainerPolicy::default(),
-                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
         AdapterSuite::SmolVm => {
@@ -622,26 +652,36 @@ async fn main() -> Result<()> {
                 )],
             ));
             Arc::new(HandlerDependencies {
-                registry_router,
-                filesystem: Arc::new(SmolVmFilesystem::new()),
-                resource_limiter: Arc::new(SmolVmLimiter::new()),
-                runtime: Arc::new(SmolVmRuntime::new()),
-                network_provider: Arc::new(NoopNetwork::new()),
-                containers_base: containers_dir.clone(),
-                run_containers_base: PathBuf::from(&run_containers_dir),
-                metrics: metrics_recorder.clone(),
-                image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-                exec_runtime: None,
-                event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
-                event_source: Arc::clone(&event_broker)
-                    as Arc<dyn minibox_core::events::EventSource>,
-                image_gc: Arc::clone(&image_gc),
-                image_store: Arc::clone(&state.image_store),
-                image_pusher: None,
-                commit_adapter: None,
-                image_builder: None,
+                image: daemonbox::handler::ImageDeps {
+                    registry_router,
+                    image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                    image_gc: Arc::clone(&image_gc),
+                    image_store: Arc::clone(&state.image_store),
+                },
+                lifecycle: daemonbox::handler::LifecycleDeps {
+                    filesystem: Arc::new(SmolVmFilesystem::new()),
+                    resource_limiter: Arc::new(SmolVmLimiter::new()),
+                    runtime: Arc::new(SmolVmRuntime::new()),
+                    network_provider: Arc::new(NoopNetwork::new()),
+                    containers_base: containers_dir.clone(),
+                    run_containers_base: PathBuf::from(&run_containers_dir),
+                },
+                exec: daemonbox::handler::ExecDeps {
+                    exec_runtime: None,
+                    pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+                },
+                build: daemonbox::handler::BuildDeps {
+                    image_pusher: None,
+                    commit_adapter: None,
+                    image_builder: None,
+                },
+                events: daemonbox::handler::EventDeps {
+                    event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+                    event_source: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSource>,
+                    metrics: metrics_recorder.clone(),
+                },
                 policy: ContainerPolicy::default(),
-                pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
             })
         }
     };
@@ -812,15 +852,15 @@ mod tests {
         .unwrap();
 
         assert!(
-            deps.image_pusher.is_some(),
+            deps.build.image_pusher.is_some(),
             "native suite should wire image push"
         );
         assert!(
-            deps.commit_adapter.is_some(),
+            deps.build.commit_adapter.is_some(),
             "native suite should wire container commit"
         );
         assert!(
-            deps.image_builder.is_some(),
+            deps.build.image_builder.is_some(),
             "native suite should wire image build"
         );
     }
