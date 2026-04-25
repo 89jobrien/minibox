@@ -3,8 +3,16 @@ name: Protocol Drift
 on:
   push:
     branches: [main, next, stable, "feature/*", "hotfix/*"]
+    paths:
+      - 'crates/minibox-core/src/protocol.rs'
+      - 'crates/daemonbox/src/handler.rs'
+      - 'crates/daemonbox/src/server.rs'
   pull_request:
     branches: [main, next]
+    paths:
+      - 'crates/minibox-core/src/protocol.rs'
+      - 'crates/daemonbox/src/handler.rs'
+      - 'crates/daemonbox/src/server.rs'
 
 jobs:
   protocol-drift:
@@ -13,5 +21,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: check protocol consistency
-        run: bash .claude/hooks/protocol-drift-check.sh
+      - name: check DaemonRequest/DaemonResponse variants stay in sync
+        run: |
+          REQ_VARIANTS=$(grep -cE '^\s+(Run|Pull|Stop|Remove|List|Exec|Pause|Resume|Build|Push|Commit|Prune|RemoveImage|Events|PtyResize)\b' \
+            crates/minibox-core/src/protocol.rs || true)
+          RESP_VARIANTS=$(grep -cE '^\s+(ContainerCreated|Success|Error|ContainerList|ContainerStopped|ContainerOutput|ImageBuildProgress)\b' \
+            crates/minibox-core/src/protocol.rs || true)
+          echo "DaemonRequest variants: $REQ_VARIANTS"
+          echo "DaemonResponse variants: $RESP_VARIANTS"
+          if [ "$REQ_VARIANTS" -eq 0 ] || [ "$RESP_VARIANTS" -eq 0 ]; then
+            echo "ERROR: could not find protocol variants -- parser may need updating"
+            exit 1
+          fi
+          echo "OK: protocol variants detected"
+
+      - name: check handler covers all request variants
+        run: |
+          UNHANDLED=$(grep -oP 'DaemonRequest::\K\w+' crates/minibox-core/src/protocol.rs | sort -u | while read V; do
+            if ! grep -q "DaemonRequest::${V}" crates/daemonbox/src/handler.rs crates/daemonbox/src/server.rs 2>/dev/null; then
+              echo "$V"
+            fi
+          done)
+          if [ -n "$UNHANDLED" ]; then
+            echo "ERROR: DaemonRequest variants not handled in handler/server:"
+            echo "$UNHANDLED"
+            exit 1
+          fi
+          echo "OK: all request variants handled"

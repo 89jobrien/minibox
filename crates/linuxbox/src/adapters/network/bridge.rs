@@ -1,5 +1,4 @@
 //! Bridge network adapter — Linux-only.
-#![cfg(target_os = "linux")]
 
 use ipnet::IpNet;
 use std::collections::BTreeSet;
