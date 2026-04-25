@@ -8,7 +8,7 @@
 //!   cargo run --release --example pull -p minibox -- nginx:1.25
 //!   cargo run --release --example pull -p minibox -- ubuntu:22.04
 
-use minibox::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
+use minibox_core::{adapters::DockerHubRegistry, domain::ImageRegistry, image::ImageStore};
 use std::{
     io::Write,
     path::PathBuf,

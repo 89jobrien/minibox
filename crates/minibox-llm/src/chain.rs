@@ -21,10 +21,7 @@ impl FallbackChain {
         Err(LlmError::AllProvidersFailed)
     }
 
-    pub async fn complete(
-        &self,
-        req: &CompletionRequest,
-    ) -> Result<CompletionResponse, LlmError> {
+    pub async fn complete(&self, req: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
         for provider in &self.providers {
             match provider.complete(req).await {
                 Ok(resp) => return Ok(resp),
@@ -47,10 +44,7 @@ mod tests {
 
     #[async_trait]
     impl LlmProvider for SuccessProvider {
-        async fn complete(
-            &self,
-            _req: &CompletionRequest,
-        ) -> Result<CompletionResponse, LlmError> {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
             Ok(CompletionResponse {
                 text: self.response.clone(),
             })
@@ -69,10 +63,7 @@ mod tests {
 
     #[async_trait]
     impl LlmProvider for FailProvider {
-        async fn complete(
-            &self,
-            _req: &CompletionRequest,
-        ) -> Result<CompletionResponse, LlmError> {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse, LlmError> {
             Err(LlmError::Provider("fail".to_string()))
         }
 

@@ -4,8 +4,7 @@ use serde::Deserialize;
 use crate::error::LlmError;
 use crate::provider::LlmProvider;
 use crate::types::{
-    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse,
-    Role,
+    CompletionRequest, CompletionResponse, ContentBlock, InferenceRequest, InferenceResponse, Role,
 };
 
 pub struct OllamaProvider {
@@ -24,10 +23,9 @@ impl OllamaProvider {
     }
 
     pub fn from_env() -> Self {
-        let host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://localhost:11434".to_string());
-        let model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "llama3.2".to_string());
+        let host =
+            std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "llama3.2".to_string());
         Self::new(host, model)
     }
 
@@ -118,10 +116,7 @@ impl LlmProvider for OllamaProvider {
 
         if let Some(system) = &req.system {
             if let Some(arr) = body["messages"].as_array_mut() {
-                arr.insert(
-                    0,
-                    serde_json::json!({"role": "system", "content": system}),
-                );
+                arr.insert(0, serde_json::json!({"role": "system", "content": system}));
             }
         }
 
