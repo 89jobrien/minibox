@@ -21,7 +21,18 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy
-        run: cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+        run: cargo clippy -p linuxbox -p minibox-macros -p mbx -p daemonbox -p macbox -p miniboxd -p minibox-core -p minibox-oci -p minibox-client -p minibox-testers -p winbox -- -D warnings
+
+  test-all-features:
+    name: test with all features
+    runs-on: ubuntu-latest
+    needs: compile-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test --all-features
+        run: cargo test --all-features --workspace --lib --doc
 
   audit:
     name: cargo audit
@@ -86,7 +97,7 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
-          cargo geiger -p minibox -p minibox-macros -p minibox-cli -p daemonbox 2>&1 | tee geiger-report.txt
+          cargo geiger -p linuxbox -p minibox-macros -p mbx -p daemonbox 2>&1 | tee geiger-report.txt
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
