@@ -63,7 +63,7 @@ impl SmolvmProcess {
             None => {
                 let sig = status.signal().unwrap_or(0);
                 tracing::debug!(signal = sig, "smolvm: process killed by signal");
-                Ok(-(sig as i32))
+                Ok(-sig)
             }
         }
     }

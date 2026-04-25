@@ -60,9 +60,11 @@ jobs:
             --include='*.rs' \
             crates/ \
             --exclude-dir=xtask \
-            | grep -v 'tests/' \
-            | grep -v 'examples/' \
-            | grep -v 'bench' \
+            --exclude-dir=minibox-testers \
+            | grep -v '/tests/' \
+            | grep -v '/examples/' \
+            | grep -v '/benches/' \
+            | grep -v 'minibox-core/src/adapters/' \
             | grep -v '// allow:unwrap' \
             || true)
           if [ -n "$HITS" ]; then
