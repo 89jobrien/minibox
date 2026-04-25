@@ -159,7 +159,7 @@ async fn main() -> anyhow::Result<()> {
 
     let store = Arc::new(ImageStore::new(&images_dir)?);
     let registry = DockerHubRegistry::new(store.clone())?;
-    let image_ref = minibox::ImageRef::parse(&format!("{name}:{tag}"))?;
+    let image_ref = linuxbox::ImageRef::parse(&format!("{name}:{tag}"))?;
 
     if registry.has_image(&name, &tag).await {
         ok("already cached — skipping pull");

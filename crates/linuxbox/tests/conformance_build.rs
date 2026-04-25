@@ -17,7 +17,7 @@
 //! asserting on RUN side-effects.
 
 use anyhow::Result;
-use minibox::adapters::MiniboxImageBuilder;
+use linuxbox::adapters::MiniboxImageBuilder;
 use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext, DynImageBuilder};
 use minibox_core::image::ImageStore;
 use minibox_testers::backend::BackendDescriptor;

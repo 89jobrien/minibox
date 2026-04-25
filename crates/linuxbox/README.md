@@ -30,6 +30,6 @@ minibox = { path = "../minibox" }
 ```
 
 ```rust
-use minibox::domain::ContainerRuntime;
-use minibox::protocol::DaemonRequest;
+use linuxbox::domain::ContainerRuntime;
+use linuxbox::protocol::DaemonRequest;
 ```

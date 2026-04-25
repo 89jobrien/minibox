@@ -23,7 +23,7 @@ pub mod daemonbox_state;
 // so those macro invocations in minibox source files resolve correctly.
 // Also re-export error so container/ modules can still use `crate::error::*`
 // through their own `use minibox_core::error::*` — but other callers that
-// relied on `minibox::domain` or `minibox::error` continue to compile.
+// relied on `linuxbox::domain` or `minibox::error` continue to compile.
 pub use minibox_core::domain;
 pub mod error;
 pub use minibox_core::image;

@@ -23,7 +23,7 @@
 //!    (commit `2fc7036`).
 
 use flate2::{Compression, write::GzEncoder};
-use minibox::image::layer::extract_layer;
+use linuxbox::image::layer::extract_layer;
 use std::io::Write;
 use tar::{Builder, EntryType, Header};
 use tempfile::TempDir;

@@ -39,8 +39,8 @@ use tracing::debug;
 /// # Example
 ///
 /// ```rust,ignore
-/// use minibox::adapters::CgroupV2Limiter;
-/// use minibox::domain::{ResourceConfig, ResourceLimiter};
+/// use linuxbox::adapters::CgroupV2Limiter;
+/// use linuxbox::domain::{ResourceConfig, ResourceLimiter};
 ///
 /// let limiter = CgroupV2Limiter::new();
 ///

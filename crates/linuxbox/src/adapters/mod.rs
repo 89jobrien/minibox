@@ -69,9 +69,9 @@
 //! injected into the business logic layer:
 //!
 //! ```rust,ignore
-//! use minibox::adapters::DockerHubRegistry;
-//! use minibox::domain::DynImageRegistry;
-//! use minibox::image::ImageStore;
+//! use linuxbox::adapters::DockerHubRegistry;
+//! use linuxbox::domain::DynImageRegistry;
+//! use linuxbox::image::ImageStore;
 //! use std::sync::Arc;
 //!
 //! let store = Arc::new(ImageStore::new("/var/lib/minibox/images")?);

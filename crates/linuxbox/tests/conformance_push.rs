@@ -16,7 +16,7 @@
 //! on that address to activate tier 2 tests.
 
 use anyhow::Result;
-use minibox::adapters::{OciPushAdapter, commit_upper_dir_to_image};
+use linuxbox::adapters::{OciPushAdapter, commit_upper_dir_to_image};
 use minibox_core::domain::{BackendCapability, DynImagePusher, RegistryCredentials};
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;

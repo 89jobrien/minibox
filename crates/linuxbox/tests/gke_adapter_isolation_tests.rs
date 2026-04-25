@@ -5,8 +5,8 @@
 //! Tests do NOT require root or cgroups — all tests run on any platform
 //! including macOS.
 
-use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
-use minibox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
+use linuxbox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
+use linuxbox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tempfile::TempDir;
