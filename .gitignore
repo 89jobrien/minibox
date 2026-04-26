@@ -122,3 +122,6 @@ __pycache__/
 .ctx/HANDOFF.md
 .ctx/HANDOVER.md
 .tmp-dogfood/
+
+# cargo-ai
+minibox-assistant

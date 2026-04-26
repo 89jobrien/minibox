@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-04-24)
+# Handoff — minibox (2026-04-25)
 
-**Branch:** main | **Build:** clean | **Tests:** N/A
+**Branch:** main | **Build:** unknown | **Tests:** unknown
 
 ## Items
 
@@ -23,9 +23,8 @@
 
 ## Log
 
-- 20260424:192000: EOD handoff: cargo check clean. Crate consolidation and plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.
+- 20260424:192000: EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.
 - 20260424:152652: Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features. [e5f178d, ed1def8]
 - 20260424:000000: Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore). [caa1b50, 295b7cd, ce75dab, 260dcaf, 5bfcb70]
 - 20260423:232521: chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items.
 - 20260423:150355: chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale; 10 missing-status plans flagged as LANDED.
-- 20260423:185322: chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests, 3 fuzz targets, READMEs for 7 crates.

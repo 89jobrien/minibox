@@ -1,11 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-24
-log:
-- date: 20260424:192000
-  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
-  commits: []
-  session: 27
+updated: 2026-04-25
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -277,6 +272,11 @@ items:
   - .github/workflows/ci.yml
   completed: null
   extra: []
+log:
+- date: 20260424:192000
+  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
+  commits: []
+  session: 27
 - date: 20260424:152652
   summary: 'Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features.'
   commits:

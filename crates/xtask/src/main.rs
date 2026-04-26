@@ -21,6 +21,7 @@ mod cleanup;
 mod gates;
 mod preflight;
 mod test_image;
+mod test_linux;
 mod vm_image;
 mod vm_run;
 
@@ -101,7 +102,7 @@ fn main() -> Result<()> {
             test_image::build_test_image(force)
         }
         Some("coverage-check") => gates::coverage_check(&sh),
-        Some("test-linux") => test_image::test_linux(&sh),
+        Some("test-linux") => test_linux::test_linux(),
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
