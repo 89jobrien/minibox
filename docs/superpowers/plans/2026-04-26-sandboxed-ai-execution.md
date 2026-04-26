@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Dogfood-2 Sandboxed AI Code Execution — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

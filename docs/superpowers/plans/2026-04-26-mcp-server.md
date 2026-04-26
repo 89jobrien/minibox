@@ -1,3 +1,7 @@
+---
+status: open
+---
+
 # Dogfood-1 MCP Server — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
