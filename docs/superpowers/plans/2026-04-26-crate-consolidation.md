@@ -573,7 +573,105 @@ minibox crate"
 
 ---
 
-### Phase 5: Update release pipeline and documentation
+### Phase 5: Configurable default adapter + smolvm cross-platform
+
+Make the default adapter suite trivially switchable (single const) and
+update the smolvm adapter docs to reflect that smolmachines supports
+both macOS and Linux (libkrun-based, not VZ-only).
+
+**Files:**
+- Modify: `crates/miniboxd/src/main.rs`
+- Modify: `crates/linuxbox/src/adapters/smolvm.rs` (or
+  `crates/minibox/src/adapters/smolvm.rs` after Phase 4)
+
+- [ ] **Step 1: Extract DEFAULT_ADAPTER_SUITE const in miniboxd**
+
+In `crates/miniboxd/src/main.rs`, add a const above `AdapterSuite`:
+
+```rust
+/// Default adapter suite when `MINIBOX_ADAPTER` is unset.
+///
+/// Change this single value to switch the default runtime for all
+/// platforms. Current options: `"native"`, `"gke"`, `"colima"`,
+/// `"smolvm"`.
+const DEFAULT_ADAPTER_SUITE: &str = "native";
+```
+
+Update `AdapterSuite::from_env()`:
+
+```rust
+fn from_env() -> Result<Self> {
+    let val = std::env::var("MINIBOX_ADAPTER")
+        .unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
+    match val.as_str() {
+        "native" => Ok(Self::Native),
+        "gke" => Ok(Self::Gke),
+        "colima" => Ok(Self::Colima),
+        "smolvm" => Ok(Self::SmolVm),
+        other => anyhow::bail!(
+            "unknown MINIBOX_ADAPTER value {other:?} \
+             (expected \"native\", \"gke\", \"colima\", or \"smolvm\")"
+        ),
+    }
+}
+```
+
+- [ ] **Step 2: Update smolvm.rs module docs for cross-platform**
+
+Replace the module-level doc comment to reflect that smolmachines
+uses libkrun (not Apple VZ-only) and works on both macOS and Linux:
+
+```rust
+//! SmolVM adapter suite — lightweight Linux VMs via smolmachines.
+//!
+//! Delegates container operations into a smolmachines VM. smolmachines
+//! uses libkrun (a lightweight VMM) to boot Linux VMs with sub-second
+//! cold starts. Works on both macOS (Apple Silicon / Intel) and Linux.
+//!
+//! # How it works
+//!
+//! Each adapter runs commands inside a smolmachines VM using
+//! `smolvm machine run --image <image> -- <command>`. The VM boots a
+//! Linux kernel, provides cgroups v2, overlay FS, and network isolation
+//! inside the guest. Images are cached locally after first pull.
+//!
+//! # Adapter selection
+//!
+//! Selected by `MINIBOX_ADAPTER=smolvm`. These adapters are compiled on
+//! all platforms.
+//!
+//! # Requirements
+//!
+//! - smolmachines installed (https://smolmachines.com)
+//!   - macOS: `brew install smolvm`
+//!   - Linux: see smolmachines docs
+//! - macOS with Apple Silicon or Intel, or Linux x86_64/aarch64
+```
+
+- [ ] **Step 3: Update SmolVmLimiter and SmolVmFilesystem doc comments**
+
+Remove "macOS host side" language — replace with "host side" since it
+now applies to both platforms. Affected doc comments:
+- `SmolVmFilesystem`: "on the host side" (already correct)
+- `SmolVmLimiter`: "on the macOS host side" -> "on the host side"
+
+- [ ] **Step 4: Verify**
+
+Run: `cargo check --workspace`
+Run: `cargo xtask test-unit`
+Expected: clean pass, no test regressions
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "feat(miniboxd): extract DEFAULT_ADAPTER_SUITE const, \
+update smolvm docs for cross-platform"
+```
+
+---
+
+### Phase 6: Update release pipeline and documentation
 
 **Files:**
 - Modify: `.github/workflows/release.yml`
@@ -635,7 +733,7 @@ consolidated workspace"
 
 ---
 
-### Phase 6: Dry-run publish and tag
+### Phase 7: Dry-run publish and tag
 
 - [ ] **Step 1: Verify CARGO_REGISTRY_TOKEN is set**
 
