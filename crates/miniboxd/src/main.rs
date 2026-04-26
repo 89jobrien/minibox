@@ -191,8 +191,8 @@ impl AdapterSuite {
     /// Accepted values: `"native"` (default when the variable is absent),
     /// `"gke"`, `"colima"`, `"smolvm"`.  Returns an error for any other value.
     fn from_env() -> Result<Self> {
-        let val = std::env::var("MINIBOX_ADAPTER")
-            .unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
+        let val =
+            std::env::var("MINIBOX_ADAPTER").unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
         match val.as_str() {
             "gke" => Ok(Self::Gke),
             "colima" => Ok(Self::Colima),

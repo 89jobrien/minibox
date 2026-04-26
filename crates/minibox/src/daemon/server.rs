@@ -545,17 +545,17 @@ mod tests {
     fn test_deps(
         tmp: &TempDir,
     ) -> (
-        Arc<crate::state::DaemonState>,
-        Arc<crate::handler::HandlerDependencies>,
+        Arc<crate::daemon::state::DaemonState>,
+        Arc<crate::daemon::handler::HandlerDependencies>,
     ) {
         let store = ImageStore::new(tmp.path().join("images")).expect("create ImageStore");
-        let state = Arc::new(crate::state::DaemonState::new(store, tmp.path()));
+        let state = Arc::new(crate::daemon::state::DaemonState::new(store, tmp.path()));
         let image_store =
             Arc::new(ImageStore::new(tmp.path().join("images")).expect("create ImageStore"));
         let image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector> =
             Arc::new(NoopImageGc);
-        let deps = Arc::new(crate::handler::HandlerDependencies {
-            image: crate::handler::ImageDeps {
+        let deps = Arc::new(crate::daemon::handler::HandlerDependencies {
+            image: crate::daemon::handler::ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(
                     Arc::new(MockRegistry::new()),
                     [(
@@ -563,11 +563,11 @@ mod tests {
                         Arc::new(MockRegistry::new()) as minibox_core::domain::DynImageRegistry,
                     )],
                 )),
-                image_loader: Arc::new(crate::handler::NoopImageLoader),
+                image_loader: Arc::new(crate::daemon::handler::NoopImageLoader),
                 image_gc,
                 image_store,
             },
-            lifecycle: crate::handler::LifecycleDeps {
+            lifecycle: crate::daemon::handler::LifecycleDeps {
                 filesystem: Arc::new(MockFilesystem::new()),
                 resource_limiter: Arc::new(MockLimiter::new()),
                 runtime: Arc::new(MockRuntime::new()),
@@ -575,23 +575,23 @@ mod tests {
                 containers_base: tmp.path().join("containers"),
                 run_containers_base: tmp.path().join("run"),
             },
-            exec: crate::handler::ExecDeps {
+            exec: crate::daemon::handler::ExecDeps {
                 exec_runtime: None,
                 pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-                    crate::handler::PtySessionRegistry::default(),
+                    crate::daemon::handler::PtySessionRegistry::default(),
                 )),
             },
-            build: crate::handler::BuildDeps {
+            build: crate::daemon::handler::BuildDeps {
                 image_pusher: None,
                 commit_adapter: None,
                 image_builder: None,
             },
-            events: crate::handler::EventDeps {
+            events: crate::daemon::handler::EventDeps {
                 event_sink: Arc::new(minibox_core::events::NoopEventSink),
                 event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-                metrics: Arc::new(crate::telemetry::NoOpMetricsRecorder::new()),
+                metrics: Arc::new(crate::daemon::telemetry::NoOpMetricsRecorder::new()),
             },
-            policy: crate::handler::ContainerPolicy {
+            policy: crate::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
