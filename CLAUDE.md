@@ -121,7 +121,7 @@ cargo bench -p minibox          # trait_overhead + protocol_codec (local HTML re
 
 **Test Status:**
 
-- Unit + conformance: ~300+ tests via nextest (run `cargo nextest run --lib` for current count; 4 skipped on macOS)
+- Unit + conformance: ~760 tests via nextest (run `cargo nextest list --workspace` for current count; 4 skipped on macOS)
 - Property-based: 8 daemon proptest properties + 25 minibox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)

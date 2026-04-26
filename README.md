@@ -148,15 +148,14 @@ Roadmap details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 ## Testing
 
 ```bash
-cargo xtask test-unit              # 1000+ unit/conformance/property tests (any platform)
+cargo xtask test-unit              # ~760 unit/conformance/property tests (any platform)
 just test-integration              # cgroup tests (Linux + root)
 just test-e2e                      # daemon + CLI (Linux + root)
 cargo xtask test-conformance       # OCI conformance matrix
 just doctor                        # preflight capability check
 ```
 
-Fuzzing harnesses in `fuzz/` (nightly required). See `CLAUDE.md` for full
-testing strategy.
+See `CLAUDE.md` for the full testing strategy.
 
 ---
 
