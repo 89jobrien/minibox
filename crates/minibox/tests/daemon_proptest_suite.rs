@@ -139,6 +139,10 @@ fn make_record(id: &str) -> ContainerRecord {
         post_exit_hooks: vec![],
         rootfs_metadata: None,
         source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     }
 }
 

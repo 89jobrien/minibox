@@ -84,6 +84,9 @@ proptest! {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -107,6 +110,9 @@ proptest! {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();

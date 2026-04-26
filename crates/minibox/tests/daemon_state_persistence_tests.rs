@@ -51,7 +51,7 @@ fn make_record(id: &str, state: &str, pid: Option<u32>) -> ContainerRecord {
         cgroup_path: PathBuf::from("/mock/cgroup"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     }
 }
 

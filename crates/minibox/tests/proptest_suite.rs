@@ -61,6 +61,9 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         env: vec![],
                         name: None,
                         tty: false,
+                        priority: None,
+                        urgency: None,
+                        execution_context: None,
                     }
                 }
             ),
@@ -165,6 +168,9 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                     budget: None,
                     env,
                     max_depth,
+                    priority: None,
+                    urgency: None,
+                    execution_context: None,
                 }
             }),
     ]

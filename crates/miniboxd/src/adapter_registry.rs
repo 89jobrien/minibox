@@ -30,6 +30,8 @@ pub enum AdapterSuite {
     Colima,
     /// macOS via SmolVM: lightweight Linux VMs with subsecond boot.
     SmolVm,
+    /// krun: libkrun-based micro-VM (Linux via KVM, macOS via HVF).
+    Krun,
 }
 
 impl fmt::Display for AdapterSuite {
@@ -46,12 +48,13 @@ impl AdapterSuite {
             Self::Gke => "gke",
             Self::Colima => "colima",
             Self::SmolVm => "smolvm",
+            Self::Krun => "krun",
         }
     }
 }
 
 /// Default adapter suite when `MINIBOX_ADAPTER` is unset.
-pub const DEFAULT_ADAPTER_SUITE: &str = "native";
+pub const DEFAULT_ADAPTER_SUITE: &str = "krun";
 
 /// All known adapter suites with their compile-time availability.
 ///
@@ -75,14 +78,20 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
         AdapterInfo {
             name: "colima",
             description: "Colima/Lima VM via limactl + nerdctl",
-            available: cfg!(target_os = "linux"),
-            platform: "linux",
+            available: cfg!(target_os = "macos"),
+            platform: "macos",
         },
         AdapterInfo {
             name: "smolvm",
             description: "SmolVM lightweight Linux VMs with subsecond boot",
-            available: cfg!(target_os = "linux"),
-            platform: "linux",
+            available: cfg!(target_os = "macos"),
+            platform: "macos",
+        },
+        AdapterInfo {
+            name: "krun",
+            description: "libkrun micro-VM (KVM on Linux, HVF on macOS)",
+            available: true,
+            platform: "any",
         },
     ]
 }
@@ -101,17 +110,34 @@ pub fn available_adapter_names() -> Vec<&'static str> {
 /// Returns a structured error listing all valid (and known-but-unavailable)
 /// options when the name is not recognized or not available.
 pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> {
-    match name {
-        "native" => Ok(AdapterSuite::Native),
-        "gke" => Ok(AdapterSuite::Gke),
-        "colima" => Ok(AdapterSuite::Colima),
-        "smolvm" => Ok(AdapterSuite::SmolVm),
-        _ => Err(AdapterSelectionError {
+    let suite = match name {
+        "native" => AdapterSuite::Native,
+        "gke" => AdapterSuite::Gke,
+        "colima" => AdapterSuite::Colima,
+        "smolvm" => AdapterSuite::SmolVm,
+        "krun" => AdapterSuite::Krun,
+        _ => {
+            return Err(AdapterSelectionError {
+                requested: name.to_string(),
+                available: available_adapter_names(),
+                all_known: all_adapters().into_iter().map(|a| a.name).collect(),
+            })
+        }
+    };
+
+    // Reject known-but-unavailable adapters in this build.
+    let info = all_adapters();
+    if let Some(adapter) = info.iter().find(|a| a.name == name)
+        && !adapter.available
+    {
+        return Err(AdapterSelectionError {
             requested: name.to_string(),
             available: available_adapter_names(),
-            all_known: all_adapters().into_iter().map(|a| a.name).collect(),
-        }),
+            all_known: info.into_iter().map(|a| a.name).collect(),
+        });
     }
+
+    Ok(suite)
 }
 
 /// Parse from the `MINIBOX_ADAPTER` environment variable.
@@ -136,12 +162,22 @@ pub struct AdapterSelectionError {
 
 impl fmt::Display for AdapterSelectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "unknown MINIBOX_ADAPTER value {:?}. Valid options: {}",
-            self.requested,
-            self.available.join(", ")
-        )?;
+        if self.all_known.contains(&self.requested.as_str()) {
+            write!(
+                f,
+                "MINIBOX_ADAPTER {:?} is known but not available in this build. \
+                 Available options: {}",
+                self.requested,
+                self.available.join(", ")
+            )?;
+        } else {
+            write!(
+                f,
+                "unknown MINIBOX_ADAPTER value {:?}. Valid options: {}",
+                self.requested,
+                self.available.join(", ")
+            )?;
+        }
         let unavailable: Vec<_> = self
             .all_known
             .iter()
@@ -172,6 +208,7 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn parse_native_succeeds() {
         assert_eq!(
             parse_adapter("native").expect("should parse native"),
@@ -180,6 +217,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn parse_gke_succeeds() {
         assert_eq!(
             parse_adapter("gke").expect("should parse gke"),
@@ -188,6 +226,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn parse_colima_succeeds() {
         assert_eq!(
             parse_adapter("colima").expect("should parse colima"),
@@ -196,6 +235,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn parse_smolvm_succeeds() {
         assert_eq!(
             parse_adapter("smolvm").expect("should parse smolvm"),
@@ -253,29 +293,88 @@ mod tests {
     }
 
     #[test]
-    fn adapter_suite_display_matches_parse() {
+    fn adapter_suite_display_matches_parse_for_available() {
+        let available = available_adapter_names();
         for suite in [
             AdapterSuite::Native,
             AdapterSuite::Gke,
             AdapterSuite::Colima,
             AdapterSuite::SmolVm,
+            AdapterSuite::Krun,
         ] {
             let name = suite.to_string();
-            let parsed =
-                parse_adapter(&name).unwrap_or_else(|_| panic!("should round-trip: {name}"));
-            assert_eq!(parsed, suite);
+            if available.contains(&name.as_str()) {
+                let parsed = parse_adapter(&name)
+                    .unwrap_or_else(|_| panic!("should round-trip: {name}"));
+                assert_eq!(parsed, suite);
+            } else {
+                parse_adapter(&name)
+                    .expect_err(&format!("unavailable suite should fail: {name}"));
+            }
         }
     }
 
     #[test]
-    fn adapter_from_env_defaults_to_native() {
+    fn adapter_from_env_defaults_to_krun() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
-        let suite = adapter_from_env().expect("default should parse");
-        assert_eq!(suite, AdapterSuite::Native);
+        let suite = adapter_from_env().expect("krun default should parse on any platform");
+        assert_eq!(suite, AdapterSuite::Krun);
+    }
+
+    #[test]
+    fn parse_unavailable_adapter_returns_error() {
+        // On macOS: native/gke are unavailable. On Linux: colima/smolvm are unavailable.
+        let unavailable_name = if cfg!(target_os = "macos") {
+            "native"
+        } else {
+            "colima"
+        };
+        let err = parse_adapter(unavailable_name)
+            .expect_err("should reject unavailable adapter");
+        assert_eq!(err.requested, unavailable_name);
+        // It should be in all_known but not in available
+        assert!(
+            err.all_known.contains(&unavailable_name),
+            "unavailable adapter should be in all_known"
+        );
+        assert!(
+            !err.available.contains(&unavailable_name),
+            "unavailable adapter should not be in available"
+        );
+    }
+
+    #[test]
+    fn unavailable_adapter_error_message_says_not_available() {
+        let unavailable_name = if cfg!(target_os = "macos") {
+            "native"
+        } else {
+            "colima"
+        };
+        let err = parse_adapter(unavailable_name)
+            .expect_err("should reject unavailable adapter");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not available"),
+            "error for known-but-unavailable should say 'not available': {msg}"
+        );
+    }
+
+    #[test]
+    fn colima_metadata_targets_macos() {
+        let info = all_adapters();
+        let colima = info.iter().find(|a| a.name == "colima").expect("colima entry");
+        assert_eq!(colima.platform, "macos");
+    }
+
+    #[test]
+    fn smolvm_metadata_targets_macos() {
+        let info = all_adapters();
+        let smolvm = info.iter().find(|a| a.name == "smolvm").expect("smolvm entry");
+        assert_eq!(smolvm.platform, "macos");
     }
 
     #[test]

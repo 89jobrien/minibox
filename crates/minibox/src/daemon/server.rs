@@ -343,6 +343,7 @@ async fn dispatch(
             env,
             name,
             tty: _,
+            ..
         } => {
             handler::handle_run(
                 image,

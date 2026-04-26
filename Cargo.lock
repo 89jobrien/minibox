@@ -1424,6 +1424,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "slashcrux",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
@@ -1457,6 +1458,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "slashcrux",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
@@ -2478,6 +2480,15 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slashcrux"
+version = "0.1.2"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "smallvec"

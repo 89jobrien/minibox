@@ -172,3 +172,114 @@ impl TempContainerFixture {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- MockAdapterBuilder -------------------------------------------------
+
+    #[test]
+    fn builder_default_succeeds() {
+        let set = MockAdapterBuilder::new().build();
+        // All adapters are constructed (Arc is non-null).
+        assert!(Arc::strong_count(&set.filesystem) >= 1);
+        assert!(Arc::strong_count(&set.limiter) >= 1);
+        assert!(Arc::strong_count(&set.registry) >= 1);
+        assert!(Arc::strong_count(&set.runtime) >= 1);
+    }
+
+    #[test]
+    fn builder_default_trait_matches_new() {
+        let from_new = MockAdapterBuilder::new();
+        let from_default = MockAdapterBuilder::default();
+        // Both should produce equivalent sets (no failures, no cached images).
+        let _set_new = from_new.build();
+        let _set_default = from_default.build();
+    }
+
+    #[test]
+    fn builder_with_setup_failure_builds() {
+        let set = MockAdapterBuilder::new().with_setup_failure().build();
+        assert!(Arc::strong_count(&set.filesystem) >= 1);
+    }
+
+    #[test]
+    fn builder_with_create_failure_builds() {
+        let set = MockAdapterBuilder::new().with_create_failure().build();
+        assert!(Arc::strong_count(&set.limiter) >= 1);
+    }
+
+    #[test]
+    fn builder_with_pull_failure_builds() {
+        let set = MockAdapterBuilder::new().with_pull_failure().build();
+        assert!(Arc::strong_count(&set.registry) >= 1);
+    }
+
+    #[test]
+    fn builder_with_spawn_failure_builds() {
+        let set = MockAdapterBuilder::new().with_spawn_failure().build();
+        assert!(Arc::strong_count(&set.runtime) >= 1);
+    }
+
+    #[test]
+    fn builder_with_cached_image_builds() {
+        let set = MockAdapterBuilder::new()
+            .with_cached_image("alpine", "latest")
+            .with_cached_image("ubuntu", "22.04")
+            .build();
+        assert!(Arc::strong_count(&set.registry) >= 1);
+    }
+
+    #[test]
+    fn builder_all_failures_combined() {
+        let set = MockAdapterBuilder::new()
+            .with_setup_failure()
+            .with_create_failure()
+            .with_pull_failure()
+            .with_spawn_failure()
+            .with_cached_image("alpine", "latest")
+            .build();
+        assert!(Arc::strong_count(&set.filesystem) >= 1);
+        assert!(Arc::strong_count(&set.limiter) >= 1);
+        assert!(Arc::strong_count(&set.registry) >= 1);
+        assert!(Arc::strong_count(&set.runtime) >= 1);
+    }
+
+    // -- TempContainerFixture -----------------------------------------------
+
+    #[test]
+    fn fixture_creates_subdirs() {
+        let fixture =
+            TempContainerFixture::new().expect("fixture creation should succeed");
+        assert!(fixture.images_dir.exists(), "images/ should exist");
+        assert!(
+            fixture.containers_dir.exists(),
+            "containers/ should exist"
+        );
+        assert!(fixture.images_dir.is_dir());
+        assert!(fixture.containers_dir.is_dir());
+    }
+
+    #[test]
+    fn fixture_subdirs_are_children_of_root() {
+        let fixture =
+            TempContainerFixture::new().expect("fixture creation should succeed");
+        let root = fixture.dir.path();
+        assert!(fixture.images_dir.starts_with(root));
+        assert!(fixture.containers_dir.starts_with(root));
+    }
+
+    #[test]
+    fn fixture_cleanup_on_drop() {
+        let root_path;
+        {
+            let fixture = TempContainerFixture::new()
+                .expect("fixture creation should succeed");
+            root_path = fixture.dir.path().to_path_buf();
+            assert!(root_path.exists());
+        }
+        // TempDir dropped — directory should be gone.
+        assert!(!root_path.exists(), "tempdir should be cleaned up on drop");
+    }
+}

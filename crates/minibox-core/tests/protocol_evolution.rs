@@ -428,6 +428,7 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
             budget,
             env,
             max_depth,
+            ..
         } => {
             assert_eq!(pipeline_path, "work.cruxx");
             assert!(input.is_none(), "input should default to None");
@@ -453,6 +454,9 @@ fn run_pipeline_request_snapshot() {
         budget: None,
         env: vec![("CRUX_LOG".into(), "debug".into())],
         max_depth: 3,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     insta::assert_json_snapshot!(req);
 }
@@ -466,6 +470,9 @@ fn run_pipeline_request_minimal_snapshot() {
         budget: None,
         env: vec![],
         max_depth: 3,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     insta::assert_json_snapshot!(req);
 }

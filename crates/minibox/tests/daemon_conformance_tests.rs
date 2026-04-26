@@ -1910,7 +1910,7 @@ mod pause_resume_conformance {
             cgroup_path: cgroup_dir.to_path_buf(),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: Some("alpine:latest".to_string()),
+            source_image_ref: Some("alpine:latest".to_string()), step_state: None, priority: None, urgency: None, execution_context: None,
         }
     }
 

@@ -108,6 +108,15 @@ pub enum DaemonRequest {
         /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
         #[serde(default)]
         tty: bool,
+        /// Scheduling priority for this container run.
+        #[serde(default)]
+        priority: Option<slashcrux::Priority>,
+        /// Urgency hint for the scheduler.
+        #[serde(default)]
+        urgency: Option<slashcrux::Urgency>,
+        /// Agentic execution context — workflow variables and bindings.
+        #[serde(default)]
+        execution_context: Option<slashcrux::ExecutionContext>,
     },
 
     /// Stop a running container by ID.
@@ -273,6 +282,15 @@ pub enum DaemonRequest {
         /// Defaults to 3. Requests exceeding this are rejected.
         #[serde(default = "default_max_depth")]
         max_depth: u32,
+        /// Scheduling priority for this pipeline run.
+        #[serde(default)]
+        priority: Option<slashcrux::Priority>,
+        /// Urgency hint for the scheduler.
+        #[serde(default)]
+        urgency: Option<slashcrux::Urgency>,
+        /// Agentic execution context — workflow variables and bindings.
+        #[serde(default)]
+        execution_context: Option<slashcrux::ExecutionContext>,
     },
 }
 
@@ -541,6 +559,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -584,6 +605,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -785,6 +809,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -868,6 +895,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -896,6 +926,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
@@ -1023,6 +1056,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
@@ -1063,6 +1099,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1095,6 +1134,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1244,6 +1286,9 @@ mod tests {
             privileged: false,
             name: Some("my-container".to_string()),
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
@@ -1429,6 +1474,9 @@ mod tests {
             privileged: false,
             name: None,
             tty: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         };
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");

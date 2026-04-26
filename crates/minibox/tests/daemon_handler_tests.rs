@@ -1504,7 +1504,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -1781,7 +1781,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -2136,7 +2136,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -2301,7 +2301,7 @@ async fn test_handle_remove_created_container_succeeds() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -3169,7 +3169,7 @@ async fn test_stop_dead_pid_exits_immediately() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -3234,7 +3234,7 @@ async fn test_stop_container_no_pid_returns_error() {
             cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -3896,7 +3896,7 @@ async fn test_handle_logs_reads_log_files() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -3999,7 +3999,7 @@ async fn test_pause_stopped_container_returns_error() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -4045,7 +4045,7 @@ async fn test_resume_running_container_returns_error() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -4095,7 +4095,7 @@ async fn test_pause_missing_cgroup_returns_error() {
         cgroup_path: nonexistent_cgroup,
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -4143,7 +4143,7 @@ async fn test_resume_missing_cgroup_returns_error() {
         cgroup_path: nonexistent_cgroup,
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -4768,7 +4768,7 @@ async fn test_handle_pause_running_container_succeeds() {
             cgroup_path: cgroup_dir.clone(),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -4825,7 +4825,7 @@ async fn test_handle_resume_paused_container_succeeds() {
             cgroup_path: cgroup_dir.clone(),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         })
         .await;
 
@@ -5281,7 +5281,7 @@ async fn test_handle_remove_running_container_returns_error() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -5483,7 +5483,7 @@ async fn test_daemon_state_persistence_survives_restart() {
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         };
         state.add_container(record).await;
     }
@@ -5529,7 +5529,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: None,
+            source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;
@@ -5626,7 +5626,7 @@ async fn test_handle_remove_resolves_by_name() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 
@@ -5744,7 +5744,7 @@ async fn test_handle_logs_client_disconnect_mid_stream() {
         cgroup_path: std::path::PathBuf::from("/tmp/fake"),
         post_exit_hooks: vec![],
         rootfs_metadata: None,
-        source_image_ref: None,
+        source_image_ref: None, step_state: None, priority: None, urgency: None, execution_context: None,
     };
     state.add_container(record).await;
 

@@ -151,6 +151,9 @@ pub async fn execute(
         env: vec![],
         name,
         tty,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
 
     let client = DaemonClient::with_socket(socket_path);

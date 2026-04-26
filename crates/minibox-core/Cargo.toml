@@ -39,6 +39,7 @@ tar = { workspace = true }
 flate2 = { workspace = true }
 tokio-util = { workspace = true }
 pin-project-lite = { workspace = true }
+slashcrux = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }

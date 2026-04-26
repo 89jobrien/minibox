@@ -167,6 +167,18 @@ pub struct ContainerRecord {
     /// Image reference used to create this container (e.g. `"alpine:latest"`).
     #[serde(default)]
     pub source_image_ref: Option<String>,
+    /// Slashcrux step state — mirrors container lifecycle for agentic pipelines.
+    #[serde(default)]
+    pub step_state: Option<slashcrux::StepState>,
+    /// Scheduling priority set at creation time.
+    #[serde(default)]
+    pub priority: Option<slashcrux::Priority>,
+    /// Scheduling urgency set at creation time.
+    #[serde(default)]
+    pub urgency: Option<slashcrux::Urgency>,
+    /// Execution context passed from the pipeline runner.
+    #[serde(default)]
+    pub execution_context: Option<slashcrux::ExecutionContext>,
 }
 
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
@@ -576,6 +588,10 @@ mod tests {
             post_exit_hooks: vec![],
             rootfs_metadata: None,
             source_image_ref: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         }
     }
 

@@ -753,6 +753,10 @@ async fn run_inner_capture(
             .source_image_ref
             .clone()
             .or_else(|| Some(image_label.clone())),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     state.add_container(record).await;
 
@@ -969,6 +973,10 @@ async fn run_inner(
             .source_image_ref
             .clone()
             .or_else(|| Some(image_label.clone())),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     state.add_container(record).await;
 

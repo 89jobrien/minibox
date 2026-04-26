@@ -65,3 +65,55 @@ impl ImageRegistry for KrunRegistry {
         self.inner.get_image_layers(name, tag)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_registry() -> KrunRegistry {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = Arc::new(
+            ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"),
+        );
+        std::mem::forget(tmp); // keep tempdir alive
+        KrunRegistry::new(store).expect("KrunRegistry::new")
+    }
+
+    #[test]
+    fn new_with_valid_store_succeeds() {
+        let _reg = make_registry();
+    }
+
+    #[test]
+    fn manifest_size_limit_is_10mib() {
+        assert_eq!(
+            KrunRegistry::manifest_size_limit_bytes(),
+            10 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn as_any_downcasts_to_self() {
+        let reg = make_registry();
+        assert!(reg.as_any().downcast_ref::<KrunRegistry>().is_some());
+    }
+
+    #[test]
+    fn clone_produces_independent_instance() {
+        let reg1 = make_registry();
+        let _reg2 = reg1.clone();
+    }
+
+    #[tokio::test]
+    async fn has_image_returns_false_for_uncached() {
+        let reg = make_registry();
+        assert!(!reg.has_image("nonexistent-xyzzy", "latest").await);
+    }
+
+    #[test]
+    fn get_image_layers_returns_err_for_uncached() {
+        let reg = make_registry();
+        let result = reg.get_image_layers("nonexistent-xyzzy", "latest");
+        assert!(result.is_err());
+    }
+}

@@ -125,6 +125,11 @@ use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
 use minibox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 #[cfg(target_os = "linux")]
+use macbox::krun::{
+    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry,
+    runtime::KrunRuntime,
+};
+#[cfg(target_os = "linux")]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 #[cfg(target_os = "linux")]
 use minibox::daemon::state::DaemonState;
@@ -639,6 +644,54 @@ async fn main() -> Result<()> {
                     filesystem: Arc::new(SmolVmFilesystem::new()),
                     resource_limiter: Arc::new(SmolVmLimiter::new()),
                     runtime: Arc::new(SmolVmRuntime::new()),
+                    network_provider: Arc::new(NoopNetwork::new()),
+                    containers_base: containers_dir.clone(),
+                    run_containers_base: PathBuf::from(&run_containers_dir),
+                },
+                exec: minibox::daemon::handler::ExecDeps {
+                    exec_runtime: None,
+                    pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
+                },
+                build: minibox::daemon::handler::BuildDeps {
+                    image_pusher: None,
+                    commit_adapter: None,
+                    image_builder: None,
+                },
+                events: minibox::daemon::handler::EventDeps {
+                    event_sink: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSink>,
+                    event_source: Arc::clone(&event_broker)
+                        as Arc<dyn minibox_core::events::EventSource>,
+                    metrics: metrics_recorder.clone(),
+                },
+                policy: ContainerPolicy::default(),
+            })
+        }
+        AdapterSuite::Krun => {
+            let registry_router = Arc::new(HostnameRegistryRouter::new(
+                Arc::new(
+                    KrunRegistry::new(Arc::clone(&state.image_store))
+                        .context("creating krun registry adapter")?,
+                ) as minibox_core::domain::DynImageRegistry,
+                [(
+                    "ghcr.io",
+                    Arc::new(
+                        GhcrRegistry::new(Arc::clone(&state.image_store))
+                            .context("creating GHCR registry adapter")?,
+                    ) as minibox_core::domain::DynImageRegistry,
+                )],
+            ));
+            Arc::new(HandlerDependencies {
+                image: minibox::daemon::handler::ImageDeps {
+                    registry_router,
+                    image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+                    image_gc: Arc::clone(&image_gc),
+                    image_store: Arc::clone(&state.image_store),
+                },
+                lifecycle: minibox::daemon::handler::LifecycleDeps {
+                    filesystem: Arc::new(KrunFilesystem::new()),
+                    resource_limiter: Arc::new(KrunLimiter::new()),
+                    runtime: Arc::new(KrunRuntime::new()),
                     network_provider: Arc::new(NoopNetwork::new()),
                     containers_base: containers_dir.clone(),
                     run_containers_base: PathBuf::from(&run_containers_dir),
