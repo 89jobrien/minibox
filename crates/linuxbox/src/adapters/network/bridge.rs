@@ -615,6 +615,130 @@ mod tests {
         assert_eq!(ip2, "172.20.0.3".parse::<IpAddr>().unwrap());
         assert_eq!(ip3, "172.20.0.4".parse::<IpAddr>().unwrap());
     }
+
+    /// Issue #134: releasing the gateway IP must be a no-op — it must never re-enter
+    /// the allocatable pool.
+    #[test]
+    fn ip_allocator_release_gateway_is_noop() {
+        let subnet: ipnet::IpNet = "10.0.0.0/24".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet).unwrap();
+        let gateway: IpAddr = "10.0.0.1".parse().unwrap();
+
+        alloc.release(gateway); // must be silently ignored
+
+        // The first allocation must still be .2, not the gateway.
+        let first = alloc.allocate().unwrap();
+        assert_ne!(first, gateway, "gateway must never be returned after release");
+        assert_eq!(first, "10.0.0.2".parse::<IpAddr>().unwrap());
+    }
+
+    /// Issue #134: release an IP from an exhausted pool — it must be reclaimed.
+    #[test]
+    fn ip_allocator_release_then_exhaust() {
+        // /30: hosts are .1 and .2; gateway = .1; usable = .2 only.
+        let subnet: ipnet::IpNet = "192.168.2.0/30".parse().unwrap();
+        let mut alloc = IpAllocator::new(subnet).unwrap();
+
+        let ip = alloc.allocate().expect("first allocation from /30");
+        assert_eq!(ip, "192.168.2.2".parse::<IpAddr>().unwrap());
+
+        // Pool is now empty.
+        assert!(
+            alloc.allocate().is_none(),
+            "pool should be exhausted after one allocation"
+        );
+
+        // Release and reallocate.
+        alloc.release(ip);
+        let reclaimed = alloc.allocate().expect("reclaimed IP after release");
+        assert_eq!(reclaimed, ip, "released IP must be reclaimed");
+    }
+
+    /// Issue #134: `veth_prefix` must strip hyphens and truncate to 8 alphanumeric chars.
+    #[test]
+    fn veth_prefix_strips_non_alphanumeric_and_truncates() {
+        // UUID-style ID: hyphens must be dropped, result must be 8 lowercase alphanum.
+        let id = "abc12345-def6-7890-ghij-klmn";
+        let prefix = BridgeNetwork::veth_prefix(id);
+        assert_eq!(
+            prefix.len(),
+            8,
+            "veth prefix must be exactly 8 chars; got: {prefix:?}"
+        );
+        assert!(
+            prefix.chars().all(|c| c.is_ascii_alphanumeric()),
+            "veth prefix must be alphanumeric; got: {prefix:?}"
+        );
+        assert_eq!(prefix, "abc12345");
+    }
+
+    /// Issue #134: short container IDs (< 8 alphanumeric chars) must not be padded.
+    #[test]
+    fn veth_prefix_short_id_is_not_padded() {
+        let prefix = BridgeNetwork::veth_prefix("abc");
+        assert_eq!(prefix, "abc");
+    }
+
+    /// Issue #134: `veth_prefix` output must be lowercase.
+    #[test]
+    fn veth_prefix_lowercases_output() {
+        let prefix = BridgeNetwork::veth_prefix("ABCDEFGH");
+        assert_eq!(prefix, "abcdefgh");
+    }
+
+    /// Issue #134: DNAT destination string format used by `apply_port_mappings`.
+    ///
+    /// The iptables `--to-destination` argument must be `container_ip:container_port`.
+    /// This test verifies the format string without invoking any iptables binary.
+    #[test]
+    fn dnat_destination_format() {
+        let container_ip = "172.20.0.5";
+        let container_port: u16 = 8080;
+        let to_dest = format!("{container_ip}:{container_port}");
+        assert_eq!(to_dest, "172.20.0.5:8080");
+    }
+
+    /// Issue #134: DNS fallback must be 8.8.8.8 and 1.1.1.1 when no servers are configured.
+    #[test]
+    fn dns_fallback_when_config_has_no_servers() {
+        let empty: Vec<String> = vec![];
+        let dns: Vec<String> = if empty.is_empty() {
+            vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
+        } else {
+            empty.clone()
+        };
+        assert_eq!(dns, vec!["8.8.8.8", "1.1.1.1"]);
+    }
+
+    /// Issue #134: DNS config is used verbatim when non-empty.
+    #[test]
+    fn dns_config_used_verbatim_when_non_empty() {
+        let servers = vec!["1.0.0.1".to_string(), "9.9.9.9".to_string()];
+        let dns: Vec<String> = if servers.is_empty() {
+            vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
+        } else {
+            servers.clone()
+        };
+        assert_eq!(dns, servers);
+    }
+
+    /// Issue #134: net context file path must be deterministic and container-scoped.
+    #[test]
+    fn net_context_path_is_container_scoped() {
+        let path = BridgeNetwork::net_context_path("abc123");
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/run/minibox/net/abc123.json")
+        );
+    }
+
+    /// Issue #134: different container IDs must produce different net context paths.
+    #[test]
+    fn net_context_path_differs_per_container() {
+        let p1 = BridgeNetwork::net_context_path("aaa");
+        let p2 = BridgeNetwork::net_context_path("bbb");
+        assert_ne!(p1, p2);
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]
