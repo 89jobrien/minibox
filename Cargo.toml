@@ -72,7 +72,7 @@ minibox = { path = "crates/minibox" }
 minibox-macros = { path = "crates/minibox-macros", version = "0.21.0" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
-slashcrux = { path = "../slashcrux" }
+slashcrux = "0.1"
 dirs = "5"
 secrecy = "0.10"
 keyring = "3"
