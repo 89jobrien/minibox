@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 /// Run cgroup v2 integration tests under a properly delegated cgroup hierarchy.
@@ -20,7 +21,6 @@ use std::{
 ///   6. Exec the binary as the sole process in `runner-leaf`
 #[cfg(target_os = "linux")]
 pub fn run_cgroup_tests(root: &Path) -> Result<()> {
-    use std::io::Write;
 
     let cgroup_root = Path::new("/sys/fs/cgroup");
     let slice = cgroup_root.join("minibox-test-slice");
