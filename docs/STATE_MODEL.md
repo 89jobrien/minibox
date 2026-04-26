@@ -80,7 +80,7 @@ Created ──► Running ──► Stopped
 Valid transitions are enforced by `update_container_state()`. Invalid
 transitions return an error.
 
-## Persistence Port (Hexagonal Architecture)
+## Persistence Port
 
 The `StateRepository` trait abstracts persistence:
 

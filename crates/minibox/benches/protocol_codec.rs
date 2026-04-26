@@ -18,6 +18,9 @@ fn small_run_request() -> DaemonRequest {
         env: vec![],
         name: None,
         tty: false,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     }
 }
 
@@ -38,6 +41,9 @@ fn large_run_request() -> DaemonRequest {
         env: vec![],
         name: None,
         tty: false,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     }
 }
 
