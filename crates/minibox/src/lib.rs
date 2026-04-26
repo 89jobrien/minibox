@@ -33,3 +33,6 @@ pub use minibox_core::protocol;
 // Convenience re-exports for ImageRef used by daemonbox and miniboxd.
 pub use minibox_core::image::reference::{ImageRef, ImageRefError};
 pub use minibox_core::require_capability;
+
+#[cfg(feature = "test-utils")]
+pub mod testing;

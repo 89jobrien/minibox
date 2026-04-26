@@ -7,7 +7,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p minibox-testers --fix --allow-dirty --allow-staged"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
@@ -16,13 +16,16 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p minibox-testers -- -D warnings"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
     )
     .run()
     .context("lint failed")?;
-    cmd!(sh,
-        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd -p minibox-testers"
-    ).run().context("build-release failed")?;
+    cmd!(
+        sh,
+        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+    )
+    .run()
+    .context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
 }

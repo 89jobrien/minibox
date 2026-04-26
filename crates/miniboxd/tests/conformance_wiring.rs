@@ -12,9 +12,9 @@
 //! No daemon process, no root, no network.
 
 use minibox::daemon::handler::ContainerPolicy;
+use minibox::testing::helpers::{make_mock_deps, make_mock_state};
+use minibox::testing::mocks::MockRegistry;
 use minibox_core::protocol::DaemonResponse;
-use minibox_testers::helpers::{make_mock_deps, make_mock_state};
-use minibox_testers::mocks::MockRegistry;
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ async fn handle_list_empty_state_returns_container_list() {
 async fn handle_pull_failure_returns_error_response() {
     let tmp = TempDir::new().unwrap();
     let state = make_mock_state(tmp.path());
-    let deps = minibox_testers::helpers::make_mock_deps_with_registry(
+    let deps = minibox::testing::helpers::make_mock_deps_with_registry(
         MockRegistry::new().with_pull_failure(),
         &tmp,
     );

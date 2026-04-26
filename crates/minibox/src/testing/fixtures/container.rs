@@ -19,7 +19,7 @@
 //! }
 //! ```
 
-use crate::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
+use crate::testing::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_core::domain::{
     DynContainerRuntime, DynFilesystemProvider, DynImageRegistry, DynResourceLimiter,
 };

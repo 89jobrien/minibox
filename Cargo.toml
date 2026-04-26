@@ -9,7 +9,6 @@ members = [
     "crates/macbox",
     "crates/winbox",
     "crates/xtask",
-    "crates/minibox-testers",
 ]
 
 [workspace.package]
@@ -82,5 +81,3 @@ predicates = "3"    # dev-only: assert_cmd predicate helpers
 proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
-
-minibox-testers = { path = "crates/minibox-testers" }

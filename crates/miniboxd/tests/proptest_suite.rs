@@ -8,11 +8,11 @@
 //!
 //! No daemon process, no root, no network.
 
-use minibox_core::protocol::DaemonResponse;
-use minibox_testers::helpers::{
+use minibox::testing::helpers::{
     make_mock_deps, make_mock_state, make_mock_state_with_n_containers,
 };
-use minibox_testers::mocks::MockRegistry;
+use minibox::testing::mocks::MockRegistry;
+use minibox_core::protocol::DaemonResponse;
 use proptest::prelude::*;
 use tempfile::TempDir;
 
@@ -84,7 +84,7 @@ proptest! {
         rt.block_on(async {
             let tmp = TempDir::new().unwrap();
             let state = make_mock_state(tmp.path());
-            let deps = minibox_testers::helpers::make_mock_deps_with_registry(
+            let deps = minibox::testing::helpers::make_mock_deps_with_registry(
                 MockRegistry::new().with_pull_failure(),
                 &tmp,
             );
