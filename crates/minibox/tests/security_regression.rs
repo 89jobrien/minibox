@@ -322,3 +322,163 @@ fn regression_setuid_bits_stripped_on_extraction() {
         "setgid bit must be stripped; got mode {mode:o}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Regression 5: FD-leak prevention — close_extra_fds (process.rs)
+// ---------------------------------------------------------------------------
+
+/// Verify that `close_extra_fds` in `process.rs` closes FDs above stderr.
+///
+/// This is a source-level invariant test: the function must exist and use
+/// `close_range(3, ...)` or `/proc/self/fd` fallback. We verify the source
+/// contains the expected syscall invocation so that refactors that remove or
+/// weaken FD closure are caught.
+///
+/// The actual FD closure is Linux-only (requires `/proc/self/fd` or
+/// `close_range` syscall) so we test the contract via source inspection.
+#[test]
+fn regression_close_extra_fds_uses_close_range_syscall() {
+    let source = include_str!("../src/container/process.rs");
+
+    // Must use close_range starting from FD 3 (preserve stdin/stdout/stderr).
+    assert!(
+        source.contains("SYS_close_range"),
+        "close_extra_fds must use close_range syscall as fast path"
+    );
+    assert!(
+        source.contains("3u32"),
+        "close_range must start from FD 3 (preserving stdin/stdout/stderr)"
+    );
+
+    // Must have /proc/self/fd fallback for older kernels.
+    assert!(
+        source.contains("/proc/self/fd"),
+        "close_extra_fds must fall back to /proc/self/fd scan"
+    );
+
+    // Must filter out FDs <= 2.
+    assert!(
+        source.contains("fd > 2"),
+        "fallback path must skip stdin/stdout/stderr (fd > 2 filter)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Regression 6: Environment isolation — execve not execvp (process.rs)
+// ---------------------------------------------------------------------------
+
+/// Verify that `child_init` uses `execve` (explicit envp) instead of `execvp`
+/// (inherits host environment).
+///
+/// `execvp` would leak the daemon's entire environment into every container,
+/// exposing secrets, API keys, and host configuration. `execve` takes an
+/// explicit `envp` parameter built from `config.env`, ensuring only declared
+/// variables are visible inside the container.
+///
+/// This is a critical security invariant: if someone changes the exec call
+/// to `execvp`, this test must fail.
+#[test]
+fn regression_child_init_uses_execve_not_execvp() {
+    let source = include_str!("../src/container/process.rs");
+
+    // child_init must call execve (with explicit envp).
+    assert!(
+        source.contains("execve(&cmd, &argv, &envp)"),
+        "child_init must use execve with explicit envp, not execvp"
+    );
+
+    // The source must NOT contain execvp calls (which inherit host env).
+    // We check for the nix crate's execvp function specifically.
+    let has_execvp_call = source
+        .lines()
+        .any(|line| {
+            let trimmed = line.trim();
+            // Skip comments and string literals
+            !trimmed.starts_with("//")
+                && !trimmed.starts_with("///")
+                && !trimmed.starts_with("*")
+                && trimmed.contains("execvp(")
+                // Exclude references in comments about what NOT to do
+                && !trimmed.contains("not")
+                && !trimmed.contains("NOT")
+                && !trimmed.contains("Do not")
+        });
+    assert!(
+        !has_execvp_call,
+        "child_init must not use execvp — it leaks the host environment into containers"
+    );
+}
+
+/// Verify that the envp vector in child_init is built from `config.env`,
+/// not from `std::env::vars()` or any other host-environment source.
+#[test]
+fn regression_envp_built_from_config_env_only() {
+    let source = include_str!("../src/container/process.rs");
+
+    // The envp must be constructed from config.env.
+    assert!(
+        source.contains("config.env"),
+        "envp must be built from config.env (container-declared variables only)"
+    );
+
+    // Must NOT read from the host environment.
+    assert!(
+        !source.contains("std::env::vars()"),
+        "child_init must not read host environment via std::env::vars()"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Regression 7: Named pipe / FIFO rejection in tar extraction
+// ---------------------------------------------------------------------------
+
+/// A tar entry of type `Fifo` (named pipe) must be handled safely.
+///
+/// Named pipes in a container image could be used for denial-of-service
+/// by blocking reads during extraction. While the current implementation
+/// allows FIFOs through `unpack_in`, this test documents the behaviour
+/// and ensures no regression if FIFO rejection is added later.
+#[test]
+fn regression_fifo_entry_does_not_crash() {
+    let dest = TempDir::new().expect("failed to create temp dir");
+    let gz = GzEncoder::new(Vec::new(), Compression::default());
+    let mut ar = Builder::new(gz);
+    let mut h = Header::new_gnu();
+    h.set_path("tmp/fifo").expect("set_path");
+    h.set_size(0);
+    h.set_entry_type(EntryType::Fifo);
+    h.set_mode(0o644);
+    h.set_cksum();
+    ar.append(&h, &[][..]).expect("append");
+    let tar_gz = ar.into_inner().expect("inner").finish().expect("finish");
+
+    // FIFOs are not explicitly rejected like device nodes, but extraction
+    // must not panic or corrupt state. The result may be Ok or Err depending
+    // on platform, but it must not panic.
+    let _result = extract_layer(&mut tar_gz.as_slice(), dest.path());
+}
+
+// ---------------------------------------------------------------------------
+// Regression 8: Root dot entry skip (tar archive markers)
+// ---------------------------------------------------------------------------
+
+/// The tar root marker entries "." and "./" must be silently skipped.
+///
+/// These entries appear in many OCI layer tarballs as the archive root
+/// directory. Without the skip, `validate_tar_entry_path` would reject
+/// them because `Path::join("./")` normalises away the CurDir component,
+/// causing a confusing false-positive path-escape error.
+#[test]
+fn regression_root_dot_entries_are_silently_skipped() {
+    let dest = TempDir::new().expect("failed to create temp dir");
+
+    // "." entry
+    let tar_gz_dot = tar_gz_regular_file(".", b"", 0o644);
+    extract_layer(&mut tar_gz_dot.as_slice(), dest.path())
+        .expect("'.' root entry must be silently skipped, not rejected");
+
+    // "./" entry
+    let tar_gz_dot_slash = tar_gz_regular_file("./", b"", 0o644);
+    extract_layer(&mut tar_gz_dot_slash.as_slice(), dest.path())
+        .expect("'./' root entry must be silently skipped, not rejected");
+}
