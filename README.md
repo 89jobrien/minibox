@@ -18,7 +18,7 @@ startup.
 The `native` adapter suite on Linux is the production path. It provides:
 
 - **Container lifecycle** -- pull, run, stop, rm, ps, pause/resume
-- **Container exec** -- `setns`-based exec with `-it` PTY support
+- **Container exec** -- `setns`-based exec with `-it` PTY support (native adapter only)
 - **OCI image pull** -- Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
 - **Image management** -- `prune` / `rmi` with lease-based GC
 - **Bind mounts + privileged mode** -- `-v`/`--mount`, `--privileged`
