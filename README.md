@@ -25,9 +25,9 @@ for the active roadmap.
 - **Image GC** – `minibox prune` / `minibox rmi`; lease-based GC; all adapter suites.
 - **Bind mounts + privileged** – `-v` / `--mount`, `--privileged` — **Linux native only**.
 - **Container events** – `minibox events` streams lifecycle events; all adapter suites.
-- **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub), `daemonbox` (shared
-  handler + server).
-- **Core library (`linuxbox`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
+- **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub).
+- **Core library (`minibox`)** – Linux primitives, daemon handler/server/state; re-exports
+  `minibox-core` for cross-platform use.
 - **JSON CLI (`mbx`)** – Thin client over Unix socket.
 - **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
 
@@ -54,15 +54,13 @@ for the active roadmap.
 - Rootless (user namespace remapping).
 - Dockerfile parser.
 
-See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform breakdown.
-
 [![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
 [![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)
 
 A Docker-like container runtime written in Rust. Daemon/client architecture with OCI image pulling, Linux namespace isolation, cgroups v2 resource limits, overlay filesystem, and hexagonal architecture for cross-platform adapter swapping.
 
-**Status:** Development (`v0.19.0`)
+**Status:** Development (`v0.21.0`)
 
 ## Supported
 
@@ -143,26 +141,23 @@ cargo xtask test-linux
 
 | Crate             | Type    | Description                                                            |
 | ----------------- | ------- | ---------------------------------------------------------------------- |
-| `minibox-core`    | Library | Protocol, domain traits, image types, error types                      |
-| `minibox-oci`     | Library | OCI image types and operations                                         |
-| `linuxbox`        | Library | Linux primitives, adapters, image management; re-exports core          |
-| `daemonbox`       | Library | Handler, state, Unix socket server, NetworkLifecycle                   |
+| `minibox-core`    | Library | Protocol, domain traits, OCI image types, client, error types          |
+| `minibox`         | Library | Linux primitives, adapters, daemon handler/server/state                |
 | `miniboxd`        | Binary  | Async daemon — Unix socket listener, platform dispatch                 |
 | `mbx`             | Binary  | CLI client                                                             |
 | `minibox-macros`  | Library | Proc macros (`as_any!`, `adapt!`, `default_new!`)                      |
-| `minibox-client`  | Library | Low-level Unix socket client                                           |
 | `minibox-testers` | Library | Test infrastructure — mocks, fixtures, conformance helpers             |
 | `macbox`          | Library | macOS daemon (Colima adapter suite + VZ.framework + krun adapters)     |
 | `winbox`          | Library | Windows daemon implementation (stub)                                   |
 
-**Key modules in `linuxbox`:**
+**Key modules in `minibox`:**
 
 | Module         | Purpose                                                                                   |
 | -------------- | ----------------------------------------------------------------------------------------- |
 | `domain.rs`    | Port traits: `ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`, `ContainerRuntime` |
 | `adapters/`    | Concrete adapter implementations + mocks                                                  |
 | `container/`   | Namespace setup, cgroups, overlay FS, process spawn                                       |
-| `image/`       | Docker Hub v2 API client, OCI manifest parsing, tar extraction                            |
+| `daemon/`      | Handler, state machine, Unix socket server, telemetry                                     |
 | `preflight.rs` | Host capability probing (`just doctor`)                                                   |
 
 ---
@@ -246,9 +241,7 @@ Virtualization.framework — experimental). Additional adapters (`docker_desktop
 `hcs`) exist as library code but are not wired into the daemon. Passing an unrecognized
 `MINIBOX_ADAPTER` value causes the daemon to exit at startup.
 
-See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform and
-per-adapter capability breakdown, including isolation, networking, image management, and
-observability status across all supported targets.
+See `CLAUDE.md` ("Current Limitations") for the full per-platform constraint list.
 
 ---
 
@@ -321,7 +314,7 @@ MINIBOX_NETWORK_MODE=bridge miniboxd     # bridge networking
 
 ```bash
 # Unit + protocol tests (any platform)
-cargo test -p linuxbox
+cargo test -p minibox
 
 # All tests (Linux)
 cargo test --workspace
@@ -363,7 +356,7 @@ cargo +nightly fuzz run fuzz_extract_layer     # arbitrary bytes → extract_lay
 cargo +nightly fuzz run fuzz_validate_layer_path  # arbitrary paths → validate_layer_path
 ```
 
-See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile guards.
+See `CLAUDE.md` for full testing strategy and macOS-specific compile guards.
 
 ---
 
@@ -388,7 +381,7 @@ See `TESTING.md` for full strategy. See `CLAUDE.md` for macOS-specific compile g
 - Request rate limiting
 - Rootless support
 
-See `SECURITY.md` for threat model, `SECURITY_FIXES.md` for full audit.
+See `CLAUDE.md` ("Security Considerations") for threat model details.
 
 ---
 
@@ -402,7 +395,7 @@ no seccomp/capability dropping, no rootless support.
 
 ## Extending
 
-Domain traits are defined as ports in `crates/linuxbox/src/domain.rs`. Adding a capability means
+Domain traits are defined as ports in `crates/minibox/src/domain.rs`. Adding a capability means
 implementing the trait and wiring the adapter into `HandlerDependencies`.
 
 | Trait                | Status  | Notes                                         |
@@ -442,7 +435,7 @@ lsmod | grep overlay
 
 # Build
 cargo build --release              # Linux full build
-cargo build -p linuxbox        # macOS/Windows (lib only, Linux-only features excluded)
+cargo build -p minibox         # macOS/Windows (lib only, Linux-only features excluded)
 cargo check --workspace            # fast type check
 
 # Lint
