@@ -11,6 +11,7 @@ use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use tracing::{debug, info, warn};
 
 /// Detect the interpreter command from a file extension.
 ///
@@ -25,8 +26,10 @@ pub fn detect_interpreter(path: &Path) -> Result<(String, Vec<String>)> {
         "nu" => Ok(("nu".to_string(), vec![])),
         "js" => Ok(("node".to_string(), vec![])),
         "" => {
-            // No extension — try to read shebang
-            Ok(("sh".to_string(), vec![]))
+            bail!(
+                "cannot detect language: file has no extension \
+                 (supported: .py, .rs, .sh, .nu, .js)"
+            )
         }
         other => {
             bail!("unsupported script extension: .{other} (supported: .py, .rs, .sh, .nu, .js)")
@@ -50,8 +53,14 @@ pub fn build_request(
     let (interpreter, mut args) = detect_interpreter(&script)?;
     args.push("/workspace/script".to_string());
 
-    let mut command = vec![interpreter];
+    let mut command = vec![interpreter.clone()];
     command.append(&mut args);
+
+    debug!(
+        script = %script.display(),
+        interpreter = %interpreter,
+        "sandbox: detected interpreter"
+    );
 
     let mut mounts = vec![BindMount {
         host_path: script,
@@ -86,6 +95,10 @@ pub fn build_request(
 }
 
 /// Execute the `sandbox` subcommand.
+///
+/// Returns `Ok(())` on success (container exited 0) or an error. Non-zero
+/// container exit codes are returned as errors — the caller in `main.rs`
+/// translates to `std::process::exit`.
 #[allow(clippy::too_many_arguments)]
 pub async fn execute(
     script: PathBuf,
@@ -98,6 +111,14 @@ pub async fn execute(
     socket_path: &Path,
 ) -> Result<()> {
     let request = build_request(&script, &image, &tag, memory_mb, extra_mounts, network)?;
+
+    info!(
+        script = %script.display(),
+        image = %image,
+        memory_mb = memory_mb,
+        timeout_secs = timeout_secs,
+        "sandbox: dispatching request"
+    );
 
     let client = DaemonClient::with_socket(socket_path);
     let mut stream = client
@@ -125,31 +146,32 @@ pub async fn execute(
                     }
                 }
                 DaemonResponse::ContainerStopped { exit_code } => {
-                    std::process::exit(exit_code);
+                    if exit_code == 0 {
+                        return Ok(());
+                    }
+                    bail!("sandbox: container exited with code {exit_code}");
                 }
                 DaemonResponse::ContainerCreated { id } => {
-                    // Ephemeral path — container ID printed for reference, streaming follows.
-                    eprintln!("sandbox: container {id}");
+                    debug!(container_id = %id, "sandbox: container created");
                 }
                 DaemonResponse::Error { message } => {
-                    eprintln!("sandbox error: {message}");
-                    std::process::exit(1);
+                    bail!("sandbox: daemon error: {message}");
                 }
                 other => {
-                    eprintln!("sandbox: unexpected response: {other:?}");
-                    std::process::exit(1);
+                    warn!("sandbox: unexpected response: {other:?}");
+                    bail!("sandbox: unexpected daemon response");
                 }
             }
         }
-        Ok::<(), anyhow::Error>(())
+        Ok(())
     })
     .await;
 
     match result {
         Ok(inner) => inner,
         Err(_elapsed) => {
-            eprintln!("sandbox: timeout after {timeout_secs}s — container killed");
-            std::process::exit(124); // Same as GNU timeout
+            warn!(timeout_secs = timeout_secs, "sandbox: execution timed out");
+            bail!("sandbox: timeout after {timeout_secs}s");
         }
     }
 }
@@ -190,9 +212,9 @@ mod tests {
     }
 
     #[test]
-    fn detect_no_extension_defaults_to_sh() {
-        let (interp, _) = detect_interpreter(Path::new("Makefile")).unwrap();
-        assert_eq!(interp, "sh");
+    fn detect_no_extension_errors() {
+        let err = detect_interpreter(Path::new("Makefile")).unwrap_err();
+        assert!(err.to_string().contains("no extension"));
     }
 
     #[test]
@@ -203,7 +225,7 @@ mod tests {
 
     #[test]
     fn build_request_sets_ephemeral() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "minibox-sandbox", "latest", 512, vec![], false);
         assert!(req.is_ok());
         if let Ok(DaemonRequest::Run { ephemeral, .. }) = req {
@@ -215,7 +237,7 @@ mod tests {
 
     #[test]
     fn build_request_enforces_no_privileged() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "sandbox", "latest", 256, vec![], false).unwrap();
         if let DaemonRequest::Run { privileged, .. } = req {
             assert!(!privileged);
@@ -226,7 +248,7 @@ mod tests {
 
     #[test]
     fn build_request_memory_conversion() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
         if let DaemonRequest::Run {
             memory_limit_bytes, ..
@@ -240,7 +262,7 @@ mod tests {
 
     #[test]
     fn build_request_network_off_by_default() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
         if let DaemonRequest::Run { network, .. } = req {
             assert_eq!(network, Some(NetworkMode::None));
@@ -251,7 +273,7 @@ mod tests {
 
     #[test]
     fn build_request_network_bridge_when_enabled() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], true).unwrap();
         if let DaemonRequest::Run { network, .. } = req {
             assert_eq!(network, Some(NetworkMode::Bridge));
@@ -262,7 +284,7 @@ mod tests {
 
     #[test]
     fn build_request_mounts_script_readonly() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
         if let DaemonRequest::Run { mounts, .. } = req {
             assert!(!mounts.is_empty());
@@ -279,7 +301,7 @@ mod tests {
 
     #[test]
     fn build_request_includes_extra_mounts() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let extra = vec![BindMount {
             host_path: PathBuf::from("/tmp/data"),
             container_path: PathBuf::from("/data"),

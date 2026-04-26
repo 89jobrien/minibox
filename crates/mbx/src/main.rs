@@ -334,10 +334,15 @@ async fn main() -> Result<()> {
         } => {
             let mut extra_mounts = Vec::new();
             for v in &volumes {
-                extra_mounts.push(
-                    commands::run::parse_volume(v)
-                        .with_context(|| format!("invalid -v flag {:?}", v))?,
-                );
+                let mut mount = commands::run::parse_volume(v)
+                    .with_context(|| format!("invalid -v flag {:?}", v))?;
+                mount.host_path = mount.host_path.canonicalize().with_context(|| {
+                    format!(
+                        "sandbox mount host path not found: {}",
+                        mount.host_path.display()
+                    )
+                })?;
+                extra_mounts.push(mount);
             }
             commands::sandbox::execute(
                 script,
