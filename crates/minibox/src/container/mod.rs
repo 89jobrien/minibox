@@ -35,6 +35,8 @@ pub enum ContainerState {
     Stopped,
     /// Resources have been cleaned up; the container record can be discarded.
     Removed,
+    /// Container was running in a previous daemon session but its PID is gone.
+    Orphaned,
 }
 
 impl std::fmt::Display for ContainerState {
@@ -44,6 +46,7 @@ impl std::fmt::Display for ContainerState {
             ContainerState::Running => write!(f, "running"),
             ContainerState::Stopped => write!(f, "stopped"),
             ContainerState::Removed => write!(f, "removed"),
+            ContainerState::Orphaned => write!(f, "orphaned"),
         }
     }
 }

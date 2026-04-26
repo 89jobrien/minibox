@@ -683,20 +683,23 @@ pub enum ContainerState {
     Stopped,
     /// Container failed to start or crashed.
     Failed,
+    /// Container was running in a previous daemon session but its PID is gone.
+    Orphaned,
 }
 
 impl ContainerState {
     /// Return the canonical string representation of this state.
     ///
-    /// The returned strings (`"Created"`, `"Running"`, `"Stopped"`, `"Failed"`)
-    /// are used directly in [`crate::protocol::ContainerInfo::state`] list
-    /// responses sent to the CLI.
+    /// The returned strings (`"Created"`, `"Running"`, `"Stopped"`, `"Failed"`,
+    /// `"Orphaned"`) are used directly in [`crate::protocol::ContainerInfo::state`]
+    /// list responses sent to the CLI.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",
             Self::Running => "Running",
             Self::Stopped => "Stopped",
             Self::Failed => "Failed",
+            Self::Orphaned => "Orphaned",
         }
     }
 }

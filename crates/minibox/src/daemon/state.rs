@@ -19,6 +19,29 @@ use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, warn};
 
 // ---------------------------------------------------------------------------
+// ProcessChecker port (hexagonal architecture — process liveness port)
+// ---------------------------------------------------------------------------
+
+/// Port for checking whether a host PID is still alive.
+///
+/// The default adapter uses `kill(pid, 0)`.  Tests supply in-memory doubles.
+pub trait ProcessChecker: Send + Sync {
+    /// Returns `true` if the process with the given PID exists on the host.
+    fn is_alive(&self, pid: u32) -> bool;
+}
+
+/// Default adapter: probes process existence via `kill(pid, 0)`.
+pub struct KillProcessChecker;
+
+impl ProcessChecker for KillProcessChecker {
+    fn is_alive(&self, pid: u32) -> bool {
+        // SAFETY: `kill(pid, 0)` sends no signal; it only checks existence.
+        // A non-zero PID is always valid to probe.
+        unsafe { nix::libc::kill(pid as nix::libc::pid_t, 0) == 0 }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StateRepository port (hexagonal architecture — persistence port)
 // ---------------------------------------------------------------------------
 
@@ -227,12 +250,12 @@ impl DaemonState {
             }
         };
 
-        // Processes from the previous daemon session are gone.
+        // Created and Paused containers from a previous session cannot be
+        // recovered — mark them Stopped immediately.  Running containers are
+        // left as-is so that `reconcile_on_startup` can probe their PIDs and
+        // distinguish truly orphaned processes from those still alive.
         for record in records.values_mut() {
-            if record.info.state == "Running"
-                || record.info.state == "Created"
-                || record.info.state == "Paused"
-            {
+            if record.info.state == "Created" || record.info.state == "Paused" {
                 debug!(
                     "marking stale container {} as Stopped (was {})",
                     record.info.id, record.info.state
@@ -246,6 +269,57 @@ impl DaemonState {
         let count = records.len();
         *self.containers.write().await = records;
         debug!("loaded {} container records from disk", count);
+    }
+
+    /// Reconcile container state after loading from disk.
+    ///
+    /// For each container still marked `"Running"`, probe the host PID via the
+    /// supplied [`ProcessChecker`].  If the process is gone, transition the
+    /// record to `"Orphaned"` and clear the PID fields.
+    ///
+    /// Call this **after** [`load_from_disk`] on daemon startup.
+    pub async fn reconcile_on_startup(&self, checker: &dyn ProcessChecker) {
+        let mut map = self.containers.write().await;
+        let mut orphaned_count: u32 = 0;
+
+        for record in map.values_mut() {
+            if record.info.state != "Running" {
+                continue;
+            }
+            let pid = match record.pid {
+                Some(p) => p,
+                None => {
+                    // Running with no PID is always orphaned.
+                    warn!(
+                        container_id = %record.info.id,
+                        stale_pid = 0_u32,
+                        "reconcile: container marked Running but has no PID — marking Orphaned"
+                    );
+                    record.info.state = "Orphaned".to_string();
+                    record.info.pid = None;
+                    orphaned_count += 1;
+                    continue;
+                }
+            };
+
+            if !checker.is_alive(pid) {
+                warn!(
+                    container_id = %record.info.id,
+                    stale_pid = pid,
+                    "reconcile: stale container detected — PID gone, marking Orphaned"
+                );
+                record.info.state = "Orphaned".to_string();
+                record.info.pid = None;
+                record.pid = None;
+                orphaned_count += 1;
+            }
+        }
+
+        drop(map);
+
+        if orphaned_count > 0 {
+            self.save_to_disk().await;
+        }
     }
 
     /// Persist the current state to disk using an atomic write.
@@ -610,13 +684,11 @@ mod tests {
         assert_eq!(containers[0].id, "test-container-id");
     }
 
-    /// Issue #134: containers that were "Running" when the daemon stopped must
-    /// be marked "Stopped" on reload — their PIDs are gone and cannot be reattached.
-    ///
-    /// Guards: `load_from_disk` transitions Running/Created/Paused → Stopped
-    /// and clears the `pid` field.
+    /// Issue #134 (updated by #160): containers that were "Running" when the
+    /// daemon stopped are marked "Orphaned" after `load_from_disk` +
+    /// `reconcile_on_startup` with a checker that reports the PID as dead.
     #[tokio::test]
-    async fn running_containers_marked_stopped_on_reload() {
+    async fn running_containers_marked_orphaned_on_reload() {
         let tmp = TempDir::new().unwrap();
 
         {
@@ -630,16 +702,17 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
+        state2.reconcile_on_startup(&NeverAliveChecker).await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
         assert_eq!(
-            containers[0].state, "Stopped",
-            "Running containers must be marked Stopped on reload (process is gone)"
+            containers[0].state, "Orphaned",
+            "Running containers with dead PIDs must be Orphaned after reconcile"
         );
         assert_eq!(
             containers[0].pid, None,
-            "pid must be cleared on reload — process cannot be reattached"
+            "pid must be cleared — process cannot be reattached"
         );
     }
 
@@ -664,6 +737,100 @@ mod tests {
             containers[0].state, "Stopped",
             "Created containers must be marked Stopped on reload"
         );
+    }
+
+    // ── Orphaned state reconciliation — Issue #160 ──────────────────────
+
+    /// Issue #160: `ContainerState::Orphaned` variant exists and can be
+    /// represented as the string `"Orphaned"`.
+    #[test]
+    fn orphaned_state_has_correct_string_repr() {
+        assert_eq!(ContainerState::Orphaned.as_str(), "Orphaned");
+    }
+
+    /// Issue #160: `reconcile_on_startup` marks Running containers whose PID
+    /// is gone as Orphaned (not Stopped).
+    #[tokio::test]
+    async fn reconcile_marks_stale_running_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        // Session 1: persist a "Running" container with a non-existent PID.
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Running".to_string();
+            record.info.pid = Some(99999);
+            record.pid = Some(99999);
+            state.add_container(record).await;
+        }
+
+        // Session 2: load + reconcile with a checker that says "no such PID".
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2.reconcile_on_startup(&NeverAliveChecker).await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers.len(), 1);
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Running containers with dead PIDs must become Orphaned after reconcile"
+        );
+    }
+
+    /// Issue #160: reconcile leaves actually-running containers alone.
+    #[tokio::test]
+    async fn reconcile_leaves_live_containers_running() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Running".to_string();
+            record.info.pid = Some(1);
+            record.pid = Some(1);
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers[0].state, "Running");
+    }
+
+    /// Issue #160: orphaned containers appear in `list_containers` (surfaced by `mbx ps`).
+    #[tokio::test]
+    async fn orphaned_containers_visible_in_list() {
+        let tmp = TempDir::new().expect("tempdir");
+        let state = make_state_in(&tmp);
+
+        let mut record = make_test_record();
+        record.info.state = "Orphaned".to_string();
+        record.pid = None;
+        state.add_container(record).await;
+
+        let list = state.list_containers().await;
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].state, "Orphaned");
+    }
+
+    // ── Test doubles for ProcessChecker ──────────────────────────────────
+
+    /// Always reports PIDs as dead.
+    struct NeverAliveChecker;
+    impl super::ProcessChecker for NeverAliveChecker {
+        fn is_alive(&self, _pid: u32) -> bool {
+            false
+        }
+    }
+
+    /// Always reports PIDs as alive.
+    struct AlwaysAliveChecker;
+    impl super::ProcessChecker for AlwaysAliveChecker {
+        fn is_alive(&self, _pid: u32) -> bool {
+            true
+        }
     }
 
     /// Issue #134: "Stopped" containers must be preserved as-is on reload.
