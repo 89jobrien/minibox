@@ -48,6 +48,9 @@ fn main() -> Result<()> {
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
         }
+        Some("available") => {
+            preflight::check_xtask_available(&preflight::ProcessXtaskProbe)
+        }
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -108,6 +111,7 @@ fn main() -> Result<()> {
             eprintln!("Available tasks:");
             eprintln!("  bump [patch|minor|major]  bump workspace version in Cargo.toml");
             eprintln!("  preflight        check required tools are on PATH and functional");
+            eprintln!("  available        verify cargo xtask is runnable (real capability check)");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
