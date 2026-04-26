@@ -162,50 +162,8 @@ const DEFAULT_RUN_DIR: &str = "/run/minibox";
 
 // ── Adapter suite selection ───────────────────────────────────────────────
 
-/// Default adapter suite when `MINIBOX_ADAPTER` is unset.
-///
-/// Change this single value to switch the default runtime for all
-/// platforms. Current options: `"native"`, `"gke"`, `"colima"`,
-/// `"smolvm"`.
 #[cfg(target_os = "linux")]
-const DEFAULT_ADAPTER_SUITE: &str = "native";
-
-/// Which set of adapters to use for container operations.
-#[cfg(target_os = "linux")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AdapterSuite {
-    /// Linux-native: namespaces, overlay FS, cgroups v2. Requires root.
-    Native,
-    /// GKE unprivileged: proot, copy FS, no-op limiter. No root needed.
-    Gke,
-    /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
-    Colima,
-    /// macOS via SmolVM: lightweight Linux VMs with subsecond boot.
-    SmolVm,
-}
-
-#[cfg(target_os = "linux")]
-impl AdapterSuite {
-    /// Parse the `MINIBOX_ADAPTER` environment variable into an [`AdapterSuite`].
-    ///
-    /// Accepted values: `"native"` (default when the variable is absent),
-    /// `"gke"`, `"colima"`, `"smolvm"`.  Returns an error for any other value.
-    fn from_env() -> Result<Self> {
-        let val =
-            std::env::var("MINIBOX_ADAPTER").unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
-        match val.as_str() {
-            "gke" => Ok(Self::Gke),
-            "colima" => Ok(Self::Colima),
-            "smolvm" => Ok(Self::SmolVm),
-            "native" => Ok(Self::Native),
-            other => anyhow::bail!(
-                "unknown MINIBOX_ADAPTER value {:?} \
-                 (expected \"native\", \"gke\", \"colima\", or \"smolvm\")",
-                other
-            ),
-        }
-    }
-}
+use miniboxd::adapter_registry::{self, AdapterSuite};
 
 /// Resolve the image/container data directory based on effective UID.
 ///
@@ -426,8 +384,13 @@ async fn main() -> Result<()> {
     info!("miniboxd starting");
 
     // ── Adapter suite ────────────────────────────────────────────────────
-    let suite = AdapterSuite::from_env()?;
-    info!("adapter suite: {suite:?}");
+    let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let available = adapter_registry::available_adapter_names();
+    info!(
+        selected_adapter = %suite,
+        available_adapters = ?available,
+        "adapter suite selected"
+    );
 
     // ── Privilege check (native only) ────────────────────────────────────
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
