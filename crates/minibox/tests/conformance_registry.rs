@@ -3,9 +3,9 @@
 //! All tests use `MockRegistry` from `minibox::testing` — no network calls are made.
 //! Each test creates a fresh mock to avoid shared state.
 
+use minibox::testing::mocks::registry::MockRegistry;
 use minibox_core::domain::ImageRegistry;
 use minibox_core::image::reference::ImageRef;
-use minibox::testing::mocks::registry::MockRegistry;
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -250,21 +250,16 @@ mod tests {
 
     #[test]
     fn fixture_creates_subdirs() {
-        let fixture =
-            TempContainerFixture::new().expect("fixture creation should succeed");
+        let fixture = TempContainerFixture::new().expect("fixture creation should succeed");
         assert!(fixture.images_dir.exists(), "images/ should exist");
-        assert!(
-            fixture.containers_dir.exists(),
-            "containers/ should exist"
-        );
+        assert!(fixture.containers_dir.exists(), "containers/ should exist");
         assert!(fixture.images_dir.is_dir());
         assert!(fixture.containers_dir.is_dir());
     }
 
     #[test]
     fn fixture_subdirs_are_children_of_root() {
-        let fixture =
-            TempContainerFixture::new().expect("fixture creation should succeed");
+        let fixture = TempContainerFixture::new().expect("fixture creation should succeed");
         let root = fixture.dir.path();
         assert!(fixture.images_dir.starts_with(root));
         assert!(fixture.containers_dir.starts_with(root));
@@ -274,8 +269,7 @@ mod tests {
     fn fixture_cleanup_on_drop() {
         let root_path;
         {
-            let fixture = TempContainerFixture::new()
-                .expect("fixture creation should succeed");
+            let fixture = TempContainerFixture::new().expect("fixture creation should succeed");
             root_path = fixture.dir.path().to_path_buf();
             assert!(root_path.exists());
         }

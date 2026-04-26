@@ -19,9 +19,7 @@
 //! - **colima**: uses `MockRegistry` + `ColimaRuntime::with_executor` +
 //!   `ColimaFilesystem` + `ColimaLimiter` + `NoopNetwork`.
 
-use minibox::adapters::mocks::{
-    MockFilesystem, MockRegistry, MockRuntime,
-};
+use minibox::adapters::mocks::{MockFilesystem, MockRegistry, MockRuntime};
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
     NoopImageLoader,

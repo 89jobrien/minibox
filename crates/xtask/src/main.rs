@@ -156,9 +156,13 @@ fn main() -> Result<()> {
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
-            eprintln!("  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)");
+            eprintln!(
+                "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
+            );
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
-            eprintln!("                   verify HandlerDependencies construction site count in miniboxd/src/main.rs");
+            eprintln!(
+                "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"
+            );
             Ok(())
         }
     }

@@ -29,7 +29,10 @@ impl MetricsRecorder for StubRecorder {
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
         self.counters.lock().unwrap().push((
             name.to_string(),
-            labels.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            labels
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         ));
     }
 
@@ -37,7 +40,10 @@ impl MetricsRecorder for StubRecorder {
         self.histograms.lock().unwrap().push((
             name.to_string(),
             value,
-            labels.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            labels
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         ));
     }
 
@@ -45,7 +51,10 @@ impl MetricsRecorder for StubRecorder {
         self.gauges.lock().unwrap().push((
             name.to_string(),
             value,
-            labels.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            labels
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
         ));
     }
 }

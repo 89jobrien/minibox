@@ -9,13 +9,15 @@
 
 use minibox::daemon::handler::{self, HandlerDependencies};
 use minibox::daemon::state::{ContainerState, DaemonState};
+use minibox::testing::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, DynImageRegistry, ImageRegistry,
     NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::protocol::DaemonResponse;
-use minibox::testing::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -629,9 +631,9 @@ mod performance_conformance {
 /// Tests are skipped automatically when `BackendCapability::Commit` is absent.
 #[cfg(test)]
 mod commit_conformance {
-    use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
     use minibox::testing::backend::BackendDescriptor;
     use minibox::testing::mocks::MockContainerCommitter;
+    use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
     use std::sync::Arc;
 
     fn mock_backend() -> BackendDescriptor {
@@ -745,10 +747,10 @@ mod commit_conformance {
 /// `MockImageBuilder` for the in-memory adapter under test.
 #[cfg(test)]
 mod build_conformance {
-    use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
     use minibox::testing::backend::BackendDescriptor;
     use minibox::testing::fixtures::BuildContextFixture;
     use minibox::testing::mocks::MockImageBuilder;
+    use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
     use std::sync::Arc;
     use tokio::sync::mpsc;
 
@@ -1026,11 +1028,11 @@ mod lifecycle_conformance {
 /// for the in-memory adapter that records pushes without a real registry.
 #[cfg(test)]
 mod push_conformance {
-    use minibox_core::domain::{BackendCapability, RegistryCredentials};
-    use minibox_core::image::reference::ImageRef;
     use minibox::testing::backend::BackendDescriptor;
     use minibox::testing::fixtures::LocalPushTargetFixture;
     use minibox::testing::mocks::MockImagePusher;
+    use minibox_core::domain::{BackendCapability, RegistryCredentials};
+    use minibox_core::image::reference::ImageRef;
     use std::sync::Arc;
 
     fn mock_backend() -> (BackendDescriptor, Arc<MockImagePusher>) {
@@ -1295,9 +1297,9 @@ mod resource_limit_conformance {
 // ---------------------------------------------------------------------------
 
 mod gc_conformance {
-    use minibox_core::image::gc::ImageGarbageCollector;
     use minibox::testing::capability::{GcCapability, should_skip};
     use minibox::testing::helpers::NoopImageGc;
+    use minibox_core::image::gc::ImageGarbageCollector;
 
     /// NoopImageGc never prunes anything — prune returns Ok(PruneReport) with 0 freed.
     #[tokio::test]
@@ -1542,11 +1544,11 @@ mod krun_suite {
     use macbox::krun::runtime::KrunRuntime;
     use minibox::daemon::handler::{self, HandlerDependencies};
     use minibox::daemon::state::DaemonState;
+    use minibox::testing::helpers::NoopImageGc;
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
     use minibox_core::image::ImageStore;
     use minibox_core::protocol::DaemonResponse;
-    use minibox::testing::helpers::NoopImageGc;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -1910,7 +1912,11 @@ mod pause_resume_conformance {
             cgroup_path: cgroup_dir.to_path_buf(),
             post_exit_hooks: vec![],
             rootfs_metadata: None,
-            source_image_ref: Some("alpine:latest".to_string()), step_state: None, priority: None, urgency: None, execution_context: None,
+            source_image_ref: Some("alpine:latest".to_string()),
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
         }
     }
 

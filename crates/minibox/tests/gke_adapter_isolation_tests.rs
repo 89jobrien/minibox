@@ -98,7 +98,9 @@ fn copy_filesystem_merges_single_layer() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs.setup_rootfs(std::slice::from_ref(&layer), &container_dir).unwrap();
+    let merged = fs
+        .setup_rootfs(std::slice::from_ref(&layer), &container_dir)
+        .unwrap();
 
     assert!(
         merged.merged_dir.join("bin/sh").exists(),

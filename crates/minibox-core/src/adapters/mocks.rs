@@ -31,9 +31,9 @@
 
 use crate::adapt;
 use crate::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry,
-    LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
-    RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, LayerInfo, NetworkConfig,
+    NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter, RootfsLayout,
+    RuntimeCapabilities, SpawnResult,
 };
 use anyhow::Result;
 use async_trait::async_trait;
@@ -1111,10 +1111,7 @@ impl ContainerCommitter for MockContainerCommitter {
         _config: &CommitConfig,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
-        if self
-            .should_fail
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
+        if self.should_fail.load(std::sync::atomic::Ordering::SeqCst) {
             anyhow::bail!("mock commit failure");
         }
         // Parse "name:tag" — fall back to "name:latest" if no colon.
@@ -1188,10 +1185,7 @@ impl ImageBuilder for MockImageBuilder {
         progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
-        if self
-            .should_fail
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
+        if self.should_fail.load(std::sync::atomic::Ordering::SeqCst) {
             anyhow::bail!("mock build failure");
         }
         let _ = progress_tx

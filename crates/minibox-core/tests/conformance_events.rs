@@ -11,7 +11,9 @@
 //!
 //! No I/O, no network. Uses tokio broadcast channels only.
 
-use minibox_core::events::{BroadcastEventBroker, ContainerEvent, EventSink, EventSource, NoopEventSink};
+use minibox_core::events::{
+    BroadcastEventBroker, ContainerEvent, EventSink, EventSource, NoopEventSink,
+};
 use std::time::SystemTime;
 
 // ---------------------------------------------------------------------------
@@ -77,7 +79,9 @@ async fn conformance_multiple_subscribers_each_receive_event() {
     let e2 = rx2.recv().await.expect("rx2 must receive");
     let e3 = rx3.recv().await.expect("rx3 must receive");
 
-    assert!(matches!(e1, ContainerEvent::Stopped { id, exit_code, .. } if id == "multi-1" && exit_code == 0));
+    assert!(
+        matches!(e1, ContainerEvent::Stopped { id, exit_code, .. } if id == "multi-1" && exit_code == 0)
+    );
     assert!(matches!(e2, ContainerEvent::Stopped { .. }));
     assert!(matches!(e3, ContainerEvent::Stopped { .. }));
 }
@@ -138,15 +142,47 @@ async fn conformance_all_event_variants_round_trip() {
     let now = SystemTime::now();
 
     let events = vec![
-        ContainerEvent::Created { id: "v1".into(), image: "img".into(), timestamp: now },
-        ContainerEvent::Started { id: "v2".into(), pid: 42, timestamp: now },
-        ContainerEvent::Stopped { id: "v3".into(), exit_code: 1, timestamp: now },
-        ContainerEvent::Paused { id: "v4".into(), timestamp: now },
-        ContainerEvent::Resumed { id: "v5".into(), timestamp: now },
-        ContainerEvent::OomKilled { id: "v6".into(), timestamp: now },
-        ContainerEvent::ImagePulled { image: "alpine".into(), size_bytes: 1024, timestamp: now },
-        ContainerEvent::ImageRemoved { image: "old".into(), timestamp: now },
-        ContainerEvent::ImagePruned { count: 3, freed_bytes: 4096, timestamp: now },
+        ContainerEvent::Created {
+            id: "v1".into(),
+            image: "img".into(),
+            timestamp: now,
+        },
+        ContainerEvent::Started {
+            id: "v2".into(),
+            pid: 42,
+            timestamp: now,
+        },
+        ContainerEvent::Stopped {
+            id: "v3".into(),
+            exit_code: 1,
+            timestamp: now,
+        },
+        ContainerEvent::Paused {
+            id: "v4".into(),
+            timestamp: now,
+        },
+        ContainerEvent::Resumed {
+            id: "v5".into(),
+            timestamp: now,
+        },
+        ContainerEvent::OomKilled {
+            id: "v6".into(),
+            timestamp: now,
+        },
+        ContainerEvent::ImagePulled {
+            image: "alpine".into(),
+            size_bytes: 1024,
+            timestamp: now,
+        },
+        ContainerEvent::ImageRemoved {
+            image: "old".into(),
+            timestamp: now,
+        },
+        ContainerEvent::ImagePruned {
+            count: 3,
+            freed_bytes: 4096,
+            timestamp: now,
+        },
     ];
 
     for evt in &events {
@@ -154,10 +190,16 @@ async fn conformance_all_event_variants_round_trip() {
     }
 
     for (i, _) in events.iter().enumerate() {
-        let received = rx.recv().await.unwrap_or_else(|_| panic!("must receive event {i}"));
+        let received = rx
+            .recv()
+            .await
+            .unwrap_or_else(|_| panic!("must receive event {i}"));
         // Verify discriminant matches by checking Debug output contains expected variant name.
         let debug = format!("{received:?}");
-        assert!(!debug.is_empty(), "event {i} must have non-empty Debug output");
+        assert!(
+            !debug.is_empty(),
+            "event {i} must have non-empty Debug output"
+        );
     }
 }
 
@@ -170,15 +212,47 @@ fn conformance_noop_event_sink_accepts_all_variants() {
     let sink = NoopEventSink;
     let now = SystemTime::now();
 
-    sink.emit(ContainerEvent::Created { id: "n1".into(), image: "x".into(), timestamp: now });
-    sink.emit(ContainerEvent::Started { id: "n2".into(), pid: 1, timestamp: now });
-    sink.emit(ContainerEvent::Stopped { id: "n3".into(), exit_code: 0, timestamp: now });
-    sink.emit(ContainerEvent::Paused { id: "n4".into(), timestamp: now });
-    sink.emit(ContainerEvent::Resumed { id: "n5".into(), timestamp: now });
-    sink.emit(ContainerEvent::OomKilled { id: "n6".into(), timestamp: now });
-    sink.emit(ContainerEvent::ImagePulled { image: "a".into(), size_bytes: 0, timestamp: now });
-    sink.emit(ContainerEvent::ImageRemoved { image: "b".into(), timestamp: now });
-    sink.emit(ContainerEvent::ImagePruned { count: 0, freed_bytes: 0, timestamp: now });
+    sink.emit(ContainerEvent::Created {
+        id: "n1".into(),
+        image: "x".into(),
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::Started {
+        id: "n2".into(),
+        pid: 1,
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::Stopped {
+        id: "n3".into(),
+        exit_code: 0,
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::Paused {
+        id: "n4".into(),
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::Resumed {
+        id: "n5".into(),
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::OomKilled {
+        id: "n6".into(),
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::ImagePulled {
+        image: "a".into(),
+        size_bytes: 0,
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::ImageRemoved {
+        image: "b".into(),
+        timestamp: now,
+    });
+    sink.emit(ContainerEvent::ImagePruned {
+        count: 0,
+        freed_bytes: 0,
+        timestamp: now,
+    });
 }
 
 // ---------------------------------------------------------------------------

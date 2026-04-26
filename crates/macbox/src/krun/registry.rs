@@ -72,9 +72,7 @@ mod tests {
 
     fn make_registry() -> KrunRegistry {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let store = Arc::new(
-            ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"),
-        );
+        let store = Arc::new(ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"));
         std::mem::forget(tmp); // keep tempdir alive
         KrunRegistry::new(store).expect("KrunRegistry::new")
     }
@@ -86,10 +84,7 @@ mod tests {
 
     #[test]
     fn manifest_size_limit_is_10mib() {
-        assert_eq!(
-            KrunRegistry::manifest_size_limit_bytes(),
-            10 * 1024 * 1024
-        );
+        assert_eq!(KrunRegistry::manifest_size_limit_bytes(), 10 * 1024 * 1024);
     }
 
     #[test]
