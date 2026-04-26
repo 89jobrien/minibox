@@ -162,6 +162,14 @@ const DEFAULT_RUN_DIR: &str = "/run/minibox";
 
 // ── Adapter suite selection ───────────────────────────────────────────────
 
+/// Default adapter suite when `MINIBOX_ADAPTER` is unset.
+///
+/// Change this single value to switch the default runtime for all
+/// platforms. Current options: `"native"`, `"gke"`, `"colima"`,
+/// `"smolvm"`.
+#[cfg(target_os = "linux")]
+const DEFAULT_ADAPTER_SUITE: &str = "native";
+
 /// Which set of adapters to use for container operations.
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,12 +191,14 @@ impl AdapterSuite {
     /// Accepted values: `"native"` (default when the variable is absent),
     /// `"gke"`, `"colima"`, `"smolvm"`.  Returns an error for any other value.
     fn from_env() -> Result<Self> {
-        match std::env::var("MINIBOX_ADAPTER").as_deref() {
-            Ok("gke") => Ok(Self::Gke),
-            Ok("colima") => Ok(Self::Colima),
-            Ok("smolvm") => Ok(Self::SmolVm),
-            Ok("native") | Err(_) => Ok(Self::Native),
-            Ok(other) => anyhow::bail!(
+        let val = std::env::var("MINIBOX_ADAPTER")
+            .unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
+        match val.as_str() {
+            "gke" => Ok(Self::Gke),
+            "colima" => Ok(Self::Colima),
+            "smolvm" => Ok(Self::SmolVm),
+            "native" => Ok(Self::Native),
+            other => anyhow::bail!(
                 "unknown MINIBOX_ADAPTER value {:?} \
                  (expected \"native\", \"gke\", \"colima\", or \"smolvm\")",
                 other

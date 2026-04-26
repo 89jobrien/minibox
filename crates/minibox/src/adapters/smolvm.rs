@@ -1,26 +1,15 @@
-//! SmolVM adapter suite for macOS support via lightweight Linux VMs.
+//! SmolVM adapter suite — lightweight Linux VMs via smolmachines.
 //!
-//! This module provides four adapters that together implement the full set of
-//! domain traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
-//! [`ContainerRuntime`]) by delegating operations into a smolvm Linux VM
-//! running on the macOS host.
+//! Delegates container operations into a smolmachines VM. smolmachines
+//! uses libkrun (a lightweight VMM) to boot Linux VMs with sub-second
+//! cold starts. Works on both macOS (Apple Silicon / Intel) and Linux.
 //!
-//! # How it works
+//! Selected by `MINIBOX_ADAPTER=smolvm`. Compiled on all platforms.
 //!
-//! Each adapter runs commands inside a smolvm VM using
-//! `smolvm machine run --image <image> -- <command>`. smolvm boots a Linux VM
-//! in under 1 second using Apple's Virtualization.framework and caches images
-//! locally after first pull.
-//!
-//! # Adapter selection
-//!
-//! Selected by `MINIBOX_ADAPTER=smolvm`. These adapters are compiled on all
-//! platforms but are only useful on macOS where smolvm is available.
-//!
-//! # Requirements
-//!
-//! - smolvm installed (`brew install smolvm`)
-//! - macOS with Apple Silicon or Intel
+//! Requirements:
+//! - smolmachines installed (https://smolmachines.com)
+//!   - macOS: `brew install smolvm`
+//!   - Linux: see smolmachines docs
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -369,7 +358,7 @@ impl minibox_core::domain::ChildInit for SmolVmFilesystem {
 /// SmolVM implementation of [`ResourceLimiter`].
 ///
 /// Cgroup operations are handled inside the VM's Linux kernel. All methods
-/// are no-ops on the macOS host side.
+/// are no-ops on the host side.
 pub struct SmolVmLimiter;
 
 impl SmolVmLimiter {
