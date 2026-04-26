@@ -98,7 +98,7 @@ fn copy_filesystem_merges_single_layer() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs.setup_rootfs(&[layer.clone()], &container_dir).unwrap();
+    let merged = fs.setup_rootfs(std::slice::from_ref(&layer), &container_dir).unwrap();
 
     assert!(
         merged.merged_dir.join("bin/sh").exists(),
@@ -347,10 +347,10 @@ fn adapters_can_be_used_simultaneously() {
     let c1 = limiter1.create("c1", &config).unwrap();
     let c2 = limiter2.create("c2", &config).unwrap();
     let merged1 = fs1
-        .setup_rootfs(&[layer1.clone()], &container_dir1)
+        .setup_rootfs(std::slice::from_ref(&layer1), &container_dir1)
         .unwrap();
     let merged2 = fs2
-        .setup_rootfs(&[layer1.clone()], &container_dir2)
+        .setup_rootfs(std::slice::from_ref(&layer1), &container_dir2)
         .unwrap();
 
     assert_eq!(c1, "noop:c1");
@@ -379,8 +379,8 @@ fn copy_filesystem_multiple_instances_independent() {
     let c1 = dir.path().join("container1");
     let c2 = dir.path().join("container2");
 
-    let m1 = fs1.setup_rootfs(&[layer.clone()], &c1).unwrap();
-    let m2 = fs2.setup_rootfs(&[layer.clone()], &c2).unwrap();
+    let m1 = fs1.setup_rootfs(std::slice::from_ref(&layer), &c1).unwrap();
+    let m2 = fs2.setup_rootfs(std::slice::from_ref(&layer), &c2).unwrap();
 
     assert!(m1.merged_dir.exists());
     assert!(m2.merged_dir.exists());

@@ -1153,11 +1153,10 @@ mod tests {
         let cap = captured.clone();
 
         let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
-            if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc") {
-                if let Some(script) = args.get(pos + 1) {
+            if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc")
+                && let Some(script) = args.get(pos + 1) {
                     *cap.lock().unwrap() = script.to_string();
                 }
-            }
             Ok("42\n".to_string())
         }));
 

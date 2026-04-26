@@ -136,6 +136,6 @@ mod tests {
     #[test]
     fn test_client_default() {
         let client = DaemonClient::default();
-        assert!(client.socket_path.as_os_str().len() > 0);
+        assert!(!client.socket_path.as_os_str().is_empty());
     }
 }

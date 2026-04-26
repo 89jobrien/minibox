@@ -471,7 +471,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(args.iter().map(|arg| arg.to_string()).collect());
-            if args.get(0) == Some(&"nerdctl") && args.get(1) == Some(&"image") {
+            if args.first() == Some(&"nerdctl") && args.get(1) == Some(&"image") {
                 return Ok(
                     r#"[{"RepoDigests":["127.0.0.1:5001/example/app:latest@sha256:deadbeef"]}]"#
                         .to_string(),

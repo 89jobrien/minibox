@@ -110,7 +110,7 @@ proptest! {
         let mut wrong = wrong_suffix.clone();
         let last = wrong.pop().unwrap();
         let flipped = if last == 'f' { '0' } else { 'f' };
-        if wrong == &real_hex[..63] {
+        if wrong == real_hex[..63] {
             // The prefix matched — append the flipped char to guarantee divergence.
             wrong.push(flipped);
         } else {

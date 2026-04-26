@@ -17,10 +17,6 @@ use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-// `chrono` is used in manual ContainerRecord construction below.
-#[allow(unused_imports)]
-use chrono;
-
 /// Helper that calls `handle_run` via a channel and returns the first response.
 ///
 /// `handle_run` now sends responses via a channel rather than returning them,
@@ -2534,11 +2530,10 @@ async fn wait_for_container_state(
 ) -> String {
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
     loop {
-        if let Some(record) = state.get_container(id).await {
-            if record.info.state == expected {
+        if let Some(record) = state.get_container(id).await
+            && record.info.state == expected {
                 return record.info.state;
             }
-        }
         if tokio::time::Instant::now() >= deadline {
             break;
         }

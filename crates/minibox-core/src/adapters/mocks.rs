@@ -701,11 +701,13 @@ pub struct RecordingMetricsRecorder {
     state: Arc<Mutex<RecordingMetricsState>>,
 }
 
+type Labels = Vec<(String, String)>;
+
 #[derive(Debug, Default)]
 struct RecordingMetricsState {
-    counters: Vec<(String, Vec<(String, String)>)>,
-    histograms: Vec<(String, f64, Vec<(String, String)>)>,
-    gauges: Vec<(String, f64, Vec<(String, String)>)>,
+    counters: Vec<(String, Labels)>,
+    histograms: Vec<(String, f64, Labels)>,
+    gauges: Vec<(String, f64, Labels)>,
 }
 
 impl RecordingMetricsRecorder {
@@ -717,17 +719,17 @@ impl RecordingMetricsRecorder {
     }
 
     /// Return all recorded counter increments as `(name, labels)` pairs.
-    pub fn counters(&self) -> Vec<(String, Vec<(String, String)>)> {
+    pub fn counters(&self) -> Vec<(String, Labels)> {
         self.state.lock().unwrap().counters.clone()
     }
 
     /// Return all recorded histogram observations as `(name, value, labels)` triples.
-    pub fn histograms(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+    pub fn histograms(&self) -> Vec<(String, f64, Labels)> {
         self.state.lock().unwrap().histograms.clone()
     }
 
     /// Return all recorded gauge settings as `(name, value, labels)` triples.
-    pub fn gauges(&self) -> Vec<(String, f64, Vec<(String, String)>)> {
+    pub fn gauges(&self) -> Vec<(String, f64, Labels)> {
         self.state.lock().unwrap().gauges.clone()
     }
 }
@@ -779,7 +781,7 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{ChildInit, ContainerHooks, MetricsRecorder, RootfsSetup};
+    use crate::domain::{ContainerHooks, MetricsRecorder, RootfsSetup};
 
     #[test]
     fn mock_registry_has_image_sync_cached() {

@@ -341,8 +341,8 @@ fn conformance_mock_runtime_capabilities_type() {
     let runtime = MockRuntime::new();
     let caps: RuntimeCapabilities = runtime.capabilities();
 
-    assert_eq!(
-        caps.supports_user_namespaces, false,
+    assert!(
+        !caps.supports_user_namespaces,
         "mock runtime does not support user namespaces"
     );
 }

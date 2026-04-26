@@ -254,10 +254,8 @@ async fn commit_empty_upperdir_returns_error() -> Result<()> {
         .await;
 
     // Either Ok (with any number of layers) or Err — but no panic.
-    match result {
-        Ok(_meta) => {} // adapter may produce an empty-tar layer — acceptable
-        Err(_) => {}    // error is also acceptable
-    }
+    // We only care that it doesn't panic; drop the result.
+    drop(result);
 
     Ok(())
 }

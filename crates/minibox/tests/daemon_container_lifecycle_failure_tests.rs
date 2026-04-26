@@ -115,6 +115,7 @@ fn make_record(id: &str) -> ContainerRecord {
 }
 
 /// Helper that calls `handle_run` via a channel and returns the first response.
+#[allow(clippy::too_many_arguments)]
 async fn handle_run_once(
     image: String,
     tag: Option<String>,

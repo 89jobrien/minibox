@@ -20,7 +20,7 @@
 //!   `ColimaFilesystem` + `ColimaLimiter` + `NoopNetwork`.
 
 use minibox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+    MockFilesystem, MockRegistry, MockRuntime,
 };
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,

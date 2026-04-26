@@ -49,6 +49,7 @@ use tempfile::TempDir;
 /// Boolean capability flags control which conformance tests are exercised.
 /// Tests must check the relevant flag and return early when it is `false`
 /// (skip, not fail).
+#[allow(clippy::type_complexity)]
 pub struct TestBackendDescriptor {
     /// Human-readable name used in test failure messages.
     pub name: &'static str,
@@ -88,7 +89,7 @@ impl TestBackendDescriptor {
             supports_commit: false,
             supports_build: false,
             supports_push: false,
-            make_deps: Box::new(|temp_dir| make_mock_deps(temp_dir)),
+            make_deps: Box::new(make_mock_deps),
         }
     }
 

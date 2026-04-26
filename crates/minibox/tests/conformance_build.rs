@@ -210,13 +210,12 @@ async fn build_empty_dockerfile_returns_error_or_empty() -> Result<()> {
     let result = builder.build_image(&context, &config, tx).await;
 
     // Either empty layers or an error — but no panic.
-    match result {
-        Ok(meta) => assert!(
+    if let Ok(meta) = result {
+        assert!(
             meta.layers.is_empty(),
             "empty Dockerfile must produce empty layers, got: {:?}",
             meta.layers
-        ),
-        Err(_) => {} // also acceptable
+        );
     }
 
     Ok(())
