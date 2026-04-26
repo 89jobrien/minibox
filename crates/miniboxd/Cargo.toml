@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[package.metadata.cargo-machete]
+ignored = ["tracing-subscriber"]
+
 [lib]
 name = "miniboxd"
 path = "src/lib.rs"

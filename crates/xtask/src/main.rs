@@ -159,7 +159,9 @@ fn main() -> Result<()> {
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
-            eprintln!("  lint-docs        validate frontmatter + status values in docs/superpowers/");
+            eprintln!(
+                "  lint-docs        validate frontmatter + status values in docs/superpowers/"
+            );
             eprintln!("  bench            run criterion benchmarks, save to bench/results/");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(

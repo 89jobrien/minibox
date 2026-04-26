@@ -19,8 +19,8 @@ pub fn lint_docs(root: &Path) -> Result<()> {
         if !dir.is_dir() {
             continue;
         }
-        let entries = std::fs::read_dir(&dir)
-            .with_context(|| format!("read_dir {}", dir.display()))?;
+        let entries =
+            std::fs::read_dir(&dir).with_context(|| format!("read_dir {}", dir.display()))?;
         for entry in entries {
             let entry = entry?;
             let path = entry.path();
@@ -60,7 +60,10 @@ fn lint_file(path: &Path) -> Result<()> {
             continue;
         }
         if !trimmed.contains(':') {
-            bail!("frontmatter line {} is not a key: value pair: {trimmed}", i + 1);
+            bail!(
+                "frontmatter line {} is not a key: value pair: {trimmed}",
+                i + 1
+            );
         }
     }
 
