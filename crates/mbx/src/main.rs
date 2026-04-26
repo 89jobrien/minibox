@@ -222,7 +222,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let socket_path = minibox_client::default_socket_path();
+    let socket_path = minibox_core::client::default_socket_path();
     let socket_path: &Path = &socket_path;
 
     match cli.command {

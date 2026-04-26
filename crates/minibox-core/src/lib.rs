@@ -28,13 +28,16 @@ pub mod protocol;
 pub mod trace;
 pub mod tracing_init;
 
+pub mod client;
+pub mod image;
+
 pub use tracing_init::init_tracing;
 
-// Image handling is provided by the standalone minibox-oci crate.
-// Re-export the full module so existing `minibox_core::image::*` paths continue to work.
-pub use minibox_oci::image;
-
 pub use error::MiniboxError;
+pub use error::{ImageError, RegistryError};
+pub use image::ImageStore;
+pub use image::reference::{ImageRef, ImageRefError};
+pub use image::registry::RegistryClient;
 pub use minibox_macros::{adapt, as_any, default_new, require_capability};
 
 /// Convenience re-export of the [`anyhow::Result`] type used throughout this crate.

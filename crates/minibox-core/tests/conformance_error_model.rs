@@ -21,7 +21,7 @@
 //!
 //! No network, no I/O beyond error message formatting.
 
-use minibox_oci::{ImageError, RegistryError};
+use minibox_core::{ImageError, RegistryError};
 use std::io;
 
 // ---------------------------------------------------------------------------

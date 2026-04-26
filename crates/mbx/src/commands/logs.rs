@@ -9,7 +9,7 @@
 //! * [`DaemonResponse::Error`] — terminal error; print to stderr, exit 1.
 
 use anyhow::{Context as _, Result};
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 
 /// Execute the `logs` subcommand.

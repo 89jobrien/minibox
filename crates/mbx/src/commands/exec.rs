@@ -16,7 +16,7 @@
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
-use minibox_client::{DaemonClient, DaemonWriter};
+use minibox_core::client::{DaemonClient, DaemonWriter};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 

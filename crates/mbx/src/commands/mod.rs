@@ -1,6 +1,6 @@
 //! CLI command modules.
 //!
-//! Each module implements a single subcommand using the [`minibox_client`] library
+//! Each module implements a single subcommand using the [`minibox_core::client`] library
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
 

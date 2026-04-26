@@ -16,8 +16,8 @@
 //!
 //! No network, no I/O beyond Path operations.
 
-use minibox_oci::ImageRef;
-use minibox_oci::ImageRefError;
+use minibox_core::ImageRef;
+use minibox_core::ImageRefError;
 use std::path::Path;
 
 // ---------------------------------------------------------------------------

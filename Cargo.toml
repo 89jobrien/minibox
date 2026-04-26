@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/minibox-oci",
     "crates/minibox-core",
     "crates/linuxbox",
     "crates/miniboxd",
@@ -10,7 +9,6 @@ members = [
     "crates/daemonbox",
     "crates/macbox",
     "crates/winbox",
-    "crates/minibox-client",
     "crates/xtask",
     "crates/minibox-testers",
 ]
@@ -71,11 +69,9 @@ ipnet = "2"
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-oci = { path = "crates/minibox-oci", version = "0.21.0" }
 minibox-core = { path = "crates/minibox-core", version = "0.21.0" }
 linuxbox = { path = "crates/linuxbox" }
 minibox-macros = { path = "crates/minibox-macros", version = "0.21.0" }
-minibox-client = { path = "crates/minibox-client", version = "0.21.0" }
 daemonbox = { path = "crates/daemonbox" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }

@@ -129,7 +129,7 @@ fn conformance_as_any_downcast_wrong_type_network_to_registry() {
 #[tokio::test]
 async fn conformance_mock_registry_pull_success_populates_metadata() {
     let registry = MockRegistry::new();
-    let image_ref = minibox_oci::image::reference::ImageRef {
+    let image_ref = minibox_core::image::reference::ImageRef {
         registry: "docker.io".to_string(),
         namespace: "library".to_string(),
         name: "alpine".to_string(),
@@ -157,7 +157,7 @@ async fn conformance_mock_registry_pull_success_populates_metadata() {
 #[tokio::test]
 async fn conformance_mock_registry_pull_failure_returns_error() {
     let registry = MockRegistry::new().with_pull_failure();
-    let image_ref = minibox_oci::image::reference::ImageRef {
+    let image_ref = minibox_core::image::reference::ImageRef {
         registry: "docker.io".to_string(),
         namespace: "library".to_string(),
         name: "alpine".to_string(),
@@ -206,7 +206,7 @@ async fn conformance_mock_registry_multiple_cached_images() {
 #[tokio::test]
 async fn conformance_mock_registry_pull_count_incremented() {
     let registry = MockRegistry::new();
-    let image_ref = minibox_oci::image::reference::ImageRef {
+    let image_ref = minibox_core::image::reference::ImageRef {
         registry: "docker.io".to_string(),
         namespace: "library".to_string(),
         name: "alpine".to_string(),

@@ -22,7 +22,7 @@
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};

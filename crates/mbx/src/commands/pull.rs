@@ -1,7 +1,7 @@
 //! `minibox pull` — pull an image from Docker Hub.
 
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Execute the `pull` subcommand.

@@ -1,7 +1,7 @@
 //! `minibox ps` — list all containers.
 
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Column widths for the table output.

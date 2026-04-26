@@ -1430,7 +1430,6 @@ dependencies = [
  "base64",
  "clap",
  "libc",
- "minibox-client",
  "minibox-core",
  "nix",
  "predicates",
@@ -1463,45 +1462,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
-name = "minibox-client"
-version = "0.21.0"
-dependencies = [
- "minibox-core",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "minibox-core"
-version = "0.21.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "insta",
- "minibox-macros",
- "minibox-oci",
- "nix",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "wiremock",
-]
-
-[[package]]
-name = "minibox-macros"
-version = "0.21.0"
-
-[[package]]
-name = "minibox-oci"
 version = "0.21.0"
 dependencies = [
  "anyhow",
@@ -1511,7 +1472,9 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
+ "insta",
  "minibox-macros",
+ "nix",
  "pin-project-lite",
  "proptest",
  "reqwest",
@@ -1524,9 +1487,14 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "wiremock",
 ]
+
+[[package]]
+name = "minibox-macros"
+version = "0.21.0"
 
 [[package]]
 name = "minibox-testers"

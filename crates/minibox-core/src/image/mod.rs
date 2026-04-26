@@ -352,6 +352,74 @@ impl ImageStore {
     }
 }
 
+/// Pull an OCI image into a local store.
+///
+/// Parses `image_ref` (e.g. `"alpine:latest"`, `"ghcr.io/org/name:tag"`),
+/// authenticates against the appropriate registry, downloads the manifest and
+/// all layer blobs, and extracts them under `store_path`.
+///
+/// `progress` is called with a human-readable status string for each major
+/// step (auth, manifest fetch, each layer).  Pass a no-op closure to silence
+/// progress output.
+pub async fn pull(
+    image_ref: &str,
+    store_path: impl Into<std::path::PathBuf>,
+    mut progress: impl FnMut(&str),
+) -> anyhow::Result<()> {
+    use reference::ImageRef;
+    use registry::RegistryClient;
+
+    let image_ref = ImageRef::parse(image_ref)
+        .map_err(|e| anyhow::anyhow!("invalid image reference {image_ref:?}: {e}"))?;
+
+    let store = ImageStore::new(store_path).context("opening image store")?;
+    let client = RegistryClient::new().context("creating registry client")?;
+
+    let name = image_ref.cache_name();
+    let tag = &image_ref.tag;
+
+    if store.has_image(&name, tag) {
+        progress(&format!("image {name}:{tag} already cached"));
+        return Ok(());
+    }
+
+    progress(&format!("authenticating for {name}"));
+    let token = client
+        .authenticate(&image_ref.repository())
+        .await
+        .with_context(|| format!("authenticating for {name}"))?;
+
+    progress(&format!("fetching manifest for {name}:{tag}"));
+    let manifest = client
+        .get_manifest(&image_ref.repository(), tag, &token)
+        .await
+        .with_context(|| format!("fetching manifest for {name}:{tag}"))?;
+
+    let layer_count = manifest.layers.len();
+    for (i, layer) in manifest.layers.iter().enumerate() {
+        progress(&format!(
+            "pulling layer {}/{}: {}",
+            i + 1,
+            layer_count,
+            &layer.digest[..layer.digest.len().min(20)]
+        ));
+        let blob = client
+            .pull_layer(&image_ref.repository(), &layer.digest, &token)
+            .await
+            .with_context(|| format!("fetching layer {}", layer.digest))?;
+        store
+            .store_layer(&name, tag, &layer.digest, std::io::Cursor::new(&blob[..]))
+            .with_context(|| format!("storing layer {}", layer.digest))?;
+    }
+
+    store
+        .store_manifest(&name, tag, &manifest)
+        .context("storing manifest")?;
+
+    progress(&format!("pulled {name}:{tag} ({layer_count} layers)"));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

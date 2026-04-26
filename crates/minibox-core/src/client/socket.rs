@@ -1,5 +1,5 @@
-use crate::error::{ClientError, Result};
-use minibox_core::protocol::{DaemonRequest, DaemonResponse, decode_response};
+use super::error::{ClientError, Result};
+use crate::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -11,7 +11,7 @@ pub struct DaemonClient {
 impl DaemonClient {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            socket_path: crate::default_socket_path(),
+            socket_path: super::default_socket_path(),
         })
     }
 
