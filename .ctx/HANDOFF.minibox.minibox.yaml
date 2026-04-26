@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260426:051901
+updated: 20260426:095815
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -213,7 +213,6 @@ items:
   - docs/superpowers/plans/2026-04-26-crate-consolidation.md
   - Cargo.toml
   - crates/minibox-core/Cargo.toml
-  - crates/minibox-client/Cargo.toml
   completed: null
   extra:
   - date: 20260426:051901
@@ -224,13 +223,22 @@ items:
     note: null
     number: 153
     url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260426:051901
+  - date: 20260426:095815
     type: note
     field: null
     value: null
     reviewed: null
-    note: Plan written and committed (5fd6c4c). Phase 0 unblocks immediately — just license files + publish guards.
+    note: "Phases 0-2 done (13->10 crates). Phase 3 infeasible (minibox-testers depends on linuxbox+daemonbox, circular if absorbed into minibox-core). Next: Phase 4 (merge linuxbox+daemonbox, ~12.5k LOC)."
 log:
+- date: 20260426:095815
+  summary: "Session 30: executed consolidation Phases 0-2 (13->10 crates). Absorbed minibox-oci+minibox-client into minibox-core. Phase 3 skipped (circular dep). Orca-strait agents resolved #95, #120, #134. 1134 tests pass."
+  commits:
+  - 21b5e5c
+  - 5e42156
+  - d20f095
+  - 53dc09b
+  - cdee328
+  session: 30
 - date: 20260426:051901
   summary: 'Session 29: audited publish readiness; wrote 7-phase crate consolidation plan (GH #153, 5fd6c4c); added configurable DEFAULT_ADAPTER_SUITE + smolvm cross-platform phase; updated smolvm/krun adapter specs.'
   commits:
