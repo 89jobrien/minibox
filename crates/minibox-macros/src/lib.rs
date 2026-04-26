@@ -10,7 +10,7 @@
 //! - [`as_any!`] — implement `AsAny` for one or more types
 //! - [`default_new!`] — implement `Default` via `Self::new()` for one or more types
 //! - [`adapt!`] — implement both `AsAny` and `Default` for one or more types
-//! - [`provide!`] — generate provider constructors in `minibox-llm`
+//! - [`provide!`] — generate provider constructors for LLM adapters
 //! - [`require_capability!`] — skip tests when a probed host capability is absent
 //! - [`normalize_name!`] — replace `/` with `_` for filesystem path components
 //! - [`normalize_digest!`] — replace `:` with `_` for filesystem path components
@@ -100,7 +100,7 @@ macro_rules! adapt {
 /// Generate `from_env()`, `from_env_with_config()`, and test-only `from_key()`
 /// constructors for an LLM provider type.
 ///
-/// This macro is intended for use inside `minibox-llm` provider modules. It
+/// This macro is intended for use inside LLM provider modules. It
 /// intentionally references `crate::ProviderConfig` at the call site, so it
 /// expands against `minibox_llm`, not `minibox_macros`.
 ///

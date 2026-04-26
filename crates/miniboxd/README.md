@@ -6,21 +6,22 @@ Async container daemon entry point with platform dispatch.
 
 Dispatches to platform-specific implementations via conditional compilation:
 
-- **Linux** — `minibox` + `daemonbox` for full container runtime
-- **macOS** — `macbox` for Colima or Virtualization.framework containers
-- **Windows** — `winbox` stub for future implementation
+- **Linux** -- `minibox` crate for full container runtime (handler, server, state)
+- **macOS** -- `macbox` for Colima or Virtualization.framework containers
+- **Windows** -- `winbox` stub for future implementation
 
-The main server loop uses `daemonbox` for request handling and state management across all platforms.
+The main server loop uses `minibox::daemon` for request handling and state
+management across all platforms.
 
 ## Configuration
 
 Environment variables:
 
-- `MINIBOX_DATA_DIR` — Image/container storage (default: `~/.minibox/cache` or `/var/lib/minibox`)
-- `MINIBOX_RUN_DIR` — Socket/runtime dir (default: `/run/minibox`)
-- `MINIBOX_SOCKET_PATH` — Unix socket path
-- `MINIBOX_CGROUP_ROOT` — Cgroup root for containers
-- `MINIBOX_ADAPTER` — Adapter suite: `native`, `gke`, `colima`, `vz` (macOS, requires `--features vz`)
+- `MINIBOX_DATA_DIR` -- Image/container storage (default: `~/.minibox/cache` or `/var/lib/minibox`)
+- `MINIBOX_RUN_DIR` -- Socket/runtime dir (default: `/run/minibox`)
+- `MINIBOX_SOCKET_PATH` -- Unix socket path
+- `MINIBOX_CGROUP_ROOT` -- Cgroup root for containers
+- `MINIBOX_ADAPTER` -- Adapter suite: `native`, `gke`, `colima`, `vz` (macOS, requires `--features vz`)
 
 ## Logging
 

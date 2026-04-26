@@ -21,7 +21,7 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
-          cargo geiger -p minibox -p minibox-macros -p minibox-cli -p daemonbox 2>&1 | tee geiger-report.txt
+          cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
           # Extract unsafe counts and write to job summary
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"

@@ -27,7 +27,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 ///
 /// # Proxy vs Server Design
 ///
-/// This differs from `daemonbox/server.rs::is_terminal_response()`. The server
+/// This differs from `minibox::daemon::server::is_terminal_response()`. The server
 /// treats `ContainerCreated` as non-terminal for ephemeral runs because it uses
 /// a channel (`tx`) to communicate with the handler. For non-ephemeral runs, the
 /// server drops `tx` after sending `ContainerCreated`, causing the handler loop

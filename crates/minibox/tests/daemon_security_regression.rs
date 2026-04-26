@@ -1,4 +1,4 @@
-//! Security regression tests for daemonbox.
+//! Security regression tests for the daemon handler.
 //!
 //! These tests pin the socket auth (SO_PEERCRED UID check) invariants so that
 //! any future refactor that weakens the gate is caught at compile time or in CI.

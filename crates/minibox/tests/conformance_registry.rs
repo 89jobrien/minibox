@@ -1,6 +1,6 @@
 //! Conformance tests for the `ImageRegistry` trait contract.
 //!
-//! All tests use `MockRegistry` from `minibox-testers` — no network calls are made.
+//! All tests use `MockRegistry` from `minibox::testing` — no network calls are made.
 //! Each test creates a fresh mock to avoid shared state.
 
 use minibox_core::domain::ImageRegistry;

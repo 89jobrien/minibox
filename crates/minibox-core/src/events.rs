@@ -1,7 +1,7 @@
 //! Container lifecycle event types and pub/sub ports.
 //!
 //! `EventSink` is the write port — handlers call `emit()`.
-//! `EventSource` is the read port — dashbox and CLI subscribe.
+//! `EventSource` is the read port — consumers (CLI, dashboards) subscribe.
 //! `BroadcastEventBroker` is the single adapter implementing both ports.
 
 use serde::{Deserialize, Serialize};

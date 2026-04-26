@@ -39,9 +39,9 @@ jobs:
         run: |
           FAIL=0
           for ADAPTER in native gke colima; do
-            FILES=$(ls crates/linuxbox/tests/*${ADAPTER}* 2>/dev/null | wc -l)
+            FILES=$(ls crates/minibox/tests/*${ADAPTER}* 2>/dev/null | wc -l)
             if [ "$FILES" -eq 0 ]; then
-              echo "ERROR: No integration test file for adapter '${ADAPTER}' in crates/linuxbox/tests/"
+              echo "ERROR: No integration test file for adapter '${ADAPTER}' in crates/minibox/tests/"
               FAIL=1
             else
               echo "OK: adapter '${ADAPTER}' has ${FILES} integration test file(s)."
@@ -62,7 +62,7 @@ jobs:
             --include='*.rs' \
             crates/ \
             --exclude-dir=xtask \
-            --exclude-dir=minibox-testers \
+            --exclude-dir=testing \
             | grep -v '/tests/' \
             | grep -v '/examples/' \
             | grep -v '/benches/' \
@@ -115,9 +115,7 @@ jobs:
         run: |
           cargo clippy \
             -p minibox-core \
-            -p linuxbox \
-            -p daemonbox \
-            -p minibox-client \
+            -p minibox \
             -p macbox \
             -p winbox \
             -- -D warnings

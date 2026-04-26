@@ -11,7 +11,7 @@
 use thiserror::Error;
 
 // ---------------------------------------------------------------------------
-// Image errors (absorbed from minibox-oci)
+// Image errors
 // ---------------------------------------------------------------------------
 
 /// Errors from image layer extraction and the image store.
@@ -72,7 +72,7 @@ pub enum ImageError {
 }
 
 // ---------------------------------------------------------------------------
-// Registry errors (absorbed from minibox-oci)
+// Registry errors
 // ---------------------------------------------------------------------------
 
 /// Errors from the OCI registry client.

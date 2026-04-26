@@ -1096,7 +1096,7 @@ async fn run_inner(
 /// Wait for a process to exit and return its exit code.
 ///
 /// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `linuxbox::container::process::wait_for_exit` variant is only
+/// The `minibox::container::process::wait_for_exit` variant is only
 /// available on Linux (the `container` module is gated
 /// `#[cfg(target_os = "linux")]`). This local version provides the same
 /// functionality for the macOS streaming path.
@@ -1156,7 +1156,7 @@ fn check_oom_killed_sync(cgroup_path: &std::path::Path) -> bool {
 ///
 /// After the process exits:
 /// 1. Any post-exit hooks registered on the container are executed
-///    (Linux only, via `linuxbox::container::process::run_hooks`).
+///    (Linux only, via `minibox::container::process::run_hooks`).
 /// 2. The container state is updated to `"Stopped"` in `DaemonState`.
 ///    Because this runs in a blocking thread, the state update bridges back
 ///    to the async runtime via `Handle::try_current` or a one-shot runtime.

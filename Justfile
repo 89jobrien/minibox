@@ -18,13 +18,13 @@ fmt-check:
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -- -D warnings
+    cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox -p minibox-bench
+    cargo build --release -p minibox -p minibox-macros -p mbx -p miniboxd
 
 build:
     cargo build --release
@@ -42,7 +42,7 @@ build-linux:
     rustup target add "$MUSL_TARGET"
     RUSTFLAGS="-C target-feature=+crt-static" \
         cargo build --release --target "$MUSL_TARGET" \
-        -p miniboxd -p minibox-cli
+        -p miniboxd -p mbx
 
 # ── Gates ────────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ prepush:
 # fmt-check + lint + test-unit
 ci:
     cargo fmt --all --check
-    cargo clippy -p minibox -p minibox-macros -p minibox-cli -p daemonbox -- -D warnings
+    cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
     just test-unit
 
 # ── Testing ──────────────────────────────────────────────────────────────────
@@ -69,15 +69,15 @@ test-unit:
 # Adapter isolation tests (any platform)
 test-adapters:
     cargo test -p minibox --test adapter_colima_tests
-    cargo test -p daemonbox --test handler_adapter_swap_tests
+    cargo test -p minibox --test handler_adapter_swap_tests
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox -p minibox-macros -p minibox-cli -p daemonbox
+    cargo nextest run --release -p minibox -p minibox-macros -p mbx -p miniboxd
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p minibox -p minibox-macros -p minibox-cli -p daemonbox --html
+    cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p miniboxd --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
@@ -93,9 +93,9 @@ test-vz-isolation:
 
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
-    cargo build -p minibox-cli
+    cargo build -p mbx
     MINIBOX_TEST_BIN_DIR={{justfile_directory()}}/target/debug \
-        cargo test -p minibox-cli --features subprocess-tests --test cli_subprocess
+        cargo test -p mbx --features subprocess-tests --test cli_subprocess
 
 # Cgroup integration tests (Linux, root)
 test-integration:
@@ -136,9 +136,9 @@ test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-s
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
-# Launch dashbox TUI dashboard
-dash:
-    cargo run -p dashbox --release
+# Launch TUI dashboard (removed — dashbox was extracted)
+# dash:
+#     cargo run -p dashbox --release
 
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
@@ -207,7 +207,7 @@ trace:
         [[ "$(id -u)" -eq 0 ]] || { echo "error: sudo just trace"; exit 1; }
 
         echo "trace: building native release binary..."
-        cargo build --release -p miniboxd -p minibox-cli
+        cargo build --release -p miniboxd -p mbx
 
         echo "trace: recording to $TRACE_DIR ..."
         uftrace record -P . --no-libcall -d "$TRACE_DIR" ./target/release/miniboxd &

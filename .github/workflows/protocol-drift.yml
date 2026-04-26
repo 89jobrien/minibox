@@ -5,14 +5,14 @@ on:
     branches: [main, next, stable, "feature/*", "hotfix/*"]
     paths:
       - 'crates/minibox-core/src/protocol.rs'
-      - 'crates/daemonbox/src/handler.rs'
-      - 'crates/daemonbox/src/server.rs'
+      - 'crates/minibox/src/daemon/handler.rs'
+      - 'crates/minibox/src/daemon/server.rs'
   pull_request:
     branches: [main, next]
     paths:
       - 'crates/minibox-core/src/protocol.rs'
-      - 'crates/daemonbox/src/handler.rs'
-      - 'crates/daemonbox/src/server.rs'
+      - 'crates/minibox/src/daemon/handler.rs'
+      - 'crates/minibox/src/daemon/server.rs'
 
 jobs:
   protocol-drift:
@@ -38,7 +38,7 @@ jobs:
       - name: check handler covers all request variants
         run: |
           UNHANDLED=$(grep -oP 'DaemonRequest::\K\w+' crates/minibox-core/src/protocol.rs | sort -u | while read V; do
-            if ! grep -q "DaemonRequest::${V}" crates/daemonbox/src/handler.rs crates/daemonbox/src/server.rs 2>/dev/null; then
+            if ! grep -q "DaemonRequest::${V}" crates/minibox/src/daemon/handler.rs crates/minibox/src/daemon/server.rs 2>/dev/null; then
               echo "$V"
             fi
           done)

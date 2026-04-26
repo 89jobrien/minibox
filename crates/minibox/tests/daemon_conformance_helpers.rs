@@ -1,4 +1,4 @@
-//! Shared helpers for daemonbox conformance tests.
+//! Shared helpers for daemon conformance tests.
 //!
 //! This module defines [`TestBackendDescriptor`], which describes a concrete
 //! handler-level backend under conformance test with boolean capability flags.
@@ -44,7 +44,7 @@ use tempfile::TempDir;
 // TestBackendDescriptor
 // ---------------------------------------------------------------------------
 
-/// Describes a daemonbox handler-level backend under conformance test.
+/// Describes a daemon handler-level backend under conformance test.
 ///
 /// Boolean capability flags control which conformance tests are exercised.
 /// Tests must check the relevant flag and return early when it is `false`

@@ -1,26 +1,18 @@
 # minibox
 
-Re-export facade crate for the minibox container runtime.
+Linux-only container primitives for the Minibox container runtime.
 
-Re-exports the public surface of `linuxbox` and `minibox-core` under the `minibox` crate name
-so that consumers (integration tests, `daemonbox`, `miniboxd`) can depend on a single,
-stable import path that survives internal renames.
+Contains the core container infrastructure: Linux namespace setup, cgroups v2,
+overlay filesystem, daemon handler/server/state, and platform adapters. Also
+re-exports `minibox-core` domain traits and protocol types.
 
-## What lives here
+## Key modules
 
-| Upstream crate   | What is re-exported                                             |
-| ---------------- | --------------------------------------------------------------- |
-| `linuxbox`       | All public items (`pub use linuxbox::*`)                        |
-| `minibox-core`   | Domain traits and protocol types (via `linuxbox` re-exports)    |
-
-Direct code additions to this crate are intentionally kept to zero — the crate is a thin
-shim only.
-
-## Why this exists
-
-The Linux container primitives live in `linuxbox` so that `miniboxd` can conditionally
-compile them only on Linux while the `minibox` name remains stable for consumers. This
-indirection also makes future renames transparent to downstream crates.
+| Module         | Purpose                                                             |
+| -------------- | ------------------------------------------------------------------- |
+| `container/`   | Linux namespace setup, cgroups v2, overlay FS, process spawn        |
+| `adapters/`    | Concrete adapter implementations of domain traits                   |
+| `daemon/`      | Handler, state machine, Unix socket server                          |
 
 ## Usage
 
@@ -30,6 +22,6 @@ minibox = { path = "../minibox" }
 ```
 
 ```rust
-use linuxbox::domain::ContainerRuntime;
-use linuxbox::protocol::DaemonRequest;
+use minibox::domain::ContainerRuntime;
+use minibox::protocol::DaemonRequest;
 ```

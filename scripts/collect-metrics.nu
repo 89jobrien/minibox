@@ -102,7 +102,7 @@ def main [
         return
     }
 
-    let default_crates = ["minibox" "minibox-macros" "minibox-cli" "daemonbox"]
+    let default_crates = ["minibox" "minibox-macros" "mbx" "miniboxd"]
     let target_crates = if ($crates | is-not-empty) {
         $crates | split row ","
     } else {

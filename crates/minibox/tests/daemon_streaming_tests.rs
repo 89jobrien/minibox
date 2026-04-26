@@ -3,7 +3,7 @@
 //! These tests require Linux, root, and network access for image pulls.
 //! Run them with:
 //!
-//!   cargo test -p daemonbox --test streaming_tests -- --include-ignored --nocapture
+//!   cargo test -p minibox --test daemon_streaming_tests -- --include-ignored --nocapture
 
 /// Ephemeral `run` with `capture_output=true` must stream stdout via
 /// `ContainerOutput` messages and finish with `ContainerStopped`.

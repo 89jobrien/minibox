@@ -1,6 +1,6 @@
 //! Conformance tests for the `ResourceLimiter` trait contract.
 //!
-//! All tests use `MockLimiter` from `minibox-testers` — no kernel/cgroup interaction.
+//! All tests use `MockLimiter` from `minibox::testing` — no kernel/cgroup interaction.
 //! Each test creates a fresh mock to avoid shared state.
 
 use minibox_core::domain::{ResourceConfig, ResourceLimiter};

@@ -4,7 +4,7 @@
     {
       "name": "task",
       "type": "text",
-      "text": "You are the assistant for the minibox Rust workspace. minibox is a Docker-like container runtime written in Rust with a daemon/client architecture, OCI image pulling, Linux namespace isolation, cgroups v2, and overlay filesystem support.\n\nWorkspace layout:\n- crates/minibox        — Linux container primitives + adapters (namespaces, cgroups, overlay)\n- crates/minibox-core  — cross-platform shared types (protocol, domain traits, image, error, preflight)\n- crates/minibox-oci   — OCI image types and operations\n- crates/daemonbox     — handler, state, Unix socket server\n- crates/miniboxd      — async daemon entry point\n- crates/macbox        — macOS daemon (Colima + VZ + krun adapters)\n- crates/mbx           — CLI binary\n- crates/minibox-llm   — multi-provider LLM client\n- crates/tailbox       — Tailscale/tailnet adapter\n- crates/dockerbox     — Docker API shim over minibox protocol\n- crates/dashbox       — Ratatui TUI dashboard\n- crates/xtask         — dev tooling (pre-commit, prepush, test-unit, bench, conformance)\n\nKey conventions:\n- Rust 2024 edition — set_var/remove_var require unsafe {}\n- Pre-commit gate: cargo xtask pre-commit (fmt + clippy + release build, macOS-safe)\n- Pre-push gate: cargo xtask prepush (nextest + llvm-cov)\n- No .unwrap() in production — use .context()?\n- Path validation mandatory on all external input\n- Tracing: key = value structured fields only, never embed in message string\n- Architecture: hexagonal — domain traits in minibox-core, adapters in minibox/src/adapters/\n- Active branch: feat/tracing-init\n- P1 backlog: minibox-70 (handler coverage 80%), minibox-75 (krun adapters) — both closed\n- Current work: linuxbox crate absorbed into crates/minibox (complete as of 2026-04-24)\n\nWhen asked to help with a task in this repo:\n1. Identify what kind of task it is\n2. Summarize what needs to happen\n3. Decide if the pre-commit gate should run\n4. Flag any blocking issues\n5. State the single most important next action"
+      "text": "You are the assistant for the minibox Rust workspace. minibox is a Docker-like container runtime written in Rust with a daemon/client architecture, OCI image pulling, Linux namespace isolation, cgroups v2, and overlay filesystem support.\n\nWorkspace layout:\n- crates/minibox        — Linux container primitives, adapters, daemon handler/server/state\n- crates/minibox-core  — cross-platform shared types (protocol, domain traits, image, error, preflight)\n- crates/miniboxd      — async daemon entry point\n- crates/macbox        — macOS daemon (Colima + VZ + krun adapters)\n- crates/mbx           — CLI binary\n- crates/winbox        — Windows daemon stub\n- crates/minibox-macros — proc macros (as_any!, adapt!, default_new!)\n- crates/xtask         — dev tooling (pre-commit, prepush, test-unit, bench, conformance)\n\nKey conventions:\n- Rust 2024 edition — set_var/remove_var require unsafe {}\n- Pre-commit gate: cargo xtask pre-commit (fmt + clippy + release build, macOS-safe)\n- Pre-push gate: cargo xtask prepush (nextest + llvm-cov)\n- No .unwrap() in production — use .context()?\n- Path validation mandatory on all external input\n- Tracing: key = value structured fields only, never embed in message string\n- Architecture: hexagonal — domain traits in minibox-core, adapters in minibox/src/adapters/\n- Active branch: feat/tracing-init\n- P1 backlog: minibox-70 (handler coverage 80%), minibox-75 (krun adapters) — both closed\n- Current work: post-consolidation cleanup (#153 complete, #156 stale ref audit)\n\nWhen asked to help with a task in this repo:\n1. Identify what kind of task it is\n2. Summarize what needs to happen\n3. Decide if the pre-commit gate should run\n4. Flag any blocking issues\n5. State the single most important next action"
     }
   ],
   "agent_schema": {
@@ -47,13 +47,22 @@
     {
       "name": "run_pre_commit_gate",
       "logic": {
-        "==": [{ "var": "run_gate" }, true]
+        "==": [
+          {
+            "var": "run_gate"
+          },
+          true
+        ]
       },
       "run": [
         {
           "kind": "exec",
           "program": "/usr/bin/env",
-          "args": ["cargo", "xtask", "pre-commit"],
+          "args": [
+            "cargo",
+            "xtask",
+            "pre-commit"
+          ],
           "platform": "macos",
           "output_variable": "gate_output",
           "status_variable": "gate_status",
@@ -63,19 +72,36 @@
         {
           "kind": "exec",
           "when": {
-            "==": [{ "var": "gate_status" }, "failed"]
+            "==": [
+              {
+                "var": "gate_status"
+              },
+              "failed"
+            ]
           },
           "program": "/bin/echo",
-          "args": ["[minibox-assistant] pre-commit gate FAILED:", { "var": "gate_error" }],
+          "args": [
+            "[minibox-assistant] pre-commit gate FAILED:",
+            {
+              "var": "gate_error"
+            }
+          ],
           "platform": "macos"
         },
         {
           "kind": "exec",
           "when": {
-            "==": [{ "var": "gate_status" }, "succeeded"]
+            "==": [
+              {
+                "var": "gate_status"
+              },
+              "succeeded"
+            ]
           },
           "program": "/bin/echo",
-          "args": ["[minibox-assistant] pre-commit gate passed."],
+          "args": [
+            "[minibox-assistant] pre-commit gate passed."
+          ],
           "platform": "macos"
         }
       ]
@@ -83,7 +109,12 @@
     {
       "name": "report_blocking_issues",
       "logic": {
-        "==": [{ "var": "has_blocking_issues" }, true]
+        "==": [
+          {
+            "var": "has_blocking_issues"
+          },
+          true
+        ]
       },
       "run": [
         {
@@ -91,7 +122,9 @@
           "program": "/bin/echo",
           "args": [
             "[minibox-assistant] BLOCKING:",
-            { "var": "summary" }
+            {
+              "var": "summary"
+            }
           ],
           "platform": "macos"
         }
@@ -100,7 +133,12 @@
     {
       "name": "emit_next_action",
       "logic": {
-        "!=": [{ "var": "next_action" }, ""]
+        "!=": [
+          {
+            "var": "next_action"
+          },
+          ""
+        ]
       },
       "run": [
         {
@@ -108,7 +146,9 @@
           "program": "/bin/echo",
           "args": [
             "[minibox-assistant] Next:",
-            { "var": "next_action" }
+            {
+              "var": "next_action"
+            }
           ],
           "platform": "macos"
         }

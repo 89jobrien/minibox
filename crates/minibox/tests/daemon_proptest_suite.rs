@@ -1,4 +1,4 @@
-//! Property-based tests for daemonbox state invariants and handler input safety.
+//! Property-based tests for daemon state invariants and handler input safety.
 
 use std::path::Path;
 use std::sync::{Arc, OnceLock};

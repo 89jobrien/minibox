@@ -24,11 +24,8 @@ jobs:
         run: |
           cargo publish -p minibox-macros
           sleep 30
-          cargo publish -p minibox-oci
-          sleep 30
           cargo publish -p minibox-core
           sleep 30
-          cargo publish -p minibox-client
 
   build:
     name: Build ${{ matrix.target }}

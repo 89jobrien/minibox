@@ -1,6 +1,6 @@
 //! Conformance tests for the `ContainerRuntime` trait contract.
 //!
-//! All tests use `MockRuntime` from `minibox-testers` — no syscalls are made.
+//! All tests use `MockRuntime` from `minibox::testing` — no syscalls are made.
 //! Each test creates a fresh mock to avoid shared state.
 
 use minibox_core::domain::{ContainerRuntime, ContainerSpawnConfig};

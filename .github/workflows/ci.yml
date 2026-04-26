@@ -21,7 +21,7 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy
-        run: cargo clippy -p linuxbox -p minibox-macros -p mbx -p daemonbox -p macbox -p miniboxd -p minibox-core -p minibox-oci -p minibox-client -p minibox-testers -p winbox -- -D warnings
+        run: cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
 
   test-all-features:
     name: test with all features
@@ -109,7 +109,7 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
-          cargo geiger -p linuxbox -p minibox-macros -p mbx -p daemonbox 2>&1 | tee geiger-report.txt
+          cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"

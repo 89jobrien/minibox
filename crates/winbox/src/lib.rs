@@ -47,7 +47,7 @@ pub enum WinboxError {
 /// Phase 2 work needed before this can function:
 /// - Create a Named Pipe listener at [`paths::pipe_name`].
 /// - Select the appropriate adapter (HCS or WSL2) based on [`preflight`] output.
-/// - Run the `daemonbox::server::run_server` accept loop over the Named Pipe.
+/// - Run the `minibox::daemon::server::run_server` accept loop over the Named Pipe.
 pub async fn start() -> Result<()> {
     info!("miniboxd (Windows) starting");
     // Phase 1 stub — full implementation in Phase 2

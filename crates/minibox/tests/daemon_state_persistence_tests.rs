@@ -471,7 +471,7 @@ async fn test_container_state_is_domain_type() {
         .add_container(make_record(id, "Running", Some(99)))
         .await;
 
-    // This must compile: DomainState passed where daemonbox ContainerState expected.
+    // This must compile: DomainState passed where daemon ContainerState expected.
     state
         .update_container_state(id, DomainState::Paused)
         .await
