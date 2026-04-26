@@ -13,7 +13,7 @@ use minibox::adapters::{NoopLimiter, NoopNetwork};
 use minibox_core::domain::{
     ContainerRuntime, ImageRegistry, NetworkConfig, NetworkProvider, ResourceLimiter,
 };
-use minibox_testers::mocks::{MockRegistry, MockRuntime};
+use minibox::testing::mocks::{MockRegistry, MockRuntime};
 use std::any::Any;
 use std::sync::Arc;
 

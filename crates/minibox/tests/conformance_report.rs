@@ -22,7 +22,7 @@
 //! - `CONFORMANCE_PUSH_REGISTRY` — when set, tier-2 push tests were active;
 //!   reflected in the matrix as `Pass` rather than `Skip`.
 
-use minibox_testers::report::{
+use minibox::testing::report::{
     ConformanceMatrixResult, ConformanceOutcome, ConformanceRow, write_conformance_reports,
 };
 use std::path::PathBuf;

@@ -8,8 +8,6 @@ use minibox::adapters::mocks::{
 };
 use minibox::daemon::handler::{HandlerDependencies, handle_list, handle_remove, handle_stop};
 use minibox::daemon::state::{ContainerRecord, DaemonState};
-use minibox_core::adapters::HostnameRegistryRouter;
-use minibox_core::domain::DynImageRegistry;
 use minibox_core::{image::ImageStore, protocol::ContainerInfo, protocol::DaemonResponse};
 use proptest::prelude::*;
 

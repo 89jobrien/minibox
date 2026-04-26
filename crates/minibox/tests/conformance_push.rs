@@ -21,8 +21,8 @@ use minibox_core::domain::{BackendCapability, DynImagePusher, RegistryCredential
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use minibox_core::image::registry::RegistryClient;
-use minibox_testers::backend::BackendDescriptor;
-use minibox_testers::fixtures::{LocalPushTargetFixture, WritableUpperDirFixture};
+use minibox::testing::backend::BackendDescriptor;
+use minibox::testing::fixtures::{LocalPushTargetFixture, WritableUpperDirFixture};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------

@@ -8,11 +8,20 @@
 //!   223      update_container_state: container not found (no-op)
 //!   231      update_container_state: Stopped → clears pid fields
 
-use minibox::daemon::state::{ContainerRecord, ContainerState, DaemonState};
+use minibox::daemon::state::{ContainerRecord, ContainerState, DaemonState, ProcessChecker};
 use minibox_core::image::ImageStore;
 use minibox_core::protocol::ContainerInfo;
 use std::path::PathBuf;
 use tempfile::TempDir;
+
+/// A process checker that always reports processes as dead.
+struct DeadProcessChecker;
+
+impl ProcessChecker for DeadProcessChecker {
+    fn is_alive(&self, _pid: u32) -> bool {
+        false
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,7 +86,8 @@ fn write_state_json(dir: &TempDir, id: &str, state: &str, pid: Option<u32>) {
 // load_from_disk — stale container recovery (lines 104–118)
 // ---------------------------------------------------------------------------
 
-/// A container persisted as "Running" must be loaded as "Stopped" with no pid.
+/// A container persisted as "Running" must be marked "Orphaned" after reconciliation
+/// when the process is no longer alive.
 #[tokio::test]
 async fn test_load_from_disk_marks_stale_running_as_stopped() {
     let tmp = TempDir::new().unwrap();
@@ -85,14 +95,15 @@ async fn test_load_from_disk_marks_stale_running_as_stopped() {
 
     let state = make_state(&tmp);
     state.load_from_disk().await;
+    state.reconcile_on_startup(&DeadProcessChecker).await;
 
     let containers = state.list_containers().await;
     assert_eq!(containers.len(), 1, "expected one container to be loaded");
 
     let c = &containers[0];
     assert_eq!(
-        c.state, "Stopped",
-        "stale Running container must be marked Stopped"
+        c.state, "Orphaned",
+        "stale Running container must be marked Orphaned after reconciliation"
     );
     assert_eq!(c.pid, None, "stale Running container must have pid cleared");
 }
@@ -137,6 +148,7 @@ async fn test_load_from_disk_preserves_already_stopped() {
 }
 
 /// Multiple containers with mixed states: Running and Created become Stopped,
+/// After load + reconciliation: Created→Stopped, Running→Orphaned,
 /// already-Stopped containers are unchanged.
 #[tokio::test]
 async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
@@ -164,15 +176,25 @@ async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
 
     let state = make_state(&tmp);
     state.load_from_disk().await;
+    state.reconcile_on_startup(&DeadProcessChecker).await;
 
     let containers = state.list_containers().await;
     assert_eq!(containers.len(), 3);
 
+    let expected: std::collections::HashMap<&str, &str> = [
+        ("run-1", "Orphaned"),
+        ("cre-1", "Stopped"),
+        ("stp-1", "Stopped"),
+    ]
+    .into_iter()
+    .collect();
+
     for c in &containers {
+        let want = expected.get(c.id.as_str()).unwrap_or(&"Stopped");
         assert_eq!(
-            c.state, "Stopped",
-            "container {} should be Stopped after load, got {}",
-            c.id, c.state
+            c.state, *want,
+            "container {} should be {} after reconciliation, got {}",
+            c.id, want, c.state
         );
         assert_eq!(
             c.pid, None,

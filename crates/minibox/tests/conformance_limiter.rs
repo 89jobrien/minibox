@@ -4,7 +4,7 @@
 //! Each test creates a fresh mock to avoid shared state.
 
 use minibox_core::domain::{ResourceConfig, ResourceLimiter};
-use minibox_testers::mocks::limiter::MockLimiter;
+use minibox::testing::mocks::limiter::MockLimiter;
 
 // ---------------------------------------------------------------------------
 // Helpers

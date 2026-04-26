@@ -34,5 +34,4 @@ pub use minibox_core::protocol;
 pub use minibox_core::image::reference::{ImageRef, ImageRefError};
 pub use minibox_core::require_capability;
 
-#[cfg(feature = "test-utils")]
 pub mod testing;

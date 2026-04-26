@@ -11,8 +11,6 @@ use minibox::adapters::mocks::{
 };
 use minibox::daemon::handler::{self, HandlerDependencies};
 use minibox::daemon::state::DaemonState;
-use minibox_core::adapters::HostnameRegistryRouter;
-use minibox_core::domain::{DynImageRegistry, DynNetworkProvider};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;

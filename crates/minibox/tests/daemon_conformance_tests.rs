@@ -15,12 +15,12 @@ use minibox_core::domain::{
     NetworkConfig, NetworkMode, NetworkProvider, ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::protocol::DaemonResponse;
-use minibox_testers::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::testing::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use minibox_testers::helpers::NoopImageGc;
+use minibox::testing::helpers::NoopImageGc;
 
 /// Helper that wraps `handle_run` with a channel, returning the first response.
 #[allow(clippy::too_many_arguments)]
@@ -630,8 +630,8 @@ mod performance_conformance {
 #[cfg(test)]
 mod commit_conformance {
     use minibox_core::domain::{BackendCapability, CommitConfig, ContainerId};
-    use minibox_testers::backend::BackendDescriptor;
-    use minibox_testers::mocks::MockContainerCommitter;
+    use minibox::testing::backend::BackendDescriptor;
+    use minibox::testing::mocks::MockContainerCommitter;
     use std::sync::Arc;
 
     fn mock_backend() -> BackendDescriptor {
@@ -746,9 +746,9 @@ mod commit_conformance {
 #[cfg(test)]
 mod build_conformance {
     use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext};
-    use minibox_testers::backend::BackendDescriptor;
-    use minibox_testers::fixtures::BuildContextFixture;
-    use minibox_testers::mocks::MockImageBuilder;
+    use minibox::testing::backend::BackendDescriptor;
+    use minibox::testing::fixtures::BuildContextFixture;
+    use minibox::testing::mocks::MockImageBuilder;
     use std::sync::Arc;
     use tokio::sync::mpsc;
 
@@ -1028,9 +1028,9 @@ mod lifecycle_conformance {
 mod push_conformance {
     use minibox_core::domain::{BackendCapability, RegistryCredentials};
     use minibox_core::image::reference::ImageRef;
-    use minibox_testers::backend::BackendDescriptor;
-    use minibox_testers::fixtures::LocalPushTargetFixture;
-    use minibox_testers::mocks::MockImagePusher;
+    use minibox::testing::backend::BackendDescriptor;
+    use minibox::testing::fixtures::LocalPushTargetFixture;
+    use minibox::testing::mocks::MockImagePusher;
     use std::sync::Arc;
 
     fn mock_backend() -> (BackendDescriptor, Arc<MockImagePusher>) {
@@ -1296,8 +1296,8 @@ mod resource_limit_conformance {
 
 mod gc_conformance {
     use minibox_core::image::gc::ImageGarbageCollector;
-    use minibox_testers::capability::{GcCapability, should_skip};
-    use minibox_testers::helpers::NoopImageGc;
+    use minibox::testing::capability::{GcCapability, should_skip};
+    use minibox::testing::helpers::NoopImageGc;
 
     /// NoopImageGc never prunes anything — prune returns Ok(PruneReport) with 0 freed.
     #[tokio::test]
@@ -1546,7 +1546,7 @@ mod krun_suite {
     use minibox_core::domain::DynImageRegistry;
     use minibox_core::image::ImageStore;
     use minibox_core::protocol::DaemonResponse;
-    use minibox_testers::helpers::NoopImageGc;
+    use minibox::testing::helpers::NoopImageGc;
     use std::sync::Arc;
     use tempfile::TempDir;
 

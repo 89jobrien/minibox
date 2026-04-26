@@ -31,7 +31,7 @@
 
 use crate::adapt;
 use crate::domain::{
-    ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageMetadata, ImageRegistry,
+    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry,
     LayerInfo, NetworkConfig, NetworkProvider, NetworkStats, ResourceConfig, ResourceLimiter,
     RootfsLayout, RuntimeCapabilities, SpawnResult,
 };

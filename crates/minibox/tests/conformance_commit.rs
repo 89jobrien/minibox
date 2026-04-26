@@ -24,8 +24,8 @@ use minibox_core::domain::{
     ImageMetadata,
 };
 use minibox_core::image::ImageStore;
-use minibox_testers::backend::BackendDescriptor;
-use minibox_testers::fixtures::WritableUpperDirFixture;
+use minibox::testing::backend::BackendDescriptor;
+use minibox::testing::fixtures::WritableUpperDirFixture;
 use std::path::PathBuf;
 use std::sync::Arc;
 

@@ -5,7 +5,7 @@
 
 use minibox_core::domain::ImageRegistry;
 use minibox_core::image::reference::ImageRef;
-use minibox_testers::mocks::registry::MockRegistry;
+use minibox::testing::mocks::registry::MockRegistry;
 
 // ---------------------------------------------------------------------------
 // Helpers

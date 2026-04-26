@@ -4,7 +4,7 @@
 //! Each test creates a fresh mock to avoid shared state.
 
 use minibox_core::domain::{ContainerRuntime, ContainerSpawnConfig};
-use minibox_testers::mocks::runtime::MockRuntime;
+use minibox::testing::mocks::runtime::MockRuntime;
 
 // ---------------------------------------------------------------------------
 // Helpers
