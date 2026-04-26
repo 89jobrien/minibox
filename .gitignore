@@ -76,6 +76,7 @@ repro.rs
 /bench/profiles/
 *.profraw
 *.profdata
+*.crate
 
 # IDE / Editor
 .vscode/
