@@ -3,6 +3,7 @@ name = "macbox"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [features]
 vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]

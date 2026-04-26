@@ -13,7 +13,6 @@ members = [
     "crates/minibox-client",
     "crates/xtask",
     "crates/minibox-testers",
-    "crates/minibox-llm",
 ]
 
 [workspace.package]
@@ -91,4 +90,3 @@ serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
 
 minibox-testers = { path = "crates/minibox-testers" }
-minibox-llm = { path = "crates/minibox-llm", version = "0.21.0" }
