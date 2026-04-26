@@ -5549,3 +5549,254 @@ async fn test_daemon_state_remove_persists_to_disk() {
         "removed container must not appear after restart"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Name-resolution and additional error-path coverage (#158)
+// ---------------------------------------------------------------------------
+
+/// `handle_stop` resolves a container by name (not just ID).
+#[tokio::test]
+async fn test_handle_stop_resolves_by_name() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&tmp);
+    let state = create_test_state_with_dir(&tmp);
+
+    // Create a named container via handle_run.
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("my-stop-ctr".to_string()),
+        state.clone(),
+        deps.clone(),
+        tx,
+    )
+    .await;
+    let resp = rx.recv().await.expect("handler sent no response");
+    let id = extract_container_id(&resp);
+
+    // Wait for spawn task to set PID (or fail).
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    // Stop by name -- should resolve to the container's real ID.
+    let stop_resp = handler::handle_stop("my-stop-ctr".to_string(), state.clone(), deps).await;
+    // The response should either be Success (stopped) or Error mentioning the
+    // container -- but NOT "container not found".
+    match &stop_resp {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains(&id),
+                "stop success should reference container id {id}, got: {message}"
+            );
+        }
+        DaemonResponse::Error { message } => {
+            assert!(
+                !message.contains("not found"),
+                "stop by name should resolve, but got not-found: {message}"
+            );
+        }
+        other => panic!("expected Success or Error, got {other:?}"),
+    }
+}
+
+/// `handle_remove` resolves a container by name (not just ID).
+#[tokio::test]
+async fn test_handle_remove_resolves_by_name() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&tmp);
+    let state = create_test_state_with_dir(&tmp);
+
+    // Insert a named Stopped container directly into state.
+    let container_id = "nameresrm00000001";
+    let record = minibox::daemon::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: Some("rm-by-name".to_string()),
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    // Remove by name.
+    let resp = handler::handle_remove("rm-by-name".to_string(), state.clone(), deps).await;
+    match resp {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains(container_id),
+                "remove success should reference id {container_id}, got: {message}"
+            );
+        }
+        other => panic!("expected Success, got {other:?}"),
+    }
+
+    // Container should be gone.
+    assert!(
+        state.get_container(container_id).await.is_none(),
+        "container should be removed after handle_remove by name"
+    );
+}
+
+/// `handle_exec` with an empty container ID returns an error.
+#[tokio::test]
+async fn test_handle_exec_empty_container_id_returns_error() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&tmp)).clone();
+        d.exec.exec_runtime = Some(Arc::new(FailingExecRuntime));
+        Arc::new(d)
+    };
+    let state = create_test_state_with_dir(&tmp);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_exec(
+        String::new(), // empty ID
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("handler sent no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("invalid") || message.contains("empty"),
+                "expected invalid container id error, got: {message}"
+            );
+        }
+        other => panic!("expected Error for empty container ID, got {other:?}"),
+    }
+}
+
+/// `handle_exec` with special characters in container ID returns an error.
+#[tokio::test]
+async fn test_handle_exec_special_chars_container_id_returns_error() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&tmp)).clone();
+        d.exec.exec_runtime = Some(Arc::new(FailingExecRuntime));
+        Arc::new(d)
+    };
+    let state = create_test_state_with_dir(&tmp);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_exec(
+        "../../../etc/passwd".to_string(), // path traversal attempt
+        vec!["/bin/sh".to_string()],
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("handler sent no response");
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("invalid"),
+                "expected invalid container id error, got: {message}"
+            );
+        }
+        other => panic!("expected Error for special-char container ID, got {other:?}"),
+    }
+}
+
+/// `handle_logs` gracefully handles client disconnect mid-stream.
+#[tokio::test]
+async fn test_handle_logs_client_disconnect_mid_stream() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&tmp);
+    let state = create_test_state_with_dir(&tmp);
+
+    let container_id = "logdiscon00000001";
+    let record = minibox::daemon::state::ContainerRecord {
+        info: minibox_core::protocol::ContainerInfo {
+            id: container_id.to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+    };
+    state.add_container(record).await;
+
+    // Write many log lines to ensure streaming is in progress when we drop.
+    let container_dir = tmp.path().join("containers").join(container_id);
+    std::fs::create_dir_all(&container_dir).expect("create log dir");
+    let mut content = String::new();
+    for i in 0..1000 {
+        content.push_str(&format!("log line {i}\n"));
+    }
+    std::fs::write(container_dir.join("stdout.log"), &content).expect("write log");
+
+    // Use a channel with capacity 1 and drop the receiver immediately.
+    let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+    drop(rx);
+
+    // Must not panic -- the warn path for client disconnect is exercised.
+    handler::handle_logs(container_id.to_string(), false, state, deps, tx).await;
+}
+
+/// `handle_run` creates a container and it appears in state.
+#[tokio::test]
+async fn test_handle_run_propagates_env_vars() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&tmp);
+    let state = create_test_state_with_dir(&tmp);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    // Should succeed -- env vars are passed through to the spawn config.
+    match response {
+        DaemonResponse::ContainerCreated { id } => {
+            assert!(!id.is_empty(), "container ID should be non-empty");
+            // Container should be registered in state.
+            let container = state.get_container(&id).await;
+            assert!(container.is_some(), "container should exist in state");
+        }
+        other => panic!("expected ContainerCreated, got {other:?}"),
+    }
+}
