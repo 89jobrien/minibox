@@ -2484,6 +2484,8 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "slashcrux"
 version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53c5c18ad999666226f0993c05472106274a24dd1ade4e19eefa11d8e5064a2"
 dependencies = [
  "indexmap",
  "serde",

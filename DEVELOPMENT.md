@@ -8,17 +8,17 @@ details and `TESTING.md` for the full test strategy.
 - Rust stable (edition 2024)
 - [cargo-nextest](https://nexte.st/) for test filtering
 - [just](https://github.com/casey/just) for convenience recipes
+- [uv](https://docs.astral.sh/uv/) for Python script dependencies
 - Linux + root for integration/e2e tests (unit tests run on macOS)
 
 ## Runner Hierarchy
 
-Minibox has three task runners. They are complementary, not competing:
+Minibox has two task runners. They are complementary, not competing:
 
-| Runner   | Role                              | When to use                    |
-| -------- | --------------------------------- | ------------------------------ |
-| `xtask`  | CI gates, canonical test suites   | Always for CI-critical paths   |
-| `just`   | Wraps xtask + convenience recipes | Day-to-day development         |
-| `mise`   | Interactive/ops tasks             | Demos, VPS ops, git helpers    |
+| Runner  | Role                              | When to use                  |
+| ------- | --------------------------------- | ---------------------------- |
+| `xtask` | CI gates, canonical test suites   | Always for CI-critical paths |
+| `just`  | Wraps xtask + convenience recipes | Day-to-day development       |
 
 **Rule of thumb:** if a GitHub Actions workflow calls it, the source of truth
 is `cargo xtask <command>`. `just` recipes delegate to xtask where possible.
@@ -57,9 +57,21 @@ sudo ./target/release/miniboxd
 sudo ./target/release/mbx pull alpine
 sudo ./target/release/mbx run alpine -- /bin/echo "Hello"
 sudo ./target/release/mbx ps
+sudo ./target/release/mbx stop <container_id>
+sudo ./target/release/mbx rm <container_id>
 ```
 
 Set `RUST_LOG=debug` for verbose tracing output.
+
+## Building
+
+```bash
+cargo build --release                # all crates
+just build-release                   # optimised (macOS-safe)
+just build-linux                     # static musl binary (auto-detects arch)
+cargo xtask build-vm-image           # Alpine VM image for macOS VZ tests
+cargo xtask build-vm-image --force   # force re-download + recompile
+```
 
 ## Testing
 
@@ -81,12 +93,29 @@ just test-integration        # cgroup tests + native adapter isolation
 ```bash
 just test-e2e                # single lifecycle test
 just test-e2e-suite          # full daemon+CLI e2e suite
+just test-e2e-vps            # run e2e suite on VPS via SSH
 ```
 
 ### Property-based tests (any platform)
 
 ```bash
 cargo xtask test-property
+```
+
+### Adapter and CLI tests (any platform)
+
+```bash
+just test-adapters           # Colima + handler adapter swap tests
+just test-cli-subprocess     # CLI subprocess integration tests
+just test-vz-isolation       # macOS VZ isolation (requires VM image)
+```
+
+### VM tests
+
+```bash
+just run-vm                  # boot Alpine VM with interactive shell (QEMU HVF)
+just test-vm                 # cross-compile + run tests inside QEMU VM
+just test-linux              # dogfood: build image + run tests in container
 ```
 
 ### Coverage
@@ -101,6 +130,23 @@ just coverage                # HTML report at target/llvm-cov/html/
 just doctor                  # reports kernel features, cgroups, overlay support
 ```
 
+### Full pipeline
+
+```bash
+just test-all                # nuke state -> doctor -> unit + integration + e2e -> nuke
+```
+
+## Benchmarks
+
+```bash
+cargo xtask bench                          # run locally, save to bench/results/
+cargo xtask bench-vps                      # run on VPS, fetch results
+cargo xtask bench-vps --commit --push      # ... and commit + push
+just bench-sync                            # sync VPS results to local jsonl
+just flamegraph [suite]                    # profile with samply/flamegraph
+just bench-agent report                    # AI bench analysis
+```
+
 ## CI Gates
 
 Local validation should match CI. The two commands that matter:
@@ -113,18 +159,29 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the same xtask commands plus
 
 ## Environment Variables
 
-| Variable              | Purpose                                    | Default                          |
-| --------------------- | ------------------------------------------ | -------------------------------- |
-| `MINIBOX_ADAPTER`     | Adapter suite: native, gke, colima, vz     | `native`                         |
-| `MINIBOX_DATA_DIR`    | Image/container storage                    | `/var/lib/minibox` (root)        |
-| `MINIBOX_RUN_DIR`     | Socket/runtime directory                   | `/run/minibox`                   |
-| `MINIBOX_SOCKET_PATH` | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
-| `MINIBOX_CGROUP_ROOT` | Cgroup root for containers                 | systemd slice path               |
-| `RUST_LOG`            | Tracing verbosity (debug, info, warn, etc) | unset                            |
+| Variable               | Purpose                                    | Default                          |
+| ---------------------- | ------------------------------------------ | -------------------------------- |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, vz     | `native`                         |
+| `MINIBOX_DATA_DIR`     | Image/container storage                    | `/var/lib/minibox` (root)        |
+| `MINIBOX_RUN_DIR`      | Socket/runtime directory                   | `/run/minibox`                   |
+| `MINIBOX_SOCKET_PATH`  | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
+| `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                 | systemd slice path               |
+| `MINIBOX_NETWORK_MODE` | Network mode: none, bridge                 | `none`                           |
+| `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc) | unset                            |
+
+## Cleanup
+
+```bash
+just clean-artifacts         # remove non-critical build outputs
+just clean-test              # remove test binaries
+just clean-stale [days]      # remove files older than N days (default: 7)
+cargo xtask nuke-test-state  # kill orphans, unmount overlays, clean cgroups
+```
 
 ## scripts/ Directory
 
 The `scripts/` directory contains AI agent tooling (council analysis,
 AI-assisted code review, test generation) and operational helpers (VM setup,
 daemon start, cgroup test harness). These are **not** part of the core
-build/test pipeline. See `just --list` for recipes that wrap them.
+build/test pipeline. All Python scripts use `uv run` with PEP 723 inline
+deps. See `just --list` for recipes that wrap them.

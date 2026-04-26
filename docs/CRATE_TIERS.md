@@ -4,7 +4,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-04-26
+Last updated: 2026-04-27
 
 ---
 
@@ -69,14 +69,10 @@ the domain traits from `minibox-core` for its target platform.
 Unstable crates. APIs may change or crates may be merged, split, or removed. Do not
 take a public dependency on these crates from outside the workspace.
 
-| Crate             | Path                     | Role                                                                                                                       |
-| ----------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `minibox-agent`   | `crates/minibox-agent`   | AI agent runtime: error types, LLM step wiring, crux-agentic integration.                                                  |
-| `minibox-llm`     | `crates/minibox-llm`     | Multi-provider LLM client with structured output and fallback chains.                                                      |
-| `minibox-secrets` | `crates/minibox-secrets` | Typed credential store: env, OS keyring, 1Password, Bitwarden adapters. SHA-256 audit hashes, expiry-aware provider chain. |
-| `mbxctl`          | `crates/mbxctl`          | Alternative management CLI (axum-based). WIP — not a shipping binary in the current release.                               |
-| `dashbox`         | `crates/dashbox`         | Ratatui TUI dashboard with 6 tabs (Agents, Bench, History, Git, Todos, CI). Run via `just dash`.                           |
-| `minibox-bench`   | `crates/minibox-bench`   | Benchmark harness binary: codec and adapter-overhead suites.                                                               |
+No crates are currently in this tier. The six former experimental crates
+(`minibox-agent`, `minibox-llm`, `minibox-secrets`, `mbxctl`, `dashbox`,
+`minibox-bench`) were removed during the consolidation in sessions 29-31
+(2026-04-21 to 2026-04-26) to reduce maintenance surface.
 
 **Stability expectations for Experimental crates:**
 

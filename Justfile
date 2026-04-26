@@ -220,9 +220,9 @@ trace:
         [[ -S /run/minibox/miniboxd.sock ]] || { echo "error: daemon socket did not appear"; kill "$DAEMON_PID" 2>/dev/null; exit 1; }
 
         echo "trace: smoke — pull alpine..."
-        ./target/release/minibox pull alpine || true
+        ./target/release/mbx pull alpine || true
         echo "trace: smoke — run echo..."
-        ./target/release/minibox run alpine -- /bin/echo "uftrace smoke" || true
+        ./target/release/mbx run alpine -- /bin/echo "uftrace smoke" || true
 
         echo "trace: stopping daemon..."
         kill "$DAEMON_PID" 2>/dev/null || true

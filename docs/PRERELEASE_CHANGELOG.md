@@ -6,6 +6,88 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+**Crate consolidation (GH #153):**
+- 7-phase workspace consolidation: 13 crates reduced to 8
+  - Phase 0: dropped `minibox-llm` (orphan)
+  - Phase 1+2: absorbed `minibox-oci` + `minibox-client` into `minibox-core`
+  - Phase 3: consolidated `daemonbox` + `linuxbox` into unified `minibox` crate
+  - Phase 4: absorbed `minibox-testers` into `minibox` behind `test-utils` feature
+  - Phase 5: `DEFAULT_ADAPTER_SUITE` const in `miniboxd`
+- `minibox::testing` module — unified test infrastructure (mocks, fixtures, conformance)
+
+**Adapter registry:**
+- Centralized `miniboxd::adapter_registry` — typed `AdapterSuite` enum, `AdapterInfo`
+  metadata, structured `AdapterSelectionError`, env-based selection via `MINIBOX_ADAPTER`
+- Startup observability: logs selected adapter and available options with structured fields
+
+**State management:**
+- Container state reconciliation on daemon restart — marks stale Running containers as
+  Orphaned via `ProcessChecker` trait; `KillProcessChecker` (unix-gated)
+- Disk-persisted state survives daemon restarts; reconciliation runs at startup
+
+**macOS / krun adapter:**
+- krun Phases 1-3 complete: `KrunRuntime`, `KrunRegistry`, `KrunFilesystem`,
+  `KrunLimiter` adapters with 31 TDD conformance tests
+- `SmolVM` adapter suite wired into `miniboxd`
+- QEMU cross-platform VM runner — `HostPlatform` detection, `VmRunner`/`VmHandle`,
+  `build-vm-image` with platform-aware cross-compilation
+
+**Tailnet integration:**
+- `tailbox` crate — `TailnetNetwork` adapter, `TailnetConfig`, auth key resolution
+  chain, gateway IP caching, per-container setup/cleanup
+- `TailnetMode` enum and tailnet fields in `NetworkConfig` protocol
+
+**Searchbox / Zoektbox:**
+- `searchbox` crate — federated code search: `ZoektAdapter`, `MergedAdapter`,
+  `GitRepoSource`, `FilesystemSource`, MCP stdio server, `searchboxd` binary
+- `zoektbox` crate — zoekt deploy/service adapter, download+SHA256 verify
+
+**minibox-llm:**
+- Multi-turn `infer()` API, `Message`/`ContentBlock` types, Ollama auto-detection
+  provider, fallback chain
+
+**Testing:**
+- Security regression suite for container-init invariants (tar traversal, symlink escape,
+  path validation, socket auth)
+- Handler error-path coverage raised to 80%+ (pause/resume, exec, push, commit, build)
+- Conformance suite: commit/build/push, pause/resume handler, backend descriptor with
+  capability flags
+- Proptest expansion: all protocol variants covered
+- Bridge networking unit tests
+- 3 dogfood implementation plans: MCP server, sandboxed AI execution, CI agent
+
+**Infrastructure:**
+- Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
+  `minibox-plugins` workspace
+- `cargo xtask pre-commit` — fmt-check + clippy + release build (macOS-safe)
+- CI `all-features` job, coverage-check gate (handler 80% threshold)
+- Stability checklist enforcement gates, protocol-drift detection workflow
+- `init_tracing()` with `MINIBOX_TRACE_LEVEL` env var
+
+### Fixed
+
+- IPv6 panic replaced with `anyhow::bail!` in `IpAllocator`
+- `KillProcessChecker` gated behind `cfg(unix)` for macOS compat
+- `fork()` in exec path replaced with `nsenter` + `Command` (eliminates POSIX UB)
+- Stale `minibox::`/`linuxbox::` refs cleaned up across tests and crate boundaries
+- `ContainerState` unified — single source in `minibox-core`, no local duplicates
+- Handler `HandlerDependencies` decomposed into ISP sub-structs
+- `RegistryRouter` port replaces dual-registry fields in handler
+- Conformance report writer uses `std::io::Error::other` (idiomatic)
+- Clippy warnings resolved across all test and core crates
+
+### Changed
+
+- Workspace version bumped 0.19.0 → 0.20.0 → 0.21.0
+- `linuxbox` crate renamed from `minibox` (2026-04-21), then absorbed back into `minibox`
+  as unified crate (2026-04-26)
+- `minibox-cli` renamed to `mbx`
+- `FilesystemProvider` split into `RootfsSetup` + `ChildInit` (ISP)
+- `BackendRootfsMetadata` — typed writable-layer contract for commit/build/push
+- Three-tier git workflow: `main` → `next` (auto) → `stable` (manual)
+
 ## [v0.2.0] - 2026-04-14
 
 ### Added
