@@ -1342,6 +1342,58 @@ mod tests {
         assert_eq!(set.len(), 2);
     }
 
+    // --- ContainerId hex edge-case tests (GH #145) ---
+
+    #[test]
+    fn test_container_id_valid_16_char_hex() {
+        // A standard 16-character lowercase hex ID (common Docker short-ID format) is valid.
+        let id = ContainerId::new("deadbeef01234567".to_string())
+            .expect("valid 16-char hex id");
+        assert_eq!(id.as_str(), "deadbeef01234567");
+    }
+
+    #[test]
+    fn test_container_id_15_chars_is_valid() {
+        // The validator requires 1–64 alphanumeric chars; 15 chars is within that range.
+        // There is no minimum length beyond non-empty, so a 15-char hex string is accepted.
+        let id = ContainerId::new("deadbeef0123456".to_string())
+            .expect("15-char hex id is within the 1-64 range and must be accepted");
+        assert_eq!(id.as_str().len(), 15);
+    }
+
+    #[test]
+    fn test_container_id_17_chars_is_valid() {
+        // Similarly, 17-char hex strings are within the 64-char maximum and accepted.
+        let id = ContainerId::new("deadbeef012345678".to_string())
+            .expect("17-char hex id is within the 1-64 range and must be accepted");
+        assert_eq!(id.as_str().len(), 17);
+    }
+
+    #[test]
+    fn test_container_id_non_hex_chars_rejected() {
+        // Characters outside [0-9a-fA-F] that are also non-alphanumeric are rejected.
+        // Hyphens and underscores are not alphanumeric, so they fail validation.
+        let result = ContainerId::new("deadbeef-0123456".to_string());
+        assert!(result.is_err(), "hyphen is not alphanumeric and must be rejected");
+    }
+
+    #[test]
+    fn test_container_id_empty_rejected() {
+        let result = ContainerId::new(String::new());
+        assert!(result.is_err(), "empty string must be rejected");
+    }
+
+    /// The validator uses `is_ascii_alphanumeric()`, which allows both lowercase and uppercase
+    /// hex characters (a-f and A-F). Mixed-case hex IDs such as "DeadBeef01234567" are
+    /// therefore accepted — they are alphanumeric even though they mix case. Code that compares
+    /// container IDs must normalise case if canonical form matters.
+    #[test]
+    fn test_container_id_mixed_case_hex_accepted() {
+        let id = ContainerId::new("DeadBeef01234567".to_string())
+            .expect("mixed-case hex is alphanumeric and must be accepted");
+        assert_eq!(id.as_str(), "DeadBeef01234567");
+    }
+
     // --- ContainerState tests ---
 
     #[test]
