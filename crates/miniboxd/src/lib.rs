@@ -7,6 +7,8 @@
 //! to compile without changes.
 
 pub mod adapter_registry;
+#[cfg(unix)]
+pub mod listener;
 
 #[doc(hidden)]
 pub use minibox::daemon::handler;

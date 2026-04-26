@@ -78,14 +78,14 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
         AdapterInfo {
             name: "colima",
             description: "Colima/Lima VM via limactl + nerdctl",
-            available: cfg!(target_os = "macos"),
-            platform: "macos",
+            available: cfg!(unix),
+            platform: "any",
         },
         AdapterInfo {
             name: "smolvm",
             description: "SmolVM lightweight Linux VMs with subsecond boot",
-            available: cfg!(target_os = "macos"),
-            platform: "macos",
+            available: cfg!(unix),
+            platform: "any",
         },
         AdapterInfo {
             name: "krun",
@@ -121,7 +121,7 @@ pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> 
                 requested: name.to_string(),
                 available: available_adapter_names(),
                 all_known: all_adapters().into_iter().map(|a| a.name).collect(),
-            })
+            });
         }
     };
 
@@ -226,19 +226,19 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     fn parse_colima_succeeds() {
         assert_eq!(
-            parse_adapter("colima").expect("should parse colima"),
+            parse_adapter("colima").expect("should parse colima on any unix"),
             AdapterSuite::Colima
         );
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     fn parse_smolvm_succeeds() {
         assert_eq!(
-            parse_adapter("smolvm").expect("should parse smolvm"),
+            parse_adapter("smolvm").expect("should parse smolvm on any unix"),
             AdapterSuite::SmolVm
         );
     }
@@ -304,12 +304,11 @@ mod tests {
         ] {
             let name = suite.to_string();
             if available.contains(&name.as_str()) {
-                let parsed = parse_adapter(&name)
-                    .unwrap_or_else(|_| panic!("should round-trip: {name}"));
+                let parsed =
+                    parse_adapter(&name).unwrap_or_else(|_| panic!("should round-trip: {name}"));
                 assert_eq!(parsed, suite);
             } else {
-                parse_adapter(&name)
-                    .expect_err(&format!("unavailable suite should fail: {name}"));
+                parse_adapter(&name).expect_err(&format!("unavailable suite should fail: {name}"));
             }
         }
     }
@@ -327,16 +326,14 @@ mod tests {
 
     #[test]
     fn parse_unavailable_adapter_returns_error() {
-        // On macOS: native/gke are unavailable. On Linux: colima/smolvm are unavailable.
-        let unavailable_name = if cfg!(target_os = "macos") {
-            "native"
-        } else {
-            "colima"
-        };
-        let err = parse_adapter(unavailable_name)
-            .expect_err("should reject unavailable adapter");
+        // On macOS: native/gke are unavailable. On Linux: all adapters are available.
+        // Only test on macOS where we know native is unavailable.
+        if !cfg!(target_os = "macos") {
+            return; // all adapters available on Linux — skip
+        }
+        let unavailable_name = "native";
+        let err = parse_adapter(unavailable_name).expect_err("should reject unavailable adapter");
         assert_eq!(err.requested, unavailable_name);
-        // It should be in all_known but not in available
         assert!(
             err.all_known.contains(&unavailable_name),
             "unavailable adapter should be in all_known"
@@ -349,13 +346,11 @@ mod tests {
 
     #[test]
     fn unavailable_adapter_error_message_says_not_available() {
-        let unavailable_name = if cfg!(target_os = "macos") {
-            "native"
-        } else {
-            "colima"
-        };
-        let err = parse_adapter(unavailable_name)
-            .expect_err("should reject unavailable adapter");
+        if !cfg!(target_os = "macos") {
+            return; // all adapters available on Linux — skip
+        }
+        let unavailable_name = "native";
+        let err = parse_adapter(unavailable_name).expect_err("should reject unavailable adapter");
         let msg = err.to_string();
         assert!(
             msg.contains("not available"),
@@ -364,17 +359,25 @@ mod tests {
     }
 
     #[test]
-    fn colima_metadata_targets_macos() {
+    fn colima_metadata_targets_any() {
         let info = all_adapters();
-        let colima = info.iter().find(|a| a.name == "colima").expect("colima entry");
-        assert_eq!(colima.platform, "macos");
+        let colima = info
+            .iter()
+            .find(|a| a.name == "colima")
+            .expect("colima entry");
+        assert_eq!(colima.platform, "any");
+        assert_eq!(colima.available, cfg!(unix));
     }
 
     #[test]
-    fn smolvm_metadata_targets_macos() {
+    fn smolvm_metadata_targets_any() {
         let info = all_adapters();
-        let smolvm = info.iter().find(|a| a.name == "smolvm").expect("smolvm entry");
-        assert_eq!(smolvm.platform, "macos");
+        let smolvm = info
+            .iter()
+            .find(|a| a.name == "smolvm")
+            .expect("smolvm entry");
+        assert_eq!(smolvm.platform, "any");
+        assert_eq!(smolvm.available, cfg!(unix));
     }
 
     #[test]
