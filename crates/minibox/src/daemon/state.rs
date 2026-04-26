@@ -31,8 +31,10 @@ pub trait ProcessChecker: Send + Sync {
 }
 
 /// Default adapter: probes process existence via `kill(pid, 0)`.
+#[cfg(unix)]
 pub struct KillProcessChecker;
 
+#[cfg(unix)]
 impl ProcessChecker for KillProcessChecker {
     fn is_alive(&self, pid: u32) -> bool {
         // SAFETY: `kill(pid, 0)` sends no signal; it only checks existence.
