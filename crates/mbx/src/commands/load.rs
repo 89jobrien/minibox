@@ -1,7 +1,7 @@
 //! `minibox load` — load an image from a local OCI tar archive.
 
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Execute the `load` subcommand.

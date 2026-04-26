@@ -61,7 +61,7 @@ mod tests {
     use crate::image::reference::ImageRef;
 
     struct StubRegistry {
-        label: &'static str,
+        _label: &'static str,
     }
 
     impl crate::domain::AsAny for StubRegistry {
@@ -91,8 +91,8 @@ mod tests {
     }
 
     fn make_router() -> (HostnameRegistryRouter, *const (), *const ()) {
-        let docker: DynImageRegistry = Arc::new(StubRegistry { label: "docker" });
-        let ghcr: DynImageRegistry = Arc::new(StubRegistry { label: "ghcr" });
+        let docker: DynImageRegistry = Arc::new(StubRegistry { _label: "docker" });
+        let ghcr: DynImageRegistry = Arc::new(StubRegistry { _label: "ghcr" });
 
         let docker_ptr = Arc::as_ptr(&docker) as *const ();
         let ghcr_ptr = Arc::as_ptr(&ghcr) as *const ();

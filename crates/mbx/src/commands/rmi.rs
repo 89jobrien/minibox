@@ -1,6 +1,6 @@
 //! `minibox rmi <image>` — remove a specific image.
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::path::Path;
 

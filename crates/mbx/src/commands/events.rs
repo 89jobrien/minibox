@@ -1,7 +1,7 @@
 //! `minibox events` — stream container lifecycle events as JSON-lines to stdout.
 
 use anyhow::Result;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::path::Path;
 

@@ -1,125 +1,116 @@
 # State Persistence Model
 
-This document clarifies the actual persistence behaviour of `DaemonState` as implemented in
-`crates/daemonbox/src/state.rs`. It supersedes the stale note in CLAUDE.md that said "daemon
-restart loses all records."
+How minibox tracks container state across daemon restarts.
 
-## Summary
-
-Container records **are persisted to disk** after every mutation. The daemon reloads them on
-startup. The earlier "in-memory only" description was accurate for an older version of the code
-and is now incorrect.
+Last updated: 2026-04-27
 
 ---
 
-## What Is Persisted
+## Overview
 
-`DaemonState` serialises a `HashMap<String, ContainerRecord>` to JSON after every write
-operation. Each `ContainerRecord` contains:
+`DaemonState` (defined in `crates/minibox/src/daemon/state.rs`) is the single
+shared data structure for all container metadata. It is held behind
+`Arc<RwLock<...>>` so many readers proceed concurrently while writes are
+exclusive.
 
-- Container metadata (`ContainerInfo`): id, name, image, command, state string, creation time,
-  PID snapshot
-- `pid` — host-namespace PID at time of last write (may be stale after restart)
-- `rootfs_path` — path to the merged overlay directory used as the container rootfs
-- `cgroup_path` — path to the container's cgroup directory
-- `post_exit_hooks` — host-side commands to run after the container process exits
-- `rootfs_metadata` — writable-layer overlay metadata (None for GKE/VZ adapters)
-- `source_image_ref` — image reference used to create the container (e.g. `"alpine:latest"`)
+State is persisted to a JSON file after **every mutation** (add, remove, state
+transition, PID assignment). The file is written atomically via rename so
+readers never see a partial write.
 
-### What Is NOT Persisted
+## What Survives a Restart
 
-- **IP allocations** (`allocated_ips`): the bridge-network IP map is in-memory only and is
-  not written to disk. Bridge-assigned IPs are lost on daemon restart.
-- **PTY sessions**: in-memory only; not serialised.
-- **Event broker subscriptions**: in-memory only.
-- **Image layer contents**: managed separately by `ImageStore`, not by `DaemonState`.
+| Data                                                                  | Survives? | Notes                                                  |
+| --------------------------------------------------------------------- | --------- | ------------------------------------------------------ |
+| Container records (ID, image, command, creation time)                 | Yes       | Loaded from `state.json` on startup                    |
+| Container state (Created, Running, Paused, Stopped, Failed, Orphaned) | Yes       | Adjusted on load — see below                           |
+| Host PID                                                              | No        | PIDs are not valid across restarts                     |
+| Overlay mount                                                         | No        | Mount namespace is gone after daemon exit              |
+| Cgroup tree                                                           | No        | Cgroup dirs may persist on disk but are not reattached |
+| Allocated bridge IPs                                                  | No        | `allocated_ips` map is in-memory only                  |
 
----
+## State File Location
 
-## Write Trigger Points
+- Default: `$MINIBOX_DATA_DIR/state.json`
+    - Root: `/var/lib/minibox/state.json`
+    - Non-root: `~/.minibox/cache/state.json`
+- Override: set `MINIBOX_DATA_DIR` explicitly
 
-`save_to_disk()` is called (as an async best-effort operation) after every state mutation:
+## Atomic Write Protocol
 
-| Method                   | Trigger                                          |
-| ------------------------ | ------------------------------------------------ |
-| `add_container`          | New container registered                         |
-| `remove_container`       | Container removed (`minibox rm`)                 |
-| `update_container_state` | State transition (Running→Stopped, Paused, etc.) |
-| `set_container_pid`      | PID recorded after fork                          |
+1. Serialise container map to pretty-printed JSON.
+2. Write to `state.json.tmp` (sibling file).
+3. Set permissions to `0o600` (owner-only, POSIX only).
+4. `rename(state.json.tmp, state.json)` — atomic on POSIX filesystems.
 
-Writes are **not batched**. Each mutation causes one synchronous JSON serialisation and one
-filesystem write+rename cycle.
+Failures at any step are logged as warnings but do not crash the daemon.
+State writes are best-effort.
 
----
+## Startup Reconciliation
 
-## Storage Location
+On daemon start, `load_from_disk()` followed by `reconcile_on_startup()`
+adjusts stale records:
 
-The state file is named `state.json` and lives in the data directory:
+| Previous state        | Action on reload  | Rationale                                         |
+| --------------------- | ----------------- | ------------------------------------------------- |
+| `Created`             | Set to `Stopped`  | Process was never forked or fork did not complete |
+| `Paused`              | Set to `Stopped`  | Cgroup freeze is lost after daemon exit           |
+| `Running` (PID alive) | Left as `Running` | Process survived daemon restart                   |
+| `Running` (PID dead)  | Set to `Orphaned` | Process exited while daemon was down              |
+| `Stopped`             | Unchanged         | Already terminal                                  |
+| `Failed`              | Unchanged         | Already terminal                                  |
+| `Orphaned`            | Unchanged         | Already terminal                                  |
 
-| Context                   | Path                           |
-| ------------------------- | ------------------------------ |
-| Root daemon (default)     | `/var/lib/minibox/state.json`  |
-| Non-root daemon (default) | `~/.minibox/cache/state.json`  |
-| Explicit override         | `$MINIBOX_DATA_DIR/state.json` |
+The PID liveness check is performed by the `ProcessChecker` port (default
+adapter uses `kill(pid, 0)`). Tests inject doubles that always return
+alive or dead.
 
----
+## Container State Machine
 
-## What Survives a Daemon Restart
+```
+Created ──► Running ──► Stopped
+              │   │
+              │   └──► Failed
+              │
+              ├──► Paused ──► Running  (resume)
+              │           └──► Stopped
+              │
+              └── (daemon restart, PID dead) ──► Orphaned
+```
 
-`DaemonState::load_from_disk()` is called during startup (see `miniboxd/src/main.rs`).
+Valid transitions are enforced by `update_container_state()`. Invalid
+transitions return an error.
 
-**Survives restart:**
+## Persistence Port
 
-- All container records (id, name, image, command, rootfs/cgroup paths, source image ref)
-- `Stopped` container records — visible in `minibox ps` after restart
+The `StateRepository` trait abstracts persistence:
 
-**Does not survive restart:**
+```rust
+pub trait StateRepository: Send + Sync + 'static {
+    fn load_containers(&self) -> Result<HashMap<String, ContainerRecord>>;
+    fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> Result<()>;
+}
+```
 
-- Running/Created/Paused container state: all such containers are marked `Stopped` on load,
-  because their processes are gone. The `pid` field is cleared to `None`.
-- Bridge-network IP allocations (`allocated_ips`)
+- **Production adapter**: `JsonFileRepository` — atomic JSON file.
+- **Test adapter**: in-memory doubles or `TempDir`-backed `DaemonState`.
 
----
+`DaemonState::with_repository()` accepts an `Arc<dyn StateRepository>` for
+dependency injection. The internal `save_to_disk`/`load_from_disk` path is
+being migrated to use this port exclusively (tracked as a follow-on refactor).
 
-## Crash-Consistency Guarantees
+## What Is NOT Persisted
 
-Writes use an atomic rename pattern:
+- **Running processes**: PIDs are recorded but processes are not reattached.
+  A container marked `Running` after reload may have its process still alive
+  (checked by `reconcile_on_startup`) but the daemon does not re-enter its
+  reaper loop. The container will appear as `Orphaned` if the PID dies later.
+- **Network state**: Bridge IP allocations, veth pairs, and iptables rules
+  are ephemeral. Containers lose network connectivity after a daemon restart.
+- **Mount state**: Overlay mounts are gone. The layer directories on disk
+  remain, but the merged view is not recreated.
 
-1. JSON is written to `state.json.tmp` (a sibling temp file)
-2. File permissions are set to `0o600` (owner-only)
-3. `rename(state.json.tmp, state.json)` is called
+## Security
 
-On POSIX filesystems, `rename(2)` is atomic with respect to readers: a reader either sees the
-old complete file or the new complete file, never a partial write.
-
-**Gaps and limitations:**
-
-- **No fsync**: `save_to_disk` does not call `fsync` before rename. On a crash (kernel panic,
-  power loss) the rename may be lost even if the write appeared to succeed. The previous
-  `state.json` survives but will not reflect mutations since the last successful write.
-- **Not transactional**: if the daemon crashes mid-operation (e.g. between creating an overlay
-  mount and recording the container), the filesystem may hold resources that have no matching
-  state file entry. Use `cargo xtask nuke-test-state` to clean orphaned overlays and cgroups.
-- **No WAL or journal**: there is no write-ahead log. The state file is a point-in-time
-  snapshot, not an append-only log.
-
----
-
-## StateRepository Port (Hexagonal Architecture)
-
-`state.rs` also defines a `StateRepository` trait and a `JsonFileRepository` adapter. This is
-the hexagonal port for persistence injection in tests. The `DaemonState::with_repository`
-constructor accepts an `Arc<dyn StateRepository>`, but note that the current implementation
-does not yet route internal `save_to_disk`/`load_from_disk` calls through this port — those
-still use the direct `state_file` path. Full extraction through the port is a planned follow-on
-refactor.
-
----
-
-## Known Gaps
-
-- No fsync before rename — crash may lose the last write
-- `allocated_ips` (bridge network) is not persisted
-- `DaemonState::with_repository` accepts a `StateRepository` port but does not yet use it for
-  internal saves — the port is wired for future extraction
-- Orphaned overlay mounts and cgroups are not cleaned up on restart
+- State file is restricted to `0o600` (owner-read/write only).
+- Contains PIDs and rootfs paths — should not be world-readable.
+- `SO_PEERCRED` auth on the daemon socket prevents unauthorized state queries.

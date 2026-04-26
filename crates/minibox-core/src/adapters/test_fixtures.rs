@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use linuxbox::adapters::test_fixtures::{MockAdapterBuilder, TempContainerFixture};
+//! use minibox::adapters::test_fixtures::{MockAdapterBuilder, TempContainerFixture};
 //!
 //! #[tokio::test]
 //! async fn test_something() {

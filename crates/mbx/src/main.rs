@@ -42,7 +42,7 @@ struct Cli {
 
 /// Available minibox subcommands.
 ///
-/// Each variant maps directly to a [`linuxbox::protocol::DaemonRequest`]
+/// Each variant maps directly to a [`minibox::protocol::DaemonRequest`]
 /// variant sent over the Unix socket.
 #[derive(Subcommand)]
 enum Commands {
@@ -222,7 +222,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    let socket_path = minibox_client::default_socket_path();
+    let socket_path = minibox_core::client::default_socket_path();
     let socket_path: &Path = &socket_path;
 
     match cli.command {

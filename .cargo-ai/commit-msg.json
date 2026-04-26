@@ -4,7 +4,7 @@
     {
       "name": "diff_context",
       "type": "text",
-      "text": "Generate a git commit message for the staged changes below.\n\nRules:\n- Follow the existing commit style shown in the recent log\n- Use conventional commits format: `type(scope): description`\n  Types: feat, fix, docs, refactor, test, chore, perf, ci\n  Scope: crate name, module, or area (e.g. minibox, daemonbox, xtask)\n- First line: <=72 chars, imperative mood, no period\n- If the change warrants it, populate body with 2-4 lines of context\n- Do NOT add Co-Authored-By lines\n- Return only subject and body fields — no markdown fences, no extra text"
+      "text": "Generate a git commit message for the staged changes below.\n\nRules:\n- Follow the existing commit style shown in the recent log\n- Use conventional commits format: `type(scope): description`\n  Types: feat, fix, docs, refactor, test, chore, perf, ci\n  Scope: crate name, module, or area (e.g. minibox, miniboxd, xtask)\n- First line: <=72 chars, imperative mood, no period\n- If the change warrants it, populate body with 2-4 lines of context\n- Do NOT add Co-Authored-By lines\n- Return only subject and body fields — no markdown fences, no extra text"
     }
   ],
   "runtime_vars": {

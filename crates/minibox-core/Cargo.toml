@@ -14,9 +14,11 @@ homepage.workspace = true
 # tempfile is pulled in as a real dependency because test_fixtures.rs and
 # conformance.rs compile as library code (not cfg(test)) under this feature.
 test-utils = ["dep:tempfile"]
+# Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.
+# Never enable in production builds.
+fuzzing = []
 
 [dependencies]
-minibox-oci = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -29,6 +31,15 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 minibox-macros = { workspace = true }
 tempfile = { workspace = true, optional = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
+tokio-util = { workspace = true }
+pin-project-lite = { workspace = true }
+slashcrux = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
@@ -39,3 +50,7 @@ proptest = "1"
 base64 = { workspace = true }
 insta = { workspace = true }
 tempfile = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+hex = { workspace = true }

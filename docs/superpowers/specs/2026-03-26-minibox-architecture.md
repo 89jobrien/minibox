@@ -445,13 +445,14 @@ sequenceDiagram
 
 **Request types** (`DaemonRequest` enum):
 
-| Variant  | Fields                                                                                | Description                                      |
-| -------- | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `Run`    | `image`, `tag`, `command`, `memory_limit_bytes`, `cpu_weight`, `ephemeral`, `network` | Create and start a container                     |
-| `Pull`   | `image`, `tag`                                                                        | Download an image without running                |
-| `Stop`   | `id`                                                                                  | Send SIGTERM then SIGKILL to a running container |
-| `Remove` | `id`                                                                                  | Clean up a stopped container's resources         |
-| `List`   | (none)                                                                                | List all tracked containers                      |
+| Variant  | Fields                                           | Description                                      |
+| -------- | ------------------------------------------------ | ------------------------------------------------ |
+| `Run`    | `image`, `tag`, `command`, `memory_limit_bytes`, | Create and start a container                     |
+|          | `cpu_weight`, `ephemeral`, `network`             |                                                  |
+| `Pull`   | `image`, `tag`                                   | Download an image without running                |
+| `Stop`   | `id`                                             | Send SIGTERM then SIGKILL to a running container |
+| `Remove` | `id`                                             | Clean up a stopped container's resources         |
+| `List`   | (none)                                           | List all tracked containers                      |
 
 **Response types** (`DaemonResponse` enum):
 

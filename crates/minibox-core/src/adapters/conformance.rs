@@ -432,7 +432,7 @@ pub fn write_conformance_reports(
     // --- JSON report ---
     let json_path = artifact_dir.join("report.json");
     let json = serde_json::to_string_pretty(result)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     std::fs::write(&json_path, json.as_bytes())?;
 
     // --- Markdown report ---

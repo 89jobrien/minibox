@@ -1,11 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-24
-log:
-- date: 20260424:192000
-  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
-  commits: []
-  session: 27
+updated: 20260426:091635
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -173,68 +168,16 @@ items:
     note: null
     number: 87
     url: https://github.com/89jobrien/minibox/issues/87
-- id: minibox-65
-  doob_uuid: null
-  name: vz-virtiofs
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
-  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 75
-    url: https://github.com/89jobrien/minibox/issues/75
-- id: minibox-66
-  doob_uuid: null
-  name: vz-agent
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
-  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 88
-    url: https://github.com/89jobrien/minibox/issues/88
-- id: minibox-67
-  doob_uuid: null
-  name: vz-io-bridge
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
-  description: 'GH #93: Blocked by minibox-agent and vsock bridge implementation.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 93
-    url: https://github.com/89jobrien/minibox/issues/93
 - id: minibox-agent-llm-api
   doob_uuid: null
   name: minibox-agent-llm-api
   priority: P1
-  status: open
+  status: blocked
   title: Extend minibox-llm with infer() API, then re-land minibox-agent
   description: |
     feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
+    NOTE: minibox-llm is being dropped in crate consolidation Phase 0 (GH #153). Re-evaluate
+    whether LLM support moves into minibox-core or a separate plugin before implementing.
   files:
   - crates/minibox-llm/src/provider.rs
   - crates/minibox-llm/src/types.rs
@@ -248,59 +191,114 @@ items:
     value: null
     reviewed: null
     note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
+  - date: 20260426:051901
+    type: blocker
+    field: null
+    value: null
+    reviewed: null
+    note: minibox-llm being dropped in crate consolidation Phase 0 (GH #153). LLM placement TBD.
 - id: minibox-77
   doob_uuid: null
   name: publish-core-crates
   priority: P1
   status: open
-  title: 'chore: publish minibox-core and minibox-client to crates.io'
-  description: Prerequisite for moving dockerbox to minibox-plugins without cross-workspace path deps. Once published, dockerbox can use versioned deps instead of path deps.
+  title: 'chore: consolidate workspace (13->8 crates) and publish to crates.io'
+  description: |
+    GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
+    Phases 0-5 complete (13->8 crates). Phase 6 complete: fixed slashcrux path dependency → published
+    crate.io version (0.1). Both crates pass dry-run publish. Remaining: promote to stable branch and
+    cut v0.21.0 release tag (GH Actions release.yml will publish automatically).
   files:
+  - docs/superpowers/plans/2026-04-26-crate-consolidation.md
+  - Cargo.toml
   - crates/minibox-core/Cargo.toml
-  - crates/minibox-client/Cargo.toml
   completed: null
   extra:
-  - date: 2026-04-24
+  - date: 20260426:051901
+    type: github-issue
+    field: null
+    value: null
+    reviewed: null
+    note: null
+    number: 153
+    url: https://github.com/89jobrien/minibox/issues/153
+  - date: 20260426:160000
     type: note
     field: null
     value: null
     reviewed: null
-    note: dockerbox stays in main workspace until core crates are published. dashbox already moved to minibox-plugins (zero deps).
+    note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
 - id: minibox-78
   doob_uuid: null
-  name: ci-all-features
-  priority: P2
-  status: open
-  title: 'feat(ci): add cargo test --all-features job to CI'
-  description: Add a cargo test --all-features job to ci.yml to catch feature-flag-specific regressions. Edit .github/workflows/ci.yml.
+  name: adapter-registry-correctness
+  priority: P1
+  status: closed
+  title: 'fix(miniboxd): parse_adapter must reject known-but-unavailable adapters'
+  description: |
+    Council finding (67% health): adapter_registry::parse_adapter accepts any known adapter
+    name without checking the available field. Already fixed in commit c7e6ff5 (adapter registry
+    hardening). Validation correctly checks available field and rejects known-but-unavailable
+    adapters with distinct error message. 12/12 unit tests pass.
   files:
-  - .github/workflows/ci.yml
-  completed: null
-  extra: []
-- date: 20260424:152652
-  summary: 'Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features.'
+  - crates/miniboxd/src/adapter_registry.rs
+  completed: 20260426:160000
+  extra:
+  - date: 20260426:091635
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: "Council strict-critic flagged as [high] risk. 10 doob todos created from council reports."
+  - date: 20260426:160000
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: "Fixed in c7e6ff5. parse_adapter now correctly rejects known-but-unavailable adapters. Metadata corrected: colima/smolvm marked as macOS-available."
+log:
+- date: 20260426:091635
+  summary: "Session 31: Phases 3-5 consolidation complete (13->8 crates). Created 3 dogfood implementation plans (MCP server, sandbox, CI agent). Fixed post-consolidation test compile errors. Ran council (93%/67%). Captured 10 council todos. New P1: adapter registry correctness gap."
   commits:
-  - e5f178d
-  - ed1def8
-  session: 26
-- date: 20260424:000000
-  summary: 'Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore).'
+  - 451e7ec
+  - 830877e
+  - f865277
+  - fd6c7e5
+  - c3b1270
+  - bfc5493
+  - 283bdc2
+  - 1ab12c0
+  - 680752e
+  - eb144b9
+  - 5d14a20
+  - 6f253ba
+  - bd5fcf9
+  - 2e5e971
+  - 50e5edb
+  - c9aa8f5
+  - 309bd78
+  session: 31
+- date: 20260426:095815
+  summary: "Session 30: executed consolidation Phases 0-2 (13->10 crates). Absorbed minibox-oci+minibox-client into minibox-core. Phase 3 skipped (circular dep). Orca-strait agents resolved #95, #120, #134. 1134 tests pass."
   commits:
-  - caa1b50
-  - 295b7cd
-  - ce75dab
-  - 260dcaf
-  - 5bfcb70
-  session: 25
-- date: 20260423:232521
-  summary: 'chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items.'
+  - 21b5e5c
+  - 5e42156
+  - d20f095
+  - 53dc09b
+  - cdee328
+  session: 30
+- date: 20260426:051901
+  summary: 'Session 29: audited publish readiness; wrote 7-phase crate consolidation plan (GH #153, 5fd6c4c); added configurable DEFAULT_ADAPTER_SUITE + smolvm cross-platform phase; updated smolvm/krun adapter specs.'
+  commits:
+  - 7bdda13
+  - e9fd838
+  - 0f73248
+  - 5fd6c4c
+  session: 29
+- date: 20260426:000000
+  summary: 'Session 28: closed minibox-78 (ci-all-features already in ci.yml). Pruned 3 duplicate VZ items (65/66/67, covered by 43/53/54).'
   commits: []
-  session: 24
-- date: 20260423:150355
-  summary: 'chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale; 10 missing-status plans flagged as LANDED.'
+  session: 28
+- date: 20260424:192000
+  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
   commits: []
-  session: 23
-- date: 20260423:185322
-  summary: 'chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests, 3 fuzz targets, READMEs for 7 crates.'
-  commits: []
-  session: 22
+  session: 27

@@ -12,30 +12,17 @@
 
 # Core tier
 crates/minibox-core/                @89jobrien
-crates/minibox/                         @89jobrien
-crates/daemonbox/                   @89jobrien
+crates/minibox/                     @89jobrien
 crates/miniboxd/                    @89jobrien
-crates/minibox-cli/                 @89jobrien
-crates/minibox-client/              @89jobrien
+crates/mbx/                         @89jobrien
 
 # Platform tier
 crates/macbox/                      @89jobrien
 crates/winbox/                      @89jobrien
-crates/dockerbox/                   @89jobrien
-crates/tailbox/                     @89jobrien
-
-# Experimental tier
-crates/minibox-agent/               @89jobrien
-crates/minibox-llm/                 @89jobrien
-crates/minibox-secrets/             @89jobrien
-crates/miniboxctl/                      @89jobrien
-crates/dashbox/                     @89jobrien
-crates/minibox-bench/               @89jobrien
 
 # Internal tier
 crates/xtask/                       @89jobrien
 crates/minibox-macros/              @89jobrien
-crates/minibox-oci/                 @89jobrien
 
 # External (Go module)
 agentbox/                           @89jobrien

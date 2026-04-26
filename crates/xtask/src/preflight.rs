@@ -84,6 +84,58 @@ impl ToolProbe for ProcessProbe {
 }
 
 // ---------------------------------------------------------------------------
+// Xtask availability port + domain service
+// ---------------------------------------------------------------------------
+
+/// Domain port: probe whether `cargo xtask` itself is runnable.
+///
+/// Implementations invoke the real xtask binary; test doubles return canned results.
+pub trait XtaskProbe {
+    /// Probe xtask by running it with no arguments (which prints help and exits 0).
+    /// Returns `Ok(())` if the binary responds successfully.
+    /// Returns `Err(String)` with a human-readable message otherwise.
+    fn probe_xtask(&self) -> Result<(), String>;
+}
+
+/// Domain service: check that `cargo xtask` is actually runnable.
+///
+/// This validates real capability (the binary compiles and responds), not just
+/// structural signals like `Cargo.toml` existence.
+pub fn check_xtask_available<P: XtaskProbe>(probe: &P) -> anyhow::Result<()> {
+    probe
+        .probe_xtask()
+        .map_err(|msg| anyhow::anyhow!("xtask is not available: {msg}"))
+}
+
+// ---------------------------------------------------------------------------
+// Real adapter (process-based)
+// ---------------------------------------------------------------------------
+
+/// Adapter: probe xtask availability by invoking `cargo xtask` with no args.
+///
+/// `cargo xtask` with no arguments prints the task list and exits 0, which
+/// proves the binary compiles and is runnable without performing any side effects.
+pub struct ProcessXtaskProbe;
+
+impl XtaskProbe for ProcessXtaskProbe {
+    fn probe_xtask(&self) -> Result<(), String> {
+        let status = std::process::Command::new("cargo")
+            .args(["xtask"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        match status {
+            Err(e) => Err(format!("could not execute `cargo xtask`: {e}")),
+            Ok(s) if s.success() => Ok(()),
+            Ok(s) => Err(format!(
+                "`cargo xtask` exited with {}",
+                s.code().unwrap_or(-1)
+            )),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests (in-memory test double — no real processes)
 // ---------------------------------------------------------------------------
 
@@ -179,5 +231,65 @@ mod tests {
         let probe = ProcessProbe;
         let result = probe.probe("__xtask_nonexistent_binary_xyz__");
         assert!(result.is_err());
+    }
+
+    // ---------------------------------------------------------------------------
+    // XtaskProbe tests (in-memory doubles)
+    // ---------------------------------------------------------------------------
+
+    struct StubXtaskProbe {
+        result: Result<(), String>,
+    }
+
+    impl StubXtaskProbe {
+        fn available() -> Self {
+            Self { result: Ok(()) }
+        }
+
+        fn unavailable(reason: &str) -> Self {
+            Self {
+                result: Err(reason.to_string()),
+            }
+        }
+    }
+
+    impl XtaskProbe for StubXtaskProbe {
+        fn probe_xtask(&self) -> Result<(), String> {
+            self.result.clone()
+        }
+    }
+
+    #[test]
+    fn check_xtask_available_returns_ok_when_probe_succeeds() {
+        let probe = StubXtaskProbe::available();
+        assert!(check_xtask_available(&probe).is_ok());
+    }
+
+    #[test]
+    fn check_xtask_available_returns_err_when_probe_fails() {
+        let probe = StubXtaskProbe::unavailable("binary not found");
+        let result = check_xtask_available(&probe);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("xtask is not available"),
+            "error should mention xtask is not available; got: {msg}"
+        );
+        assert!(
+            msg.contains("binary not found"),
+            "error should include the probe reason; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn process_xtask_probe_succeeds_in_workspace() {
+        // This calls the real `cargo xtask` — it requires the workspace to be intact.
+        // It validates the real adapter proves xtask is runnable, not just that
+        // Cargo.toml exists.
+        let probe = ProcessXtaskProbe;
+        assert!(
+            probe.probe_xtask().is_ok(),
+            "cargo xtask must be runnable for this workspace"
+        );
     }
 }

@@ -1,7 +1,7 @@
 //! `minibox stop` — stop a running container.
 
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Execute the `stop` subcommand.

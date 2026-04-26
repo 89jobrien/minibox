@@ -1,31 +1,29 @@
-# Handoff — minibox (2026-04-24)
+# minibox handoff
 
-**Branch:** main | **Build:** clean | **Tests:** N/A
+Updated: 20260426:160000 | Branch: main | Build: clean | Tests: passing (macOS gate)
 
-## Items
+## Open Items
 
-| ID | P | Status | Title |
-|---|---|---|---|
+| ID | Priority | Status | Title |
+|----|----------|--------|-------|
+| minibox-78 | P1 | open | fix(miniboxd): parse_adapter must reject known-but-unavailable adapters |
 | minibox-33 | P1 | open | feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel |
-| minibox-46 | P1 | open | feat: PTY/stdio piping for interactive containers (#19) — plan written |
+| minibox-46 | P1 | open | feat: PTY/stdio piping for interactive containers (#19) |
 | minibox-55 | P1 | open | feat: minibox owns the full container stack on every OS |
-| minibox-77 | P1 | open | chore: publish minibox-core and minibox-client to crates.io |
-| minibox-agent-llm-api | P1 | open | Extend minibox-llm with infer() API, then re-land minibox-agent |
-| minibox-78 | P2 | open | feat(ci): add cargo test --all-features job to CI |
-| minibox-43 | P2 | blocked | feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75) |
-| minibox-52 | P2 | blocked | feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84) |
-| minibox-53 | P2 | blocked | feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88) |
-| minibox-54 | P2 | blocked | feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93) |
-| minibox-65 | P2 | blocked | [BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75) |
-| minibox-66 | P2 | blocked | [BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88) |
-| minibox-67 | P2 | blocked | [BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93) |
+| minibox-77 | P1 | open | chore: consolidate workspace (13->8 crates) and publish to crates.io |
+| minibox-agent-llm-api | P1 | blocked | Extend minibox-llm with infer() API, then re-land minibox-agent |
 | minibox-7 | P2 | blocked | bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64 |
+| minibox-43 | P2 | blocked | feat(vz): virtiofs host-path mounts |
+| minibox-52 | P2 | blocked | feat(vz): provision and start minibox-managed Linux VM |
+| minibox-53 | P2 | blocked | feat(vz): minibox-agent in-VM daemon over vsock |
+| minibox-54 | P2 | blocked | feat(vz): vsock I/O bridge |
 
-## Log
+## Recent Log
 
-- 20260424:192000: EOD handoff: cargo check clean. Crate consolidation and plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.
-- 20260424:152652: Session 26: added init_tracing()/MINIBOX_TRACE_LEVEL (e5f178d, TDD agent); audited error system + macros (no gaps found, both tasks closed); moved dashbox to minibox-plugins (ed1def8); removed stale release artifacts (searchboxd, liblinuxbox*, libsearchbox*); new items: publish-core-crates (prereq for dockerbox move), ci-all-features. [e5f178d, ed1def8]
-- 20260424:000000: Session 25: closed P1s minibox-70/75 (handler 80%, krun Phase 3). Promoted 13 P2→P1. Wave 1 orca-strait: minibox-72 (FEATURE_MATRIX SOT), minibox-73 (CI coverage gate), minibox-76 (class diagram generator), minibox-agent-llm-api (infer() API). Wave 2: minibox-58/69 already done, minibox-74 (surface tests), parallel-layer-pulls-port (minibox-oci JoinSet+Semaphore). [caa1b50, 295b7cd, ce75dab, 260dcaf, 5bfcb70]
-- 20260423:232521: chore(backlog): pruned doob minibox backlog 130→100 (7 stale/closed-issue refs + 23 duplicate pairs removed); built full sequential dependency chain for all 100 items.
-- 20260423:150355: chore(docs): plan audit — 29/30 done plans confirmed in git log; 1 stale; 10 missing-status plans flagged as LANDED.
-- 20260423:185322: chore(test): full test coverage sweep — proptest suites for minibox-agent/tailbox/zoektbox, conformance tests, 3 fuzz targets, READMEs for 7 crates.
+| Session | Date | Summary |
+|---------|------|---------|
+| 31 | 20260426:091635 | Phases 3-5 consolidation (13->8 crates). 3 dogfood plans. Test fixes. Council 93%/67%. 10 council todos. |
+| 30 | 20260426:095815 | Phases 0-2 consolidation (13->10 crates). Orca-strait agents resolved #95, #120, #134. |
+| 29 | 20260426:051901 | 7-phase crate consolidation plan. DEFAULT_ADAPTER_SUITE. smolvm specs. |
+| 28 | 20260426:000000 | Closed minibox-78. Pruned 3 duplicate VZ items. |
+| 27 | 20260424:192000 | EOD handoff. macbox/krun Phases 1-3 done. |

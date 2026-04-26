@@ -1,22 +1,18 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/minibox-oci",
     "crates/minibox-core",
-    "crates/linuxbox",
+    "crates/minibox",
     "crates/miniboxd",
     "crates/mbx",
     "crates/minibox-macros",
-    "crates/daemonbox",
     "crates/macbox",
     "crates/winbox",
-    "crates/minibox-client",
     "crates/xtask",
-    "crates/minibox-testers",
 ]
 
 [workspace.package]
-version = "0.20.0"
+version = "0.21.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -71,14 +67,12 @@ ipnet = "2"
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-oci = { path = "crates/minibox-oci", version = "0.20.0" }
-minibox-core = { path = "crates/minibox-core", version = "0.20.0" }
-linuxbox = { path = "crates/linuxbox" }
-minibox-macros = { path = "crates/minibox-macros", version = "0.20.0" }
-minibox-client = { path = "crates/minibox-client", version = "0.20.0" }
-daemonbox = { path = "crates/daemonbox" }
+minibox-core = { path = "crates/minibox-core", version = "0.21.0" }
+minibox = { path = "crates/minibox" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.21.0" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
+slashcrux = "0.1"
 dirs = "5"
 secrecy = "0.10"
 keyring = "3"
@@ -88,5 +82,3 @@ predicates = "3"    # dev-only: assert_cmd predicate helpers
 proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
-
-minibox-testers = { path = "crates/minibox-testers" }

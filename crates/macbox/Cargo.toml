@@ -3,14 +3,14 @@ name = "macbox"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [features]
 vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]
 
 [dependencies]
-daemonbox = { workspace = true }
+minibox = { workspace = true }
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }

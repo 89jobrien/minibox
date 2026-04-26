@@ -7,7 +7,7 @@
 //! 2. Every `DaemonRequest` variant with `#[serde(default)]` fields tolerates
 //!    omitted keys in JSON (backward-compatible deserialization).
 //! 3. Non-streaming `DaemonResponse` variants are explicitly classified as
-//!    terminal here — when `is_terminal_response` in `daemonbox/server.rs` is
+//!    terminal here — when `is_terminal_response` in `minibox/src/daemon/server.rs` is
 //!    updated, this test must be updated in the same commit to keep the two in
 //!    sync.
 //!
@@ -273,7 +273,7 @@ fn test_request_build_backward_compat_omits_optional_fields() {
 // ---------------------------------------------------------------------------
 // Test 3: terminal-vs-non-terminal classification is exhaustive
 //
-// This test mirrors the match in `daemonbox/src/server.rs::is_terminal_response`.
+// This test mirrors the match in `minibox/src/daemon/src/server.rs::is_terminal_response`.
 // When a new variant is added, the compiler will force an update here via the
 // exhaustive match below.
 // ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ fn test_request_build_backward_compat_omits_optional_fields() {
 /// (i.e. after which the server closes the connection).
 ///
 /// This MUST stay in sync with `is_terminal_response` in
-/// `crates/daemonbox/src/server.rs`.  If the two diverge, one of the tests
+/// `crates/minibox/src/daemon/src/server.rs`.  If the two diverge, one of the tests
 /// below will catch it during review.
 fn classify_terminal(r: &DaemonResponse) -> bool {
     match r {
@@ -428,6 +428,7 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
             budget,
             env,
             max_depth,
+            ..
         } => {
             assert_eq!(pipeline_path, "work.cruxx");
             assert!(input.is_none(), "input should default to None");
@@ -453,6 +454,9 @@ fn run_pipeline_request_snapshot() {
         budget: None,
         env: vec![("CRUX_LOG".into(), "debug".into())],
         max_depth: 3,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     insta::assert_json_snapshot!(req);
 }
@@ -466,6 +470,9 @@ fn run_pipeline_request_minimal_snapshot() {
         budget: None,
         env: vec![],
         max_depth: 3,
+        priority: None,
+        urgency: None,
+        execution_context: None,
     };
     insta::assert_json_snapshot!(req);
 }

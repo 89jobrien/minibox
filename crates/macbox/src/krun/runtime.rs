@@ -196,6 +196,130 @@ impl AsAny for KrunRuntime {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_and_default_are_equivalent() {
+        let _a = KrunRuntime::new();
+        let _b = KrunRuntime::default();
+    }
+
+    #[tokio::test]
+    async fn create_returns_nonempty_uuid() {
+        let rt = KrunRuntime::new();
+        let id = rt
+            .create("alpine", &["/bin/true".into()], &[])
+            .await
+            .expect("create should succeed");
+        assert!(!id.is_empty());
+        // Should be a valid UUID
+        assert!(uuid::Uuid::parse_str(&id).is_ok(), "ID should be a UUID");
+    }
+
+    #[tokio::test]
+    async fn create_returns_unique_ids() {
+        let rt = KrunRuntime::new();
+        let id1 = rt.create("alpine", &[], &[]).await.expect("create 1");
+        let id2 = rt.create("alpine", &[], &[]).await.expect("create 2");
+        assert_ne!(id1, id2);
+    }
+
+    #[tokio::test]
+    async fn start_unknown_id_returns_err() {
+        let rt = KrunRuntime::new();
+        let result = rt.start("nonexistent-id").await;
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("unknown container id"));
+    }
+
+    #[tokio::test]
+    async fn wait_unknown_id_returns_err() {
+        let rt = KrunRuntime::new();
+        let result = rt.wait("nonexistent-id").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn wait_before_start_returns_err() {
+        let rt = KrunRuntime::new();
+        let id = rt.create("alpine", &[], &[]).await.expect("create");
+        let result = rt.wait(&id).await;
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("has not been started"));
+    }
+
+    #[tokio::test]
+    async fn stop_unknown_id_returns_err() {
+        let rt = KrunRuntime::new();
+        let result = rt.stop("nonexistent-id").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn stop_before_start_is_ok() {
+        let rt = KrunRuntime::new();
+        let id = rt.create("alpine", &[], &[]).await.expect("create");
+        // stop() with no process is a no-op
+        rt.stop(&id).await.expect("stop before start should be ok");
+    }
+
+    #[tokio::test]
+    async fn destroy_unknown_id_is_ok() {
+        let rt = KrunRuntime::new();
+        // destroy of nonexistent container should not error
+        rt.destroy("nonexistent-id")
+            .await
+            .expect("destroy unknown should succeed");
+    }
+
+    #[tokio::test]
+    async fn destroy_removes_container() {
+        let rt = KrunRuntime::new();
+        let id = rt.create("alpine", &[], &[]).await.expect("create");
+        rt.destroy(&id).await.expect("destroy");
+        // After destroy, wait should fail
+        assert!(rt.wait(&id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn collect_stdout_unknown_id_returns_err() {
+        let rt = KrunRuntime::new();
+        let result = rt.collect_stdout("nonexistent-id").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn collect_stdout_before_start_returns_err() {
+        let rt = KrunRuntime::new();
+        let id = rt.create("alpine", &[], &[]).await.expect("create");
+        let result = rt.collect_stdout(&id).await;
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("has not been started"));
+    }
+
+    #[test]
+    fn capabilities_reports_no_namespaces_no_cgroups_no_overlay() {
+        let rt = KrunRuntime::new();
+        let caps = rt.capabilities();
+        assert!(!caps.supports_user_namespaces);
+        assert!(!caps.supports_cgroups_v2);
+        assert!(!caps.supports_overlay_fs);
+        assert!(caps.supports_network_isolation);
+        assert!(caps.max_containers.is_none());
+    }
+
+    #[test]
+    fn as_any_downcasts_to_self() {
+        let rt = KrunRuntime::new();
+        assert!(rt.as_any().downcast_ref::<KrunRuntime>().is_some());
+    }
+}
+
 #[async_trait::async_trait]
 impl ContainerRuntime for KrunRuntime {
     fn capabilities(&self) -> RuntimeCapabilities {
@@ -213,6 +337,10 @@ impl ContainerRuntime for KrunRuntime {
     /// Uses the rootfs path as the image identifier passed to smolvm, and
     /// returns a synthetic PID (1) since krun manages its own process tree
     /// inside the VM rather than exposing a host-side PID.
+    ///
+    /// When `capture_output` is set, the smolvm child's stdout fd is extracted
+    /// and returned as `output_reader` so the daemon can stream output back
+    /// to the CLI.
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let env: Vec<(String, String)> = config
             .env
@@ -233,11 +361,39 @@ impl ContainerRuntime for KrunRuntime {
         let image = config.rootfs.to_string_lossy().to_string();
 
         let id = self.create(&image, &command, &env).await?;
-        self.start(&id).await?;
+
+        // Spawn the process and extract stdout fd before storing.
+        let mut proc = SmolvmProcess::spawn(&image, &command, &env)
+            .await
+            .with_context(|| format!("krun: spawn failed for container {id}"))?;
+
+        #[cfg(unix)]
+        let output_reader = if config.capture_output {
+            proc.take_stdout_fd()
+        } else {
+            None
+        };
+        #[cfg(not(unix))]
+        let output_reader = None;
+
+        // Store the process (stdout already taken if captured).
+        {
+            let mut map = self.containers.lock().await;
+            if let Some(state) = map.get_mut(&id) {
+                state.process = Some(proc);
+            }
+        }
+
+        tracing::info!(
+            container_id = %id,
+            image = %image,
+            capture_output = config.capture_output,
+            "krun: container started"
+        );
 
         Ok(SpawnResult {
             pid: 1,
-            output_reader: None,
+            output_reader,
         })
     }
 }

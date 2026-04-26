@@ -1,7 +1,7 @@
 //! `minibox resume` — thaw a paused container.
 
 use anyhow::Context;
-use minibox_client::DaemonClient;
+use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// Execute the `resume` subcommand.

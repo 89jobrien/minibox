@@ -75,3 +75,84 @@ impl ChildInit for KrunFilesystem {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minibox_core::domain::{ChildInit, RootfsSetup};
+    use tempfile::TempDir;
+
+    #[test]
+    fn new_and_default_are_equivalent() {
+        let _a = KrunFilesystem::new();
+        let _b = KrunFilesystem::default();
+    }
+
+    #[test]
+    fn setup_rootfs_returns_merged_dir_matching_container_dir() {
+        let tmp = TempDir::new().expect("tempdir");
+        let fs = KrunFilesystem::new();
+        let layout = fs
+            .setup_rootfs(&[], tmp.path())
+            .expect("setup_rootfs should succeed");
+        assert_eq!(layout.merged_dir, tmp.path().to_path_buf());
+        assert!(layout.rootfs_metadata.is_none());
+        assert!(layout.source_image_ref.is_none());
+    }
+
+    #[test]
+    fn setup_rootfs_ignores_image_layers() {
+        let tmp = TempDir::new().expect("tempdir");
+        let fs = KrunFilesystem::new();
+        let fake_layers = vec![
+            PathBuf::from("/nonexistent/layer1"),
+            PathBuf::from("/nonexistent/layer2"),
+        ];
+        let layout = fs
+            .setup_rootfs(&fake_layers, tmp.path())
+            .expect("setup_rootfs should succeed even with fake layers");
+        assert_eq!(layout.merged_dir, tmp.path().to_path_buf());
+    }
+
+    #[test]
+    fn setup_rootfs_errors_on_nonexistent_dir() {
+        let fs = KrunFilesystem::new();
+        let result = fs.setup_rootfs(&[], Path::new("/does/not/exist/xyzzy"));
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            msg.contains("container_dir"),
+            "error should mention container_dir: {msg}"
+        );
+    }
+
+    #[test]
+    fn cleanup_is_noop_ok() {
+        let tmp = TempDir::new().expect("tempdir");
+        let fs = KrunFilesystem::new();
+        fs.cleanup(tmp.path()).expect("cleanup should succeed");
+    }
+
+    #[test]
+    fn cleanup_ok_even_for_nonexistent_path() {
+        let fs = KrunFilesystem::new();
+        fs.cleanup(Path::new("/does/not/exist"))
+            .expect("cleanup should succeed for any path");
+    }
+
+    #[test]
+    fn pivot_root_is_noop_ok() {
+        let tmp = TempDir::new().expect("tempdir");
+        let fs = KrunFilesystem::new();
+        fs.pivot_root(tmp.path())
+            .expect("pivot_root should succeed");
+    }
+
+    #[test]
+    fn as_any_downcasts_to_self() {
+        use minibox_core::domain::AsAny;
+        let fs = KrunFilesystem::new();
+        let any = fs.as_any();
+        assert!(any.downcast_ref::<KrunFilesystem>().is_some());
+    }
+}

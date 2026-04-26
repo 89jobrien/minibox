@@ -16,7 +16,7 @@
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
-use minibox_client::{DaemonClient, DaemonWriter};
+use minibox_core::client::{DaemonClient, DaemonWriter};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::Write;
 
@@ -83,7 +83,10 @@ pub async fn execute(
                                         ),
                                         data,
                                     };
-                                    let _ = writer.send(req).await;
+                                    if writer.send(req).await.is_err() {
+                                        eprintln!("exec: stdin relay: daemon connection lost");
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -159,10 +162,14 @@ pub async fn execute(
                 std::process::exit(exit_code);
             }
             DaemonResponse::Error { message } => {
+                #[cfg(unix)]
+                drop(_raw_guard);
                 eprintln!("error: {message}");
                 std::process::exit(1);
             }
             other => {
+                #[cfg(unix)]
+                drop(_raw_guard);
                 eprintln!("exec: unexpected response: {other:?}");
                 std::process::exit(1);
             }
@@ -176,27 +183,6 @@ pub async fn execute(
 mod tests {
     use super::*;
     use minibox_core::protocol::DaemonResponse;
-
-    /// Helper: bind a Unix socket, accept one connection, read the request line,
-    /// then send back the given sequence of responses.
-    #[cfg(unix)]
-    async fn serve_responses(socket_path: &std::path::Path, responses: Vec<DaemonResponse>) {
-        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-        use tokio::net::UnixListener;
-
-        let listener = UnixListener::bind(socket_path).unwrap();
-        let (stream, _) = listener.accept().await.unwrap();
-        let (read_half, mut write_half) = tokio::io::split(stream);
-        let mut reader = BufReader::new(read_half);
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        for resp in responses {
-            let mut encoded = serde_json::to_string(&resp).unwrap();
-            encoded.push('\n');
-            write_half.write_all(encoded.as_bytes()).await.unwrap();
-        }
-        write_half.flush().await.unwrap();
-    }
 
     /// Verify that `execute` sends an Exec request with the correct fields.
     #[cfg(unix)]

@@ -7,7 +7,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     cmd!(
         sh,
-        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
@@ -16,13 +16,16 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("fmt-check failed")?;
     cmd!(
         sh,
-        "cargo clippy -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox -p macbox -p miniboxd -- -D warnings"
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
     )
     .run()
     .context("lint failed")?;
-    cmd!(sh,
-        "cargo build --release -p linuxbox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox -p miniboxd"
-    ).run().context("build-release failed")?;
+    cmd!(
+        sh,
+        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+    )
+    .run()
+    .context("build-release failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
 }
@@ -31,13 +34,13 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox"
+        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core"
     )
     .run()
     .context("nextest failed")?;
     cmd!(
         sh,
-        "cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox --html"
+        "cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p minibox-core --html"
     )
     .run()
     .context("coverage failed")?;
@@ -53,16 +56,19 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p minibox -p minibox-macros -p mbx -p minibox-client -p minibox-core -p minibox-oci -p daemonbox --lib"
+        "cargo test --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
     )
     .run()
     .context("lib tests failed")?;
-    cmd!(sh, "cargo test --release -p daemonbox --test handler_tests")
-        .run()
-        .context("handler_tests failed")?;
     cmd!(
         sh,
-        "cargo test --release -p daemonbox --test conformance_tests"
+        "cargo test --release -p minibox --test daemon_handler_tests"
+    )
+    .run()
+    .context("handler_tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test daemon_conformance_tests"
     )
     .run()
     .context("conformance_tests failed")?;
@@ -80,10 +86,10 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("gke_adapter_isolation_tests failed")?;
-    // Container lifecycle failure tests (daemonbox handler error paths)
+    // Container lifecycle failure tests (handler error paths)
     cmd!(
         sh,
-        "cargo test --release -p daemonbox --test container_lifecycle_failure_tests"
+        "cargo test --release -p minibox --test daemon_container_lifecycle_failure_tests"
     )
     .run()
     .context("container_lifecycle_failure_tests failed")?;
@@ -185,10 +191,10 @@ pub fn test_property(sh: &Shell) -> Result<()> {
         .context("minibox property tests failed")?;
     cmd!(
         sh,
-        "cargo test --release -p daemonbox --test proptest_suite"
+        "cargo test --release -p minibox --test daemon_proptest_suite"
     )
     .run()
-    .context("daemonbox property tests failed")?;
+    .context("daemon property tests failed")?;
     Ok(())
 }
 
@@ -261,7 +267,7 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Coverage-check gate: run llvm-cov on daemonbox, parse handler.rs function coverage,
+/// Coverage-check gate: run llvm-cov on minibox, parse handler.rs function coverage,
 /// and exit non-zero when it falls below the 80% threshold.
 ///
 /// The function scrapes the per-file summary line emitted by `cargo llvm-cov` in its
@@ -271,13 +277,13 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
 /// handler.rs          |  80.00 |  ...  |  82.35 |  ...
 /// ```
 ///
-/// Column order (0-based): Filename | Line% | Line hits/total | Function% | ...
+/// Column order (0-based): Filename | Line% | Lines | Fns% | Fns | ...
 /// We look for the function-coverage column (index 3) on the `handler.rs` row.
 pub fn coverage_check(sh: &Shell) -> Result<()> {
     const THRESHOLD: f64 = 80.0;
 
     // Run llvm-cov with text output so we can parse per-file function coverage.
-    let output = cmd!(sh, "cargo llvm-cov nextest --package daemonbox --text")
+    let output = cmd!(sh, "cargo llvm-cov nextest --package minibox --text")
         .output()
         .context("cargo llvm-cov nextest failed")?;
 

@@ -486,37 +486,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "daemonbox"
-version = "0.20.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64",
- "chrono",
- "dashmap",
- "linuxbox",
- "macbox",
- "minibox-core",
- "minibox-testers",
- "nix",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "prometheus-client",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "dashmap"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1318,41 +1287,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
-name = "linuxbox"
-version = "0.20.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bytes",
- "chrono",
- "criterion",
- "flate2",
- "futures",
- "hex",
- "ipnet",
- "libc",
- "minibox-core",
- "minibox-macros",
- "minibox-testers",
- "nix",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "walkdir",
- "wiremock",
-]
-
-[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1381,17 +1315,16 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "macbox"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64",
  "block2",
- "daemonbox",
  "dirs",
  "hostname",
  "libc",
- "linuxbox",
+ "minibox",
  "minibox-core",
  "objc2",
  "objc2-foundation",
@@ -1423,14 +1356,13 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mbx"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
  "base64",
  "clap",
  "libc",
- "minibox-client",
  "minibox-core",
  "nix",
  "predicates",
@@ -1463,46 +1395,52 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
-name = "minibox-client"
-version = "0.20.0"
-dependencies = [
- "minibox-core",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "minibox-core"
-version = "0.20.0"
+name = "minibox"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "base64",
- "insta",
+ "bytes",
+ "chrono",
+ "criterion",
+ "dashmap",
+ "flate2",
+ "futures",
+ "hex",
+ "ipnet",
+ "libc",
+ "macbox",
+ "minibox-core",
  "minibox-macros",
- "minibox-oci",
  "nix",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "prometheus-client",
  "proptest",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
+ "slashcrux",
+ "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber",
  "uuid",
+ "walkdir",
  "wiremock",
 ]
 
 [[package]]
-name = "minibox-macros"
-version = "0.20.0"
-
-[[package]]
-name = "minibox-oci"
-version = "0.20.0"
+name = "minibox-core"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1511,50 +1449,41 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
+ "insta",
  "minibox-macros",
+ "nix",
  "pin-project-lite",
  "proptest",
  "reqwest",
  "serde",
  "serde_json",
  "sha2",
+ "slashcrux",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
  "wiremock",
 ]
 
 [[package]]
-name = "minibox-testers"
-version = "0.20.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "daemonbox",
- "linuxbox",
- "minibox-core",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
+name = "minibox-macros"
+version = "0.21.0"
 
 [[package]]
 name = "miniboxd"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "daemonbox",
  "libc",
- "linuxbox",
  "macbox",
+ "minibox",
  "minibox-core",
- "minibox-testers",
  "nix",
  "proptest",
  "serde_json",
@@ -2553,6 +2482,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "slashcrux"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53c5c18ad999666226f0993c05472106274a24dd1ade4e19eefa11d8e5064a2"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3250,11 +3190,11 @@ dependencies = [
 
 [[package]]
 name = "winbox"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
- "daemonbox",
  "dirs",
+ "minibox",
  "minibox-core",
  "thiserror 2.0.18",
  "tokio",
@@ -3713,6 +3653,7 @@ dependencies = [
  "anyhow",
  "dirs",
  "hex",
+ "libc",
  "serde",
  "serde_json",
  "sha2",

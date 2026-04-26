@@ -17,10 +17,13 @@ use xshell::Shell;
 
 mod bump;
 mod cas;
+mod cgroup_tests;
 mod cleanup;
 mod gates;
 mod preflight;
+mod protocol_sites;
 mod test_image;
+mod test_linux;
 mod vm_image;
 mod vm_run;
 
@@ -47,6 +50,7 @@ fn main() -> Result<()> {
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
         }
+        Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -101,12 +105,28 @@ fn main() -> Result<()> {
             test_image::build_test_image(force)
         }
         Some("coverage-check") => gates::coverage_check(&sh),
-        Some("test-linux") => test_image::test_linux(&sh),
+        Some("test-linux") => test_linux::test_linux(),
+        Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
+        Some("check-protocol-sites") => {
+            let file = env::args()
+                .nth(2)
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| root.join("crates/miniboxd/src/main.rs"));
+            let args_vec: Vec<String> = env::args().collect();
+            let expected: usize = args_vec
+                .windows(2)
+                .find(|w| w[0] == "--expected")
+                .and_then(|w| w[1].parse().ok())
+                .unwrap_or(3);
+            let warn_only = env::args().any(|a| a == "--warn-only");
+            protocol_sites::check_protocol_sites(&file, expected, warn_only)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
             eprintln!("  bump [patch|minor|major]  bump workspace version in Cargo.toml");
             eprintln!("  preflight        check required tools are on PATH and functional");
+            eprintln!("  available        verify cargo xtask is runnable (real capability check)");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          nextest + coverage");
             eprintln!("  test-unit        all unit + conformance tests");
@@ -134,8 +154,11 @@ fn main() -> Result<()> {
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
-            eprintln!("  coverage-check   llvm-cov daemonbox; fail if handler.rs fns < 80%");
+            eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
+            eprintln!("  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)");
+            eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
+            eprintln!("                   verify HandlerDependencies construction site count in miniboxd/src/main.rs");
             Ok(())
         }
     }

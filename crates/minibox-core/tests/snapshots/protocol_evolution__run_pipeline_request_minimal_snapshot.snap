@@ -9,5 +9,8 @@ expression: req
   "image": null,
   "budget": null,
   "env": [],
-  "max_depth": 3
+  "max_depth": 3,
+  "priority": null,
+  "urgency": null,
+  "execution_context": null
 }

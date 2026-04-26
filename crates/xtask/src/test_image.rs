@@ -31,6 +31,7 @@ pub fn default_test_image_dir() -> PathBuf {
 }
 
 /// Full Linux dogfood flow: build test image inside Colima, run tests.
+#[allow(dead_code)]
 pub fn test_linux(sh: &Shell) -> Result<()> {
     // Find the scripts dir relative to workspace root
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))

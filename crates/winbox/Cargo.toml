@@ -3,9 +3,10 @@ name = "winbox"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
-daemonbox = { workspace = true }
+minibox = { workspace = true }
 minibox-core = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -16,4 +17,4 @@ dirs = { workspace = true }
 
 [package.metadata.cargo-machete]
 # winbox is a Windows stub — deps reserved for planned implementation
-ignored = ["daemonbox", "minibox-core", "tokio", "tracing-subscriber"]
+ignored = ["minibox", "minibox-core", "tokio", "tracing-subscriber"]
