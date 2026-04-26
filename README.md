@@ -98,9 +98,9 @@ Eight crates in the workspace:
               +-----------------+-----------------+
               |                 |                 |
         +-----+------+   +-----+------+   +------+-----+
-        |  linuxbox  |   |   macbox   |   |   winbox   |
-        | (minibox)  |   | Colima/VZ/ |   |   (stub)   |
-        |  Linux     |   |   krun     |   |            |
+        |  minibox   |   |   macbox   |   |   winbox   |
+        |  Linux     |   | Colima/VZ/ |   |   (stub)   |
+        | primitives |   |   krun     |   |            |
         +-----+------+   +------------+   +------------+
               |
         +-----+------+
