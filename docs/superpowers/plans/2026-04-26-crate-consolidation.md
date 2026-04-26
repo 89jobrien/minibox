@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # minibox-77 Crate Consolidation — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
