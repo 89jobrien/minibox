@@ -27,7 +27,7 @@ for the active roadmap.
 - **Container events** – `minibox events` streams lifecycle events; all adapter suites.
 - **Platform shims** – `macbox` (Colima + VZ.framework), `winbox` (stub), `daemonbox` (shared
   handler + server).
-- **Core library (`minibox`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
+- **Core library (`linuxbox`)** – Linux primitives; re-exports `minibox-core` for cross-platform use.
 - **JSON CLI (`mbx`)** – Thin client over Unix socket.
 - **Proc-macros (`minibox-macros`)** – `as_any!`, `adapt!`, `default_new!` for adapter boilerplate.
 
@@ -321,7 +321,7 @@ MINIBOX_NETWORK_MODE=bridge miniboxd     # bridge networking
 
 ```bash
 # Unit + protocol tests (any platform)
-cargo test -p minibox
+cargo test -p linuxbox
 
 # All tests (Linux)
 cargo test --workspace
@@ -344,7 +344,7 @@ just doctor
 # Benchmarks (any platform, no daemon needed)
 cargo xtask bench --suite codec    # 36 protocol encode/decode benchmarks
 cargo xtask bench --suite adapter  # 10 trait-overhead benchmarks
-cargo bench -p minibox         # Criterion HTML reports (local only)
+cargo bench -p linuxbox        # Criterion HTML reports (local only)
 ```
 
 **Current counts:** 1039 unit + conformance + property (any platform), 16 cgroup integration
@@ -402,7 +402,7 @@ no seccomp/capability dropping, no rootless support.
 
 ## Extending
 
-Domain traits are defined as ports in `crates/minibox/src/domain.rs`. Adding a capability means
+Domain traits are defined as ports in `crates/linuxbox/src/domain.rs`. Adding a capability means
 implementing the trait and wiring the adapter into `HandlerDependencies`.
 
 | Trait                | Status  | Notes                                         |
@@ -442,7 +442,7 @@ lsmod | grep overlay
 
 # Build
 cargo build --release              # Linux full build
-cargo build -p minibox         # macOS/Windows (lib only)
+cargo build -p linuxbox        # macOS/Windows (lib only, Linux-only features excluded)
 cargo check --workspace            # fast type check
 
 # Lint
