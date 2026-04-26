@@ -196,7 +196,7 @@ fn bench_decode_invalid_request(c: &mut Criterion) {
 }
 
 fn bench_decode_invalid_response(c: &mut Criterion) {
-    let encoded = br#"{"type":"Unknown"}\n"#;
+    let encoded = b"{\"type\":\"Unknown\"}\n";
     c.bench_function("protocol_decode_invalid_response", |b| {
         b.iter(|| {
             let decoded = decode_response(encoded);
