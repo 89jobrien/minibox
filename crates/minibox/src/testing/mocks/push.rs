@@ -14,6 +14,8 @@ struct MockImagePusherState {
     pushed_tags: Vec<String>,
     /// Digest returned by the most recent push.
     last_digest: Option<String>,
+    /// Whether `push_image` should return an error.
+    should_fail: bool,
 }
 
 /// In-memory mock for [`ImagePusher`].
@@ -32,8 +34,15 @@ impl MockImagePusher {
             state: Mutex::new(MockImagePusherState {
                 pushed_tags: vec![],
                 last_digest: None,
+                should_fail: false,
             }),
         }
+    }
+
+    /// Configure all subsequent `push_image` calls to return an error.
+    pub fn with_failure(self) -> Self {
+        self.state.lock().unwrap().should_fail = true;
+        self
     }
 
     /// Returns `true` if `image_ref` has been pushed at least once.
@@ -71,6 +80,13 @@ impl ImagePusher for MockImagePusher {
         _credentials: &RegistryCredentials,
         progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
     ) -> anyhow::Result<PushResult> {
+        {
+            let state = self.state.lock().unwrap();
+            if state.should_fail {
+                anyhow::bail!("mock push failure");
+            }
+        }
+
         let digest =
             "sha256:push000000000000000000000000000000000000000000000000000000000000".to_string();
         let ref_str = format!(

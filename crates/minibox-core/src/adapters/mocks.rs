@@ -1069,6 +1069,7 @@ use crate::domain::{
 /// Tracks commit call count for assertion.
 pub struct MockContainerCommitter {
     call_count: AtomicUsize,
+    should_fail: std::sync::atomic::AtomicBool,
 }
 
 impl MockContainerCommitter {
@@ -1076,7 +1077,15 @@ impl MockContainerCommitter {
     pub fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
+            should_fail: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Configure all subsequent `commit` calls to return an error.
+    pub fn with_failure(self) -> Self {
+        self.should_fail
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self
     }
 
     /// Number of times `commit` has been called.
@@ -1102,6 +1111,12 @@ impl ContainerCommitter for MockContainerCommitter {
         _config: &CommitConfig,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
+        if self
+            .should_fail
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            anyhow::bail!("mock commit failure");
+        }
         // Parse "name:tag" — fall back to "name:latest" if no colon.
         let (name, tag) = if let Some((n, t)) = target_ref.rsplit_once(':') {
             (n.to_string(), t.to_string())
@@ -1131,6 +1146,7 @@ use crate::domain::{BuildConfig, BuildContext, BuildProgress, ImageBuilder};
 /// Parses `config.tag` as `"name:tag"` and returns synthetic [`ImageMetadata`].
 pub struct MockImageBuilder {
     call_count: AtomicUsize,
+    should_fail: std::sync::atomic::AtomicBool,
 }
 
 impl MockImageBuilder {
@@ -1138,7 +1154,15 @@ impl MockImageBuilder {
     pub fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
+            should_fail: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Configure all subsequent `build_image` calls to return an error.
+    pub fn with_failure(self) -> Self {
+        self.should_fail
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self
     }
 
     /// Number of times `build_image` has been called.
@@ -1164,6 +1188,12 @@ impl ImageBuilder for MockImageBuilder {
         progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
+        if self
+            .should_fail
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            anyhow::bail!("mock build failure");
+        }
         let _ = progress_tx
             .send(BuildProgress {
                 step: 1,
@@ -1199,6 +1229,8 @@ struct MockImagePusherState {
     pushed_tags: Vec<String>,
     /// Digest returned by the most recent push.
     last_digest: Option<String>,
+    /// Whether push should fail.
+    should_fail: bool,
 }
 
 /// In-memory mock for [`ImagePusher`].
@@ -1217,6 +1249,7 @@ impl MockImagePusher {
             state: Mutex::new(MockImagePusherState {
                 pushed_tags: vec![],
                 last_digest: None,
+                should_fail: false,
             }),
         }
     }
@@ -1233,6 +1266,12 @@ impl MockImagePusher {
     /// Returns the digest reported by the most recent push, or `None`.
     pub fn last_pushed_digest(&self) -> Option<String> {
         self.state.lock().unwrap().last_digest.clone()
+    }
+
+    /// Configure all subsequent `push_image` calls to return an error.
+    pub fn with_failure(self) -> Self {
+        self.state.lock().unwrap().should_fail = true;
+        self
     }
 }
 
@@ -1252,6 +1291,12 @@ impl ImagePusher for MockImagePusher {
         _credentials: &RegistryCredentials,
         progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
     ) -> anyhow::Result<PushResult> {
+        {
+            let state = self.state.lock().unwrap();
+            if state.should_fail {
+                anyhow::bail!("mock push failure");
+            }
+        }
         let digest =
             "sha256:push000000000000000000000000000000000000000000000000000000000000".to_string();
         let ref_str = format!(

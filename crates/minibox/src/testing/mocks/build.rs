@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use minibox_core::domain::{
     AsAny, BuildConfig, BuildContext, BuildProgress, ImageBuilder, ImageMetadata, LayerInfo,
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 // ---------------------------------------------------------------------------
 // MockImageBuilder
@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// Parses `config.tag` as `"name:tag"` and returns synthetic [`ImageMetadata`].
 pub struct MockImageBuilder {
     call_count: AtomicUsize,
+    should_fail: AtomicBool,
 }
 
 impl MockImageBuilder {
@@ -22,7 +23,14 @@ impl MockImageBuilder {
     pub fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
+            should_fail: AtomicBool::new(false),
         }
+    }
+
+    /// Configure all subsequent `build_image` calls to return an error.
+    pub fn with_failure(self) -> Self {
+        self.should_fail.store(true, Ordering::SeqCst);
+        self
     }
 
     /// Number of times `build_image` has been called.
@@ -52,6 +60,9 @@ impl ImageBuilder for MockImageBuilder {
         progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
+        if self.should_fail.load(Ordering::SeqCst) {
+            anyhow::bail!("mock build failure");
+        }
         let _ = progress_tx
             .send(BuildProgress {
                 step: 1,

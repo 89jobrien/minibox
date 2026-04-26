@@ -5795,3 +5795,501 @@ async fn test_handle_run_propagates_env_vars() {
         other => panic!("expected ContainerCreated, got {other:?}"),
     }
 }
+
+// ===========================================================================
+// Error-path coverage tests (#158, #129, #116)
+// ===========================================================================
+
+// --- handle_push: pusher adapter failure ---
+
+#[tokio::test]
+async fn test_handle_push_adapter_failure_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_pusher =
+        Arc::new(minibox_core::adapters::mocks::MockImagePusher::new().with_failure());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_pusher =
+            Some(Arc::clone(&mock_pusher) as minibox_core::domain::DynImagePusher);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+
+    handler::handle_push(
+        "docker.io/library/alpine:latest".to_string(),
+        minibox_core::protocol::PushCredentials::Anonymous,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("mock push failure")),
+        "expected push failure error, got {resp:?}"
+    );
+}
+
+// --- handle_commit: committer adapter failure ---
+
+#[tokio::test]
+async fn test_handle_commit_adapter_failure_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_committer =
+        Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new().with_failure());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("mock commit failure")),
+        "expected commit failure error, got {resp:?}"
+    );
+}
+
+// --- handle_build: builder adapter failure ---
+
+#[tokio::test]
+async fn test_handle_build_adapter_failure_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder =
+        Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new().with_failure());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+
+    handler::handle_build(
+        "FROM alpine\nRUN true".to_string(),
+        temp_dir.path().to_str().unwrap().to_string(),
+        "testimage:v1".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let mut terminal = None;
+    while let Ok(Some(r)) =
+        tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv()).await
+    {
+        if !matches!(r, DaemonResponse::BuildOutput { .. }) {
+            terminal = Some(r);
+            break;
+        }
+    }
+    assert!(
+        matches!(terminal, Some(DaemonResponse::Error { ref message }) if message.contains("mock build failure")),
+        "expected build failure error, got {terminal:?}"
+    );
+}
+
+// --- handle_build: canonicalize failure (nonexistent path) ---
+
+#[tokio::test]
+async fn test_handle_build_canonicalize_failure_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.build.image_builder =
+            Some(Arc::clone(&mock_builder) as minibox_core::domain::DynImageBuilder);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_build(
+        "FROM alpine".to_string(),
+        "/nonexistent/path/that/does/not/exist".to_string(),
+        "testimage:v1".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("context_path invalid")),
+        "expected canonicalize error, got {resp:?}"
+    );
+}
+
+// --- handle_resize_pty: unknown session ---
+
+#[tokio::test]
+async fn test_handle_resize_pty_unknown_session_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_resize_pty(
+        minibox_core::domain::SessionId::new("nonexistent-session".to_string()),
+        80,
+        24,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("no active tty session")),
+        "expected unknown session error, got {resp:?}"
+    );
+}
+
+// --- handle_send_input: closed channel still succeeds ---
+
+#[tokio::test]
+async fn test_handle_send_input_closed_channel_still_succeeds() {
+    let temp_dir = TempDir::new().unwrap();
+    let d = (*create_test_deps_with_dir(&temp_dir)).clone();
+    let (stdin_tx, stdin_rx_dropped) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+    drop(stdin_rx_dropped);
+    {
+        let mut reg = d.exec.pty_sessions.lock().await;
+        reg.stdin
+            .insert("test-session".to_string(), stdin_tx);
+    }
+    let deps = Arc::new(d);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::new("test-session".to_string()),
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"hello"),
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Success { .. }),
+        "expected Success (channel closed is non-fatal), got {resp:?}"
+    );
+}
+
+// --- handle_resize_pty: closed channel still succeeds ---
+
+#[tokio::test]
+async fn test_handle_resize_pty_closed_channel_still_succeeds() {
+    let temp_dir = TempDir::new().unwrap();
+    let d = (*create_test_deps_with_dir(&temp_dir)).clone();
+    let (resize_tx, resize_rx_dropped) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
+    drop(resize_rx_dropped);
+    {
+        let mut reg = d.exec.pty_sessions.lock().await;
+        reg.resize
+            .insert("test-session".to_string(), resize_tx);
+    }
+    let deps = Arc::new(d);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_resize_pty(
+        minibox_core::domain::SessionId::new("test-session".to_string()),
+        120,
+        40,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Success { .. }),
+        "expected Success (channel closed is non-fatal), got {resp:?}"
+    );
+}
+
+// --- handle_send_input: unknown session ---
+
+#[tokio::test]
+async fn test_handle_send_input_unknown_session_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handle_send_input(
+        minibox_core::domain::SessionId::new("nonexistent-session".to_string()),
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b"data"),
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("no active tty session")),
+        "expected unknown session error, got {resp:?}"
+    );
+}
+
+// --- handle_logs: missing log dir sends Success ---
+
+#[tokio::test]
+async fn test_handle_logs_missing_log_dir_sends_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+    let deps = create_test_deps_with_dir(&temp_dir);
+
+    let (tx_run, mut rx_run) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state.clone(),
+        deps.clone(),
+        tx_run,
+    )
+    .await;
+    let container_id = match rx_run.recv().await.unwrap() {
+        DaemonResponse::ContainerCreated { id } => id,
+        other => panic!("expected ContainerCreated, got {other:?}"),
+    };
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_logs(container_id, false, state, deps, tx).await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Success { ref message } if message.contains("end of log")),
+        "expected end-of-log Success, got {resp:?}"
+    );
+}
+
+// --- handle_run: duplicate container name ---
+
+#[tokio::test]
+async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+    let deps = create_test_deps_with_dir(&temp_dir);
+
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mycontainer".to_string()),
+        state.clone(),
+        deps.clone(),
+        tx1,
+    )
+    .await;
+    let resp1 = rx1.recv().await.unwrap();
+    assert!(
+        matches!(resp1, DaemonResponse::ContainerCreated { .. }),
+        "first run should succeed, got {resp1:?}"
+    );
+
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        Some("mycontainer".to_string()),
+        state,
+        deps,
+        tx2,
+    )
+    .await;
+    let resp2 = rx2.recv().await.unwrap();
+    assert!(
+        matches!(resp2, DaemonResponse::Error { ref message } if message.contains("already in use")),
+        "duplicate name should return error, got {resp2:?}"
+    );
+}
+
+// --- handle_run: network setup failure (bridge mode) ---
+
+#[tokio::test]
+async fn test_handle_run_network_setup_failure_bridge_mode() {
+    use minibox::adapters::mocks::MockNetwork;
+
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let failing_network = Arc::new(MockNetwork::new().with_setup_failure());
+    let deps = build_deps(
+        Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as minibox_core::domain::DynImageRegistry,
+            std::iter::empty::<(&str, minibox_core::domain::DynImageRegistry)>(),
+        )),
+        image_store,
+        failing_network,
+        temp_dir.path().join("containers"),
+        temp_dir.path().join("run"),
+    );
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        Some(NetworkMode::Bridge),
+        vec![],
+        false,
+        vec![],
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("network")),
+        "expected network setup error, got {resp:?}"
+    );
+}
+
+// --- handle_exec: failure with tty=true cleans up PTY registry ---
+
+#[tokio::test]
+async fn test_handle_exec_failure_with_tty_cleans_up_pty_registry() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let mock_exec = minibox::testing::mocks::MockExecRuntime::new().with_failure();
+    let deps = {
+        let mut d = (*create_test_deps_with_dir(&temp_dir)).clone();
+        d.exec.exec_runtime =
+            Some(Arc::new(mock_exec) as minibox_core::domain::DynExecRuntime);
+        Arc::new(d)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_exec(
+        "abc123def456abcd".to_string(),
+        vec!["sh".to_string()],
+        vec![],
+        None,
+        true,
+        state,
+        deps.clone(),
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("exec failed")),
+        "expected exec failure error, got {resp:?}"
+    );
+
+    let reg = deps.exec.pty_sessions.lock().await;
+    assert!(
+        reg.resize.is_empty(),
+        "PTY resize registry should be empty after exec failure"
+    );
+    assert!(
+        reg.stdin.is_empty(),
+        "PTY stdin registry should be empty after exec failure"
+    );
+}
+
+// --- handle_pause: stopped container returns error ---
+
+#[tokio::test]
+async fn test_handle_pause_stopped_container_returns_not_running() {
+    let temp_dir = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&temp_dir);
+    let deps = create_test_deps_with_dir(&temp_dir);
+
+    let (tx_run, mut rx_run) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        state.clone(),
+        deps.clone(),
+        tx_run,
+    )
+    .await;
+    let container_id = match rx_run.recv().await.unwrap() {
+        DaemonResponse::ContainerCreated { id } => id,
+        other => panic!("expected ContainerCreated, got {other:?}"),
+    };
+
+    let _ = handler::handle_stop(container_id.clone(), state.clone(), deps).await;
+
+    let event_sink: Arc<dyn minibox_core::events::EventSink> =
+        Arc::new(minibox_core::events::NoopEventSink);
+    let resp = handler::handle_pause(container_id, state, event_sink).await;
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not running")),
+        "expected 'not running' error, got {resp:?}"
+    );
+}
