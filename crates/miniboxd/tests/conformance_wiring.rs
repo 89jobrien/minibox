@@ -11,7 +11,7 @@
 //!
 //! No daemon process, no root, no network.
 
-use daemonbox::handler::ContainerPolicy;
+use minibox::daemon::handler::ContainerPolicy;
 use minibox_core::protocol::DaemonResponse;
 use minibox_testers::helpers::{make_mock_deps, make_mock_state};
 use minibox_testers::mocks::MockRegistry;

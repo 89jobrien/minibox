@@ -27,7 +27,7 @@
 //! 4. Create required directories.
 //! 5. Remove stale socket file.
 //! 6. Bind `UnixListener`.
-//! 7. Accept connections via `daemonbox::server::run_server`.
+//! 7. Accept connections via `minibox::daemon::server::run_server`.
 //! 8. Gracefully shut down on SIGTERM / SIGINT.
 
 // ── macOS ─────────────────────────────────────────────────────────────────
@@ -112,22 +112,22 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
-use daemonbox::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
+use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
-use daemonbox::state::DaemonState;
-#[cfg(target_os = "linux")]
-use linuxbox::adapters::network::BridgeNetwork;
-#[cfg(target_os = "linux")]
-use linuxbox::adapters::{
+use minibox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
     OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
+use minibox::adapters::{ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
+use minibox::adapters::{CopyFilesystem, NoopLimiter, NoopNetwork, ProotRuntime};
 #[cfg(target_os = "linux")]
-use linuxbox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+use minibox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+#[cfg(target_os = "linux")]
+use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
+#[cfg(target_os = "linux")]
+use minibox::daemon::state::DaemonState;
 #[cfg(target_os = "linux")]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(target_os = "linux")]
@@ -242,27 +242,27 @@ fn build_native_handler_dependencies(
             ) as minibox_core::domain::DynImageRegistry,
         )],
     ));
-    let commit_adapter = linuxbox::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
     );
-    let image_builder = linuxbox::adapters::builder::minibox_image_builder(
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.to_path_buf(),
     );
-    let image_pusher = linuxbox::adapters::push::oci_push_adapter(
+    let image_pusher = minibox::adapters::push::oci_push_adapter(
         RegistryClient::new().context("creating OCI push registry client")?,
         Arc::clone(&state.image_store),
     );
 
     Ok(Arc::new(HandlerDependencies {
-        image: daemonbox::handler::ImageDeps {
+        image: minibox::daemon::handler::ImageDeps {
             registry_router,
             image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
-        lifecycle: daemonbox::handler::LifecycleDeps {
+        lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(OverlayFilesystem::new()),
             resource_limiter: Arc::new(CgroupV2Limiter::new()),
             runtime: Arc::new(LinuxNamespaceRuntime::new()),
@@ -270,18 +270,18 @@ fn build_native_handler_dependencies(
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
-        exec: daemonbox::handler::ExecDeps {
-            exec_runtime: Some(linuxbox::adapters::exec::native_exec_runtime(
-                Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+        exec: minibox::daemon::handler::ExecDeps {
+            exec_runtime: Some(minibox::adapters::exec::native_exec_runtime(
+                Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
             )),
             pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
         },
-        build: daemonbox::handler::BuildDeps {
+        build: minibox::daemon::handler::BuildDeps {
             image_pusher: Some(image_pusher),
             commit_adapter: Some(commit_adapter),
             image_builder: Some(image_builder),
         },
-        events: daemonbox::handler::EventDeps {
+        events: minibox::daemon::handler::EventDeps {
             event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
             event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
             metrics: metrics_recorder,
@@ -357,7 +357,7 @@ fn migrate_to_supervisor_cgroup() {
 
 // ── UnixServerListener ────────────────────────────────────────────────────
 
-/// Wraps a Tokio [`UnixListener`] and implements [`daemonbox::server::ServerListener`].
+/// Wraps a Tokio [`UnixListener`] and implements [`minibox::daemon::server::ServerListener`].
 ///
 /// On `accept()`, peer credentials are read via `SO_PEERCRED` (using the `nix`
 /// crate's `PeerCredentials` socket option) and returned alongside the stream.
@@ -367,16 +367,18 @@ fn migrate_to_supervisor_cgroup() {
 struct UnixServerListener(UnixListener);
 
 #[cfg(target_os = "linux")]
-impl daemonbox::server::ServerListener for UnixServerListener {
+impl minibox::daemon::server::ServerListener for UnixServerListener {
     type Stream = tokio::net::UnixStream;
 
-    async fn accept(&self) -> anyhow::Result<(Self::Stream, Option<daemonbox::server::PeerCreds>)> {
+    async fn accept(
+        &self,
+    ) -> anyhow::Result<(Self::Stream, Option<minibox::daemon::server::PeerCreds>)> {
         let (stream, _addr) = self.0.accept().await?;
         let creds = {
             use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
             use std::os::unix::io::AsFd;
             getsockopt(&stream.as_fd(), PeerCredentials).ok().map(|c| {
-                daemonbox::server::PeerCreds {
+                minibox::daemon::server::PeerCreds {
                     uid: c.uid(),
                     pid: c.pid(),
                 }
@@ -406,7 +408,7 @@ async fn main() -> Result<()> {
     #[cfg(feature = "otel")]
     let _otel_guard = {
         let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
-        daemonbox::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
+        minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
     };
     #[cfg(not(feature = "otel"))]
     minibox_core::init_tracing();
@@ -441,7 +443,7 @@ async fn main() -> Result<()> {
     // ── Startup diagnostics ──────────────────────────────────────────────
     let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
         .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
-    daemonbox::server::log_startup_info(
+    minibox::daemon::server::log_startup_info(
         &socket_path_str,
         &data_dir.display().to_string(),
         &cgroup_root,
@@ -493,9 +495,9 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
             .parse()
             .context("parsing MINIBOX_METRICS_ADDR")?;
-        let recorder = Arc::new(daemonbox::telemetry::PrometheusMetricsRecorder::new());
+        let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
         let (_addr, _handle) =
-            daemonbox::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
+            minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
                 .await
                 .context("starting metrics server")?;
         info!(addr = %_addr, "metrics server listening");
@@ -503,7 +505,7 @@ async fn main() -> Result<()> {
     };
     #[cfg(not(feature = "metrics"))]
     let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
-        Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new());
+        Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
 
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
@@ -514,7 +516,7 @@ async fn main() -> Result<()> {
         let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
         match mode.as_str() {
             "bridge" => Arc::new(BridgeNetwork::new().context("BridgeNetwork init failed")?),
-            "host" => Arc::new(linuxbox::adapters::network::HostNetwork::new()),
+            "host" => Arc::new(minibox::adapters::network::HostNetwork::new()),
             #[cfg(feature = "tailnet")]
             "tailnet" => {
                 let tailnet_cfg = TailnetConfig {
@@ -564,13 +566,13 @@ async fn main() -> Result<()> {
             let proot_runtime =
                 ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
             Arc::new(HandlerDependencies {
-                image: daemonbox::handler::ImageDeps {
+                image: minibox::daemon::handler::ImageDeps {
                     registry_router,
                     image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                     image_gc: Arc::clone(&image_gc),
                     image_store: Arc::clone(&state.image_store),
                 },
-                lifecycle: daemonbox::handler::LifecycleDeps {
+                lifecycle: minibox::daemon::handler::LifecycleDeps {
                     filesystem: Arc::new(CopyFilesystem::new()),
                     resource_limiter: Arc::new(NoopLimiter::new()),
                     runtime: Arc::new(proot_runtime),
@@ -578,16 +580,16 @@ async fn main() -> Result<()> {
                     containers_base: containers_dir.clone(),
                     run_containers_base: PathBuf::from(&run_containers_dir),
                 },
-                exec: daemonbox::handler::ExecDeps {
+                exec: minibox::daemon::handler::ExecDeps {
                     exec_runtime: None,
                     pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
                 },
-                build: daemonbox::handler::BuildDeps {
+                build: minibox::daemon::handler::BuildDeps {
                     image_pusher: None,
                     commit_adapter: None,
                     image_builder: None,
                 },
-                events: daemonbox::handler::EventDeps {
+                events: minibox::daemon::handler::EventDeps {
                     event_sink: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
@@ -609,13 +611,13 @@ async fn main() -> Result<()> {
                 )],
             ));
             Arc::new(HandlerDependencies {
-                image: daemonbox::handler::ImageDeps {
+                image: minibox::daemon::handler::ImageDeps {
                     registry_router,
                     image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                     image_gc: Arc::clone(&image_gc),
                     image_store: Arc::clone(&state.image_store),
                 },
-                lifecycle: daemonbox::handler::LifecycleDeps {
+                lifecycle: minibox::daemon::handler::LifecycleDeps {
                     filesystem: Arc::new(ColimaFilesystem::new()),
                     resource_limiter: Arc::new(ColimaLimiter::new()),
                     runtime: Arc::new(ColimaRuntime::new()),
@@ -623,16 +625,16 @@ async fn main() -> Result<()> {
                     containers_base: containers_dir.clone(),
                     run_containers_base: PathBuf::from(&run_containers_dir),
                 },
-                exec: daemonbox::handler::ExecDeps {
+                exec: minibox::daemon::handler::ExecDeps {
                     exec_runtime: None,
                     pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
                 },
-                build: daemonbox::handler::BuildDeps {
+                build: minibox::daemon::handler::BuildDeps {
                     image_pusher: None,
                     commit_adapter: None,
                     image_builder: None,
                 },
-                events: daemonbox::handler::EventDeps {
+                events: minibox::daemon::handler::EventDeps {
                     event_sink: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
@@ -654,13 +656,13 @@ async fn main() -> Result<()> {
                 )],
             ));
             Arc::new(HandlerDependencies {
-                image: daemonbox::handler::ImageDeps {
+                image: minibox::daemon::handler::ImageDeps {
                     registry_router,
                     image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
                     image_gc: Arc::clone(&image_gc),
                     image_store: Arc::clone(&state.image_store),
                 },
-                lifecycle: daemonbox::handler::LifecycleDeps {
+                lifecycle: minibox::daemon::handler::LifecycleDeps {
                     filesystem: Arc::new(SmolVmFilesystem::new()),
                     resource_limiter: Arc::new(SmolVmLimiter::new()),
                     runtime: Arc::new(SmolVmRuntime::new()),
@@ -668,16 +670,16 @@ async fn main() -> Result<()> {
                     containers_base: containers_dir.clone(),
                     run_containers_base: PathBuf::from(&run_containers_dir),
                 },
-                exec: daemonbox::handler::ExecDeps {
+                exec: minibox::daemon::handler::ExecDeps {
                     exec_runtime: None,
                     pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
                 },
-                build: daemonbox::handler::BuildDeps {
+                build: minibox::daemon::handler::BuildDeps {
                     image_pusher: None,
                     commit_adapter: None,
                     image_builder: None,
                 },
-                events: daemonbox::handler::EventDeps {
+                events: minibox::daemon::handler::EventDeps {
                     event_sink: Arc::clone(&event_broker)
                         as Arc<dyn minibox_core::events::EventSink>,
                     event_source: Arc::clone(&event_broker)
@@ -754,7 +756,7 @@ async fn main() -> Result<()> {
     let listener = UnixServerListener(raw_listener);
 
     // ── Accept loop via run_server ────────────────────────────────────────
-    daemonbox::server::run_server(listener, state, deps, require_root_auth, shutdown).await?;
+    minibox::daemon::server::run_server(listener, state, deps, require_root_auth, shutdown).await?;
 
     // ── Cleanup ──────────────────────────────────────────────────────────
     if sock_path.exists() {
@@ -838,7 +840,7 @@ mod tests {
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
         let event_broker = Arc::new(BroadcastEventBroker::new());
         let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
-            Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new());
+            Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
         let native_network: Arc<dyn minibox_core::domain::NetworkProvider> =
             Arc::new(NoopNetwork::new());
 

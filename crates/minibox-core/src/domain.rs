@@ -153,7 +153,7 @@ pub trait MetricsRecorder: Send + Sync {
 /// # Examples
 ///
 /// ```rust,ignore
-/// use linuxbox::domain::ImageRegistry;
+/// use minibox::domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,
@@ -926,7 +926,7 @@ impl From<&str> for SessionId {
 ///
 /// This is a domain value type — no channel fields, no tokio types.
 /// Channel wiring (stdin relay, PTY resize) belongs in the infrastructure
-/// adapter layer (`linuxbox::adapters::exec`).
+/// adapter layer (`minibox::adapters::exec`).
 #[derive(Debug, Clone)]
 pub struct ExecSpec {
     pub cmd: Vec<String>,
@@ -1347,8 +1347,7 @@ mod tests {
     #[test]
     fn test_container_id_valid_16_char_hex() {
         // A standard 16-character lowercase hex ID (common Docker short-ID format) is valid.
-        let id = ContainerId::new("deadbeef01234567".to_string())
-            .expect("valid 16-char hex id");
+        let id = ContainerId::new("deadbeef01234567".to_string()).expect("valid 16-char hex id");
         assert_eq!(id.as_str(), "deadbeef01234567");
     }
 
@@ -1374,7 +1373,10 @@ mod tests {
         // Characters outside [0-9a-fA-F] that are also non-alphanumeric are rejected.
         // Hyphens and underscores are not alphanumeric, so they fail validation.
         let result = ContainerId::new("deadbeef-0123456".to_string());
-        assert!(result.is_err(), "hyphen is not alphanumeric and must be rejected");
+        assert!(
+            result.is_err(),
+            "hyphen is not alphanumeric and must be rejected"
+        );
     }
 
     #[test]

@@ -2,11 +2,10 @@
 resolver = "3"
 members = [
     "crates/minibox-core",
-    "crates/linuxbox",
+    "crates/minibox",
     "crates/miniboxd",
     "crates/mbx",
     "crates/minibox-macros",
-    "crates/daemonbox",
     "crates/macbox",
     "crates/winbox",
     "crates/xtask",
@@ -70,9 +69,8 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
 minibox-core = { path = "crates/minibox-core", version = "0.21.0" }
-linuxbox = { path = "crates/linuxbox" }
+minibox = { path = "crates/minibox" }
 minibox-macros = { path = "crates/minibox-macros", version = "0.21.0" }
-daemonbox = { path = "crates/daemonbox" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
 dirs = "5"

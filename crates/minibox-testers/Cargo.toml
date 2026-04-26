@@ -7,8 +7,7 @@ publish = false
 
 [dependencies]
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
-daemonbox = { workspace = true }
+minibox = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

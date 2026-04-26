@@ -486,37 +486,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "daemonbox"
-version = "0.21.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64",
- "chrono",
- "dashmap",
- "linuxbox",
- "macbox",
- "minibox-core",
- "minibox-testers",
- "nix",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "prometheus-client",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "dashmap"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1318,41 +1287,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
-name = "linuxbox"
-version = "0.21.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bytes",
- "chrono",
- "criterion",
- "flate2",
- "futures",
- "hex",
- "ipnet",
- "libc",
- "minibox-core",
- "minibox-macros",
- "minibox-testers",
- "nix",
- "proptest",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tar",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "walkdir",
- "wiremock",
-]
-
-[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1387,11 +1321,10 @@ dependencies = [
  "async-trait",
  "base64",
  "block2",
- "daemonbox",
  "dirs",
  "hostname",
  "libc",
- "linuxbox",
+ "minibox",
  "minibox-core",
  "objc2",
  "objc2-foundation",
@@ -1462,6 +1395,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "minibox"
+version = "0.21.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64",
+ "bytes",
+ "chrono",
+ "criterion",
+ "dashmap",
+ "flate2",
+ "futures",
+ "hex",
+ "ipnet",
+ "libc",
+ "macbox",
+ "minibox-core",
+ "minibox-macros",
+ "minibox-testers",
+ "nix",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "prometheus-client",
+ "proptest",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "uuid",
+ "walkdir",
+ "wiremock",
+]
+
+[[package]]
 name = "minibox-core"
 version = "0.21.0"
 dependencies = [
@@ -1502,8 +1479,7 @@ version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "daemonbox",
- "linuxbox",
+ "minibox",
  "minibox-core",
  "serde",
  "serde_json",
@@ -1517,10 +1493,9 @@ version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "daemonbox",
  "libc",
- "linuxbox",
  "macbox",
+ "minibox",
  "minibox-core",
  "minibox-testers",
  "nix",
@@ -3221,8 +3196,8 @@ name = "winbox"
 version = "0.21.0"
 dependencies = [
  "anyhow",
- "daemonbox",
  "dirs",
+ "minibox",
  "minibox-core",
  "thiserror 2.0.18",
  "tokio",

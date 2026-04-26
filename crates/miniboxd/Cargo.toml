@@ -15,14 +15,14 @@ path = "src/main.rs"
 
 [features]
 default = ["metrics", "otel"]
-metrics = ["daemonbox/metrics"]
-otel    = ["daemonbox/otel"]
+metrics = ["minibox/metrics"]
+otel    = ["minibox/otel"]
 # tailnet feature is declared for cfg(feature = "tailnet") gating in main.rs;
 # the tailbox crate was moved to minibox-plugins — enable separately when available.
 tailnet = []
 
 [dependencies]
-daemonbox = { workspace = true }
+minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
@@ -30,7 +30,6 @@ tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 minibox-core = { workspace = true }
-linuxbox = { workspace = true }
 nix = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -20,12 +20,12 @@
 
 #![cfg(target_os = "linux")]
 
-use linuxbox::adapters::{
+use minibox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, NoopNetwork,
     OverlayFilesystem,
 };
-use linuxbox::image::ImageStore;
-use linuxbox::protocol::DaemonResponse;
+use minibox::image::ImageStore;
+use minibox::protocol::DaemonResponse;
 use miniboxd::handler::{self, ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
@@ -110,7 +110,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
     });
 
     (deps, state, temp_dir)
@@ -335,7 +335,10 @@ async fn test_container_removal_cleanup() {
 
     // Mark as stopped (normally done by reaper)
     state
-        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .update_container_state(
+            &container_id,
+            minibox::daemon::state::ContainerState::Stopped,
+        )
         .await;
 
     // Remove container
@@ -473,7 +476,10 @@ async fn test_complete_container_lifecycle() {
 
     // 6. Mark as stopped and remove
     state
-        .update_container_state(&container_id, daemonbox::state::ContainerState::Stopped)
+        .update_container_state(
+            &container_id,
+            minibox::daemon::state::ContainerState::Stopped,
+        )
         .await;
     let remove_response = handler::handle_remove(container_id.clone(), state.clone(), deps).await;
     assert!(matches!(remove_response, DaemonResponse::Success { .. }));
@@ -557,7 +563,7 @@ async fn test_multiple_concurrent_containers() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
         state
-            .update_container_state(&id, daemonbox::state::ContainerState::Stopped)
+            .update_container_state(&id, minibox::daemon::state::ContainerState::Stopped)
             .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }

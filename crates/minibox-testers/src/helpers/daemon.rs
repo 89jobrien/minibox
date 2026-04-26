@@ -1,13 +1,13 @@
-//! Shared helpers for daemonbox conformance tests.
+//! Shared helpers for daemon conformance tests.
 
 use crate::helpers::gc::NoopImageGc;
 use crate::mocks::MockRegistry;
 use crate::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
-use daemonbox::handler::{
+use minibox::daemon::handler::{
     BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
     NoopImageLoader, PtySessionRegistry,
 };
-use daemonbox::state::DaemonState;
+use minibox::daemon::state::DaemonState;
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
@@ -82,9 +82,9 @@ pub fn make_mock_deps_with_registry(
         events: EventDeps {
             event_sink: Arc::new(NoopEventSink),
             event_source: Arc::new(BroadcastEventBroker::new()),
-            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
-        policy: daemonbox::handler::ContainerPolicy {
+        policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
@@ -93,17 +93,17 @@ pub fn make_mock_deps_with_registry(
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = linuxbox::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
     Arc::new(DaemonState::new(image_store, base))
 }
 
-/// Build a minimal [`daemonbox::state::ContainerRecord`] for use in tests.
+/// Build a minimal [`minibox::daemon::state::ContainerRecord`] for use in tests.
 ///
 /// All optional/path fields are set to safe empty/tmp values. The returned
 /// record is in `Created` state with no PID.
-pub fn make_stub_record(id: impl Into<String>) -> daemonbox::state::ContainerRecord {
+pub fn make_stub_record(id: impl Into<String>) -> minibox::daemon::state::ContainerRecord {
     let id = id.into();
-    daemonbox::state::ContainerRecord {
+    minibox::daemon::state::ContainerRecord {
         info: minibox_core::protocol::ContainerInfo {
             id: id.clone(),
             name: None,

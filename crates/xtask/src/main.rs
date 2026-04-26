@@ -48,9 +48,7 @@ fn main() -> Result<()> {
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
         }
-        Some("available") => {
-            preflight::check_xtask_available(&preflight::ProcessXtaskProbe)
-        }
+        Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -139,7 +137,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
-            eprintln!("  coverage-check   llvm-cov daemonbox; fail if handler.rs fns < 80%");
+            eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             Ok(())
         }

@@ -24,16 +24,16 @@ pub mod preflight;
 pub mod vz;
 
 use anyhow::{Context, Result};
-use daemonbox::handler::HandlerDependencies;
-use daemonbox::state::DaemonState;
 use krun::filesystem::KrunFilesystem;
 use krun::limiter::KrunLimiter;
 use krun::registry::KrunRegistry;
 use krun::runtime::KrunRuntime;
-use linuxbox::adapters::{
+use minibox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     NoopNetwork,
 };
+use minibox::daemon::handler::HandlerDependencies;
+use minibox::daemon::state::DaemonState;
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{DynImageLoader, DynImageRegistry};
 use minibox_core::image::ImageStore;
@@ -66,15 +66,15 @@ fn build_colima_handler_dependencies(
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
     let image_loader: DynImageLoader = registry.clone();
-    let commit_adapter = linuxbox::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as linuxbox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
     );
-    let image_builder = linuxbox::adapters::builder::minibox_image_builder(
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.clone(),
     );
-    let image_pusher = linuxbox::adapters::colima_image_pusher(
+    let image_pusher = minibox::adapters::colima_image_pusher(
         Arc::clone(&state.image_store),
         Arc::clone(&image_loader),
         data_dir.join("exports"),
@@ -82,7 +82,7 @@ fn build_colima_handler_dependencies(
     );
 
     Ok(Arc::new(HandlerDependencies {
-        image: daemonbox::handler::ImageDeps {
+        image: minibox::daemon::handler::ImageDeps {
             // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter,
             // so we use it as the default with no hostname overrides.
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -93,7 +93,7 @@ fn build_colima_handler_dependencies(
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
-        lifecycle: daemonbox::handler::LifecycleDeps {
+        lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(ColimaFilesystem::new()),
             resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
             runtime: Arc::new(
@@ -105,28 +105,28 @@ fn build_colima_handler_dependencies(
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
-        exec: daemonbox::handler::ExecDeps {
+        exec: minibox::daemon::handler::ExecDeps {
             exec_runtime: None,
             pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-                daemonbox::handler::PtySessionRegistry::default(),
+                minibox::daemon::handler::PtySessionRegistry::default(),
             )),
         },
-        build: daemonbox::handler::BuildDeps {
+        build: minibox::daemon::handler::BuildDeps {
             image_pusher: Some(image_pusher),
             commit_adapter: Some(commit_adapter),
             image_builder: Some(image_builder),
         },
-        events: daemonbox::handler::EventDeps {
+        events: minibox::daemon::handler::EventDeps {
             event_sink: Arc::new(minibox_core::events::NoopEventSink),
             event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
-        policy: daemonbox::handler::ContainerPolicy::default(),
+        policy: minibox::daemon::handler::ContainerPolicy::default(),
     }))
 }
 
 /// Newtype wrapper around [`tokio::net::UnixListener`] that implements
-/// [`daemonbox::server::ServerListener`] for the macOS daemon.
+/// [`minibox::daemon::server::ServerListener`] for the macOS daemon.
 ///
 /// On macOS, `SO_PEERCRED` is not available through the `nix` crate, so
 /// peer credential checking is skipped (the `accept` implementation returns
@@ -138,13 +138,13 @@ fn build_colima_handler_dependencies(
 /// On macOS, uses `getpeereid(2)` (pid unavailable, returns 0 sentinel).
 /// On Linux, uses `SO_PEERCRED` via `getsockopt`.
 #[cfg(target_os = "macos")]
-fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::PeerCreds> {
+fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<minibox::daemon::server::PeerCreds> {
     let mut uid: libc::uid_t = 0;
     let mut gid: libc::gid_t = 0;
     // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
     // call on any connected Unix domain socket.
     if unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
-        Some(daemonbox::server::PeerCreds { uid, pid: 0 })
+        Some(minibox::daemon::server::PeerCreds { uid, pid: 0 })
     } else {
         tracing::warn!("getpeereid failed: {}", std::io::Error::last_os_error());
         None
@@ -152,7 +152,7 @@ fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::Pee
 }
 
 #[cfg(target_os = "linux")]
-fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::PeerCreds> {
+fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<minibox::daemon::server::PeerCreds> {
     use std::mem;
     let mut cred: libc::ucred = unsafe { mem::zeroed() };
     let mut len = mem::size_of::<libc::ucred>() as libc::socklen_t;
@@ -168,7 +168,7 @@ fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::Pee
         )
     };
     if ret == 0 {
-        Some(daemonbox::server::PeerCreds {
+        Some(minibox::daemon::server::PeerCreds {
             uid: cred.uid,
             pid: cred.pid,
         })
@@ -180,10 +180,12 @@ fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<daemonbox::server::Pee
 
 struct MacUnixListener(UnixListener);
 
-impl daemonbox::server::ServerListener for MacUnixListener {
+impl minibox::daemon::server::ServerListener for MacUnixListener {
     type Stream = tokio::net::UnixStream;
 
-    async fn accept(&self) -> anyhow::Result<(Self::Stream, Option<daemonbox::server::PeerCreds>)> {
+    async fn accept(
+        &self,
+    ) -> anyhow::Result<(Self::Stream, Option<minibox::daemon::server::PeerCreds>)> {
         let (stream, _addr) = self.0.accept().await?;
         use std::os::unix::io::AsRawFd;
         let creds = get_peer_creds(stream.as_raw_fd());
@@ -205,7 +207,7 @@ impl daemonbox::server::ServerListener for MacUnixListener {
 ///    [`ColimaRegistry`], [`ColimaFilesystem`], [`ColimaLimiter`],
 ///    [`ColimaRuntime`].
 /// 6. Removes any stale socket file, binds a new Unix socket, and runs the
-///    [`daemonbox::server::run_server`] accept loop with root-auth disabled.
+///    [`minibox::daemon::server::run_server`] accept loop with root-auth disabled.
 /// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
@@ -348,7 +350,7 @@ pub async fn start() -> Result<()> {
     };
 
     // macOS: no root auth for Colima (operations run in the VM).
-    daemonbox::server::run_server(
+    minibox::daemon::server::run_server(
         MacUnixListener(raw_listener),
         state,
         deps,
@@ -389,16 +391,16 @@ async fn start_krun(
     let registry_port: DynImageRegistry = registry;
 
     let deps = Arc::new(HandlerDependencies {
-        image: daemonbox::handler::ImageDeps {
+        image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
                 registry_port,
                 std::iter::empty::<(&str, DynImageRegistry)>(),
             )),
-            image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
-        lifecycle: daemonbox::handler::LifecycleDeps {
+        lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(KrunFilesystem::new()),
             resource_limiter: Arc::new(KrunLimiter::new()),
             runtime: Arc::new(KrunRuntime::new()),
@@ -406,23 +408,23 @@ async fn start_krun(
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
-        exec: daemonbox::handler::ExecDeps {
+        exec: minibox::daemon::handler::ExecDeps {
             exec_runtime: None,
             pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-                daemonbox::handler::PtySessionRegistry::default(),
+                minibox::daemon::handler::PtySessionRegistry::default(),
             )),
         },
-        build: daemonbox::handler::BuildDeps {
+        build: minibox::daemon::handler::BuildDeps {
             image_pusher: None,
             commit_adapter: None,
             image_builder: None,
         },
-        events: daemonbox::handler::EventDeps {
+        events: minibox::daemon::handler::EventDeps {
             event_sink: Arc::new(minibox_core::events::NoopEventSink),
             event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
-        policy: daemonbox::handler::ContainerPolicy::default(),
+        policy: minibox::daemon::handler::ContainerPolicy::default(),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -453,7 +455,7 @@ async fn start_krun(
         info!("krun: received Ctrl-C, shutting down");
     };
 
-    daemonbox::server::run_server(
+    minibox::daemon::server::run_server(
         MacUnixListener(raw_listener),
         state,
         deps,
@@ -482,7 +484,7 @@ async fn start_vz(
     images_dir: std::path::PathBuf,
     containers_dir: std::path::PathBuf,
     run_containers_dir: std::path::PathBuf,
-    state: Arc<daemonbox::state::DaemonState>,
+    state: Arc<minibox::daemon::state::DaemonState>,
 ) -> Result<()> {
     use vz::vm::{VzVm, VzVmConfig, default_vm_dir};
     use vz::{VzFilesystem, VzLimiter, VzRegistry, VzRuntime};
@@ -598,10 +600,10 @@ async fn start_vz(
         filesystem: Arc::new(VzFilesystem::new(Arc::clone(&vm_arc))),
         resource_limiter: Arc::new(VzLimiter::new(Arc::clone(&vm_arc))),
         runtime: Arc::new(VzRuntime::new(Arc::clone(&vm_arc))),
-        network_provider: Arc::new(linuxbox::adapters::NoopNetwork::new()),
+        network_provider: Arc::new(minibox::adapters::NoopNetwork::new()),
         containers_base: containers_dir,
         run_containers_base: run_containers_dir,
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+        metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         image_loader: Arc::new(VzRegistry::new(Arc::clone(&vm_arc))),
         exec_runtime: None,
         image_pusher: None,
@@ -611,9 +613,9 @@ async fn start_vz(
         event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
         image_gc: vz_image_gc,
         image_store: vz_image_store_ref,
-        policy: daemonbox::handler::ContainerPolicy::default(),
+        policy: minibox::daemon::handler::ContainerPolicy::default(),
         pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
-            daemonbox::handler::PtySessionRegistry::default(),
+            minibox::daemon::handler::PtySessionRegistry::default(),
         )),
     });
 
@@ -647,7 +649,7 @@ async fn start_vz(
         vm_for_shutdown.stop();
     };
 
-    daemonbox::server::run_server(
+    minibox::daemon::server::run_server(
         MacUnixListener(raw_listener),
         state,
         deps,

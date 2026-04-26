@@ -1,12 +1,12 @@
-//! miniboxd library — re-exports from daemonbox for backward compatibility.
+//! miniboxd library — re-exports from minibox::daemon for backward compatibility.
 //!
 //! These re-exports exist so that integration tests importing
 //! `miniboxd::handler`, `miniboxd::state`, or `miniboxd::server` continue
-//! to compile without changes after the move to `daemonbox`.
+//! to compile without changes.
 
 #[doc(hidden)]
-pub use daemonbox::handler;
+pub use minibox::daemon::handler;
 #[doc(hidden)]
-pub use daemonbox::server;
+pub use minibox::daemon::server;
 #[doc(hidden)]
-pub use daemonbox::state;
+pub use minibox::daemon::state;
