@@ -15,10 +15,10 @@ pub struct IpAllocator {
 }
 
 impl IpAllocator {
-    pub fn new(subnet: IpNet) -> Self {
+    pub fn new(subnet: IpNet) -> anyhow::Result<Self> {
         let base = match subnet.network() {
             IpAddr::V4(a) => u32::from(a),
-            IpAddr::V6(_) => panic!("IPv6 not supported in IpAllocator"),
+            IpAddr::V6(_) => anyhow::bail!("IPv6 not supported in IpAllocator"),
         };
         let hosts = subnet.hosts().filter_map(|ip| {
             if let IpAddr::V4(a) = ip {
@@ -30,11 +30,11 @@ impl IpAllocator {
         let mut available: BTreeSet<u32> = hosts.collect();
         let gateway = base + 1;
         available.remove(&gateway); // reserve gateway
-        Self {
+        Ok(Self {
             subnet,
             available,
             gateway,
-        }
+        })
     }
 
     pub fn allocate(&mut self) -> Option<IpAddr> {
@@ -89,7 +89,7 @@ impl BridgeNetwork {
         Ok(Self {
             bridge_name: DEFAULT_BRIDGE.to_string(),
             subnet,
-            ip_alloc: Arc::new(Mutex::new(IpAllocator::new(subnet))),
+            ip_alloc: Arc::new(Mutex::new(IpAllocator::new(subnet)?)),
         })
     }
 
@@ -519,7 +519,7 @@ mod tests {
     #[test]
     fn test_ip_allocator_skips_network_and_gateway() {
         let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
 
         let first = alloc.allocate().unwrap();
         // Must not be .0 (network) or .1 (gateway)
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_ip_allocator_release_and_reuse() {
         let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
 
         let ip1 = alloc.allocate().unwrap();
         alloc.release(ip1);
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn ip_allocator_gateway_never_allocated() {
         let subnet: ipnet::IpNet = "10.0.0.0/24".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
         let expected_gateway: IpAddr = "10.0.0.1".parse().unwrap();
 
         let mut allocated = vec![];
@@ -564,7 +564,7 @@ mod tests {
         // /29 gives hosts .1-.6 (ipnet excludes network .0 and broadcast .7).
         // Gateway .1 is reserved, leaving 5 usable addresses (.2-.6).
         let subnet: ipnet::IpNet = "192.168.1.0/29".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
 
         for i in 1..=5 {
             assert!(alloc.allocate().is_some(), "allocation {i} must succeed");
@@ -579,7 +579,7 @@ mod tests {
     #[test]
     fn ip_allocator_release_out_of_subnet_is_noop() {
         let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
 
         let foreign: IpAddr = "10.0.0.5".parse().unwrap();
         alloc.release(foreign); // must not panic
@@ -588,11 +588,24 @@ mod tests {
         assert_eq!(ip, "172.20.0.2".parse::<IpAddr>().unwrap());
     }
 
+    /// IPv6 subnet must return Err, not panic.
+    #[test]
+    fn ip_allocator_ipv6_returns_err() {
+        let subnet: ipnet::IpNet = "2001:db8::/32".parse().unwrap();
+        let result = IpAllocator::new(subnet);
+        assert!(result.is_err(), "IPv6 subnet must produce Err, not panic");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("IPv6"),
+            "error message should mention IPv6; got: {msg}"
+        );
+    }
+
     /// Issue #134: allocations must be sequential starting at .2.
     #[test]
     fn ip_allocator_sequential_allocation() {
         let subnet: ipnet::IpNet = "172.20.0.0/16".parse().unwrap();
-        let mut alloc = IpAllocator::new(subnet);
+        let mut alloc = IpAllocator::new(subnet).unwrap();
 
         let ip1 = alloc.allocate().unwrap();
         let ip2 = alloc.allocate().unwrap();

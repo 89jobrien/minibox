@@ -2109,3 +2109,509 @@ mod pause_resume_conformance {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Issue #146 — logs conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for `handle_logs`.
+///
+/// Documents and enforces the contract:
+/// - nonexistent container → `DaemonResponse::Error`
+/// - container with no log file → `DaemonResponse::Success` (empty stream)
+/// - container with log content → `DaemonResponse::LogLine` lines + `Success`
+mod logs_conformance {
+    use super::*;
+    use minibox_core::protocol::OutputStreamKind;
+    use std::fs;
+
+    /// Drain all responses from handle_logs into a Vec.
+    async fn collect_logs(
+        name_or_id: String,
+        state: Arc<DaemonState>,
+        deps: Arc<HandlerDependencies>,
+    ) -> Vec<DaemonResponse> {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+        handler::handle_logs(name_or_id, false, state, deps, tx).await;
+        let mut responses = Vec::new();
+        while let Ok(r) = rx.try_recv() {
+            responses.push(r);
+        }
+        responses
+    }
+
+    fn deps_with_alpine(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+        mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            temp_dir,
+        )
+    }
+
+    /// #146 — nonexistent container must return a single Error response.
+    #[tokio::test]
+    async fn logs_nonexistent_container_returns_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let responses = collect_logs(
+            "does-not-exist-container-id".to_string(),
+            state,
+            deps,
+        )
+        .await;
+
+        assert_eq!(
+            responses.len(),
+            1,
+            "must return exactly one response for nonexistent container"
+        );
+        assert!(
+            matches!(responses[0], DaemonResponse::Error { .. }),
+            "nonexistent container must return Error, got: {:?}",
+            responses[0]
+        );
+    }
+
+    /// #146 — container with no log file → empty LogLine stream, then Success.
+    ///
+    /// `handle_logs` silently skips missing log files. The result is a single
+    /// `Success` response with no `LogLine` messages.
+    #[tokio::test]
+    async fn logs_container_with_no_log_file_returns_success() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        // Create a container record (no log files written).
+        let create_resp = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_resp {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
+        };
+
+        let responses = collect_logs(id, state, deps).await;
+
+        // Must end with Success; no LogLine messages expected (no log file).
+        let last = responses.last().expect("must have at least one response");
+        assert!(
+            matches!(last, DaemonResponse::Success { .. }),
+            "handle_logs with no log file must terminate with Success, got: {last:?}"
+        );
+        let log_lines: Vec<_> = responses
+            .iter()
+            .filter(|r| matches!(r, DaemonResponse::LogLine { .. }))
+            .collect();
+        assert!(
+            log_lines.is_empty(),
+            "no log file means zero LogLine responses, got: {log_lines:?}"
+        );
+    }
+
+    /// #146 — container with log content → LogLine per line, then Success.
+    #[tokio::test]
+    async fn logs_container_with_log_content_returns_log_lines() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let create_resp = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_resp {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
+        };
+
+        // Write a stdout.log file in the container directory.
+        let log_dir = deps.lifecycle.containers_base.join(&id);
+        fs::create_dir_all(&log_dir).expect("create log dir");
+        fs::write(log_dir.join("stdout.log"), "hello world\nfoo bar\n")
+            .expect("write stdout.log");
+
+        let responses = collect_logs(id, state, deps).await;
+
+        let log_lines: Vec<_> = responses
+            .iter()
+            .filter_map(|r| {
+                if let DaemonResponse::LogLine { stream, line } = r {
+                    Some((stream, line))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        assert_eq!(log_lines.len(), 2, "must emit one LogLine per line in stdout.log");
+        assert_eq!(log_lines[0].1, "hello world", "first line must match");
+        assert_eq!(log_lines[1].1, "foo bar", "second line must match");
+        assert!(
+            matches!(log_lines[0].0, OutputStreamKind::Stdout),
+            "log lines from stdout.log must use Stdout stream kind"
+        );
+
+        let last = responses.last().expect("must have terminal response");
+        assert!(
+            matches!(last, DaemonResponse::Success { .. }),
+            "handle_logs must terminate with Success, got: {last:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Issue #143 — list conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for `handle_list`.
+mod list_conformance {
+    use super::*;
+
+    fn deps_with_alpine(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
+        mock_deps_with_registry(
+            MockRegistry::new().with_cached_image("library/alpine", "latest"),
+            temp_dir,
+        )
+    }
+
+    /// #143 — list after one run shows one container with correct id/image/state.
+    #[tokio::test]
+    async fn list_after_run_shows_container() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let create_resp = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_resp {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
+        };
+
+        let list_resp = handler::handle_list(state).await;
+        let containers = match list_resp {
+            DaemonResponse::ContainerList { containers } => containers,
+            _ => panic!("expected ContainerList, got: {list_resp:?}"),
+        };
+
+        assert_eq!(containers.len(), 1, "list must return exactly one container");
+        assert_eq!(containers[0].id, id, "container id must match");
+        assert!(
+            containers[0].image.contains("alpine"),
+            "container image must contain 'alpine', got: {}",
+            containers[0].image
+        );
+        // State may be "Created" or "Running" depending on mock timing.
+        assert!(
+            matches!(
+                containers[0].state.as_str(),
+                "Created" | "Running" | "Stopped"
+            ),
+            "container state must be a valid state string, got: {}",
+            containers[0].state
+        );
+    }
+
+    /// #143 — list after run+stop shows container as Stopped.
+    #[tokio::test]
+    async fn list_after_stop_shows_stopped() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let create_resp = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_resp {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
+        };
+
+        // Force the state to Stopped via Running (state machine: Created→Running→Stopped).
+        state
+            .update_container_state(&id, ContainerState::Running)
+            .await
+            .expect("update state to Running must succeed");
+        state
+            .update_container_state(&id, ContainerState::Stopped)
+            .await
+            .expect("update state to Stopped must succeed");
+
+        let list_resp = handler::handle_list(state).await;
+        let containers = match list_resp {
+            DaemonResponse::ContainerList { containers } => containers,
+            _ => panic!("expected ContainerList, got: {list_resp:?}"),
+        };
+
+        assert_eq!(containers.len(), 1, "must have exactly one container");
+        assert_eq!(
+            containers[0].state, "Stopped",
+            "container state must be 'Stopped', got: {}",
+            containers[0].state
+        );
+    }
+
+    /// #143 — list after run+remove shows no container.
+    #[tokio::test]
+    async fn list_after_remove_shows_absent() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let create_resp = handle_run_once(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            state.clone(),
+            deps.clone(),
+        )
+        .await;
+        let id = match create_resp {
+            DaemonResponse::ContainerCreated { id } => id,
+            _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
+        };
+
+        // Stop then remove (state machine: Created→Running→Stopped).
+        state
+            .update_container_state(&id, ContainerState::Running)
+            .await
+            .expect("update state to Running");
+        state
+            .update_container_state(&id, ContainerState::Stopped)
+            .await
+            .expect("update state to Stopped");
+        let remove_resp = handler::handle_remove(id, state.clone(), deps).await;
+        assert!(
+            matches!(remove_resp, DaemonResponse::Success { .. }),
+            "remove must succeed, got: {remove_resp:?}"
+        );
+
+        let list_resp = handler::handle_list(state).await;
+        let containers = match list_resp {
+            DaemonResponse::ContainerList { containers } => containers,
+            _ => panic!("expected ContainerList, got: {list_resp:?}"),
+        };
+
+        assert!(
+            containers.is_empty(),
+            "list must be empty after remove, got: {containers:?}"
+        );
+    }
+
+    /// #143 — list returns all containers when multiple exist.
+    #[tokio::test]
+    async fn list_returns_all_containers_when_multiple_exist() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = deps_with_alpine(&temp_dir);
+        let state = mock_state(&temp_dir);
+
+        // Create three containers.
+        for _ in 0..3 {
+            let resp = handle_run_once(
+                "alpine".to_string(),
+                Some("latest".to_string()),
+                vec!["/bin/sh".to_string()],
+                None,
+                None,
+                false,
+                state.clone(),
+                deps.clone(),
+            )
+            .await;
+            assert!(
+                matches!(resp, DaemonResponse::ContainerCreated { .. }),
+                "each run must succeed, got: {resp:?}"
+            );
+        }
+
+        let list_resp = handler::handle_list(state).await;
+        let containers = match list_resp {
+            DaemonResponse::ContainerList { containers } => containers,
+            _ => panic!("expected ContainerList, got: {list_resp:?}"),
+        };
+
+        assert_eq!(
+            containers.len(),
+            3,
+            "list must return all 3 containers, got: {containers:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Issue #144 — policy conformance tests
+// ---------------------------------------------------------------------------
+
+/// Conformance tests for `ContainerPolicy` enforcement in `handle_run`.
+mod policy_conformance {
+    use super::*;
+    use minibox_core::domain::BindMount;
+
+    fn mock_deps_with_policy(
+        allow_bind_mounts: bool,
+        allow_privileged: bool,
+        temp_dir: &TempDir,
+    ) -> Arc<HandlerDependencies> {
+        let image_store =
+            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+        Arc::new(HandlerDependencies {
+            image: daemonbox::handler::ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    Arc::new(
+                        MockRegistry::new().with_cached_image("library/alpine", "latest"),
+                    ) as DynImageRegistry,
+                    [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+                )),
+                image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc::new()),
+                image_store,
+            },
+            lifecycle: daemonbox::handler::LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: temp_dir.path().join("containers"),
+                run_containers_base: temp_dir.path().join("run"),
+            },
+            exec: daemonbox::handler::ExecDeps {
+                exec_runtime: None,
+                pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    daemonbox::handler::PtySessionRegistry::default(),
+                )),
+            },
+            build: daemonbox::handler::BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: daemonbox::handler::EventDeps {
+                event_sink: Arc::new(minibox_core::events::NoopEventSink),
+                event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+                metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: daemonbox::handler::ContainerPolicy {
+                allow_bind_mounts,
+                allow_privileged,
+            },
+        })
+    }
+
+    /// Helper: run with specific mounts and privileged flag.
+    async fn run_with_policy(
+        mounts: Vec<BindMount>,
+        privileged: bool,
+        state: Arc<DaemonState>,
+        deps: Arc<HandlerDependencies>,
+    ) -> DaemonResponse {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handler::handle_run(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            vec!["/bin/sh".to_string()],
+            None,
+            None,
+            false,
+            None,
+            mounts,
+            privileged,
+            vec![],
+            None,
+            state,
+            deps,
+            tx,
+        )
+        .await;
+        rx.recv().await.expect("handler sent no response")
+    }
+
+    fn a_bind_mount() -> BindMount {
+        BindMount {
+            host_path: std::path::PathBuf::from("/tmp/host"),
+            container_path: std::path::PathBuf::from("/mnt/host"),
+            read_only: false,
+        }
+    }
+
+    /// #144 — bind mount when allow_bind_mounts=false → Error.
+    #[tokio::test]
+    async fn run_with_bind_mount_when_disallowed_returns_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps_with_policy(false, true, &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let resp = run_with_policy(vec![a_bind_mount()], false, state, deps).await;
+
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "bind mount with allow_bind_mounts=false must return Error, got: {resp:?}"
+        );
+    }
+
+    /// #144 — privileged=true when allow_privileged=false → Error.
+    #[tokio::test]
+    async fn run_with_privileged_when_disallowed_returns_error() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps_with_policy(true, false, &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let resp = run_with_policy(vec![], true, state, deps).await;
+
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "privileged=true with allow_privileged=false must return Error, got: {resp:?}"
+        );
+    }
+
+    /// #144 — bind mount when allow_bind_mounts=true → ContainerCreated (not Error).
+    #[tokio::test]
+    async fn run_with_bind_mount_when_allowed_returns_container_created() {
+        let temp_dir = TempDir::new().expect("tempdir");
+        let deps = mock_deps_with_policy(true, true, &temp_dir);
+        let state = mock_state(&temp_dir);
+
+        let resp = run_with_policy(vec![a_bind_mount()], false, state, deps).await;
+
+        assert!(
+            matches!(resp, DaemonResponse::ContainerCreated { .. }),
+            "bind mount with allow_bind_mounts=true must return ContainerCreated, got: {resp:?}"
+        );
+    }
+}

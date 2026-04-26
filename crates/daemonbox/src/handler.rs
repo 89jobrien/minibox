@@ -12,8 +12,8 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use linuxbox::ImageRef;
 use minibox_core::domain::NetworkMode;
+use minibox_core::image::reference::ImageRef;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime,
     DynFilesystemProvider, DynMetricsRecorder, DynNetworkProvider, DynRegistryRouter,
@@ -2480,8 +2480,8 @@ mod run_inner_tests {
 
 #[cfg(test)]
 mod registry_router_tests {
-    use linuxbox::ImageRef;
     use linuxbox::adapters::{DockerHubRegistry, GhcrRegistry};
+    use minibox_core::image::reference::ImageRef;
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::{DynImageRegistry, RegistryRouter};
     use minibox_core::image::ImageStore;
