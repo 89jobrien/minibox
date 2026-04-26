@@ -168,60 +168,6 @@ items:
     note: null
     number: 87
     url: https://github.com/89jobrien/minibox/issues/87
-- id: minibox-65
-  doob_uuid: null
-  name: vz-virtiofs
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#75)'
-  description: 'GH #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 75
-    url: https://github.com/89jobrien/minibox/issues/75
-- id: minibox-66
-  doob_uuid: null
-  name: vz-agent
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#88)'
-  description: 'GH #88: Blocked by VZ VM provisioning and vsock bridge. In-VM daemon for container control.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 88
-    url: https://github.com/89jobrien/minibox/issues/88
-- id: minibox-67
-  doob_uuid: null
-  name: vz-io-bridge
-  priority: P2
-  status: blocked
-  title: '[BLOCKED] feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#93)'
-  description: 'GH #93: Blocked by minibox-agent and vsock bridge implementation.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 93
-    url: https://github.com/89jobrien/minibox/issues/93
 - id: minibox-agent-llm-api
   doob_uuid: null
   name: minibox-agent-llm-api
@@ -261,18 +207,11 @@ items:
     value: null
     reviewed: null
     note: dockerbox stays in main workspace until core crates are published. dashbox already moved to minibox-plugins (zero deps).
-- id: minibox-78
-  doob_uuid: null
-  name: ci-all-features
-  priority: P2
-  status: open
-  title: 'feat(ci): add cargo test --all-features job to CI'
-  description: Add a cargo test --all-features job to ci.yml to catch feature-flag-specific regressions. Edit .github/workflows/ci.yml.
-  files:
-  - .github/workflows/ci.yml
-  completed: null
-  extra: []
 log:
+- date: 20260426:000000
+  summary: 'Session 28: closed minibox-78 (ci-all-features already in ci.yml). Pruned 3 duplicate VZ items (65/66/67, covered by 43/53/54).'
+  commits: []
+  session: 28
 - date: 20260424:192000
   summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
   commits: []
