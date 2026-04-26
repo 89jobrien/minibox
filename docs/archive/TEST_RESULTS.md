@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Minibox Test Results
 
 **Test Date:** 2026-03-16

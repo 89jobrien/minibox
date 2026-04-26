@@ -1,6 +1,7 @@
 # minibox
 
-> Terminal‑first tooling for sandboxed dev environments on macOS, Linux, and Windows.
+> Terminal-first tooling for sandboxed dev environments -- production on Linux,
+> experimental on macOS, planned for Windows.
 
 > Designed to be a solid tool/command/skill target for AI agents.
 
@@ -62,15 +63,19 @@ A Docker-like container runtime written in Rust. Daemon/client architecture with
 
 **Status:** Development (`v0.21.0`)
 
-## Supported
+## Platform Support
 
-- Linux: native (namespaces + cgroups v2 + overlayfs) — shipped
-- GKE: unprivileged deployment (proot + copy-FS) — shipped
-- macOS Colima: `MINIBOX_ADAPTER=colima` — experimental (exec/logs limited)
-- macOS VZ.framework: blocked upstream — `VZErrorInternal(code=1)` on macOS 26 ARM64
-- Windows: stub only — `winbox::start()` returns error unconditionally
+| Platform | Status | Adapter | Notes |
+| --- | --- | --- | --- |
+| Linux x86_64 | **Production** | `native` | Full namespace/cgroup v2/overlay isolation |
+| Linux aarch64 | **Production** | `native` | Same as x86_64 |
+| Linux (GKE) | **Production** | `gke` | Unprivileged pods via proot + copy-FS |
+| macOS (Apple Silicon) | Experimental | `colima`, `krun` (WIP) | VZ blocked by Apple bug ([GH #61](https://github.com/89jobrien/minibox/issues/61)) |
+| macOS (Intel) | Experimental | `colima` | exec/logs limited |
+| Windows | Planned | `winbox` stub | `winbox::start()` returns error; no runtime yet |
 
-See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform breakdown.
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
+capability breakdown.
 
 ## Near-Term Roadmap
 
@@ -91,6 +96,7 @@ See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 - [Crate Structure](#crate-structure)
 - [Architecture](#architecture)
 - [Platform Support](#platform-support)
+- [Platform Support (Detail)](#platform-support-detail)
 - [CLI Reference](#cli-reference)
 - [Testing](#testing)
 - [Security](#security)
@@ -225,23 +231,19 @@ miniboxd starts
       │      ├── MINIBOX_ADAPTER=colima  OR  Colima running ──►│ Colima delegate
       │      └── neither ──────────────────────────────────── ►│ FATAL: no backend
       │                                                        │
-      └─── Windows ─────────────────────────────────────────── ┘
+      └─── Windows (STUB — no runtime yet) ──────────────────── ┘
              │
-           winbox::preflight()
-             ├── MINIBOX_ADAPTER=hcs   OR  HCS available  ───► HCS (Windows Containers)
-             ├── MINIBOX_ADAPTER=wsl2  OR  WSL2 available ───► WSL2 delegate
-             └── neither ─────────────────────────────────── ► FATAL: no backend
+           winbox::start() → returns error unconditionally
+           (Future: HCS / WSL2 backends planned)
 ```
 
-## Platform Support
+## Platform Support (Detail)
 
-Four adapter suites are shipped: `native` (Linux namespaces + cgroups v2 + overlayfs), `gke`
-(unprivileged pods via proot + copy-FS), `colima` (macOS via limactl/nerdctl), and `vz` (macOS
-Virtualization.framework — experimental). Additional adapters (`docker_desktop`, `wsl2`, `vf`,
-`hcs`) exist as library code but are not wired into the daemon. Passing an unrecognized
-`MINIBOX_ADAPTER` value causes the daemon to exit at startup.
+See the [Platform Support](#platform-support) table above for the status matrix.
 
-See `CLAUDE.md` ("Current Limitations") for the full per-platform constraint list.
+Additional adapters (`docker_desktop`, `wsl2`, `vf`, `hcs`) exist as library code but are
+**not wired** into the daemon. Passing an unrecognized `MINIBOX_ADAPTER` value causes the
+daemon to exit at startup.
 
 ---
 

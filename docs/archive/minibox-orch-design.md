@@ -3,6 +3,8 @@ status: future
 note: Design for minibox-orch crate (self-evolving agent orchestrator). Not started. Prerequisite: exec/logs/named-container gaps in minibox must be closed first (see docs/plans/maestro-minibox.md).
 ---
 
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # minibox-orch Design
 
 A new Rust binary crate that treats `miniboxd` as a substrate and layers self-evolving agents on top.

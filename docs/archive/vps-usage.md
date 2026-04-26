@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # VPS Usage (minibox)
 
 This guide covers running `miniboxd` and using the CLI on this VPS.

@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Cgroup Debug Findings (miniboxd on VPS)
 
 ## Context

@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Useful Patterns from Zombienet-SDK
 
 **Source:** ~/dev/zombienet-sdk-main/

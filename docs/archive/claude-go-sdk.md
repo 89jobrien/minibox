@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Go Claude Agent SDK
 
 Install and configure the Anthropic Go SDK with context-based cancellation and functional options

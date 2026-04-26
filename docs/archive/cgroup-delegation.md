@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # cgroup v2 Delegation for miniboxd
 
 This document explains how miniboxd is wired into the systemd cgroup hierarchy, why the

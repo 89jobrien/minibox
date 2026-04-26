@@ -15,7 +15,7 @@ The integration components in this repository are:
 | `minibox-dagu/Dockerfile` | Builds the `ghcr.io/89jobrien/mbx-dagu` image on top of the official dagu base image. |
 | `minibox-dagu/executor.go` | The `mbx-dagu` binary: translates dagu step definitions to miniboxctl HTTP API calls. |
 | `crates/miniboxctl/` | HTTP controller that bridges dagu → miniboxd over the Unix socket. |
-| `docs/archive/dagu-minibox-integration.md` | Architecture diagrams (Mermaid + ASCII). |
+| `docs/archive/dagu-minibox-integration.md` | Architecture diagrams (Mermaid + ASCII). **(archived)** |
 | `docs/superpowers/specs/2026-03-24-dagu-minibox-orchestration-design.md` | Full design spec. |
 
 ## Runtime dependency chain

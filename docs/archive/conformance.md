@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Conformance Suite
 
 The conformance suite validates that every backend adapter (commit, build, push) honours the

@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Issue Dependency Graph
 
 **Generated:** 2026-04-16

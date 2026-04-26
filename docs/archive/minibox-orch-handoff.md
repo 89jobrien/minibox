@@ -3,6 +3,8 @@ status: future
 note: Implementation spec for {App}-orch. Not started. See {App}-orch-design.md for full type definitions and architecture.
 ---
 
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # {App}-orch Implementation Handoff
 
 ## What This Is

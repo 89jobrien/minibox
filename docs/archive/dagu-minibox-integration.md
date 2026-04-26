@@ -1,3 +1,5 @@
+> **ARCHIVED** — This document is not authoritative. See the current docs in the repo root.
+
 # Dagu + Minibox Integration
 
 Shows how dagu orchestrates minibox container jobs via `mbx-dagu` and the
