@@ -453,6 +453,10 @@ is defined on `RootfsSetup` — import `RootfsSetup` explicitly wherever `setup_
 <context> could be sent"); }` so dropped connections are observable in logs.
 - **Stale rust-analyzer diagnostics** — During multi-file edits, rust-analyzer lags behind. Use `cargo check -p <crate>` as the source of truth, not the IDE error count.
 - **Linux-only clippy lints** — Files under `#![cfg(target_os = "linux")]` (e.g. `bridge.rs`) are invisible to macOS clippy. Lints like `clone_on_copy` and `collapsible_if` only surface on Linux CI runners — always check CI after touching the adapter layer.
+- **Linux-only cfg-gated imports** — `#[cfg(target_os = "linux")]` code is not checked by
+  `cargo check` on macOS. When writing or reviewing Linux-only modules (cgroup_tests.rs,
+  bridge.rs, etc.), manually verify all `use` statements are present — the compiler won't
+  catch missing imports until Linux CI runs.
 
 ### macbox/vz gotchas (relevant when modifying `crates/macbox/src/vz/` or merging the vz branch)
 
@@ -570,6 +574,10 @@ main (develop) ──auto──► next (validated) ──manual──► stable
 - **`feature/*`, `hotfix/*`, `chore/*`**: Short-lived, target `main`. Auto-deleted on merge.
 
 Every commit on every branch must compile. `origin` is GitHub (`git@github.com:89jobrien/minibox.git`).
+
+**Guardrail**: Never promote `next → stable` without confirming `next` CI is green. After
+merging to `next`, run `gh run list --limit 3` and verify all `next` jobs pass before
+touching `stable`. The `stable` branch is a manual gate — do not batch the promotion.
 
 **Shared target dir**: `CARGO_TARGET_DIR=~/.minibox/cache/target/` (set in `.envrc`). Worktrees share the same cache.
 

@@ -59,7 +59,10 @@ async fn exec_success_increments_call_count() {
     let cid = make_container_id("execconf02ab1234");
 
     assert_eq!(runtime.call_count(), 0);
-    runtime.run_in_container(&cid, default_spec(), tx).await.unwrap();
+    runtime
+        .run_in_container(&cid, default_spec(), tx)
+        .await
+        .unwrap();
     assert_eq!(runtime.call_count(), 1);
 }
 
@@ -70,12 +73,21 @@ async fn exec_successive_calls_produce_different_ids() {
     let cid = make_container_id("execconf03ab1234");
 
     let (tx1, _) = mpsc::channel::<DaemonResponse>(8);
-    let h1 = runtime.run_in_container(&cid, default_spec(), tx1).await.unwrap();
+    let h1 = runtime
+        .run_in_container(&cid, default_spec(), tx1)
+        .await
+        .unwrap();
 
     let (tx2, _) = mpsc::channel::<DaemonResponse>(8);
-    let h2 = runtime.run_in_container(&cid, default_spec(), tx2).await.unwrap();
+    let h2 = runtime
+        .run_in_container(&cid, default_spec(), tx2)
+        .await
+        .unwrap();
 
-    assert_ne!(h1.id, h2.id, "successive exec handles must have different ids");
+    assert_ne!(
+        h1.id, h2.id,
+        "successive exec handles must have different ids"
+    );
 }
 
 /// The mock captures the last `ExecSpec` for test assertions.
@@ -92,9 +104,14 @@ async fn exec_captures_last_spec() {
     };
 
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
-    runtime.run_in_container(&cid, spec.clone(), tx).await.unwrap();
+    runtime
+        .run_in_container(&cid, spec.clone(), tx)
+        .await
+        .unwrap();
 
-    let captured = runtime.last_spec().expect("last_spec must be Some after a call");
+    let captured = runtime
+        .last_spec()
+        .expect("last_spec must be Some after a call");
     assert_eq!(captured.cmd, spec.cmd);
     assert_eq!(captured.tty, true);
     assert_eq!(captured.working_dir, Some(PathBuf::from("/tmp")));
@@ -107,12 +124,12 @@ async fn exec_captures_last_container_id() {
     let cid = make_container_id("execconf05ab1234");
 
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
-    runtime.run_in_container(&cid, default_spec(), tx).await.unwrap();
+    runtime
+        .run_in_container(&cid, default_spec(), tx)
+        .await
+        .unwrap();
 
-    assert_eq!(
-        runtime.last_container_id().expect("must be Some"),
-        cid
-    );
+    assert_eq!(runtime.last_container_id().expect("must be Some"), cid);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +144,10 @@ async fn exec_failure_returns_err() {
     let cid = make_container_id("execconf06ab1234");
 
     let result = runtime.run_in_container(&cid, default_spec(), tx).await;
-    assert!(result.is_err(), "exec must fail when configured with_failure");
+    assert!(
+        result.is_err(),
+        "exec must fail when configured with_failure"
+    );
 }
 
 /// A failed exec still increments `call_count`.
@@ -138,7 +158,11 @@ async fn exec_failure_increments_call_count() {
     let cid = make_container_id("execconf07ab1234");
 
     let _ = runtime.run_in_container(&cid, default_spec(), tx).await;
-    assert_eq!(runtime.call_count(), 1, "call_count must increment on failure");
+    assert_eq!(
+        runtime.call_count(),
+        1,
+        "call_count must increment on failure"
+    );
 }
 
 // ---------------------------------------------------------------------------

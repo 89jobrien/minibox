@@ -29,6 +29,10 @@ build-release:
 build:
     cargo build --release
 
+# Build the sandbox toolchain image and load into minibox.
+build-sandbox:
+    bash images/sandbox/build.sh
+
 # Build static Linux musl binaries matching the host architecture.
 # Output: target/<arch>-unknown-linux-musl/release/{miniboxd,minibox}
 build-linux:

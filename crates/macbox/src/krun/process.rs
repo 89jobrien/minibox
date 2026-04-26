@@ -166,11 +166,23 @@ mod tests {
                     .await
                     .expect("collect_stdout should work");
                 // echo prints: machine run --image test-image --env KEY=VAL -- cmd1 cmd2
-                assert!(output.contains("machine"), "should contain 'machine': {output}");
+                assert!(
+                    output.contains("machine"),
+                    "should contain 'machine': {output}"
+                );
                 assert!(output.contains("run"), "should contain 'run': {output}");
-                assert!(output.contains("--image"), "should contain '--image': {output}");
-                assert!(output.contains("test-image"), "should contain image name: {output}");
-                assert!(output.contains("KEY=VAL"), "should contain env pair: {output}");
+                assert!(
+                    output.contains("--image"),
+                    "should contain '--image': {output}"
+                );
+                assert!(
+                    output.contains("test-image"),
+                    "should contain image name: {output}"
+                );
+                assert!(
+                    output.contains("KEY=VAL"),
+                    "should contain env pair: {output}"
+                );
                 assert!(output.contains("cmd1"), "should contain command: {output}");
                 assert!(output.contains("cmd2"), "should contain arg: {output}");
             }

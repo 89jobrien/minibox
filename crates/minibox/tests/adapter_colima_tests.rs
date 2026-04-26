@@ -388,9 +388,10 @@ async fn runtime_spawn_script_embeds_args() {
     let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
         *captured_argv_ref.lock().unwrap() = args.iter().map(|arg| arg.to_string()).collect();
         if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc")
-            && let Some(script) = args.get(pos + 1) {
-                *cap.lock().unwrap() = script.to_string();
-            }
+            && let Some(script) = args.get(pos + 1)
+        {
+            *cap.lock().unwrap() = script.to_string();
+        }
         Ok("99\n".to_string())
     }));
 

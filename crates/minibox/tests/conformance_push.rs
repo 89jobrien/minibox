@@ -17,12 +17,12 @@
 
 use anyhow::Result;
 use minibox::adapters::{OciPushAdapter, commit_upper_dir_to_image};
+use minibox::testing::backend::BackendDescriptor;
+use minibox::testing::fixtures::{LocalPushTargetFixture, WritableUpperDirFixture};
 use minibox_core::domain::{BackendCapability, DynImagePusher, RegistryCredentials};
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use minibox_core::image::registry::RegistryClient;
-use minibox::testing::backend::BackendDescriptor;
-use minibox::testing::fixtures::{LocalPushTargetFixture, WritableUpperDirFixture};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------

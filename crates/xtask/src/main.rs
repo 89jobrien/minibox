@@ -15,10 +15,12 @@ use anyhow::{Result, bail};
 use std::{env, path::Path};
 use xshell::Shell;
 
+mod bench;
 mod bump;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
+mod docs_lint;
 mod gates;
 mod preflight;
 mod protocol_sites;
@@ -107,6 +109,8 @@ fn main() -> Result<()> {
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("test-linux") => test_linux::test_linux(),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
+        Some("lint-docs") => docs_lint::lint_docs(root),
+        Some("bench") => bench::bench(&sh, root),
         Some("check-protocol-sites") => {
             let file = env::args()
                 .nth(2)
@@ -155,10 +159,18 @@ fn main() -> Result<()> {
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
+            eprintln!(
+                "  lint-docs        validate frontmatter + status values in docs/superpowers/"
+            );
+            eprintln!("  bench            run criterion benchmarks, save to bench/results/");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
-            eprintln!("  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)");
+            eprintln!(
+                "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
+            );
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
-            eprintln!("                   verify HandlerDependencies construction site count in miniboxd/src/main.rs");
+            eprintln!(
+                "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"
+            );
             Ok(())
         }
     }

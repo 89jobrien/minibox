@@ -5,11 +5,7 @@ use std::{fs, path::Path};
 ///
 /// When a field is added to `HandlerDependencies`, all three adapter suites (native, gke,
 /// colima) must be updated together. This check fails if the count deviates from `expected`.
-pub fn check_protocol_sites(
-    file: &Path,
-    expected: usize,
-    warn_only: bool,
-) -> Result<()> {
+pub fn check_protocol_sites(file: &Path, expected: usize, warn_only: bool) -> Result<()> {
     let content = fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", file.display()))?;
 
@@ -39,7 +35,9 @@ pub fn check_protocol_sites(
         if warn_only {
             return Ok(());
         }
-        bail!("construction site count mismatch ({count} != {expected}); pass --warn-only to suppress");
+        bail!(
+            "construction site count mismatch ({count} != {expected}); pass --warn-only to suppress"
+        );
     }
 
     println!("OK: construction site count matches expected.");

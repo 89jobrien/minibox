@@ -8,6 +8,7 @@ use std::net::IpAddr;
 ///
 /// Skips the network address (`.0`) and gateway address (`.1`).
 /// Released IPs are returned to the pool.
+#[derive(Debug)]
 pub struct IpAllocator {
     subnet: IpNet,
     available: BTreeSet<u32>, // IPv4 host parts only

@@ -9,9 +9,9 @@
 //!
 //! No I/O, no actual PTY allocation.
 
-use minibox_core::domain::{NullPtyAllocator, PtyAllocator, PtyConfig};
 #[cfg(feature = "test-utils")]
 use minibox_core::domain::MockPtyAllocator;
+use minibox_core::domain::{NullPtyAllocator, PtyAllocator, PtyConfig};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
@@ -19,7 +19,11 @@ use std::sync::Arc;
 // ---------------------------------------------------------------------------
 
 fn default_pty_config() -> PtyConfig {
-    PtyConfig { rows: 24, cols: 80, enabled: true }
+    PtyConfig {
+        rows: 24,
+        cols: 80,
+        enabled: true,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,8 +81,12 @@ fn conformance_mock_pty_returns_configured_fds() {
 #[test]
 fn conformance_mock_pty_is_idempotent() {
     let alloc = MockPtyAllocator::new(5, 6);
-    let h1 = alloc.allocate(&default_pty_config()).expect("first allocation");
-    let h2 = alloc.allocate(&default_pty_config()).expect("second allocation");
+    let h1 = alloc
+        .allocate(&default_pty_config())
+        .expect("first allocation");
+    let h2 = alloc
+        .allocate(&default_pty_config())
+        .expect("second allocation");
 
     assert_eq!(h1.master_fd, h2.master_fd);
     assert_eq!(h1.slave_fd, h2.slave_fd);
@@ -89,7 +97,11 @@ fn conformance_mock_pty_is_idempotent() {
 #[test]
 fn conformance_mock_pty_zero_dimensions_accepted() {
     let alloc = MockPtyAllocator::new(3, 4);
-    let config = PtyConfig { rows: 0, cols: 0, enabled: true };
+    let config = PtyConfig {
+        rows: 0,
+        cols: 0,
+        enabled: true,
+    };
     let result = alloc.allocate(&config);
     assert!(result.is_ok(), "zero dimensions must not cause an error");
 }
@@ -108,6 +120,8 @@ fn conformance_pty_allocator_as_trait_object_null() {
 #[test]
 fn conformance_pty_allocator_as_trait_object_mock() {
     let alloc: Arc<dyn PtyAllocator> = Arc::new(MockPtyAllocator::new(7, 8));
-    let handle = alloc.allocate(&default_pty_config()).expect("mock must succeed");
+    let handle = alloc
+        .allocate(&default_pty_config())
+        .expect("mock must succeed");
     assert_eq!(handle.master_fd, 7);
 }

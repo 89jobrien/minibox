@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use std::{env, fs, path::Path};
 use xshell::{Shell, cmd};
 
+use crate::docs_lint;
+
 /// Pre-commit gate: fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
@@ -26,6 +28,9 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("build-release failed")?;
+    // Docs frontmatter lint (fast, no external tools).
+    let root = sh.current_dir();
+    docs_lint::lint_docs(&root).context("docs-lint failed")?;
     eprintln!("pre-commit checks passed");
     Ok(())
 }

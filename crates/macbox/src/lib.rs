@@ -54,7 +54,7 @@ pub enum MacboxError {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_colima_handler_dependencies(
+pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: PathBuf,
     containers_dir: PathBuf,

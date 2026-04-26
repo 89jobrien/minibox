@@ -3,8 +3,8 @@
 //! All tests use `MockLimiter` from `minibox::testing` — no kernel/cgroup interaction.
 //! Each test creates a fresh mock to avoid shared state.
 
-use minibox_core::domain::{ResourceConfig, ResourceLimiter};
 use minibox::testing::mocks::limiter::MockLimiter;
+use minibox_core::domain::{ResourceConfig, ResourceLimiter};
 
 // ---------------------------------------------------------------------------
 // Helpers
