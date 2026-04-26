@@ -337,6 +337,10 @@ impl ContainerRuntime for KrunRuntime {
     /// Uses the rootfs path as the image identifier passed to smolvm, and
     /// returns a synthetic PID (1) since krun manages its own process tree
     /// inside the VM rather than exposing a host-side PID.
+    ///
+    /// When `capture_output` is set, the smolvm child's stdout fd is extracted
+    /// and returned as `output_reader` so the daemon can stream output back
+    /// to the CLI.
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let env: Vec<(String, String)> = config
             .env
@@ -357,11 +361,39 @@ impl ContainerRuntime for KrunRuntime {
         let image = config.rootfs.to_string_lossy().to_string();
 
         let id = self.create(&image, &command, &env).await?;
-        self.start(&id).await?;
+
+        // Spawn the process and extract stdout fd before storing.
+        let mut proc = SmolvmProcess::spawn(&image, &command, &env)
+            .await
+            .with_context(|| format!("krun: spawn failed for container {id}"))?;
+
+        #[cfg(unix)]
+        let output_reader = if config.capture_output {
+            proc.take_stdout_fd()
+        } else {
+            None
+        };
+        #[cfg(not(unix))]
+        let output_reader = None;
+
+        // Store the process (stdout already taken if captured).
+        {
+            let mut map = self.containers.lock().await;
+            if let Some(state) = map.get_mut(&id) {
+                state.process = Some(proc);
+            }
+        }
+
+        tracing::info!(
+            container_id = %id,
+            image = %image,
+            capture_output = config.capture_output,
+            "krun: container started"
+        );
 
         Ok(SpawnResult {
             pid: 1,
-            output_reader: None,
+            output_reader,
         })
     }
 }

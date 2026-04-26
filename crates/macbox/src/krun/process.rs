@@ -81,6 +81,24 @@ impl SmolvmProcess {
         Ok(buf)
     }
 
+    /// Take the piped stdout from the child process, returning the raw fd.
+    ///
+    /// Converts the async `ChildStdout` back to its underlying `OwnedFd` so
+    /// the caller can pass it through the `SpawnResult` output_reader channel.
+    /// Returns `None` if stdout was not piped or was already taken.
+    #[cfg(unix)]
+    pub fn take_stdout_fd(&mut self) -> Option<std::os::fd::OwnedFd> {
+        use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
+        let stdout = self.child.stdout.take()?;
+        let raw_fd = stdout.as_raw_fd();
+        // SAFETY: we just took ownership of stdout from the child, and
+        // `as_raw_fd` returns a valid fd. We must forget the tokio wrapper
+        // to prevent it from closing the fd when dropped.
+        let owned = unsafe { OwnedFd::from_raw_fd(raw_fd) };
+        std::mem::forget(stdout);
+        Some(owned)
+    }
+
     /// Send SIGTERM to the subprocess to stop the microVM.
     pub async fn stop(&mut self) -> Result<()> {
         if let Some(id) = self.child.id() {
