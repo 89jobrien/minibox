@@ -20,6 +20,7 @@ mod bump;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
+mod docs_lint;
 mod gates;
 mod preflight;
 mod protocol_sites;
@@ -108,6 +109,7 @@ fn main() -> Result<()> {
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("test-linux") => test_linux::test_linux(),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
+        Some("lint-docs") => docs_lint::lint_docs(root),
         Some("bench") => bench::bench(&sh, root),
         Some("check-protocol-sites") => {
             let file = env::args()
@@ -157,6 +159,7 @@ fn main() -> Result<()> {
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
+            eprintln!("  lint-docs        validate frontmatter + status values in docs/superpowers/");
             eprintln!("  bench            run criterion benchmarks, save to bench/results/");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(
