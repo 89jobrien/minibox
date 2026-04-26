@@ -205,9 +205,9 @@ items:
   title: 'chore: consolidate workspace (13->8 crates) and publish to crates.io'
   description: |
     GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
-    Phases 0-5 complete (13->8 crates). Phase 4 absorbed minibox-testers into minibox test-utils
-    feature. Phase 5 added DEFAULT_ADAPTER_SUITE const. Remaining: Phase 6 (LICENSE files +
-    crates.io publish). Also: doc cleanup, README reconciliation, stale ref audit all done.
+    Phases 0-5 complete (13->8 crates). Phase 6 complete: fixed slashcrux path dependency → published
+    crate.io version (0.1). Both crates pass dry-run publish. Remaining: promote to stable branch and
+    cut v0.21.0 release tag (GH Actions release.yml will publish automatically).
   files:
   - docs/superpowers/plans/2026-04-26-crate-consolidation.md
   - Cargo.toml
@@ -222,27 +222,26 @@ items:
     note: null
     number: 153
     url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260426:091635
+  - date: 20260426:160000
     type: note
     field: null
     value: null
     reviewed: null
-    note: "Phases 0-5 done (13->8 crates). Phase 6 remaining: LICENSE files + crates.io publish."
+    note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
 - id: minibox-78
   doob_uuid: null
   name: adapter-registry-correctness
   priority: P1
-  status: open
+  status: closed
   title: 'fix(miniboxd): parse_adapter must reject known-but-unavailable adapters'
   description: |
     Council finding (67% health): adapter_registry::parse_adapter accepts any known adapter
-    name without checking the available field. Known-but-unavailable adapters (e.g. colima on
-    non-Linux) parse successfully, violating the module's documented validation contract.
-    Also: adapter metadata marks colima/smolvm as Linux-only despite being macOS-oriented.
-    Fix: check available in parse_adapter, add unavailable-adapter tests, correct metadata.
+    name without checking the available field. Already fixed in commit c7e6ff5 (adapter registry
+    hardening). Validation correctly checks available field and rejects known-but-unavailable
+    adapters with distinct error message. 12/12 unit tests pass.
   files:
   - crates/miniboxd/src/adapter_registry.rs
-  completed: null
+  completed: 20260426:160000
   extra:
   - date: 20260426:091635
     type: note
@@ -250,6 +249,12 @@ items:
     value: null
     reviewed: null
     note: "Council strict-critic flagged as [high] risk. 10 doob todos created from council reports."
+  - date: 20260426:160000
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: "Fixed in c7e6ff5. parse_adapter now correctly rejects known-but-unavailable adapters. Metadata corrected: colima/smolvm marked as macOS-available."
 log:
 - date: 20260426:091635
   summary: "Session 31: Phases 3-5 consolidation complete (13->8 crates). Created 3 dogfood implementation plans (MCP server, sandbox, CI agent). Fixed post-consolidation test compile errors. Ran council (93%/67%). Captured 10 council todos. New P1: adapter registry correctness gap."
