@@ -22,7 +22,7 @@
 mod commands;
 pub(crate) mod terminal;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use std::path::Path;
 
@@ -197,6 +197,40 @@ enum Commands {
         image_ref: String,
     },
 
+    /// Run a script inside a sandboxed container with resource limits.
+    ///
+    /// Detects language from the file extension, bind-mounts the script
+    /// read-only, and enforces safety defaults (512 MB, 60 s timeout, no
+    /// network, no privileged).
+    Sandbox {
+        /// Path to the script file on the host.
+        script: std::path::PathBuf,
+
+        /// Image to use (default: minibox-sandbox:latest).
+        #[arg(long, default_value = "minibox-sandbox")]
+        image: String,
+
+        /// Image tag.
+        #[arg(long, default_value = "latest")]
+        tag: String,
+
+        /// Memory limit in MB (default: 512).
+        #[arg(long, default_value = "512")]
+        memory_mb: u64,
+
+        /// Timeout in seconds (default: 60).
+        #[arg(long, default_value = "60")]
+        timeout: u64,
+
+        /// Extra bind mounts in src:dst[:ro] format. Repeatable.
+        #[arg(short = 'v', long = "volume")]
+        volumes: Vec<String>,
+
+        /// Enable bridge networking (default: no network).
+        #[arg(long)]
+        network: bool,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -288,6 +322,35 @@ async fn main() -> Result<()> {
         Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
 
         Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
+
+        Commands::Sandbox {
+            script,
+            image,
+            tag,
+            memory_mb,
+            timeout,
+            volumes,
+            network,
+        } => {
+            let mut extra_mounts = Vec::new();
+            for v in &volumes {
+                extra_mounts.push(
+                    commands::run::parse_volume(v)
+                        .with_context(|| format!("invalid -v flag {:?}", v))?,
+                );
+            }
+            commands::sandbox::execute(
+                script,
+                image,
+                tag,
+                memory_mb,
+                timeout,
+                extra_mounts,
+                network,
+                socket_path,
+            )
+            .await
+        }
     }
 }
 
