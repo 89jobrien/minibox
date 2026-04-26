@@ -389,12 +389,10 @@ fn regression_child_init_uses_execve_not_execvp() {
 
     // The source must NOT contain execvp calls (which inherit host env).
     // We check for the nix crate's execvp function specifically.
-    let has_execvp_call = source
-        .lines()
-        .any(|line| {
-            let trimmed = line.trim();
-            // Skip comments and string literals
-            !trimmed.starts_with("//")
+    let has_execvp_call = source.lines().any(|line| {
+        let trimmed = line.trim();
+        // Skip comments and string literals
+        !trimmed.starts_with("//")
                 && !trimmed.starts_with("///")
                 && !trimmed.starts_with("*")
                 && trimmed.contains("execvp(")
@@ -402,7 +400,7 @@ fn regression_child_init_uses_execve_not_execvp() {
                 && !trimmed.contains("not")
                 && !trimmed.contains("NOT")
                 && !trimmed.contains("Do not")
-        });
+    });
     assert!(
         !has_execvp_call,
         "child_init must not use execvp — it leaks the host environment into containers"
