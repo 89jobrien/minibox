@@ -596,6 +596,87 @@ pub fn decode_response(line: &[u8]) -> anyhow::Result<DaemonResponse> {
 pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 
 // ---------------------------------------------------------------------------
+// Test helper: default Run request builder (edition 2024 macro workaround)
+// ---------------------------------------------------------------------------
+
+/// Plain struct mirroring `DaemonRequest::Run` fields with `Default`.
+///
+/// Used by the `test_run!` macro to support struct-update syntax (`..defaults`),
+/// which is not possible directly on enum variants. Not intended for production use.
+#[doc(hidden)]
+pub struct TestRunDefaults {
+    pub image: String,
+    pub tag: Option<String>,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub ephemeral: bool,
+    pub network: Option<crate::domain::NetworkMode>,
+    pub mounts: Vec<crate::domain::BindMount>,
+    pub privileged: bool,
+    pub env: Vec<String>,
+    pub name: Option<String>,
+    pub tty: bool,
+    pub entrypoint: Option<String>,
+    pub user: Option<String>,
+    pub auto_remove: bool,
+    pub priority: Option<slashcrux::Priority>,
+    pub urgency: Option<slashcrux::Urgency>,
+    pub execution_context: Option<slashcrux::ExecutionContext>,
+}
+
+impl Default for TestRunDefaults {
+    fn default() -> Self {
+        Self {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+        }
+    }
+}
+
+impl TestRunDefaults {
+    /// Convert into a `DaemonRequest::Run`.
+    pub fn into_request(self) -> DaemonRequest {
+        DaemonRequest::Run {
+            image: self.image,
+            tag: self.tag,
+            command: self.command,
+            memory_limit_bytes: self.memory_limit_bytes,
+            cpu_weight: self.cpu_weight,
+            ephemeral: self.ephemeral,
+            network: self.network,
+            mounts: self.mounts,
+            privileged: self.privileged,
+            env: self.env,
+            name: self.name,
+            tty: self.tty,
+            entrypoint: self.entrypoint,
+            user: self.user,
+            auto_remove: self.auto_remove,
+            priority: self.priority,
+            urgency: self.urgency,
+            execution_context: self.execution_context,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -603,35 +684,16 @@ pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 mod tests {
     use super::*;
 
-    /// Local alias for the `test_run!` macro that resolves `DaemonRequest` via
-    /// `crate::protocol` rather than the cross-crate `minibox_core::protocol` path.
-    /// Uses `let`-binding shadowing so field overrides don't produce duplicate-field errors.
+    /// Local alias for the `test_run!` macro — uses `TestRunDefaults` +
+    /// struct-update syntax to work around edition 2024 macro hygiene.
     macro_rules! test_run {
         ($($field:ident : $val:expr),* $(,)?) => {{
-            #[allow(unused_variables)] let image = "alpine".to_string();
-            #[allow(unused_variables)] let tag = None;
-            #[allow(unused_variables)] let command = vec!["/bin/sh".to_string()];
-            #[allow(unused_variables)] let memory_limit_bytes = None;
-            #[allow(unused_variables)] let cpu_weight = None;
-            #[allow(unused_variables)] let ephemeral = false;
-            #[allow(unused_variables)] let network = None;
-            #[allow(unused_variables)] let mounts = vec![];
-            #[allow(unused_variables)] let privileged = false;
-            #[allow(unused_variables)] let env = vec![];
-            #[allow(unused_variables)] let name = None;
-            #[allow(unused_variables)] let tty = false;
-            #[allow(unused_variables)] let entrypoint = None;
-            #[allow(unused_variables)] let user = None;
-            #[allow(unused_variables)] let auto_remove = false;
-            #[allow(unused_variables)] let priority = None;
-            #[allow(unused_variables)] let urgency = None;
-            #[allow(unused_variables)] let execution_context = None;
-            $(#[allow(unused_variables)] let $field = $val;)*
-            crate::protocol::DaemonRequest::Run {
-                image, tag, command, memory_limit_bytes, cpu_weight,
-                ephemeral, network, mounts, privileged, env, name, tty,
-                entrypoint, user, auto_remove, priority, urgency, execution_context,
-            }
+            let defaults = crate::protocol::TestRunDefaults::default();
+            let overrides = crate::protocol::TestRunDefaults {
+                $($field: $val,)*
+                ..defaults
+            };
+            overrides.into_request()
         }};
     }
 
