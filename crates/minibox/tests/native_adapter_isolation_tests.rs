@@ -14,8 +14,8 @@
 #![cfg(target_os = "linux")]
 
 use minibox::adapters::{CgroupV2Limiter, OverlayFilesystem};
-use minibox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter};
-use minibox::preflight::probe_capabilities;
+use minibox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup};
+use minibox::preflight::probe;
 use minibox_macros::require_capability;
 use std::fs;
 use tempfile::TempDir;
@@ -36,7 +36,7 @@ fn fake_layer(dir: &std::path::Path) {
 
 #[test]
 fn overlay_setup_creates_merged_upper_work_dirs() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -63,7 +63,7 @@ fn overlay_setup_creates_merged_upper_work_dirs() {
 
 #[test]
 fn overlay_write_goes_to_upper_not_lower() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -95,7 +95,7 @@ fn overlay_write_goes_to_upper_not_lower() {
 
 #[test]
 fn overlay_multiple_layers_all_visible_in_merged() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -136,7 +136,7 @@ fn overlay_multiple_layers_all_visible_in_merged() {
 
 #[test]
 fn overlay_cleanup_unmounts_merged() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -162,7 +162,7 @@ fn overlay_cleanup_unmounts_merged() {
 
 #[test]
 fn overlay_empty_layers_returns_error() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -183,7 +183,7 @@ fn overlay_empty_layers_returns_error() {
 
 #[test]
 fn cgroup_create_and_cleanup_lifecycle() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -207,7 +207,7 @@ fn cgroup_create_and_cleanup_lifecycle() {
 
 #[test]
 fn cgroup_memory_limit_written_correctly() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -237,7 +237,7 @@ fn cgroup_memory_limit_written_correctly() {
 
 #[test]
 fn cgroup_cpu_weight_written_correctly() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -266,7 +266,7 @@ fn cgroup_cpu_weight_written_correctly() {
 
 #[test]
 fn cgroup_pids_max_written_correctly() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -295,7 +295,7 @@ fn cgroup_pids_max_written_correctly() {
 
 #[test]
 fn cgroup_add_process_writes_pid_to_cgroup_procs() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -333,7 +333,7 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
 
 #[test]
 fn overlay_path_traversal_attempt_is_rejected() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -376,7 +376,7 @@ fn overlay_path_traversal_attempt_is_rejected() {
 
 #[test]
 fn overlay_symlink_outside_upper_does_not_escape() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_overlay_fs, "requires overlay FS");
 
@@ -429,7 +429,7 @@ fn overlay_symlink_outside_upper_does_not_escape() {
 
 #[test]
 fn cgroup_pid_zero_is_rejected() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
@@ -453,7 +453,7 @@ fn cgroup_pid_zero_is_rejected() {
 
 #[test]
 fn cgroup_cleanup_removes_all_state() {
-    let caps = probe_capabilities();
+    let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, has_cgroup_v2, "requires cgroup v2");
 
