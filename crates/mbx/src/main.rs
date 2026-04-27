@@ -96,7 +96,7 @@ enum Commands {
         name: Option<String>,
 
         /// Allocate a pseudo-TTY.
-        #[arg(short = 't', long = "tty")]
+        #[arg(long)]
         tty: bool,
 
         /// Keep stdin open (interactive mode).
@@ -157,7 +157,7 @@ enum Commands {
         image: String,
 
         /// Image tag (default: latest)
-        #[arg(short, long, default_value = "latest")]
+        #[arg(long, default_value = "latest")]
         tag: String,
     },
 
@@ -175,7 +175,7 @@ enum Commands {
         cmd: Vec<String>,
 
         /// Allocate a pseudo-TTY.
-        #[arg(short = 't', long = "tty")]
+        #[arg(long)]
         tty: bool,
 
         /// Keep stdin open (interactive mode).
