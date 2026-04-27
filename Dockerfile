@@ -31,3 +31,13 @@ VOLUME ["/run/minibox", "/var/lib/minibox"]
 USER minibox
 
 ENTRYPOINT ["/usr/local/bin/miniboxd"]
+
+# Stage 3: Test image — keeps toolchain + source + nextest for CI
+FROM builder AS test
+
+RUN cargo install cargo-nextest --locked
+
+ENV RUST_LOG=info
+
+ENTRYPOINT ["cargo"]
+CMD ["nextest", "run", "--workspace", "--lib"]

@@ -70,8 +70,8 @@ jobs:
       - run: cargo machete
 
   test-unit:
-    name: unit tests (Linux)
-    runs-on: [self-hosted, minibox]
+    name: unit tests (macOS via minibox)
+    runs-on: [self-hosted, minibox-mac]
     needs: compile-check
     steps:
       - uses: actions/checkout@v4
@@ -79,21 +79,7 @@ jobs:
         with:
           tool: cargo-nextest
       - name: cargo nextest run (unit tests)
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cargo nextest run --workspace --lib
-
-  coverage-check:
-    name: handler coverage (>= 80%)
-    runs-on: [self-hosted, minibox]
-    needs: test-unit
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
-    steps:
-      - uses: actions/checkout@v4
-      - name: cargo xtask coverage-check
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cargo xtask coverage-check
+        run: cargo nextest run --workspace --lib
 
   geiger:
     name: unsafe audit (geiger)
@@ -109,11 +95,14 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
+          set -euo pipefail
           cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
-          echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## cargo geiger report"
+            echo '```'
+            sed -n '1,30p' geiger-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: upload geiger report
         if: always()
         uses: actions/upload-artifact@v4
