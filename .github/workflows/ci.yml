@@ -6,27 +6,75 @@ on:
   pull_request:
     branches: [main, next]
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
-  compile-check:
-    name: compile + lint
+  lint:
+    name: lint + fmt
+    runs-on: [self-hosted, minibox-mac]
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo fmt + clippy + check
+        run: |
+          cargo fmt --all --check
+          cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
+          cargo check --workspace
+
+  build-test-archive:
+    name: build test archive
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo check
-        run: cargo check --workspace
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
       - name: cargo build --locked
         run: cargo build --locked --workspace
-      - name: cargo fmt
-        run: cargo fmt --all --check
-      - name: cargo clippy
-        run: cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
+      - name: cargo nextest archive
+        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
+      - name: upload test archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+          retention-days: 1
+
+  test-unit:
+    name: unit tests (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest run (unit tests)
+        run: cargo nextest run --workspace --lib
+
+  test-archive:
+    name: test from archive (ubuntu)
+    runs-on: ubuntu-latest
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: run tests from archive
+        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap .
 
   test-all-features:
     name: test with all features
     runs-on: ubuntu-latest
-    needs: compile-check
+    needs: build-test-archive
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -35,9 +83,9 @@ jobs:
         with:
           tool: cargo-nextest
       - name: cargo nextest --all-features (lib, exclude macOS-only crates)
-        run: cargo nextest run --all-features --workspace --exclude macbox --lib
+        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
       - name: cargo test --all-features (doc)
-        run: cargo test --all-features --workspace --exclude macbox --doc
+        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
 
   audit:
     name: cargo audit
@@ -69,23 +117,11 @@ jobs:
           tool: cargo-machete
       - run: cargo machete
 
-  test-unit:
-    name: unit tests (macOS via minibox)
-    runs-on: [self-hosted, minibox-mac]
-    needs: compile-check
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: cargo nextest run (unit tests)
-        run: cargo nextest run --workspace --lib
-
   geiger:
     name: unsafe audit (geiger)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/stable'
-    needs: compile-check
+    needs: lint
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
