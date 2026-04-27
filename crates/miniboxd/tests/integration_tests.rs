@@ -107,6 +107,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         image_gc: Arc::new(NoopImageGc),
         image_store: Arc::clone(&state.image_store),
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
         containers_base: temp_dir.path().join("containers"),
         run_containers_base: temp_dir.path().join("run"),

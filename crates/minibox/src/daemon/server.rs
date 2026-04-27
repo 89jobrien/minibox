@@ -287,6 +287,9 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerResumed { .. }
             | DaemonResponse::Pruned { .. }
             | DaemonResponse::PipelineComplete { .. }
+            | DaemonResponse::SnapshotSaved { .. }
+            | DaemonResponse::SnapshotRestored { .. }
+            | DaemonResponse::SnapshotList { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
     // Event are non-terminal.
@@ -496,6 +499,20 @@ async fn dispatch(
                 handle_resize_pty(session_id, cols, rows, deps, tx).await;
             });
         }
+        DaemonRequest::SaveSnapshot { id, name } => {
+            let response =
+                handler::handle_save_snapshot(id, name, state, deps).await;
+            send_terminal_response(&tx, "SaveSnapshot", response).await;
+        }
+        DaemonRequest::RestoreSnapshot { id, name } => {
+            let response =
+                handler::handle_restore_snapshot(id, name, state, deps).await;
+            send_terminal_response(&tx, "RestoreSnapshot", response).await;
+        }
+        DaemonRequest::ListSnapshots { id } => {
+            let response = handler::handle_list_snapshots(id, deps).await;
+            send_terminal_response(&tx, "ListSnapshots", response).await;
+        }
         DaemonRequest::RunPipeline { .. } => {
             send_terminal_response(
                 &tx,
@@ -596,6 +613,7 @@ mod tests {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         (state, deps)
     }
@@ -788,6 +806,9 @@ mod tests {
                 DaemonResponse::Pruned { .. } => true,
                 DaemonResponse::LogLine { .. } => false,
                 DaemonResponse::PipelineComplete { .. } => true,
+                DaemonResponse::SnapshotSaved { .. } => true,
+                DaemonResponse::SnapshotRestored { .. } => true,
+                DaemonResponse::SnapshotList { .. } => true,
             };
         }
     }

@@ -149,6 +149,10 @@ test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-s
 bench:
     cargo xtask bench
 
+# Machine-readable repo context snapshot (JSON to stdout)
+context:
+    cargo xtask context
+
 # Sync VPS bench results into local bench/results/bench.jsonl
 bench-sync:
     cargo xtask bench-sync

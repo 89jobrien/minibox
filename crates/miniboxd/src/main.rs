@@ -623,6 +623,7 @@ fn build_native_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -682,6 +683,7 @@ fn build_gke_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -780,6 +782,7 @@ fn build_smolvm_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -831,6 +834,7 @@ fn build_krun_handler_dependencies(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 

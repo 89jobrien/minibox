@@ -17,6 +17,7 @@ pub mod rm;
 pub mod rmi;
 pub mod run;
 pub mod sandbox;
+pub mod snapshot;
 pub mod stop;
 
 /// Shared async test helpers for command unit tests.

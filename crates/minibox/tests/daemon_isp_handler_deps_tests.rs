@@ -86,6 +86,7 @@ fn handler_deps_are_accessible_via_sub_structs() {
         build: build_deps,
         events: event_deps,
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     };
 
     // Verify sub-struct fields are accessible

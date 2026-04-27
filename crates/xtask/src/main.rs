@@ -20,6 +20,7 @@ mod bump;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
+mod context;
 mod docs_lint;
 mod gates;
 mod preflight;
@@ -111,6 +112,10 @@ fn main() -> Result<()> {
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
         Some("bench") => bench::bench(&sh, root),
+        Some("context") => {
+            let save = env::args().any(|a| a == "--save");
+            context::context(&sh, root, save)
+        }
         Some("check-protocol-sites") => {
             let file = env::args()
                 .nth(2)
@@ -167,6 +172,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
+            eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(
                 "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"

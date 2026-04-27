@@ -127,8 +127,12 @@ enum Commands {
 
     /// Remove a stopped container
     Rm {
-        /// Container ID
-        id: String,
+        /// Container ID (omit when using --all)
+        id: Option<String>,
+
+        /// Remove all stopped containers.
+        #[arg(long)]
+        all: bool,
     },
 
     /// Pull an image from Docker Hub
@@ -231,6 +235,10 @@ enum Commands {
         network: bool,
     },
 
+    /// Manage VM state snapshots (save, restore, list).
+    #[command(subcommand)]
+    Snapshot(SnapshotCommands),
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -243,6 +251,31 @@ enum Commands {
         /// Image tag (default: latest)
         #[arg(long, default_value = "latest")]
         tag: String,
+    },
+}
+
+/// Snapshot sub-subcommands.
+#[derive(Subcommand)]
+enum SnapshotCommands {
+    /// Save a VM state snapshot.
+    Save {
+        /// Container ID.
+        id: String,
+        /// Snapshot name (auto-generated if omitted).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Restore a VM state snapshot.
+    Restore {
+        /// Container ID.
+        id: String,
+        /// Snapshot name to restore.
+        name: String,
+    },
+    /// List available snapshots.
+    List {
+        /// Container ID.
+        id: String,
     },
 }
 
@@ -306,7 +339,16 @@ async fn main() -> Result<()> {
 
         Commands::Resume { id } => commands::resume::execute(id, socket_path).await,
 
-        Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
+        Commands::Rm { id, all } => {
+            if all {
+                commands::rm::execute_all(socket_path).await
+            } else if let Some(id) = id {
+                commands::rm::execute(id, socket_path).await
+            } else {
+                eprintln!("error: provide a container ID or use --all");
+                std::process::exit(1);
+            }
+        }
 
         Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
 
@@ -322,6 +364,18 @@ async fn main() -> Result<()> {
         Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
 
         Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
+
+        Commands::Snapshot(sub) => match sub {
+            SnapshotCommands::Save { id, name } => {
+                commands::snapshot::execute_save(id, name, socket_path).await
+            }
+            SnapshotCommands::Restore { id, name } => {
+                commands::snapshot::execute_restore(id, name, socket_path).await
+            }
+            SnapshotCommands::List { id } => {
+                commands::snapshot::execute_list(id, socket_path).await
+            }
+        },
 
         Commands::Sandbox {
             script,

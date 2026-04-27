@@ -296,7 +296,10 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::ContainerPaused { .. }
         | DaemonResponse::ContainerResumed { .. }
         | DaemonResponse::Pruned { .. }
-        | DaemonResponse::PipelineComplete { .. } => true,
+        | DaemonResponse::PipelineComplete { .. }
+        | DaemonResponse::SnapshotSaved { .. }
+        | DaemonResponse::SnapshotRestored { .. }
+        | DaemonResponse::SnapshotList { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }

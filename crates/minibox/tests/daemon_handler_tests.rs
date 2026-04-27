@@ -117,6 +117,7 @@ fn build_deps(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -177,6 +178,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -286,6 +288,7 @@ async fn test_handle_pull_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -347,6 +350,7 @@ async fn test_handle_run_with_cached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -423,6 +427,7 @@ async fn test_handle_run_pulls_uncached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -493,6 +498,7 @@ async fn test_handle_run_filesystem_setup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -560,6 +566,7 @@ async fn test_handle_run_resource_limiter_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -627,6 +634,7 @@ async fn test_handle_run_runtime_spawn_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -905,6 +913,7 @@ fn create_test_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -1281,6 +1290,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1443,6 +1453,7 @@ async fn test_handle_run_empty_image_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1572,6 +1583,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1723,6 +1735,7 @@ async fn test_handle_run_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1868,6 +1881,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1942,6 +1956,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2016,6 +2031,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2086,6 +2102,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2377,6 +2394,7 @@ async fn test_handle_remove_failed_container_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2456,6 +2474,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2695,6 +2714,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2780,6 +2800,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2858,6 +2879,7 @@ async fn test_run_empty_image_no_layers() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2932,6 +2954,7 @@ async fn test_pull_registry_failure_with_tag() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3078,6 +3101,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3455,6 +3479,7 @@ fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<Han
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy,
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -3690,6 +3715,7 @@ async fn test_handle_run_image_pull_failure() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3752,6 +3778,7 @@ async fn test_handle_run_empty_layers() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3814,6 +3841,7 @@ async fn test_handle_pull_nonexistent_image() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -4998,6 +5026,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 
     let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
@@ -5071,6 +5100,7 @@ async fn test_handle_run_filesystem_setup_failure_v2() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5136,6 +5166,7 @@ async fn test_handle_run_limiter_create_failure() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5201,6 +5232,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5278,6 +5310,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 

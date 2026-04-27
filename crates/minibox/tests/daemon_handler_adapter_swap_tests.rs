@@ -120,6 +120,7 @@ fn make_deps(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -184,6 +185,7 @@ async fn test_run_with_all_success_adapters() {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     };
     let state = make_state(&tmp);
@@ -450,6 +452,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     };
     let state = make_state(&tmp);

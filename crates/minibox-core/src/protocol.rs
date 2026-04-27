@@ -292,6 +292,29 @@ pub enum DaemonRequest {
         #[serde(default)]
         execution_context: Option<slashcrux::ExecutionContext>,
     },
+
+    /// Save a VM state snapshot for a container.
+    SaveSnapshot {
+        /// Container ID to snapshot.
+        id: String,
+        /// Optional human-readable snapshot name (auto-generated if omitted).
+        #[serde(default)]
+        name: Option<String>,
+    },
+
+    /// Restore a VM state snapshot for a container.
+    RestoreSnapshot {
+        /// Container ID to restore.
+        id: String,
+        /// Snapshot name to restore.
+        name: String,
+    },
+
+    /// List available snapshots for a container.
+    ListSnapshots {
+        /// Container ID.
+        id: String,
+    },
 }
 
 fn default_max_depth() -> u32 {
@@ -465,6 +488,28 @@ pub enum DaemonResponse {
         container_id: String,
         /// Exit code of the `crux run` process.
         exit_code: i32,
+    },
+
+    /// Confirmation that a snapshot was saved.
+    SnapshotSaved {
+        /// Snapshot metadata.
+        info: crate::domain::SnapshotInfo,
+    },
+
+    /// Confirmation that a snapshot was restored.
+    SnapshotRestored {
+        /// Container ID that was restored.
+        id: String,
+        /// Snapshot name that was restored.
+        name: String,
+    },
+
+    /// List of snapshots for a container.
+    SnapshotList {
+        /// Container ID.
+        id: String,
+        /// Available snapshots.
+        snapshots: Vec<crate::domain::SnapshotInfo>,
     },
 }
 
