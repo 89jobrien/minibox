@@ -63,10 +63,7 @@ pub async fn execute_all(socket_path: &std::path::Path) -> anyhow::Result<()> {
         std::process::exit(1);
     };
 
-    let stopped: Vec<_> = containers
-        .iter()
-        .filter(|c| c.state == "Stopped")
-        .collect();
+    let stopped: Vec<_> = containers.iter().filter(|c| c.state == "Stopped").collect();
 
     if stopped.is_empty() {
         println!("No stopped containers to remove.");

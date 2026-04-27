@@ -323,6 +323,7 @@ impl ContainerRuntime for ProotRuntime {
 
         debug!("proot runtime: spawned with PID {}", pid);
         Ok(SpawnResult {
+            runtime_id: None,
             pid,
             output_reader: None,
         })

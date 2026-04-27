@@ -1,0 +1,24 @@
+[package]
+name = "minibox-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Infrastructure memory for minibox — hybrid vector + keyword search over Turso/SQLite"
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+turso = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+md5 = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = { workspace = true }

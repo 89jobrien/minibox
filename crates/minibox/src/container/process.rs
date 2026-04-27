@@ -142,6 +142,7 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     };
 
     Ok(SpawnResult {
+        runtime_id: None,
         pid: pid_raw,
         output_reader,
     })

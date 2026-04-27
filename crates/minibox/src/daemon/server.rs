@@ -402,6 +402,7 @@ async fn dispatch(
             env,
             working_dir,
             tty,
+            user: _user,
         } => {
             handler::handle_exec(container_id, cmd, env, working_dir, tty, state, deps, tx).await;
         }
@@ -500,13 +501,11 @@ async fn dispatch(
             });
         }
         DaemonRequest::SaveSnapshot { id, name } => {
-            let response =
-                handler::handle_save_snapshot(id, name, state, deps).await;
+            let response = handler::handle_save_snapshot(id, name, state, deps).await;
             send_terminal_response(&tx, "SaveSnapshot", response).await;
         }
         DaemonRequest::RestoreSnapshot { id, name } => {
-            let response =
-                handler::handle_restore_snapshot(id, name, state, deps).await;
+            let response = handler::handle_restore_snapshot(id, name, state, deps).await;
             send_terminal_response(&tx, "RestoreSnapshot", response).await;
         }
         DaemonRequest::ListSnapshots { id } => {

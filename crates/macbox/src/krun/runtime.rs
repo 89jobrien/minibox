@@ -394,6 +394,12 @@ impl ContainerRuntime for KrunRuntime {
         Ok(SpawnResult {
             pid: 1,
             output_reader,
+            runtime_id: Some(id),
         })
+    }
+
+    async fn wait_for_exit(&self, runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        let id = runtime_id.context("krun: wait_for_exit requires runtime_id")?;
+        self.wait(id).await
     }
 }

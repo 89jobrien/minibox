@@ -24,10 +24,7 @@ pub async fn execute_save(
     if let Some(response) = stream.next().await.context("stream error")? {
         match response {
             DaemonResponse::SnapshotSaved { info } => {
-                println!(
-                    "Snapshot saved: {} ({})",
-                    info.name, info.container_id
-                );
+                println!("Snapshot saved: {} ({})", info.name, info.container_id);
                 Ok(())
             }
             DaemonResponse::Error { message } => {
@@ -84,10 +81,7 @@ pub async fn execute_restore(
 }
 
 /// List snapshots for a container.
-pub async fn execute_list(
-    id: String,
-    socket_path: &std::path::Path,
-) -> anyhow::Result<()> {
+pub async fn execute_list(id: String, socket_path: &std::path::Path) -> anyhow::Result<()> {
     let request = DaemonRequest::ListSnapshots { id: id.clone() };
 
     let client = DaemonClient::with_socket(socket_path);

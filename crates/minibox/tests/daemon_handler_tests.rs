@@ -3043,6 +3043,7 @@ impl minibox_core::domain::ContainerRuntime for PipedMockRuntime {
         Ok(minibox_core::domain::SpawnResult {
             pid: u32::MAX, // fake PID; waitpid will return ECHILD → exit_code -1
             output_reader: Some(output_reader),
+            runtime_id: None,
         })
     }
 }

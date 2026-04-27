@@ -108,6 +108,21 @@ pub enum DaemonRequest {
         /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
         #[serde(default)]
         tty: bool,
+        /// Override the image's default entrypoint.
+        ///
+        /// When set, this replaces the image's `ENTRYPOINT` directive.
+        /// `command` becomes the arguments to this entrypoint.
+        #[serde(default)]
+        entrypoint: Option<String>,
+        /// Run the container process as a specific user (e.g. `"nobody"`, `"1000:1000"`).
+        ///
+        /// Maps to the `--user` / `-u` Docker flag. When `None`, the container
+        /// runs as root (or the image's default `USER` directive).
+        #[serde(default)]
+        user: Option<String>,
+        /// Automatically remove the container when it exits.
+        #[serde(default)]
+        auto_remove: bool,
         /// Scheduling priority for this container run.
         #[serde(default)]
         priority: Option<slashcrux::Priority>,
@@ -179,6 +194,9 @@ pub enum DaemonRequest {
         /// If `true`, allocate a pseudo-TTY for the exec process.
         #[serde(default)]
         tty: bool,
+        /// Run the exec process as a specific user (e.g. `"nobody"`, `"1000:1000"`).
+        #[serde(default)]
+        user: Option<String>,
     },
 
     /// Send raw bytes to a running exec or run session stdin (base64-encoded).
@@ -585,29 +603,45 @@ pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 mod tests {
     use super::*;
 
+    /// Local alias for the `test_run!` macro that resolves `DaemonRequest` via
+    /// `crate::protocol` rather than the cross-crate `minibox_core::protocol` path.
+    /// Uses `let`-binding shadowing so field overrides don't produce duplicate-field errors.
+    macro_rules! test_run {
+        ($($field:ident : $val:expr),* $(,)?) => {{
+            #[allow(unused_variables)] let image = "alpine".to_string();
+            #[allow(unused_variables)] let tag = None;
+            #[allow(unused_variables)] let command = vec!["/bin/sh".to_string()];
+            #[allow(unused_variables)] let memory_limit_bytes = None;
+            #[allow(unused_variables)] let cpu_weight = None;
+            #[allow(unused_variables)] let ephemeral = false;
+            #[allow(unused_variables)] let network = None;
+            #[allow(unused_variables)] let mounts = vec![];
+            #[allow(unused_variables)] let privileged = false;
+            #[allow(unused_variables)] let env = vec![];
+            #[allow(unused_variables)] let name = None;
+            #[allow(unused_variables)] let tty = false;
+            #[allow(unused_variables)] let entrypoint = None;
+            #[allow(unused_variables)] let user = None;
+            #[allow(unused_variables)] let auto_remove = false;
+            #[allow(unused_variables)] let priority = None;
+            #[allow(unused_variables)] let urgency = None;
+            #[allow(unused_variables)] let execution_context = None;
+            $(#[allow(unused_variables)] let $field = $val;)*
+            crate::protocol::DaemonRequest::Run {
+                image, tag, command, memory_limit_bytes, cpu_weight,
+                ephemeral, network, mounts, privileged, env, name, tty,
+                entrypoint, user, auto_remove, priority, urgency, execution_context,
+            }
+        }};
+    }
+
     // -----------------------------------------------------------------------
     // Request serialization/deserialization tests
     // -----------------------------------------------------------------------
 
     #[test]
     fn test_encode_decode_run_request_minimal() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!();
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -633,27 +667,13 @@ mod tests {
 
     #[test]
     fn test_encode_decode_run_request_with_limits() {
-        let req = DaemonRequest::Run {
+        let req = test_run!(
             image: "ubuntu".to_string(),
             tag: Some("22.04".to_string()),
-            command: vec![
-                "/bin/bash".to_string(),
-                "-c".to_string(),
-                "echo hi".to_string(),
-            ],
-            memory_limit_bytes: Some(536870912), // 512MB
+            command: vec!["/bin/bash".to_string(), "-c".to_string(), "echo hi".to_string()],
+            memory_limit_bytes: Some(536870912),
             cpu_weight: Some(500),
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        );
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -841,23 +861,7 @@ mod tests {
 
     #[test]
     fn test_request_json_has_type_tag() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!();
 
         let encoded = encode_request(&req).expect("encode failed");
         let json_str = String::from_utf8_lossy(&encoded);
@@ -927,23 +931,7 @@ mod tests {
 
     #[test]
     fn test_run_request_empty_command() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec![],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(command: Vec::<String>::new());
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -958,23 +946,7 @@ mod tests {
 
     #[test]
     fn test_run_request_max_memory_limit() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: Some(u64::MAX),
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(memory_limit_bytes: Some(u64::MAX));
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -1088,23 +1060,7 @@ mod tests {
     #[test]
     fn run_request_with_network_mode_roundtrip() {
         use crate::domain::NetworkMode;
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: Some(NetworkMode::Host),
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(network: Some(NetworkMode::Host));
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
         match decoded {
@@ -1127,27 +1083,14 @@ mod tests {
     fn run_request_with_mounts_roundtrip() {
         use crate::domain::BindMount;
         use std::path::PathBuf;
-        let req = DaemonRequest::Run {
+        let req = test_run!(
             image: "ubuntu".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
             mounts: vec![BindMount {
                 host_path: PathBuf::from("/tmp/foo"),
                 container_path: PathBuf::from("/bar"),
                 read_only: false,
             }],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        );
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         match decoded {
@@ -1179,6 +1122,9 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
             priority: None,
             urgency: None,
             execution_context: None,
@@ -1331,6 +1277,9 @@ mod tests {
             privileged: false,
             name: Some("my-container".to_string()),
             tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
             priority: None,
             urgency: None,
             execution_context: None,
@@ -1506,23 +1455,7 @@ mod tests {
     /// change and will cause this test to fail.
     #[test]
     fn wire_format_run_request_field_names_stable() {
-        let req = DaemonRequest::Run {
-            image: "i".to_string(),
-            tag: None,
-            command: vec![],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(image: "i".to_string(), command: Vec::<String>::new());
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
         let obj = v.as_object().expect("object");

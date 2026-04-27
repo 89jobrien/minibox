@@ -61,6 +61,9 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         env: vec![],
                         name: None,
                         tty: false,
+                        entrypoint: None,
+                        user: None,
+                        auto_remove: false,
                         priority: None,
                         urgency: None,
                         execution_context: None,
@@ -92,6 +95,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                     env,
                     working_dir,
                     tty,
+                    user: None,
                 }
             ),
         (arb_session_id(), any::<String>())

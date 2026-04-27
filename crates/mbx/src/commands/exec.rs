@@ -29,6 +29,7 @@ pub async fn execute(
     container_id: String,
     cmd: Vec<String>,
     tty: bool,
+    user: Option<String>,
     socket_path: &std::path::Path,
 ) -> Result<()> {
     use std::io::IsTerminal as _;
@@ -40,6 +41,7 @@ pub async fn execute(
         env: vec![],
         working_dir: None,
         tty,
+        user,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -215,12 +217,14 @@ mod tests {
                     env,
                     working_dir,
                     tty,
+                    user,
                 } => {
                     assert_eq!(container_id, "abc123");
                     assert_eq!(cmd, vec!["/bin/sh"]);
                     assert!(env.is_empty());
                     assert_eq!(working_dir, None);
                     assert!(!tty);
+                    assert_eq!(user, None);
                 }
                 _ => panic!("expected Exec request, got something else"),
             }
@@ -247,6 +251,7 @@ mod tests {
             "abc123".to_string(),
             vec!["/bin/sh".to_string()],
             false,
+            None,
             &socket_path,
         )
         .await;
@@ -265,6 +270,7 @@ mod tests {
             env: vec![],
             working_dir: None,
             tty: false,
+            user: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(

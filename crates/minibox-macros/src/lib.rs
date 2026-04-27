@@ -5,6 +5,9 @@
 //! `Cargo.toml` for historical reasons. All macros are re-exported with
 //! `#[macro_export]` and are available to downstream crates via the crate root.
 //!
+// TODO: split existing macros into separate files (as_any, default_new, adapt,
+// provide, require_capability, normalize) to match the test_run.rs convention.
+
 //! # Available macros
 //!
 //! - [`as_any!`] — implement `AsAny` for one or more types
@@ -16,6 +19,7 @@
 //! - [`normalize_digest!`] — replace `:` with `_` for filesystem path components
 //! - [`normalize!`] — replace both `/` and `:` with `_`
 //! - [`denormalize_digest!`] — reverse `normalize_digest!` (replace `_` with `:`)
+//! - [`test_run!`] — construct a default `DaemonRequest::Run` for tests
 //!
 //! # Call-site resolution note
 //!
@@ -233,3 +237,5 @@ macro_rules! denormalize_digest {
         $s.replace('_', ":")
     };
 }
+
+mod test_run;

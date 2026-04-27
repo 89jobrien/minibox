@@ -617,6 +617,45 @@ pub trait ContainerRuntime: AsAny + Send + Sync {
     /// This operation typically requires blocking I/O (fork/clone syscalls)
     /// and should be called from a blocking thread context in async code.
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult>;
+
+    /// Wait for a container process to exit and return its exit code.
+    ///
+    /// The default implementation uses `waitpid` which works when the daemon
+    /// directly fork/cloned the child (native Linux adapter). Adapters that
+    /// manage processes externally (krun/smolvm, Colima) must override this
+    /// to use their own wait mechanism.
+    ///
+    /// The `container_id` is the internal container ID (not the PID). The
+    /// `pid` is the value returned by `spawn_process`.
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, pid: u32) -> Result<i32> {
+        #[cfg(unix)]
+        {
+            use anyhow::Context as _;
+            use nix::sys::wait::{WaitStatus, waitpid};
+            use nix::unistd::Pid;
+            let nix_pid = Pid::from_raw(pid as i32);
+            let result = tokio::task::spawn_blocking(move || waitpid(nix_pid, None))
+                .await
+                .context("wait_for_exit: join error")?;
+            match result {
+                Ok(WaitStatus::Exited(_, code)) => Ok(code),
+                Ok(WaitStatus::Signaled(_, sig, _)) => Ok(-(sig as i32)),
+                Ok(other) => {
+                    tracing::warn!(pid = pid, status = ?other, "wait_for_exit: unexpected status");
+                    Ok(-1)
+                }
+                Err(e) => {
+                    tracing::warn!(pid = pid, error = %e, "wait_for_exit: waitpid error");
+                    Ok(-1)
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = pid;
+            Ok(-1)
+        }
+    }
 }
 
 /// Result returned by [`ContainerRuntime::spawn_process`].
@@ -630,6 +669,10 @@ pub struct SpawnResult {
     /// Placeholder for non-Unix builds where pipes are not supported.
     #[cfg(not(unix))]
     pub output_reader: Option<std::convert::Infallible>,
+    /// Runtime-internal container ID, used by adapters that manage their own
+    /// process tree (e.g. krun/smolvm). Passed back to `wait_for_exit`.
+    /// `None` for native adapters where `waitpid(pid)` suffices.
+    pub runtime_id: Option<String>,
 }
 
 /// A single host-side lifecycle hook command.
@@ -1204,11 +1247,7 @@ pub struct SnapshotInfo {
 /// and omit [`BackendCapability::Checkpoint`] from their capability set.
 pub trait VmCheckpoint: Send + Sync {
     /// Persist the current VM/container state to `path`.
-    fn save_snapshot(
-        &self,
-        container_id: &str,
-        path: &Path,
-    ) -> Result<SnapshotInfo>;
+    fn save_snapshot(&self, container_id: &str, path: &Path) -> Result<SnapshotInfo>;
 
     /// Restore VM/container state from a previously saved snapshot at `path`.
     fn restore_snapshot(&self, container_id: &str, path: &Path) -> Result<()>;
@@ -1226,11 +1265,7 @@ pub type DynVmCheckpoint = Arc<dyn VmCheckpoint>;
 pub struct NoopVmCheckpoint;
 
 impl VmCheckpoint for NoopVmCheckpoint {
-    fn save_snapshot(
-        &self,
-        _container_id: &str,
-        _path: &Path,
-    ) -> Result<SnapshotInfo> {
+    fn save_snapshot(&self, _container_id: &str, _path: &Path) -> Result<SnapshotInfo> {
         anyhow::bail!("checkpoint: not supported by this adapter")
     }
 

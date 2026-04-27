@@ -931,6 +931,7 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
             );
 
             return Ok(SpawnResult {
+                runtime_id: None,
                 pid,
                 #[cfg(unix)]
                 output_reader: Some(output_reader),
@@ -965,6 +966,7 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
             .map_err(|e| anyhow!("Invalid PID returned: {e}"))?;
 
         Ok(SpawnResult {
+            runtime_id: None,
             pid,
             output_reader: None,
         })

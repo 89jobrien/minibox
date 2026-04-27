@@ -94,8 +94,7 @@ fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
     let raw = cmd!(sh, "cargo metadata --no-deps --format-version 1")
         .read()
         .context("cargo metadata")?;
-    let meta: serde_json::Value =
-        serde_json::from_str(&raw).context("parse cargo metadata")?;
+    let meta: serde_json::Value = serde_json::from_str(&raw).context("parse cargo metadata")?;
 
     let workspace_members: Vec<&str> = meta["workspace_members"]
         .as_array()
@@ -167,7 +166,11 @@ fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
 /// Count .rs files and total lines under a crate directory.
 fn count_source(crate_dir: &Path) -> (usize, usize) {
     let src_dir = crate_dir.join("src");
-    let dir = if src_dir.is_dir() { &src_dir } else { crate_dir };
+    let dir = if src_dir.is_dir() {
+        &src_dir
+    } else {
+        crate_dir
+    };
     let mut files = 0usize;
     let mut lines = 0usize;
     if let Ok(entries) = walkdir(dir) {
@@ -322,10 +325,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         }
     }
 
-    let by_crate: BTreeMap<String, usize> = counts
-        .iter()
-        .map(|(k, &v)| (k.clone(), v))
-        .collect();
+    let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
 
     let snapshot = ContextSnapshot {
         snapshot_version: 1,

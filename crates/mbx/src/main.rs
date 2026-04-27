@@ -96,12 +96,28 @@ enum Commands {
         name: Option<String>,
 
         /// Allocate a pseudo-TTY.
-        #[arg(long = "tty")]
+        #[arg(short = 't', long = "tty")]
         tty: bool,
 
         /// Keep stdin open (interactive mode).
-        #[arg(long = "interactive")]
+        #[arg(short = 'i', long = "interactive")]
         interactive: bool,
+
+        /// Set environment variables (KEY=VALUE). Repeatable.
+        #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
+
+        /// Override the image entrypoint.
+        #[arg(long)]
+        entrypoint: Option<String>,
+
+        /// Run as a specific user (e.g. "nobody", "1000:1000").
+        #[arg(short = 'u', long = "user")]
+        user: Option<String>,
+
+        /// Automatically remove the container when it exits.
+        #[arg(long)]
+        rm: bool,
     },
 
     /// List all containers
@@ -165,6 +181,10 @@ enum Commands {
         /// Keep stdin open (interactive mode).
         #[arg(short = 'i', long = "interactive")]
         interactive: bool,
+
+        /// Run as a specific user (e.g. "nobody", "1000:1000").
+        #[arg(short = 'u', long = "user")]
+        user: Option<String>,
     },
 
     /// Fetch or stream log output from a container.
@@ -306,6 +326,10 @@ async fn main() -> Result<()> {
             name,
             tty,
             interactive,
+            env,
+            entrypoint,
+            user,
+            rm,
         } => {
             commands::run::execute(
                 image,
@@ -319,6 +343,10 @@ async fn main() -> Result<()> {
                 mounts,
                 name,
                 tty || interactive,
+                env,
+                entrypoint,
+                user,
+                rm,
                 socket_path,
             )
             .await
@@ -331,7 +359,10 @@ async fn main() -> Result<()> {
             cmd,
             tty,
             interactive,
-        } => commands::exec::execute(container_id, cmd, tty || interactive, socket_path).await,
+            user,
+        } => {
+            commands::exec::execute(container_id, cmd, tty || interactive, user, socket_path).await
+        }
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
