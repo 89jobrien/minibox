@@ -9,7 +9,6 @@ members = [
     "crates/macbox",
     "crates/winbox",
     "crates/xtask",
-    "crates/minibox-memory",
 ]
 
 [workspace.package]
@@ -83,9 +82,3 @@ predicates = "3"    # dev-only: assert_cmd predicate helpers
 proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
-
-# Memory (infrastructure memory store)
-turso = { version = "0.6.0-pre.22", default-features = false }
-fastembed = { version = "5", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
-md5 = "0.8"
-minibox-memory = { path = "crates/minibox-memory" }
