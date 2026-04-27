@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260426:091635
+updated: 20260427:163631
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -228,34 +228,16 @@ items:
     value: null
     reviewed: null
     note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
-- id: minibox-78
-  doob_uuid: null
-  name: adapter-registry-correctness
-  priority: P1
-  status: closed
-  title: 'fix(miniboxd): parse_adapter must reject known-but-unavailable adapters'
-  description: |
-    Council finding (67% health): adapter_registry::parse_adapter accepts any known adapter
-    name without checking the available field. Already fixed in commit c7e6ff5 (adapter registry
-    hardening). Validation correctly checks available field and rejects known-but-unavailable
-    adapters with distinct error message. 12/12 unit tests pass.
-  files:
-  - crates/miniboxd/src/adapter_registry.rs
-  completed: 20260426:160000
-  extra:
-  - date: 20260426:091635
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: "Council strict-critic flagged as [high] risk. 10 doob todos created from council reports."
-  - date: 20260426:160000
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: "Fixed in c7e6ff5. parse_adapter now correctly rejects known-but-unavailable adapters. Metadata corrected: colima/smolvm marked as macOS-available."
 log:
+- date: 20260427:163631
+  summary: "Session 32: CI repair campaign — macro hygiene (test_run! struct-update), -t flag conflict (tag vs tty), Linux-only test updates (HandlerDependencies ISP layout, RootfsSetup import, probe rename). Moved minibox-memory to minibox-plugins workspace. Quality CI green pending current run."
+  commits:
+  - e1664e8
+  - 88bcdd3
+  - b55b78a
+  - c89e93f
+  - 6a65bc3
+  session: 32
 - date: 20260426:091635
   summary: "Session 31: Phases 3-5 consolidation complete (13->8 crates). Created 3 dogfood implementation plans (MCP server, sandbox, CI agent). Fixed post-consolidation test compile errors. Ran council (93%/67%). Captured 10 council todos. New P1: adapter registry correctness gap."
   commits:
