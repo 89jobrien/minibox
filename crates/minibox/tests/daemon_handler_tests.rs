@@ -6465,3 +6465,115 @@ async fn test_handle_run_invalid_platform_returns_error() {
         "expected platform error, got {resp:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Platform-aware pull tests
+// ---------------------------------------------------------------------------
+
+/// Valid platform override is accepted by resolve_platform_registry and
+/// handle_pull proceeds without panicking. The pull itself may fail (no
+/// real registry), but the error must NOT be "invalid platform".
+#[tokio::test]
+async fn test_handle_pull_with_valid_platform_override() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        Some("linux/arm64".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    // The platform string is valid, so any error must come from the pull
+    // itself (network/mock), never from platform parsing.
+    match &response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                !message.contains("invalid platform"),
+                "valid platform 'linux/arm64' should not produce an invalid-platform error, got: {message}"
+            );
+        }
+        DaemonResponse::Success { .. } => { /* acceptable if mock satisfies */ }
+        other => panic!("unexpected response variant: {other:?}"),
+    }
+}
+
+/// Empty and malformed platform strings must produce an "invalid platform"
+/// error response.
+#[tokio::test]
+async fn test_handle_pull_with_invalid_platform_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    for bad_platform in ["", "invalid"] {
+        let response = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            Some(bad_platform.to_string()),
+            Arc::clone(&state),
+            Arc::clone(&deps),
+        )
+        .await;
+
+        match &response {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("invalid platform"),
+                    "platform {bad_platform:?} should trigger 'invalid platform' error, got: {message}"
+                );
+            }
+            other => panic!("expected Error for platform {bad_platform:?}, got {other:?}"),
+        }
+    }
+}
+
+/// When platform is None, handle_pull uses the default registry router
+/// and succeeds with the mock registry (regression guard).
+#[tokio::test]
+async fn test_handle_pull_platform_none_uses_default_router() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("create image store"),
+    );
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            mock_registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        image_store,
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        None,
+        state,
+        deps,
+    )
+    .await;
+
+    match &response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("pulled"),
+                "expected 'pulled' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success for platform=None pull, got {other:?}"),
+    }
+
+    assert_eq!(
+        mock_registry.pull_count(),
+        1,
+        "default router mock should have been called exactly once"
+    );
+}
