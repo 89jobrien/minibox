@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260428:062906
+updated: 20260428:121625
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -202,12 +202,12 @@ items:
   name: publish-core-crates
   priority: P1
   status: open
-  title: 'chore: consolidate workspace (13->8 crates) and publish to crates.io'
+  title: 'chore: promote to stable and cut v0.21.0 release tag'
   description: |
     GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
-    Phases 0-5 complete (13->8 crates). Phase 6 complete: fixed slashcrux path dependency → published
-    crate.io version (0.1). Both crates pass dry-run publish. Remaining: promote to stable branch and
-    cut v0.21.0 release tag (GH Actions release.yml will publish automatically).
+    Phases 0-6 complete (13->8 crates, slashcrux path dep fixed, dry-run passes). Remaining:
+    promote main→next (wait for CI green), then promote next→stable and cut v0.21.0 release tag.
+    GitHub Actions release.yml will publish minibox-core and minibox-macros to crates.io automatically.
   files:
   - docs/superpowers/plans/2026-04-26-crate-consolidation.md
   - Cargo.toml
@@ -222,39 +222,24 @@ items:
     note: null
     number: 153
     url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260426:160000
+  - date: 20260428:121625
     type: note
     field: null
     value: null
     reviewed: null
-    note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
-- id: minibox-multi-platform-wrapup
-  doob_uuid: null
-  name: multi-platform-wrapup
-  priority: P1
-  status: open
-  title: 'feat: multi-platform image pull — commit mbx changes + miniboxd handler wiring'
-  description: |
-    Session 35 orca-strait run. 2 of 4 crates committed (minibox-core, minibox).
-    mbx changes are in working tree (uncommitted — pre-commit hook or signing failure).
-    miniboxd agent may still be running or BLOCKED.
-    Next: verify miniboxd agent result, commit mbx working tree changes, run cargo nextest
-    --workspace to confirm full integration.
-  files:
-  - crates/mbx/src/main.rs
-  - crates/mbx/src/commands/pull.rs
-  - crates/mbx/src/commands/run.rs
-  - crates/miniboxd/src/main.rs
-  - crates/minibox/src/daemon/handler.rs
-  completed: null
-  extra:
-  - date: 20260428:062906
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: "Wave 1 (minibox-core): TargetPlatform, find_platform(), NoPlatformManifest, RegistryClient::with_platform(), Pull/Run platform field. Wave 2 (minibox ghcr): find_platform in GHCR adapter. mbx: --platform CLI flag + thread to protocol (in working tree, not committed). miniboxd: TDD agent dispatched, status unknown."
+    note: "Session 36: all council recommendations resolved — multi-platform feature fully wired. Branch is now healthy for next→stable promotion."
 log:
+- date: 20260428:121625
+  summary: "Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests."
+  commits:
+  - c669ca8
+  - f423e19
+  - 49fc9a1
+  - 73703f8
+  - 93b4814
+  - ade65b9
+  - eb6bef2
+  session: 36
 - date: 20260428:062906
   summary: "Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree."
   commits:
@@ -280,10 +265,3 @@ log:
   - c89e93f
   - 6a65bc3
   session: 32
-- date: 20260426:091635
-  summary: "Session 31: Phases 3-5 consolidation complete (13->8 crates). Created 3 dogfood implementation plans (MCP server, sandbox, CI agent). Fixed post-consolidation test compile errors. Ran council (93%/67%). Captured 10 council todos. New P1: adapter registry correctness gap."
-  commits:
-  - 451e7ec
-  - 830877e
-  - f865277
-  session: 31
