@@ -132,6 +132,9 @@ pub enum DaemonRequest {
         /// Agentic execution context — workflow variables and bindings.
         #[serde(default)]
         execution_context: Option<slashcrux::ExecutionContext>,
+        /// Target platform (e.g. `"linux/arm64"`). Defaults to host platform.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        platform: Option<String>,
     },
 
     /// Stop a running container by ID.
@@ -167,6 +170,9 @@ pub enum DaemonRequest {
         image: String,
         /// Image tag. Defaults to `"latest"` when `None`.
         tag: Option<String>,
+        /// Target platform (e.g. `"linux/arm64"`). Defaults to host platform.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        platform: Option<String>,
     },
 
     /// Load a local OCI image tarball into the daemon's image store.
@@ -672,6 +678,7 @@ impl TestRunDefaults {
             priority: self.priority,
             urgency: self.urgency,
             execution_context: self.execution_context,
+            platform: None,
         }
     }
 }
@@ -808,13 +815,14 @@ mod tests {
         let req = DaemonRequest::Pull {
             image: "nginx".to_string(),
             tag: Some("alpine".to_string()),
+            platform: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
 
         match decoded {
-            DaemonRequest::Pull { image, tag } => {
+            DaemonRequest::Pull { image, tag, .. } => {
                 assert_eq!(image, "nginx");
                 assert_eq!(tag, Some("alpine".to_string()));
             }
@@ -1190,6 +1198,7 @@ mod tests {
             priority: None,
             urgency: None,
             execution_context: None,
+            platform: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1345,6 +1354,7 @@ mod tests {
             priority: None,
             urgency: None,
             execution_context: None,
+            platform: None,
         };
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
@@ -1390,6 +1400,7 @@ mod tests {
         let json = serde_json::to_string(&DaemonRequest::Pull {
             image: "library/nginx".to_string(),
             tag: Some("stable".to_string()),
+            platform: None,
         })
         .expect("serialize");
         assert_eq!(
@@ -1541,6 +1552,54 @@ mod tests {
                 obj.contains_key(*field),
                 "missing field {field} in Run wire format"
             );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Platform field on Pull and Run
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pull_without_platform_deserializes() {
+        let json = r#"{"type":"Pull","image":"alpine","tag":"latest"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Pull { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn pull_with_platform_deserializes() {
+        let json = r#"{"type":"Pull","image":"alpine","tag":"latest","platform":"linux/arm64"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Pull { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()));
+            }
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn run_without_platform_deserializes() {
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Run { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn run_with_platform_deserializes() {
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"platform":"linux/arm64"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Run { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()));
+            }
+            _ => panic!("expected Run"),
         }
     }
 }

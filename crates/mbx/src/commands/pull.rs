@@ -19,6 +19,7 @@ pub async fn execute(
     let request = DaemonRequest::Pull {
         image: image.clone(),
         tag: Some(tag.clone()),
+        platform: None,
     };
 
     let client = DaemonClient::with_socket(socket_path);

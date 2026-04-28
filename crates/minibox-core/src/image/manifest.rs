@@ -4,7 +4,9 @@
 //! and multi-arch manifest lists (`application/vnd.oci.image.index.v1+json`
 //! `application/vnd.docker.distribution.manifest.list.v2+json`).
 
+use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 // ---------------------------------------------------------------------------
 // Media type constants
@@ -97,15 +99,32 @@ pub struct ManifestList {
 }
 
 impl ManifestList {
-    /// Find the descriptor for the `linux/amd64` platform.
-    pub fn find_linux_amd64(&self) -> Option<&Descriptor> {
+    /// Find the descriptor matching a specific [`TargetPlatform`].
+    ///
+    /// Matches on `os` and `architecture`. If the target has a `variant`, the
+    /// descriptor must also match that variant. If the target has no variant,
+    /// any variant (or none) on the descriptor is accepted.
+    pub fn find_platform(&self, target: &TargetPlatform) -> Option<&Descriptor> {
         self.manifests.iter().find(|d| {
             if let Some(p) = &d.platform {
-                p.os == "linux" && p.architecture == "amd64"
+                if p.os != target.os || p.architecture != target.architecture {
+                    return false;
+                }
+                // If the target specifies a variant, it must match.
+                if let Some(tv) = &target.variant {
+                    p.variant.as_ref() == Some(tv)
+                } else {
+                    true
+                }
             } else {
                 false
             }
         })
+    }
+
+    /// Find the descriptor for the `linux/amd64` platform.
+    pub fn find_linux_amd64(&self) -> Option<&Descriptor> {
+        self.find_platform(&TargetPlatform::linux_amd64())
     }
 }
 
@@ -147,6 +166,84 @@ impl ManifestResponse {
             let manifest: OciManifest = serde_json::from_slice(body)?;
             Ok(ManifestResponse::Single(manifest))
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TargetPlatform
+// ---------------------------------------------------------------------------
+
+/// A target platform for multi-arch image selection.
+///
+/// Combines OS, architecture, and optional variant (e.g. ARM v7/v8) to match
+/// against manifest list entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetPlatform {
+    /// Operating system (e.g. `"linux"`, `"windows"`).
+    pub os: String,
+    /// CPU architecture in OCI convention (e.g. `"amd64"`, `"arm64"`).
+    pub architecture: String,
+    /// Architecture variant (e.g. `"v8"` for ARM64). `None` for amd64.
+    pub variant: Option<String>,
+}
+
+impl Default for TargetPlatform {
+    /// Auto-detect the host platform, mapping Rust arch names to OCI conventions.
+    fn default() -> Self {
+        let os = std::env::consts::OS.to_string();
+        let architecture = match std::env::consts::ARCH {
+            "aarch64" => "arm64".to_string(),
+            "x86_64" => "amd64".to_string(),
+            other => other.to_string(),
+        };
+        Self {
+            os,
+            architecture,
+            variant: None,
+        }
+    }
+}
+
+impl TargetPlatform {
+    /// Parse a platform string in `"os/arch"` or `"os/arch/variant"` format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string does not contain at least `os/arch`.
+    pub fn parse(s: &str) -> anyhow::Result<Self> {
+        let parts: Vec<&str> = s.split('/').collect();
+        match parts.len() {
+            2 => Ok(Self {
+                os: parts[0].to_string(),
+                architecture: parts[1].to_string(),
+                variant: None,
+            }),
+            3 => Ok(Self {
+                os: parts[0].to_string(),
+                architecture: parts[1].to_string(),
+                variant: Some(parts[2].to_string()),
+            }),
+            _ => bail!("invalid platform string: expected os/arch or os/arch/variant, got {s:?}"),
+        }
+    }
+
+    /// Convenience constructor for `linux/amd64`.
+    pub fn linux_amd64() -> Self {
+        Self {
+            os: "linux".to_string(),
+            architecture: "amd64".to_string(),
+            variant: None,
+        }
+    }
+}
+
+impl fmt::Display for TargetPlatform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.os, self.architecture)?;
+        if let Some(v) = &self.variant {
+            write!(f, "/{v}")?;
+        }
+        Ok(())
     }
 }
 
@@ -366,5 +463,187 @@ mod tests {
         let result =
             ManifestResponse::parse(b"not json", "application/vnd.oci.image.manifest.v1+json");
         assert!(result.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // TargetPlatform
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn target_platform_default_matches_host() {
+        let tp = TargetPlatform::default();
+        assert!(!tp.os.is_empty(), "os should be non-empty");
+        assert!(!tp.architecture.is_empty(), "architecture should be non-empty");
+        assert_eq!(tp.os, std::env::consts::OS);
+    }
+
+    #[test]
+    fn target_platform_parse_two_part() {
+        let tp = TargetPlatform::parse("linux/arm64").expect("should parse");
+        assert_eq!(tp.os, "linux");
+        assert_eq!(tp.architecture, "arm64");
+        assert_eq!(tp.variant, None);
+    }
+
+    #[test]
+    fn target_platform_parse_three_part() {
+        let tp = TargetPlatform::parse("linux/arm64/v8").expect("should parse");
+        assert_eq!(tp.os, "linux");
+        assert_eq!(tp.architecture, "arm64");
+        assert_eq!(tp.variant, Some("v8".to_string()));
+    }
+
+    #[test]
+    fn target_platform_parse_invalid() {
+        assert!(TargetPlatform::parse("invalid").is_err());
+    }
+
+    #[test]
+    fn target_platform_display_without_variant() {
+        let tp = TargetPlatform {
+            os: "linux".to_string(),
+            architecture: "amd64".to_string(),
+            variant: None,
+        };
+        assert_eq!(tp.to_string(), "linux/amd64");
+    }
+
+    #[test]
+    fn target_platform_display_with_variant() {
+        let tp = TargetPlatform {
+            os: "linux".to_string(),
+            architecture: "arm64".to_string(),
+            variant: Some("v8".to_string()),
+        };
+        assert_eq!(tp.to_string(), "linux/arm64/v8");
+    }
+
+    #[test]
+    fn target_platform_linux_amd64() {
+        let tp = TargetPlatform::linux_amd64();
+        assert_eq!(tp.os, "linux");
+        assert_eq!(tp.architecture, "amd64");
+        assert_eq!(tp.variant, None);
+    }
+
+    // -------------------------------------------------------------------------
+    // ManifestList::find_platform
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn find_platform_matches_linux_amd64() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_DOCKER_MANIFEST_LIST.to_string(),
+            manifests: vec![
+                Descriptor {
+                    media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                    size: 100,
+                    digest: "sha256:arm_digest".to_string(),
+                    platform: Some(Platform {
+                        architecture: "arm64".to_string(),
+                        os: "linux".to_string(),
+                        variant: Some("v8".to_string()),
+                    }),
+                },
+                Descriptor {
+                    media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                    size: 200,
+                    digest: "sha256:amd64_digest".to_string(),
+                    platform: Some(Platform {
+                        architecture: "amd64".to_string(),
+                        os: "linux".to_string(),
+                        variant: None,
+                    }),
+                },
+            ],
+        };
+        let target = TargetPlatform::linux_amd64();
+        let found = list.find_platform(&target);
+        assert!(found.is_some());
+        assert_eq!(found.expect("should find").digest, "sha256:amd64_digest");
+    }
+
+    #[test]
+    fn find_platform_matches_arm64_with_variant() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_OCI_INDEX.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_OCI_MANIFEST.to_string(),
+                size: 100,
+                digest: "sha256:arm_v8".to_string(),
+                platform: Some(Platform {
+                    architecture: "arm64".to_string(),
+                    os: "linux".to_string(),
+                    variant: Some("v8".to_string()),
+                }),
+            }],
+        };
+        let target = TargetPlatform::parse("linux/arm64/v8").expect("parse");
+        let found = list.find_platform(&target);
+        assert!(found.is_some());
+        assert_eq!(found.expect("should find").digest, "sha256:arm_v8");
+    }
+
+    #[test]
+    fn find_platform_returns_none_for_missing() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_OCI_INDEX.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_OCI_MANIFEST.to_string(),
+                size: 100,
+                digest: "sha256:win".to_string(),
+                platform: Some(Platform {
+                    architecture: "amd64".to_string(),
+                    os: "windows".to_string(),
+                    variant: None,
+                }),
+            }],
+        };
+        let target = TargetPlatform::linux_amd64();
+        assert!(list.find_platform(&target).is_none());
+    }
+
+    #[test]
+    fn find_platform_ignores_variant_when_target_has_none() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_OCI_INDEX.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_OCI_MANIFEST.to_string(),
+                size: 100,
+                digest: "sha256:arm_v8".to_string(),
+                platform: Some(Platform {
+                    architecture: "arm64".to_string(),
+                    os: "linux".to_string(),
+                    variant: Some("v8".to_string()),
+                }),
+            }],
+        };
+        // Target has no variant — should still match arm64/linux
+        let target = TargetPlatform::parse("linux/arm64").expect("parse");
+        let found = list.find_platform(&target);
+        assert!(found.is_some());
+    }
+
+    #[test]
+    fn find_linux_amd64_still_works() {
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: MEDIA_TYPE_DOCKER_MANIFEST_LIST.to_string(),
+            manifests: vec![Descriptor {
+                media_type: MEDIA_TYPE_DOCKER_MANIFEST.to_string(),
+                size: 200,
+                digest: "sha256:amd64_digest".to_string(),
+                platform: Some(Platform {
+                    architecture: "amd64".to_string(),
+                    os: "linux".to_string(),
+                    variant: None,
+                }),
+            }],
+        };
+        assert!(list.find_linux_amd64().is_some());
     }
 }

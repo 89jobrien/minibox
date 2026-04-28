@@ -25,6 +25,7 @@ fn small_pull_request() -> DaemonRequest {
     DaemonRequest::Pull {
         image: "alpine".to_string(),
         tag: None,
+        platform: None,
     }
 }
 
@@ -32,6 +33,7 @@ fn large_pull_request() -> DaemonRequest {
     DaemonRequest::Pull {
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
         tag: Some("2026.03.16-benchmarks".to_string()),
+        platform: None,
     }
 }
 

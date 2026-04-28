@@ -13,7 +13,7 @@
 //! - `RegistryError::AuthFailed` Display includes image and message.
 //! - `RegistryError::ManifestFetch` Display includes name, tag, and message.
 //! - `RegistryError::BlobFetch` Display includes digest and message.
-//! - `RegistryError::NoAmd64Manifest` Display has known message.
+//! - `RegistryError::NoPlatformManifest` Display includes platform string.
 //! - `RegistryError::ManifestNestingTooDeep` Display has known message.
 //! - `RegistryError::LayerTask` wraps JoinError.
 //! - `RegistryError::Other` wraps arbitrary message.
@@ -242,15 +242,17 @@ fn conformance_registry_error_blob_fetch_display() {
 }
 
 // ---------------------------------------------------------------------------
-// RegistryError::NoAmd64Manifest
+// RegistryError::NoPlatformManifest
 // ---------------------------------------------------------------------------
 
 #[test]
-fn conformance_registry_error_no_amd64_display() {
-    let err = RegistryError::NoAmd64Manifest;
+fn conformance_registry_error_no_platform_manifest_display() {
+    let err = RegistryError::NoPlatformManifest {
+        platform: "linux/amd64".into(),
+    };
     let msg = err.to_string();
-    assert!(msg.contains("amd64"));
-    assert!(msg.contains("manifest"));
+    assert!(msg.contains("linux/amd64"), "should contain platform: {msg}");
+    assert!(msg.contains("manifest"), "should contain 'manifest': {msg}");
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +285,12 @@ fn conformance_registry_error_other_display() {
 
 #[test]
 fn conformance_registry_error_is_debug() {
-    let err = RegistryError::NoAmd64Manifest;
+    let err = RegistryError::NoPlatformManifest {
+        platform: "linux/amd64".into(),
+    };
     let debug_str = format!("{:?}", err);
     assert!(!debug_str.is_empty());
-    assert!(debug_str.contains("NoAmd64Manifest"));
+    assert!(debug_str.contains("NoPlatformManifest"));
 }
 
 // ---------------------------------------------------------------------------

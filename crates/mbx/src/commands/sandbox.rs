@@ -94,6 +94,7 @@ pub fn build_request(
         priority: None,
         urgency: None,
         execution_context: None,
+        platform: None,
     })
 }
 

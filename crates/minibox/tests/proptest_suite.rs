@@ -67,6 +67,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         priority: None,
                         urgency: None,
                         execution_context: None,
+                        platform: None,
                     }
                 }
             ),
@@ -78,7 +79,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
         // Exercises arbitrary image ref strings (the spec's ImageRef invariant —
         // ImageRef is not public, but Pull carries the same data through the wire).
         (any::<String>(), option::of(any::<String>()))
-            .prop_map(|(image, tag)| DaemonRequest::Pull { image, tag }),
+            .prop_map(|(image, tag)| DaemonRequest::Pull { image, tag, platform: None }),
         (any::<String>(), any::<String>(), any::<String>())
             .prop_map(|(path, name, tag)| DaemonRequest::LoadImage { path, name, tag }),
         (

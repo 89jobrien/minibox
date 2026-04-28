@@ -161,6 +161,7 @@ pub async fn execute(
         priority: None,
         urgency: None,
         execution_context: None,
+        platform: None,
     };
 
     let client = DaemonClient::with_socket(socket_path);

@@ -98,6 +98,7 @@ impl ImageRegistry for VzRegistry {
         let req = DaemonRequest::Pull {
             image: format!("{}/{}", image_ref.namespace, image_ref.name),
             tag: Some(image_ref.tag.clone()),
+            platform: None,
         };
 
         let vm = Arc::clone(&self.vm);
@@ -194,6 +195,7 @@ impl ContainerRuntime for VzRuntime {
             priority: None,
             urgency: None,
             execution_context: None,
+            platform: None,
         };
 
         let responses = call_agent(&self.vm, &req)

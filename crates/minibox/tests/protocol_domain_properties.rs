@@ -27,7 +27,7 @@ proptest! {
         suffix in ".*",
     ) {
         let image = format!("{prefix}\n{suffix}");
-        let req = DaemonRequest::Pull { image, tag: None };
+        let req = DaemonRequest::Pull { image, tag: None, platform: None };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         let re_encoded = encode_request(&decoded).unwrap();

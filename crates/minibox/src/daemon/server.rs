@@ -388,7 +388,7 @@ async fn dispatch(
             let response = handler::handle_list(state).await;
             send_terminal_response(&tx, "List", response).await;
         }
-        DaemonRequest::Pull { image, tag } => {
+        DaemonRequest::Pull { image, tag, .. } => {
             let response = handler::handle_pull(image, tag, state, deps).await;
             send_terminal_response(&tx, "Pull", response).await;
         }
@@ -993,6 +993,7 @@ mod tests {
             &DaemonRequest::Pull {
                 image: "alpine".to_string(),
                 tag: Some("latest".to_string()),
+                platform: None,
             },
         )
         .await;

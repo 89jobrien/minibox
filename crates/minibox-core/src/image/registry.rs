@@ -151,6 +151,8 @@ pub struct RegistryClient {
     insecure_http: Client,
     auth_url: String,
     registry_base: String,
+    /// Target platform for multi-arch manifest selection.
+    pub platform: crate::image::manifest::TargetPlatform,
 }
 
 impl RegistryClient {
@@ -177,7 +179,20 @@ impl RegistryClient {
             insecure_http,
             auth_url: AUTH_URL.to_owned(),
             registry_base: REGISTRY_BASE.to_owned(),
+            platform: crate::image::manifest::TargetPlatform::default(),
         })
+    }
+
+    /// Create a new client targeting a specific platform.
+    ///
+    /// Use this when pulling images for a non-host architecture (e.g.
+    /// cross-platform builds).
+    pub fn with_platform(
+        platform: crate::image::manifest::TargetPlatform,
+    ) -> anyhow::Result<Self> {
+        let mut client = Self::new()?;
+        client.platform = platform;
+        Ok(client)
     }
 
     /// Create a client with custom base URLs for testing against a mock server.
@@ -194,6 +209,7 @@ impl RegistryClient {
             http,
             auth_url: auth_url.to_owned(),
             registry_base: registry_base.to_owned(),
+            platform: crate::image::manifest::TargetPlatform::default(),
         })
     }
 
@@ -350,9 +366,15 @@ impl RegistryClient {
             ManifestResponse::List(list) => {
                 // Find linux/amd64 and fetch that manifest.
                 let amd64 = list
-                    .find_linux_amd64()
-                    .ok_or(RegistryError::NoAmd64Manifest)?;
-                info!("manifest list resolved to amd64 digest={}", amd64.digest);
+                    .find_platform(&self.platform)
+                    .ok_or(RegistryError::NoPlatformManifest {
+                        platform: self.platform.to_string(),
+                    })?;
+                info!(
+                    platform = %self.platform,
+                    digest = %amd64.digest,
+                    "manifest list resolved to platform-specific digest"
+                );
                 let digest = amd64.digest.clone();
                 // Recurse with the digest as the "tag", incrementing depth to
                 // guard against malformed or adversarial chained manifest lists.
@@ -954,11 +976,14 @@ mod tests {
         /// Build a RegistryClient pointed at the given mock server (plain HTTP,
         /// no TLS requirement).
         fn test_client(server: &MockServer) -> RegistryClient {
-            RegistryClient::for_test(
+            let mut client = RegistryClient::for_test(
                 &format!("{}/token", server.uri()),
                 &format!("{}/v2", server.uri()),
             )
-            .unwrap()
+            .unwrap();
+            // Pin to linux/amd64 so tests are deterministic across host platforms.
+            client.platform = crate::image::manifest::TargetPlatform::linux_amd64();
+            client
         }
 
         /// Build a minimal valid gzip-compressed tar layer and return
@@ -1649,5 +1674,20 @@ mod tests {
             let _ = s.next().await;
             assert_eq!(s.consumed(), 5);
         }
+    }
+
+    #[test]
+    fn test_registry_client_new_has_default_platform() {
+        let client = RegistryClient::new().expect("should create client");
+        let default_tp = crate::image::manifest::TargetPlatform::default();
+        assert_eq!(client.platform, default_tp);
+    }
+
+    #[test]
+    fn test_registry_client_with_platform() {
+        let tp = crate::image::manifest::TargetPlatform::parse("linux/arm64/v8")
+            .expect("should parse");
+        let client = RegistryClient::with_platform(tp.clone()).expect("should create client");
+        assert_eq!(client.platform, tp);
     }
 }
