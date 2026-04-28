@@ -1,7 +1,32 @@
 project: minibox
 id: minibox
-updated: 20260428:121625
+updated: 20260428:124518
 items:
+- id: minibox-update-upgrade
+  doob_uuid: null
+  name: update-upgrade-commands
+  priority: P1
+  status: open
+  title: 'feat: mbx update + mbx upgrade commands — Wave 2 in flight'
+  description: |
+    Wave 1 done (protocol types + upgrade CLI). Wave 2 dispatched: handle_update in
+    handler.rs (agent a669857) and mbx update CLI command (agent a01cc07). When Wave 2
+    lands, cherry-pick both onto main, run cargo xtask test-unit, then push.
+    Restart support in handle_update is stubbed (warn log) — Wave 3 would wire it.
+  files:
+  - crates/minibox-core/src/protocol.rs
+  - crates/minibox/src/daemon/handler.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/mbx/src/commands/update.rs
+  - crates/mbx/src/commands/upgrade.rs
+  completed: null
+  extra:
+  - date: 20260428:124518
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: "Wave 1 commits: 54df5d0 (protocol), 1bc83c5 (upgrade CLI). Wave 2 agents running in worktrees."
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
   name: vz-apple-bug-blocker
@@ -229,6 +254,12 @@ items:
     reviewed: null
     note: "Session 36: all council recommendations resolved — multi-platform feature fully wired. Branch is now healthy for next→stable promotion."
 log:
+- date: 20260428:124518
+  summary: "Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI)."
+  commits:
+  - 54df5d0
+  - 1bc83c5
+  session: 37
 - date: 20260428:121625
   summary: "Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests."
   commits:
@@ -256,12 +287,3 @@ log:
   commits:
   - a2619cc
   session: 33
-- date: 20260427:163631
-  summary: "Session 32: CI repair campaign — macro hygiene (test_run! struct-update), -t flag conflict (tag vs tty), Linux-only test updates (HandlerDependencies ISP layout, RootfsSetup import, probe rename). Moved minibox-memory to minibox-plugins workspace. Quality CI green pending current run."
-  commits:
-  - e1664e8
-  - 88bcdd3
-  - b55b78a
-  - c89e93f
-  - 6a65bc3
-  session: 32
