@@ -2588,7 +2588,12 @@ pub async fn handle_update(
         match deps.image.image_store.list_all_images().await {
             Ok(refs) => refs,
             Err(e) => {
-                send_error(&tx, "handle_update", format!("failed to list images: {e:#}")).await;
+                send_error(
+                    &tx,
+                    "handle_update",
+                    format!("failed to list images: {e:#}"),
+                )
+                .await;
                 return;
             }
         }
@@ -2685,11 +2690,7 @@ pub async fn handle_update(
     // ── Step 4: terminal Success ──────────────────────────────────────────────
     let message = format!("updated {updated}/{total} images");
     info!(updated, total, "handle_update: complete");
-    if tx
-        .send(DaemonResponse::Success { message })
-        .await
-        .is_err()
-    {
+    if tx.send(DaemonResponse::Success { message }).await.is_err() {
         warn!("handle_update: client disconnected before Success could be sent");
     }
 }

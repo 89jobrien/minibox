@@ -1720,8 +1720,7 @@ mod tests {
         };
         let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(
-            json,
-            r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
+            json, r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
             "wire snapshot mismatch: {json}",
         );
     }

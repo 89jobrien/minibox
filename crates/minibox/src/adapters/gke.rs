@@ -315,8 +315,8 @@ impl ContainerRuntime for ProotRuntime {
                     // Create a pipe for merged stdout+stderr. We dup the write
                     // end so both stdout and stderr flow into the same reader.
                     use std::os::unix::io::{AsRawFd, IntoRawFd};
-                    let (read_fd, write_fd) = nix::unistd::pipe()
-                        .context("proot: creating output pipe")?;
+                    let (read_fd, write_fd) =
+                        nix::unistd::pipe().context("proot: creating output pipe")?;
                     // dup the write end so stderr gets its own fd into the
                     // same pipe. Both write ends are consumed by the child.
                     let stderr_raw = nix::unistd::dup(write_fd.as_raw_fd())
@@ -324,12 +324,8 @@ impl ContainerRuntime for ProotRuntime {
                     // SAFETY: write_fd is a valid open fd from pipe() above,
                     // stderr_raw is a valid fd from dup(). from_raw_fd takes
                     // ownership so the fds are closed when the child exits.
-                    cmd.stdout(unsafe {
-                        std::process::Stdio::from_raw_fd(write_fd.into_raw_fd())
-                    });
-                    cmd.stderr(unsafe {
-                        std::process::Stdio::from_raw_fd(stderr_raw)
-                    });
+                    cmd.stdout(unsafe { std::process::Stdio::from_raw_fd(write_fd.into_raw_fd()) });
+                    cmd.stderr(unsafe { std::process::Stdio::from_raw_fd(stderr_raw) });
                     let child = cmd
                         .spawn()
                         .with_context(|| format!("spawning proot at {proot_path:?}"))?;
