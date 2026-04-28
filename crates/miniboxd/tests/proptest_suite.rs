@@ -89,7 +89,7 @@ proptest! {
                 &tmp,
             );
             let response =
-                miniboxd::handler::handle_pull(image.clone(), Some(tag), state, deps).await;
+                miniboxd::handler::handle_pull(image.clone(), Some(tag), None, state, deps).await;
             prop_assert!(
                 matches!(response, DaemonResponse::Error { .. }),
                 "pull of '{image}' with failing registry must return Error, got {response:?}"

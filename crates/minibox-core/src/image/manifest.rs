@@ -473,7 +473,10 @@ mod tests {
     fn target_platform_default_matches_host() {
         let tp = TargetPlatform::default();
         assert!(!tp.os.is_empty(), "os should be non-empty");
-        assert!(!tp.architecture.is_empty(), "architecture should be non-empty");
+        assert!(
+            !tp.architecture.is_empty(),
+            "architecture should be non-empty"
+        );
         assert_eq!(tp.os, std::env::consts::OS);
     }
 

@@ -118,6 +118,10 @@ enum Commands {
         /// Automatically remove the container when it exits.
         #[arg(long)]
         rm: bool,
+
+        /// Target platform (e.g. linux/arm64). Defaults to host platform.
+        #[arg(long)]
+        platform: Option<String>,
     },
 
     /// List all containers
@@ -159,6 +163,10 @@ enum Commands {
         /// Image tag (default: latest)
         #[arg(long, default_value = "latest")]
         tag: String,
+
+        /// Target platform (e.g. linux/arm64). Defaults to host platform.
+        #[arg(long)]
+        platform: Option<String>,
     },
 
     /// Execute a command inside a running container.
@@ -330,6 +338,7 @@ async fn main() -> Result<()> {
             entrypoint,
             user,
             rm,
+            platform,
         } => {
             commands::run::execute(
                 image,
@@ -347,6 +356,7 @@ async fn main() -> Result<()> {
                 entrypoint,
                 user,
                 rm,
+                platform,
                 socket_path,
             )
             .await
@@ -381,7 +391,11 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
+        Commands::Pull {
+            image,
+            tag,
+            platform,
+        } => commands::pull::execute(image, tag, platform, socket_path).await,
 
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
@@ -579,6 +593,54 @@ mod tests {
         let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
         match cli.command {
             Commands::Run { name, .. } => assert_eq!(name, None),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_platform_flag_on_pull() {
+        let cli =
+            Cli::try_parse_from(["mbx", "pull", "--platform", "linux/arm64", "alpine"]).unwrap();
+        match cli.command {
+            Commands::Pull { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()))
+            }
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_platform_flag_on_run() {
+        let cli = Cli::try_parse_from([
+            "mbx",
+            "run",
+            "--platform",
+            "linux/arm64",
+            "alpine",
+            "--",
+            "/bin/sh",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Run { platform, .. } => assert_eq!(platform, Some("linux/arm64".to_string())),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_pull_without_platform_is_none() {
+        let cli = Cli::try_parse_from(["mbx", "pull", "alpine"]).unwrap();
+        match cli.command {
+            Commands::Pull { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn cli_run_without_platform_is_none() {
+        let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        match cli.command {
+            Commands::Run { platform, .. } => assert_eq!(platform, None),
             _ => panic!("expected Run"),
         }
     }

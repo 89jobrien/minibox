@@ -187,9 +187,7 @@ impl RegistryClient {
     ///
     /// Use this when pulling images for a non-host architecture (e.g.
     /// cross-platform builds).
-    pub fn with_platform(
-        platform: crate::image::manifest::TargetPlatform,
-    ) -> anyhow::Result<Self> {
+    pub fn with_platform(platform: crate::image::manifest::TargetPlatform) -> anyhow::Result<Self> {
         let mut client = Self::new()?;
         client.platform = platform;
         Ok(client)
@@ -365,11 +363,11 @@ impl RegistryClient {
             ManifestResponse::Single(m) => Ok(m),
             ManifestResponse::List(list) => {
                 // Find linux/amd64 and fetch that manifest.
-                let amd64 = list
-                    .find_platform(&self.platform)
-                    .ok_or(RegistryError::NoPlatformManifest {
+                let amd64 = list.find_platform(&self.platform).ok_or(
+                    RegistryError::NoPlatformManifest {
                         platform: self.platform.to_string(),
-                    })?;
+                    },
+                )?;
                 info!(
                     platform = %self.platform,
                     digest = %amd64.digest,
@@ -1685,8 +1683,8 @@ mod tests {
 
     #[test]
     fn test_registry_client_with_platform() {
-        let tp = crate::image::manifest::TargetPlatform::parse("linux/arm64/v8")
-            .expect("should parse");
+        let tp =
+            crate::image::manifest::TargetPlatform::parse("linux/arm64/v8").expect("should parse");
         let client = RegistryClient::with_platform(tp.clone()).expect("should create client");
         assert_eq!(client.platform, tp);
     }

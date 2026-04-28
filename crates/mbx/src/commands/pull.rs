@@ -12,6 +12,7 @@ use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 pub async fn execute(
     image: String,
     tag: String,
+    platform: Option<String>,
     socket_path: &std::path::Path,
 ) -> anyhow::Result<()> {
     eprintln!("Pulling {image}:{tag}…");
@@ -19,7 +20,7 @@ pub async fn execute(
     let request = DaemonRequest::Pull {
         image: image.clone(),
         tag: Some(tag.clone()),
-        platform: None,
+        platform,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -61,7 +62,13 @@ mod tests {
             message: "pulled".to_string(),
         })
         .await;
-        let result = execute("alpine".to_string(), "latest".to_string(), &socket_path).await;
+        let result = execute(
+            "alpine".to_string(),
+            "latest".to_string(),
+            None,
+            &socket_path,
+        )
+        .await;
         assert!(result.is_ok(), "execute should succeed: {result:?}");
     }
 }

@@ -118,6 +118,7 @@ pub async fn execute(
     entrypoint: Option<String>,
     user: Option<String>,
     auto_remove: bool,
+    platform: Option<String>,
     socket_path: &std::path::Path,
 ) -> Result<()> {
     let network_mode = match network.as_str() {
@@ -161,7 +162,7 @@ pub async fn execute(
         priority: None,
         urgency: None,
         execution_context: None,
-        platform: None,
+        platform,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -262,6 +263,7 @@ mod tests {
             None,
             None,
             false,
+            None,
             &socket_path,
         )
         .await;

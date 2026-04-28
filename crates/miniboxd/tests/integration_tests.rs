@@ -165,6 +165,7 @@ async fn test_pull_real_image_from_dockerhub() {
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps,
     )
@@ -199,6 +200,7 @@ async fn test_pull_nonexistent_image() {
     let response = handler::handle_pull(
         "nonexistent-image-that-does-not-exist-12345".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -229,6 +231,7 @@ async fn test_run_simple_container() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -271,6 +274,7 @@ async fn test_run_container_with_resource_limits() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -325,6 +329,7 @@ async fn test_container_removal_cleanup() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -393,6 +398,7 @@ async fn test_overlay_filesystem_setup() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -448,6 +454,7 @@ async fn test_complete_container_lifecycle() {
     let pull_response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -523,6 +530,7 @@ async fn test_multiple_concurrent_containers() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )

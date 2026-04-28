@@ -123,6 +123,7 @@ async fn handle_pull_failure_returns_error_response() {
     let response = miniboxd::handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )

@@ -251,7 +251,10 @@ fn conformance_registry_error_no_platform_manifest_display() {
         platform: "linux/amd64".into(),
     };
     let msg = err.to_string();
-    assert!(msg.contains("linux/amd64"), "should contain platform: {msg}");
+    assert!(
+        msg.contains("linux/amd64"),
+        "should contain platform: {msg}"
+    );
     assert!(msg.contains("manifest"), "should contain 'manifest': {msg}");
 }
 
