@@ -1644,26 +1644,47 @@ pub async fn handle_logs(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
-/// Pull an image from the appropriate registry and cache it locally.
-/// Construct a temporary [`DockerHubRegistry`] targeting a specific platform
-/// when the request carries a platform override. Returns `None` when no
-/// override is needed (use the default router instead).
+/// Apply a per-request platform override to whichever registry the router selected.
+///
+/// Downcasts the routed registry to its concrete type and reconstructs it with
+/// the requested [`TargetPlatform`].  Returns `None` when `platform` is absent
+/// (the caller should use the router's result directly).
+///
+/// # Errors
+///
+/// Returns an error if `platform` cannot be parsed, or if the adapter cannot
+/// be reconstructed (e.g. TLS init failure).
 fn resolve_platform_registry(
     platform: &Option<String>,
+    image_ref: &minibox_core::image::reference::ImageRef,
     deps: &HandlerDependencies,
-) -> Result<Option<crate::adapters::DockerHubRegistry>> {
-    match platform {
-        Some(p) => {
-            let tp = minibox_core::image::manifest::TargetPlatform::parse(p)?;
-            info!(platform = %p, "using per-request platform override");
-            let registry = crate::adapters::DockerHubRegistry::with_platform(
-                Arc::clone(&deps.image.image_store),
-                tp,
-            )?;
-            Ok(Some(registry))
-        }
-        None => Ok(None),
+) -> Result<Option<Box<dyn minibox_core::domain::ImageRegistry>>> {
+    let Some(p) = platform else {
+        return Ok(None);
+    };
+
+    let tp = minibox_core::image::manifest::TargetPlatform::parse(p)?;
+    info!(platform = %p, "using per-request platform override");
+
+    // Route first so we know which registry type owns this image reference,
+    // then reconstruct that adapter with the platform override applied.
+    let routed = deps.image.registry_router.route(image_ref);
+
+    if routed.as_any().is::<crate::adapters::GhcrRegistry>() {
+        let registry = crate::adapters::GhcrRegistry::with_platform(
+            Arc::clone(&deps.image.image_store),
+            tp,
+        )?;
+        return Ok(Some(Box::new(registry)));
     }
+
+    // Default: treat as Docker Hub (covers `native` adapter and any unknown
+    // hostname that the router falls back to its default for).
+    let registry = crate::adapters::DockerHubRegistry::with_platform(
+        Arc::clone(&deps.image.image_store),
+        tp,
+    )?;
+    Ok(Some(Box::new(registry)))
 }
 
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
@@ -1690,10 +1711,10 @@ pub async fn handle_pull(
     };
     let tag = image_ref.tag.clone();
 
-    // When a platform override is requested, construct a temporary
-    // DockerHubRegistry targeting that platform. Otherwise use the
-    // default registry from the router.
-    let platform_registry = match resolve_platform_registry(&platform, &deps) {
+    // When a platform override is requested, reconstruct the routed registry
+    // adapter with the requested platform applied. Otherwise use the router's
+    // result directly.  The box is held for the lifetime of the pull call.
+    let platform_registry = match resolve_platform_registry(&platform, &image_ref, &deps) {
         Ok(r) => r,
         Err(e) => {
             error!("handle_pull: invalid platform: {e}");
@@ -1704,7 +1725,7 @@ pub async fn handle_pull(
     };
 
     let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
-        Some(r) => r,
+        Some(r) => r.as_ref(),
         None => deps.image.registry_router.route(&image_ref),
     };
 

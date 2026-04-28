@@ -60,6 +60,8 @@ pub struct GhcrRegistry {
     token: Option<String>, // GHCR_TOKEN env var
     http: reqwest::Client,
     base_url: String,
+    /// Per-request platform override; falls back to [`TargetPlatform::default`] when `None`.
+    platform: Option<TargetPlatform>,
 }
 
 impl GhcrRegistry {
@@ -78,7 +80,23 @@ impl GhcrRegistry {
             token,
             http,
             base_url: GHCR_BASE.to_owned(),
+            platform: None,
         })
+    }
+
+    /// Create a GHCR adapter targeting a specific platform.
+    ///
+    /// Use this when pulling multi-arch images for a non-host architecture.
+    /// The platform selects which manifest entry to resolve from a manifest list.
+    pub fn with_platform(store: Arc<ImageStore>, platform: TargetPlatform) -> Result<Self> {
+        let mut registry = Self::new(store)?;
+        registry.platform = Some(platform);
+        Ok(registry)
+    }
+
+    /// Return the effective [`TargetPlatform`] for manifest list resolution.
+    fn effective_platform(&self) -> TargetPlatform {
+        self.platform.clone().unwrap_or_default()
     }
 
     /// Create a test adapter pointed at a plain-HTTP mock server.
@@ -93,6 +111,7 @@ impl GhcrRegistry {
             token: token.map(str::to_owned),
             http,
             base_url: base_url.to_owned(),
+            platform: None,
         }
     }
 
@@ -210,7 +229,7 @@ impl GhcrRegistry {
         match manifest_resp {
             ManifestResponse::Single(m) => Ok(m),
             ManifestResponse::List(list) => {
-                let platform = TargetPlatform::default();
+                let platform = self.effective_platform();
                 let desc = list.find_platform(&platform).ok_or_else(|| {
                     anyhow::anyhow!(
                         "ghcr: no {platform} manifest in list for {repo}:{tag_or_digest}",
