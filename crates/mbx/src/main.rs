@@ -155,6 +155,24 @@ enum Commands {
         all: bool,
     },
 
+    /// Re-pull cached images to check for newer versions.
+    Update {
+        /// Specific images to update (e.g. alpine:latest nginx:stable).
+        images: Vec<String>,
+
+        /// Update all cached images.
+        #[arg(long)]
+        all: bool,
+
+        /// Resolve images from running containers.
+        #[arg(long)]
+        containers: bool,
+
+        /// Restart containers after their image is updated.
+        #[arg(long)]
+        restart: bool,
+    },
+
     /// Pull an image from Docker Hub
     Pull {
         /// Image name (e.g., alpine, library/nginx)
@@ -401,6 +419,13 @@ async fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+
+        Commands::Update {
+            images,
+            all,
+            containers,
+            restart,
+        } => commands::update::execute(images, all, containers, restart, socket_path).await,
 
         Commands::Pull {
             image,
@@ -705,6 +730,67 @@ mod tests {
         match cli.unwrap().command {
             Commands::Run { mounts, .. } => assert_eq!(mounts.len(), 1),
             _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_single_image() {
+        let cli = Cli::try_parse_from(["mbx", "update", "alpine:latest"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                images,
+                all,
+                containers,
+                restart,
+            } => {
+                assert_eq!(images, vec!["alpine:latest"]);
+                assert!(!all);
+                assert!(!containers);
+                assert!(!restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_all_flag() {
+        let cli = Cli::try_parse_from(["mbx", "update", "--all"]).unwrap();
+        match cli.command {
+            Commands::Update { all, images, .. } => {
+                assert!(all);
+                assert!(images.is_empty());
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_containers_and_restart() {
+        let cli = Cli::try_parse_from(["mbx", "update", "--containers", "--restart"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                containers,
+                restart,
+                ..
+            } => {
+                assert!(containers);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_multiple_images_with_restart() {
+        let cli = Cli::try_parse_from(["mbx", "update", "img1", "img2", "--restart"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                images, restart, ..
+            } => {
+                assert_eq!(images, vec!["img1", "img2"]);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
         }
     }
 }
