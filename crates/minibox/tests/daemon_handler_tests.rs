@@ -6577,3 +6577,161 @@ async fn test_handle_pull_platform_none_uses_default_router() {
         "default router mock should have been called exactly once"
     );
 }
+
+// ---------------------------------------------------------------------------
+// handle_update Tests
+// ---------------------------------------------------------------------------
+
+/// `handle_update` with an explicit image list sends one `UpdateProgress` per
+/// image and ends with a terminal `Success` response.
+#[tokio::test]
+async fn test_handle_update_explicit_images_sends_progress_then_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Expect one UpdateProgress for alpine:latest
+    let first = rx.recv().await.expect("handler sent no response");
+    match &first {
+        DaemonResponse::UpdateProgress { image, status } => {
+            assert_eq!(image, "alpine:latest");
+            assert_eq!(status, "updated");
+        }
+        other => panic!("expected UpdateProgress, got {other:?}"),
+    }
+
+    // Expect terminal Success
+    let second = rx.recv().await.expect("handler sent no terminal response");
+    match &second {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("1/1"),
+                "expected '1/1' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success, got {other:?}"),
+    }
+
+    // Pull should have been called once
+    assert_eq!(mock_registry.pull_count(), 1);
+}
+
+/// `handle_update` with `all = true` and an empty image store sends a terminal
+/// `Success` with "0/0" (no images to refresh).
+#[tokio::test]
+async fn test_handle_update_all_empty_store_sends_zero_progress() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // With an empty image store, all=true means 0 images → terminal Success "0/0"
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(vec![], true, false, false, state, deps, tx).await;
+
+    let response = rx.recv().await.expect("handler sent no response");
+    match response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("0/0"),
+                "expected '0/0' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success, got {other:?}"),
+    }
+}
+
+/// `handle_update` with `containers = true` collects images from container records.
+#[tokio::test]
+async fn test_handle_update_containers_collects_source_image_refs() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Add a container with a source_image_ref
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "test-cid-update".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(vec![], false, true, false, Arc::clone(&state), deps, tx).await;
+
+    // Should get one UpdateProgress for alpine:latest
+    let first = rx.recv().await.expect("handler sent no response");
+    match &first {
+        DaemonResponse::UpdateProgress { image, status } => {
+            assert_eq!(image, "alpine:latest");
+            assert_eq!(status, "updated");
+        }
+        other => panic!("expected UpdateProgress, got {other:?}"),
+    }
+
+    let second = rx.recv().await.expect("no terminal response");
+    assert!(
+        matches!(second, DaemonResponse::Success { .. }),
+        "expected Success, got {second:?}"
+    );
+}

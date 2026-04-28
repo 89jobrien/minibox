@@ -2558,6 +2558,142 @@ pub async fn handle_list_snapshots(id: String, deps: Arc<HandlerDependencies>) -
     }
 }
 
+// ─── Update ─────────────────────────────────────────────────────────────────
+
+/// Re-pull cached images to pick up newer versions.
+///
+/// Sends a non-terminal [`DaemonResponse::UpdateProgress`] for each image
+/// processed, then a terminal [`DaemonResponse::Success`] with a summary.
+///
+/// # Image resolution order
+///
+/// 1. If `all` is `true`: every image returned by [`ImageStore::list_all_images`].
+/// 2. If `containers` is `true`: deduplicated `source_image_ref` values from all
+///    container records held in `state`.
+/// 3. Otherwise: the explicit `images` list.
+///
+/// When `restart` is `true` a warning is logged for each affected container;
+/// the actual restart is not yet implemented (tracked for a later wave).
+pub async fn handle_update(
+    images: Vec<String>,
+    all: bool,
+    containers: bool,
+    restart: bool,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    // ── Step 1: resolve the list of image refs to update ─────────────────────
+    let target_refs: Vec<String> = if all {
+        match deps.image.image_store.list_all_images().await {
+            Ok(refs) => refs,
+            Err(e) => {
+                send_error(&tx, "handle_update", format!("failed to list images: {e:#}")).await;
+                return;
+            }
+        }
+    } else if containers {
+        let containers_list = state.list_containers().await;
+        let mut seen = std::collections::HashSet::new();
+        let mut refs = Vec::new();
+        for info in containers_list {
+            let record = state.get_container(&info.id).await;
+            if let Some(source_ref) = record.and_then(|r| r.source_image_ref)
+                && seen.insert(source_ref.clone())
+            {
+                refs.push(source_ref);
+            }
+        }
+        refs
+    } else {
+        images
+    };
+
+    let total = target_refs.len();
+    let mut updated: usize = 0;
+
+    // ── Step 2: pull each image, send UpdateProgress per image ────────────────
+    for ref_str in &target_refs {
+        let image_ref = match ImageRef::parse(ref_str) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    image = %ref_str,
+                    error = %e,
+                    "handle_update: invalid image reference, skipping"
+                );
+                let status = format!("error: {e}");
+                if tx
+                    .send(DaemonResponse::UpdateProgress {
+                        image: ref_str.clone(),
+                        status,
+                    })
+                    .await
+                    .is_err()
+                {
+                    warn!(
+                        image = %ref_str,
+                        "handle_update: client disconnected during UpdateProgress"
+                    );
+                    return;
+                }
+                continue;
+            }
+        };
+
+        let registry = deps.image.registry_router.route(&image_ref);
+        let status = match registry.pull_image(&image_ref).await {
+            Ok(_) => {
+                info!(
+                    image = %ref_str,
+                    "handle_update: image refreshed"
+                );
+                updated += 1;
+                "updated".to_string()
+            }
+            Err(e) => {
+                warn!(
+                    image = %ref_str,
+                    error = %e,
+                    "handle_update: pull failed"
+                );
+                format!("error: {e:#}")
+            }
+        };
+
+        if tx
+            .send(DaemonResponse::UpdateProgress {
+                image: ref_str.clone(),
+                status,
+            })
+            .await
+            .is_err()
+        {
+            warn!(
+                image = %ref_str,
+                "handle_update: client disconnected during UpdateProgress"
+            );
+            return;
+        }
+    }
+
+    // ── Step 3: restart if requested (not yet implemented) ────────────────────
+    if restart {
+        warn!("handle_update: restart not yet implemented — skipping container restart");
+    }
+
+    // ── Step 4: terminal Success ──────────────────────────────────────────────
+    let message = format!("updated {updated}/{total} images");
+    info!(updated, total, "handle_update: complete");
+    if tx
+        .send(DaemonResponse::Success { message })
+        .await
+        .is_err()
+    {
+        warn!("handle_update: client disconnected before Success could be sent");
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
