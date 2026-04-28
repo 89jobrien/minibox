@@ -10,7 +10,7 @@ use futures::TryStreamExt;
 use minibox_core::as_any;
 use minibox_core::domain::{ImageMetadata, ImageRegistry, LayerInfo};
 use minibox_core::image::ImageStore;
-use minibox_core::image::manifest::ManifestResponse;
+use minibox_core::image::manifest::{ManifestResponse, TargetPlatform};
 use serde::Deserialize;
 use std::io;
 use std::path::PathBuf;
@@ -210,9 +210,10 @@ impl GhcrRegistry {
         match manifest_resp {
             ManifestResponse::Single(m) => Ok(m),
             ManifestResponse::List(list) => {
-                let desc = list.find_linux_amd64().ok_or_else(|| {
+                let platform = TargetPlatform::default();
+                let desc = list.find_platform(&platform).ok_or_else(|| {
                     anyhow::anyhow!(
-                        "ghcr: no linux/amd64 manifest in list for {repo}:{tag_or_digest}",
+                        "ghcr: no {platform} manifest in list for {repo}:{tag_or_digest}",
                     )
                 })?;
                 let digest = desc.digest.clone();

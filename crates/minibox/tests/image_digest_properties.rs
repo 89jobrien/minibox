@@ -1,7 +1,9 @@
 //! Property-based tests for image digest verification and manifest parsing.
 
 use minibox::image::layer::verify_digest;
-use minibox::image::manifest::{Descriptor, ManifestList, ManifestResponse, OciManifest, Platform};
+use minibox::image::manifest::{
+    Descriptor, ManifestList, ManifestResponse, OciManifest, Platform, TargetPlatform,
+};
 use proptest::prelude::*;
 use sha2::{Digest, Sha256};
 
@@ -309,6 +311,91 @@ proptest! {
         };
 
         prop_assert!(list.find_linux_amd64().is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // ManifestList::find_platform
+    // -----------------------------------------------------------------------
+
+    /// find_platform with TargetPlatform::linux_amd64() finds the correct entry.
+    #[test]
+    fn manifest_list_find_platform_finds_correct_entry(
+        other_platforms in prop::collection::vec(
+            prop_oneof![
+                Just(("arm64", "linux")),
+                Just(("amd64", "windows")),
+                Just(("arm64", "windows")),
+                Just(("s390x", "linux")),
+            ],
+            0..4,
+        ),
+        amd64_digest_tag in "[a-f0-9]{8}",
+        insert_at in 0usize..5,
+    ) {
+        let amd64_digest = format!("sha256:{amd64_digest_tag:0<64}");
+
+        let mut descriptors: Vec<Descriptor> = other_platforms
+            .iter()
+            .map(|(arch, os)| make_descriptor_with_platform(
+                "application/vnd.docker.distribution.manifest.v2+json",
+                &format!("sha256:{arch}{os:0<56}"),
+                528,
+                arch,
+                os,
+            ))
+            .collect();
+
+        let insert_pos = insert_at.min(descriptors.len());
+        descriptors.insert(
+            insert_pos,
+            make_descriptor_with_platform(
+                "application/vnd.docker.distribution.manifest.v2+json",
+                &amd64_digest,
+                528,
+                "amd64",
+                "linux",
+            ),
+        );
+
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: "application/vnd.docker.distribution.manifest.list.v2+json".to_string(),
+            manifests: descriptors,
+        };
+
+        let target = TargetPlatform::linux_amd64();
+        let found = list.find_platform(&target);
+        prop_assert!(found.is_some(), "expected to find linux/amd64 via find_platform");
+        prop_assert_eq!(&found.unwrap().digest, &amd64_digest);
+    }
+
+    /// find_platform returns None when searching for amd64 but only arm64 entries exist.
+    #[test]
+    fn manifest_list_find_platform_absent_for_wrong_platform(
+        arm64_tags in prop::collection::vec("[a-f0-9]{8}", 1..5),
+    ) {
+        let descriptors: Vec<Descriptor> = arm64_tags
+            .iter()
+            .map(|tag| make_descriptor_with_platform(
+                "application/vnd.docker.distribution.manifest.v2+json",
+                &format!("sha256:{tag:0<64}"),
+                528,
+                "arm64",
+                "linux",
+            ))
+            .collect();
+
+        let list = ManifestList {
+            schema_version: 2,
+            media_type: "application/vnd.docker.distribution.manifest.list.v2+json".to_string(),
+            manifests: descriptors,
+        };
+
+        let target = TargetPlatform::linux_amd64();
+        prop_assert!(
+            list.find_platform(&target).is_none(),
+            "expected None when no amd64 entry exists"
+        );
     }
 
     // -----------------------------------------------------------------------
