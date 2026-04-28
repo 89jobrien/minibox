@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260428:000000
+updated: 20260428:080155
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -229,6 +229,11 @@ items:
     reviewed: null
     note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
 log:
+- date: 20260428:080155
+  summary: "Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions."
+  commits:
+  - 5b4c4d8
+  session: 34
 - date: 20260428:000000
   summary: "Session 33: add lint-docs xtask gate — validates YAML frontmatter parseability and restricts status values to approved set; wired into pre-commit."
   commits:
