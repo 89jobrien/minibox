@@ -160,3 +160,43 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo xtask test-e2e-suite
+
+  test-integration:
+    name: integration tests (Linux, root)
+    runs-on: [self-hosted, minibox]
+    needs: test-unit
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo xtask test-integration
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask test-integration
+  test-protocol-e2e:
+    name: protocol e2e (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - name: build daemon + cli
+        run: cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+
+  test-protocol-e2e-linux:
+    name: protocol e2e (Linux)
+    runs-on: [self-hosted, minibox]
+    needs: lint
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: build daemon + cli
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
