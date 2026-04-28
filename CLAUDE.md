@@ -608,6 +608,23 @@ Workflows in `.github/workflows/`:
   uses `u16::default()` (0), not the serde default fn. When a struct has field-level serde
   defaults AND is used as `#[serde(default)]` on its parent, implement `Default` manually.
 
+## Plan Status Verification
+
+Plans in `docs/superpowers/plans/` with `status: done` may be incorrect --
+agentic sessions sometimes mark plans done when protocol fields land, even if
+primary deliverable crates were never created. Always verify with `cargo
+metadata` and file existence before trusting plan status.
+
+## Documentation Drift
+
+`docs/CRATE_INVENTORY.md` and `docs/CRATE_TIERS.md` drift as the codebase
+grows. Regenerate inventory counts with `cargo metadata --no-deps` + `wc -l`
+on `crates/*/src/`. Test counts via `cargo nextest list --workspace | tail -1`.
+
+Spec/plan files in `docs/superpowers/` use date prefixes (e.g.
+`2026-04-26-winbox-wsl2-proxy-design.md`). When searching by name, always
+glob with `*name*` pattern, not exact match.
+
 ## Skills Available
 
 Global minibox skills available across all projects:

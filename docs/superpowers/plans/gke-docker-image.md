@@ -1,3 +1,8 @@
+---
+status: archived
+note: "No frontmatter, no status, no matching code found"
+---
+
 # Plan: miniboxd Docker Image for GKE
 
 ## Context

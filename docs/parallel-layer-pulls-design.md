@@ -1,5 +1,9 @@
 # Parallel Layer Pulls Design
 
+> **ARCHIVED:** This feature was shipped in v0.1.0. All crate paths
+> below are stale (`minibox-lib`, `linuxbox` -> now `minibox`). The
+> implementation lives in `crates/minibox/src/image/`.
+
 `feat/parallel-layer-pulls` implements streaming parallel OCI layer downloads in
 `crates/minibox-lib/` (now `crates/linuxbox/`). The branch was not merged because all 7
 commits target the old crate path — porting to `linuxbox` is required before landing.
@@ -73,6 +77,7 @@ New: `fn extract_layer(reader: &mut impl Read, dest: &Path) -> Result<()>` — s
 Old: `read_to_end` buffered blob → wrote to final path.
 
 New:
+
 1. Creates `{dest}.tmp/` directory
 2. Streams into tmp via `extract_layer`
 3. On success, `fs::rename(tmp, dest)` — atomic commit
@@ -174,13 +179,13 @@ HTTP response bytes
 
 All changes live in `crates/minibox-lib/`. Port to these paths in `crates/linuxbox/`:
 
-| Branch file                              | Port to                                        |
-|------------------------------------------|------------------------------------------------|
-| `minibox-lib/Cargo.toml`                 | `linuxbox/Cargo.toml` (add deps)               |
-| `minibox-lib/src/error.rs`               | `linuxbox/src/error.rs` (`RegistryError::LayerTask`) |
-| `minibox-lib/src/image/layer.rs`         | `linuxbox/src/image/layer.rs` (`HashingReader`) |
-| `minibox-lib/src/image/mod.rs`           | `linuxbox/src/image/mod.rs`                    |
-| `minibox-lib/src/image/registry.rs`      | `linuxbox/src/image/registry.rs` (parallel pull + `LimitedStream`) |
+| Branch file                         | Port to                                                            |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `minibox-lib/Cargo.toml`            | `linuxbox/Cargo.toml` (add deps)                                   |
+| `minibox-lib/src/error.rs`          | `linuxbox/src/error.rs` (`RegistryError::LayerTask`)               |
+| `minibox-lib/src/image/layer.rs`    | `linuxbox/src/image/layer.rs` (`HashingReader`)                    |
+| `minibox-lib/src/image/mod.rs`      | `linuxbox/src/image/mod.rs`                                        |
+| `minibox-lib/src/image/registry.rs` | `linuxbox/src/image/registry.rs` (parallel pull + `LimitedStream`) |
 
 The `linuxbox` versions of these files have evolved significantly since the branch diverged —
 the port is an integration, not a diff-apply.

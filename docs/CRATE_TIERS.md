@@ -25,12 +25,12 @@ Last updated: 2026-04-27
 These crates define the stable runtime contract. Any API change in a Core crate
 that breaks callers outside the workspace is a semver-major event.
 
-| Crate          | Path                  | Role                                                                                                                                                                       |
-| -------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Crate          | Path                  | Role                                                                                                                                                                                                        |
+| -------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `minibox-core` | `crates/minibox-core` | Cross-platform shared types: protocol, domain traits, error types, OCI image types, `ImageStore`, `RegistryClient`, `DaemonClient`, preflight. Single source of truth for `DaemonRequest`/`DaemonResponse`. |
-| `minibox`      | `crates/minibox`      | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.            |
-| `miniboxd`     | `crates/miniboxd`     | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                 |
-| `mbx`          | `crates/mbx`          | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                            |
+| `minibox`      | `crates/minibox`      | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
+| `miniboxd`     | `crates/miniboxd`     | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
+| `mbx`          | `crates/mbx`          | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
 
 **Stability expectations for Core crates:**
 
@@ -51,8 +51,8 @@ the domain traits from `minibox-core` for its target platform.
 | ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `macbox`    | `crates/macbox`    | macOS adapter suite: Colima (nerdctl/limactl) and Virtualization.framework (VZ) backends.                                                                   |
 | `winbox`    | `crates/winbox`    | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
-| `dockerbox` | `crates/dockerbox` | Docker API shim: HTTP-over-Unix-socket bridge that translates Docker API calls to the minibox protocol. Ships the `dockerboxd` binary. (Not yet created.)   |
-| `tailbox`   | `crates/tailbox`   | Tailscale/tailnet adapter: auth, config, experimental network experiments. (Not yet created.)                                                               |
+| `dockerbox` | `crates/dockerbox` | Docker API shim: HTTP-over-Unix-socket bridge that translates Docker API calls to the minibox protocol. (Extracted to `minibox-plugins` workspace.)          |
+| `tailbox`   | `crates/tailbox`   | Tailscale/tailnet adapter: auth, config, experimental network experiments. (Extracted to `minibox-plugins` workspace.)                                      |
 
 **Stability expectations for Platform crates:**
 
@@ -126,7 +126,7 @@ following gates in `docs/STABILITY_CHECKLIST.md` are green:**
 2. Handler coverage >= 80% function coverage in `minibox/src/daemon/handler.rs`.
 3. All wired adapters have at least one integration test.
 4. `cargo xtask pre-commit` passes on macOS (fmt + clippy + release build).
-5. `cargo xtask test-unit` passes (~300+ tests).
+5. `cargo xtask test-unit` passes (~760+ tests).
 6. `cargo deny check` passes (license + advisory audit).
 
 Until these gates are met:

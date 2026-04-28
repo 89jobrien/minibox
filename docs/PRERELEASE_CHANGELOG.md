@@ -9,25 +9,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 **Crate consolidation (GH #153):**
+
 - 7-phase workspace consolidation: 13 crates reduced to 8
-  - Phase 0: dropped `minibox-llm` (orphan)
-  - Phase 1+2: absorbed `minibox-oci` + `minibox-client` into `minibox-core`
-  - Phase 3: consolidated `daemonbox` + `linuxbox` into unified `minibox` crate
-  - Phase 4: absorbed `minibox-testers` into `minibox` behind `test-utils` feature
-  - Phase 5: `DEFAULT_ADAPTER_SUITE` const in `miniboxd`
+    - Phase 0: dropped `minibox-llm` (orphan)
+    - Phase 1+2: absorbed `minibox-oci` + `minibox-client` into `minibox-core`
+    - Phase 3: consolidated `daemonbox` + `linuxbox` into unified `minibox` crate
+    - Phase 4: absorbed `minibox-testers` into `minibox` behind `test-utils` feature
+    - Phase 5: `DEFAULT_ADAPTER_SUITE` const in `miniboxd`
 - `minibox::testing` module — unified test infrastructure (mocks, fixtures, conformance)
 
 **Adapter registry:**
+
 - Centralized `miniboxd::adapter_registry` — typed `AdapterSuite` enum, `AdapterInfo`
   metadata, structured `AdapterSelectionError`, env-based selection via `MINIBOX_ADAPTER`
 - Startup observability: logs selected adapter and available options with structured fields
 
 **State management:**
+
 - Container state reconciliation on daemon restart — marks stale Running containers as
   Orphaned via `ProcessChecker` trait; `KillProcessChecker` (unix-gated)
 - Disk-persisted state survives daemon restarts; reconciliation runs at startup
 
 **macOS / krun adapter:**
+
 - krun Phases 1-3 complete: `KrunRuntime`, `KrunRegistry`, `KrunFilesystem`,
   `KrunLimiter` adapters with 31 TDD conformance tests
 - `SmolVM` adapter suite wired into `miniboxd`
@@ -35,20 +39,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `build-vm-image` with platform-aware cross-compilation
 
 **Tailnet integration:**
+
 - `tailbox` crate — `TailnetNetwork` adapter, `TailnetConfig`, auth key resolution
   chain, gateway IP caching, per-container setup/cleanup
 - `TailnetMode` enum and tailnet fields in `NetworkConfig` protocol
 
 **Searchbox / Zoektbox:**
+
 - `searchbox` crate — federated code search: `ZoektAdapter`, `MergedAdapter`,
   `GitRepoSource`, `FilesystemSource`, MCP stdio server, `searchboxd` binary
 - `zoektbox` crate — zoekt deploy/service adapter, download+SHA256 verify
 
 **minibox-llm:**
+
 - Multi-turn `infer()` API, `Message`/`ContentBlock` types, Ollama auto-detection
   provider, fallback chain
 
 **Testing:**
+
 - Security regression suite for container-init invariants (tar traversal, symlink escape,
   path validation, socket auth)
 - Handler error-path coverage raised to 80%+ (pause/resume, exec, push, commit, build)
@@ -59,6 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - 3 dogfood implementation plans: MCP server, sandboxed AI execution, CI agent
 
 **Infrastructure:**
+
 - Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
   `minibox-plugins` workspace
 - `cargo xtask pre-commit` — fmt-check + clippy + release build (macOS-safe)
@@ -93,6 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 **Container features:**
+
 - `exec` subcommand — run commands in existing containers via `setns` + NativeExecRuntime
 - Named containers — `--name` flag on `run`, name column in `ps`, `exec` by name
 - Log capture and retrieval — `minibox logs <id>` subcommand; stdout/stderr stored per container
@@ -111,6 +121,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Container freeze/thaw — cgroup-based SIGSTOP/SIGCONT (`Prune` protocol)
 
 **Observability:**
+
 - OpenTelemetry tracing — OTLP exporter, optional OTLP bridge; handlers instrumented with spans
 - Prometheus metrics — `/metrics` HTTP endpoint; `MetricsRecorder` domain port;
   `MetricsTab` in dashbox with live poll and snapshot fallback
@@ -118,6 +129,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   severity rules enforced across all handlers
 
 **macOS / VZ.framework:**
+
 - VM image pipeline — `cargo xtask build-vm-image`; downloads Alpine aarch64 kernel + initrd,
   cross-compiles `minibox-agent`, assembles bootable VM image directory
 - VZ.framework adapter — `VzAdapter` implementing all four domain traits via JSON-over-newline
@@ -127,6 +139,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - macOS Tahoe GCD main-queue dispatch fix for VZ.framework
 
 **Dashbox TUI:**
+
 - Initial `dashbox` binary (`crates/dashbox`) — 8-tab Ratatui TUI: Agents, Bench, Bench History,
   Git, Todos, CI, Diagrams, Metrics
 - Space-leader command palette — `Space` opens overlay; all actions routed through
@@ -139,6 +152,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - CI tab open-URL action (`o` key)
 
 **Agentbox (Go module):**
+
 - `agentbox/` Go module with orchestration binary (`minibox-orchestrate`) and standalone
   `mbx-commit-msg` binary
 - `council` agent — 5-role multi-perspective code review with synthesis
@@ -150,6 +164,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `GitContextProvider` — repo context discovery for agent prompts
 
 **Infrastructure and tooling:**
+
 - `minibox-secrets` crate — typed credential store with validation, audit hashes, passthrough
 - `minibox-llm` crate — multi-provider LLM client (Anthropic/OpenAI/Gemini), fallback chain,
   structured JSON output, HTTP timeouts, exponential backoff retry
@@ -174,6 +189,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Dual MIT/Apache-2.0 license
 
 **Testing:**
+
 - Backend-agnostic conformance suite — `BackendDescriptor`, `BackendCapability`, fixture helpers;
   conformance tests for commit/build/push/network; Markdown + JSON report output
 - Proptest suite — 33 property-based tests: DaemonState invariants, handler input safety, cgroup
@@ -187,6 +203,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ~300+ unit + conformance + property tests (any platform); 16 cgroup integration; 14 e2e
 
 **Architecture:**
+
 - `NetworkLifecycle` wrapper in daemonbox — best-effort cleanup on container teardown
 - `NetworkMode` dispatch — `None`, `Host`, `Bridge` with `MINIBOX_NETWORK_MODE`
 - `ExecRuntime`, `ImagePusher`, `ContainerCommitter`, `ImageBuilder` domain traits (ISP)
