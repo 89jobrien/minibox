@@ -311,39 +311,48 @@ impl ContainerRuntime for ProotRuntime {
                     }
                 }
 
-                if capture_output {
-                    cmd.stdout(std::process::Stdio::piped());
-                    cmd.stderr(std::process::Stdio::piped());
-                }
-
-                let mut child = cmd
-                    .spawn()
-                    .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                let (mut child, read_end) = if capture_output {
+                    // Create a pipe for merged stdout+stderr. We dup the write
+                    // end so both stdout and stderr flow into the same reader.
+                    use std::os::unix::io::{AsRawFd, IntoRawFd};
+                    let (read_fd, write_fd) = nix::unistd::pipe()
+                        .context("proot: creating output pipe")?;
+                    // dup the write end so stderr gets its own fd into the
+                    // same pipe. Both write ends are consumed by the child.
+                    let stderr_raw = nix::unistd::dup(write_fd.as_raw_fd())
+                        .context("proot: dup write end for stderr")?;
+                    // SAFETY: write_fd is a valid open fd from pipe() above,
+                    // stderr_raw is a valid fd from dup(). from_raw_fd takes
+                    // ownership so the fds are closed when the child exits.
+                    cmd.stdout(unsafe {
+                        std::process::Stdio::from_raw_fd(write_fd.into_raw_fd())
+                    });
+                    cmd.stderr(unsafe {
+                        std::process::Stdio::from_raw_fd(stderr_raw)
+                    });
+                    let child = cmd
+                        .spawn()
+                        .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                    (child, Some(read_fd))
+                } else {
+                    let child = cmd
+                        .spawn()
+                        .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                    (child, None)
+                };
 
                 let pid = child.id();
 
-                let reader = if capture_output {
-                    // Take stdout fd — stderr is a separate pipe, but the daemon's
-                    // streaming loop only reads one fd. Merge stderr into stdout
-                    // by taking the stdout fd and dropping stderr (it goes to the
-                    // daemon's own stderr).
-                    let stdout = child
-                        .stdout
-                        .take()
-                        .context("proot: expected piped stdout")?;
-                    // SAFETY: stdout is a valid, open fd that we own. Converting
-                    // to OwnedFd transfers ownership; the Child no longer closes it.
-                    let fd = unsafe {
-                        OwnedFd::from_raw_fd(std::os::unix::io::IntoRawFd::into_raw_fd(stdout))
-                    };
-                    Some(fd)
-                } else {
-                    None
-                };
+                // read_end is already an OwnedFd from nix::unistd::pipe()
+                let reader = read_end;
 
-                // Prevent Child::drop from sending SIGKILL — the daemon's
-                // waitpid loop in handler.rs is the reaper.
-                std::mem::forget(child);
+                // Spawn a background thread to reap the child process so it
+                // does not become a zombie. The daemon's waitpid loop in
+                // handler.rs handles the container-level lifecycle; this
+                // thread ensures the proot wrapper process is cleaned up.
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
 
                 Ok((pid, reader))
             })
