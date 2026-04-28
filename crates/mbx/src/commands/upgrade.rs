@@ -5,7 +5,7 @@
 //! downloads and extracts the tarball for the current platform, and atomically
 //! replaces the current executable.
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use std::env;
 
 // ── Domain types ──────────────────────────────────────────────────────────────
@@ -100,7 +100,8 @@ where
         .await
         .context("download asset")?;
 
-    let bin_path = extract_binary(&bytes, &triple).context("extract binary from tarball")?;
+    let (bin_path, _tmp_guard) =
+        extract_binary(&bytes, &triple).context("extract binary from tarball")?;
 
     let current_exe = env::current_exe().context("locate current executable")?;
     replace_binary(&current_exe, &bin_path).context("replace binary")?;
@@ -110,10 +111,10 @@ where
 }
 
 /// Extract `mbx` binary from a gzipped tarball (bytes in memory).
-/// Returns path to the extracted binary in a temp dir.
-fn extract_binary(bytes: &[u8], _triple: &str) -> Result<std::path::PathBuf> {
+/// Returns `(path_to_binary, _guard)` — the `TempDir` guard must be kept alive
+/// until the caller is done with the extracted file.
+fn extract_binary(bytes: &[u8], _triple: &str) -> Result<(std::path::PathBuf, tempfile::TempDir)> {
     use flate2::read::GzDecoder;
-    use std::io::Read;
 
     let gz = GzDecoder::new(bytes);
     let mut archive = tar::Archive::new(gz);
@@ -130,14 +131,9 @@ fn extract_binary(bytes: &[u8], _triple: &str) -> Result<std::path::PathBuf> {
             .unwrap_or("");
         if name == "mbx" || name == "mbx.exe" {
             let dest = tmp_dir.path().join(name);
-            let mut dest_file =
-                std::fs::File::create(&dest).context("create extraction target")?;
-            // SAFETY: reading bytes from an in-memory buffer; no syscall invariants at stake.
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf).context("read entry bytes")?;
-            std::io::Write::write_all(&mut dest_file, &buf).context("write extracted binary")?;
+            let mut dest_file = std::fs::File::create(&dest).context("create extraction target")?;
+            std::io::copy(&mut entry, &mut dest_file).context("extract binary from tar")?;
 
-            // Make executable
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -146,14 +142,10 @@ fn extract_binary(bytes: &[u8], _triple: &str) -> Result<std::path::PathBuf> {
                     .context("stat extracted binary")?
                     .permissions();
                 perms.set_mode(0o755);
-                std::fs::set_permissions(&dest, perms)
-                    .context("set executable permissions")?;
+                std::fs::set_permissions(&dest, perms).context("set executable permissions")?;
             }
 
-            // Leak the TempDir so the path stays valid until the caller uses it
-            let path = dest.clone();
-            std::mem::forget(tmp_dir);
-            return Ok(path);
+            return Ok((dest, tmp_dir));
         }
     }
     bail!("mbx binary not found in release tarball")
@@ -181,6 +173,14 @@ fn replace_binary(current_exe: &std::path::Path, new_bin: &std::path::Path) -> R
 
 // ── Infrastructure adapter ────────────────────────────────────────────────────
 
+fn build_client() -> Result<reqwest::Client> {
+    let version = env!("CARGO_PKG_VERSION");
+    reqwest::Client::builder()
+        .user_agent(format!("mbx/{version}"))
+        .build()
+        .context("build HTTP client")
+}
+
 /// HTTP-backed release provider using the GitHub API.
 pub struct GitHubReleaseProvider {
     client: reqwest::Client,
@@ -188,25 +188,24 @@ pub struct GitHubReleaseProvider {
 
 impl GitHubReleaseProvider {
     pub fn new() -> Result<Self> {
-        let version = env!("CARGO_PKG_VERSION");
-        let client = reqwest::Client::builder()
-            .user_agent(format!("mbx/{version}"))
-            .build()
-            .context("build HTTP client")?;
-        Ok(Self { client })
+        Ok(Self {
+            client: build_client()?,
+        })
     }
 }
 
 impl ReleaseProvider for GitHubReleaseProvider {
-    async fn fetch_release(&self, version: Option<&str>, target_triple: &str) -> Result<ReleaseInfo> {
+    async fn fetch_release(
+        &self,
+        version: Option<&str>,
+        target_triple: &str,
+    ) -> Result<ReleaseInfo> {
         let url = match version {
             Some(v) => format!(
                 "https://api.github.com/repos/89jobrien/minibox/releases/tags/{}",
                 v
             ),
-            None => {
-                "https://api.github.com/repos/89jobrien/minibox/releases/latest".to_string()
-            }
+            None => "https://api.github.com/repos/89jobrien/minibox/releases/latest".to_string(),
         };
 
         let resp = self
@@ -246,12 +245,9 @@ pub struct HttpAssetDownloader {
 
 impl HttpAssetDownloader {
     pub fn new() -> Result<Self> {
-        let version = env!("CARGO_PKG_VERSION");
-        let client = reqwest::Client::builder()
-            .user_agent(format!("mbx/{version}"))
-            .build()
-            .context("build HTTP client")?;
-        Ok(Self { client })
+        Ok(Self {
+            client: build_client()?,
+        })
     }
 }
 
@@ -388,9 +384,6 @@ mod tests {
         };
         let result = run_upgrade(true, None, "0.0.1", &provider, &TrackingDownloader).await;
         assert!(result.is_ok());
-        assert!(
-            !*DOWNLOADED.lock().unwrap(),
-            "dry_run should not download"
-        );
+        assert!(!*DOWNLOADED.lock().unwrap(), "dry_run should not download");
     }
 }

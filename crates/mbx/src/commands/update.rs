@@ -48,12 +48,10 @@ pub async fn execute(
                 std::process::exit(1);
             }
             Some(other) => {
-                eprintln!("unexpected response: {other:?}");
-                std::process::exit(1);
+                anyhow::bail!("unexpected response: {other:?}");
             }
             None => {
-                eprintln!("no response from daemon");
-                std::process::exit(1);
+                anyhow::bail!("no response from daemon");
             }
         }
     }

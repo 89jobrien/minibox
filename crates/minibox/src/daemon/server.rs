@@ -528,6 +528,7 @@ async fn dispatch(
             )
             .await;
         }
+        // TODO(wave3): wire handle_update via spawn — currently returns a stub error
         DaemonRequest::Update { .. } => {
             send_terminal_response(
                 &tx,
