@@ -339,6 +339,27 @@ pub enum DaemonRequest {
         /// Container ID.
         id: String,
     },
+
+    /// Re-pull cached images to check for newer versions.
+    ///
+    /// Used by `mbx update`. When `all` is true the daemon re-pulls every
+    /// image in its store. When `containers` is true the daemon resolves
+    /// images from currently-running containers. Explicit `images` entries
+    /// take precedence over the flags when both are supplied.
+    Update {
+        /// Specific images to update (e.g. `["alpine:latest", "nginx:stable"]`).
+        /// Empty when `--all` is used.
+        images: Vec<String>,
+        /// Update all cached images.
+        #[serde(default)]
+        all: bool,
+        /// Resolve images from running containers instead of explicit list.
+        #[serde(default)]
+        containers: bool,
+        /// Restart containers after their image is updated.
+        #[serde(default)]
+        restart: bool,
+    },
 }
 
 fn default_max_depth() -> u32 {
@@ -534,6 +555,17 @@ pub enum DaemonResponse {
         id: String,
         /// Available snapshots.
         snapshots: Vec<crate::domain::SnapshotInfo>,
+    },
+
+    /// Progress update for an image being checked/pulled during an `Update` request.
+    ///
+    /// Non-terminal: sent once per image being updated before the final
+    /// `Success` or `Error` response.
+    UpdateProgress {
+        /// Image reference being updated (e.g. `"alpine:latest"`).
+        image: String,
+        /// Human-readable status: `"up to date"`, `"updated"`, `"error: ..."`.
+        status: String,
     },
 }
 
@@ -1601,5 +1633,96 @@ mod tests {
             }
             _ => panic!("expected Run"),
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Update request / UpdateProgress response — wire format and serde tests
+    // -----------------------------------------------------------------------
+
+    /// Wire-format snapshot for `DaemonRequest::Update` with explicit image list.
+    #[test]
+    fn wire_snapshot_update_request() {
+        let req = DaemonRequest::Update {
+            images: vec!["alpine:latest".to_string(), "nginx:stable".to_string()],
+            all: false,
+            containers: false,
+            restart: false,
+        };
+        let json = serde_json::to_string(&req).expect("serialize");
+        assert!(json.contains("\"type\":\"Update\""), "type tag: {json}");
+        assert!(json.contains("\"alpine:latest\""), "image: {json}");
+        assert!(json.contains("\"nginx:stable\""), "image: {json}");
+        // Round-trip must be stable.
+        let decoded: DaemonRequest = serde_json::from_str(&json).expect("deserialize");
+        let re_encoded = serde_json::to_string(&decoded).expect("re-serialize");
+        assert_eq!(json, re_encoded, "wire format not stable across roundtrip");
+    }
+
+    /// Deserialize `Update` with only the `images` field — booleans default to false.
+    #[test]
+    fn update_request_defaults_bools_false() {
+        let json = r#"{"type":"Update","images":["alpine:latest"]}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update {
+                images,
+                all,
+                containers,
+                restart,
+            } => {
+                assert_eq!(images, vec!["alpine:latest"]);
+                assert!(!all, "all should default to false");
+                assert!(!containers, "containers should default to false");
+                assert!(!restart, "restart should default to false");
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Deserialize `Update` with `all: true`.
+    #[test]
+    fn update_request_all_true() {
+        let json = r#"{"type":"Update","images":[],"all":true}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update { all, images, .. } => {
+                assert!(all);
+                assert!(images.is_empty());
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Deserialize `Update` with `containers: true, restart: true`.
+    #[test]
+    fn update_request_containers_and_restart() {
+        let json = r#"{"type":"Update","images":[],"containers":true,"restart":true}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update {
+                containers,
+                restart,
+                ..
+            } => {
+                assert!(containers);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Wire-format snapshot for `DaemonResponse::UpdateProgress`.
+    #[test]
+    fn wire_snapshot_update_progress_response() {
+        let resp = DaemonResponse::UpdateProgress {
+            image: "alpine:latest".to_string(),
+            status: "updated".to_string(),
+        };
+        let json = serde_json::to_string(&resp).expect("serialize");
+        assert_eq!(
+            json,
+            r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
+            "wire snapshot mismatch: {json}",
+        );
     }
 }

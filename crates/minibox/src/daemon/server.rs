@@ -291,8 +291,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::SnapshotRestored { .. }
             | DaemonResponse::SnapshotList { .. }
     )
-    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
-    // Event are non-terminal.
+    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
+    // Event, and UpdateProgress are non-terminal.
 }
 
 /// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
@@ -524,6 +524,16 @@ async fn dispatch(
                 "RunPipeline",
                 DaemonResponse::Error {
                     message: "RunPipeline is not yet implemented".to_string(),
+                },
+            )
+            .await;
+        }
+        DaemonRequest::Update { .. } => {
+            send_terminal_response(
+                &tx,
+                "Update",
+                DaemonResponse::Error {
+                    message: "Update is not yet implemented".to_string(),
                 },
             )
             .await;
@@ -779,6 +789,13 @@ mod tests {
                 },
                 true, // terminal: pipeline execution finished
             ),
+            (
+                DaemonResponse::UpdateProgress {
+                    image: "alpine:latest".to_string(),
+                    status: "updated".to_string(),
+                },
+                false, // non-terminal: one per image, Success/Error follows
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -814,6 +831,7 @@ mod tests {
                 DaemonResponse::SnapshotSaved { .. } => true,
                 DaemonResponse::SnapshotRestored { .. } => true,
                 DaemonResponse::SnapshotList { .. } => true,
+                DaemonResponse::UpdateProgress { .. } => false,
             };
         }
     }
