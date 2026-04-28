@@ -34,6 +34,8 @@ use minibox_core::domain::{
     RuntimeCapabilities, SpawnResult,
 };
 use minibox_core::{adapt, as_any};
+use std::os::unix::io::FromRawFd;
+use std::os::unix::io::OwnedFd;
 use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 
@@ -278,54 +280,80 @@ impl ContainerRuntime for ProotRuntime {
         let command = config.command.clone();
         let args = config.args.clone();
         let env = config.env.clone();
+        let capture_output = config.capture_output;
 
-        let pid = tokio::task::spawn_blocking(move || -> Result<u32> {
-            let mut cmd = std::process::Command::new(&proot_path);
+        let (pid, output_reader) =
+            tokio::task::spawn_blocking(move || -> Result<(u32, Option<OwnedFd>)> {
+                let mut cmd = std::process::Command::new(&proot_path);
 
-            // proot flags: fake root, bind /proc and /dev, set working dir
-            cmd.arg("-r")
-                .arg(&rootfs)
-                .arg("-0")
-                .arg("-b")
-                .arg("/proc:/proc")
-                .arg("-b")
-                .arg("/dev:/dev")
-                .arg("-w")
-                .arg("/")
-                .arg(&command);
+                // proot flags: fake root, bind /proc and /dev, set working dir
+                cmd.arg("-r")
+                    .arg(&rootfs)
+                    .arg("-0")
+                    .arg("-b")
+                    .arg("/proc:/proc")
+                    .arg("-b")
+                    .arg("/dev:/dev")
+                    .arg("-w")
+                    .arg("/")
+                    .arg(&command);
 
-            // Append command arguments
-            for arg in &args {
-                cmd.arg(arg);
-            }
-
-            // Clear inherited env, set only container env vars
-            cmd.env_clear();
-            for var in &env {
-                if let Some((key, value)) = var.split_once('=') {
-                    cmd.env(key, value);
+                // Append command arguments
+                for arg in &args {
+                    cmd.arg(arg);
                 }
-            }
 
-            let child = cmd
-                .spawn()
-                .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                // Clear inherited env, set only container env vars
+                cmd.env_clear();
+                for var in &env {
+                    if let Some((key, value)) = var.split_once('=') {
+                        cmd.env(key, value);
+                    }
+                }
 
-            let pid = child.id();
+                if capture_output {
+                    cmd.stdout(std::process::Stdio::piped());
+                    cmd.stderr(std::process::Stdio::piped());
+                }
 
-            // Prevent Child::drop from sending SIGKILL — the daemon's
-            // waitpid loop in handler.rs is the reaper.
-            std::mem::forget(child);
+                let mut child = cmd
+                    .spawn()
+                    .with_context(|| format!("spawning proot at {proot_path:?}"))?;
 
-            Ok(pid)
-        })
-        .await??;
+                let pid = child.id();
+
+                let reader = if capture_output {
+                    // Take stdout fd — stderr is a separate pipe, but the daemon's
+                    // streaming loop only reads one fd. Merge stderr into stdout
+                    // by taking the stdout fd and dropping stderr (it goes to the
+                    // daemon's own stderr).
+                    let stdout = child
+                        .stdout
+                        .take()
+                        .context("proot: expected piped stdout")?;
+                    // SAFETY: stdout is a valid, open fd that we own. Converting
+                    // to OwnedFd transfers ownership; the Child no longer closes it.
+                    let fd = unsafe {
+                        OwnedFd::from_raw_fd(std::os::unix::io::IntoRawFd::into_raw_fd(stdout))
+                    };
+                    Some(fd)
+                } else {
+                    None
+                };
+
+                // Prevent Child::drop from sending SIGKILL — the daemon's
+                // waitpid loop in handler.rs is the reaper.
+                std::mem::forget(child);
+
+                Ok((pid, reader))
+            })
+            .await??;
 
         debug!("proot runtime: spawned with PID {}", pid);
         Ok(SpawnResult {
             runtime_id: None,
             pid,
-            output_reader: None,
+            output_reader,
         })
     }
 }
