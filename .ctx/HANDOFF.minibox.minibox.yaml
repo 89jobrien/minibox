@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260428:080155
+updated: 20260428:062906
 items:
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
@@ -228,7 +228,39 @@ items:
     value: null
     reviewed: null
     note: "Phase 6 done: slashcrux dependency fixed. minibox-core and minibox-macros both pass cargo publish --dry-run."
+- id: minibox-multi-platform-wrapup
+  doob_uuid: null
+  name: multi-platform-wrapup
+  priority: P1
+  status: open
+  title: 'feat: multi-platform image pull — commit mbx changes + miniboxd handler wiring'
+  description: |
+    Session 35 orca-strait run. 2 of 4 crates committed (minibox-core, minibox).
+    mbx changes are in working tree (uncommitted — pre-commit hook or signing failure).
+    miniboxd agent may still be running or BLOCKED.
+    Next: verify miniboxd agent result, commit mbx working tree changes, run cargo nextest
+    --workspace to confirm full integration.
+  files:
+  - crates/mbx/src/main.rs
+  - crates/mbx/src/commands/pull.rs
+  - crates/mbx/src/commands/run.rs
+  - crates/miniboxd/src/main.rs
+  - crates/minibox/src/daemon/handler.rs
+  completed: null
+  extra:
+  - date: 20260428:062906
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: "Wave 1 (minibox-core): TargetPlatform, find_platform(), NoPlatformManifest, RegistryClient::with_platform(), Pull/Run platform field. Wave 2 (minibox ghcr): find_platform in GHCR adapter. mbx: --platform CLI flag + thread to protocol (in working tree, not committed). miniboxd: TDD agent dispatched, status unknown."
 log:
+- date: 20260428:062906
+  summary: "Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree."
+  commits:
+  - b8720ac
+  - 4e4bdba
+  session: 35
 - date: 20260428:080155
   summary: "Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions."
   commits:
@@ -254,43 +286,4 @@ log:
   - 451e7ec
   - 830877e
   - f865277
-  - fd6c7e5
-  - c3b1270
-  - bfc5493
-  - 283bdc2
-  - 1ab12c0
-  - 680752e
-  - eb144b9
-  - 5d14a20
-  - 6f253ba
-  - bd5fcf9
-  - 2e5e971
-  - 50e5edb
-  - c9aa8f5
-  - 309bd78
   session: 31
-- date: 20260426:095815
-  summary: "Session 30: executed consolidation Phases 0-2 (13->10 crates). Absorbed minibox-oci+minibox-client into minibox-core. Phase 3 skipped (circular dep). Orca-strait agents resolved #95, #120, #134. 1134 tests pass."
-  commits:
-  - 21b5e5c
-  - 5e42156
-  - d20f095
-  - 53dc09b
-  - cdee328
-  session: 30
-- date: 20260426:051901
-  summary: 'Session 29: audited publish readiness; wrote 7-phase crate consolidation plan (GH #153, 5fd6c4c); added configurable DEFAULT_ADAPTER_SUITE + smolvm cross-platform phase; updated smolvm/krun adapter specs.'
-  commits:
-  - 7bdda13
-  - e9fd838
-  - 0f73248
-  - 5fd6c4c
-  session: 29
-- date: 20260426:000000
-  summary: 'Session 28: closed minibox-78 (ci-all-features already in ci.yml). Pruned 3 duplicate VZ items (65/66/67, covered by 43/53/54).'
-  commits: []
-  session: 28
-- date: 20260424:192000
-  summary: 'EOD handoff: cargo check clean. crate consolidation+plugin extraction complete. macbox/krun Phases 1-3 done. Ready for next session.'
-  commits: []
-  session: 27
