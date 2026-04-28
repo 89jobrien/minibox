@@ -19,9 +19,7 @@
 //! - **colima**: uses `MockRegistry` + `ColimaRuntime::with_executor` +
 //!   `ColimaFilesystem` + `ColimaLimiter` + `NoopNetwork`.
 
-use minibox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
+use minibox::adapters::mocks::{MockFilesystem, MockRegistry, MockRuntime};
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
     NoopImageLoader,
@@ -309,10 +307,13 @@ async fn test_colima_adapter_suite_run_returns_container_created() {
     let colima_runtime =
         ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
 
+    let colima_limiter =
+        ColimaLimiter::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
+
     let deps = make_deps_from_parts(
         registry,
         MockFilesystem::new(), // ColimaFilesystem requires limactl; use mock for rootfs setup
-        ColimaLimiter::new(),
+        colima_limiter,
         colima_runtime,
         NoopNetwork::new(),
         &tmp,
@@ -350,10 +351,13 @@ async fn test_colima_adapter_suite_pull_failure_returns_error() {
     let colima_runtime =
         ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
 
+    let colima_limiter =
+        ColimaLimiter::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
+
     let deps = make_deps_from_parts(
         registry,
         MockFilesystem::new(),
-        ColimaLimiter::new(),
+        colima_limiter,
         colima_runtime,
         NoopNetwork::new(),
         &tmp,
