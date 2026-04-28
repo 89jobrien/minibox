@@ -213,17 +213,45 @@ impl TargetPlatform {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = s.split('/').collect();
         match parts.len() {
-            2 => Ok(Self {
-                os: parts[0].to_string(),
-                architecture: parts[1].to_string(),
-                variant: None,
-            }),
-            3 => Ok(Self {
-                os: parts[0].to_string(),
-                architecture: parts[1].to_string(),
-                variant: Some(parts[2].to_string()),
-            }),
+            2 => {
+                if parts[0].is_empty() {
+                    bail!("invalid platform string: os segment is empty in {s:?}");
+                }
+                if parts[1].is_empty() {
+                    bail!("invalid platform string: arch segment is empty in {s:?}");
+                }
+                Ok(Self {
+                    os: parts[0].to_string(),
+                    architecture: Self::normalize_arch(parts[1]),
+                    variant: None,
+                })
+            }
+            3 => {
+                if parts[0].is_empty() {
+                    bail!("invalid platform string: os segment is empty in {s:?}");
+                }
+                if parts[1].is_empty() {
+                    bail!("invalid platform string: arch segment is empty in {s:?}");
+                }
+                if parts[2].is_empty() {
+                    bail!("invalid platform string: variant segment is empty in {s:?}");
+                }
+                Ok(Self {
+                    os: parts[0].to_string(),
+                    architecture: Self::normalize_arch(parts[1]),
+                    variant: Some(parts[2].to_string()),
+                })
+            }
             _ => bail!("invalid platform string: expected os/arch or os/arch/variant, got {s:?}"),
+        }
+    }
+
+    /// Normalize common architecture aliases to OCI standard names.
+    fn normalize_arch(arch: &str) -> String {
+        match arch {
+            "x86_64" => "amd64".to_string(),
+            "aarch64" => "arm64".to_string(),
+            other => other.to_string(),
         }
     }
 
@@ -629,6 +657,54 @@ mod tests {
         let target = TargetPlatform::parse("linux/arm64").expect("parse");
         let found = list.find_platform(&target);
         assert!(found.is_some());
+    }
+
+    // -------------------------------------------------------------------------
+    // TargetPlatform::parse — validation and normalization
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn target_platform_parse_rejects_empty_os() {
+        assert!(
+            TargetPlatform::parse("/amd64").is_err(),
+            "empty os segment should be rejected"
+        );
+    }
+
+    #[test]
+    fn target_platform_parse_rejects_empty_arch() {
+        assert!(
+            TargetPlatform::parse("linux/").is_err(),
+            "empty arch segment should be rejected"
+        );
+    }
+
+    #[test]
+    fn target_platform_parse_rejects_empty_variant() {
+        assert!(
+            TargetPlatform::parse("linux/amd64/").is_err(),
+            "empty variant segment should be rejected"
+        );
+    }
+
+    #[test]
+    fn target_platform_parse_rejects_empty_string() {
+        assert!(
+            TargetPlatform::parse("").is_err(),
+            "empty string should be rejected"
+        );
+    }
+
+    #[test]
+    fn target_platform_parse_normalizes_x86_64() {
+        let tp = TargetPlatform::parse("linux/x86_64").expect("should parse");
+        assert_eq!(tp.architecture, "amd64");
+    }
+
+    #[test]
+    fn target_platform_parse_normalizes_aarch64() {
+        let tp = TargetPlatform::parse("linux/aarch64").expect("should parse");
+        assert_eq!(tp.architecture, "arm64");
     }
 
     #[test]
