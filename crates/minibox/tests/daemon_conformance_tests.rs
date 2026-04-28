@@ -49,6 +49,7 @@ async fn handle_run_once(
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -358,6 +359,7 @@ mod conformance {
         let response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state,
             deps,
         )
@@ -967,6 +969,7 @@ mod lifecycle_conformance {
         let pull_response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -997,6 +1000,7 @@ mod lifecycle_conformance {
         let first = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -1009,6 +1013,7 @@ mod lifecycle_conformance {
         let second = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -1414,6 +1419,7 @@ mod error_path_conformance {
         let response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state,
             deps,
         )
@@ -1659,6 +1665,7 @@ mod krun_suite {
             false,
             vec![],
             None,
+            None,
             state,
             deps,
             tx,
@@ -1726,6 +1733,7 @@ mod krun_suite {
             vec![],
             false,
             vec![],
+            None,
             None,
             state,
             deps,
@@ -2565,6 +2573,7 @@ mod policy_conformance {
             mounts,
             privileged,
             vec![],
+            None,
             None,
             state,
             deps,

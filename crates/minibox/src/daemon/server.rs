@@ -346,6 +346,7 @@ async fn dispatch(
             env,
             name,
             tty: _,
+            platform,
             ..
         } => {
             handler::handle_run(
@@ -360,6 +361,7 @@ async fn dispatch(
                 privileged,
                 env,
                 name,
+                platform,
                 state,
                 deps,
                 tx,
@@ -388,8 +390,12 @@ async fn dispatch(
             let response = handler::handle_list(state).await;
             send_terminal_response(&tx, "List", response).await;
         }
-        DaemonRequest::Pull { image, tag, .. } => {
-            let response = handler::handle_pull(image, tag, state, deps).await;
+        DaemonRequest::Pull {
+            image,
+            tag,
+            platform,
+        } => {
+            let response = handler::handle_pull(image, tag, platform, state, deps).await;
             send_terminal_response(&tx, "Pull", response).await;
         }
         DaemonRequest::LoadImage { path, name, tag } => {

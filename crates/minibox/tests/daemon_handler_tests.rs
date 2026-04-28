@@ -45,6 +45,7 @@ async fn handle_run_once(
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -211,6 +212,7 @@ async fn test_handle_pull_success() {
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -235,7 +237,7 @@ async fn test_handle_pull_with_library_prefix() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // Bare image name should get "library/" prefix
-    let response = handler::handle_pull("ubuntu".to_string(), None, state, deps).await;
+    let response = handler::handle_pull("ubuntu".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Success { .. } => {
@@ -292,7 +294,7 @@ async fn test_handle_pull_failure() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_pull("alpine".to_string(), None, state, deps).await;
+    let response = handler::handle_pull("alpine".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {
@@ -809,6 +811,7 @@ async fn test_full_container_lifecycle() {
     let pull_response = handler::handle_pull(
         "nginx".to_string(),
         Some("alpine".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -993,6 +996,7 @@ async fn test_handle_run_explicit_network_none() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -1204,6 +1208,7 @@ async fn test_run_with_network_mode_host() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -1641,7 +1646,8 @@ async fn test_handle_pull_invalid_image_ref_returns_error() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // "ghcr.io/imageonly" fails parse: non-docker.io registry requires org/name format.
-    let response = handler::handle_pull("ghcr.io/imageonly".to_string(), None, state, deps).await;
+    let response =
+        handler::handle_pull("ghcr.io/imageonly".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {
@@ -1888,6 +1894,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
     let response = handler::handle_pull(
         "ghcr.io/org/myimage".to_string(),
         Some("v1.0".to_string()),
+        None,
         state,
         deps,
     )
@@ -2481,6 +2488,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
     let response = handler::handle_pull(
         "ghcr.io/org/myimage".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -2731,6 +2739,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -2816,6 +2825,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -2961,6 +2971,7 @@ async fn test_pull_registry_failure_with_tag() {
     let response = handler::handle_pull(
         "testimage".to_string(),
         Some("v1.0".to_string()),
+        None,
         state,
         deps,
     )
@@ -3118,6 +3129,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3510,6 +3522,7 @@ async fn test_policy_denies_bind_mount_by_default() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -3547,6 +3560,7 @@ async fn test_policy_denies_privileged_by_default() {
         vec![],
         true, // privileged
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3621,6 +3635,7 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -3657,6 +3672,7 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
         vec![],
         true, // privileged
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3849,6 +3865,7 @@ async fn test_handle_pull_nonexistent_image() {
     let resp = handler::handle_pull(
         "does-not-exist".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -4314,6 +4331,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
         false,
         vec![],
         Some("mybox".to_string()),
+        None,
         Arc::clone(&state),
         Arc::clone(&deps),
         tx1,
@@ -4339,6 +4357,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
         false,
         vec![],
         Some("mybox".to_string()),
+        None,
         Arc::clone(&state),
         Arc::clone(&deps),
         tx2,
@@ -5045,6 +5064,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
         false,
         vec![],
         None,
+        None,
         state,
         deps_fail,
         tx,
@@ -5254,6 +5274,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -5328,6 +5349,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
         true, // privileged=true, policy denies it
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -5396,7 +5418,7 @@ async fn test_handle_pull_invalid_image_ref_returns_error_v2() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // An empty string is not a valid image reference.
-    let resp = handler::handle_pull("".to_string(), None, state, deps).await;
+    let resp = handler::handle_pull("".to_string(), None, None, state, deps).await;
 
     assert!(
         matches!(resp, DaemonResponse::Error { .. }),
@@ -5477,6 +5499,7 @@ async fn test_handle_run_bridge_network_mode_calls_setup() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -5669,6 +5692,7 @@ async fn test_handle_stop_resolves_by_name() {
         false,
         vec![],
         Some("my-stop-ctr".to_string()),
+        None,
         state.clone(),
         deps.clone(),
         tx,
@@ -6185,6 +6209,7 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
         false,
         vec![],
         None,
+        None,
         state.clone(),
         deps.clone(),
         tx_run,
@@ -6226,6 +6251,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         false,
         vec![],
         Some("mycontainer".to_string()),
+        None,
         state.clone(),
         deps.clone(),
         tx1,
@@ -6250,6 +6276,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         false,
         vec![],
         Some("mycontainer".to_string()),
+        None,
         state,
         deps,
         tx2,
@@ -6298,6 +6325,7 @@ async fn test_handle_run_network_setup_failure_bridge_mode() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -6376,6 +6404,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state.clone(),
         deps.clone(),

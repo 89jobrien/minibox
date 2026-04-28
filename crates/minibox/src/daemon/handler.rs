@@ -328,6 +328,7 @@ pub async fn handle_run(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
+    #[allow(unused_variables)] platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -1644,10 +1645,32 @@ pub async fn handle_logs(
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
 /// Pull an image from the appropriate registry and cache it locally.
+/// Construct a temporary [`DockerHubRegistry`] targeting a specific platform
+/// when the request carries a platform override. Returns `None` when no
+/// override is needed (use the default router instead).
+fn resolve_platform_registry(
+    platform: &Option<String>,
+    deps: &HandlerDependencies,
+) -> Result<Option<crate::adapters::DockerHubRegistry>> {
+    match platform {
+        Some(p) => {
+            let tp = minibox_core::image::manifest::TargetPlatform::parse(p)?;
+            info!(platform = %p, "using per-request platform override");
+            let registry = crate::adapters::DockerHubRegistry::with_platform(
+                Arc::clone(&deps.image.image_store),
+                tp,
+            )?;
+            Ok(Some(registry))
+        }
+        None => Ok(None),
+    }
+}
+
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,
+    platform: Option<String>,
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
@@ -1667,8 +1690,23 @@ pub async fn handle_pull(
     };
     let tag = image_ref.tag.clone();
 
-    // Select registry based on image reference hostname.
-    let registry = deps.image.registry_router.route(&image_ref);
+    // When a platform override is requested, construct a temporary
+    // DockerHubRegistry targeting that platform. Otherwise use the
+    // default registry from the router.
+    let platform_registry = match resolve_platform_registry(&platform, &deps) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("handle_pull: invalid platform: {e}");
+            return DaemonResponse::Error {
+                message: format!("invalid platform: {e}"),
+            };
+        }
+    };
+
+    let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
+        Some(r) => r,
+        None => deps.image.registry_router.route(&image_ref),
+    };
 
     // Pull image (using selected registry trait).
     let start = std::time::Instant::now();
