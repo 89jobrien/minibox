@@ -5,6 +5,7 @@
 //! connection and protocol formatting.
 
 pub mod events;
+pub mod upgrade;
 pub mod exec;
 pub mod load;
 pub mod logs;

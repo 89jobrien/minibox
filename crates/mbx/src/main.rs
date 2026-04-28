@@ -267,6 +267,17 @@ enum Commands {
     #[command(subcommand)]
     Snapshot(SnapshotCommands),
 
+    /// Update mbx and miniboxd to the latest release.
+    #[command(disable_version_flag = true)]
+    Upgrade {
+        /// Show what would be done without replacing binaries.
+        #[arg(long)]
+        dry_run: bool,
+        /// Install a specific version (e.g. "v0.21.0"). Default: latest.
+        #[arg(long)]
+        version: Option<String>,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -421,6 +432,10 @@ async fn main() -> Result<()> {
                 commands::snapshot::execute_list(id, socket_path).await
             }
         },
+
+        Commands::Upgrade { dry_run, version } => {
+            commands::upgrade::execute(dry_run, version).await
+        }
 
         Commands::Sandbox {
             script,
@@ -642,6 +657,36 @@ mod tests {
         match cli.command {
             Commands::Run { platform, .. } => assert_eq!(platform, None),
             _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_default() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { dry_run, version } => {
+                assert!(!dry_run);
+                assert_eq!(version, None);
+            }
+            _ => panic!("expected Upgrade"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_dry_run() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade", "--dry-run"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { dry_run, .. } => assert!(dry_run),
+            _ => panic!("expected Upgrade"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_version() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade", "--version", "v0.21.0"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { version, .. } => assert_eq!(version, Some("v0.21.0".to_string())),
+            _ => panic!("expected Upgrade"),
         }
     }
 
