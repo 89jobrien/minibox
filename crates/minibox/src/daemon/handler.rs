@@ -346,16 +346,6 @@ pub async fn handle_run(
         return;
     }
 
-    // Validate platform override early so we fail fast before doing any work.
-    let platform_registry = match resolve_platform_registry(&platform, &deps) {
-        Ok(r) => r,
-        Err(e) => {
-            error!("handle_run: invalid platform: {e}");
-            send_error(&tx, "handle_run", format!("invalid platform: {e}")).await;
-            return;
-        }
-    };
-
     // Reject duplicate names eagerly before doing any work.
     // Two-guard pattern: Option check then async check (cannot be written as
     // a single `if let ... && await` in stable Rust).
@@ -385,7 +375,7 @@ pub async fn handle_run(
             privileged,
             env,
             name,
-            platform_registry,
+            platform,
             state,
             deps,
             tx,
@@ -406,7 +396,7 @@ pub async fn handle_run(
         privileged,
         env,
         name,
-        platform_registry,
+        platform,
         state,
         deps,
     )
@@ -442,7 +432,7 @@ async fn handle_run_streaming(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
-    platform_registry: Option<crate::adapters::DockerHubRegistry>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -464,7 +454,7 @@ async fn handle_run_streaming(
         privileged,
         env,
         name,
-        platform_registry,
+        platform,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
@@ -650,7 +640,7 @@ async fn run_inner_capture(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
-    platform_registry: Option<crate::adapters::DockerHubRegistry>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
@@ -668,10 +658,11 @@ async fn run_inner_capture(
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
-    // Use platform-overridden registry if provided, otherwise route by hostname.
+    // Resolve platform-overridden registry if requested, otherwise route by hostname.
+    let platform_registry = resolve_platform_registry(&platform, &image_ref, &deps)?;
     let default_registry = deps.image.registry_router.route(&image_ref);
     let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
-        Some(r) => r,
+        Some(r) => r.as_ref(),
         None => default_registry,
     };
 
@@ -867,7 +858,7 @@ async fn run_inner(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
-    platform_registry: Option<crate::adapters::DockerHubRegistry>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -885,10 +876,11 @@ async fn run_inner(
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
-    // Use platform-overridden registry if provided, otherwise route by hostname.
+    // Resolve platform-overridden registry if requested, otherwise route by hostname.
+    let platform_registry = resolve_platform_registry(&platform, &image_ref, &deps)?;
     let default_registry = deps.image.registry_router.route(&image_ref);
     let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
-        Some(r) => r,
+        Some(r) => r.as_ref(),
         None => default_registry,
     };
 
@@ -1695,19 +1687,15 @@ fn resolve_platform_registry(
     let routed = deps.image.registry_router.route(image_ref);
 
     if routed.as_any().is::<crate::adapters::GhcrRegistry>() {
-        let registry = crate::adapters::GhcrRegistry::with_platform(
-            Arc::clone(&deps.image.image_store),
-            tp,
-        )?;
+        let registry =
+            crate::adapters::GhcrRegistry::with_platform(Arc::clone(&deps.image.image_store), tp)?;
         return Ok(Some(Box::new(registry)));
     }
 
     // Default: treat as Docker Hub (covers `native` adapter and any unknown
     // hostname that the router falls back to its default for).
-    let registry = crate::adapters::DockerHubRegistry::with_platform(
-        Arc::clone(&deps.image.image_store),
-        tp,
-    )?;
+    let registry =
+        crate::adapters::DockerHubRegistry::with_platform(Arc::clone(&deps.image.image_store), tp)?;
     Ok(Some(Box::new(registry)))
 }
 
