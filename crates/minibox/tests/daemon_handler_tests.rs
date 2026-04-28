@@ -6426,3 +6426,42 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
         "expected 'not running' error, got {resp:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// handle_run --platform Tests
+// ---------------------------------------------------------------------------
+
+/// When `handle_run` receives an invalid platform string, it should return an
+/// error rather than silently ignoring it.
+#[tokio::test]
+async fn test_handle_run_invalid_platform_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        Some("not/a/valid/platform/triple".to_string()),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("handler sent no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("platform")),
+        "expected platform error, got {resp:?}"
+    );
+}
