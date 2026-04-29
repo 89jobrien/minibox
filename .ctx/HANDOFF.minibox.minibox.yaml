@@ -1,32 +1,35 @@
 project: minibox
 id: minibox
-updated: 20260428:124518
+updated: 20260429:042914
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
   name: update-upgrade-commands
   priority: P1
   status: open
-  title: 'feat: mbx update + mbx upgrade commands — Wave 2 in flight'
+  title: 'feat: mbx update + mbx upgrade — restart support stubbed (Wave 3)'
   description: |
-    Wave 1 done (protocol types + upgrade CLI). Wave 2 dispatched: handle_update in
-    handler.rs (agent a669857) and mbx update CLI command (agent a01cc07). When Wave 2
-    lands, cherry-pick both onto main, run cargo xtask test-unit, then push.
-    Restart support in handle_update is stubbed (warn log) — Wave 3 would wire it.
+    Wave 1 (protocol types + upgrade CLI) and Wave 2 (handle_update handler + mbx update CLI)
+    are fully landed on main (commits 9574520, d3459f4, e08a7dc, 277dbf2, 761fd26, 5a4aadf).
+    Remaining: restart support in handle_update is stubbed with a warn! log — Wave 3 would wire
+    actual container restart after image refresh. Also: bench dashboard (xtask bench rewrite)
+    and typestate lifecycle module (minibox-core::typestate) were added this session.
   files:
   - crates/minibox-core/src/protocol.rs
   - crates/minibox/src/daemon/handler.rs
   - crates/minibox/src/daemon/server.rs
   - crates/mbx/src/commands/update.rs
   - crates/mbx/src/commands/upgrade.rs
+  - crates/minibox-core/src/typestate.rs
+  - crates/xtask/src/bench.rs
   completed: null
   extra:
-  - date: 20260428:124518
+  - date: 20260429:042914
     type: note
     field: null
     value: null
     reviewed: null
-    note: "Wave 1 commits: 54df5d0 (protocol), 1bc83c5 (upgrade CLI). Wave 2 agents running in worktrees."
+    note: "Wave 2 complete: 9574520 (handle_update), d3459f4 (mbx update), e08a7dc (sentinel fixes), 277dbf2 (docs), 761fd26 (v0.22.0), 5a4aadf (CI e2e). Bench dashboard and typestate module also added this session."
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
   name: vz-apple-bug-blocker
@@ -227,11 +230,11 @@ items:
   name: publish-core-crates
   priority: P1
   status: open
-  title: 'chore: promote to stable and cut v0.21.0 release tag'
+  title: 'chore: promote to stable and cut v0.22.0 release tag'
   description: |
     GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
     Phases 0-6 complete (13->8 crates, slashcrux path dep fixed, dry-run passes). Remaining:
-    promote main→next (wait for CI green), then promote next→stable and cut v0.21.0 release tag.
+    promote main→next (wait for CI green), then promote next→stable and cut v0.22.0 release tag.
     GitHub Actions release.yml will publish minibox-core and minibox-macros to crates.io automatically.
   files:
   - docs/superpowers/plans/2026-04-26-crate-consolidation.md
@@ -247,13 +250,23 @@ items:
     note: null
     number: 153
     url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260428:121625
+  - date: 20260429:042914
     type: note
     field: null
     value: null
     reviewed: null
-    note: "Session 36: all council recommendations resolved — multi-platform feature fully wired. Branch is now healthy for next→stable promotion."
+    note: "Session 38: v0.22.0 bumped this session (761fd26). CI e2e job added (5a4aadf). Ready for next→stable promotion once CI is green."
 log:
+- date: 20260429:042914
+  summary: "Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified)."
+  commits:
+  - 9574520
+  - d3459f4
+  - e08a7dc
+  - 277dbf2
+  - 761fd26
+  - 5a4aadf
+  session: 38
 - date: 20260428:124518
   summary: "Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI)."
   commits:
@@ -282,8 +295,3 @@ log:
   commits:
   - 5b4c4d8
   session: 34
-- date: 20260428:000000
-  summary: "Session 33: add lint-docs xtask gate — validates YAML frontmatter parseability and restricts status values to approved set; wired into pre-commit."
-  commits:
-  - a2619cc
-  session: 33
