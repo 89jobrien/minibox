@@ -24,7 +24,6 @@ use minibox::adapters::{
     CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, NoopNetwork,
     OverlayFilesystem,
 };
-use minibox::domain::RootfsSetup;
 use minibox::image::ImageStore;
 use minibox::protocol::DaemonResponse;
 use miniboxd::handler::{
@@ -75,6 +74,7 @@ async fn handle_run_once(
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,

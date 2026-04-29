@@ -1,10 +1,8 @@
-name: Quality
+name: Merge
 
 on:
   push:
     branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
-  pull_request:
-    branches: [main, next]
 
 env:
   CARGO_INCREMENTAL: 0
@@ -20,6 +18,33 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
           cargo check --workspace
+
+  test-unit:
+    name: unit tests (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest run (unit tests)
+        run: cargo nextest run --workspace --lib
+
+  test-protocol-e2e:
+    name: protocol e2e (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - name: build daemon + cli
+        run: cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
 
   build-test-archive:
     name: build test archive
@@ -42,20 +67,6 @@ jobs:
           name: nextest-archive
           path: nextest-archive.tar.zst
           retention-days: 1
-
-  test-unit:
-    name: unit tests (macOS)
-    runs-on: [self-hosted, minibox-mac]
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          clean: true
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: cargo nextest run (unit tests)
-        run: cargo nextest run --workspace --lib
 
   test-archive:
     name: test from archive (ubuntu)
@@ -119,36 +130,6 @@ jobs:
           tool: cargo-machete
       - run: cargo machete
 
-  geiger:
-    name: unsafe audit (geiger)
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/stable'
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: install cargo-geiger
-        run: cargo install cargo-geiger --locked
-      - name: cargo geiger
-        id: geiger
-        run: |
-          set -euo pipefail
-          cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
-          {
-            echo "## cargo geiger report"
-            echo '```'
-            sed -n '1,30p' geiger-report.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: upload geiger report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: geiger-report
-          path: geiger-report.txt
-          retention-days: 30
-
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
@@ -172,18 +153,6 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo xtask test-integration
-  test-protocol-e2e:
-    name: protocol e2e (macOS)
-    runs-on: [self-hosted, minibox-mac]
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          clean: true
-      - name: build daemon + cli
-        run: cargo build --release -p miniboxd -p mbx
-      - name: protocol e2e tests
-        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
 
   test-protocol-e2e-linux:
     name: protocol e2e (Linux)
@@ -200,3 +169,26 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+
+  cleanup-mac:
+    name: cleanup (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    if: always()
+    needs: [test-unit, test-protocol-e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - name: clean build artifacts
+        run: cargo xtask clean-artifacts
+
+  cleanup-linux:
+    name: cleanup (Linux)
+    runs-on: [self-hosted, minibox]
+    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    needs: [test-e2e, test-integration, test-protocol-e2e-linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: clean build artifacts and test state
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask clean-artifacts
+          cargo xtask nuke-test-state

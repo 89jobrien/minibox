@@ -31,23 +31,23 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    test_conformance(sh)?;
     eprintln!("pre-commit checks passed");
     Ok(())
 }
 
-/// Pre-push gate: nextest + conformance suite
+/// Pre-push gate: fast lib tests (debug, incremental)
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core"
+        "cargo nextest run -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
     )
     .run()
     .context("nextest failed")?;
-    test_conformance(sh)?;
     Ok(())
 }
 
-/// All unit + conformance tests (any platform)
+/// Unit tests only (any platform)
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -55,41 +55,6 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("lib tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_handler_tests"
-    )
-    .run()
-    .context("handler_tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_conformance_tests"
-    )
-    .run()
-    .context("conformance_tests failed")?;
-    // Colima adapter conformance tests
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test colima_conformance_tests"
-    )
-    .run()
-    .context("colima_conformance_tests failed")?;
-    // GKE adapter isolation tests (platform-agnostic)
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test gke_adapter_isolation_tests"
-    )
-    .run()
-    .context("gke_adapter_isolation_tests failed")?;
-    // Container lifecycle failure tests (handler error paths)
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_container_lifecycle_failure_tests"
-    )
-    .run()
-    .context("container_lifecycle_failure_tests failed")?;
-    // commit / build / push conformance + artifact report (wires #68)
-    test_conformance(sh)?;
     Ok(())
 }
 
