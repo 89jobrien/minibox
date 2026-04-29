@@ -69,8 +69,7 @@ impl ProtocolFixture {
 
     /// Send a request and collect all responses until a terminal one.
     fn request(&self, req: &DaemonRequest) -> Vec<DaemonResponse> {
-        let mut stream =
-            UnixStream::connect(&self.socket_path).expect("connect to daemon socket");
+        let mut stream = UnixStream::connect(&self.socket_path).expect("connect to daemon socket");
         stream
             .set_read_timeout(Some(Duration::from_secs(30)))
             .expect("set read timeout");
@@ -89,8 +88,7 @@ impl ProtocolFixture {
             if line.is_empty() {
                 continue;
             }
-            let resp: DaemonResponse =
-                serde_json::from_str(&line).expect("deserialize response");
+            let resp: DaemonResponse = serde_json::from_str(&line).expect("deserialize response");
             let is_terminal = !matches!(&resp, DaemonResponse::ContainerOutput { .. });
             responses.push(resp);
             if is_terminal {
@@ -103,8 +101,7 @@ impl ProtocolFixture {
 
     /// Send raw bytes and read the response line.
     fn raw_request(&self, payload: &[u8]) -> String {
-        let mut stream =
-            UnixStream::connect(&self.socket_path).expect("connect to daemon socket");
+        let mut stream = UnixStream::connect(&self.socket_path).expect("connect to daemon socket");
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .expect("set read timeout");
@@ -138,7 +135,10 @@ fn protocol_list_empty_returns_container_list() {
     assert_eq!(responses.len(), 1, "expected exactly one response");
     match &responses[0] {
         DaemonResponse::ContainerList { containers } => {
-            assert!(containers.is_empty(), "fresh daemon should have no containers");
+            assert!(
+                containers.is_empty(),
+                "fresh daemon should have no containers"
+            );
         }
         other => panic!("expected ContainerList, got: {other:?}"),
     }
@@ -209,8 +209,7 @@ fn protocol_empty_line_does_not_crash_daemon() {
     let fixture = ProtocolFixture::start();
 
     // Send empty line, then a valid request
-    let mut stream =
-        UnixStream::connect(&fixture.socket_path).expect("connect");
+    let mut stream = UnixStream::connect(&fixture.socket_path).expect("connect");
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .expect("set timeout");
@@ -218,7 +217,9 @@ fn protocol_empty_line_does_not_crash_daemon() {
 
     // Send valid list request on same connection
     let req = serde_json::to_string(&DaemonRequest::List).unwrap() + "\n";
-    stream.write_all(req.as_bytes()).expect("write list request");
+    stream
+        .write_all(req.as_bytes())
+        .expect("write list request");
 
     let mut reader = BufReader::new(&stream);
     let mut line = String::new();
@@ -236,8 +237,7 @@ fn protocol_empty_line_does_not_crash_daemon() {
 fn protocol_multiple_requests_on_single_connection() {
     let fixture = ProtocolFixture::start();
 
-    let mut stream =
-        UnixStream::connect(&fixture.socket_path).expect("connect");
+    let mut stream = UnixStream::connect(&fixture.socket_path).expect("connect");
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .expect("set timeout");
@@ -252,9 +252,8 @@ fn protocol_multiple_requests_on_single_connection() {
     for i in 0..2 {
         let mut line = String::new();
         reader.read_line(&mut line).expect("read response");
-        let resp: DaemonResponse =
-            serde_json::from_str(line.trim())
-                .unwrap_or_else(|e| panic!("response {i} not valid JSON: {e}, raw: {line}"));
+        let resp: DaemonResponse = serde_json::from_str(line.trim())
+            .unwrap_or_else(|e| panic!("response {i} not valid JSON: {e}, raw: {line}"));
         assert!(
             matches!(resp, DaemonResponse::ContainerList { .. }),
             "response {i} should be ContainerList, got: {resp:?}"
