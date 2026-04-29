@@ -137,7 +137,7 @@ fn main() -> Result<()> {
             eprintln!("  preflight        check required tools are on PATH and functional");
             eprintln!("  available        verify cargo xtask is runnable (real capability check)");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
-            eprintln!("  prepush          nextest + coverage");
+            eprintln!("  prepush          nextest + conformance suite");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
             eprintln!(

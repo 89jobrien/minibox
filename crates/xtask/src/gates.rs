@@ -35,7 +35,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-push gate: nextest + coverage + ai-review
+/// Pre-push gate: nextest + conformance suite
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -43,17 +43,7 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("nextest failed")?;
-    cmd!(
-        sh,
-        "cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p minibox-core --html"
-    )
-    .run()
-    .context("coverage failed")?;
-    eprintln!("coverage: target/llvm-cov/html/index.html");
-    eprintln!("running ai-review...");
-    if let Err(e) = cmd!(sh, "uv run scripts/ai-review.py --base main").run() {
-        eprintln!("warning: ai-review failed (non-fatal): {e}");
-    }
+    test_conformance(sh)?;
     Ok(())
 }
 
