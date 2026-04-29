@@ -58,39 +58,23 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Conformance suite: commit + build + push backends, then emit MD + JSON reports.
+/// Conformance suite: auto-discovers all `conformance_*` test binaries across the workspace.
 ///
-/// All three conformance test binaries must pass before the report is emitted.
-/// After a successful run this function prints the paths to:
-///   `artifacts/conformance/report.md`
-///   `artifacts/conformance/report.json`
+/// After running all conformance tests, emits MD + JSON reports via `conformance_report`.
 ///
 /// Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` (and run a local OCI registry)
 /// to activate tier-2 push tests.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
-    // --- Commit conformance ---
+    // Run all conformance_* tests across the entire workspace in one shot.
+    // The glob matches any test binary whose name starts with `conformance_`,
+    // excluding `conformance_report` which needs special output handling.
+    let filter = "not binary(conformance_report)";
     cmd!(
         sh,
-        "cargo test --release -p minibox --test conformance_commit"
+        "cargo nextest run --workspace --test conformance_* -E {filter}"
     )
     .run()
-    .context("conformance_commit tests failed")?;
-
-    // --- Build conformance ---
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test conformance_build"
-    )
-    .run()
-    .context("conformance_build tests failed")?;
-
-    // --- Push conformance ---
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test conformance_push"
-    )
-    .run()
-    .context("conformance_push tests failed")?;
+    .context("conformance tests failed")?;
 
     // --- Emit reports ---
     // Run the report emitter with `--nocapture` so the artifact paths are visible.
