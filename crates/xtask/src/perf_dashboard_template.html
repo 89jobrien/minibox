@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>minibox bench dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+       background: #0d1117; color: #c9d1d9; padding: 1.5rem; }
+h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+.meta { color: #8b949e; font-size: 0.85rem; margin-bottom: 1.5rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 1.5rem; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1rem; }
+.card h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #58a6ff; }
+canvas { width: 100% !important; height: 300px !important; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 1rem; }
+th, td { padding: 0.4rem 0.6rem; text-align: right; border-bottom: 1px solid #21262d; }
+th { color: #8b949e; font-weight: 600; }
+td:first-child, th:first-child { text-align: left; }
+.good { color: #3fb950; } .bad { color: #f85149; } .neutral { color: #8b949e; }
+</style>
+</head>
+<body>
+<h1>minibox bench dashboard</h1>
+<div class="meta" id="meta"></div>
+<div class="grid" id="charts"></div>
+<div class="card" style="margin-top:1.5rem">
+<h2>Latest Run</h2>
+<table id="latest-table"><thead><tr>
+<th>Benchmark</th><th>Mean (ns)</th><th>Median</th><th>p95</th><th>p99</th><th>Std Dev</th><th>Peak Mem (KB)</th>
+</tr></thead><tbody></tbody></table>
+</div>
+<script>
+const DATA = __DATA_PLACEHOLDER__;
+const runs = DATA.runs || [];
+const meta = document.getElementById('meta');
+meta.textContent = `Generated: ${DATA.generated_at} | Runs: ${runs.length} / ${DATA.history_limit}`;
+
+const scenarios = new Map();
+for (const run of runs) {
+  for (const m of run.metrics) {
+    if (!scenarios.has(m.scenario)) scenarios.set(m.scenario, []);
+    scenarios.get(m.scenario).push({ ts: run.generated_at, rev: run.git_rev, ...m });
+  }
+}
+
+const colors = ['#58a6ff','#3fb950','#d29922','#f85149','#a371f7','#79c0ff','#56d364','#e3b341'];
+let ci = 0;
+const grid = document.getElementById('charts');
+
+for (const [name, points] of scenarios) {
+  points.reverse();
+  const card = document.createElement('div');
+  card.className = 'card';
+  const heading = document.createElement('h2');
+  heading.textContent = points[0].scenario_title || name;
+  card.appendChild(heading);
+  const canvas = document.createElement('canvas');
+  canvas.id = `c-${ci}`;
+  card.appendChild(canvas);
+  grid.appendChild(card);
+
+  const labels = points.map(p => p.rev || p.ts.slice(0,10));
+  const color = colors[ci % colors.length];
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'mean (ns)', data: points.map(p => p.mean_ns), borderColor: color, tension: 0.2 },
+        { label: 'p95 (ns)', data: points.map(p => p.p95_ns), borderColor: color, borderDash: [4,4], tension: 0.2 },
+      ]
+    },
+    options: {
+      plugins: { legend: { labels: { color: '#8b949e' } } },
+      scales: {
+        x: { ticks: { color: '#8b949e' } },
+        y: { ticks: { color: '#8b949e' }, beginAtZero: false }
+      }
+    }
+  });
+  ci++;
+}
+
+if (runs.length > 0) {
+  const latest = runs[0];
+  const tbody = document.querySelector('#latest-table tbody');
+  for (const m of latest.metrics) {
+    const tr = document.createElement('tr');
+    const td = (text, align) => { const el = document.createElement('td'); el.textContent = text; if (align) el.style.textAlign = align; return el; };
+    tr.appendChild(td(m.scenario_title || m.scenario, 'left'));
+    tr.appendChild(td(m.mean_ns.toFixed(1)));
+    tr.appendChild(td(m.median_ns.toFixed(1)));
+    tr.appendChild(td(m.p95_ns.toFixed(1)));
+    tr.appendChild(td(m.p99_ns.toFixed(1)));
+    tr.appendChild(td(m.std_dev_ns.toFixed(1)));
+    tr.appendChild(td((m.memory_peak_bytes/1024).toFixed(1)));
+    tbody.appendChild(tr);
+  }
+}
+</script>
+</body>
+</html>

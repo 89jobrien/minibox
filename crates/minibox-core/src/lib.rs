@@ -30,6 +30,7 @@ pub mod tracing_init;
 
 pub mod client;
 pub mod image;
+pub mod typestate;
 
 pub use tracing_init::init_tracing;
 
