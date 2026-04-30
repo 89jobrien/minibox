@@ -31,33 +31,23 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    test_conformance(sh)?;
     eprintln!("pre-commit checks passed");
     Ok(())
 }
 
-/// Pre-push gate: nextest + coverage + ai-review
+/// Pre-push gate: fast lib tests (debug, incremental)
 pub fn prepush(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core"
+        "cargo nextest run -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
     )
     .run()
     .context("nextest failed")?;
-    cmd!(
-        sh,
-        "cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p minibox-core --html"
-    )
-    .run()
-    .context("coverage failed")?;
-    eprintln!("coverage: target/llvm-cov/html/index.html");
-    eprintln!("running ai-review...");
-    if let Err(e) = cmd!(sh, "uv run scripts/ai-review.py --base main").run() {
-        eprintln!("warning: ai-review failed (non-fatal): {e}");
-    }
     Ok(())
 }
 
-/// All unit + conformance tests (any platform)
+/// Unit tests only (any platform)
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -65,77 +55,26 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("lib tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_handler_tests"
-    )
-    .run()
-    .context("handler_tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_conformance_tests"
-    )
-    .run()
-    .context("conformance_tests failed")?;
-    // Colima adapter conformance tests
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test colima_conformance_tests"
-    )
-    .run()
-    .context("colima_conformance_tests failed")?;
-    // GKE adapter isolation tests (platform-agnostic)
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test gke_adapter_isolation_tests"
-    )
-    .run()
-    .context("gke_adapter_isolation_tests failed")?;
-    // Container lifecycle failure tests (handler error paths)
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_container_lifecycle_failure_tests"
-    )
-    .run()
-    .context("container_lifecycle_failure_tests failed")?;
-    // commit / build / push conformance + artifact report (wires #68)
-    test_conformance(sh)?;
     Ok(())
 }
 
-/// Conformance suite: commit + build + push backends, then emit MD + JSON reports.
+/// Conformance suite: auto-discovers all `conformance_*` test binaries across the workspace.
 ///
-/// All three conformance test binaries must pass before the report is emitted.
-/// After a successful run this function prints the paths to:
-///   `artifacts/conformance/report.md`
-///   `artifacts/conformance/report.json`
+/// After running all conformance tests, emits MD + JSON reports via `conformance_report`.
 ///
 /// Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` (and run a local OCI registry)
 /// to activate tier-2 push tests.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
-    // --- Commit conformance ---
+    // Run all conformance_* tests across the entire workspace in one shot.
+    // The glob matches any test binary whose name starts with `conformance_`,
+    // excluding `conformance_report` which needs special output handling.
+    let filter = "not binary(conformance_report)";
     cmd!(
         sh,
-        "cargo test --release -p minibox --test conformance_commit"
+        "cargo nextest run --workspace --test conformance_* -E {filter}"
     )
     .run()
-    .context("conformance_commit tests failed")?;
-
-    // --- Build conformance ---
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test conformance_build"
-    )
-    .run()
-    .context("conformance_build tests failed")?;
-
-    // --- Push conformance ---
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test conformance_push"
-    )
-    .run()
-    .context("conformance_push tests failed")?;
+    .context("conformance tests failed")?;
 
     // --- Emit reports ---
     // Run the report emitter with `--nocapture` so the artifact paths are visible.

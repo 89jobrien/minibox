@@ -49,6 +49,7 @@ async fn handle_run_once(
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -103,6 +104,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -151,6 +153,7 @@ fn mock_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -356,6 +359,7 @@ mod conformance {
         let response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state,
             deps,
         )
@@ -965,6 +969,7 @@ mod lifecycle_conformance {
         let pull_response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -995,6 +1000,7 @@ mod lifecycle_conformance {
         let first = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -1007,6 +1013,7 @@ mod lifecycle_conformance {
         let second = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state.clone(),
             deps.clone(),
         )
@@ -1412,6 +1419,7 @@ mod error_path_conformance {
         let response = handler::handle_pull(
             "alpine".to_string(),
             Some("latest".to_string()),
+            None,
             state,
             deps,
         )
@@ -1505,6 +1513,7 @@ mod error_path_conformance {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         let state = mock_state(&temp_dir);
 
@@ -1625,6 +1634,7 @@ mod krun_suite {
                 allow_bind_mounts: false,
                 allow_privileged: false,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     }
 
@@ -1654,6 +1664,7 @@ mod krun_suite {
             vec![],
             false,
             vec![],
+            None,
             None,
             state,
             deps,
@@ -1722,6 +1733,7 @@ mod krun_suite {
             vec![],
             false,
             vec![],
+            None,
             None,
             state,
             deps,
@@ -2538,6 +2550,7 @@ mod policy_conformance {
                 allow_bind_mounts,
                 allow_privileged,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     }
 
@@ -2560,6 +2573,7 @@ mod policy_conformance {
             mounts,
             privileged,
             vec![],
+            None,
             None,
             state,
             deps,

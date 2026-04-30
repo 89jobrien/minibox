@@ -66,6 +66,7 @@ impl MockRuntime {
         let pid = state.next_pid;
         state.next_pid += 1;
         Ok(SpawnResult {
+            runtime_id: None,
             pid,
             output_reader: None,
         })
@@ -100,6 +101,7 @@ impl ContainerRuntime for MockRuntime {
         let pid = state.next_pid;
         state.next_pid += 1;
         Ok(SpawnResult {
+            runtime_id: None,
             pid,
             output_reader: None,
         })

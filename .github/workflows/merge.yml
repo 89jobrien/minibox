@@ -1,0 +1,194 @@
+name: Merge
+
+on:
+  push:
+    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
+
+env:
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  lint:
+    name: lint + fmt
+    runs-on: [self-hosted, minibox-mac]
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo fmt + clippy + check
+        run: |
+          cargo fmt --all --check
+          cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
+          cargo check --workspace
+
+  test-unit:
+    name: unit tests (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest run (unit tests)
+        run: cargo nextest run --workspace --lib
+
+  test-protocol-e2e:
+    name: protocol e2e (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - name: build daemon + cli
+        run: cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+
+  build-test-archive:
+    name: build test archive
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo build --locked
+        run: cargo build --locked --workspace
+      - name: cargo nextest archive
+        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
+      - name: upload test archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+          retention-days: 1
+
+  test-archive:
+    name: test from archive (ubuntu)
+    runs-on: ubuntu-latest
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: run tests from archive
+        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap .
+
+  test-all-features:
+    name: test with all features
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
+        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
+      - name: cargo test --all-features (doc)
+        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  machete:
+    name: cargo machete
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - run: cargo machete
+
+  test-e2e:
+    name: e2e tests (Linux, root)
+    runs-on: [self-hosted, minibox]
+    needs: test-unit
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo xtask test-e2e-suite
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask test-e2e-suite
+
+  test-integration:
+    name: integration tests (Linux, root)
+    runs-on: [self-hosted, minibox]
+    needs: test-unit
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo xtask test-integration
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask test-integration
+
+  test-protocol-e2e-linux:
+    name: protocol e2e (Linux)
+    runs-on: [self-hosted, minibox]
+    needs: lint
+    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v4
+      - name: build daemon + cli
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+
+  cleanup-mac:
+    name: cleanup (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    if: always()
+    needs: [test-unit, test-protocol-e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - name: clean build artifacts
+        run: cargo xtask clean-artifacts
+
+  cleanup-linux:
+    name: cleanup (Linux)
+    runs-on: [self-hosted, minibox]
+    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    needs: [test-e2e, test-integration, test-protocol-e2e-linux]
+    steps:
+      - uses: actions/checkout@v4
+      - name: clean build artifacts and test state
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask clean-artifacts
+          cargo xtask nuke-test-state

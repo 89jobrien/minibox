@@ -88,9 +88,13 @@ pub fn build_request(
         env: vec![],
         name: None,
         tty: false,
+        entrypoint: None,
+        user: None,
+        auto_remove: true,
         priority: None,
         urgency: None,
         execution_context: None,
+        platform: None,
     })
 }
 

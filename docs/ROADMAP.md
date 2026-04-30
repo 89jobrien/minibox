@@ -1,5 +1,45 @@
 # Minibox Roadmap
 
+## Engineering Priorities
+
+### P0 -- Stability Gates
+
+- **Handler coverage >= 80%**: `minibox/src/daemon/handler.rs` is at 67.5%
+  function / 55% line coverage. Error path tests (image pull failure, empty
+  image, registry unreachable) have the best ROI.
+- **Auth policy gate**: No daemon-side policy gate on bind mounts or
+  privileged mode. Any root client can mount arbitrary host paths.
+
+### P1 -- Platform Wiring
+
+- **krun daemon wiring**: `KrunRuntime`/`KrunRegistry`/`KrunFilesystem`/
+  `KrunLimiter` adapters exist in macbox but are not yet the default on
+  macOS. Goal: make krun the default macOS adapter suite.
+- **Windows phase 2**: Named Pipe server, HCS/WSL2 adapter wiring in
+  winbox. Currently a stub.
+- **VZ Apple bug**: VZ.framework adapter blocked by VZErrorInternal on
+  macOS 26 ARM64 (GH #61). Waiting on Apple fix.
+
+### P2 -- Feature Gaps
+
+- **Networking hardening**: Bridge networking is wired but has limited test
+  coverage. Port forwarding and in-container DNS are not implemented.
+- **Exec cross-platform**: `minibox exec` only works on native Linux
+  adapter. GKE, Colima, and macOS adapters return errors.
+- **Dockerfile parser**: `MiniboxImageBuilder` exists but there is no
+  Dockerfile DSL.
+- **Push/commit hardening**: `OciPushAdapter` and `overlay_commit_adapter`
+  are native-only with limited test coverage.
+
+### P3 -- Observability
+
+- **OTEL tracing**: Spec written (`docs/superpowers/specs/`), no
+  implementation yet. `otel` feature flag exists but is a no-op.
+- **Metrics endpoint**: `metrics` feature flag wired but Prometheus
+  endpoint coverage is minimal.
+
+---
+
 ## Dogfooding
 
 This section tracks ideas for using minibox to run itself and AI tooling.
@@ -34,6 +74,7 @@ toolchain, or inject code via bind mount at run time.
 #### 3. CI Agent — manages its own test environment via minibox
 
 A Claude agent that:
+
 1. Pulls a specific image via minibox
 2. Runs the test suite inside the container
 3. Streams stdout back to parse results

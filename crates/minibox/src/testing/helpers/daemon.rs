@@ -88,6 +88,7 @@ pub fn make_mock_deps_with_registry(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 

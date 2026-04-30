@@ -6,14 +6,14 @@
 //! # Adapter suites
 //!
 //! The daemon supports multiple adapter suites selected via the
-//! `MINIBOX_ADAPTER` environment variable (default: `krun`):
+//! `MINIBOX_ADAPTER` environment variable (default: `smolvm`, fallback: `krun`):
 //!
+//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform.
+//! - **krun**: libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
 //! - **gke** (Linux only): proot (ptrace), copy FS, no-op limiter. Unprivileged.
 //! - **colima**: Colima/Lima VM via limactl + nerdctl. Cross-platform.
-//! - **smolvm**: SmolVM lightweight Linux VMs. Cross-platform.
-//! - **krun**: libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
-//! - **vz** (macOS only, feature-gated): VZ.framework micro-VM.
+//! - **vz** (macOS only, feature-gated, opt-in): VZ.framework micro-VM.
 //!
 //! # Startup sequence
 //! 1. Detect VZ adapter — if so, use GCD dispatch_main pattern (macOS only).
@@ -623,6 +623,7 @@ fn build_native_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -682,6 +683,7 @@ fn build_gke_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -780,6 +782,7 @@ fn build_smolvm_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -831,6 +834,7 @@ fn build_krun_handler_dependencies(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 

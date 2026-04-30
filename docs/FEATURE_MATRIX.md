@@ -8,65 +8,65 @@ Last updated: 2026-04-27
 
 ## Adapter Suites
 
-| Adapter  | Platform              | Status        | Crate    |
-| -------- | --------------------- | ------------- | -------- |
-| `native` | Linux (x86_64/arm64)  | Production    | minibox  |
-| `gke`    | Linux (GKE pods)      | Production    | minibox  |
-| `colima` | macOS (Colima/Lima)   | Experimental  | macbox   |
-| `krun`   | macOS (libkrun)       | In progress   | macbox   |
-| `vz`     | macOS (VZ.framework)  | Blocked       | macbox   |
-| `winbox` | Windows               | Stub          | winbox   |
+| Adapter  | Platform             | Status       | Crate   |
+| -------- | -------------------- | ------------ | ------- |
+| `native` | Linux (x86_64/arm64) | Production   | minibox |
+| `gke`    | Linux (GKE pods)     | Production   | minibox |
+| `colima` | macOS (Colima/Lima)  | Experimental | macbox  |
+| `krun`   | macOS (libkrun)      | In progress  | macbox  |
+| `vz`     | macOS (VZ.framework) | Blocked      | macbox  |
+| `winbox` | Windows              | Stub         | winbox  |
 
 ---
 
 ## Capability Matrix
 
-| Feature                       | native | gke    | colima      | krun   | vz      | winbox |
-| ----------------------------- | ------ | ------ | ----------- | ------ | ------- | ------ |
-| **Container lifecycle**       |        |        |             |        |         |        |
-| pull                          | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| run                           | Yes    | Yes    | Yes         | WIP    | Blocked | No     |
-| stop                          | Yes    | Yes    | Yes         | WIP    | Blocked | No     |
-| rm                            | Yes    | Yes    | Yes         | WIP    | Blocked | No     |
-| ps                            | Yes    | Yes    | Yes         | WIP    | Blocked | No     |
-| pause/resume                  | Yes    | No     | No          | No     | Blocked | No     |
-| exec (-it)                    | Yes    | No     | Limited     | No     | Blocked | No     |
-| logs                          | Yes    | No     | Limited     | No     | Blocked | No     |
-| events                        | Yes    | No     | No          | No     | Blocked | No     |
-| **Image management**          |        |        |             |        |         |        |
-| Docker Hub v2                 | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| ghcr.io                       | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| Parallel layer pull           | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| prune / rmi                   | Yes    | No     | No          | No     | Blocked | No     |
-| push (experimental)           | Yes    | No     | No          | No     | Blocked | No     |
-| commit (experimental)         | Yes    | No     | No          | No     | Blocked | No     |
-| build (experimental)          | Yes    | No     | No          | No     | Blocked | No     |
-| **Isolation**                 |        |        |             |        |         |        |
-| PID namespace                 | Yes    | No     | Lima VM     | VM     | Blocked | No     |
-| Mount namespace               | Yes    | No     | Lima VM     | VM     | Blocked | No     |
-| Network namespace             | Yes    | No     | Lima VM     | VM     | Blocked | No     |
-| UTS namespace                 | Yes    | No     | Lima VM     | VM     | Blocked | No     |
-| IPC namespace                 | Yes    | No     | Lima VM     | VM     | Blocked | No     |
-| cgroups v2                    | Yes    | No     | No          | No     | Blocked | No     |
-| Overlay FS                    | Yes    | Copy   | nerdctl     | No     | Blocked | No     |
-| **Networking**                |        |        |             |        |         |        |
-| Bridge (experimental)         | Yes    | No     | No          | No     | Blocked | No     |
-| Port forwarding               | No     | No     | No          | No     | No      | No     |
-| DNS                           | No     | No     | No          | No     | No      | No     |
-| **Mounts & Privileges**       |        |        |             |        |         |        |
-| Bind mounts (`-v`)            | Yes    | No     | No          | No     | Blocked | No     |
-| Privileged mode               | Yes    | No     | No          | No     | Blocked | No     |
-| **Security**                  |        |        |             |        |         |        |
-| SO_PEERCRED auth              | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| Tar path validation           | Yes    | Yes    | Yes         | Yes    | Yes     | Yes    |
-| Setuid stripping              | Yes    | Yes    | Yes         | Yes    | Yes     | Yes    |
-| Device node rejection         | Yes    | Yes    | Yes         | Yes    | Yes     | Yes    |
-| **State persistence**         |        |        |             |        |         |        |
-| Records survive restart       | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| PID reconciliation            | Yes    | No     | No          | No     | Blocked | No     |
-| **Observability**             |        |        |             |        |         |        |
-| Structured tracing            | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
-| OTLP export (opt-in)          | Yes    | Yes    | Yes         | Yes    | Blocked | No     |
+| Feature                 | native | gke  | colima  | krun | vz      | winbox |
+| ----------------------- | ------ | ---- | ------- | ---- | ------- | ------ |
+| **Container lifecycle** |        |      |         |      |         |        |
+| pull                    | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| run                     | Yes    | Yes  | Yes     | WIP  | Blocked | No     |
+| stop                    | Yes    | Yes  | Yes     | WIP  | Blocked | No     |
+| rm                      | Yes    | Yes  | Yes     | WIP  | Blocked | No     |
+| ps                      | Yes    | Yes  | Yes     | WIP  | Blocked | No     |
+| pause/resume            | Yes    | No   | No      | No   | Blocked | No     |
+| exec (-it)              | Yes    | No   | Limited | No   | Blocked | No     |
+| logs                    | Yes    | No   | Limited | No   | Blocked | No     |
+| events                  | Yes    | No   | No      | No   | Blocked | No     |
+| **Image management**    |        |      |         |      |         |        |
+| Docker Hub v2           | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| ghcr.io                 | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| Parallel layer pull     | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| prune / rmi             | Yes    | No   | No      | No   | Blocked | No     |
+| push (exp)              | Yes    | No   | No      | No   | Blocked | No     |
+| commit (exp)            | Yes    | No   | No      | No   | Blocked | No     |
+| build (exp)             | Yes    | No   | No      | No   | Blocked | No     |
+| **Isolation**           |        |      |         |      |         |        |
+| PID namespace           | Yes    | No   | Lima VM | VM   | Blocked | No     |
+| Mount namespace         | Yes    | No   | Lima VM | VM   | Blocked | No     |
+| Network namespace       | Yes    | No   | Lima VM | VM   | Blocked | No     |
+| UTS namespace           | Yes    | No   | Lima VM | VM   | Blocked | No     |
+| IPC namespace           | Yes    | No   | Lima VM | VM   | Blocked | No     |
+| cgroups v2              | Yes    | No   | No      | No   | Blocked | No     |
+| Overlay FS              | Yes    | Copy | nerdctl | No   | Blocked | No     |
+| **Networking**          |        |      |         |      |         |        |
+| Bridge (exp)            | Yes    | No   | No      | No   | Blocked | No     |
+| Port forwarding         | No     | No   | No      | No   | No      | No     |
+| DNS                     | No     | No   | No      | No   | No      | No     |
+| **Mounts & Privileges** |        |      |         |      |         |        |
+| Bind mounts (`-v`)      | Yes    | No   | No      | No   | Blocked | No     |
+| Privileged mode         | Yes    | No   | No      | No   | Blocked | No     |
+| **Security**            |        |      |         |      |         |        |
+| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| Tar path validation     | Yes    | Yes  | Yes     | Yes  | Yes     | Yes    |
+| Setuid stripping        | Yes    | Yes  | Yes     | Yes  | Yes     | Yes    |
+| Device node rejection   | Yes    | Yes  | Yes     | Yes  | Yes     | Yes    |
+| **State persistence**   |        |      |         |      |         |        |
+| Records survive restart | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| PID reconciliation      | Yes    | No   | No      | No   | Blocked | No     |
+| **Observability**       |        |      |         |      |         |        |
+| Structured tracing      | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
+| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes  | Blocked | No     |
 
 ---
 

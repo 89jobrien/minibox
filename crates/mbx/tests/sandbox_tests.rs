@@ -3,7 +3,8 @@
 
 use minibox_core::client::DaemonClient;
 use minibox_core::domain::NetworkMode;
-use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
+use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
+use minibox_macros::test_run;
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -41,7 +42,7 @@ async fn sandbox_times_out_when_container_hangs() {
     tokio::spawn(async move { serve_hang(&sp).await });
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
 
-    let request = DaemonRequest::Run {
+    let request = test_run!(
         image: "minibox-sandbox".to_string(),
         tag: Some("latest".to_string()),
         command: vec!["sh".to_string(), "/workspace/script".to_string()],
@@ -49,15 +50,7 @@ async fn sandbox_times_out_when_container_hangs() {
         cpu_weight: Some(100),
         ephemeral: true,
         network: Some(NetworkMode::None),
-        mounts: vec![],
-        privileged: false,
-        env: vec![],
-        name: None,
-        tty: false,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-    };
+    );
 
     let client = DaemonClient::with_socket(&socket_path);
     let mut stream = client.call(request).await.unwrap();
@@ -108,7 +101,7 @@ async fn sandbox_receives_exit_code_from_stopped_container() {
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
 
     let client = DaemonClient::with_socket(&socket_path);
-    let request = DaemonRequest::Run {
+    let request = test_run!(
         image: "sandbox".to_string(),
         tag: Some("latest".to_string()),
         command: vec!["sh".to_string(), "/workspace/script".to_string()],
@@ -116,15 +109,7 @@ async fn sandbox_receives_exit_code_from_stopped_container() {
         cpu_weight: Some(100),
         ephemeral: true,
         network: Some(NetworkMode::None),
-        mounts: vec![],
-        privileged: false,
-        env: vec![],
-        name: None,
-        tty: false,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-    };
+    );
 
     let mut stream = client.call(request).await.unwrap();
     let mut exit_code = None;

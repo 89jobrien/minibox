@@ -42,6 +42,7 @@ objc2-virtualization = { version = "0.3", optional = true, features = [
 ] }
 
 [dev-dependencies]
+minibox-macros = { workspace = true }
 tempfile = { workspace = true }
 base64 = { workspace = true }
 hostname = "0.4"

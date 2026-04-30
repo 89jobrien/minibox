@@ -1,5 +1,11 @@
 # minibox-agent Design
 
+> **ARCHIVED:** This document describes removed functionality. The
+> `minibox-agent` and `minibox-llm` crates were removed during the
+> consolidation in sessions 29-31 (2026-04-21 to 2026-04-26). See
+> `docs/superpowers/plans/2026-04-28-minibox-agent-reland.md` for the
+> current reland plan.
+
 `feat/minibox-agent-error` implemented a structured agentic loop in `crates/minibox-agent/`.
 It was reverted because it depended on a richer `minibox-llm` API (`InferenceRequest`,
 `Message`, `ContentBlock`, `ToolDefinition`, `.infer()`) that was stripped down to the current
@@ -50,11 +56,11 @@ The loop (in `run_turn`):
 3. Append assistant message to history
 4. If no tool calls in response → return `TurnResult { text, observations }`
 5. For each `ContentBlock::ToolUse { id, name, input }`:
-   - Fire `Event::PreToolUse`
-   - Call `tools.execute(ToolInput { name, args })`
-   - Fire `Event::PostToolUse`
-   - Record `Observation` (session_id, turn, input, output)
-   - Collect `ContentBlock::ToolResult { tool_use_id, content }`
+    - Fire `Event::PreToolUse`
+    - Call `tools.execute(ToolInput { name, args })`
+    - Fire `Event::PostToolUse`
+    - Record `Observation` (session_id, turn, input, output)
+    - Collect `ContentBlock::ToolResult { tool_use_id, content }`
 6. Append tool results as a user turn and loop
 7. Hard limit: `MAX_TOOL_ROUNDS = 50` → `AgentLoopError::MaxRoundsExceeded`
 
@@ -77,15 +83,15 @@ type) — should be replaced with `AgentError` throughout.
 The branch was built against a richer `minibox-llm` interface that was removed before merge.
 What the agent needs vs what currently exists:
 
-| Needed by agent | Current `minibox-llm` | Gap |
-|---|---|---|
-| `InferenceRequest { messages, tools, system, max_tokens }` | `CompletionRequest { prompt, system, max_tokens, schema }` | No message history, no tool definitions |
-| `InferenceResponse { content: Vec<ContentBlock> }` | `CompletionResponse { text: String }` | No structured content blocks |
-| `ContentBlock::Text`, `ToolUse`, `ToolResult` | — | Missing entirely |
-| `Message::user()`, `Message::assistant()`, `Message::tool_results()` | — | Missing entirely |
-| `Role` enum | — | Missing |
-| `ToolDefinition { name, description, schema }` | — | Missing |
-| `LlmProvider::infer(&InferenceRequest)` | `LlmProvider::complete(&CompletionRequest)` | Different method, different types |
+| Needed by agent                                                      | Current `minibox-llm`                                      | Gap                                     |
+| -------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
+| `InferenceRequest { messages, tools, system, max_tokens }`           | `CompletionRequest { prompt, system, max_tokens, schema }` | No message history, no tool definitions |
+| `InferenceResponse { content: Vec<ContentBlock> }`                   | `CompletionResponse { text: String }`                      | No structured content blocks            |
+| `ContentBlock::Text`, `ToolUse`, `ToolResult`                        | —                                                          | Missing entirely                        |
+| `Message::user()`, `Message::assistant()`, `Message::tool_results()` | —                                                          | Missing entirely                        |
+| `Role` enum                                                          | —                                                          | Missing                                 |
+| `ToolDefinition { name, description, schema }`                       | —                                                          | Missing                                 |
+| `LlmProvider::infer(&InferenceRequest)`                              | `LlmProvider::complete(&CompletionRequest)`                | Different method, different types       |
 
 The `CompletionRequest`/`complete()` API is designed for single-turn completions with optional
 structured output. The agent loop requires multi-turn conversation history and tool-use blocks.
@@ -131,11 +137,11 @@ they'll pass immediately once the types exist).
 
 When porting forward, recover these from `feat/minibox-agent-error`:
 
-| File | What to keep |
-|---|---|
-| `crates/minibox-agent/src/error.rs` | `AgentError` as written — no changes needed |
-| `crates/minibox-agent/src/agent.rs` | `Agent`, `TurnResult`, `AgentLoopError`, full test suite |
-| `crates/minibox-agent/src/conversation.rs` | Conversation history management using `Message` types |
+| File                                       | What to keep                                             |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `crates/minibox-agent/src/error.rs`        | `AgentError` as written — no changes needed              |
+| `crates/minibox-agent/src/agent.rs`        | `Agent`, `TurnResult`, `AgentLoopError`, full test suite |
+| `crates/minibox-agent/src/conversation.rs` | Conversation history management using `Message` types    |
 
 The `AgentError` from `error.rs` is already correct and can be committed independently of
 the LLM API work — it compiles fine with the current `minibox-llm` since it only references

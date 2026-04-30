@@ -72,6 +72,23 @@ impl DockerHubRegistry {
         Ok(Self { client, store })
     }
 
+    /// Create a Docker Hub registry adapter targeting a specific platform.
+    ///
+    /// Use this when pulling images for a non-host architecture (e.g.
+    /// cross-platform builds). The platform selects which manifest entry
+    /// to resolve from a multi-arch manifest list.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be initialised.
+    pub fn with_platform(
+        store: Arc<ImageStore>,
+        platform: minibox_core::image::manifest::TargetPlatform,
+    ) -> Result<Self> {
+        let client = RegistryClient::with_platform(platform)?;
+        Ok(Self { client, store })
+    }
+
     /// Return a reference to the underlying image store.
     ///
     /// Useful for callers that need direct store access (e.g. checking disk

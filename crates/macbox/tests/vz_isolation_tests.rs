@@ -66,7 +66,7 @@ mod suite {
     use macbox::vz::proxy::VzProxy;
     use macbox::vz::vm::{VzVm, VzVmConfig};
     use macbox::vz::vsock::connect_to_agent;
-    use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
+    use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::sync::OnceCell;
@@ -198,23 +198,15 @@ mod suite {
         eprintln!("  run_in_vm: {shell_cmd}");
         let stream = connect_to_agent(vm, 30).await.expect("agent connect");
         let mut proxy = VzProxy::new(stream);
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
+        let req = minibox_macros::test_run!(
             command: vec![
                 "/bin/sh".to_string(),
                 "-c".to_string(),
                 shell_cmd.to_string(),
             ],
-            memory_limit_bytes: None,
-            cpu_weight: None,
             ephemeral: true,
-            network: None,
-            env: vec![],
-            mounts: vec![],
             privileged: true,
-            name: None,
-        };
+        );
         let responses = proxy.send_request(&req).await.expect("request failed");
 
         let mut stdout = String::new();

@@ -72,6 +72,16 @@ sudo ./target/release/mbx run alpine -- /bin/echo "Hello"
 sudo ./target/release/mbx ps
 sudo ./target/release/mbx stop <container_id>
 sudo ./target/release/mbx rm <container_id>
+
+# Image refresh (daemon must be running)
+sudo ./target/release/mbx update alpine:latest    # re-pull specific image
+sudo ./target/release/mbx update --all            # re-pull all cached images
+sudo ./target/release/mbx update --containers     # re-pull images used by running containers
+
+# Self-update (no daemon needed)
+./target/release/mbx upgrade              # upgrade to latest GitHub release
+./target/release/mbx upgrade --dry-run    # preview without replacing binary
+./target/release/mbx upgrade --version v0.21.0  # pin to specific version
 ```
 
 ### Testing
@@ -121,7 +131,7 @@ cargo bench -p minibox          # trait_overhead + protocol_codec (local HTML re
 
 **Test Status:**
 
-- Unit + conformance: ~760 tests via nextest (run `cargo nextest list --workspace` for current count; 4 skipped on macOS)
+- Unit + conformance: ~770+ tests via nextest (run `cargo nextest list --workspace` for current count; 4 skipped on macOS)
 - Property-based: 8 daemon proptest properties + 25 minibox property tests (`cargo xtask test-property`)
 - Cgroup integration: 16 tests (Linux+root, `just test-integration`)
 - E2E daemon+CLI: 14 tests (Linux+root, `just test-e2e`)
@@ -158,9 +168,19 @@ cargo xtask test-unit
 
 **Test file organization**: Handler tests in `crates/minibox/tests/handler_tests.rs`. Test helpers (`create_test_deps_with_dir`, `create_test_state_with_dir`) are in that file.
 
+**CLI command test helpers**: `mbx/src/commands/mod.rs` has `test_helpers` module with `setup()`
+(single response) and `setup_multi()` (multi-response) — bind a mock Unix socket, accept one
+connection, write canned `DaemonResponse` lines. Use for any new CLI command tests.
+
+**Hexagonal ports in CLI**: `upgrade.rs` uses `ReleaseProvider` and `AssetDownloader` traits
+with mock doubles for testing `run_upgrade()` without network access. Follow this pattern for
+any new CLI command that talks to external services.
+
 ### Coverage Focus Areas
 
-`handler.rs` (minibox::daemon) is at 67.5% function / 55% line coverage — biggest gap in codebase. Error path tests (image pull failure, empty image, registry unreachable) have good ROI. Use `cargo xtask prepush` to generate llvm-cov coverage report.
+`handler.rs` (minibox::daemon) coverage improved with Wave 2 handler tests but remains the
+biggest gap. Error path tests (image pull failure, empty image, registry unreachable) have good
+ROI. Use `cargo xtask prepush` to generate llvm-cov coverage report.
 
 ## Architecture Overview
 
@@ -607,6 +627,23 @@ Workflows in `.github/workflows/`:
 - `#[derive(Default)]` ignores `#[serde(default = "fn")]` field annotations — derived `Default`
   uses `u16::default()` (0), not the serde default fn. When a struct has field-level serde
   defaults AND is used as `#[serde(default)]` on its parent, implement `Default` manually.
+
+## Plan Status Verification
+
+Plans in `docs/superpowers/plans/` with `status: done` may be incorrect --
+agentic sessions sometimes mark plans done when protocol fields land, even if
+primary deliverable crates were never created. Always verify with `cargo
+metadata` and file existence before trusting plan status.
+
+## Documentation Drift
+
+`docs/CRATE_INVENTORY.md` and `docs/CRATE_TIERS.md` drift as the codebase
+grows. Regenerate inventory counts with `cargo metadata --no-deps` + `wc -l`
+on `crates/*/src/`. Test counts via `cargo nextest list --workspace | tail -1`.
+
+Spec/plan files in `docs/superpowers/` use date prefixes (e.g.
+`2026-04-26-winbox-wsl2-proxy-design.md`). When searching by name, always
+glob with `*name*` pattern, not exact match.
 
 ## Skills Available
 

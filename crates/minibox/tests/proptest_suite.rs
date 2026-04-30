@@ -61,9 +61,13 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         env: vec![],
                         name: None,
                         tty: false,
+                        entrypoint: None,
+                        user: None,
+                        auto_remove: false,
                         priority: None,
                         urgency: None,
                         execution_context: None,
+                        platform: None,
                     }
                 }
             ),
@@ -74,8 +78,13 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
         Just(DaemonRequest::List),
         // Exercises arbitrary image ref strings (the spec's ImageRef invariant —
         // ImageRef is not public, but Pull carries the same data through the wire).
-        (any::<String>(), option::of(any::<String>()))
-            .prop_map(|(image, tag)| DaemonRequest::Pull { image, tag }),
+        (any::<String>(), option::of(any::<String>())).prop_map(|(image, tag)| {
+            DaemonRequest::Pull {
+                image,
+                tag,
+                platform: None,
+            }
+        }),
         (any::<String>(), any::<String>(), any::<String>())
             .prop_map(|(path, name, tag)| DaemonRequest::LoadImage { path, name, tag }),
         (
@@ -92,6 +101,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                     env,
                     working_dir,
                     tty,
+                    user: None,
                 }
             ),
         (arb_session_id(), any::<String>())

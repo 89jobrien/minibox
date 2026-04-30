@@ -94,8 +94,8 @@ pub enum RegistryError {
     #[error("failed to fetch blob {digest}: {message}")]
     BlobFetch { digest: String, message: String },
 
-    #[error("no linux/amd64 manifest found in manifest list")]
-    NoAmd64Manifest,
+    #[error("no {platform} manifest found in manifest list")]
+    NoPlatformManifest { platform: String },
 
     #[error("manifest list nesting too deep (max 2 levels)")]
     ManifestNestingTooDeep,

@@ -51,14 +51,14 @@ sudo ./target/release/mbx rm <id>
 
 ## Platform Support
 
-| Platform | Status | Adapter | Notes |
-| --- | --- | --- | --- |
-| Linux x86_64 | **Production** | `native` | Full namespace/cgroup v2/overlay isolation |
-| Linux aarch64 | **Production** | `native` | Same as x86_64 |
-| Linux (GKE) | **Production** | `gke` | Unprivileged pods via proot + copy-FS |
-| macOS (Apple Silicon) | Experimental | `colima`, `krun` (WIP) | VZ blocked by Apple bug ([GH #61](https://github.com/89jobrien/minibox/issues/61)) |
-| macOS (Intel) | Experimental | `colima` | exec/logs limited |
-| Windows | Planned | `winbox` stub | `winbox::start()` returns error; no runtime yet |
+| Platform              | Status         | Adapter                | Notes                                                                              |
+| --------------------- | -------------- | ---------------------- | ---------------------------------------------------------------------------------- |
+| Linux x86_64          | **Production** | `native`               | Full namespace/cgroup v2/overlay isolation                                         |
+| Linux aarch64         | **Production** | `native`               | Same as x86_64                                                                     |
+| Linux (GKE)           | **Production** | `gke`                  | Unprivileged pods via proot + copy-FS                                              |
+| macOS (Apple Silicon) | Experimental   | `colima`, `krun` (WIP) | VZ blocked by Apple bug ([GH #61](https://github.com/89jobrien/minibox/issues/61)) |
+| macOS (Intel)         | Experimental   | `colima`               | exec/logs limited                                                                  |
+| Windows               | Planned        | `winbox` stub          | `winbox::start()` returns error; no runtime yet                                    |
 
 See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 capability breakdown.
@@ -71,14 +71,14 @@ daemon to exit before binding the socket.
 
 ## Security Model
 
-| Area | Protection |
-| --- | --- |
-| Socket auth | `SO_PEERCRED` -- UID 0 only, socket mode `0600` |
-| Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction |
+| Area           | Protection                                                          |
+| -------------- | ------------------------------------------------------------------- |
+| Socket auth    | `SO_PEERCRED` -- UID 0 only, socket mode `0600`                     |
+| Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction  |
 | Tar extraction | Rejects `..`, absolute symlinks, device nodes; strips setuid/setgid |
-| DoS limits | 1 MB request, 10 MB manifest, 1 GB/layer, 5 GB total image |
-| Mount flags | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs |
-| PID limit | 1024 per container (default) |
+| DoS limits     | 1 MB request, 10 MB manifest, 1 GB/layer, 5 GB total image          |
+| Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
+| PID limit      | 1024 per container (default)                                        |
 
 **Not yet implemented:** capability dropping, seccomp filters, user namespace
 remapping, rootless support. See `CLAUDE.md` ("Security Considerations") for
@@ -90,7 +90,7 @@ the full threat model.
 
 Eight crates in the workspace:
 
-```
+```rust
                          +--------------+
                          |   miniboxd   |  binary -- daemon entrypoint
                          +------+-------+
@@ -108,8 +108,8 @@ Eight crates in the workspace:
         +-----+------+
               |
         +-----+------+
-        |minibox-     |  proc macros (as_any!, adapt!)
-        |  macros     |
+        | minibox-   |  proc macros (as_any!, adapt!)
+        |  macros    |
         +------------+
 
         +------------+         +------------+
@@ -128,18 +128,18 @@ them. Tests use mock adapters -- no real HTTP or filesystem needed.
 
 ## Experimental and Planned
 
-| Feature | Status | Notes |
-| --- | --- | --- |
-| Bridge networking | Experimental | `MINIBOX_NETWORK_MODE=bridge`; Linux native only |
-| OCI push/commit/build | Experimental | Adapters exist; not wired into miniboxd |
-| macOS Colima | Experimental | run/stop/ps work; exec/logs limited |
-| macOS VZ.framework | Blocked | Apple bug on macOS 26 ARM64 ([GH #61](https://github.com/89jobrien/minibox/issues/61)) |
-| Observability | Opt-in | OTLP (`feature = "otel"`), Prometheus (`feature = "metrics"`) |
-| Windows | Planned | `winbox` stub compiles; WSL2 is the likely first backend |
-| Port forwarding / DNS | Planned | Not started |
-| Rootless | Planned | No user namespace remapping yet |
-| Dockerfile parser | Planned | `MiniboxImageBuilder` exists but no DSL |
-| MCP control surface | Planned | Agent-facing pull/run/ps/stop/rm |
+| Feature               | Status       | Notes                                                                                  |
+| --------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| Bridge networking     | Experimental | `MINIBOX_NETWORK_MODE=bridge`; Linux native only                                       |
+| OCI push/commit/build | Experimental | Adapters exist; not wired into miniboxd                                                |
+| macOS Colima          | Experimental | run/stop/ps work; exec/logs limited                                                    |
+| macOS VZ.framework    | Blocked      | Apple bug on macOS 26 ARM64 ([GH #61](https://github.com/89jobrien/minibox/issues/61)) |
+| Observability         | Opt-in       | OTLP (`feature = "otel"`), Prometheus (`feature = "metrics"`)                          |
+| Windows               | Planned      | `winbox` stub compiles; WSL2 is the likely first backend                               |
+| Port forwarding / DNS | Planned      | Not started                                                                            |
+| Rootless              | Planned      | No user namespace remapping yet                                                        |
+| Dockerfile parser     | Planned      | `MiniboxImageBuilder` exists but no DSL                                                |
+| MCP control surface   | Planned      | Agent-facing pull/run/ps/stop/rm                                                       |
 
 Roadmap details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -168,13 +168,13 @@ cargo clippy --workspace -- -D warnings
 cargo xtask pre-commit             # fmt + clippy + release build gate
 ```
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `MINIBOX_ADAPTER` | `native` | Adapter suite selection |
-| `MINIBOX_DATA_DIR` | `/var/lib/minibox` | Image + container storage |
-| `MINIBOX_RUN_DIR` | `/run/minibox` | Socket + runtime state |
-| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root |
-| `RUST_LOG` | -- | Tracing log level |
+| Variable              | Default                                         | Purpose                   |
+| --------------------- | ----------------------------------------------- | ------------------------- |
+| `MINIBOX_ADAPTER`     | `native`                                        | Adapter suite selection   |
+| `MINIBOX_DATA_DIR`    | `/var/lib/minibox`                              | Image + container storage |
+| `MINIBOX_RUN_DIR`     | `/run/minibox`                                  | Socket + runtime state    |
+| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
+| `RUST_LOG`            | --                                              | Tracing log level         |
 
 Git workflow: `main` (develop) -> `next` (auto-promoted on green CI) ->
 `stable` (manual, tagged releases). See

@@ -235,6 +235,7 @@ impl ContainerRuntime for Wsl2Runtime {
 
         debug!(pid = response.pid, "wsl2: container spawned");
         Ok(SpawnResult {
+            runtime_id: None,
             pid: response.pid,
             output_reader: None,
         })

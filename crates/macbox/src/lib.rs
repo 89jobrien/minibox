@@ -122,6 +122,7 @@ pub fn build_colima_handler_dependencies(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
 
@@ -425,6 +426,7 @@ async fn start_krun(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
@@ -614,6 +616,7 @@ async fn start_vz(
         image_gc: vz_image_gc,
         image_store: vz_image_store_ref,
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
             minibox::daemon::handler::PtySessionRegistry::default(),
         )),

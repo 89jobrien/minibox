@@ -233,6 +233,8 @@ pub struct HandlerDependencies {
     pub events: EventDeps,
     /// Policy controlling which container capabilities are permitted.
     pub policy: ContainerPolicy,
+    /// VM checkpoint adapter for save/restore snapshot operations.
+    pub checkpoint: minibox_core::domain::DynVmCheckpoint,
 }
 
 impl HandlerDependencies {
@@ -326,6 +328,7 @@ pub async fn handle_run(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -372,6 +375,7 @@ pub async fn handle_run(
             privileged,
             env,
             name,
+            platform,
             state,
             deps,
             tx,
@@ -392,6 +396,7 @@ pub async fn handle_run(
         privileged,
         env,
         name,
+        platform,
         state,
         deps,
     )
@@ -427,6 +432,7 @@ async fn handle_run_streaming(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -448,12 +454,13 @@ async fn handle_run_streaming(
         privileged,
         env,
         name,
+        platform,
         Arc::clone(&state),
         Arc::clone(&deps),
     )
     .await;
 
-    let (container_id, pid, output_reader) = match result {
+    let (container_id, pid, output_reader, runtime_id) = match result {
         Ok(triple) => triple,
         Err(e) => {
             error!("handle_run_streaming setup error: {e:#}");
@@ -546,11 +553,13 @@ async fn handle_run_streaming(
         }
     });
 
-    // Wait for the child process to exit.
+    // Wait for the child process to exit via the runtime adapter.
+    // Native adapters use waitpid; krun/smolvm delegates to SmolvmProcess::wait().
     debug!(pid = pid, "streaming: waiting for child exit");
-    let exit_code = tokio::task::spawn_blocking(move || handler_wait_for_exit(pid))
+    let runtime = Arc::clone(&deps.lifecycle.runtime);
+    let exit_code = runtime
+        .wait_for_exit(runtime_id.as_deref(), pid)
         .await
-        .unwrap_or(Ok(-1))
         .unwrap_or(-1);
     debug!(pid = pid, exit_code = exit_code, "streaming: child exited");
 
@@ -631,9 +640,10 @@ async fn run_inner_capture(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
-) -> Result<(String, u32, std::os::fd::OwnedFd)> {
+) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
     use anyhow::Context;
     use minibox_core::domain::NetworkConfig;
 
@@ -648,8 +658,13 @@ async fn run_inner_capture(
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
-    // Select registry based on image reference hostname.
-    let registry = deps.image.registry_router.route(&image_ref);
+    // Resolve platform-overridden registry if requested, otherwise route by hostname.
+    let platform_registry = resolve_platform_registry(&platform, &image_ref, &deps)?;
+    let default_registry = deps.image.registry_router.route(&image_ref);
+    let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
+        Some(r) => r.as_ref(),
+        None => default_registry,
+    };
 
     if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
@@ -793,6 +808,7 @@ async fn run_inner_capture(
     let spawn_result = deps.lifecycle.runtime.spawn_process(&spawn_config).await?;
 
     let pid = spawn_result.pid;
+    let runtime_id = spawn_result.runtime_id;
     let output_reader = spawn_result.output_reader.ok_or_else(|| {
         anyhow::anyhow!("capture_output=true but runtime returned no output_reader")
     })?;
@@ -811,7 +827,7 @@ async fn run_inner_capture(
     }
     state.set_container_pid(&id, pid).await;
 
-    Ok((id, pid, output_reader))
+    Ok((id, pid, output_reader, runtime_id))
 }
 
 /// Pull the image if needed, set up the overlay rootfs and cgroup, register the
@@ -842,6 +858,7 @@ async fn run_inner(
     privileged: bool,
     env: Vec<String>,
     name: Option<String>,
+    platform: Option<String>,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
@@ -859,8 +876,13 @@ async fn run_inner(
     let tag = image_ref.tag.clone();
     let full_image = image_ref.cache_name();
 
-    // Select registry based on image reference hostname.
-    let registry = deps.image.registry_router.route(&image_ref);
+    // Resolve platform-overridden registry if requested, otherwise route by hostname.
+    let platform_registry = resolve_platform_registry(&platform, &image_ref, &deps)?;
+    let default_registry = deps.image.registry_router.route(&image_ref);
+    let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
+        Some(r) => r.as_ref(),
+        None => default_registry,
+    };
 
     // Pull image if not cached (using injected registry trait).
     if !registry.has_image(&full_image, &tag).await {
@@ -1070,7 +1092,9 @@ async fn run_inner(
                 let hooks_wait = spawn_config.hooks.post_exit.clone();
                 let event_sink_wait = Arc::clone(&event_sink_clone);
                 let cgroup_path_wait = spawn_config.cgroup_path.clone();
-                tokio::task::spawn_blocking(move || {
+                let runtime_wait = Arc::clone(&runtime_clone);
+                let runtime_id = spawn_result.runtime_id.clone();
+                tokio::spawn(async move {
                     daemon_wait_for_exit(
                         pid,
                         &id_wait,
@@ -1079,7 +1103,10 @@ async fn run_inner(
                         hooks_wait,
                         event_sink_wait,
                         cgroup_path_wait,
-                    );
+                        runtime_wait,
+                        runtime_id,
+                    )
+                    .await;
                 });
             }
             Err(e) => {
@@ -1101,32 +1128,6 @@ async fn run_inner(
     Ok(id)
 }
 
-/// Wait for a process to exit and return its exit code.
-///
-/// Thin wrapper around `waitpid` usable on any Unix platform.
-/// The `minibox::container::process::wait_for_exit` variant is only
-/// available on Linux (the `container` module is gated
-/// `#[cfg(target_os = "linux")]`). This local version provides the same
-/// functionality for the macOS streaming path.
-#[cfg(unix)]
-fn handler_wait_for_exit(pid: u32) -> Result<i32> {
-    use nix::sys::wait::{WaitStatus, waitpid};
-    use nix::unistd::Pid;
-    let nix_pid = Pid::from_raw(pid as i32);
-    match waitpid(nix_pid, None) {
-        Ok(WaitStatus::Exited(_, code)) => Ok(code),
-        Ok(WaitStatus::Signaled(_, sig, _)) => Ok(-(sig as i32)),
-        Ok(other) => {
-            info!(pid = pid, wait_status = ?other, "handler_wait_for_exit: unexpected status");
-            Ok(-1)
-        }
-        Err(e) => {
-            warn!(pid = pid, error = %e, "handler_wait_for_exit: waitpid error");
-            Ok(-1)
-        }
-    }
-}
-
 /// Check if a container was OOM-killed by reading cgroup v2 `memory.events`.
 ///
 /// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
@@ -1143,33 +1144,16 @@ async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
     false
 }
 
-/// Synchronous variant of [`check_oom_killed`] for use inside `spawn_blocking` contexts.
-fn check_oom_killed_sync(cgroup_path: &std::path::Path) -> bool {
-    let events_path = cgroup_path.join("memory.events");
-    if let Ok(content) = std::fs::read_to_string(&events_path) {
-        for line in content.lines() {
-            if let Some(rest) = line.strip_prefix("oom_kill ") {
-                return rest.trim().parse::<u64>().unwrap_or(0) > 0;
-            }
-        }
-    }
-    false
-}
-
-/// Block the calling thread until the container process exits.
 ///
-/// This function must be called from a `tokio::task::spawn_blocking` context
-/// because `waitpid(2)` is a blocking syscall that cannot run on a Tokio
-/// worker thread.
+/// Waits for the container process to exit via the runtime adapter, then
+/// updates state and emits lifecycle events.
 ///
-/// After the process exits:
-/// 1. Any post-exit hooks registered on the container are executed
-///    (Linux only, via `minibox::container::process::run_hooks`).
-/// 2. The container state is updated to `"Stopped"` in `DaemonState`.
-///    Because this runs in a blocking thread, the state update bridges back
-///    to the async runtime via `Handle::try_current` or a one-shot runtime.
+/// Uses `runtime.wait_for_exit()` which dispatches to `waitpid` for native
+/// adapters or to the adapter's own wait mechanism (e.g. `SmolvmProcess::wait`
+/// for krun).
+#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
-fn daemon_wait_for_exit(
+async fn daemon_wait_for_exit(
     pid: u32,
     id: &str,
     state: Arc<DaemonState>,
@@ -1177,28 +1161,17 @@ fn daemon_wait_for_exit(
     _post_exit_hooks: Vec<HookSpec>,
     event_sink: Arc<dyn EventSink>,
     cgroup_path: std::path::PathBuf,
+    runtime: DynContainerRuntime,
+    runtime_id: Option<String>,
 ) {
-    use nix::sys::wait::{WaitStatus, waitpid};
-    use nix::unistd::Pid;
-    let nix_pid = Pid::from_raw(pid as i32);
-    let exit_code = match waitpid(nix_pid, None) {
-        Ok(WaitStatus::Exited(_, code)) => {
-            info!(container_id = %id, exit_code = code, "container: exited");
-            code
-        }
-        Ok(WaitStatus::Signaled(_, sig, _)) => {
-            info!(container_id = %id, signal = %sig, "container: killed by signal");
-            -(sig as i32)
-        }
-        Ok(other) => {
-            info!(container_id = %id, status = ?other, "container: unexpected wait status");
+    let exit_code = runtime
+        .wait_for_exit(runtime_id.as_deref(), pid)
+        .await
+        .unwrap_or_else(|e| {
+            warn!(container_id = %id, error = %e, "container: wait_for_exit error");
             -1
-        }
-        Err(e) => {
-            warn!(container_id = %id, error = %e, "container: waitpid error");
-            -1
-        }
-    };
+        });
+    info!(container_id = %id, exit_code = exit_code, "container: exited");
 
     #[cfg(target_os = "linux")]
     if !_post_exit_hooks.is_empty() {
@@ -1208,8 +1181,8 @@ fn daemon_wait_for_exit(
         }
     }
 
-    // Check OOM and emit lifecycle event (sync: read memory.events directly).
-    let oom = check_oom_killed_sync(&cgroup_path);
+    // Check OOM and emit lifecycle event.
+    let oom = check_oom_killed(&cgroup_path).await;
     if oom {
         event_sink.emit(ContainerEvent::OomKilled {
             id: id.to_string(),
@@ -1223,24 +1196,11 @@ fn daemon_wait_for_exit(
         });
     }
 
-    // Mark stopped; bridge async state update from sync context.
-    match tokio::runtime::Handle::try_current() {
-        Ok(handle) => {
-            if let Err(e) =
-                handle.block_on(state.update_container_state(id, ContainerState::Stopped))
-            {
-                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
-            }
-        }
-        Err(_) => {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("one-shot runtime");
-            if let Err(e) = rt.block_on(state.update_container_state(id, ContainerState::Stopped)) {
-                warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
-            }
-        }
+    if let Err(e) = state
+        .update_container_state(id, ContainerState::Stopped)
+        .await
+    {
+        warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
     }
 }
 
@@ -1249,7 +1209,7 @@ fn daemon_wait_for_exit(
 /// Containers on Windows remain in `"Running"` state until an explicit
 /// `stop` or `remove` command is issued.
 #[cfg(windows)]
-fn daemon_wait_for_exit(
+async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
@@ -1257,13 +1217,15 @@ fn daemon_wait_for_exit(
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
     _cgroup_path: std::path::PathBuf,
+    _runtime: DynContainerRuntime,
+    _runtime_id: Option<String>,
 ) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
 
 /// Fallback stub for platforms other than Unix or Windows.
 #[cfg(not(any(unix, windows)))]
-fn daemon_wait_for_exit(
+async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
@@ -1271,6 +1233,8 @@ fn daemon_wait_for_exit(
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
     _cgroup_path: std::path::PathBuf,
+    _runtime: DynContainerRuntime,
+    _runtime_id: Option<String>,
 ) {
     // No-op on this platform.
 }
@@ -1696,11 +1660,50 @@ pub async fn handle_logs(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
-/// Pull an image from the appropriate registry and cache it locally.
+/// Apply a per-request platform override to whichever registry the router selected.
+///
+/// Downcasts the routed registry to its concrete type and reconstructs it with
+/// the requested [`TargetPlatform`].  Returns `None` when `platform` is absent
+/// (the caller should use the router's result directly).
+///
+/// # Errors
+///
+/// Returns an error if `platform` cannot be parsed, or if the adapter cannot
+/// be reconstructed (e.g. TLS init failure).
+fn resolve_platform_registry(
+    platform: &Option<String>,
+    image_ref: &minibox_core::image::reference::ImageRef,
+    deps: &HandlerDependencies,
+) -> Result<Option<Box<dyn minibox_core::domain::ImageRegistry>>> {
+    let Some(p) = platform else {
+        return Ok(None);
+    };
+
+    let tp = minibox_core::image::manifest::TargetPlatform::parse(p)?;
+    info!(platform = %p, "using per-request platform override");
+
+    // Route first so we know which registry type owns this image reference,
+    // then reconstruct that adapter with the platform override applied.
+    let routed = deps.image.registry_router.route(image_ref);
+
+    if routed.as_any().is::<crate::adapters::GhcrRegistry>() {
+        let registry =
+            crate::adapters::GhcrRegistry::with_platform(Arc::clone(&deps.image.image_store), tp)?;
+        return Ok(Some(Box::new(registry)));
+    }
+
+    // Default: treat as Docker Hub (covers `native` adapter and any unknown
+    // hostname that the router falls back to its default for).
+    let registry =
+        crate::adapters::DockerHubRegistry::with_platform(Arc::clone(&deps.image.image_store), tp)?;
+    Ok(Some(Box::new(registry)))
+}
+
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,
+    platform: Option<String>,
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
@@ -1720,8 +1723,23 @@ pub async fn handle_pull(
     };
     let tag = image_ref.tag.clone();
 
-    // Select registry based on image reference hostname.
-    let registry = deps.image.registry_router.route(&image_ref);
+    // When a platform override is requested, reconstruct the routed registry
+    // adapter with the requested platform applied. Otherwise use the router's
+    // result directly.  The box is held for the lifetime of the pull call.
+    let platform_registry = match resolve_platform_registry(&platform, &image_ref, &deps) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("handle_pull: invalid platform: {e}");
+            return DaemonResponse::Error {
+                message: format!("invalid platform: {e}"),
+            };
+        }
+    };
+
+    let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
+        Some(r) => r.as_ref(),
+        None => deps.image.registry_router.route(&image_ref),
+    };
 
     // Pull image (using selected registry trait).
     let start = std::time::Instant::now();
@@ -2470,6 +2488,210 @@ pub(crate) async fn handle_remove_image(
         Err(e) => {
             send_error(&tx, "handle_build", e.to_string()).await;
         }
+    }
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+
+// ─── Snapshot handlers ───────────────────────────────────────────────────────
+
+/// Save a VM state snapshot for a container.
+pub async fn handle_save_snapshot(
+    id: String,
+    name: Option<String>,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let snap_name = name.unwrap_or_else(|| Utc::now().format("%Y%m%d-%H%M%S").to_string());
+
+    let data_dir = &deps.lifecycle.containers_base;
+    let snap_dir = data_dir
+        .parent()
+        .unwrap_or(data_dir)
+        .join("snapshots")
+        .join(&id);
+    if let Err(e) = std::fs::create_dir_all(&snap_dir) {
+        return DaemonResponse::Error {
+            message: format!("failed to create snapshot dir: {e}"),
+        };
+    }
+
+    let snap_path = snap_dir.join(format!("{snap_name}.snap"));
+    match deps.checkpoint.save_snapshot(&id, &snap_path) {
+        Ok(info) => DaemonResponse::SnapshotSaved { info },
+        Err(e) => DaemonResponse::Error {
+            message: format!("save_snapshot: {e}"),
+        },
+    }
+}
+
+/// Restore a VM state snapshot for a container.
+pub async fn handle_restore_snapshot(
+    id: String,
+    name: String,
+    _state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> DaemonResponse {
+    let data_dir = &deps.lifecycle.containers_base;
+    let snap_path = data_dir
+        .parent()
+        .unwrap_or(data_dir)
+        .join("snapshots")
+        .join(&id)
+        .join(format!("{name}.snap"));
+
+    match deps.checkpoint.restore_snapshot(&id, &snap_path) {
+        Ok(()) => DaemonResponse::SnapshotRestored { id, name },
+        Err(e) => DaemonResponse::Error {
+            message: format!("restore_snapshot: {e}"),
+        },
+    }
+}
+
+/// List available snapshots for a container.
+pub async fn handle_list_snapshots(id: String, deps: Arc<HandlerDependencies>) -> DaemonResponse {
+    match deps.checkpoint.list_snapshots(&id) {
+        Ok(snapshots) => DaemonResponse::SnapshotList { id, snapshots },
+        Err(e) => DaemonResponse::Error {
+            message: format!("list_snapshots: {e}"),
+        },
+    }
+}
+
+// ─── Update ─────────────────────────────────────────────────────────────────
+
+/// Re-pull cached images to pick up newer versions.
+///
+/// Sends a non-terminal [`DaemonResponse::UpdateProgress`] for each image
+/// processed, then a terminal [`DaemonResponse::Success`] with a summary.
+///
+/// # Image resolution order
+///
+/// 1. If `all` is `true`: every image returned by [`ImageStore::list_all_images`].
+/// 2. If `containers` is `true`: deduplicated `source_image_ref` values from all
+///    container records held in `state`.
+/// 3. Otherwise: the explicit `images` list.
+///
+/// When `restart` is `true` a warning is logged for each affected container;
+/// the actual restart is not yet implemented (tracked for a later wave).
+pub async fn handle_update(
+    images: Vec<String>,
+    all: bool,
+    containers: bool,
+    restart: bool,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    // ── Step 1: resolve the list of image refs to update ─────────────────────
+    let target_refs: Vec<String> = if all {
+        match deps.image.image_store.list_all_images().await {
+            Ok(refs) => refs,
+            Err(e) => {
+                send_error(
+                    &tx,
+                    "handle_update",
+                    format!("failed to list images: {e:#}"),
+                )
+                .await;
+                return;
+            }
+        }
+    } else if containers {
+        let containers_list = state.list_containers().await;
+        let mut seen = std::collections::HashSet::new();
+        let mut refs = Vec::new();
+        for info in containers_list {
+            let record = state.get_container(&info.id).await;
+            if let Some(source_ref) = record.and_then(|r| r.source_image_ref)
+                && seen.insert(source_ref.clone())
+            {
+                refs.push(source_ref);
+            }
+        }
+        refs
+    } else {
+        images
+    };
+
+    let total = target_refs.len();
+    let mut updated: usize = 0;
+
+    // ── Step 2: pull each image, send UpdateProgress per image ────────────────
+    for ref_str in &target_refs {
+        let image_ref = match ImageRef::parse(ref_str) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    image = %ref_str,
+                    error = %e,
+                    "handle_update: invalid image reference, skipping"
+                );
+                let status = format!("error: {e}");
+                if tx
+                    .send(DaemonResponse::UpdateProgress {
+                        image: ref_str.clone(),
+                        status,
+                    })
+                    .await
+                    .is_err()
+                {
+                    warn!(
+                        image = %ref_str,
+                        "handle_update: client disconnected during UpdateProgress"
+                    );
+                    return;
+                }
+                continue;
+            }
+        };
+
+        let registry = deps.image.registry_router.route(&image_ref);
+        let status = match registry.pull_image(&image_ref).await {
+            Ok(_) => {
+                info!(
+                    image = %ref_str,
+                    "handle_update: image refreshed"
+                );
+                updated += 1;
+                "updated".to_string()
+            }
+            Err(e) => {
+                warn!(
+                    image = %ref_str,
+                    error = %e,
+                    "handle_update: pull failed"
+                );
+                format!("error: {e:#}")
+            }
+        };
+
+        if tx
+            .send(DaemonResponse::UpdateProgress {
+                image: ref_str.clone(),
+                status,
+            })
+            .await
+            .is_err()
+        {
+            warn!(
+                image = %ref_str,
+                "handle_update: client disconnected during UpdateProgress"
+            );
+            return;
+        }
+    }
+
+    // ── Step 3: restart if requested (not yet implemented) ────────────────────
+    if restart {
+        warn!("handle_update: restart not yet implemented — skipping container restart");
+    }
+
+    // ── Step 4: terminal Success ──────────────────────────────────────────────
+    let message = format!("updated {updated}/{total} images");
+    info!(updated, total, "handle_update: complete");
+    if tx.send(DaemonResponse::Success { message }).await.is_err() {
+        warn!("handle_update: client disconnected before Success could be sent");
     }
 }
 

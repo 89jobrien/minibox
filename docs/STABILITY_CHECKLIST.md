@@ -10,14 +10,14 @@ Last updated: 2026-04-27
 
 ## Gates
 
-| # | Gate | Status | Evidence |
-| - | ---- | ------ | -------- |
-| 1 | Protocol types have a single source of truth | Met | `minibox-core/src/protocol.rs` (#122/#128) |
-| 2 | Handler coverage >= 80% function coverage | Not met | Current ~67.5% (`handler.rs`) |
-| 3 | All wired adapters have at least one integration test | Met | native, gke, colima all tested |
-| 4 | `cargo xtask pre-commit` passes on macOS | Met | fmt + clippy + release build |
-| 5 | `cargo xtask test-unit` passes | Met | ~760 tests |
-| 6 | `cargo deny check` passes | Met | License + advisory audit in CI |
+| #   | Gate                                                  | Status  | Evidence                                   |
+| --- | ----------------------------------------------------- | ------- | ------------------------------------------ |
+| 1   | Protocol types have a single source of truth          | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
+| 2   | Handler coverage >= 80% function coverage             | Not met | Current ~67.5% (`handler.rs`)              |
+| 3   | All wired adapters have at least one integration test | Met     | native, gke, colima all tested             |
+| 4   | `cargo xtask pre-commit` passes on macOS              | Met     | fmt + clippy + release build               |
+| 5   | `cargo xtask test-unit` passes                        | Met     | ~760 tests                                 |
+| 6   | `cargo deny check` passes                             | Met     | License + advisory audit in CI             |
 
 ---
 

@@ -1,7 +1,8 @@
 ---
-status: done
+status: archived
 completed: "2026-04-20"
 branch: main
+note: "Protocol wiring landed (RunPipeline, slashcrux fields); minibox-agent and minibox-crux-plugin crates never created"
 ---
 
 # Crux-Minibox Integration Implementation Plan

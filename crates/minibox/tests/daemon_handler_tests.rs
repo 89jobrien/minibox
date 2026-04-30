@@ -45,6 +45,7 @@ async fn handle_run_once(
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -117,6 +118,7 @@ fn build_deps(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -177,6 +179,7 @@ fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -209,6 +212,7 @@ async fn test_handle_pull_success() {
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -233,7 +237,7 @@ async fn test_handle_pull_with_library_prefix() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // Bare image name should get "library/" prefix
-    let response = handler::handle_pull("ubuntu".to_string(), None, state, deps).await;
+    let response = handler::handle_pull("ubuntu".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Success { .. } => {
@@ -286,10 +290,11 @@ async fn test_handle_pull_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    let response = handler::handle_pull("alpine".to_string(), None, state, deps).await;
+    let response = handler::handle_pull("alpine".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {
@@ -347,6 +352,7 @@ async fn test_handle_run_with_cached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -423,6 +429,7 @@ async fn test_handle_run_pulls_uncached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -493,6 +500,7 @@ async fn test_handle_run_filesystem_setup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -560,6 +568,7 @@ async fn test_handle_run_resource_limiter_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -627,6 +636,7 @@ async fn test_handle_run_runtime_spawn_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -801,6 +811,7 @@ async fn test_full_container_lifecycle() {
     let pull_response = handler::handle_pull(
         "nginx".to_string(),
         Some("alpine".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -905,6 +916,7 @@ fn create_test_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -984,6 +996,7 @@ async fn test_handle_run_explicit_network_none() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -1196,6 +1209,7 @@ async fn test_run_with_network_mode_host() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -1281,6 +1295,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1443,6 +1458,7 @@ async fn test_handle_run_empty_image_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1572,6 +1588,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1629,7 +1646,8 @@ async fn test_handle_pull_invalid_image_ref_returns_error() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // "ghcr.io/imageonly" fails parse: non-docker.io registry requires org/name format.
-    let response = handler::handle_pull("ghcr.io/imageonly".to_string(), None, state, deps).await;
+    let response =
+        handler::handle_pull("ghcr.io/imageonly".to_string(), None, None, state, deps).await;
 
     match response {
         DaemonResponse::Error { message } => {
@@ -1723,6 +1741,7 @@ async fn test_handle_run_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1868,12 +1887,14 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "ghcr.io/org/myimage".to_string(),
         Some("v1.0".to_string()),
+        None,
         state,
         deps,
     )
@@ -1942,6 +1963,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2016,6 +2038,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2086,6 +2109,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2377,6 +2401,7 @@ async fn test_handle_remove_failed_container_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2456,12 +2481,14 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "ghcr.io/org/myimage".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -2695,6 +2722,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2710,6 +2738,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -2780,6 +2809,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2795,6 +2825,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -2858,6 +2889,7 @@ async fn test_run_empty_image_no_layers() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2932,12 +2964,14 @@ async fn test_pull_registry_failure_with_tag() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let response = handler::handle_pull(
         "testimage".to_string(),
         Some("v1.0".to_string()),
+        None,
         state,
         deps,
     )
@@ -3020,6 +3054,7 @@ impl minibox_core::domain::ContainerRuntime for PipedMockRuntime {
         Ok(minibox_core::domain::SpawnResult {
             pid: u32::MAX, // fake PID; waitpid will return ECHILD → exit_code -1
             output_reader: Some(output_reader),
+            runtime_id: None,
         })
     }
 }
@@ -3078,6 +3113,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3093,6 +3129,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3455,6 +3492,7 @@ fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<Han
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy,
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
@@ -3483,6 +3521,7 @@ async fn test_policy_denies_bind_mount_by_default() {
         vec![bind_mount],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3521,6 +3560,7 @@ async fn test_policy_denies_privileged_by_default() {
         vec![],
         true, // privileged
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3595,6 +3635,7 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -3631,6 +3672,7 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
         vec![],
         true, // privileged
         vec![],
+        None,
         None,
         state,
         deps,
@@ -3690,6 +3732,7 @@ async fn test_handle_run_image_pull_failure() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3752,6 +3795,7 @@ async fn test_handle_run_empty_layers() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -3814,12 +3858,14 @@ async fn test_handle_pull_nonexistent_image() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let resp = handler::handle_pull(
         "does-not-exist".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -4285,6 +4331,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
         false,
         vec![],
         Some("mybox".to_string()),
+        None,
         Arc::clone(&state),
         Arc::clone(&deps),
         tx1,
@@ -4310,6 +4357,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
         false,
         vec![],
         Some("mybox".to_string()),
+        None,
         Arc::clone(&state),
         Arc::clone(&deps),
         tx2,
@@ -4998,6 +5046,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 
     let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
@@ -5014,6 +5063,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps_fail,
@@ -5071,6 +5121,7 @@ async fn test_handle_run_filesystem_setup_failure_v2() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5136,6 +5187,7 @@ async fn test_handle_run_limiter_create_failure() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5201,6 +5253,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5220,6 +5273,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
         }],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -5278,6 +5332,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
             allow_bind_mounts: false,
             allow_privileged: false,
         },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -5293,6 +5348,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
         vec![],
         true, // privileged=true, policy denies it
         vec![],
+        None,
         None,
         state,
         deps,
@@ -5362,7 +5418,7 @@ async fn test_handle_pull_invalid_image_ref_returns_error_v2() {
     let state = create_test_state_with_dir(&temp_dir);
 
     // An empty string is not a valid image reference.
-    let resp = handler::handle_pull("".to_string(), None, state, deps).await;
+    let resp = handler::handle_pull("".to_string(), None, None, state, deps).await;
 
     assert!(
         matches!(resp, DaemonResponse::Error { .. }),
@@ -5443,6 +5499,7 @@ async fn test_handle_run_bridge_network_mode_calls_setup() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -5635,6 +5692,7 @@ async fn test_handle_stop_resolves_by_name() {
         false,
         vec![],
         Some("my-stop-ctr".to_string()),
+        None,
         state.clone(),
         deps.clone(),
         tx,
@@ -6151,6 +6209,7 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
         false,
         vec![],
         None,
+        None,
         state.clone(),
         deps.clone(),
         tx_run,
@@ -6192,6 +6251,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         false,
         vec![],
         Some("mycontainer".to_string()),
+        None,
         state.clone(),
         deps.clone(),
         tx1,
@@ -6216,6 +6276,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         false,
         vec![],
         Some("mycontainer".to_string()),
+        None,
         state,
         deps,
         tx2,
@@ -6264,6 +6325,7 @@ async fn test_handle_run_network_setup_failure_bridge_mode() {
         vec![],
         false,
         vec![],
+        None,
         None,
         state,
         deps,
@@ -6343,6 +6405,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
         false,
         vec![],
         None,
+        None,
         state.clone(),
         deps.clone(),
         tx_run,
@@ -6361,5 +6424,314 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
     assert!(
         matches!(resp, DaemonResponse::Error { ref message } if message.contains("not running")),
         "expected 'not running' error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_run --platform Tests
+// ---------------------------------------------------------------------------
+
+/// When `handle_run` receives an invalid platform string, it should return an
+/// error rather than silently ignoring it.
+#[tokio::test]
+async fn test_handle_run_invalid_platform_returns_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        Some("not/a/valid/platform/triple".to_string()),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx.recv().await.expect("handler sent no response");
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("platform")),
+        "expected platform error, got {resp:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Platform-aware pull tests
+// ---------------------------------------------------------------------------
+
+/// Valid platform override is accepted by resolve_platform_registry and
+/// handle_pull proceeds without panicking. The pull itself may fail (no
+/// real registry), but the error must NOT be "invalid platform".
+#[tokio::test]
+async fn test_handle_pull_with_valid_platform_override() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        Some("linux/arm64".to_string()),
+        state,
+        deps,
+    )
+    .await;
+
+    // The platform string is valid, so any error must come from the pull
+    // itself (network/mock), never from platform parsing.
+    match &response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                !message.contains("invalid platform"),
+                "valid platform 'linux/arm64' should not produce an invalid-platform error, got: {message}"
+            );
+        }
+        DaemonResponse::Success { .. } => { /* acceptable if mock satisfies */ }
+        other => panic!("unexpected response variant: {other:?}"),
+    }
+}
+
+/// Empty and malformed platform strings must produce an "invalid platform"
+/// error response.
+#[tokio::test]
+async fn test_handle_pull_with_invalid_platform_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    for bad_platform in ["", "invalid"] {
+        let response = handler::handle_pull(
+            "alpine".to_string(),
+            Some("latest".to_string()),
+            Some(bad_platform.to_string()),
+            Arc::clone(&state),
+            Arc::clone(&deps),
+        )
+        .await;
+
+        match &response {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("invalid platform"),
+                    "platform {bad_platform:?} should trigger 'invalid platform' error, got: {message}"
+                );
+            }
+            other => panic!("expected Error for platform {bad_platform:?}, got {other:?}"),
+        }
+    }
+}
+
+/// When platform is None, handle_pull uses the default registry router
+/// and succeeds with the mock registry (regression guard).
+#[tokio::test]
+async fn test_handle_pull_platform_none_uses_default_router() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("create image store"),
+    );
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            mock_registry.clone() as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        image_store,
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        None,
+        state,
+        deps,
+    )
+    .await;
+
+    match &response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("pulled"),
+                "expected 'pulled' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success for platform=None pull, got {other:?}"),
+    }
+
+    assert_eq!(
+        mock_registry.pull_count(),
+        1,
+        "default router mock should have been called exactly once"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// handle_update Tests
+// ---------------------------------------------------------------------------
+
+/// `handle_update` with an explicit image list sends one `UpdateProgress` per
+/// image and ends with a terminal `Success` response.
+#[tokio::test]
+async fn test_handle_update_explicit_images_sends_progress_then_success() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Expect one UpdateProgress for alpine:latest
+    let first = rx.recv().await.expect("handler sent no response");
+    match &first {
+        DaemonResponse::UpdateProgress { image, status } => {
+            assert_eq!(image, "alpine:latest");
+            assert_eq!(status, "updated");
+        }
+        other => panic!("expected UpdateProgress, got {other:?}"),
+    }
+
+    // Expect terminal Success
+    let second = rx.recv().await.expect("handler sent no terminal response");
+    match &second {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("1/1"),
+                "expected '1/1' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success, got {other:?}"),
+    }
+
+    // Pull should have been called once
+    assert_eq!(mock_registry.pull_count(), 1);
+}
+
+/// `handle_update` with `all = true` and an empty image store sends a terminal
+/// `Success` with "0/0" (no images to refresh).
+#[tokio::test]
+async fn test_handle_update_all_empty_store_sends_zero_progress() {
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // With an empty image store, all=true means 0 images → terminal Success "0/0"
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(vec![], true, false, false, state, deps, tx).await;
+
+    let response = rx.recv().await.expect("handler sent no response");
+    match response {
+        DaemonResponse::Success { message } => {
+            assert!(
+                message.contains("0/0"),
+                "expected '0/0' in success message, got: {message}"
+            );
+        }
+        other => panic!("expected Success, got {other:?}"),
+    }
+}
+
+/// `handle_update` with `containers = true` collects images from container records.
+#[tokio::test]
+async fn test_handle_update_containers_collects_source_image_refs() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Add a container with a source_image_ref
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "test-cid-update".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Stopped".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: std::path::PathBuf::from("/tmp/fake"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(vec![], false, true, false, Arc::clone(&state), deps, tx).await;
+
+    // Should get one UpdateProgress for alpine:latest
+    let first = rx.recv().await.expect("handler sent no response");
+    match &first {
+        DaemonResponse::UpdateProgress { image, status } => {
+            assert_eq!(image, "alpine:latest");
+            assert_eq!(status, "updated");
+        }
+        other => panic!("expected UpdateProgress, got {other:?}"),
+    }
+
+    let second = rx.recv().await.expect("no terminal response");
+    assert!(
+        matches!(second, DaemonResponse::Success { .. }),
+        "expected Success, got {second:?}"
     );
 }

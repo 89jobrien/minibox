@@ -54,7 +54,7 @@ impl AdapterSuite {
 }
 
 /// Default adapter suite when `MINIBOX_ADAPTER` is unset.
-pub const DEFAULT_ADAPTER_SUITE: &str = "krun";
+pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
 
 /// All known adapter suites with their compile-time availability.
 ///
@@ -314,14 +314,14 @@ mod tests {
     }
 
     #[test]
-    fn adapter_from_env_defaults_to_krun() {
+    fn adapter_from_env_defaults_to_smolvm() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
-        let suite = adapter_from_env().expect("krun default should parse on any platform");
-        assert_eq!(suite, AdapterSuite::Krun);
+        let suite = adapter_from_env().expect("smolvm default should parse on any unix platform");
+        assert_eq!(suite, AdapterSuite::SmolVm);
     }
 
     #[test]

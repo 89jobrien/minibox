@@ -27,7 +27,7 @@ proptest! {
         suffix in ".*",
     ) {
         let image = format!("{prefix}\n{suffix}");
-        let req = DaemonRequest::Pull { image, tag: None };
+        let req = DaemonRequest::Pull { image, tag: None, platform: None };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         let re_encoded = encode_request(&decoded).unwrap();
@@ -71,23 +71,7 @@ proptest! {
     /// `DaemonRequest::Run` with an empty command vec must roundtrip correctly.
     #[test]
     fn empty_command_vec_roundtrips(image in any::<String>()) {
-        let req = DaemonRequest::Run {
-            image,
-            tag: None,
-            command: vec![],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = minibox_macros::test_run!(image: image, command: Vec::<String>::new());
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         let re_encoded = encode_request(&decoded).unwrap();
@@ -97,23 +81,12 @@ proptest! {
     /// `u64::MAX` values for resource limit fields must survive encode/decode.
     #[test]
     fn max_u64_resource_values_roundtrip(image in any::<String>()) {
-        let req = DaemonRequest::Run {
-            image,
-            tag: None,
-            command: vec![],
+        let req = minibox_macros::test_run!(
+            image: image,
+            command: Vec::<String>::new(),
             memory_limit_bytes: Some(u64::MAX),
             cpu_weight: Some(u64::MAX),
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        );
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         let re_encoded = encode_request(&decoded).unwrap();

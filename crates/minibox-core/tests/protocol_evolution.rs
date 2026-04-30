@@ -114,6 +114,11 @@ fn all_response_variants() -> Vec<DaemonResponse> {
             container_id: "abc123def456".into(),
             exit_code: 0,
         },
+        // --- non-terminal (streaming) ---
+        DaemonResponse::UpdateProgress {
+            image: "alpine:latest".to_string(),
+            status: "up to date".to_string(),
+        },
     ]
 }
 
@@ -296,7 +301,10 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::ContainerPaused { .. }
         | DaemonResponse::ContainerResumed { .. }
         | DaemonResponse::Pruned { .. }
-        | DaemonResponse::PipelineComplete { .. } => true,
+        | DaemonResponse::PipelineComplete { .. }
+        | DaemonResponse::SnapshotSaved { .. }
+        | DaemonResponse::SnapshotRestored { .. }
+        | DaemonResponse::SnapshotList { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }
@@ -305,7 +313,8 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::PushProgress { .. }
         | DaemonResponse::BuildOutput { .. }
         | DaemonResponse::Event { .. }
-        | DaemonResponse::LogLine { .. } => false,
+        | DaemonResponse::LogLine { .. }
+        | DaemonResponse::UpdateProgress { .. } => false,
     }
 }
 
@@ -385,6 +394,10 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::LogLine {
             stream: OutputStreamKind::Stderr,
             line: "hello".to_string(),
+        },
+        DaemonResponse::UpdateProgress {
+            image: "alpine:latest".to_string(),
+            status: "updated".to_string(),
         },
     ];
 

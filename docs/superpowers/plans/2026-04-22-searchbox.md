@@ -1,7 +1,8 @@
 ---
-status: done
+status: archived
 completed: "2026-04-22"
 branch: main
+note: "Neither searchbox nor zoektbox crates were created; zero implementation"
 ---
 
 # searchbox + zoektbox Implementation Plan

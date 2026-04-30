@@ -1,5 +1,9 @@
 # Dagu Integration
 
+> **ARCHIVED:** This document describes a non-executable workflow.
+> `miniboxctl` and `minibox-dagu/` do not exist. The binary paths and
+> port numbers below are aspirational, not runnable.
+
 This document describes how dagu (workflow engine) integrates with minibox (container runtime)
 and clarifies the dependency model. Addresses GH #31.
 

@@ -26,7 +26,10 @@ use minibox::adapters::{
 };
 use minibox::image::ImageStore;
 use minibox::protocol::DaemonResponse;
-use miniboxd::handler::{self, ContainerPolicy, HandlerDependencies, PtySessionRegistry};
+use miniboxd::handler::{
+    self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
+    LifecycleDeps, PtySessionRegistry,
+};
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,6 +75,7 @@ async fn handle_run_once(
         false,
         vec![],
         None,
+        None,
         state,
         deps,
         tx,
@@ -91,26 +95,39 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
         DockerHubRegistry::new(Arc::clone(&state.image_store)).expect("failed to create registry"),
     );
     let deps = Arc::new(HandlerDependencies {
-        registry: Arc::clone(&docker_registry) as _,
-        ghcr_registry: Arc::clone(&docker_registry) as _,
-        filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
-        resource_limiter: Arc::new(CgroupV2Limiter::new()),
-        runtime: Arc::new(LinuxNamespaceRuntime::new()),
-        network_provider: Arc::new(NoopNetwork::new()),
-        image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
-        exec_runtime: None,
-        image_pusher: None,
-        commit_adapter: None,
-        image_builder: None,
-        event_sink: Arc::new(minibox_core::events::NoopEventSink),
-        event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-        image_gc: Arc::new(NoopImageGc),
-        image_store: Arc::clone(&state.image_store),
+        image: ImageDeps {
+            registry_router: Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(
+                Arc::clone(&docker_registry) as _,
+                [("ghcr.io", Arc::clone(&docker_registry) as _)],
+            )),
+            image_loader: Arc::new(NativeImageLoader::new(Arc::clone(&state.image_store))),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::clone(&state.image_store),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(OverlayFilesystem::new_with_base(images_dir)),
+            resource_limiter: Arc::new(CgroupV2Limiter::new()),
+            runtime: Arc::new(LinuxNamespaceRuntime::new()),
+            network_provider: Arc::new(NoopNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        },
         policy: ContainerPolicy::default(),
-        pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
-        containers_base: temp_dir.path().join("containers"),
-        run_containers_base: temp_dir.path().join("run"),
-        metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 
     (deps, state, temp_dir)
@@ -148,6 +165,7 @@ async fn test_pull_real_image_from_dockerhub() {
     let response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps,
     )
@@ -182,6 +200,7 @@ async fn test_pull_nonexistent_image() {
     let response = handler::handle_pull(
         "nonexistent-image-that-does-not-exist-12345".to_string(),
         Some("latest".to_string()),
+        None,
         state,
         deps,
     )
@@ -212,6 +231,7 @@ async fn test_run_simple_container() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -254,6 +274,7 @@ async fn test_run_container_with_resource_limits() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -308,6 +329,7 @@ async fn test_container_removal_cleanup() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -376,6 +398,7 @@ async fn test_overlay_filesystem_setup() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -392,6 +415,7 @@ async fn test_overlay_filesystem_setup() {
     std::fs::create_dir(&container_dir).expect("failed to create container dir");
 
     let rootfs = deps
+        .lifecycle
         .filesystem
         .setup_rootfs(&layers, &container_dir)
         .expect("failed to setup rootfs");
@@ -408,7 +432,8 @@ async fn test_overlay_filesystem_setup() {
     );
 
     // Cleanup
-    deps.filesystem
+    deps.lifecycle
+        .filesystem
         .cleanup(&container_dir)
         .expect("failed to cleanup filesystem");
 }
@@ -429,6 +454,7 @@ async fn test_complete_container_lifecycle() {
     let pull_response = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
@@ -504,6 +530,7 @@ async fn test_multiple_concurrent_containers() {
     let _ = handler::handle_pull(
         "alpine".to_string(),
         Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )

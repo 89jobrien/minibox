@@ -1,0 +1,10 @@
+target/
+.git/
+.worktrees/
+.ctx/
+.github/
+.vscode/
+docs/
+artifacts/
+*.md
+!README.md

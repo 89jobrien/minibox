@@ -1,7 +1,8 @@
 ---
-status: done
+status: archived
 completed: "2026-04-17"
 branch: main
+note: "Protocol fields landed (TailnetMode, NetworkConfig); tailbox crate never created"
 ---
 
 # Tailnet Integration — Implementation Plan

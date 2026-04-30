@@ -289,6 +289,7 @@ impl ContainerRuntime for SmolVmRuntime {
         }
 
         Ok(SpawnResult {
+            runtime_id: None,
             pid: 0,
             output_reader: None,
         })

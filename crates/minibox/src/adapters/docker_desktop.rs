@@ -222,6 +222,7 @@ impl ContainerRuntime for DockerDesktopRuntime {
             response.pid
         );
         Ok(SpawnResult {
+            runtime_id: None,
             pid: response.pid,
             output_reader: None,
         })

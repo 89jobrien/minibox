@@ -287,9 +287,12 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ContainerResumed { .. }
             | DaemonResponse::Pruned { .. }
             | DaemonResponse::PipelineComplete { .. }
+            | DaemonResponse::SnapshotSaved { .. }
+            | DaemonResponse::SnapshotRestored { .. }
+            | DaemonResponse::SnapshotList { .. }
     )
-    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput, and
-    // Event are non-terminal.
+    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
+    // Event, and UpdateProgress are non-terminal.
 }
 
 /// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
@@ -343,6 +346,7 @@ async fn dispatch(
             env,
             name,
             tty: _,
+            platform,
             ..
         } => {
             handler::handle_run(
@@ -357,6 +361,7 @@ async fn dispatch(
                 privileged,
                 env,
                 name,
+                platform,
                 state,
                 deps,
                 tx,
@@ -385,8 +390,12 @@ async fn dispatch(
             let response = handler::handle_list(state).await;
             send_terminal_response(&tx, "List", response).await;
         }
-        DaemonRequest::Pull { image, tag } => {
-            let response = handler::handle_pull(image, tag, state, deps).await;
+        DaemonRequest::Pull {
+            image,
+            tag,
+            platform,
+        } => {
+            let response = handler::handle_pull(image, tag, platform, state, deps).await;
             send_terminal_response(&tx, "Pull", response).await;
         }
         DaemonRequest::LoadImage { path, name, tag } => {
@@ -399,6 +408,7 @@ async fn dispatch(
             env,
             working_dir,
             tty,
+            user: _user,
         } => {
             handler::handle_exec(container_id, cmd, env, working_dir, tty, state, deps, tx).await;
         }
@@ -496,12 +506,35 @@ async fn dispatch(
                 handle_resize_pty(session_id, cols, rows, deps, tx).await;
             });
         }
+        DaemonRequest::SaveSnapshot { id, name } => {
+            let response = handler::handle_save_snapshot(id, name, state, deps).await;
+            send_terminal_response(&tx, "SaveSnapshot", response).await;
+        }
+        DaemonRequest::RestoreSnapshot { id, name } => {
+            let response = handler::handle_restore_snapshot(id, name, state, deps).await;
+            send_terminal_response(&tx, "RestoreSnapshot", response).await;
+        }
+        DaemonRequest::ListSnapshots { id } => {
+            let response = handler::handle_list_snapshots(id, deps).await;
+            send_terminal_response(&tx, "ListSnapshots", response).await;
+        }
         DaemonRequest::RunPipeline { .. } => {
             send_terminal_response(
                 &tx,
                 "RunPipeline",
                 DaemonResponse::Error {
                     message: "RunPipeline is not yet implemented".to_string(),
+                },
+            )
+            .await;
+        }
+        // TODO(wave3): wire handle_update via spawn — currently returns a stub error
+        DaemonRequest::Update { .. } => {
+            send_terminal_response(
+                &tx,
+                "Update",
+                DaemonResponse::Error {
+                    message: "Update is not yet implemented".to_string(),
                 },
             )
             .await;
@@ -596,6 +629,7 @@ mod tests {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         (state, deps)
     }
@@ -756,6 +790,13 @@ mod tests {
                 },
                 true, // terminal: pipeline execution finished
             ),
+            (
+                DaemonResponse::UpdateProgress {
+                    image: "alpine:latest".to_string(),
+                    status: "updated".to_string(),
+                },
+                false, // non-terminal: one per image, Success/Error follows
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -788,6 +829,10 @@ mod tests {
                 DaemonResponse::Pruned { .. } => true,
                 DaemonResponse::LogLine { .. } => false,
                 DaemonResponse::PipelineComplete { .. } => true,
+                DaemonResponse::SnapshotSaved { .. } => true,
+                DaemonResponse::SnapshotRestored { .. } => true,
+                DaemonResponse::SnapshotList { .. } => true,
+                DaemonResponse::UpdateProgress { .. } => false,
             };
         }
     }
@@ -973,6 +1018,7 @@ mod tests {
             &DaemonRequest::Pull {
                 image: "alpine".to_string(),
                 tag: Some("latest".to_string()),
+                platform: None,
             },
         )
         .await;

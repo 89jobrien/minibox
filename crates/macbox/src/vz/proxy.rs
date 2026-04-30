@@ -226,19 +226,10 @@ mod tests {
         });
 
         let mut proxy = VzProxy::new(client);
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
+        let req = minibox_macros::test_run!(
             command: vec!["/bin/echo".to_string(), "hello world".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
             ephemeral: true,
-            network: None,
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            name: None,
-        };
+        );
         let responses = proxy.send_request(&req).await.expect("send request");
 
         // Should have collected all 4 responses
@@ -319,19 +310,7 @@ mod tests {
         });
 
         let mut proxy = VzProxy::new(client);
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false, // Non-ephemeral run
-            network: None,
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            name: None,
-        };
+        let req = minibox_macros::test_run!(); // Non-ephemeral run (ephemeral defaults to false)
         let result = proxy.send_request(&req).await;
 
         // Should succeed and collect the single ContainerCreated response
@@ -364,19 +343,7 @@ mod tests {
         });
 
         let mut proxy = VzProxy::new(client);
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: true,
-            network: None,
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            name: None,
-        };
+        let req = minibox_macros::test_run!(ephemeral: true);
         let result = proxy.send_request(&req).await;
 
         // Should fail because ContainerOutput is non-terminal and we get EOF

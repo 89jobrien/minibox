@@ -96,12 +96,32 @@ enum Commands {
         name: Option<String>,
 
         /// Allocate a pseudo-TTY.
-        #[arg(long = "tty")]
+        #[arg(long)]
         tty: bool,
 
         /// Keep stdin open (interactive mode).
-        #[arg(long = "interactive")]
+        #[arg(short = 'i', long = "interactive")]
         interactive: bool,
+
+        /// Set environment variables (KEY=VALUE). Repeatable.
+        #[arg(short = 'e', long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
+
+        /// Override the image entrypoint.
+        #[arg(long)]
+        entrypoint: Option<String>,
+
+        /// Run as a specific user (e.g. "nobody", "1000:1000").
+        #[arg(short = 'u', long = "user")]
+        user: Option<String>,
+
+        /// Automatically remove the container when it exits.
+        #[arg(long)]
+        rm: bool,
+
+        /// Target platform (e.g. linux/arm64). Defaults to host platform.
+        #[arg(long)]
+        platform: Option<String>,
     },
 
     /// List all containers
@@ -127,8 +147,30 @@ enum Commands {
 
     /// Remove a stopped container
     Rm {
-        /// Container ID
-        id: String,
+        /// Container ID (omit when using --all)
+        id: Option<String>,
+
+        /// Remove all stopped containers.
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Re-pull cached images to check for newer versions.
+    Update {
+        /// Specific images to update (e.g. alpine:latest nginx:stable).
+        images: Vec<String>,
+
+        /// Update all cached images.
+        #[arg(long)]
+        all: bool,
+
+        /// Resolve images from running containers.
+        #[arg(long)]
+        containers: bool,
+
+        /// Restart containers after their image is updated.
+        #[arg(long)]
+        restart: bool,
     },
 
     /// Pull an image from Docker Hub
@@ -137,8 +179,12 @@ enum Commands {
         image: String,
 
         /// Image tag (default: latest)
-        #[arg(short, long, default_value = "latest")]
+        #[arg(long, default_value = "latest")]
         tag: String,
+
+        /// Target platform (e.g. linux/arm64). Defaults to host platform.
+        #[arg(long)]
+        platform: Option<String>,
     },
 
     /// Execute a command inside a running container.
@@ -155,12 +201,16 @@ enum Commands {
         cmd: Vec<String>,
 
         /// Allocate a pseudo-TTY.
-        #[arg(short = 't', long = "tty")]
+        #[arg(long)]
         tty: bool,
 
         /// Keep stdin open (interactive mode).
         #[arg(short = 'i', long = "interactive")]
         interactive: bool,
+
+        /// Run as a specific user (e.g. "nobody", "1000:1000").
+        #[arg(short = 'u', long = "user")]
+        user: Option<String>,
     },
 
     /// Fetch or stream log output from a container.
@@ -231,6 +281,21 @@ enum Commands {
         network: bool,
     },
 
+    /// Manage VM state snapshots (save, restore, list).
+    #[command(subcommand)]
+    Snapshot(SnapshotCommands),
+
+    /// Update mbx and miniboxd to the latest release.
+    #[command(disable_version_flag = true)]
+    Upgrade {
+        /// Show what would be done without replacing binaries.
+        #[arg(long)]
+        dry_run: bool,
+        /// Install a specific version (e.g. "v0.21.0"). Default: latest.
+        #[arg(long)]
+        version: Option<String>,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -243,6 +308,31 @@ enum Commands {
         /// Image tag (default: latest)
         #[arg(long, default_value = "latest")]
         tag: String,
+    },
+}
+
+/// Snapshot sub-subcommands.
+#[derive(Subcommand)]
+enum SnapshotCommands {
+    /// Save a VM state snapshot.
+    Save {
+        /// Container ID.
+        id: String,
+        /// Snapshot name (auto-generated if omitted).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Restore a VM state snapshot.
+    Restore {
+        /// Container ID.
+        id: String,
+        /// Snapshot name to restore.
+        name: String,
+    },
+    /// List available snapshots.
+    List {
+        /// Container ID.
+        id: String,
     },
 }
 
@@ -273,6 +363,11 @@ async fn main() -> Result<()> {
             name,
             tty,
             interactive,
+            env,
+            entrypoint,
+            user,
+            rm,
+            platform,
         } => {
             commands::run::execute(
                 image,
@@ -286,6 +381,11 @@ async fn main() -> Result<()> {
                 mounts,
                 name,
                 tty || interactive,
+                env,
+                entrypoint,
+                user,
+                rm,
+                platform,
                 socket_path,
             )
             .await
@@ -298,7 +398,10 @@ async fn main() -> Result<()> {
             cmd,
             tty,
             interactive,
-        } => commands::exec::execute(container_id, cmd, tty || interactive, socket_path).await,
+            user,
+        } => {
+            commands::exec::execute(container_id, cmd, tty || interactive, user, socket_path).await
+        }
 
         Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
 
@@ -306,9 +409,29 @@ async fn main() -> Result<()> {
 
         Commands::Resume { id } => commands::resume::execute(id, socket_path).await,
 
-        Commands::Rm { id } => commands::rm::execute(id, socket_path).await,
+        Commands::Rm { id, all } => {
+            if all {
+                commands::rm::execute_all(socket_path).await
+            } else if let Some(id) = id {
+                commands::rm::execute(id, socket_path).await
+            } else {
+                eprintln!("error: provide a container ID or use --all");
+                std::process::exit(1);
+            }
+        }
 
-        Commands::Pull { image, tag } => commands::pull::execute(image, tag, socket_path).await,
+        Commands::Update {
+            images,
+            all,
+            containers,
+            restart,
+        } => commands::update::execute(images, all, containers, restart, socket_path).await,
+
+        Commands::Pull {
+            image,
+            tag,
+            platform,
+        } => commands::pull::execute(image, tag, platform, socket_path).await,
 
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
@@ -322,6 +445,22 @@ async fn main() -> Result<()> {
         Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
 
         Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
+
+        Commands::Snapshot(sub) => match sub {
+            SnapshotCommands::Save { id, name } => {
+                commands::snapshot::execute_save(id, name, socket_path).await
+            }
+            SnapshotCommands::Restore { id, name } => {
+                commands::snapshot::execute_restore(id, name, socket_path).await
+            }
+            SnapshotCommands::List { id } => {
+                commands::snapshot::execute_list(id, socket_path).await
+            }
+        },
+
+        Commands::Upgrade { dry_run, version } => {
+            commands::upgrade::execute(dry_run, version).await
+        }
 
         Commands::Sandbox {
             script,
@@ -499,6 +638,84 @@ mod tests {
     }
 
     #[test]
+    fn cli_parses_platform_flag_on_pull() {
+        let cli =
+            Cli::try_parse_from(["mbx", "pull", "--platform", "linux/arm64", "alpine"]).unwrap();
+        match cli.command {
+            Commands::Pull { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()))
+            }
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_platform_flag_on_run() {
+        let cli = Cli::try_parse_from([
+            "mbx",
+            "run",
+            "--platform",
+            "linux/arm64",
+            "alpine",
+            "--",
+            "/bin/sh",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Run { platform, .. } => assert_eq!(platform, Some("linux/arm64".to_string())),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_pull_without_platform_is_none() {
+        let cli = Cli::try_parse_from(["mbx", "pull", "alpine"]).unwrap();
+        match cli.command {
+            Commands::Pull { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn cli_run_without_platform_is_none() {
+        let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
+        match cli.command {
+            Commands::Run { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_default() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { dry_run, version } => {
+                assert!(!dry_run);
+                assert_eq!(version, None);
+            }
+            _ => panic!("expected Upgrade"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_dry_run() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade", "--dry-run"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { dry_run, .. } => assert!(dry_run),
+            _ => panic!("expected Upgrade"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_upgrade_version() {
+        let cli = Cli::try_parse_from(["mbx", "upgrade", "--version", "v0.21.0"]).unwrap();
+        match cli.command {
+            Commands::Upgrade { version, .. } => assert_eq!(version, Some("v0.21.0".to_string())),
+            _ => panic!("expected Upgrade"),
+        }
+    }
+
+    #[test]
     fn cli_parses_mount_flag() {
         let cli = Cli::try_parse_from([
             "mbx",
@@ -513,6 +730,67 @@ mod tests {
         match cli.unwrap().command {
             Commands::Run { mounts, .. } => assert_eq!(mounts.len(), 1),
             _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_single_image() {
+        let cli = Cli::try_parse_from(["mbx", "update", "alpine:latest"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                images,
+                all,
+                containers,
+                restart,
+            } => {
+                assert_eq!(images, vec!["alpine:latest"]);
+                assert!(!all);
+                assert!(!containers);
+                assert!(!restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_all_flag() {
+        let cli = Cli::try_parse_from(["mbx", "update", "--all"]).unwrap();
+        match cli.command {
+            Commands::Update { all, images, .. } => {
+                assert!(all);
+                assert!(images.is_empty());
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_containers_and_restart() {
+        let cli = Cli::try_parse_from(["mbx", "update", "--containers", "--restart"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                containers,
+                restart,
+                ..
+            } => {
+                assert!(containers);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    #[test]
+    fn cli_update_parses_multiple_images_with_restart() {
+        let cli = Cli::try_parse_from(["mbx", "update", "img1", "img2", "--restart"]).unwrap();
+        match cli.command {
+            Commands::Update {
+                images, restart, ..
+            } => {
+                assert_eq!(images, vec!["img1", "img2"]);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
         }
     }
 }

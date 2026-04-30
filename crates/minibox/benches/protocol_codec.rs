@@ -5,52 +5,27 @@ use minibox_core::protocol::{
 };
 
 fn small_run_request() -> DaemonRequest {
-    DaemonRequest::Run {
-        image: "alpine".to_string(),
-        tag: None,
-        command: vec!["/bin/sh".to_string()],
-        memory_limit_bytes: None,
-        cpu_weight: None,
-        ephemeral: false,
-        network: None,
-        mounts: vec![],
-        privileged: false,
-        env: vec![],
-        name: None,
-        tty: false,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-    }
+    minibox_macros::test_run!()
 }
 
 fn large_run_request() -> DaemonRequest {
-    let command = (0..24)
+    let command: Vec<String> = (0..24)
         .map(|i| format!("arg-{}-{}", i, "x".repeat(16)))
         .collect();
-    DaemonRequest::Run {
+    minibox_macros::test_run!(
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
         tag: Some("2026.03.16-benchmarks".to_string()),
-        command,
+        command: command,
         memory_limit_bytes: Some(512 * 1024 * 1024),
         cpu_weight: Some(7500),
-        ephemeral: false,
-        network: None,
-        mounts: vec![],
-        privileged: false,
-        env: vec![],
-        name: None,
-        tty: false,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-    }
+    )
 }
 
 fn small_pull_request() -> DaemonRequest {
     DaemonRequest::Pull {
         image: "alpine".to_string(),
         tag: None,
+        platform: None,
     }
 }
 
@@ -58,6 +33,7 @@ fn large_pull_request() -> DaemonRequest {
     DaemonRequest::Pull {
         image: "library/some-really-long-image-name-for-benchmarking".to_string(),
         tag: Some("2026.03.16-benchmarks".to_string()),
+        platform: None,
     }
 }
 

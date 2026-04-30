@@ -1,0 +1,47 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [main, next]
+
+env:
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  lint:
+    name: lint + fmt
+    runs-on: [self-hosted, minibox-mac]
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo fmt + clippy + check
+        run: |
+          cargo fmt --all --check
+          cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
+          cargo check --workspace
+
+  test-unit:
+    name: unit tests (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest run (unit tests)
+        run: cargo nextest run --workspace --lib
+
+  test-protocol-e2e:
+    name: protocol e2e (macOS)
+    runs-on: [self-hosted, minibox-mac]
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - name: build daemon + cli
+        run: cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture

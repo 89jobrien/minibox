@@ -72,6 +72,8 @@ repro.rs
 !/bench/results/latest.json
 # Timestamped result directories
 /bench/results/*/
+assets/
+images/
 
 # Profiling
 /bench/profiles/

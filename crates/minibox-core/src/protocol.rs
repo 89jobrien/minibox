@@ -108,6 +108,21 @@ pub enum DaemonRequest {
         /// If `true`, allocate a PTY and stream stdin/stdout as a terminal session.
         #[serde(default)]
         tty: bool,
+        /// Override the image's default entrypoint.
+        ///
+        /// When set, this replaces the image's `ENTRYPOINT` directive.
+        /// `command` becomes the arguments to this entrypoint.
+        #[serde(default)]
+        entrypoint: Option<String>,
+        /// Run the container process as a specific user (e.g. `"nobody"`, `"1000:1000"`).
+        ///
+        /// Maps to the `--user` / `-u` Docker flag. When `None`, the container
+        /// runs as root (or the image's default `USER` directive).
+        #[serde(default)]
+        user: Option<String>,
+        /// Automatically remove the container when it exits.
+        #[serde(default)]
+        auto_remove: bool,
         /// Scheduling priority for this container run.
         #[serde(default)]
         priority: Option<slashcrux::Priority>,
@@ -117,6 +132,9 @@ pub enum DaemonRequest {
         /// Agentic execution context — workflow variables and bindings.
         #[serde(default)]
         execution_context: Option<slashcrux::ExecutionContext>,
+        /// Target platform (e.g. `"linux/arm64"`). Defaults to host platform.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        platform: Option<String>,
     },
 
     /// Stop a running container by ID.
@@ -152,6 +170,9 @@ pub enum DaemonRequest {
         image: String,
         /// Image tag. Defaults to `"latest"` when `None`.
         tag: Option<String>,
+        /// Target platform (e.g. `"linux/arm64"`). Defaults to host platform.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        platform: Option<String>,
     },
 
     /// Load a local OCI image tarball into the daemon's image store.
@@ -179,6 +200,9 @@ pub enum DaemonRequest {
         /// If `true`, allocate a pseudo-TTY for the exec process.
         #[serde(default)]
         tty: bool,
+        /// Run the exec process as a specific user (e.g. `"nobody"`, `"1000:1000"`).
+        #[serde(default)]
+        user: Option<String>,
     },
 
     /// Send raw bytes to a running exec or run session stdin (base64-encoded).
@@ -291,6 +315,50 @@ pub enum DaemonRequest {
         /// Agentic execution context — workflow variables and bindings.
         #[serde(default)]
         execution_context: Option<slashcrux::ExecutionContext>,
+    },
+
+    /// Save a VM state snapshot for a container.
+    SaveSnapshot {
+        /// Container ID to snapshot.
+        id: String,
+        /// Optional human-readable snapshot name (auto-generated if omitted).
+        #[serde(default)]
+        name: Option<String>,
+    },
+
+    /// Restore a VM state snapshot for a container.
+    RestoreSnapshot {
+        /// Container ID to restore.
+        id: String,
+        /// Snapshot name to restore.
+        name: String,
+    },
+
+    /// List available snapshots for a container.
+    ListSnapshots {
+        /// Container ID.
+        id: String,
+    },
+
+    /// Re-pull cached images to check for newer versions.
+    ///
+    /// Used by `mbx update`. When `all` is true the daemon re-pulls every
+    /// image in its store. When `containers` is true the daemon resolves
+    /// images from currently-running containers. Explicit `images` entries
+    /// take precedence over the flags when both are supplied.
+    Update {
+        /// Specific images to update (e.g. `["alpine:latest", "nginx:stable"]`).
+        /// Empty when `--all` is used.
+        images: Vec<String>,
+        /// Update all cached images.
+        #[serde(default)]
+        all: bool,
+        /// Resolve images from running containers instead of explicit list.
+        #[serde(default)]
+        containers: bool,
+        /// Restart containers after their image is updated.
+        #[serde(default)]
+        restart: bool,
     },
 }
 
@@ -466,6 +534,39 @@ pub enum DaemonResponse {
         /// Exit code of the `crux run` process.
         exit_code: i32,
     },
+
+    /// Confirmation that a snapshot was saved.
+    SnapshotSaved {
+        /// Snapshot metadata.
+        info: crate::domain::SnapshotInfo,
+    },
+
+    /// Confirmation that a snapshot was restored.
+    SnapshotRestored {
+        /// Container ID that was restored.
+        id: String,
+        /// Snapshot name that was restored.
+        name: String,
+    },
+
+    /// List of snapshots for a container.
+    SnapshotList {
+        /// Container ID.
+        id: String,
+        /// Available snapshots.
+        snapshots: Vec<crate::domain::SnapshotInfo>,
+    },
+
+    /// Progress update for an image being checked/pulled during an `Update` request.
+    ///
+    /// Non-terminal: sent once per image being updated before the final
+    /// `Success` or `Error` response.
+    UpdateProgress {
+        /// Image reference being updated (e.g. `"alpine:latest"`).
+        image: String,
+        /// Human-readable status: `"up to date"`, `"updated"`, `"error: ..."`.
+        status: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -533,20 +634,38 @@ pub fn decode_response(line: &[u8]) -> anyhow::Result<DaemonResponse> {
 pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 
 // ---------------------------------------------------------------------------
-// Tests
+// Test helper: default Run request builder (edition 2024 macro workaround)
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Plain struct mirroring `DaemonRequest::Run` fields with `Default`.
+///
+/// Used by the `test_run!` macro to support struct-update syntax (`..defaults`),
+/// which is not possible directly on enum variants. Not intended for production use.
+#[doc(hidden)]
+pub struct TestRunDefaults {
+    pub image: String,
+    pub tag: Option<String>,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub ephemeral: bool,
+    pub network: Option<crate::domain::NetworkMode>,
+    pub mounts: Vec<crate::domain::BindMount>,
+    pub privileged: bool,
+    pub env: Vec<String>,
+    pub name: Option<String>,
+    pub tty: bool,
+    pub entrypoint: Option<String>,
+    pub user: Option<String>,
+    pub auto_remove: bool,
+    pub priority: Option<slashcrux::Priority>,
+    pub urgency: Option<slashcrux::Urgency>,
+    pub execution_context: Option<slashcrux::ExecutionContext>,
+}
 
-    // -----------------------------------------------------------------------
-    // Request serialization/deserialization tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_encode_decode_run_request_minimal() {
-        let req = DaemonRequest::Run {
+impl Default for TestRunDefaults {
+    fn default() -> Self {
+        Self {
             image: "alpine".to_string(),
             tag: None,
             command: vec!["/bin/sh".to_string()],
@@ -559,10 +678,71 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
             priority: None,
             urgency: None,
             execution_context: None,
-        };
+        }
+    }
+}
+
+impl TestRunDefaults {
+    /// Convert into a `DaemonRequest::Run`.
+    pub fn into_request(self) -> DaemonRequest {
+        DaemonRequest::Run {
+            image: self.image,
+            tag: self.tag,
+            command: self.command,
+            memory_limit_bytes: self.memory_limit_bytes,
+            cpu_weight: self.cpu_weight,
+            ephemeral: self.ephemeral,
+            network: self.network,
+            mounts: self.mounts,
+            privileged: self.privileged,
+            env: self.env,
+            name: self.name,
+            tty: self.tty,
+            entrypoint: self.entrypoint,
+            user: self.user,
+            auto_remove: self.auto_remove,
+            priority: self.priority,
+            urgency: self.urgency,
+            execution_context: self.execution_context,
+            platform: None,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Local alias for the `test_run!` macro — uses `TestRunDefaults` +
+    /// struct-update syntax to work around edition 2024 macro hygiene.
+    macro_rules! test_run {
+        ($($field:ident : $val:expr),* $(,)?) => {{
+            let defaults = crate::protocol::TestRunDefaults::default();
+            let overrides = crate::protocol::TestRunDefaults {
+                $($field: $val,)*
+                ..defaults
+            };
+            overrides.into_request()
+        }};
+    }
+
+    // -----------------------------------------------------------------------
+    // Request serialization/deserialization tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_encode_decode_run_request_minimal() {
+        let req = test_run!();
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -588,27 +768,13 @@ mod tests {
 
     #[test]
     fn test_encode_decode_run_request_with_limits() {
-        let req = DaemonRequest::Run {
+        let req = test_run!(
             image: "ubuntu".to_string(),
             tag: Some("22.04".to_string()),
-            command: vec![
-                "/bin/bash".to_string(),
-                "-c".to_string(),
-                "echo hi".to_string(),
-            ],
-            memory_limit_bytes: Some(536870912), // 512MB
+            command: vec!["/bin/bash".to_string(), "-c".to_string(), "echo hi".to_string()],
+            memory_limit_bytes: Some(536870912),
             cpu_weight: Some(500),
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        );
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -681,13 +847,14 @@ mod tests {
         let req = DaemonRequest::Pull {
             image: "nginx".to_string(),
             tag: Some("alpine".to_string()),
+            platform: None,
         };
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
 
         match decoded {
-            DaemonRequest::Pull { image, tag } => {
+            DaemonRequest::Pull { image, tag, .. } => {
                 assert_eq!(image, "nginx");
                 assert_eq!(tag, Some("alpine".to_string()));
             }
@@ -796,23 +963,7 @@ mod tests {
 
     #[test]
     fn test_request_json_has_type_tag() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!();
 
         let encoded = encode_request(&req).expect("encode failed");
         let json_str = String::from_utf8_lossy(&encoded);
@@ -882,23 +1033,7 @@ mod tests {
 
     #[test]
     fn test_run_request_empty_command() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec![],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(command: Vec::<String>::new());
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -913,23 +1048,7 @@ mod tests {
 
     #[test]
     fn test_run_request_max_memory_limit() {
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: Some(u64::MAX),
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(memory_limit_bytes: Some(u64::MAX));
 
         let encoded = encode_request(&req).expect("encode failed");
         let decoded = decode_request(&encoded).expect("decode failed");
@@ -1043,23 +1162,7 @@ mod tests {
     #[test]
     fn run_request_with_network_mode_roundtrip() {
         use crate::domain::NetworkMode;
-        let req = DaemonRequest::Run {
-            image: "alpine".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: Some(NetworkMode::Host),
-            mounts: vec![],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(network: Some(NetworkMode::Host));
         let encoded = encode_request(&req).expect("encode");
         let decoded = decode_request(&encoded).expect("decode");
         match decoded {
@@ -1082,27 +1185,14 @@ mod tests {
     fn run_request_with_mounts_roundtrip() {
         use crate::domain::BindMount;
         use std::path::PathBuf;
-        let req = DaemonRequest::Run {
+        let req = test_run!(
             image: "ubuntu".to_string(),
-            tag: None,
-            command: vec!["/bin/sh".to_string()],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
             mounts: vec![BindMount {
                 host_path: PathBuf::from("/tmp/foo"),
                 container_path: PathBuf::from("/bar"),
                 read_only: false,
             }],
-            privileged: false,
-            env: vec![],
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        );
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
         match decoded {
@@ -1134,9 +1224,13 @@ mod tests {
             env: vec![],
             name: None,
             tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
             priority: None,
             urgency: None,
             execution_context: None,
+            platform: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1286,9 +1380,13 @@ mod tests {
             privileged: false,
             name: Some("my-container".to_string()),
             tty: false,
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
             priority: None,
             urgency: None,
             execution_context: None,
+            platform: None,
         };
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
@@ -1334,6 +1432,7 @@ mod tests {
         let json = serde_json::to_string(&DaemonRequest::Pull {
             image: "library/nginx".to_string(),
             tag: Some("stable".to_string()),
+            platform: None,
         })
         .expect("serialize");
         assert_eq!(
@@ -1461,23 +1560,7 @@ mod tests {
     /// change and will cause this test to fail.
     #[test]
     fn wire_format_run_request_field_names_stable() {
-        let req = DaemonRequest::Run {
-            image: "i".to_string(),
-            tag: None,
-            command: vec![],
-            memory_limit_bytes: None,
-            cpu_weight: None,
-            ephemeral: false,
-            network: None,
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            name: None,
-            tty: false,
-            priority: None,
-            urgency: None,
-            execution_context: None,
-        };
+        let req = test_run!(image: "i".to_string(), command: Vec::<String>::new());
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
         let obj = v.as_object().expect("object");
@@ -1502,5 +1585,143 @@ mod tests {
                 "missing field {field} in Run wire format"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Platform field on Pull and Run
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pull_without_platform_deserializes() {
+        let json = r#"{"type":"Pull","image":"alpine","tag":"latest"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Pull { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn pull_with_platform_deserializes() {
+        let json = r#"{"type":"Pull","image":"alpine","tag":"latest","platform":"linux/arm64"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Pull { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()));
+            }
+            _ => panic!("expected Pull"),
+        }
+    }
+
+    #[test]
+    fn run_without_platform_deserializes() {
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Run { platform, .. } => assert_eq!(platform, None),
+            _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn run_with_platform_deserializes() {
+        let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"platform":"linux/arm64"}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Run { platform, .. } => {
+                assert_eq!(platform, Some("linux/arm64".to_string()));
+            }
+            _ => panic!("expected Run"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Update request / UpdateProgress response — wire format and serde tests
+    // -----------------------------------------------------------------------
+
+    /// Wire-format snapshot for `DaemonRequest::Update` with explicit image list.
+    #[test]
+    fn wire_snapshot_update_request() {
+        let req = DaemonRequest::Update {
+            images: vec!["alpine:latest".to_string(), "nginx:stable".to_string()],
+            all: false,
+            containers: false,
+            restart: false,
+        };
+        let json = serde_json::to_string(&req).expect("serialize");
+        assert!(json.contains("\"type\":\"Update\""), "type tag: {json}");
+        assert!(json.contains("\"alpine:latest\""), "image: {json}");
+        assert!(json.contains("\"nginx:stable\""), "image: {json}");
+        // Round-trip must be stable.
+        let decoded: DaemonRequest = serde_json::from_str(&json).expect("deserialize");
+        let re_encoded = serde_json::to_string(&decoded).expect("re-serialize");
+        assert_eq!(json, re_encoded, "wire format not stable across roundtrip");
+    }
+
+    /// Deserialize `Update` with only the `images` field — booleans default to false.
+    #[test]
+    fn update_request_defaults_bools_false() {
+        let json = r#"{"type":"Update","images":["alpine:latest"]}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update {
+                images,
+                all,
+                containers,
+                restart,
+            } => {
+                assert_eq!(images, vec!["alpine:latest"]);
+                assert!(!all, "all should default to false");
+                assert!(!containers, "containers should default to false");
+                assert!(!restart, "restart should default to false");
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Deserialize `Update` with `all: true`.
+    #[test]
+    fn update_request_all_true() {
+        let json = r#"{"type":"Update","images":[],"all":true}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update { all, images, .. } => {
+                assert!(all);
+                assert!(images.is_empty());
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Deserialize `Update` with `containers: true, restart: true`.
+    #[test]
+    fn update_request_containers_and_restart() {
+        let json = r#"{"type":"Update","images":[],"containers":true,"restart":true}"#;
+        let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        match req {
+            DaemonRequest::Update {
+                containers,
+                restart,
+                ..
+            } => {
+                assert!(containers);
+                assert!(restart);
+            }
+            _ => panic!("expected Update"),
+        }
+    }
+
+    /// Wire-format snapshot for `DaemonResponse::UpdateProgress`.
+    #[test]
+    fn wire_snapshot_update_progress_response() {
+        let resp = DaemonResponse::UpdateProgress {
+            image: "alpine:latest".to_string(),
+            status: "updated".to_string(),
+        };
+        let json = serde_json::to_string(&resp).expect("serialize");
+        assert_eq!(
+            json, r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
+            "wire snapshot mismatch: {json}",
+        );
     }
 }
