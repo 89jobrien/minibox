@@ -8,8 +8,9 @@
 //! The daemon supports multiple adapter suites selected via the
 //! `MINIBOX_ADAPTER` environment variable (default: `smolvm`, fallback: `krun`):
 //!
-//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform.
-//! - **krun**: libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
+//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform. Falls back to krun
+//!   automatically when the `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
+//! - **krun** (fallback): libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
 //! - **gke** (Linux only): proot (ptrace), copy FS, no-op limiter. Unprivileged.
 //! - **colima**: Colima/Lima VM via limactl + nerdctl. Cross-platform.

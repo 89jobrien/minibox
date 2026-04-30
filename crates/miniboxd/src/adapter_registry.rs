@@ -140,13 +140,39 @@ pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> 
     Ok(suite)
 }
 
+/// Fallback adapter suite used when the default (`smolvm`) binary is not on PATH.
+pub const FALLBACK_ADAPTER_SUITE: &str = "krun";
+
 /// Parse from the `MINIBOX_ADAPTER` environment variable.
 ///
-/// Falls back to [`DEFAULT_ADAPTER_SUITE`] when the variable is unset.
+/// When `MINIBOX_ADAPTER` is unset, tries [`DEFAULT_ADAPTER_SUITE`] (`smolvm`) first.
+/// If the `smolvm` binary is not found on PATH, silently falls back to
+/// [`FALLBACK_ADAPTER_SUITE`] (`krun`).
+///
+/// When `MINIBOX_ADAPTER` is explicitly set, the value is used as-is — no fallback.
 pub fn adapter_from_env() -> Result<AdapterSuite, AdapterSelectionError> {
-    let val =
-        std::env::var("MINIBOX_ADAPTER").unwrap_or_else(|_| DEFAULT_ADAPTER_SUITE.to_string());
-    parse_adapter(&val)
+    match std::env::var("MINIBOX_ADAPTER") {
+        Ok(val) => parse_adapter(&val),
+        Err(_) => {
+            // Auto-detect: prefer smolvm, fall back to krun if smolvm is not installed.
+            if smolvm_available() {
+                parse_adapter(DEFAULT_ADAPTER_SUITE)
+            } else {
+                parse_adapter(FALLBACK_ADAPTER_SUITE)
+            }
+        }
+    }
+}
+
+/// Returns `true` if the `smolvm` binary is present on PATH.
+fn smolvm_available() -> bool {
+    std::process::Command::new("smolvm")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 /// Structured error for invalid adapter selection.
@@ -314,14 +340,47 @@ mod tests {
     }
 
     #[test]
-    fn adapter_from_env_defaults_to_smolvm() {
+    fn adapter_from_env_defaults_to_smolvm_or_krun() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
-        let suite = adapter_from_env().expect("smolvm default should parse on any unix platform");
+        let suite = adapter_from_env()
+            .expect("default adapter (smolvm or krun fallback) should parse on any unix platform");
+        // smolvm is preferred; krun is the fallback when smolvm binary is absent.
+        assert!(
+            suite == AdapterSuite::SmolVm || suite == AdapterSuite::Krun,
+            "default should be smolvm or krun, got {suite:?}"
+        );
+    }
+
+    #[test]
+    fn adapter_from_env_explicit_smolvm_is_honoured() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "smolvm");
+        }
+        let suite = adapter_from_env().expect("explicit smolvm should parse");
         assert_eq!(suite, AdapterSuite::SmolVm);
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+    }
+
+    #[test]
+    fn adapter_from_env_explicit_krun_is_honoured() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "krun");
+        }
+        let suite = adapter_from_env().expect("explicit krun should parse");
+        assert_eq!(suite, AdapterSuite::Krun);
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
     }
 
     #[test]

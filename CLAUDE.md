@@ -645,6 +645,22 @@ Spec/plan files in `docs/superpowers/` use date prefixes (e.g.
 `2026-04-26-winbox-wsl2-proxy-design.md`). When searching by name, always
 glob with `*name*` pattern, not exact match.
 
+## Adapter Default Logic
+
+- Default adapter: `smolvm`; auto-falls back to `krun` when `smolvm` binary is absent from
+  PATH. Implemented in `miniboxd/src/adapter_registry.rs::adapter_from_env()`.
+- Explicit `MINIBOX_ADAPTER=<value>` bypasses the probe entirely — no fallback applied.
+- `DEFAULT_ADAPTER_SUITE = "smolvm"`, `FALLBACK_ADAPTER_SUITE = "krun"` are the constants.
+
+## Crux Integration
+
+- `cruxx-plugin` and `cruxx-types` exist in `~/dev/crux/crates/`. The plugin protocol
+  (JSON-RPC over stdio: `Declare`/`Invoke`/`Shutdown`) is fully implemented in
+  `cruxx-plugin::host::PluginHost`.
+- `minibox-agent` crate does NOT exist — archived specs and some doob todos reference it,
+  but it was never created. Planned replacement: `minibox-crux-plugin` binary
+  (see `docs/superpowers/plans/2026-04-30-crux-maestro-portability.md`).
+
 ## Skills Available
 
 Global minibox skills available across all projects:
