@@ -1,6 +1,6 @@
 # Handoff — minibox (2026-04-29)
 
-**Branch:** main | **Build:** clean | **Tests:** 9/9 typestate pass; cargo check clean
+**Branch:** next | **Build:** clean | **Tests:** 9/9 typestate pass; cargo check clean
 Wave 2 of update/upgrade fully landed on main. Bench dashboard rewritten with
 Chart.js history tracking. Typestate lifecycle module added to minibox-core
 (compile-time container state machine, 9 tests). Ready for next->stable promotion
