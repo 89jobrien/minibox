@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-29
+updated: 2026-04-30
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
