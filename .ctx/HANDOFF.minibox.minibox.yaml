@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260429:042914
+updated: 2026-04-29
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
@@ -29,7 +29,7 @@ items:
     field: null
     value: null
     reviewed: null
-    note: "Wave 2 complete: 9574520 (handle_update), d3459f4 (mbx update), e08a7dc (sentinel fixes), 277dbf2 (docs), 761fd26 (v0.22.0), 5a4aadf (CI e2e). Bench dashboard and typestate module also added this session."
+    note: 'Wave 2 complete: 9574520 (handle_update), d3459f4 (mbx update), e08a7dc (sentinel fixes), 277dbf2 (docs), 761fd26 (v0.22.0), 5a4aadf (CI e2e). Bench dashboard and typestate module also added this session.'
 - id: minibox-7
   doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
   name: vz-apple-bug-blocker
@@ -224,7 +224,7 @@ items:
     field: null
     value: null
     reviewed: null
-    note: minibox-llm being dropped in crate consolidation Phase 0 (GH #153). LLM placement TBD.
+    note: minibox-llm being dropped in crate consolidation Phase 0 (GH
 - id: minibox-77
   doob_uuid: null
   name: publish-core-crates
@@ -255,12 +255,12 @@ items:
     field: null
     value: null
     reviewed: null
-    note: "Session 38: v0.22.0 bumped this session (761fd26). CI e2e job added (5a4aadf). Ready for next→stable promotion once CI is green."
+    note: 'Session 38: v0.22.0 bumped this session (761fd26). CI e2e job added (5a4aadf). Ready for next→stable promotion once CI is green.'
 log:
 - date: 20260429:042914
-  summary: "Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified)."
+  summary: 'Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified).'
   commits:
-  - 9574520
+  - '9574520'
   - d3459f4
   - e08a7dc
   - 277dbf2
@@ -268,13 +268,13 @@ log:
   - 5a4aadf
   session: 38
 - date: 20260428:124518
-  summary: "Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI)."
+  summary: 'Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI).'
   commits:
   - 54df5d0
   - 1bc83c5
   session: 37
 - date: 20260428:121625
-  summary: "Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests."
+  summary: 'Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests.'
   commits:
   - c669ca8
   - f423e19
@@ -285,13 +285,13 @@ log:
   - eb6bef2
   session: 36
 - date: 20260428:062906
-  summary: "Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree."
+  summary: 'Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree.'
   commits:
   - b8720ac
   - 4e4bdba
   session: 35
 - date: 20260428:080155
-  summary: "Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions."
+  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
   commits:
   - 5b4c4d8
   session: 34
