@@ -23,8 +23,16 @@
 fuzz/*
 !fuzz/fuzz_targets/
 
-# Claude Code local configuration
-.claude/
+# Claude Code local configuration — track skills, ignore everything else
+.claude/*
+!.claude/skills
+.claude/skills/*
+!.claude/skills/wave-integration
+.claude/skills/wave-integration/*
+!.claude/skills/wave-integration/SKILL.md
+!.claude/skills/wave-integration/helpers
+!.claude/skills/wave-integration/references
+!.claude/skills/wave-integration/references/*.md
 .worktrees/
 .superpowers/
 .remember/
