@@ -107,6 +107,10 @@ fn main() -> Result<()> {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
         }
+        Some("check-repo-clean") => {
+            gates::check_repo_cleanliness(&sh);
+            Ok(())
+        }
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("test-linux") => test_linux::test_linux(),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
@@ -162,6 +166,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
+            );
+            eprintln!(
+                "  check-repo-clean warn if generated artifacts (target/, traces/, *.profraw) are tracked"
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!(
