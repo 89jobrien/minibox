@@ -213,6 +213,10 @@ items:
   completed: null
   extra: []
 log:
+- date: 2026-05-02
+  summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
+  commits:
+  - 788c10f
 - date: 20260430:143952
   summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes (all pre-rename era); merged next→stable and tagged v0.23.0; synced xtask README with full command inventory; dropped stale minibox-agent-llm-api item.'
   commits:
