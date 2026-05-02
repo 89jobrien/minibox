@@ -17,6 +17,7 @@ use xshell::Shell;
 
 mod bench;
 mod bump;
+mod stale_names;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
@@ -116,6 +117,7 @@ fn main() -> Result<()> {
             let save = env::args().any(|a| a == "--save");
             context::context(&sh, root, save)
         }
+        Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-sites") => {
             let file = env::args()
                 .nth(2)
@@ -172,6 +174,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
+            eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(

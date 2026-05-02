@@ -4,7 +4,7 @@
 //! by tarring the upperdir, storing it as a new layer blob, and constructing
 //! a new OCI manifest.
 
-use crate::daemonbox_state::StateHandle;
+use crate::container_state::StateHandle;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::as_any;

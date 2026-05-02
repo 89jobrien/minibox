@@ -190,7 +190,7 @@ Platform crates follow the `{platform}box` naming convention: `minibox` (Linux n
 `macbox` (macOS Colima/VZ/krun), `winbox` (Windows stub). All are platform-conditional deps in
 `miniboxd`.
 
-8 crates in cargo workspace:
+9 crates in cargo workspace:
 
 1. **minibox-core** (library): Cross-platform shared types — protocol, domain traits, error types,
    image management (`ImageStore`, `RegistryClient`), preflight; re-exported by minibox for macro
@@ -207,7 +207,9 @@ Platform crates follow the `{platform}box` naming convention: `minibox` (Linux n
 5. **macbox** (library): macOS daemon implementation (Colima adapter suite + VZ + krun backends)
 6. **winbox** (library): Windows daemon implementation (stub)
 7. **mbx** (binary): CLI client sending commands to daemon (formerly `minibox-cli`)
-8. **xtask** (dev-tool): Pre-commit gate, test suites, conformance, build-vm-image; not shipped
+8. **minibox-crux-plugin** (binary): Crux plugin host — exposes pull/run/ps/stop/rm over
+   JSON-RPC stdio for agent pipelines; connects minibox to the crux DSL runtime
+9. **xtask** (dev-tool): Pre-commit gate, test suites, conformance, build-vm-image; not shipped
 
 ### Critical Design Patterns
 
@@ -658,8 +660,8 @@ glob with `*name*` pattern, not exact match.
   (JSON-RPC over stdio: `Declare`/`Invoke`/`Shutdown`) is fully implemented in
   `cruxx-plugin::host::PluginHost`.
 - `minibox-agent` crate does NOT exist — archived specs and some doob todos reference it,
-  but it was never created. Planned replacement: `minibox-crux-plugin` binary
-  (see `docs/superpowers/plans/2026-04-30-crux-maestro-portability.md`).
+  but it was never created. The `minibox-crux-plugin` binary (`crates/minibox-crux-plugin/`)
+  is the live replacement — it exposes minibox ops over JSON-RPC stdio for crux agent pipelines.
 
 ## Skills Available
 

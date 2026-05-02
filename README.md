@@ -88,7 +88,7 @@ the full threat model.
 
 ## Architecture
 
-Eight crates in the workspace:
+Nine crates in the workspace:
 
 ```rust
                          +--------------+
@@ -112,9 +112,11 @@ Eight crates in the workspace:
         |  macros    |
         +------------+
 
-        +------------+         +------------+
-        |    mbx     |  CLI    |  xtask     |  dev tooling
-        +------------+         +------------+
+        +------------+   +------------------+   +------------+
+        |    mbx     |   | minibox-crux-    |   |  xtask     |
+        |   CLI      |   | plugin  (agent   |   | dev tool   |
+        |            |   | JSON-RPC bridge) |   |            |
+        +------------+   +------------------+   +------------+
 ```
 
 **Hexagonal architecture.** Domain traits (`ImageRegistry`, `FilesystemProvider`,

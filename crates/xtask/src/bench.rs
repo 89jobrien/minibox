@@ -191,10 +191,10 @@ fn collect_all_metrics(criterion_dir: &Path) -> Result<Vec<BenchMetrics>> {
                 continue;
             }
             let case_new = bench_path.join("new");
-            if case_new.join("estimates.json").exists() {
-                if let Ok(m) = collect_single_metric(&bench_name, &group_name, &case_new) {
-                    metrics.push(m);
-                }
+            if case_new.join("estimates.json").exists()
+                && let Ok(m) = collect_single_metric(&bench_name, &group_name, &case_new)
+            {
+                metrics.push(m);
             }
         }
     }

@@ -140,9 +140,8 @@ test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-s
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
-# Launch TUI dashboard (removed — dashbox was extracted)
-# dash:
-#     cargo run -p dashbox --release
+# TUI dashboard (dashbox) was removed in the crate consolidation (v0.23.0).
+# Use `mbx ps` and `mbx events` for container status and event streaming.
 
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
