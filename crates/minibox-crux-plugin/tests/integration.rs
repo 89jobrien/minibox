@@ -234,11 +234,7 @@ async fn invoke_ps_returns_container_list() {
     // Spin up mock daemon before spawning plugin.
     let sp = socket_path.clone();
     tokio::spawn(async move {
-        mock_daemon_once(
-            sp,
-            DaemonResponse::ContainerList { containers: vec![] },
-        )
-        .await
+        mock_daemon_once(sp, DaemonResponse::ContainerList { containers: vec![] }).await
     });
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
@@ -384,10 +380,8 @@ async fn multiple_requests_in_sequence() {
         let mut reader = BufReader::new(read_half);
         let mut line = String::new();
         reader.read_line(&mut line).await.unwrap();
-        let mut resp = serde_json::to_string(&DaemonResponse::ContainerList {
-            containers: vec![],
-        })
-        .unwrap();
+        let mut resp =
+            serde_json::to_string(&DaemonResponse::ContainerList { containers: vec![] }).unwrap();
         resp.push('\n');
         write_half.write_all(resp.as_bytes()).await.unwrap();
         write_half.flush().await.unwrap();

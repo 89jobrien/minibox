@@ -192,11 +192,13 @@ fn run_pipe_exec_command(
 
 /// Execute a command inside a container using a PTY (tty=true).
 ///
-/// Allocates a master/slave PTY pair via `openpty(3)`, forks, joins the container
-/// namespaces in the child, creates a new session with `setsid(2)`, acquires the
-/// slave as the controlling terminal with `TIOCSCTTY`, then `dup2`s the slave into
-/// stdin/stdout/stderr before `execve`. The parent streams master output to `tx`
-/// and relays `TIOCSWINSZ` resize events from `config.resize_rx`.
+/// Allocates a master/slave PTY pair via `openpty(3)` in the parent, then spawns
+/// `nsenter(1)` (util-linux) with the slave wired as its stdin/stdout/stderr.
+/// `std::process::Command` uses `posix_spawn(3)` internally — no `fork(2)` is
+/// called in this process, eliminating POSIX UB in a multi-threaded context.
+///
+/// The parent reads PTY output from the master fd and forwards resize events
+/// via `TIOCSWINSZ`.
 fn run_pty_exec(
     container_pid: u32,
     exec_id: &str,
@@ -210,26 +212,8 @@ fn run_pty_exec(
         let _ = rt.block_on(tx.send(DaemonResponse::Error { message: msg }));
     };
 
-    // Open namespace fds.
-    let ns_base = format!("/proc/{container_pid}/ns");
-    let ns_names = ["mnt", "pid", "net", "uts", "ipc"];
-    let ns_fds: Vec<std::fs::File> = ns_names
-        .iter()
-        .filter_map(|ns| {
-            std::fs::File::open(format!("{ns_base}/{ns}"))
-                .map_err(|e| warn!(ns = %ns, error = %e, "exec: failed to open ns fd"))
-                .ok()
-        })
-        .collect();
-    if ns_fds.len() != ns_names.len() {
-        send_err(format!(
-            "exec: could not open all ns fds for pid {container_pid}"
-        ));
-        return;
-    }
-
-    // Allocate PTY via nix safe bindings over openpty(3).
-    // nix::pty is available under the "term" feature in nix 0.29.
+    // Allocate PTY in the parent. The slave is passed to nsenter as
+    // stdin/stdout/stderr; the master stays with us for streaming and resize.
     let pty = match nix::pty::openpty(None, None) {
         Ok(p) => p,
         Err(e) => {
@@ -237,124 +221,79 @@ fn run_pty_exec(
             return;
         }
     };
-    // Convert to raw fds before the fork so we have plain ints to work with
-    // across the fork boundary without risking OwnedFd double-close.
-    // SAFETY: into_raw_fd() takes ownership of the fd as a raw int. We are
-    // responsible for closing both fds explicitly from this point forward.
+    // SAFETY: into_raw_fd() surrenders OwnedFd ownership to a raw int.
+    // Both fds are closed explicitly; no other path touches them after this.
     let master_fd = pty.master.into_raw_fd();
     let slave_fd = pty.slave.into_raw_fd();
 
-    // SAFETY: about to fork; all fds are managed explicitly below.
-    let child_pid = unsafe { libc::fork() };
-    match child_pid {
-        -1 => {
-            send_err("exec: pty fork failed".to_string());
-            // SAFETY: fork failed so only this process exists; close both fds.
-            unsafe {
-                libc::close(master_fd);
-                libc::close(slave_fd);
-            }
+    // Helper: dup slave_fd so each Stdio object owns its own fd.
+    let dup_slave = || -> std::process::Stdio {
+        use std::os::fd::FromRawFd;
+        // SAFETY: dup() creates a new fd referencing the same file description.
+        // The resulting fd is immediately given to Stdio which closes it on drop.
+        let duped = unsafe { libc::dup(slave_fd) };
+        if duped < 0 {
+            std::process::Stdio::null()
+        } else {
+            unsafe { std::process::Stdio::from_raw_fd(duped) }
         }
-        0 => {
-            // ── Child ──────────────────────────────────────────────────────
-            for f in &ns_fds {
-                // SAFETY: setns joins namespace; f is a valid open fd.
-                unsafe { libc::setns(f.as_raw_fd(), 0) };
-            }
-            // SAFETY: setsid creates a new session; safe in child after fork.
-            unsafe { libc::setsid() };
-            // SAFETY: TIOCSCTTY acquires slave as controlling terminal in the
-            // new session created by setsid above.
-            unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0i32) };
-            // SAFETY: dup2 duplicates slave fd into stdin/stdout/stderr slots.
-            // slave_fd > 2 guard prevents closing a just-dup'd slot.
-            unsafe {
-                libc::dup2(slave_fd, 0);
-                libc::dup2(slave_fd, 1);
-                libc::dup2(slave_fd, 2);
-                if slave_fd > 2 {
-                    libc::close(slave_fd);
-                }
-                libc::close(master_fd);
-            }
-            let cmd_cstr = match std::ffi::CString::new(config.spec.cmd[0].clone()) {
-                Ok(c) => c,
-                Err(_) => unsafe { libc::_exit(127) },
-            };
-            let args: Vec<std::ffi::CString> = config
-                .spec
-                .cmd
-                .iter()
-                .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
-                .collect();
-            let envp: Vec<std::ffi::CString> = config
-                .spec
-                .env
-                .iter()
-                .filter_map(|s| std::ffi::CString::new(s.as_str()).ok())
-                .collect();
-            let args_ptrs: Vec<*const libc::c_char> = args
-                .iter()
-                .map(|s| s.as_ptr())
-                .chain(std::iter::once(std::ptr::null()))
-                .collect();
-            let envp_ptrs: Vec<*const libc::c_char> = envp
-                .iter()
-                .map(|s| s.as_ptr())
-                .chain(std::iter::once(std::ptr::null()))
-                .collect();
-            // SAFETY: execve replaces this process image; all pointers are valid
-            // null-terminated C strings alive for the duration of this call.
-            unsafe {
-                libc::execve(cmd_cstr.as_ptr(), args_ptrs.as_ptr(), envp_ptrs.as_ptr());
-                libc::_exit(127);
-            }
-        }
-        child => {
-            // ── Parent ─────────────────────────────────────────────────────
-            // SAFETY: slave is now owned by child; parent closes its copy.
+    };
+
+    let mut cmd = build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env);
+    cmd.stdin(dup_slave()).stdout(dup_slave()).stderr(dup_slave());
+
+    // SAFETY: close the original slave fd after spawning — nsenter's duped
+    // copies keep the slave alive in the child; we no longer need it here.
+    let mut child = match cmd.spawn() {
+        Ok(c) => {
             unsafe { libc::close(slave_fd) };
-
-            // Resize relay thread — forwards TIOCSWINSZ to the PTY master.
-            if let Some(mut resize_rx) = config.resize_rx {
-                let mfd = master_fd;
-                std::thread::spawn(move || {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("resize relay runtime");
-                    rt.block_on(async {
-                        while let Some((cols, rows)) = resize_rx.recv().await {
-                            let ws = libc::winsize {
-                                ws_col: cols,
-                                ws_row: rows,
-                                ws_xpixel: 0,
-                                ws_ypixel: 0,
-                            };
-                            // SAFETY: TIOCSWINSZ ioctl on master_fd updates PTY window
-                            // size. mfd is valid until master_fd is closed after waitpid.
-                            unsafe { libc::ioctl(mfd, libc::TIOCSWINSZ as _, &ws) };
-                        }
-                    });
-                });
-            }
-
-            // Stream master → ContainerOutput (PTY merges stdout+stderr into master).
-            stream_fd_to_channel(master_fd, OutputStreamKind::Stdout, &tx);
-
-            let mut status: libc::c_int = 0;
-            // SAFETY: child is a valid PID returned by fork above.
-            unsafe { libc::waitpid(child, &mut status, 0) };
-            let exit_code = if libc::WIFEXITED(status) {
-                libc::WEXITSTATUS(status)
-            } else {
-                -1
-            };
-            let rt = tokio::runtime::Handle::current();
-            let _ = rt.block_on(tx.send(DaemonResponse::ContainerStopped { exit_code }));
-            info!(exec_id = %exec_id, exit_code, "exec: pty process exited");
+            c
         }
+        Err(e) => {
+            unsafe { libc::close(slave_fd) };
+            unsafe { libc::close(master_fd) };
+            send_err(format!("exec: nsenter pty spawn failed: {e}"));
+            return;
+        }
+    };
+
+    // Resize relay thread — forwards TIOCSWINSZ to the PTY master fd.
+    if let Some(mut resize_rx) = config.resize_rx {
+        let mfd = master_fd;
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("resize relay runtime");
+            rt.block_on(async {
+                while let Some((cols, rows)) = resize_rx.recv().await {
+                    let ws = libc::winsize {
+                        ws_col: cols,
+                        ws_row: rows,
+                        ws_xpixel: 0,
+                        ws_ypixel: 0,
+                    };
+                    // SAFETY: mfd is valid until master is closed after wait.
+                    unsafe { libc::ioctl(mfd, libc::TIOCSWINSZ as _, &ws) };
+                }
+            });
+        });
     }
+
+    // Stream master → ContainerOutput (PTY merges stdout+stderr into master).
+    stream_fd_to_channel(master_fd, OutputStreamKind::Stdout, &tx);
+
+    let exit_code = match child.wait() {
+        Ok(status) => status.code().unwrap_or(-1),
+        Err(e) => {
+            warn!(exec_id = %exec_id, error = %e, "exec: pty wait failed");
+            -1
+        }
+    };
+
+    let rt = tokio::runtime::Handle::current();
+    let _ = rt.block_on(tx.send(DaemonResponse::ContainerStopped { exit_code }));
+    info!(exec_id = %exec_id, exit_code, "exec: pty process exited");
 }
 
 fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<DaemonResponse>) {

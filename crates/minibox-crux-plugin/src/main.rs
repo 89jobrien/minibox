@@ -85,24 +85,19 @@ async fn dispatch(handler: &str, input: Value) -> Result<Value> {
 
     // Collect all responses until the stream closes.
     let mut responses: Vec<Value> = Vec::new();
-    loop {
-        match stream.next().await.context("read daemon response")? {
-            Some(resp) => {
-                let is_terminal = matches!(
-                    &resp,
-                    DaemonResponse::Success { .. }
-                        | DaemonResponse::Error { .. }
-                        | DaemonResponse::ContainerStopped { .. }
-                        | DaemonResponse::ContainerCreated { .. }
-                        | DaemonResponse::ContainerList { .. }
-                );
-                let json = serde_json::to_value(&resp).context("serialize DaemonResponse")?;
-                responses.push(json);
-                if is_terminal {
-                    break;
-                }
-            }
-            None => break,
+    while let Some(resp) = stream.next().await.context("read daemon response")? {
+        let is_terminal = matches!(
+            &resp,
+            DaemonResponse::Success { .. }
+                | DaemonResponse::Error { .. }
+                | DaemonResponse::ContainerStopped { .. }
+                | DaemonResponse::ContainerCreated { .. }
+                | DaemonResponse::ContainerList { .. }
+        );
+        let json = serde_json::to_value(&resp).context("serialize DaemonResponse")?;
+        responses.push(json);
+        if is_terminal {
+            break;
         }
     }
 
