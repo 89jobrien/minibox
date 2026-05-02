@@ -68,13 +68,13 @@ fn lint_file(path: &Path) -> Result<()> {
     }
 
     // Extract and validate status.
-    if let Some(status) = frontmatter_value(fm, "status") {
-        if !ALLOWED_STATUSES.contains(&status) {
-            bail!(
-                "invalid status \"{status}\" (allowed: {})",
-                ALLOWED_STATUSES.join(", ")
-            );
-        }
+    if let Some(status) = frontmatter_value(fm, "status")
+        && !ALLOWED_STATUSES.contains(&status)
+    {
+        bail!(
+            "invalid status \"{status}\" (allowed: {})",
+            ALLOWED_STATUSES.join(", ")
+        );
     }
 
     Ok(())

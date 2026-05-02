@@ -25,7 +25,7 @@ fn send_blocking(tx: &mpsc::Sender<DaemonResponse>, msg: DaemonResponse) {
     }
 }
 
-use crate::daemonbox_state::StateHandle;
+use crate::container_state::StateHandle;
 
 /// Full exec configuration including async channels for stdin/resize relay.
 ///

@@ -68,7 +68,7 @@ pub fn build_colima_handler_dependencies(
     let image_loader: DynImageLoader = registry.clone();
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::container_state::StateHandle,
     );
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),

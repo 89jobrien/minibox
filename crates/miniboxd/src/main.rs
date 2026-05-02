@@ -581,7 +581,7 @@ fn build_native_handler_dependencies(
     ));
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::container_state::StateHandle,
     );
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
@@ -609,7 +609,7 @@ fn build_native_handler_dependencies(
         },
         exec: minibox::daemon::handler::ExecDeps {
             exec_runtime: Some(minibox::adapters::exec::native_exec_runtime(
-                Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
+                Arc::clone(&state) as minibox::container_state::StateHandle,
             )),
             pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
         },

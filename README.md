@@ -4,15 +4,34 @@
 [![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
 [![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)
 
-A container runtime written in Rust with daemon/client architecture, OCI image pulling, Linux
-namespace isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal
-architecture makes adapter suites swappable at startup.
+A container runtime written in Rust with daemon/client architecture, OCI image
+pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay
+filesystem support. Hexagonal architecture makes adapter suites swappable at
+startup.
 
 **Status:** Development (`v0.21.0`)
 
-**What works (Linux `native` adapter):** container lifecycle (pull/run/stop/rm/ps/pause/resume),
-`setns`-based exec with PTY, Docker Hub v2 + ghcr.io image pull, lease-based GC (`prune`/`rmi`),
-bind mounts + privileged mode, log capture, lifecycle events, bridge networking (experimental).
+**Platform tiers:** Linux is production-ready. macOS is experimental (VM-backed, limited
+exec/logs). Windows is a planned stub only — `winbox::start()` returns an error unconditionally.
+See the [Platform Support](#platform-support) table below.
+
+---
+
+## What Works Today (Linux)
+
+The `native` adapter suite on Linux is the **production** path. These features are stable:
+
+- **Container lifecycle** -- pull, run, stop, rm, ps, pause/resume
+- **OCI image pull** -- Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
+- **Image management** -- `prune` / `rmi` with lease-based GC
+- **Bind mounts + privileged mode** -- `-v`/`--mount`, `--privileged`
+- **Log capture** -- `minibox logs <id>` for stored stdout/stderr
+- **Container events** -- `minibox events` streams lifecycle events
+
+These features exist but are **experimental** (native Linux only, limited test coverage):
+
+- **Container exec** -- `setns`-based exec with `-it` PTY support
+- **Bridge networking** -- `MINIBOX_NETWORK_MODE=bridge`; veth pairs, NAT via iptables DNAT
 
 ---
 
@@ -21,9 +40,13 @@ bind mounts + privileged mode, log capture, lifecycle events, bridge networking 
 Requires Linux, root, kernel 4.0+ (5.0+ recommended), cgroups v2, overlay FS.
 
 ```bash
+# Build
 cargo build --release
+
+# Start daemon
 sudo ./target/release/miniboxd
 
+# Pull, run, list, stop, remove
 sudo ./target/release/mbx pull alpine
 sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
 sudo ./target/release/mbx ps
@@ -44,9 +67,12 @@ sudo ./target/release/mbx rm <id>
 | macOS (Intel)         | Experimental   | `colima`               | exec/logs limited                                                                  |
 | Windows               | Planned        | `winbox` stub          | `winbox::start()` returns error; no runtime yet                                    |
 
-`miniboxd` selects the platform crate at compile time (`cfg` gates) and the adapter suite at
-startup via `MINIBOX_ADAPTER`. Unrecognized values cause the daemon to exit before binding the
-socket. See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full capability matrix.
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
+capability breakdown.
+
+`miniboxd` selects the platform crate at compile time (`cfg` gates) and the
+adapter suite at startup via `MINIBOX_ADAPTER`. Unrecognized values cause the
+daemon to exit before binding the socket.
 
 ---
 
@@ -61,42 +87,51 @@ socket. See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full capa
 | Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
 | PID limit      | 1024 per container (default)                                        |
 
-Not yet implemented: capability dropping, seccomp filters, user namespace remapping, rootless.
+**Not yet implemented:** capability dropping, seccomp filters, user namespace
+remapping, rootless support. See `CLAUDE.md` ("Security Considerations") for
+the full threat model.
 
 ---
 
 ## Architecture
 
-```
-                     +--------------+
-                     |   miniboxd   |  binary -- daemon entrypoint
-                     +------+-------+
-                            |
-          +-----------------+-----------------+
-          |                 |                 |
-    +-----+------+   +-----+------+   +------+-----+
-    |  minibox   |   |   macbox   |   |   winbox   |
-    |  Linux     |   | Colima/VZ/ |   |   (stub)   |
-    | primitives |   |   krun     |   |            |
-    +-----+------+   +------------+   +------------+
-          |
-    +-----+------+
-    |minibox-core|  protocol, domain traits, OCI types, client
-    +-----+------+
-          |
-    +-----+------+
-    | minibox-   |  proc macros (as_any!, adapt!)
-    |  macros    |
-    +------------+
+Nine crates in the workspace:
 
-    +------------+         +------------+
-    |    mbx     |  CLI    |  xtask     |  dev tooling
-    +------------+         +------------+
+```rust
+                         +--------------+
+                         |   miniboxd   |  binary -- daemon entrypoint
+                         +------+-------+
+                                |
+              +-----------------+-----------------+
+              |                 |                 |
+        +-----+------+   +-----+------+   +------+-----+
+        |  minibox   |   |   macbox   |   |   winbox   |
+        |  Linux     |   | Colima/VZ/ |   |   (stub)   |
+        | primitives |   |   krun     |   |            |
+        +-----+------+   +------------+   +------------+
+              |
+        +-----+------+
+        |minibox-core|  protocol, domain traits, OCI types, client
+        +-----+------+
+              |
+        +-----+------+
+        | minibox-   |  proc macros (as_any!, adapt!)
+        |  macros    |
+        +------------+
+
+        +------------+   +------------------+   +------------+
+        |    mbx     |   | minibox-crux-    |   |  xtask     |
+        |   CLI      |   | plugin  (agent   |   | dev tool   |
+        |            |   | JSON-RPC bridge) |   |            |
+        +------------+   +------------------+   +------------+
 ```
 
-Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`, `ContainerRuntime`) live
-in `minibox-core`; adapters implement them; tests use mock adapters. Tokio handles socket I/O;
-container operations (fork/clone/exec) run in `spawn_blocking`.
+**Hexagonal architecture.** Domain traits (`ImageRegistry`, `FilesystemProvider`,
+`ResourceLimiter`, `ContainerRuntime`) live in `minibox-core`. Adapters implement
+them. Tests use mock adapters -- no real HTTP or filesystem needed.
+
+**Async/sync boundary.** Tokio handles socket I/O; container operations
+(fork/clone/exec) run in `spawn_blocking`.
 
 ---
 
@@ -129,16 +164,47 @@ cargo xtask test-conformance       # OCI conformance matrix
 just doctor                        # preflight capability check
 ```
 
+See `CLAUDE.md` for the full testing strategy.
+
 ---
 
-## Development
+## Developer Workflow
+
+Three tooling layers exist — each with a distinct role:
+
+| Layer      | Role                                                                         | When to use                          |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| **`just`** | Primary task runner; thin wrappers over `xtask` and `cargo`                  | Day-to-day build, test, lint         |
+| **`xtask`**| CI engine; owns all quality gates (`pre-commit`, `test-unit`, `prepush`)     | Called by `just` and GitHub Actions  |
+| **`mise`** | Interactive / ops tasks (`ssh-vps`, `fix-socket`, `smoke`, git ops)          | One-off VPS ops, interactive demos   |
+
+### Golden paths
 
 ```bash
+# Build
 cargo build --release
-cargo check --workspace
+
+# Lint (macOS-safe)
 cargo clippy --workspace -- -D warnings
-cargo xtask pre-commit             # fmt + clippy + release build gate
+
+# Unit tests (any platform)
+just test-unit                     # wraps cargo xtask test-unit
+
+# Pre-commit gate (fmt + clippy + release build)
+cargo xtask pre-commit
+
+# Run the daemon (Linux, root required)
+sudo ./target/release/miniboxd
+
+# End-to-end tests (Linux, root required)
+just test-e2e
 ```
+
+Use `just --list` to see all available recipes. Use `mise tasks` for interactive/ops tasks.
+Avoid calling `mise` for tasks that appear in the `just` list — they are duplicated there
+intentionally as thin wrappers.
+
+## Development
 
 | Variable              | Default                                         | Purpose                   |
 | --------------------- | ----------------------------------------------- | ------------------------- |
@@ -148,9 +214,13 @@ cargo xtask pre-commit             # fmt + clippy + release build gate
 | `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
 | `RUST_LOG`            | --                                              | Tracing log level         |
 
-Git workflow: `main` (develop) → `next` (auto-promoted on green CI) → `stable` (manual, tagged).
-See [`docs/superpowers/specs/2026-03-26-git-workflow-design.md`](docs/superpowers/specs/2026-03-26-git-workflow-design.md).
+Git workflow: `main` (develop) -> `next` (auto-promoted on green CI) ->
+`stable` (manual, tagged releases). See
+[`docs/superpowers/specs/2026-03-26-git-workflow-design.md`](docs/superpowers/specs/2026-03-26-git-workflow-design.md).
 
-See `CLAUDE.md` for the full development guide, debugging tips, and architecture details.
+---
+
+See `CLAUDE.md` for the full development guide, debugging tips, and architecture
+details.
 
 <sup>Previously named `linuxbox` and `mbx` during early development.</sup>
