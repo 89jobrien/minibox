@@ -7160,10 +7160,7 @@ fn test_daemon_response_serde_round_trip_all_variants() {
         // Re-serialise to compare — direct PartialEq not derived.
         let json2 = serde_json::to_string(&restored)
             .unwrap_or_else(|e| panic!("re-serialise {restored:?} failed: {e}"));
-        assert_eq!(
-            json, json2,
-            "round-trip mismatch for variant: {variant:?}"
-        );
+        assert_eq!(json, json2, "round-trip mismatch for variant: {variant:?}");
     }
 }
 
