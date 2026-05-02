@@ -32,6 +32,8 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
     test_conformance(sh)?;
+    // Warn (non-fatal) if generated artifacts are tracked by git.
+    check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
     Ok(())
 }
@@ -256,6 +258,57 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Warn (non-fatal) if generated artifacts are tracked by git.
+///
+/// Checks for files under `target/`, `artifacts/`, `traces/`, or with `.profraw`/`.crate`
+/// extensions that should never be committed. Prints a warning for each found file but does
+/// not fail — callers that need a hard failure should use `check_repo_cleanliness_strict`.
+pub fn check_repo_cleanliness(sh: &Shell) {
+    let patterns = &[
+        "target/",
+        "artifacts/conformance/",
+        "traces/",
+        "*.profraw",
+        "*.crate",
+    ];
+
+    let output = cmd!(sh, "git ls-files")
+        .output()
+        .unwrap_or_else(|_| std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: vec![],
+            stderr: vec![],
+        });
+
+    let tracked = String::from_utf8_lossy(&output.stdout);
+    let mut found: Vec<&str> = Vec::new();
+
+    for line in tracked.lines() {
+        for pat in patterns {
+            let matches = if pat.ends_with('/') {
+                line.starts_with(pat) || line.contains(&format!("/{pat}"))
+            } else if pat.starts_with("*.") {
+                let ext = pat.trim_start_matches('*');
+                line.ends_with(ext)
+            } else {
+                line == *pat
+            };
+            if matches {
+                found.push(line);
+                break;
+            }
+        }
+    }
+
+    if !found.is_empty() {
+        eprintln!("warning: the following generated artifacts are tracked by git:");
+        for f in &found {
+            eprintln!("  {f}");
+        }
+        eprintln!("warning: run `git rm -r --cached <path>` to untrack them (see issue #154)");
+    }
 }
 
 /// Parse the function-coverage percentage for `handler.rs` from `cargo llvm-cov --text` output.
