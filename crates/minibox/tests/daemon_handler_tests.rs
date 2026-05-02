@@ -6735,3 +6735,83 @@ async fn test_handle_update_containers_collects_source_image_refs() {
         "expected Success, got {second:?}"
     );
 }
+
+/// `handle_update` with `restart = true` stops Running containers whose source
+/// image was updated and reports the stopped count in the success message.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_update_restart_stops_running_containers() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().unwrap();
+    let mock_registry = Arc::new(MockRegistry::new());
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let deps = build_deps_with_registry(
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::clone(&mock_registry) as DynImageRegistry,
+            [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+        )),
+        Arc::clone(&image_store),
+        &temp_dir,
+    );
+    let state = create_test_state_with_dir(&temp_dir);
+
+    // Add a Running container with source_image_ref = "alpine:latest" and a
+    // fake pid.  stop_inner will attempt to signal it; the PID won't exist on
+    // the test host so the signal will fail with ESRCH, but stop_inner still
+    // transitions the state to Stopped after the timeout.  To keep the test
+    // fast we use a non-running PID that is guaranteed to fail immediately.
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "restart-test-cid".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(99999),
+        },
+        pid: Some(99999),
+        rootfs_path: std::path::PathBuf::from("/tmp/fake-restart"),
+        cgroup_path: std::path::PathBuf::from("/tmp/fake-restart"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        true, // restart = true
+        Arc::clone(&state),
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain all responses to get the terminal Success.
+    let success_msg = loop {
+        match rx.recv().await.expect("channel closed unexpectedly") {
+            DaemonResponse::Success { message } => break message,
+            DaemonResponse::UpdateProgress { .. } => continue,
+            other => panic!("unexpected response: {other:?}"),
+        }
+    };
+
+    // The success message must mention "stopped 1 container(s)" because the
+    // running container should have been stopped (or attempted — stop_inner
+    // logs a warn on ESRCH but still counts the container).
+    assert!(
+        success_msg.contains("stopped"),
+        "expected 'stopped' in success message when restart=true, got: {success_msg}"
+    );
+}

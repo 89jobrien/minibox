@@ -2682,13 +2682,73 @@ pub async fn handle_update(
         }
     }
 
-    // ── Step 3: restart if requested (not yet implemented) ────────────────────
-    if restart {
-        warn!("handle_update: restart not yet implemented — skipping container restart");
-    }
+    // ── Step 3: stop containers using updated images (restart = true) ────────
+    //
+    // Full replay (stop + re-run with original config) requires the container's
+    // creation parameters to be stored in ContainerRecord, which is tracked for
+    // a future wave.  For now, "restart" means: stop every Running or Paused
+    // container whose source image was just updated so it picks up the new
+    // layers on its next manual start.
+    //
+    // stop_inner is unix-only so this entire block is cfg-gated.
+    #[cfg(unix)]
+    let stopped: usize = if restart {
+        let target_set: std::collections::HashSet<&str> =
+            target_refs.iter().map(String::as_str).collect();
+
+        let candidate_ids: Vec<String> = state
+            .list_containers()
+            .await
+            .into_iter()
+            .filter(|info| info.state == "Running" || info.state == "Paused")
+            .map(|info| info.id)
+            .collect();
+
+        let mut count = 0usize;
+        for id in candidate_ids {
+            let record = state.get_container(&id).await;
+            let image_ref = record.and_then(|r| r.source_image_ref);
+            if !image_ref.as_deref().map(|r| target_set.contains(r)).unwrap_or(false) {
+                continue;
+            }
+
+            info!(
+                container_id = %id,
+                "handle_update: stopping container for image update (restart=true)"
+            );
+            match stop_inner(&id, &state).await {
+                Ok(()) => {
+                    count += 1;
+                    info!(container_id = %id, "handle_update: container stopped");
+                }
+                Err(e) => {
+                    warn!(
+                        container_id = %id,
+                        error = %e,
+                        "handle_update: failed to stop container — continuing"
+                    );
+                }
+            }
+        }
+        count
+    } else {
+        0
+    };
+
+    #[cfg(not(unix))]
+    let stopped: usize = {
+        if restart {
+            warn!("handle_update: restart not supported on this platform");
+        }
+        0
+    };
 
     // ── Step 4: terminal Success ──────────────────────────────────────────────
-    let message = format!("updated {updated}/{total} images");
+    let message = if restart && stopped > 0 {
+        format!("updated {updated}/{total} images; stopped {stopped} container(s)")
+    } else {
+        format!("updated {updated}/{total} images")
+    };
     info!(updated, total, "handle_update: complete");
     if tx.send(DaemonResponse::Success { message }).await.is_err() {
         warn!("handle_update: client disconnected before Success could be sent");
