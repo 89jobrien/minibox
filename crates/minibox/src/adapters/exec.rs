@@ -16,6 +16,15 @@ use tokio::sync::mpsc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
+/// Send a [`DaemonResponse`] from a blocking context using the current Tokio handle.
+/// Logs a warning if the receiver has been dropped.
+fn send_blocking(tx: &mpsc::Sender<DaemonResponse>, msg: DaemonResponse) {
+    let rt = tokio::runtime::Handle::current();
+    if rt.block_on(tx.send(msg)).is_err() {
+        warn!("exec: client disconnected before response could be sent");
+    }
+}
+
 use crate::daemonbox_state::StateHandle;
 
 /// Full exec configuration including async channels for stdin/resize relay.
@@ -58,7 +67,7 @@ impl ExecRuntime for NativeExecRuntime {
             .await
             .with_context(|| format!("container {id} not found or not running"))?;
 
-        let exec_id = Uuid::new_v4().simple().to_string()[..16].to_string();
+        let exec_id = Uuid::new_v4().simple().to_string();
 
         let cmd_for_log = spec.cmd.clone();
         // Construct an ExecConfig (infra layer) from the pure ExecSpec.
@@ -71,16 +80,21 @@ impl ExecRuntime for NativeExecRuntime {
         };
         let exec_id_clone = exec_id.clone();
 
-        tokio::task::spawn_blocking(move || {
-            run_exec_blocking(pid, &exec_id_clone, config, tx);
-        });
-
         info!(
             container_id = %id,
             exec_id = %exec_id,
             cmd = ?cmd_for_log,
             "exec: process started"
         );
+
+        let handle = tokio::task::spawn_blocking(move || {
+            run_exec_blocking(pid, &exec_id_clone, config, tx);
+        });
+        tokio::spawn(async move {
+            if let Err(e) = handle.await {
+                warn!(exec_id = %exec_id, error = ?e, "exec: blocking task panicked");
+            }
+        });
 
         Ok(ExecHandle { id: exec_id })
     }
@@ -150,11 +164,6 @@ fn run_pipe_exec_command(
     config: ExecConfig,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    let send_error = |msg: String| {
-        let rt = tokio::runtime::Handle::current();
-        let _ = rt.block_on(tx.send(DaemonResponse::Error { message: msg }));
-    };
-
     let mut child = match build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -162,18 +171,17 @@ fn run_pipe_exec_command(
     {
         Ok(c) => c,
         Err(e) => {
-            send_error(format!("exec: nsenter spawn failed: {e}"));
+            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: nsenter spawn failed: {e}") });
             return;
         }
     };
 
     // Stream stdout and stderr pipes to the channel.
+    use std::os::fd::IntoRawFd;
     if let Some(stdout) = child.stdout.take() {
-        use std::os::fd::IntoRawFd;
         stream_fd_to_channel(stdout.into_raw_fd(), OutputStreamKind::Stdout, &tx);
     }
     if let Some(stderr) = child.stderr.take() {
-        use std::os::fd::IntoRawFd;
         stream_fd_to_channel(stderr.into_raw_fd(), OutputStreamKind::Stderr, &tx);
     }
 
@@ -185,8 +193,7 @@ fn run_pipe_exec_command(
         }
     };
 
-    let rt = tokio::runtime::Handle::current();
-    let _ = rt.block_on(tx.send(DaemonResponse::ContainerStopped { exit_code }));
+    send_blocking(&tx, DaemonResponse::ContainerStopped { exit_code });
     info!(exec_id = %exec_id, exit_code = exit_code, "exec: process exited");
 }
 
@@ -207,17 +214,12 @@ fn run_pty_exec(
 ) {
     use std::os::fd::IntoRawFd as _;
 
-    let send_err = |msg: String| {
-        let rt = tokio::runtime::Handle::current();
-        let _ = rt.block_on(tx.send(DaemonResponse::Error { message: msg }));
-    };
-
     // Allocate PTY in the parent. The slave is passed to nsenter as
     // stdin/stdout/stderr; the master stays with us for streaming and resize.
     let pty = match nix::pty::openpty(None, None) {
         Ok(p) => p,
         Err(e) => {
-            send_err(format!("exec: openpty failed: {e}"));
+            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: openpty failed: {e}") });
             return;
         }
     };
@@ -240,7 +242,9 @@ fn run_pty_exec(
     };
 
     let mut cmd = build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env);
-    cmd.stdin(dup_slave()).stdout(dup_slave()).stderr(dup_slave());
+    cmd.stdin(dup_slave())
+        .stdout(dup_slave())
+        .stderr(dup_slave());
 
     // SAFETY: close the original slave fd after spawning — nsenter's duped
     // copies keep the slave alive in the child; we no longer need it here.
@@ -252,31 +256,26 @@ fn run_pty_exec(
         Err(e) => {
             unsafe { libc::close(slave_fd) };
             unsafe { libc::close(master_fd) };
-            send_err(format!("exec: nsenter pty spawn failed: {e}"));
+            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: nsenter pty spawn failed: {e}") });
             return;
         }
     };
 
     // Resize relay thread — forwards TIOCSWINSZ to the PTY master fd.
+    // Uses blocking_recv() directly; no Tokio runtime needed on this thread.
     if let Some(mut resize_rx) = config.resize_rx {
         let mfd = master_fd;
         std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("resize relay runtime");
-            rt.block_on(async {
-                while let Some((cols, rows)) = resize_rx.recv().await {
-                    let ws = libc::winsize {
-                        ws_col: cols,
-                        ws_row: rows,
-                        ws_xpixel: 0,
-                        ws_ypixel: 0,
-                    };
-                    // SAFETY: mfd is valid until master is closed after wait.
-                    unsafe { libc::ioctl(mfd, libc::TIOCSWINSZ as _, &ws) };
-                }
-            });
+            while let Some((cols, rows)) = resize_rx.blocking_recv() {
+                let ws = libc::winsize {
+                    ws_col: cols,
+                    ws_row: rows,
+                    ws_xpixel: 0,
+                    ws_ypixel: 0,
+                };
+                // SAFETY: mfd is valid until master is closed after wait below.
+                unsafe { libc::ioctl(mfd, libc::TIOCSWINSZ as _, &ws) };
+            }
         });
     }
 
@@ -291,15 +290,14 @@ fn run_pty_exec(
         }
     };
 
-    let rt = tokio::runtime::Handle::current();
-    let _ = rt.block_on(tx.send(DaemonResponse::ContainerStopped { exit_code }));
+    send_blocking(&tx, DaemonResponse::ContainerStopped { exit_code });
     info!(exec_id = %exec_id, exit_code, "exec: pty process exited");
 }
 
 fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<DaemonResponse>) {
-    use std::io::Read;
+    use std::io::{ErrorKind, Read};
     use std::os::fd::FromRawFd;
-    // SAFETY: fd is the read end of a pipe created above; parent owns it.
+    // SAFETY: fd is the read end of a pipe or PTY master created above; caller transfers ownership.
     let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
     let mut buf = [0u8; 4096];
     loop {
@@ -307,13 +305,16 @@ fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<Dae
             Ok(0) => break,
             Ok(n) => {
                 let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                let rt = tokio::runtime::Handle::current();
-                let _ = rt.block_on(tx.send(DaemonResponse::ContainerOutput {
+                send_blocking(tx, DaemonResponse::ContainerOutput {
                     stream: stream.clone(),
                     data,
-                }));
+                });
             }
-            Err(_) => break,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => {
+                warn!(error = %e, "exec: stream read error");
+                break;
+            }
         }
     }
 }
@@ -390,6 +391,9 @@ mod tests {
             stdin_tx: None,
             resize_rx: Some(resize_rx),
         };
+        // Use the test process's own PID so nsenter --target joins our existing
+        // namespaces (effectively a no-op). This is a connectivity smoke test,
+        // not a namespace isolation test.
         let our_pid = std::process::id();
 
         std::thread::spawn(move || {
