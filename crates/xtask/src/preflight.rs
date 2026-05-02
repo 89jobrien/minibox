@@ -1,3 +1,5 @@
+use std::path::Path;
+
 /// Domain port: probe whether a named tool is functional.
 ///
 /// Implementations call the real process; test doubles return canned results.
@@ -132,6 +134,118 @@ impl XtaskProbe for ProcessXtaskProbe {
                 s.code().unwrap_or(-1)
             )),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Doctor: full preflight checks including env vars and system capabilities
+// ---------------------------------------------------------------------------
+
+/// Result of a single doctor check.
+#[derive(Debug, PartialEq)]
+pub enum CheckResult {
+    Ok,
+    Warn(String),
+    Fail(String),
+}
+
+/// Run the full doctor suite and print results.
+///
+/// Checks tools from `preflight.nu`, `CARGO_TARGET_DIR` env var, and on Linux,
+/// cgroups v2 + overlay filesystem availability. Returns `Ok(())` if all
+/// checks pass (warns are non-fatal), or an error listing failures.
+pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
+    let mut failures: Vec<String> = Vec::new();
+
+    // --- Tool checks (from preflight.nu) ---
+    let tools = &["cargo", "just", "rustup", "cargo-nextest", "gh", "op"];
+    let tool_results = check_tools(probe, tools);
+    for (tool, result) in &tool_results {
+        match result {
+            ProbeResult::Ok => println!("[ok]   {tool} on PATH"),
+            ProbeResult::Missing(msg) => {
+                // op and gh are advisory — warn, don't fail
+                if tool == "op" || tool == "gh" {
+                    println!("[warn] {tool} on PATH — {msg}");
+                } else {
+                    println!("[fail] {tool} on PATH — {msg}");
+                    failures.push(format!("{tool}: {msg}"));
+                }
+            }
+        }
+    }
+
+    // --- CARGO_TARGET_DIR ---
+    if std::env::var("CARGO_TARGET_DIR").is_ok() {
+        println!("[ok]   CARGO_TARGET_DIR set");
+    } else {
+        println!("[warn] CARGO_TARGET_DIR not set (optional but recommended)");
+    }
+
+    // --- Linux-only system checks ---
+    #[cfg(target_os = "linux")]
+    {
+        check_linux_capabilities(&mut failures);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        println!("[info] Linux-only checks (cgroups v2, overlay) skipped on this platform");
+    }
+
+    if failures.is_empty() {
+        println!("\ndoctor: all checks passed");
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "doctor: {} check(s) failed:\n  {}",
+            failures.len(),
+            failures.join("\n  ")
+        )
+    }
+}
+
+/// Check Linux-specific system capabilities required by the native adapter.
+#[cfg(target_os = "linux")]
+fn check_linux_capabilities(failures: &mut Vec<String>) {
+    // cgroups v2: /sys/fs/cgroup must be mounted as cgroup2
+    let cgroup2_ok = Path::new("/sys/fs/cgroup/cgroup.controllers").exists();
+    if cgroup2_ok {
+        println!("[ok]   cgroups v2 unified hierarchy");
+    } else {
+        println!("[fail] cgroups v2 not found — /sys/fs/cgroup/cgroup.controllers missing");
+        failures.push("cgroups v2: /sys/fs/cgroup/cgroup.controllers not found".to_string());
+    }
+
+    // overlay filesystem: check via /proc/filesystems
+    let overlay_ok = std::fs::read_to_string("/proc/filesystems")
+        .map(|s| s.contains("overlay"))
+        .unwrap_or(false);
+    if overlay_ok {
+        println!("[ok]   overlay filesystem available");
+    } else {
+        println!(
+            "[warn] overlay filesystem not listed in /proc/filesystems (may require modprobe overlay)"
+        );
+    }
+
+    // kernel version: parse /proc/version for major.minor
+    if let Ok(kver) = std::fs::read_to_string("/proc/version") {
+        let version_str = kver.split_whitespace().nth(2).unwrap_or("unknown");
+        // Require kernel 5.0+ for best cgroups v2 support
+        let parts: Vec<u32> = version_str
+            .split('.')
+            .take(2)
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        if parts.len() >= 2 && (parts[0] > 5 || (parts[0] == 5 && parts[1] >= 0)) {
+            println!("[ok]   kernel version {version_str} (>= 5.0)");
+        } else {
+            println!(
+                "[warn] kernel version {version_str} — 5.0+ recommended for cgroups v2 support"
+            );
+        }
+    } else {
+        println!("[warn] could not read /proc/version");
     }
 }
 
