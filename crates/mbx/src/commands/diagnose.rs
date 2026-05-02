@@ -39,9 +39,8 @@ pub async fn execute(container_id: &str, socket_path: &std::path::Path) -> anyho
         }
     };
 
-    let info = find_container(container_id, &containers).ok_or_else(|| {
-        anyhow::anyhow!("container not found: {container_id}")
-    })?;
+    let info = find_container(container_id, &containers)
+        .ok_or_else(|| anyhow::anyhow!("container not found: {container_id}"))?;
 
     print_report(info);
     Ok(())
@@ -54,10 +53,7 @@ fn find_container<'a>(id: &str, containers: &'a [ContainerInfo]) -> Option<&'a C
         return Some(c);
     }
     // Prefix match — return only if unambiguous.
-    let matches: Vec<_> = containers
-        .iter()
-        .filter(|c| c.id.starts_with(id))
-        .collect();
+    let matches: Vec<_> = containers.iter().filter(|c| c.id.starts_with(id)).collect();
     if matches.len() == 1 {
         Some(matches[0])
     } else {
@@ -113,10 +109,8 @@ fn print_host_diagnostics(pid: u32) {
         }
 
         // cgroup path for the container.
-        let cgroup_root =
-            std::env::var("MINIBOX_CGROUP_ROOT").unwrap_or_else(|_| {
-                "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string()
-            });
+        let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
+            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
         // We don't have the container ID here (only PID), so just note the root.
         println!("\n--- cgroup root ---");
         println!("{cgroup_root}");
@@ -192,7 +186,10 @@ mod tests {
         .await;
         // "xyz999" does not exist — execute should return Err.
         let result = execute("xyz999", &socket_path).await;
-        assert!(result.is_err(), "should fail for unknown container: {result:?}");
+        assert!(
+            result.is_err(),
+            "should fail for unknown container: {result:?}"
+        );
     }
 
     #[cfg(unix)]
@@ -203,7 +200,10 @@ mod tests {
         })
         .await;
         let result = execute("abc123", &socket_path).await;
-        assert!(result.is_ok(), "should succeed for known container: {result:?}");
+        assert!(
+            result.is_ok(),
+            "should succeed for known container: {result:?}"
+        );
     }
 
     #[cfg(unix)]
