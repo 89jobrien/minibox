@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Start miniboxd with the selected adapter, resolving the binary from the
-# shared target cache when CARGO_TARGET_DIR is set via direnv.
+# Thin wrapper: resolves the miniboxd binary and delegates to it.
+#
+# Restart/stop logic is now built into miniboxd --restart.
+# Use MINIBOX_ADAPTER to select the adapter suite.
 #
 # Usage:
 #   ./scripts/start-daemon.sh
 #   ./scripts/start-daemon.sh --adapter colima
-#   ./scripts/start-daemon.sh --adapter native
+#   MINIBOX_ADAPTER=native ./scripts/start-daemon.sh
 
 set -euo pipefail
 
-adapter="colima"
+adapter=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,15 +25,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       cat <<'EOF'
-Start miniboxd with the selected adapter, killing any existing instance first.
+Start miniboxd, replacing any existing instance.
 
 Usage:
   ./scripts/start-daemon.sh [--adapter <name>]
 
-Examples:
-  ./scripts/start-daemon.sh
-  ./scripts/start-daemon.sh --adapter colima
-  ./scripts/start-daemon.sh --adapter native
+The --adapter flag sets MINIBOX_ADAPTER. If omitted, miniboxd auto-selects
+the adapter (smolvm, falling back to krun if smolvm is not installed).
+
+Adapter selection and restart are handled by miniboxd internally.
+Run `mbx doctor` to see which adapters are compiled into this build.
 EOF
       exit 0
       ;;
@@ -47,18 +50,13 @@ binary="$target_dir/release/miniboxd"
 
 if [[ ! -x "$binary" ]]; then
   echo "error: miniboxd not found at $binary" >&2
-  echo "run: cargo build --release" >&2
+  echo "run: cargo build --release -p miniboxd" >&2
   exit 1
 fi
 
-if pgrep -x miniboxd >/dev/null 2>&1; then
-  echo "Stopping existing miniboxd instance(s)..."
-  pkill -x miniboxd || true
-  sleep 1
+if [[ -n "$adapter" ]]; then
+  export MINIBOX_ADAPTER="$adapter"
 fi
 
-export MINIBOX_ADAPTER="$adapter"
-export LIMA_HOME="${LIMA_HOME:-$HOME/.colima/_lima}"
-
-echo "Starting miniboxd (MINIBOX_ADAPTER=$MINIBOX_ADAPTER)..."
-exec sudo --preserve-env=MINIBOX_ADAPTER,LIMA_HOME "$binary"
+echo "Starting miniboxd (MINIBOX_ADAPTER=${MINIBOX_ADAPTER:-auto})..."
+exec sudo --preserve-env=MINIBOX_ADAPTER,LIMA_HOME "$binary" --restart

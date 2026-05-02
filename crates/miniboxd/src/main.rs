@@ -35,6 +35,14 @@ async fn main() -> anyhow::Result<()> {
 fn main() {
     use miniboxd::adapter_registry;
 
+    // Parse --restart flag before building the tokio runtime.
+    let args: Vec<String> = std::env::args().collect();
+    let restart = args.iter().any(|a| a == "--restart");
+
+    if restart {
+        graceful_restart();
+    }
+
     // Peek at the adapter before building the tokio runtime.
     // VZ needs GCD dispatch_main on the real main thread.
     let _adapter_name = std::env::var("MINIBOX_ADAPTER")
@@ -55,6 +63,37 @@ fn main() {
     if let Err(e) = rt.block_on(run_daemon()) {
         eprintln!("miniboxd: fatal: {e:#}");
         std::process::exit(1);
+    }
+}
+
+/// Send SIGTERM to any running miniboxd process(es) and wait briefly.
+///
+/// Used when `miniboxd --restart` is invoked to replace a running daemon
+/// without requiring a separate stop script. The current process then proceeds
+/// to start normally.
+///
+/// If no existing miniboxd is found, this is a no-op.
+#[cfg(unix)]
+fn graceful_restart() {
+    use std::process::Command;
+
+    // pkill sends SIGTERM to processes named "miniboxd" (excluding self).
+    let status = Command::new("pkill")
+        .args(["-TERM", "-x", "miniboxd"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            eprintln!("miniboxd: --restart: sent SIGTERM to existing instance(s)");
+            // Brief wait for the existing daemon to release the socket.
+            std::thread::sleep(std::time::Duration::from_millis(800));
+        }
+        Ok(_) => {
+            // pkill exit 1 means no process found — not an error.
+        }
+        Err(e) => {
+            eprintln!("miniboxd: --restart: pkill failed: {e} (continuing)");
+        }
     }
 }
 
