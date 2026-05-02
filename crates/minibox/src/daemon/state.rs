@@ -11,6 +11,7 @@
 use minibox_core::domain::HookSpec;
 use minibox_core::image::ImageStore;
 use minibox_core::protocol::ContainerInfo;
+use minibox_core::trace::TraceStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -194,20 +195,34 @@ pub struct DaemonState {
     state_file: PathBuf,
     /// IP addresses currently allocated by bridge network, keyed by container_id.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
+    /// Pipeline trace persistence adapter.
+    pub trace_store: Arc<dyn TraceStore>,
 }
 
 impl DaemonState {
     /// Create a fresh `DaemonState` using the given image store.
     ///
     /// `data_dir` is the base directory where `state.json` will be written
-    /// (e.g. `/var/lib/minibox`).
+    /// (e.g. `/var/lib/minibox`). A [`FileTraceStore`] is created under
+    /// `data_dir/traces/` by default.
+    ///
+    /// [`FileTraceStore`]: minibox_core::trace::FileTraceStore
     pub fn new(image_store: ImageStore, data_dir: &Path) -> Self {
+        let trace_store: Arc<dyn TraceStore> =
+            minibox_core::trace::FileTraceStore::new(data_dir.join("traces"))
+                .map(|s| Arc::new(s) as Arc<dyn TraceStore>)
+                .unwrap_or_else(|e| {
+                    warn!("trace store: failed to create FileTraceStore: {e}, using noop");
+                    Arc::new(minibox_core::trace::NoopTraceStore)
+                });
+
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: data_dir.join(STATE_FILENAME),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
+            trace_store,
         }
     }
 
@@ -229,6 +244,7 @@ impl DaemonState {
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: PathBuf::new(),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
+            trace_store: Arc::new(minibox_core::trace::NoopTraceStore),
         }
     }
 

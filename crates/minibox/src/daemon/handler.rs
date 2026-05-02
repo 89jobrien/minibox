@@ -2636,13 +2636,15 @@ pub async fn handle_pipeline(
             env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
         container_env.push("CRUXX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
         if let Some(ref b) = budget
-            && let Ok(s) = serde_json::to_string(b) {
-                container_env.push(format!("CRUXX_BUDGET_JSON={s}"));
-            }
+            && let Ok(s) = serde_json::to_string(b)
+        {
+            container_env.push(format!("CRUXX_BUDGET_JSON={s}"));
+        }
         if let Some(inp) = &input
-            && let Ok(s) = serde_json::to_string(inp) {
-                container_env.push(format!("CRUXX_INPUT_JSON={s}"));
-            }
+            && let Ok(s) = serde_json::to_string(inp)
+        {
+            container_env.push(format!("CRUXX_INPUT_JSON={s}"));
+        }
 
         // Clone deps and override policy to permit bind mounts for this
         // internal pipeline run.  Pipeline requests originate from the daemon
@@ -2790,6 +2792,27 @@ pub async fn handle_pipeline(
             exit_code,
             "handle_pipeline: pipeline complete"
         );
+
+        // Persist the trace before notifying the client so that a client that
+        // immediately queries `mbx pipeline show <id>` sees the record.
+        {
+            let store = state.trace_store.clone();
+            let id_for_store = container_id.clone();
+            let pipeline_for_store = pipeline_path.clone();
+            let trace_for_store = trace.clone();
+            if let Err(e) = store.store(
+                &id_for_store,
+                &pipeline_for_store,
+                &trace_for_store,
+                exit_code,
+            ) {
+                warn!(
+                    container_id = %container_id,
+                    error = %e,
+                    "handle_pipeline: failed to store trace (non-fatal)"
+                );
+            }
+        }
 
         if tx
             .send(DaemonResponse::PipelineComplete {
