@@ -296,6 +296,15 @@ enum Commands {
         version: Option<String>,
     },
 
+    /// Diagnose a container: gather state, process info, and cgroup context.
+    ///
+    /// Queries the daemon for container metadata and inspects host-visible
+    /// state (cgroup path, /proc/<pid>/status on Linux) for the given ID.
+    Diagnose {
+        /// Container ID or unambiguous prefix.
+        container_id: String,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -392,6 +401,10 @@ async fn main() -> Result<()> {
         }
 
         Commands::Ps => commands::ps::execute(socket_path).await,
+
+        Commands::Diagnose { container_id } => {
+            commands::diagnose::execute(&container_id, socket_path).await
+        }
 
         Commands::Exec {
             container_id,
