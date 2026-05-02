@@ -60,49 +60,60 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Conformance suite: auto-discovers all `conformance_*` test binaries across the workspace.
+/// Conformance suite: builds and runs the `minibox-conformance` harness.
 ///
-/// After running all conformance tests, emits MD + JSON reports via `conformance_report`.
+/// The harness executes all adapter conformance tests and emits JSON + JUnit XML
+/// reports to `artifacts/conformance/` via the `generate-report` binary.
 ///
-/// Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` (and run a local OCI registry)
-/// to activate tier-2 push tests.
+/// Set `CONFORMANCE_ADAPTER=<name>` to restrict to a single adapter.
+/// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
-    // Run all conformance_* tests across the entire workspace in one shot.
-    // The glob matches any test binary whose name starts with `conformance_`,
-    // excluding `conformance_report` which needs special output handling.
-    let filter = "not binary(conformance_report)";
-    cmd!(
-        sh,
-        "cargo nextest run --workspace --test conformance_* -E {filter}"
-    )
-    .run()
-    .context("conformance tests failed")?;
+    // Build the harness binaries first so errors surface before test execution.
+    cmd!(sh, "cargo build -p minibox-conformance --bins")
+        .run()
+        .context("failed to build minibox-conformance")?;
 
-    // --- Emit reports ---
-    // Run the report emitter with `--nocapture` so the artifact paths are visible.
+    // Run the full suite via `run-conformance` (fast, exits 1 on failure).
     let output = cmd!(
         sh,
-        "cargo test --release -p minibox --test conformance_report -- --nocapture"
+        "cargo run -p minibox-conformance --bin run-conformance"
     )
     .output()
-    .context("conformance_report failed")?;
+    .context("run-conformance failed to launch")?;
 
-    // Surface conformance: lines from stdout.
+    // Surface test output regardless of pass/fail.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        if line.starts_with("conformance:") {
-            if let Some(rest) = line.strip_prefix("conformance:md=") {
-                eprintln!("  report.md   : {rest}");
-            } else if let Some(rest) = line.strip_prefix("conformance:json=") {
-                eprintln!("  report.json : {rest}");
-            } else if let Some(rest) = line.strip_prefix("conformance:summary ") {
-                eprintln!("  summary     : {rest}");
-            }
-        }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.trim().is_empty() {
+        eprint!("{stdout}");
+    }
+    if !stderr.trim().is_empty() {
+        eprint!("{stderr}");
     }
 
     if !output.status.success() {
-        anyhow::bail!("conformance_report test failed");
+        anyhow::bail!("conformance tests failed");
+    }
+
+    // Generate JSON + JUnit XML reports.
+    let report_output = cmd!(
+        sh,
+        "cargo run -p minibox-conformance --bin generate-report"
+    )
+    .output()
+    .context("generate-report failed to launch")?;
+
+    let report_stdout = String::from_utf8_lossy(&report_output.stdout);
+    for line in report_stdout.lines() {
+        if line.starts_with("conformance:") {
+            if let Some(rest) = line.strip_prefix("conformance:json=") {
+                eprintln!("  report.json  : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:junit=") {
+                eprintln!("  report.junit : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:summary ") {
+                eprintln!("  summary      : {rest}");
+            }
+        }
     }
 
     eprintln!("conformance suite passed");

@@ -9,6 +9,7 @@ members = [
     "crates/macbox",
     "crates/winbox",
     "crates/minibox-crux-plugin",
+    "crates/minibox-conformance",
     "crates/xtask",
 ]
 

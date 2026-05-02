@@ -1561,6 +1561,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-conformance"
+version = "0.23.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "minibox",
+ "minibox-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "minibox-core"
 version = "0.23.0"
 dependencies = [
