@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-cruxx-plugin = { path = "../../../../../crux/crates/cruxx-plugin" }
+cruxx-plugin = { git = "https://github.com/89jobrien/crux", rev = "c456d5308e966b3e4527eabf1915fcef9173044d" }
 
 [dev-dependencies]
 tokio = { workspace = true }
