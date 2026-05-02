@@ -10,7 +10,6 @@ use base64::Engine as _;
 use minibox_core::as_any;
 use minibox_core::domain::{ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
 use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
-use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -78,7 +77,8 @@ impl ExecRuntime for NativeExecRuntime {
             stdin_tx: None,
             resize_rx: None,
         };
-        let exec_id_clone = exec_id.clone();
+        let exec_id_for_task = exec_id.clone();
+        let exec_id_for_warn = exec_id.clone();
 
         info!(
             container_id = %id,
@@ -88,11 +88,11 @@ impl ExecRuntime for NativeExecRuntime {
         );
 
         let handle = tokio::task::spawn_blocking(move || {
-            run_exec_blocking(pid, &exec_id_clone, config, tx);
+            run_exec_blocking(pid, &exec_id_for_task, config, tx);
         });
         tokio::spawn(async move {
             if let Err(e) = handle.await {
-                warn!(exec_id = %exec_id, error = ?e, "exec: blocking task panicked");
+                warn!(exec_id = %exec_id_for_warn, error = ?e, "exec: blocking task panicked");
             }
         });
 
