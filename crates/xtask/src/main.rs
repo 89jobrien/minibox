@@ -17,7 +17,6 @@ use xshell::Shell;
 
 mod bench;
 mod bump;
-mod stale_names;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
@@ -26,6 +25,7 @@ mod docs_lint;
 mod gates;
 mod preflight;
 mod protocol_sites;
+mod stale_names;
 mod test_image;
 mod test_linux;
 mod vm_image;
