@@ -96,6 +96,14 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
     ]
 }
 
+/// Return only the names of adapters compiled into the current build.
+///
+/// Alias for [`available_adapter_names`] — preferred name for use in
+/// diagnostic output (e.g. `mbx doctor`, daemon startup logs).
+pub fn compiled_adapters() -> Vec<&'static str> {
+    available_adapter_names()
+}
+
 /// Return only the names of adapters available in the current build.
 pub fn available_adapter_names() -> Vec<&'static str> {
     all_adapters()
@@ -294,6 +302,19 @@ mod tests {
         assert!(
             msg.contains("invalid_adapter"),
             "error should echo the invalid value: {msg}"
+        );
+    }
+
+    #[test]
+    fn compiled_adapters_matches_available_adapter_names() {
+        assert_eq!(compiled_adapters(), available_adapter_names());
+    }
+
+    #[test]
+    fn compiled_adapters_is_non_empty() {
+        assert!(
+            !compiled_adapters().is_empty(),
+            "compiled_adapters() must return at least one adapter"
         );
     }
 

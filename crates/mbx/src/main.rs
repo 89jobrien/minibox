@@ -305,6 +305,12 @@ enum Commands {
         container_id: String,
     },
 
+    /// Show adapter suite diagnostics (no daemon connection required).
+    ///
+    /// Prints which adapter suites are compiled into this build, which would
+    /// be selected given the current environment, and basic platform info.
+    Doctor,
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -470,6 +476,8 @@ async fn main() -> Result<()> {
                 commands::snapshot::execute_list(id, socket_path).await
             }
         },
+
+        Commands::Doctor => commands::doctor::execute(),
 
         Commands::Upgrade { dry_run, version } => {
             commands::upgrade::execute(dry_run, version).await

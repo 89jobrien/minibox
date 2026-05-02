@@ -5,6 +5,7 @@
 //! connection and protocol formatting.
 
 pub mod diagnose;
+pub mod doctor;
 pub mod events;
 pub mod exec;
 pub mod load;
