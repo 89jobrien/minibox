@@ -9,7 +9,7 @@ pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay
 filesystem support. Hexagonal architecture makes adapter suites swappable at
 startup.
 
-**Status:** Development (`v0.21.0`)
+**Status:** Development (`v0.23.0`)
 
 **Platform tiers:** Linux is production-ready. macOS is experimental (VM-backed, limited
 exec/logs). Windows is a planned stub only — `winbox::start()` returns an error unconditionally.
@@ -52,6 +52,12 @@ sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
 sudo ./target/release/mbx ps
 sudo ./target/release/mbx stop <id>
 sudo ./target/release/mbx rm <id>
+
+# Diagnose a container
+sudo ./target/release/mbx diagnose <id>
+
+# Show compiled adapter info (no daemon needed)
+./target/release/mbx doctor
 ```
 
 ---
@@ -71,8 +77,9 @@ See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 capability breakdown.
 
 `miniboxd` selects the platform crate at compile time (`cfg` gates) and the
-adapter suite at startup via `MINIBOX_ADAPTER`. Unrecognized values cause the
-daemon to exit before binding the socket.
+adapter suite at startup via `MINIBOX_ADAPTER`. Unrecognized values produce a
+structured error listing valid options. Run `mbx doctor` to see which adapter
+suites are compiled into the current build.
 
 ---
 
@@ -157,7 +164,7 @@ Roadmap details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 ## Testing
 
 ```bash
-cargo xtask test-unit              # ~760 unit/conformance/property tests (any platform)
+cargo xtask test-unit              # ~1200+ unit/conformance/property tests (any platform)
 just test-integration              # cgroup tests (Linux + root)
 just test-e2e                      # daemon + CLI (Linux + root)
 cargo xtask test-conformance       # OCI conformance matrix
