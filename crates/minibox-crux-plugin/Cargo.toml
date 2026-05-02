@@ -20,3 +20,5 @@ cruxx-plugin = { path = "/Users/joe/dev/crux/crates/cruxx-plugin" }
 
 [dev-dependencies]
 tokio = { workspace = true }
+tempfile = { workspace = true }
+serde_json = { workspace = true }

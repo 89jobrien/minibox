@@ -1595,6 +1595,7 @@ dependencies = [
  "cruxx-plugin",
  "minibox-core",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
