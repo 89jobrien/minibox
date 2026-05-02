@@ -485,6 +485,10 @@ is defined on `RootfsSetup` — import `RootfsSetup` explicitly wherever `setup_
 - **Crate name is `minibox`** — the lib crate was briefly named `linuxbox` (2026-04-21 to
   2026-04-26); any `linuxbox::` reference in code, notes, or plans is stale. Use `minibox::`
   (e.g. `minibox::adapters::NoopNetwork`). The CLI binary was renamed: `minibox-cli` → `mbx`.
+- **macOS App Sandbox blocks `process-fork` and `system-socket`** — if miniboxd runs inside
+  a sandbox profile (e.g. notarized distribution), fork-based adapters (krun, smolvm, Colima)
+  will fail at runtime with `Operation not permitted`. See the "macOS Notarization / App Sandbox
+  Constraints" section for the full allowlist.
 
 ### Container init gotchas (relevant when modifying `filesystem.rs` or `process.rs`)
 
@@ -660,6 +664,25 @@ glob with `*name*` pattern, not exact match.
 - `minibox-agent` crate does NOT exist — archived specs and some doob todos reference it,
   but it was never created. Planned replacement: `minibox-crux-plugin` binary
   (see `docs/superpowers/plans/2026-04-30-crux-maestro-portability.md`).
+
+## macOS Notarization / App Sandbox Constraints
+
+**TODO**: If miniboxd is ever codesigned with an App Sandbox entitlement (required for Mac App
+Store or some notarization profiles), the following SBPL operations must be explicitly allowed
+in the sandbox profile — they are denied by default:
+
+- `process-fork` — required by all macOS adapters that spawn child processes (krun, smolvm,
+  Colima). A sandboxed `miniboxd` that cannot fork is non-functional.
+- `file-write-mount` / `file-write-unmount` — required by any adapter that calls `mount(2)`
+  (native overlay FS). Not needed by krun/smolvm.
+- `system-socket` — required to create the Unix domain socket (`/run/minibox/miniboxd.sock`).
+  Denied by default in strict sandbox profiles.
+- `network-outbound` — required for OCI image pulls from Docker Hub / GHCR. Must allow
+  outbound TCP on ports 80 and 443.
+- `mach-lookup` — any system service call needs an explicit allowlist entry (e.g.
+  `com.apple.bsd.dirhelper`, `com.apple.system.logger`).
+
+App Sandbox is not currently applied. This is a pre-condition checklist for if/when that changes.
 
 ## Skills Available
 

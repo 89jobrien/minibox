@@ -171,7 +171,12 @@ fn run_pipe_exec_command(
     {
         Ok(c) => c,
         Err(e) => {
-            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: nsenter spawn failed: {e}") });
+            send_blocking(
+                &tx,
+                DaemonResponse::Error {
+                    message: format!("exec: nsenter spawn failed: {e}"),
+                },
+            );
             return;
         }
     };
@@ -219,7 +224,12 @@ fn run_pty_exec(
     let pty = match nix::pty::openpty(None, None) {
         Ok(p) => p,
         Err(e) => {
-            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: openpty failed: {e}") });
+            send_blocking(
+                &tx,
+                DaemonResponse::Error {
+                    message: format!("exec: openpty failed: {e}"),
+                },
+            );
             return;
         }
     };
@@ -256,7 +266,12 @@ fn run_pty_exec(
         Err(e) => {
             unsafe { libc::close(slave_fd) };
             unsafe { libc::close(master_fd) };
-            send_blocking(&tx, DaemonResponse::Error { message: format!("exec: nsenter pty spawn failed: {e}") });
+            send_blocking(
+                &tx,
+                DaemonResponse::Error {
+                    message: format!("exec: nsenter pty spawn failed: {e}"),
+                },
+            );
             return;
         }
     };
@@ -305,10 +320,13 @@ fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<Dae
             Ok(0) => break,
             Ok(n) => {
                 let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                send_blocking(tx, DaemonResponse::ContainerOutput {
-                    stream: stream.clone(),
-                    data,
-                });
+                send_blocking(
+                    tx,
+                    DaemonResponse::ContainerOutput {
+                        stream: stream.clone(),
+                        data,
+                    },
+                );
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => {
