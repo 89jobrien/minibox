@@ -11,20 +11,27 @@ startup.
 
 **Status:** Development (`v0.21.0`)
 
+**Platform tiers:** Linux is production-ready. macOS is experimental (VM-backed, limited
+exec/logs). Windows is a planned stub only — `winbox::start()` returns an error unconditionally.
+See the [Platform Support](#platform-support) table below.
+
 ---
 
 ## What Works Today (Linux)
 
-The `native` adapter suite on Linux is the production path. It provides:
+The `native` adapter suite on Linux is the **production** path. These features are stable:
 
 - **Container lifecycle** -- pull, run, stop, rm, ps, pause/resume
-- **Container exec** -- `setns`-based exec with `-it` PTY support (native adapter only)
 - **OCI image pull** -- Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
 - **Image management** -- `prune` / `rmi` with lease-based GC
 - **Bind mounts + privileged mode** -- `-v`/`--mount`, `--privileged`
 - **Log capture** -- `minibox logs <id>` for stored stdout/stderr
 - **Container events** -- `minibox events` streams lifecycle events
-- **Bridge networking** (experimental) -- veth pairs, NAT via iptables DNAT
+
+These features exist but are **experimental** (native Linux only, limited test coverage):
+
+- **Container exec** -- `setns`-based exec with `-it` PTY support
+- **Bridge networking** -- `MINIBOX_NETWORK_MODE=bridge`; veth pairs, NAT via iptables DNAT
 
 ---
 
