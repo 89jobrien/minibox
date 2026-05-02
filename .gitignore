@@ -8,6 +8,7 @@
 !docs/STATE_MODEL.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
+!docs/SECURITY_INVARIANTS.md
 !docs/conformance.md
 !docs/FEATURE_MATRIX.md
 !docs/STABILITY_CHECKLIST.md
