@@ -6961,6 +6961,323 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Issue #158: Error-path and protocol compatibility coverage
+// ---------------------------------------------------------------------------
+
+/// Client drops the receiver before `handle_run` (ephemeral, pull-failure path)
+/// can send its error.  The `warn` path in `send_error` must fire without panic.
+///
+/// Covers the `tx.send(...).await.is_err()` → warn path in `handle_run_streaming`
+/// and `send_error` for the dropped-receiver case.
+#[tokio::test]
+#[cfg(unix)]
+async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new().with_pull_failure()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store: Arc::new(
+                minibox_core::image::ImageStore::new(tmp.path().join("img_disc")).unwrap(),
+            ),
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: tmp.path().join("containers_disc"),
+            run_containers_base: tmp.path().join("run_disc"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                minibox::daemon::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: minibox::daemon::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
+    });
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(1);
+    // Drop the receiver immediately — streaming error path must not panic.
+    drop(rx);
+
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        true, // ephemeral=true → streaming path
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    // No panic = warn path exercised correctly.
+}
+
+/// All `DaemonResponse` variants round-trip through JSON serialisation.
+///
+/// This ensures every variant is serialisable and deserialisable without data
+/// loss — a prerequisite for the JSON-over-newline wire protocol.
+#[test]
+fn test_daemon_response_serde_round_trip_all_variants() {
+    use minibox_core::domain::SnapshotInfo;
+    use minibox_core::events::ContainerEvent;
+    use minibox_core::protocol::{ContainerInfo, OutputStreamKind};
+
+    let now = "2026-01-01T00:00:00Z".to_string();
+
+    let variants: Vec<DaemonResponse> = vec![
+        DaemonResponse::ContainerCreated {
+            id: "abc123".to_string(),
+        },
+        DaemonResponse::Success {
+            message: "ok".to_string(),
+        },
+        DaemonResponse::ContainerPaused {
+            id: "abc123".to_string(),
+        },
+        DaemonResponse::ContainerResumed {
+            id: "abc123".to_string(),
+        },
+        DaemonResponse::ContainerList {
+            containers: vec![ContainerInfo {
+                id: "abc123".to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Running".to_string(),
+                created_at: now.clone(),
+                pid: Some(1234),
+            }],
+        },
+        DaemonResponse::ImageLoaded {
+            image: "myimage:latest".to_string(),
+        },
+        DaemonResponse::Error {
+            message: "something went wrong".to_string(),
+        },
+        DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: "aGVsbG8=".to_string(), // base64 "hello"
+        },
+        DaemonResponse::ContainerStopped { exit_code: 0 },
+        DaemonResponse::ExecStarted {
+            exec_id: "exec-001".to_string(),
+        },
+        DaemonResponse::PushProgress {
+            layer_digest: "sha256:abc".to_string(),
+            bytes_uploaded: 1024,
+            total_bytes: 4096,
+        },
+        DaemonResponse::BuildOutput {
+            step: 1,
+            total_steps: 3,
+            message: "RUN echo hi".to_string(),
+        },
+        DaemonResponse::BuildComplete {
+            image_id: "sha256:deadbeef".to_string(),
+            tag: "myapp:latest".to_string(),
+        },
+        DaemonResponse::Event {
+            event: ContainerEvent::Created {
+                id: "abc123".to_string(),
+                image: "alpine:latest".to_string(),
+                timestamp: std::time::SystemTime::UNIX_EPOCH,
+            },
+        },
+        DaemonResponse::Pruned {
+            removed: vec!["alpine:old".to_string()],
+            freed_bytes: 1024 * 1024,
+            dry_run: false,
+        },
+        DaemonResponse::LogLine {
+            stream: OutputStreamKind::Stderr,
+            line: "error: something".to_string(),
+        },
+        DaemonResponse::PipelineComplete {
+            trace: serde_json::json!({"steps": []}),
+            container_id: "abc123".to_string(),
+            exit_code: 0,
+        },
+        DaemonResponse::SnapshotSaved {
+            info: SnapshotInfo {
+                container_id: "abc123".to_string(),
+                name: "snap1".to_string(),
+                created_at: now.clone(),
+                adapter: "smolvm".to_string(),
+                image: "alpine:latest".to_string(),
+                size_bytes: 0,
+            },
+        },
+        DaemonResponse::SnapshotRestored {
+            id: "abc123".to_string(),
+            name: "snap1".to_string(),
+        },
+        DaemonResponse::SnapshotList {
+            id: "abc123".to_string(),
+            snapshots: vec![],
+        },
+        DaemonResponse::UpdateProgress {
+            image: "alpine:latest".to_string(),
+            status: "up to date".to_string(),
+        },
+    ];
+
+    for variant in &variants {
+        let json = serde_json::to_string(variant)
+            .unwrap_or_else(|e| panic!("serialise {variant:?} failed: {e}"));
+        let restored: DaemonResponse = serde_json::from_str(&json)
+            .unwrap_or_else(|e| panic!("deserialise {variant:?} failed: {e}\njson: {json}"));
+        // Re-serialise to compare — direct PartialEq not derived.
+        let json2 = serde_json::to_string(&restored)
+            .unwrap_or_else(|e| panic!("re-serialise {restored:?} failed: {e}"));
+        assert_eq!(json, json2, "round-trip mismatch for variant: {variant:?}");
+    }
+}
+
+/// Containers persisted with `state = "Running"` are NOT reattached after
+/// daemon restart — their PID is stale and the record is visible but no live
+/// process exists.
+///
+/// This covers the "persisted-but-not-reattached" behaviour described in the
+/// CLAUDE.md limitations section and acceptance criterion (g) of issue #158.
+#[tokio::test]
+async fn test_persisted_running_container_not_reattached_after_restart() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().unwrap();
+    let container_id = "running-on-restart1".to_string();
+
+    // Simulate first daemon: container was Running at shutdown.
+    {
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let state = DaemonState::new(image_store, tmp.path());
+        state
+            .add_container(ContainerRecord {
+                info: ContainerInfo {
+                    id: container_id.clone(),
+                    name: None,
+                    image: "alpine:latest".to_string(),
+                    command: "/bin/sh".to_string(),
+                    state: "Running".to_string(),
+                    created_at: "2026-01-01T00:00:00Z".to_string(),
+                    pid: Some(999_997), // stale PID — process does not exist
+                },
+                pid: Some(999_997),
+                rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
+                cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
+                post_exit_hooks: vec![],
+                rootfs_metadata: None,
+                source_image_ref: None,
+                step_state: None,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+            })
+            .await;
+    }
+
+    // Simulate second daemon: load state from disk.
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let state2 = DaemonState::new(image_store2, tmp.path());
+    state2.load_from_disk().await;
+
+    // Record is present — the daemon remembers the container.
+    let record = state2
+        .get_container(&container_id)
+        .await
+        .expect("persisted container must be visible after restart");
+
+    // The record retains the stale state — reattachment is NOT performed.
+    assert_eq!(
+        record.info.id, container_id,
+        "container ID must be preserved"
+    );
+    // PID is still present in the record (not cleared by load).
+    // The process at that PID almost certainly doesn't exist, but the daemon
+    // does not attempt to reattach — this is the documented limitation.
+    assert_eq!(
+        record.pid,
+        Some(999_997),
+        "stale PID must be preserved as-is (no reattach)"
+    );
+    // State is still "Running" from the previous daemon instance; it is NOT
+    // automatically corrected to "Stopped" on load (no reattach = no correction).
+    assert_eq!(
+        record.info.state, "Running",
+        "state must remain as persisted (no auto-correction on load)"
+    );
+}
+
+/// Container state transition: Running → Stopped on abnormal exit.
+///
+/// After `handle_run` returns `ContainerCreated`, the background
+/// `daemon_wait_for_exit` task fires: `waitpid` on the mock PID returns an
+/// error (ECHILD — process never existed), which triggers the abnormal-exit
+/// branch that updates the container state to `"Stopped"` with exit_code = -1.
+///
+/// This test polls until the transition completes, covering the state-machine
+/// path: Created → Running (inside spawn_blocking) → Stopped (on waitpid err).
+#[tokio::test]
+#[cfg(unix)]
+async fn test_container_state_transitions_running_to_stopped_on_abnormal_exit() {
+    let tmp = TempDir::new().unwrap();
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        false, // non-ephemeral
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    let id = extract_container_id(&response);
+
+    // Poll until the background wait task transitions the container to Stopped.
+    let final_state = wait_for_container_state(&state, &id, "Stopped", 3000).await;
+
+    assert_eq!(
+        final_state, "Stopped",
+        "container must reach Stopped state after abnormal exit (no real PID)"
+    );
+}
+
 /// Successful pipeline run with a trace file → PipelineComplete includes it.
 #[tokio::test]
 async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
