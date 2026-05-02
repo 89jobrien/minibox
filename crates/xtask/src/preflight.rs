@@ -1,5 +1,3 @@
-use std::path::Path;
-
 /// Domain port: probe whether a named tool is functional.
 ///
 /// Implementations call the real process; test doubles return canned results.
@@ -141,14 +139,6 @@ impl XtaskProbe for ProcessXtaskProbe {
 // Doctor: full preflight checks including env vars and system capabilities
 // ---------------------------------------------------------------------------
 
-/// Result of a single doctor check.
-#[derive(Debug, PartialEq)]
-pub enum CheckResult {
-    Ok,
-    Warn(String),
-    Fail(String),
-}
-
 /// Run the full doctor suite and print results.
 ///
 /// Checks tools from `preflight.nu`, `CARGO_TARGET_DIR` env var, and on Linux,
@@ -207,6 +197,7 @@ pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
 /// Check Linux-specific system capabilities required by the native adapter.
 #[cfg(target_os = "linux")]
 fn check_linux_capabilities(failures: &mut Vec<String>) {
+    use std::path::Path;
     // cgroups v2: /sys/fs/cgroup must be mounted as cgroup2
     let cgroup2_ok = Path::new("/sys/fs/cgroup/cgroup.controllers").exists();
     if cgroup2_ok {
