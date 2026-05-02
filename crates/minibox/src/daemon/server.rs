@@ -518,26 +518,32 @@ async fn dispatch(
             let response = handler::handle_list_snapshots(id, deps).await;
             send_terminal_response(&tx, "ListSnapshots", response).await;
         }
-        DaemonRequest::RunPipeline { .. } => {
-            send_terminal_response(
-                &tx,
-                "RunPipeline",
-                DaemonResponse::Error {
-                    message: "RunPipeline is not yet implemented".to_string(),
-                },
-            )
-            .await;
+        DaemonRequest::RunPipeline {
+            pipeline_path,
+            input,
+            image,
+            budget,
+            env,
+            ..
+        } => {
+            handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
+                .await;
         }
-        // TODO(wave3): wire handle_update via spawn — currently returns a stub error
-        DaemonRequest::Update { .. } => {
-            send_terminal_response(
-                &tx,
-                "Update",
-                DaemonResponse::Error {
-                    message: "Update is not yet implemented".to_string(),
-                },
-            )
-            .await;
+        DaemonRequest::Update {
+            images,
+            all,
+            containers,
+            restart,
+        } => {
+            tokio::spawn(handler::handle_update(
+                images,
+                all,
+                containers,
+                restart,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
         }
     }
 }
