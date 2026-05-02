@@ -168,14 +168,43 @@ See `CLAUDE.md` for the full testing strategy.
 
 ---
 
-## Development
+## Developer Workflow
+
+Three tooling layers exist — each with a distinct role:
+
+| Layer      | Role                                                                         | When to use                          |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| **`just`** | Primary task runner; thin wrappers over `xtask` and `cargo`                  | Day-to-day build, test, lint         |
+| **`xtask`**| CI engine; owns all quality gates (`pre-commit`, `test-unit`, `prepush`)     | Called by `just` and GitHub Actions  |
+| **`mise`** | Interactive / ops tasks (`ssh-vps`, `fix-socket`, `smoke`, git ops)          | One-off VPS ops, interactive demos   |
+
+### Golden paths
 
 ```bash
+# Build
 cargo build --release
-cargo check --workspace
+
+# Lint (macOS-safe)
 cargo clippy --workspace -- -D warnings
-cargo xtask pre-commit             # fmt + clippy + release build gate
+
+# Unit tests (any platform)
+just test-unit                     # wraps cargo xtask test-unit
+
+# Pre-commit gate (fmt + clippy + release build)
+cargo xtask pre-commit
+
+# Run the daemon (Linux, root required)
+sudo ./target/release/miniboxd
+
+# End-to-end tests (Linux, root required)
+just test-e2e
 ```
+
+Use `just --list` to see all available recipes. Use `mise tasks` for interactive/ops tasks.
+Avoid calling `mise` for tasks that appear in the `just` list — they are duplicated there
+intentionally as thin wrappers.
+
+## Development
 
 | Variable              | Default                                         | Purpose                   |
 | --------------------- | ----------------------------------------------- | ------------------------- |
