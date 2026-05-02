@@ -387,7 +387,9 @@ mod tests {
         let input = json!({"context_path": "/tmp/ctx", "tag": "myapp:latest"});
         let req = build_request("minibox::image::build", &input).unwrap();
         match req {
-            DaemonRequest::Build { context_path, tag, .. } => {
+            DaemonRequest::Build {
+                context_path, tag, ..
+            } => {
                 assert_eq!(context_path, "/tmp/ctx");
                 assert_eq!(tag, "myapp:latest");
             }

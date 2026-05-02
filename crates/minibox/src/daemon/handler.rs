@@ -2708,7 +2708,11 @@ pub async fn handle_update(
         for id in candidate_ids {
             let record = state.get_container(&id).await;
             let image_ref = record.and_then(|r| r.source_image_ref);
-            if !image_ref.as_deref().map(|r| target_set.contains(r)).unwrap_or(false) {
+            if !image_ref
+                .as_deref()
+                .map(|r| target_set.contains(r))
+                .unwrap_or(false)
+            {
                 continue;
             }
 

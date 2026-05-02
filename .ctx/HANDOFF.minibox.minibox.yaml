@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260430:143952
+updated: 2026-05-02
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
@@ -251,14 +251,18 @@ log:
   - ade65b9
   - eb6bef2
   session: 36
+- date: 20260428:080155
+  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
+  commits:
+  - 5b4c4d8
+  session: 34
 - date: 20260428:062906
   summary: 'Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree.'
   commits:
   - b8720ac
   - 4e4bdba
   session: 35
-- date: 20260428:080155
-  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
+- date: 2026-05-02
+  summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
   commits:
-  - 5b4c4d8
-  session: 34
+  - 18eb8ea
