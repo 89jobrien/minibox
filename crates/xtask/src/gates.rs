@@ -7,12 +7,20 @@ use crate::docs_lint;
 /// Pre-commit gate: fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+    // Re-stage any files rustfmt modified so the commit includes the formatted versions.
+    cmd!(sh, "git add -u")
+        .run()
+        .context("git add -u after fmt failed")?;
     cmd!(
         sh,
         "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
+    // Re-stage any files clippy --fix modified.
+    cmd!(sh, "git add -u")
+        .run()
+        .context("git add -u after clippy --fix failed")?;
     cmd!(sh, "cargo fmt --all --check")
         .run()
         .context("fmt-check failed")?;
