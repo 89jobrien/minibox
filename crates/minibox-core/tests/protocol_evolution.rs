@@ -21,6 +21,7 @@
 //! When adding a new `DaemonRequest` variant with optional/defaulted fields:
 //! - Add a case to `test_request_serde_default_fields`.
 
+use minibox_core::domain::SnapshotInfo;
 use minibox_core::events::ContainerEvent;
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::time::SystemTime;

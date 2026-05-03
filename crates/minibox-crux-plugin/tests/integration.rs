@@ -377,6 +377,153 @@ async fn daemon_unreachable_returns_invoke_err() {
     child.wait().await.unwrap();
 }
 
+/// `container::pause` → plugin contacts daemon, returns `InvokeOk` on ContainerPaused.
+#[tokio::test]
+async fn invoke_container_pause_sends_correct_request() {
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("daemon.sock");
+
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        mock_daemon_once(
+            sp,
+            DaemonResponse::ContainerPaused {
+                id: "abc123".into(),
+            },
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    let mut child = spawn_plugin(&socket_path);
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut stdout_reader = BufReader::new(stdout);
+
+    let req = json!({
+        "method": "Invoke",
+        "params": {
+            "handler": "minibox::container::pause",
+            "input": { "id": "abc123" }
+        }
+    });
+    send(&mut stdin, &req).await;
+    let resp = recv(&mut stdout_reader).await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    send(&mut stdin, &json!({"method": "Shutdown"})).await;
+    recv(&mut stdout_reader).await;
+    child.wait().await.unwrap();
+}
+
+/// `container::resume` → plugin contacts daemon, returns `InvokeOk` on ContainerResumed.
+#[tokio::test]
+async fn invoke_container_resume_sends_correct_request() {
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("daemon.sock");
+
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        mock_daemon_once(
+            sp,
+            DaemonResponse::ContainerResumed {
+                id: "abc123".into(),
+            },
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    let mut child = spawn_plugin(&socket_path);
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut stdout_reader = BufReader::new(stdout);
+
+    let req = json!({
+        "method": "Invoke",
+        "params": {
+            "handler": "minibox::container::resume",
+            "input": { "id": "abc123" }
+        }
+    });
+    send(&mut stdin, &req).await;
+    let resp = recv(&mut stdout_reader).await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    send(&mut stdin, &json!({"method": "Shutdown"})).await;
+    recv(&mut stdout_reader).await;
+    child.wait().await.unwrap();
+}
+
+/// `image::ls` → plugin contacts daemon, returns `InvokeOk` with ImageList.
+#[tokio::test]
+async fn invoke_image_ls_sends_correct_request() {
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("daemon.sock");
+
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        mock_daemon_once(sp, DaemonResponse::ImageList { images: vec![] }).await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    let mut child = spawn_plugin(&socket_path);
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut stdout_reader = BufReader::new(stdout);
+
+    let req = json!({
+        "method": "Invoke",
+        "params": { "handler": "minibox::image::ls", "input": {} }
+    });
+    send(&mut stdin, &req).await;
+    let resp = recv(&mut stdout_reader).await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    send(&mut stdin, &json!({"method": "Shutdown"})).await;
+    recv(&mut stdout_reader).await;
+    child.wait().await.unwrap();
+}
+
+/// `image::rm` → plugin contacts daemon, returns `InvokeOk` on Success.
+#[tokio::test]
+async fn invoke_image_rm_sends_correct_request() {
+    let tmp = TempDir::new().unwrap();
+    let socket_path = tmp.path().join("daemon.sock");
+
+    let sp = socket_path.clone();
+    tokio::spawn(async move {
+        mock_daemon_once(
+            sp,
+            DaemonResponse::Success {
+                message: "removed".into(),
+            },
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    let mut child = spawn_plugin(&socket_path);
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut stdout_reader = BufReader::new(stdout);
+
+    let req = json!({
+        "method": "Invoke",
+        "params": {
+            "handler": "minibox::image::rm",
+            "input": { "image_ref": "alpine:latest" }
+        }
+    });
+    send(&mut stdin, &req).await;
+    let resp = recv(&mut stdout_reader).await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    send(&mut stdin, &json!({"method": "Shutdown"})).await;
+    recv(&mut stdout_reader).await;
+    child.wait().await.unwrap();
+}
+
 /// Multiple requests in sequence — plugin handles them all before shutdown.
 #[tokio::test]
 async fn multiple_requests_in_sequence() {

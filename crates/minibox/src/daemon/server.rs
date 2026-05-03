@@ -290,6 +290,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::SnapshotSaved { .. }
             | DaemonResponse::SnapshotRestored { .. }
             | DaemonResponse::SnapshotList { .. }
+            | DaemonResponse::ImageList { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -809,6 +810,12 @@ mod tests {
                 },
                 false, // non-terminal: one per image, Success/Error follows
             ),
+            (
+                DaemonResponse::ImageList {
+                    images: vec!["alpine:latest".to_string()],
+                },
+                true, // terminal: complete list returned in one response
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -845,6 +852,7 @@ mod tests {
                 DaemonResponse::SnapshotRestored { .. } => true,
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
+                DaemonResponse::ImageList { .. } => true,
             };
         }
     }
