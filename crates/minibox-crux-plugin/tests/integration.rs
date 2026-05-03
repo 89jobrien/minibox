@@ -40,47 +40,65 @@ fn spawn_plugin(socket_path: &Path) -> tokio::process::Child {
 /// Bind a mock daemon Unix socket. Accept one connection, read one request line,
 /// write back `response`, then close. Intended to be tokio::spawned.
 async fn mock_daemon_once(socket_path: PathBuf, response: DaemonResponse) {
-    let listener = UnixListener::bind(&socket_path).unwrap();
-    let (stream, _) = listener.accept().await.unwrap();
+    let listener = UnixListener::bind(&socket_path).expect("bind mock daemon socket");
+    let (stream, _) = listener.accept().await.expect("accept mock connection");
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
-    let mut resp = serde_json::to_string(&response).unwrap();
+    reader
+        .read_line(&mut line)
+        .await
+        .expect("read request line");
+    let mut resp = serde_json::to_string(&response).expect("serialize mock response");
     resp.push('\n');
-    write_half.write_all(resp.as_bytes()).await.unwrap();
-    write_half.flush().await.unwrap();
+    write_half
+        .write_all(resp.as_bytes())
+        .await
+        .expect("write mock response");
+    write_half.flush().await.expect("flush mock response");
 }
 
 /// Bind a mock daemon that accepts one connection and writes multiple responses
 /// (for streaming handlers like logs).
 async fn mock_daemon_multi(socket_path: PathBuf, responses: Vec<DaemonResponse>) {
-    let listener = UnixListener::bind(&socket_path).unwrap();
-    let (stream, _) = listener.accept().await.unwrap();
+    let listener = UnixListener::bind(&socket_path).expect("bind mock daemon socket");
+    let (stream, _) = listener.accept().await.expect("accept mock connection");
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
+    reader
+        .read_line(&mut line)
+        .await
+        .expect("read request line");
     for r in responses {
-        let mut resp = serde_json::to_string(&r).unwrap();
+        let mut resp = serde_json::to_string(&r).expect("serialize mock response");
         resp.push('\n');
-        write_half.write_all(resp.as_bytes()).await.unwrap();
+        write_half
+            .write_all(resp.as_bytes())
+            .await
+            .expect("write mock response");
     }
-    write_half.flush().await.unwrap();
+    write_half.flush().await.expect("flush mock responses");
 }
 
 /// Write a JSON line to the plugin's stdin.
 async fn send(stdin: &mut tokio::process::ChildStdin, value: &Value) {
-    let mut line = serde_json::to_string(value).unwrap();
+    let mut line = serde_json::to_string(value).expect("serialize request value");
     line.push('\n');
-    stdin.write_all(line.as_bytes()).await.unwrap();
-    stdin.flush().await.unwrap();
+    stdin
+        .write_all(line.as_bytes())
+        .await
+        .expect("write to plugin stdin");
+    stdin.flush().await.expect("flush plugin stdin");
 }
 
 /// Read one JSON line from the plugin's stdout.
 async fn recv(reader: &mut BufReader<tokio::process::ChildStdout>) -> Value {
     let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
+    reader
+        .read_line(&mut line)
+        .await
+        .expect("read from plugin stdout");
     serde_json::from_str(line.trim()).expect("plugin sent non-JSON")
 }
 
@@ -370,36 +388,56 @@ async fn multiple_requests_in_sequence() {
     let sp1 = socket_path.clone();
     let sp2 = socket_path.clone();
 
-    // First daemon accept — for ps
-    let listener = UnixListener::bind(&socket_path).unwrap();
-    let sp1_clone = sp1.clone();
+    // Bind listener; spawn a task that handles two sequential connections.
+    let listener = UnixListener::bind(&socket_path).expect("bind mock daemon socket");
     tokio::spawn(async move {
-        let _ = sp1_clone; // keep path alive
-        let (stream, _) = listener.accept().await.unwrap();
+        // First accept — responds to ps
+        let (stream, _) = listener
+            .accept()
+            .await
+            .expect("accept first mock connection");
         let (read_half, mut write_half) = tokio::io::split(stream);
         let mut reader = BufReader::new(read_half);
         let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let mut resp =
-            serde_json::to_string(&DaemonResponse::ContainerList { containers: vec![] }).unwrap();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("read first request");
+        let mut resp = serde_json::to_string(&DaemonResponse::ContainerList { containers: vec![] })
+            .expect("serialize ContainerList");
         resp.push('\n');
-        write_half.write_all(resp.as_bytes()).await.unwrap();
-        write_half.flush().await.unwrap();
+        write_half
+            .write_all(resp.as_bytes())
+            .await
+            .expect("write first response");
+        write_half.flush().await.expect("flush first response");
 
-        // Second daemon accept — for pull (reuse same listener)
-        let (stream2, _) = listener.accept().await.unwrap();
+        // Second accept — responds to pull
+        let (stream2, _) = listener
+            .accept()
+            .await
+            .expect("accept second mock connection");
         let (read_half2, mut write_half2) = tokio::io::split(stream2);
         let mut reader2 = BufReader::new(read_half2);
         let mut line2 = String::new();
-        reader2.read_line(&mut line2).await.unwrap();
+        reader2
+            .read_line(&mut line2)
+            .await
+            .expect("read second request");
         let mut resp2 = serde_json::to_string(&DaemonResponse::Success {
             message: "pulled".into(),
         })
-        .unwrap();
+        .expect("serialize Success");
         resp2.push('\n');
-        write_half2.write_all(resp2.as_bytes()).await.unwrap();
-        write_half2.flush().await.unwrap();
-        let _ = sp2;
+        write_half2
+            .write_all(resp2.as_bytes())
+            .await
+            .expect("write second response");
+        write_half2.flush().await.expect("flush second response");
+
+        // Drop sp1/sp2 to silence unused-variable lint.
+        drop(sp1);
+        drop(sp2);
     });
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 

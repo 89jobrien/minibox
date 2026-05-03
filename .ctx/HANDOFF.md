@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-05-02)
+# Handoff — minibox (2026-05-03)
 
 **Branch:** main | **Build:** unknown | **Tests:** unknown
 

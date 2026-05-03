@@ -10,6 +10,7 @@
 use anyhow::{Context, Result};
 use cruxx_plugin::protocol::{HandlerDecl, Request, Response};
 use minibox_core::client::{DaemonClient, default_socket_path};
+use minibox_core::domain::BindMount;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -196,7 +197,11 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
         "minibox::image::build" => {
             let context_path = str_field(input, "context_path")?;
-            let tag = str_field(input, "tag").unwrap_or_else(|_| "latest".into());
+            let tag = if input["tag"].is_null() {
+                "latest".to_string()
+            } else {
+                str_field(input, "tag")?
+            };
             let dockerfile =
                 opt_str_field(input, "dockerfile").unwrap_or_else(|| "FROM scratch".into());
             Ok(DaemonRequest::Build {
@@ -222,7 +227,7 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
 // ── Input extraction helpers ───────────────────────────────────────────────────
 
-fn parse_mounts(v: &Value) -> Result<Vec<minibox_core::domain::BindMount>> {
+fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
     let Some(arr) = v["mounts"].as_array() else {
         return Ok(vec![]);
     };
@@ -232,13 +237,33 @@ fn parse_mounts(v: &Value) -> Result<Vec<minibox_core::domain::BindMount>> {
             let host_path = entry["host_path"]
                 .as_str()
                 .map(std::path::PathBuf::from)
-                .ok_or_else(|| anyhow::anyhow!("mounts[{i}]: missing 'host_path'"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("mounts[{i}]: 'host_path' must be a non-null string")
+                })?;
+            if !host_path.is_absolute()
+                || host_path
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir)
+            {
+                anyhow::bail!("mounts[{i}]: host_path must be absolute with no '..' components");
+            }
             let container_path = entry["container_path"]
                 .as_str()
                 .map(std::path::PathBuf::from)
-                .ok_or_else(|| anyhow::anyhow!("mounts[{i}]: missing 'container_path'"))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("mounts[{i}]: 'container_path' must be a non-null string")
+                })?;
+            if !container_path.is_absolute()
+                || container_path
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir)
+            {
+                anyhow::bail!(
+                    "mounts[{i}]: container_path must be absolute with no '..' components"
+                );
+            }
             let read_only = entry["read_only"].as_bool().unwrap_or(false);
-            Ok(minibox_core::domain::BindMount {
+            Ok(BindMount {
                 host_path,
                 container_path,
                 read_only,
@@ -277,8 +302,11 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("minibox_crux_plugin=info".parse().unwrap()),
+            tracing_subscriber::EnvFilter::from_default_env().add_directive(
+                "minibox_crux_plugin=info"
+                    .parse()
+                    .expect("valid static directive"),
+            ),
         )
         .init();
 
@@ -491,6 +519,28 @@ mod tests {
             }
             other => panic!("unexpected request: {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_request_run_mount_missing_host_path_returns_err() {
+        // mount entry omits "host_path" — build_request must return Err
+        let input = json!({
+            "image": "alpine:latest",
+            "command": ["/bin/sh"],
+            "mounts": [
+                {
+                    "container_path": "/data",
+                    "read_only": false
+                }
+            ]
+        });
+        let result = build_request("minibox::container::run", &input);
+        assert!(result.is_err(), "expected Err for mount missing host_path");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("host_path"),
+            "error message should mention 'host_path', got: {msg}"
+        );
     }
 
     #[test]
