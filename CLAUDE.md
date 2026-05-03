@@ -491,7 +491,7 @@ is defined on `RootfsSetup` — import `RootfsSetup` explicitly wherever `setup_
 
 - `io.max` requires `MAJOR:MINOR` of a real block device — Colima VM uses virtio (`vda` = 253:0), not sda (8:0). Use `find_first_block_device()` (reads `/sys/block/*/dev`) rather than hardcoding.
 - PID 0 is silently accepted by kernel 6.8 but is never valid — validate explicitly before writing to `cgroup.procs`.
-- A cgroup cannot have both processes AND children (cgroup v2 "no internal process" rule). Tests run inside a dedicated `minibox-test-slice/runner-leaf` cgroup via `scripts/run-cgroup-tests.sh`.
+- A cgroup cannot have both processes AND children (cgroup v2 "no internal process" rule). Tests run inside a dedicated `minibox-test-slice/runner-leaf` cgroup via `cargo xtask run-cgroup-tests` (or `just test-integration`).
 
 ### Check kernel features
 
