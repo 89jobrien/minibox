@@ -104,7 +104,7 @@ async fn recv(reader: &mut BufReader<tokio::process::ChildStdout>) -> Value {
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
-/// `Declare` → plugin lists all 9 handlers without contacting the daemon.
+/// `Declare` → plugin lists all 11 handlers without contacting the daemon.
 #[tokio::test]
 async fn declare_returns_nine_handlers() {
     let tmp = TempDir::new().unwrap();
@@ -123,7 +123,7 @@ async fn declare_returns_nine_handlers() {
     let resp = recv(&mut stdout_reader).await;
     assert_eq!(resp["status"], "Declare");
     let handlers = resp["data"]["handlers"].as_array().expect("handlers array");
-    assert_eq!(handlers.len(), 9);
+    assert_eq!(handlers.len(), 11);
 
     let names: Vec<&str> = handlers
         .iter()

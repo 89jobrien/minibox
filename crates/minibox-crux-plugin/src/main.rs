@@ -32,6 +32,14 @@ fn handler_decls() -> Vec<HandlerDecl> {
             description: "Stop a running container. Input: {id}".into(),
         },
         HandlerDecl {
+            name: "minibox::container::pause".into(),
+            description: "Pause (freeze) a running container via cgroup.freeze. Input: {id}".into(),
+        },
+        HandlerDecl {
+            name: "minibox::container::resume".into(),
+            description: "Resume (thaw) a paused container. Input: {id}".into(),
+        },
+        HandlerDecl {
             name: "minibox::container::rm".into(),
             description: "Remove a stopped container. Input: {id}".into(),
         },
@@ -156,6 +164,16 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
         "minibox::container::rm" => {
             let id = str_field(input, "id")?;
             Ok(DaemonRequest::Remove { id })
+        }
+
+        "minibox::container::pause" => {
+            let id = str_field(input, "id")?;
+            Ok(DaemonRequest::PauseContainer { id })
+        }
+
+        "minibox::container::resume" => {
+            let id = str_field(input, "id")?;
+            Ok(DaemonRequest::ResumeContainer { id })
         }
 
         "minibox::container::exec" => {
@@ -546,7 +564,7 @@ mod tests {
     #[test]
     fn handler_decls_covers_all_nine_handlers() {
         let decls = handler_decls();
-        assert_eq!(decls.len(), 9, "expected 9 handler declarations");
+        assert_eq!(decls.len(), 11, "expected 11 handler declarations");
         let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"minibox::container::run"));
         assert!(names.contains(&"minibox::container::stop"));
@@ -557,5 +575,55 @@ mod tests {
         assert!(names.contains(&"minibox::image::pull"));
         assert!(names.contains(&"minibox::image::build"));
         assert!(names.contains(&"minibox::image::push"));
+    }
+
+    // ── pause / resume ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn build_request_container_pause() {
+        let input = json!({"id": "abc123"});
+        let req = build_request("minibox::container::pause", &input)
+            .expect("build_request must succeed for pause");
+        assert!(
+            matches!(req, DaemonRequest::PauseContainer { id } if id == "abc123"),
+            "expected PauseContainer{{id: \"abc123\"}}, got unexpected variant"
+        );
+    }
+
+    #[test]
+    fn build_request_container_resume() {
+        let input = json!({"id": "abc123"});
+        let req = build_request("minibox::container::resume", &input)
+            .expect("build_request must succeed for resume");
+        assert!(
+            matches!(req, DaemonRequest::ResumeContainer { id } if id == "abc123"),
+            "expected ResumeContainer{{id: \"abc123\"}}, got unexpected variant"
+        );
+    }
+
+    #[test]
+    fn build_request_container_pause_missing_id_returns_err() {
+        let result = build_request("minibox::container::pause", &json!({}));
+        assert!(result.is_err(), "pause without id must return Err");
+    }
+
+    #[test]
+    fn build_request_container_resume_missing_id_returns_err() {
+        let result = build_request("minibox::container::resume", &json!({}));
+        assert!(result.is_err(), "resume without id must return Err");
+    }
+
+    #[test]
+    fn handler_decls_covers_pause_and_resume() {
+        let decls = handler_decls();
+        let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+        assert!(
+            names.contains(&"minibox::container::pause"),
+            "handler_decls must include pause"
+        );
+        assert!(
+            names.contains(&"minibox::container::resume"),
+            "handler_decls must include resume"
+        );
     }
 }
