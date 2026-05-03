@@ -1525,6 +1525,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -1809,6 +1810,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -2173,6 +2175,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -2342,6 +2345,7 @@ async fn test_handle_remove_created_container_succeeds() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -3228,6 +3232,7 @@ async fn test_stop_dead_pid_exits_immediately() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -3297,6 +3302,7 @@ async fn test_stop_container_no_pid_returns_error() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -3972,6 +3978,7 @@ async fn test_handle_logs_reads_log_files() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -4079,6 +4086,7 @@ async fn test_pause_stopped_container_returns_error() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -4129,6 +4137,7 @@ async fn test_resume_running_container_returns_error() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -4183,6 +4192,7 @@ async fn test_pause_missing_cgroup_returns_error() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -4235,6 +4245,7 @@ async fn test_resume_missing_cgroup_returns_error() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -4866,6 +4877,7 @@ async fn test_handle_pause_running_container_succeeds() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -4927,6 +4939,7 @@ async fn test_handle_resume_paused_container_succeeds() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         })
         .await;
 
@@ -5395,6 +5408,7 @@ async fn test_handle_remove_running_container_returns_error() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -5602,6 +5616,7 @@ async fn test_daemon_state_persistence_survives_restart() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         };
         state.add_container(record).await;
     }
@@ -5652,6 +5667,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;
@@ -5754,6 +5770,7 @@ async fn test_handle_remove_resolves_by_name() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -5876,6 +5893,7 @@ async fn test_handle_logs_client_disconnect_mid_stream() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -6713,6 +6731,7 @@ async fn test_handle_update_containers_collects_source_image_refs() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -6783,6 +6802,7 @@ async fn test_handle_update_restart_stops_running_containers() {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     };
     state.add_container(record).await;
 
@@ -7203,6 +7223,7 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
                 priority: None,
                 urgency: None,
                 execution_context: None,
+                creation_params: None,
             })
             .await;
     }
@@ -7337,5 +7358,46 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
             }
             Some(other) => panic!("unexpected: {other:?}"),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// restart-3: creation_params population
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn handle_run_stores_creation_params() {
+    let temp_dir = tempfile::TempDir::new().expect("TempDir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/echo".to_string(), "hello".to_string()],
+        Some(67_108_864),
+        Some(256),
+        false,
+        state.clone(),
+        deps,
+    )
+    .await;
+
+    match response {
+        minibox_core::protocol::DaemonResponse::ContainerCreated { id, .. } => {
+            let record = state
+                .get_container(&id)
+                .await
+                .expect("container must be in state");
+            let cp = record
+                .creation_params
+                .expect("creation_params must be populated by handle_run");
+            assert_eq!(cp.image, "alpine");
+            assert_eq!(cp.tag.as_deref(), Some("latest"));
+            assert_eq!(cp.command, vec!["/bin/echo", "hello"]);
+            assert_eq!(cp.memory_limit_bytes, Some(67_108_864));
+            assert_eq!(cp.cpu_weight, Some(256));
+        }
+        other => panic!("expected ContainerCreated, got {other:?}"),
     }
 }

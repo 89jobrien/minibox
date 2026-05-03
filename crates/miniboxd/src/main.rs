@@ -544,6 +544,7 @@ async fn build_handler_deps(
         ),
         AdapterSuite::SmolVm => build_smolvm_handler_dependencies(
             Arc::clone(&state),
+            paths.data_dir.clone(),
             paths.containers_dir.clone(),
             paths.run_containers_dir.clone(),
             metrics_recorder,
@@ -622,9 +623,14 @@ fn build_native_handler_dependencies(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
     );
+    let filesystem = Arc::new(OverlayFilesystem::new());
+    let runtime = Arc::new(LinuxNamespaceRuntime::new());
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.to_path_buf(),
+        Arc::clone(&filesystem) as minibox_core::domain::DynFilesystemProvider,
+        Arc::clone(&runtime) as minibox_core::domain::DynContainerRuntime,
+        Arc::clone(&registry_router) as minibox_core::domain::DynRegistryRouter,
     );
     let image_pusher = minibox::adapters::push::oci_push_adapter(
         RegistryClient::new().context("creating OCI push registry client")?,
@@ -639,9 +645,9 @@ fn build_native_handler_dependencies(
             image_store: Arc::clone(&state.image_store),
         },
         lifecycle: minibox::daemon::handler::LifecycleDeps {
-            filesystem: Arc::new(OverlayFilesystem::new()),
+            filesystem,
             resource_limiter: Arc::new(CgroupV2Limiter::new()),
-            runtime: Arc::new(LinuxNamespaceRuntime::new()),
+            runtime,
             network_provider: native_network,
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
@@ -782,6 +788,7 @@ fn build_colima_handler_dependencies(
 #[cfg(unix)]
 fn build_smolvm_handler_dependencies(
     state: Arc<DaemonState>,
+    data_dir: PathBuf,
     containers_dir: PathBuf,
     run_containers_dir: PathBuf,
     metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder>,
@@ -792,6 +799,15 @@ fn build_smolvm_handler_dependencies(
         Arc::new(SmolVmRegistry::new()) as minibox_core::domain::DynImageRegistry,
         std::iter::empty::<(&str, minibox_core::domain::DynImageRegistry)>(),
     ));
+    let filesystem = Arc::new(SmolVmFilesystem::new());
+    let runtime = Arc::new(SmolVmRuntime::new());
+    let image_builder = minibox::adapters::builder::minibox_image_builder(
+        Arc::clone(&state.image_store),
+        data_dir,
+        Arc::clone(&filesystem) as minibox_core::domain::DynFilesystemProvider,
+        Arc::clone(&runtime) as minibox_core::domain::DynContainerRuntime,
+        Arc::clone(&registry_router) as minibox_core::domain::DynRegistryRouter,
+    );
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router,
@@ -800,9 +816,9 @@ fn build_smolvm_handler_dependencies(
             image_store: Arc::clone(&state.image_store),
         },
         lifecycle: minibox::daemon::handler::LifecycleDeps {
-            filesystem: Arc::new(SmolVmFilesystem::new()),
+            filesystem,
             resource_limiter: Arc::new(SmolVmLimiter::new()),
-            runtime: Arc::new(SmolVmRuntime::new()),
+            runtime,
             network_provider: Arc::new(NoopNetwork::new()),
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
@@ -814,7 +830,7 @@ fn build_smolvm_handler_dependencies(
         build: minibox::daemon::handler::BuildDeps {
             image_pusher: None,
             commit_adapter: None,
-            image_builder: None,
+            image_builder: Some(image_builder),
         },
         events: minibox::daemon::handler::EventDeps {
             event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
@@ -1129,6 +1145,7 @@ mod tests {
 
         let deps = build_smolvm_handler_dependencies(
             state,
+            data_dir.clone(),
             data_dir.join("containers"),
             data_dir.join("run/containers"),
             metrics_recorder,

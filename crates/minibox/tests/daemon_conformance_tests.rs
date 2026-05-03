@@ -1929,6 +1929,7 @@ mod pause_resume_conformance {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         }
     }
 

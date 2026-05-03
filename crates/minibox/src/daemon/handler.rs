@@ -31,7 +31,7 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use super::network_lifecycle::NetworkLifecycle;
-use super::state::{ContainerRecord, ContainerState, DaemonState};
+use super::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
 use async_trait::async_trait;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -772,6 +772,22 @@ async fn run_inner_capture(
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.clone(),
+            tag: Some(tag.clone()),
+            command: command.clone(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.clone(),
+            mounts: mounts.clone(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
     };
     state.add_container(record).await;
 
@@ -999,6 +1015,22 @@ async fn run_inner(
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.clone(),
+            tag: Some(tag.clone()),
+            command: command.clone(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.clone(),
+            mounts: mounts.clone(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
     };
     state.add_container(record).await;
 
