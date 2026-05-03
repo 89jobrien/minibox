@@ -69,6 +69,14 @@ fn handler_decls() -> Vec<HandlerDecl> {
             name: "minibox::image::push".into(),
             description: "Push an image to a registry. Input: {image, target}".into(),
         },
+        HandlerDecl {
+            name: "minibox::image::ls".into(),
+            description: "List all cached images. Input: {}".into(),
+        },
+        HandlerDecl {
+            name: "minibox::image::rm".into(),
+            description: "Remove a cached image by reference. Input: {image_ref}".into(),
+        },
     ]
 }
 
@@ -237,6 +245,13 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 image_ref,
                 credentials: minibox_core::protocol::PushCredentials::Anonymous,
             })
+        }
+
+        "minibox::image::ls" => Ok(DaemonRequest::ListImages),
+
+        "minibox::image::rm" => {
+            let image_ref = str_field(input, "image_ref")?;
+            Ok(DaemonRequest::RemoveImage { image_ref })
         }
 
         other => anyhow::bail!("unknown handler: {other}"),
@@ -564,7 +579,7 @@ mod tests {
     #[test]
     fn handler_decls_covers_all_nine_handlers() {
         let decls = handler_decls();
-        assert_eq!(decls.len(), 11, "expected 11 handler declarations");
+        assert_eq!(decls.len(), 13, "expected 13 handler declarations");
         let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"minibox::container::run"));
         assert!(names.contains(&"minibox::container::stop"));
@@ -624,6 +639,58 @@ mod tests {
         assert!(
             names.contains(&"minibox::container::resume"),
             "handler_decls must include resume"
+        );
+    }
+
+    // ── image::ls / image::rm ──────────────────────────────────────────────────
+
+    #[test]
+    fn build_request_image_ls() {
+        let req = build_request("minibox::image::ls", &json!({}))
+            .expect("image::ls must succeed with empty input");
+        assert!(
+            matches!(req, DaemonRequest::ListImages),
+            "expected DaemonRequest::ListImages, got: {req:?}"
+        );
+    }
+
+    #[test]
+    fn build_request_image_rm() {
+        let input = json!({"image_ref": "alpine:latest"});
+        let req = build_request("minibox::image::rm", &input)
+            .expect("image::rm must succeed with image_ref");
+        assert!(
+            matches!(req, DaemonRequest::RemoveImage { ref image_ref } if image_ref == "alpine:latest"),
+            "expected DaemonRequest::RemoveImage{{image_ref: \"alpine:latest\"}}, got: {req:?}"
+        );
+    }
+
+    #[test]
+    fn build_request_image_rm_missing_image_ref_returns_err() {
+        let result = build_request("minibox::image::rm", &json!({}));
+        assert!(
+            result.is_err(),
+            "image::rm without image_ref must return Err"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("image_ref"),
+            "error message should mention 'image_ref', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn handler_decls_covers_image_ls_and_image_rm() {
+        let decls = handler_decls();
+        assert_eq!(decls.len(), 13, "expected 13 handler declarations");
+        let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
+        assert!(
+            names.contains(&"minibox::image::ls"),
+            "handler_decls must include image::ls"
+        );
+        assert!(
+            names.contains(&"minibox::image::rm"),
+            "handler_decls must include image::rm"
         );
     }
 }

@@ -123,7 +123,7 @@ async fn declare_returns_nine_handlers() {
     let resp = recv(&mut stdout_reader).await;
     assert_eq!(resp["status"], "Declare");
     let handlers = resp["data"]["handlers"].as_array().expect("handlers array");
-    assert_eq!(handlers.len(), 11);
+    assert_eq!(handlers.len(), 13);
 
     let names: Vec<&str> = handlers
         .iter()

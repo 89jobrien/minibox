@@ -473,6 +473,12 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::ListImages => {
+            tokio::spawn(handler::handle_list_images(
+                Arc::clone(&deps.image.image_store),
+                tx,
+            ));
+        }
         DaemonRequest::RemoveImage { image_ref } => {
             tokio::spawn(handler::handle_remove_image(
                 image_ref,

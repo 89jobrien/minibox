@@ -2491,6 +2491,23 @@ pub(crate) async fn handle_remove_image(
     }
 }
 
+/// List all cached images stored in the image store.
+pub(crate) async fn handle_list_images(
+    image_store: Arc<minibox_core::image::ImageStore>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    match image_store.list_all_images().await {
+        Ok(images) => {
+            if tx.send(DaemonResponse::ImageList { images }).await.is_err() {
+                warn!("handle_list_images: client disconnected before ImageList could be sent");
+            }
+        }
+        Err(e) => {
+            send_error(&tx, "handle_list_images", e.to_string()).await;
+        }
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 // ─── Snapshot handlers ───────────────────────────────────────────────────────
