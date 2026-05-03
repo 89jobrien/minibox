@@ -107,13 +107,17 @@ test-integration:
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
 
-# Lifecycle e2e (Linux, root, Docker Hub)
+# Protocol e2e tests: any platform, no root, no cgroups
 test-e2e:
-    sudo -E cargo test -p miniboxd --test integration_tests -- --ignored test_complete_container_lifecycle
+    cargo xtask test-e2e
 
-# Daemon+CLI e2e tests (Linux, root)
+# System tests: full-stack daemon+CLI (Linux, root, cgroups v2 required)
+test-system:
+    cargo xtask test-system-suite
+
+# Daemon+CLI system tests (Linux, root) — alias for test-system
 test-e2e-suite:
-    cargo xtask test-e2e-suite
+    cargo xtask test-system-suite
 
 # Sandbox contract tests (Linux, root, Docker Hub)
 test-sandbox:
@@ -133,10 +137,10 @@ test-vm:
 
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
-    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-e2e-suite'
+    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
 
 # Full pipeline: clean state → doctor → all tests → clean state
-test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
+test-all: nuke-test-state doctor test-unit test-integration test-system nuke-test-state
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 

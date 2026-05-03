@@ -33,9 +33,15 @@ fn rt() -> tokio::runtime::Runtime {
 
 pub struct SpawnReturnsNonzeroPid;
 impl ConformanceTest for SpawnReturnsNonzeroPid {
-    fn name(&self) -> &str { "spawn_returns_nonzero_pid" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "spawn_returns_nonzero_pid"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new();
         let handle = ctx.assert_ok(
@@ -51,12 +57,19 @@ impl ConformanceTest for SpawnReturnsNonzeroPid {
 
 pub struct SpawnIncrementsCount;
 impl ConformanceTest for SpawnIncrementsCount {
-    fn name(&self) -> &str { "spawn_increments_count" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "spawn_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new();
-        rt().block_on(runtime.spawn_process(&default_config())).expect("spawn");
+        rt().block_on(runtime.spawn_process(&default_config()))
+            .expect("spawn");
         ctx.assert_eq(1, runtime.spawn_count(), "spawn_count after one spawn");
         ctx.result()
     }
@@ -64,24 +77,44 @@ impl ConformanceTest for SpawnIncrementsCount {
 
 pub struct SuccessiveSpawnsDifferentPids;
 impl ConformanceTest for SuccessiveSpawnsDifferentPids {
-    fn name(&self) -> &str { "successive_spawns_different_pids" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "successive_spawns_different_pids"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new();
         let cfg = default_config();
-        let first = rt().block_on(runtime.spawn_process(&cfg)).expect("first spawn");
-        let second = rt().block_on(runtime.spawn_process(&cfg)).expect("second spawn");
-        ctx.assert_ne(first.pid, second.pid, "successive spawns get different PIDs");
+        let first = rt()
+            .block_on(runtime.spawn_process(&cfg))
+            .expect("first spawn");
+        let second = rt()
+            .block_on(runtime.spawn_process(&cfg))
+            .expect("second spawn");
+        ctx.assert_ne(
+            first.pid,
+            second.pid,
+            "successive spawns get different PIDs",
+        );
         ctx.result()
     }
 }
 
 pub struct SpawnFailureReturnsErr;
 impl ConformanceTest for SpawnFailureReturnsErr {
-    fn name(&self) -> &str { "spawn_failure_returns_err" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "spawn_failure_returns_err"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new().with_spawn_failure();
         ctx.assert_err(
@@ -94,9 +127,15 @@ impl ConformanceTest for SpawnFailureReturnsErr {
 
 pub struct SpawnFailureIncrementsCount;
 impl ConformanceTest for SpawnFailureIncrementsCount {
-    fn name(&self) -> &str { "spawn_failure_increments_count" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "spawn_failure_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new().with_spawn_failure();
         let _ = rt().block_on(runtime.spawn_process(&default_config()));
@@ -107,9 +146,15 @@ impl ConformanceTest for SpawnFailureIncrementsCount {
 
 pub struct CapabilitiesReturnsStruct;
 impl ConformanceTest for CapabilitiesReturnsStruct {
-    fn name(&self) -> &str { "capabilities_returns_struct" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "capabilities_returns_struct"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new();
         // Must not panic; values are not asserted — mock declares none.
@@ -121,9 +166,15 @@ impl ConformanceTest for CapabilitiesReturnsStruct {
 
 pub struct SyncAsyncConsistency;
 impl ConformanceTest for SyncAsyncConsistency {
-    fn name(&self) -> &str { "sync_async_consistency" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Integration }
+    fn name(&self) -> &str {
+        "sync_async_consistency"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Integration
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new();
         let cfg = default_config();
@@ -144,13 +195,22 @@ impl ConformanceTest for SyncAsyncConsistency {
 
 pub struct SyncAsyncFailureConsistency;
 impl ConformanceTest for SyncAsyncFailureConsistency {
-    fn name(&self) -> &str { "sync_async_failure_consistency" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "sync_async_failure_consistency"
+    }
+    fn adapter(&self) -> &str {
+        "runtime"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let runtime = MockRuntime::new().with_spawn_failure();
         let cfg = default_config();
-        ctx.assert_err(rt().block_on(runtime.spawn_process(&cfg)), "async Err on failure");
+        ctx.assert_err(
+            rt().block_on(runtime.spawn_process(&cfg)),
+            "async Err on failure",
+        );
         ctx.assert_err(runtime.spawn_process_sync(&cfg), "sync Err on failure");
         ctx.assert_eq(2, runtime.spawn_count(), "both failed spawns counted");
         ctx.result()

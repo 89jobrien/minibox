@@ -22,9 +22,15 @@ fn rt() -> tokio::runtime::Runtime {
 
 pub struct PullIncrementsCount;
 impl ConformanceTest for PullIncrementsCount {
-    fn name(&self) -> &str { "pull_increments_count" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "pull_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let registry = MockRegistry::new();
         rt().block_on(registry.pull_image(&alpine())).expect("pull");
@@ -35,9 +41,15 @@ impl ConformanceTest for PullIncrementsCount {
 
 pub struct MultiplePullsIncrementCount;
 impl ConformanceTest for MultiplePullsIncrementCount {
-    fn name(&self) -> &str { "multiple_pulls_increment_count" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "multiple_pulls_increment_count"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let registry = MockRegistry::new();
         let image = alpine();
@@ -51,9 +63,15 @@ impl ConformanceTest for MultiplePullsIncrementCount {
 
 pub struct HasImageAfterPull;
 impl ConformanceTest for HasImageAfterPull {
-    fn name(&self) -> &str { "has_image_after_pull" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "has_image_after_pull"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let registry = MockRegistry::new();
         let r = alpine();
@@ -69,12 +87,21 @@ impl ConformanceTest for HasImageAfterPull {
 
 pub struct FreshRegistryHasNoImages;
 impl ConformanceTest for FreshRegistryHasNoImages {
-    fn name(&self) -> &str { "fresh_registry_has_no_images" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "fresh_registry_has_no_images"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let registry = MockRegistry::new();
-        ctx.assert_false(rt().block_on(registry.has_image("alpine", "3.18")), "no images before pull");
+        ctx.assert_false(
+            rt().block_on(registry.has_image("alpine", "3.18")),
+            "no images before pull",
+        );
         ctx.assert_eq(0, registry.pull_count(), "pull_count starts at zero");
         ctx.result()
     }
@@ -82,9 +109,15 @@ impl ConformanceTest for FreshRegistryHasNoImages {
 
 pub struct PullFailureRegistryReturnsErr;
 impl ConformanceTest for PullFailureRegistryReturnsErr {
-    fn name(&self) -> &str { "pull_failure_registry_returns_err" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "pull_failure_registry_returns_err"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let registry = MockRegistry::new().with_pull_failure();
         let result = rt().block_on(registry.pull_image(&alpine()));
@@ -95,15 +128,25 @@ impl ConformanceTest for PullFailureRegistryReturnsErr {
 
 pub struct PullCountIncrementedOnFailure;
 impl ConformanceTest for PullCountIncrementedOnFailure {
-    fn name(&self) -> &str { "pull_count_incremented_on_failure" }
-    fn adapter(&self) -> &str { "registry" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "pull_count_incremented_on_failure"
+    }
+    fn adapter(&self) -> &str {
+        "registry"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         // The mock increments pull_count before checking pull_should_succeed,
         // so failed attempts are counted — this is the documented contract.
         let registry = MockRegistry::new().with_pull_failure();
         let _ = rt().block_on(registry.pull_image(&alpine()));
-        ctx.assert_eq(1, registry.pull_count(), "pull_count incremented even on failure");
+        ctx.assert_eq(
+            1,
+            registry.pull_count(),
+            "pull_count incremented even on failure",
+        );
         ctx.result()
     }
 }

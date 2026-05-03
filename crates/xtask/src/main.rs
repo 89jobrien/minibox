@@ -63,6 +63,8 @@ fn main() -> Result<()> {
         Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-integration") => gates::test_integration(&sh),
+        Some("test-e2e") => gates::test_e2e(&sh),
+        Some("test-system-suite") => gates::test_system_suite(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),
         Some("test-sandbox") => gates::test_sandbox(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
@@ -155,7 +157,9 @@ fn main() -> Result<()> {
             );
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
-            eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
+            eprintln!("  test-e2e         protocol e2e tests (any platform, no root required)");
+            eprintln!("  test-system-suite full-stack system tests (Linux, root, cgroups v2)");
+            eprintln!("  test-e2e-suite   alias for test-system-suite (backward compat)");
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");

@@ -28,7 +28,11 @@ fn main() {
     let summary = runner.run();
 
     // Text report to stderr for CI visibility.
-    let cfg = ReportConfig { verbose: true, summary_only: false, show_timing: true };
+    let cfg = ReportConfig {
+        verbose: true,
+        summary_only: false,
+        show_timing: true,
+    };
     let mut text_out = Vec::new();
     ReportGenerator::text(&mut text_out, &summary, &cfg).expect("text report");
     eprint!("{}", String::from_utf8_lossy(&text_out));

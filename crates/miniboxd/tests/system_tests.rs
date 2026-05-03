@@ -1,13 +1,18 @@
-//! End-to-end tests: start real miniboxd + minibox CLI binaries.
+//! System tests: start real miniboxd + minibox CLI binaries.
 //!
 //! Tests the full stack through Unix socket: daemon startup, image pull,
 //! container lifecycle, resource limits, cleanup, and signal handling.
+//!
+//! These tests exercise real Linux kernel facilities (namespaces, cgroups v2,
+//! overlay FS) and require root. They are the "system test" tier — above
+//! integration tests (cgroup unit isolation) and below sandbox tests
+//! (Docker Hub + live registry).
 //!
 //! **Requirements:** Linux, root, cgroups v2, built binaries
 //!
 //! **Running:**
 //! ```bash
-//! just test-e2e
+//! just test-system
 //! ```
 
 #![cfg(target_os = "linux")]

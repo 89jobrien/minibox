@@ -105,9 +105,7 @@ impl TestContext {
         if expected == actual {
             true
         } else {
-            let reason = format!(
-                "{label}: expected {expected:?}, got {actual:?}"
-            );
+            let reason = format!("{label}: expected {expected:?}, got {actual:?}");
             self.record_failure(reason);
             false
         }
@@ -123,7 +121,9 @@ impl TestContext {
         if forbidden != actual {
             true
         } else {
-            self.record_failure(format!("{label}: expected value != {forbidden:?}, but got equal"));
+            self.record_failure(format!(
+                "{label}: expected value != {forbidden:?}, but got equal"
+            ));
             false
         }
     }

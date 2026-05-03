@@ -22,12 +22,21 @@ fn default_config() -> ResourceConfig {
 
 pub struct CreateReturnsCgroupPath;
 impl ConformanceTest for CreateReturnsCgroupPath {
-    fn name(&self) -> &str { "create_returns_cgroup_path" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "create_returns_cgroup_path"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new();
-        let path = ctx.assert_ok(limiter.create("testcontainer01", &default_config()), "create");
+        let path = ctx.assert_ok(
+            limiter.create("testcontainer01", &default_config()),
+            "create",
+        );
         if let Some(p) = path {
             ctx.assert_contains(&p, "testcontainer01", "path contains container_id");
         }
@@ -37,12 +46,20 @@ impl ConformanceTest for CreateReturnsCgroupPath {
 
 pub struct CreateIncrementsCount;
 impl ConformanceTest for CreateIncrementsCount {
-    fn name(&self) -> &str { "create_increments_count" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "create_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new();
-        limiter.create("counttest01", &default_config()).expect("create");
+        limiter
+            .create("counttest01", &default_config())
+            .expect("create");
         ctx.assert_eq(1, limiter.create_count(), "create_count after one create");
         ctx.result()
     }
@@ -50,21 +67,36 @@ impl ConformanceTest for CreateIncrementsCount {
 
 pub struct CreateFailureReturnsErr;
 impl ConformanceTest for CreateFailureReturnsErr {
-    fn name(&self) -> &str { "create_failure_returns_err" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "create_failure_returns_err"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new().with_create_failure();
-        ctx.assert_err(limiter.create("failtest01", &default_config()), "failure mock returns Err");
+        ctx.assert_err(
+            limiter.create("failtest01", &default_config()),
+            "failure mock returns Err",
+        );
         ctx.result()
     }
 }
 
 pub struct CreateFailureIncrementsCount;
 impl ConformanceTest for CreateFailureIncrementsCount {
-    fn name(&self) -> &str { "create_failure_increments_count" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "create_failure_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new().with_create_failure();
         let _ = limiter.create("failtest02", &default_config());
@@ -75,34 +107,59 @@ impl ConformanceTest for CreateFailureIncrementsCount {
 
 pub struct AddProcessSucceedsByDefault;
 impl ConformanceTest for AddProcessSucceedsByDefault {
-    fn name(&self) -> &str { "add_process_succeeds_by_default" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "add_process_succeeds_by_default"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new();
-        ctx.assert_ok(limiter.add_process("aptest01", 12345), "add_process succeeds");
+        ctx.assert_ok(
+            limiter.add_process("aptest01", 12345),
+            "add_process succeeds",
+        );
         ctx.result()
     }
 }
 
 pub struct CleanupIncrementsCount;
 impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str { "cleanup_increments_count" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "cleanup_increments_count"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new();
         limiter.cleanup("cleanuptest01").expect("cleanup");
-        ctx.assert_eq(1, limiter.cleanup_count(), "cleanup_count after one cleanup");
+        ctx.assert_eq(
+            1,
+            limiter.cleanup_count(),
+            "cleanup_count after one cleanup",
+        );
         ctx.result()
     }
 }
 
 pub struct CreateThenCleanupRoundTrip;
 impl ConformanceTest for CreateThenCleanupRoundTrip {
-    fn name(&self) -> &str { "create_then_cleanup_round_trip" }
-    fn adapter(&self) -> &str { "limiter" }
-    fn category(&self) -> TestCategory { TestCategory::Integration }
+    fn name(&self) -> &str {
+        "create_then_cleanup_round_trip"
+    }
+    fn adapter(&self) -> &str {
+        "limiter"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Integration
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let limiter = MockLimiter::new();
         ctx.assert_ok(limiter.create("roundtrip01", &default_config()), "create");

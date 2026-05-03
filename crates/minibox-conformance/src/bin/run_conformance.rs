@@ -22,10 +22,7 @@ fn main() {
         runner
     };
 
-    eprintln!(
-        "Running {} conformance tests...",
-        runner.filtered_count()
-    );
+    eprintln!("Running {} conformance tests...", runner.filtered_count());
 
     let summary = runner.run();
 

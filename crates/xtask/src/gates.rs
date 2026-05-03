@@ -49,14 +49,26 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Unit tests only (any platform)
+/// Unit + integration tests (any platform).
+///
+/// Runs the full workspace test suite via nextest, excluding test files that
+/// require Linux root/cgroups (those are gated with `#[cfg(target_os = "linux")]`
+/// and skipped automatically on macOS) and the protocol e2e tests (which need
+/// a pre-built binary and run separately via `test-e2e`).
 pub fn test_unit(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
+        "cargo nextest run --workspace --exclude miniboxd"
     )
     .run()
-    .context("lib tests failed")?;
+    .context("nextest workspace tests failed")?;
+    // Run miniboxd lib tests (excludes integration test files that need Linux root).
+    cmd!(
+        sh,
+        "cargo nextest run -p miniboxd --lib"
+    )
+    .run()
+    .context("miniboxd lib tests failed")?;
     Ok(())
 }
 
@@ -74,12 +86,9 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
         .context("failed to build minibox-conformance")?;
 
     // Run the full suite via `run-conformance` (fast, exits 1 on failure).
-    let output = cmd!(
-        sh,
-        "cargo run -p minibox-conformance --bin run-conformance"
-    )
-    .output()
-    .context("run-conformance failed to launch")?;
+    let output = cmd!(sh, "cargo run -p minibox-conformance --bin run-conformance")
+        .output()
+        .context("run-conformance failed to launch")?;
 
     // Surface test output regardless of pass/fail.
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -96,12 +105,9 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     }
 
     // Generate JSON + JUnit XML reports.
-    let report_output = cmd!(
-        sh,
-        "cargo run -p minibox-conformance --bin generate-report"
-    )
-    .output()
-    .context("generate-report failed to launch")?;
+    let report_output = cmd!(sh, "cargo run -p minibox-conformance --bin generate-report")
+        .output()
+        .context("generate-report failed to launch")?;
 
     let report_stdout = String::from_utf8_lossy(&report_output.stdout);
     for line in report_stdout.lines() {
@@ -172,21 +178,46 @@ pub fn test_integration(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Daemon+CLI e2e tests (Linux, root required)
-pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
+/// Protocol e2e tests — any platform, no root required.
+///
+/// Starts a real `miniboxd` process and exercises the JSON-over-Unix-socket
+/// protocol without Linux namespaces, cgroups, or root. On macOS the daemon
+/// dispatches to macbox; on Linux it uses the native adapter (but avoids
+/// operations that require root).
+pub fn test_e2e(sh: &Shell) -> Result<()> {
+    // Build the daemon binary first so find_binary() can locate it.
+    cmd!(sh, "cargo build -p miniboxd")
+        .run()
+        .context("failed to build miniboxd for protocol e2e tests")?;
+    cmd!(
+        sh,
+        "cargo nextest run -p miniboxd --test protocol_e2e_tests -j 1"
+    )
+    .run()
+    .context("protocol e2e tests failed")?;
+    eprintln!("protocol e2e tests passed");
+    Ok(())
+}
+
+/// System tests: full-stack daemon+CLI tests (Linux, root, cgroups v2 required).
+///
+/// Renamed from `test_e2e_suite` — these tests exercise real kernel facilities
+/// (namespaces, overlay FS, cgroups v2) and live above integration tests in
+/// the tier hierarchy.
+pub fn test_system_suite(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
 
     cmd!(
         sh,
-        "cargo test -p miniboxd --test e2e_tests --release --no-run"
+        "cargo test -p miniboxd --test system_tests --release --no-run"
     )
     .run()
-    .context("failed to build e2e test binary")?;
+    .context("failed to build system test binary")?;
 
-    let binary = find_test_binary("target/release/deps", "e2e_tests")
-        .context("could not locate e2e test binary in target/release/deps")?;
+    let binary = find_test_binary("target/release/deps", "system_tests")
+        .context("could not locate system test binary in target/release/deps")?;
 
     let bin_dir = env::current_dir()?.join("target/release");
     cmd!(
@@ -194,8 +225,16 @@ pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
         "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --nocapture"
     )
     .run()
-    .context("e2e tests failed")?;
+    .context("system tests failed")?;
     Ok(())
+}
+
+/// Daemon+CLI e2e tests (Linux, root required)
+///
+/// Deprecated alias for `test_system_suite`. Kept for backward compatibility
+/// with existing CI jobs that reference `test-e2e-suite`.
+pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
+    test_system_suite(sh)
 }
 
 /// Sandbox contract tests (Linux, root, Docker Hub required)

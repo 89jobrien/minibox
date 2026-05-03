@@ -48,9 +48,15 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
 
 pub struct AddThenGetRoundTrip;
 impl ConformanceTest for AddThenGetRoundTrip {
-    fn name(&self) -> &str { "add_then_get_round_trip" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "add_then_get_round_trip"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
@@ -67,9 +73,15 @@ impl ConformanceTest for AddThenGetRoundTrip {
 
 pub struct RemoveReturnsRecord;
 impl ConformanceTest for RemoveReturnsRecord {
-    fn name(&self) -> &str { "remove_returns_record" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "remove_returns_record"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
@@ -82,9 +94,15 @@ impl ConformanceTest for RemoveReturnsRecord {
 
 pub struct RemoveNonExistentReturnsNone;
 impl ConformanceTest for RemoveNonExistentReturnsNone {
-    fn name(&self) -> &str { "remove_nonexistent_returns_none" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "remove_nonexistent_returns_none"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
@@ -96,9 +114,15 @@ impl ConformanceTest for RemoveNonExistentReturnsNone {
 
 pub struct ListContainersReturnsAll;
 impl ConformanceTest for ListContainersReturnsAll {
-    fn name(&self) -> &str { "list_containers_returns_all" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "list_containers_returns_all"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
@@ -112,20 +136,29 @@ impl ConformanceTest for ListContainersReturnsAll {
 
 pub struct UpdateStateChangesStatus;
 impl ConformanceTest for UpdateStateChangesStatus {
-    fn name(&self) -> &str { "update_state_changes_status" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
+    fn name(&self) -> &str {
+        "update_state_changes_status"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record("stateupd01aabbcc11", None, "alpine")));
-        let _ = rt().block_on(
-            state.update_container_state("stateupd01aabbcc11", ContainerState::Running),
-        );
+        let _ = rt()
+            .block_on(state.update_container_state("stateupd01aabbcc11", ContainerState::Running));
         let record = rt().block_on(state.get_container("stateupd01aabbcc11"));
         ctx.assert_true(record.is_some(), "container still exists after update");
         if let Some(r) = record {
-            ctx.assert_eq("Running".to_string(), r.info.state, "state updated to Running");
+            ctx.assert_eq(
+                "Running".to_string(),
+                r.info.state,
+                "state updated to Running",
+            );
         }
         ctx.result()
     }
@@ -133,9 +166,15 @@ impl ConformanceTest for UpdateStateChangesStatus {
 
 pub struct PersistenceRoundTrip;
 impl ConformanceTest for PersistenceRoundTrip {
-    fn name(&self) -> &str { "persistence_round_trip" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::Integration }
+    fn name(&self) -> &str {
+        "persistence_round_trip"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Integration
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         {
@@ -153,13 +192,23 @@ impl ConformanceTest for PersistenceRoundTrip {
 
 pub struct NameInUseDetectsCollision;
 impl ConformanceTest for NameInUseDetectsCollision {
-    fn name(&self) -> &str { "name_in_use_detects_collision" }
-    fn adapter(&self) -> &str { "state" }
-    fn category(&self) -> TestCategory { TestCategory::EdgeCase }
+    fn name(&self) -> &str {
+        "name_in_use_detects_collision"
+    }
+    fn adapter(&self) -> &str {
+        "state"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
-        rt().block_on(state.add_container(make_record("namecol01aabbcc11", Some("myapp"), "alpine")));
+        rt().block_on(state.add_container(make_record(
+            "namecol01aabbcc11",
+            Some("myapp"),
+            "alpine",
+        )));
         ctx.assert_true(
             rt().block_on(state.name_in_use("myapp")),
             "name_in_use detects existing name",

@@ -139,7 +139,10 @@ impl TestRunner {
 
     /// Number of tests that will execute after filtering.
     pub fn filtered_count(&self) -> usize {
-        self.tests.iter().filter(|t| self.passes_filter(t.as_ref())).count()
+        self.tests
+            .iter()
+            .filter(|t| self.passes_filter(t.as_ref()))
+            .count()
     }
 
     /// Execute all (filtered) tests and return the summary.
@@ -194,9 +197,15 @@ mod tests {
 
     struct PassTest;
     impl ConformanceTest for PassTest {
-        fn name(&self) -> &str { "pass" }
-        fn adapter(&self) -> &str { "mock" }
-        fn category(&self) -> TestCategory { TestCategory::Unit }
+        fn name(&self) -> &str {
+            "pass"
+        }
+        fn adapter(&self) -> &str {
+            "mock"
+        }
+        fn category(&self) -> TestCategory {
+            TestCategory::Unit
+        }
         fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
             ctx.assert_eq(1, 1, "always");
             ctx.result()
@@ -205,9 +214,15 @@ mod tests {
 
     struct FailTest;
     impl ConformanceTest for FailTest {
-        fn name(&self) -> &str { "fail" }
-        fn adapter(&self) -> &str { "mock" }
-        fn category(&self) -> TestCategory { TestCategory::Unit }
+        fn name(&self) -> &str {
+            "fail"
+        }
+        fn adapter(&self) -> &str {
+            "mock"
+        }
+        fn category(&self) -> TestCategory {
+            TestCategory::Unit
+        }
         fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
             ctx.assert_eq(1, 2, "mismatch");
             ctx.result()
