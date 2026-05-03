@@ -10,7 +10,9 @@ Minibox is a Docker-like container runtime written in Rust featuring daemon/clie
 
 This workspace uses **Rust 2024 edition**. Watch for: match ergonomics changes, `unsafe` required for `set_var`/`remove_var`, `FromRawFd` scope differences. Always run `cargo clippy` and `cargo test` after generating code.
 
-**Critical:** See [`rules/rust-patterns.md`](rules/rust-patterns.md) for Minibox-specific patterns (error handling, path validation, async/sync boundaries, tracing discipline). This is a must-read before writing container code.
+**Critical:** `.claude/rules/rust-patterns.md` is **auto-loaded** by Claude Code and contains
+Minibox-specific patterns (error handling, path validation, async/sync boundaries, tracing
+discipline). Read it before writing container code — it overrides general Rust conventions.
 
 ## Build and Development Commands
 
@@ -146,17 +148,12 @@ cargo bench -p minibox          # trait_overhead + protocol_codec (local HTML re
 cargo xtask pre-commit
 ```
 
-This runs: `cargo fmt --all --check` + clippy (all crates) + `cargo build --release` (macOS-safe).
+This runs: `cargo fmt --all` → `git add -u` (re-stages fmt changes) → `cargo clippy --fix` →
+`git add -u` (re-stages clippy changes) → `cargo fmt --all --check` → clippy `-D warnings` →
+`cargo build --release` (macOS-safe). The `git add -u` steps ensure CI never sees a fmt diff.
 
-**On Linux**, use `cargo xtask prepush` for full coverage including `cargo xtask test-unit` + llvm-cov report.
-
-**macOS quality gates** (what `cargo xtask pre-commit` runs):
-
-```bash
-cargo fmt --all --check
-cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
-cargo xtask test-unit
-```
+**On Linux**, use `cargo xtask prepush` for full coverage including `cargo xtask test-unit` +
+llvm-cov report.
 
 ### Handler Testing Patterns
 
@@ -235,20 +232,9 @@ Wired in `miniboxd/src/main.rs`.
 
 ### Container Lifecycle Flow
 
-1. CLI sends `RunContainer` request to daemon
-2. Daemon checks image cache, pulls from Docker Hub if missing (anonymous auth)
-3. Creates overlay mount: `lowerdir=layer1:layer2:...`, `upperdir=container_rw`, `workdir=container_work`
-4. Forks child with `clone(CLONE_NEWPID|CLONE_NEWNS|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWNET)` via nix crate
-5. Child process (in `crates/minibox/src/container/process.rs`):
-   - Creates cgroup at `/sys/fs/cgroup/minibox/{id}/`
-   - Writes PID to `cgroup.procs`
-   - Sets memory.max and cpu.weight if limits specified
-   - Mounts proc, sys, tmpfs in new mount namespace
-   - Calls `pivot_root()` to switch to container rootfs
-   - Closes inherited FDs
-   - Executes user command via `execvp()`
-6. Parent tracks PID, spawns background reaper task to detect exit
-7. On exit, reaper updates state to Stopped
+CLI → daemon → image cache check/pull → overlay mount → `clone()` with all namespace flags →
+child: cgroup setup, `pivot_root`, `execve` → parent: reaper task watches PID → state →
+Stopped. See `crates/minibox/src/container/process.rs` for the full child init sequence.
 
 ### Key Modules
 

@@ -122,6 +122,7 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
             let env = str_array_field(input, "env").unwrap_or_default();
             let name = opt_str_field(input, "name");
             let platform = opt_str_field(input, "platform");
+            let mounts = parse_mounts(input)?;
 
             Ok(DaemonRequest::Run {
                 image,
@@ -131,7 +132,7 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 cpu_weight,
                 ephemeral: false,
                 network: None,
-                mounts: vec![],
+                mounts,
                 privileged: false,
                 env,
                 name,
@@ -220,6 +221,31 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 }
 
 // ── Input extraction helpers ───────────────────────────────────────────────────
+
+fn parse_mounts(v: &Value) -> Result<Vec<minibox_core::domain::BindMount>> {
+    let Some(arr) = v["mounts"].as_array() else {
+        return Ok(vec![]);
+    };
+    arr.iter()
+        .enumerate()
+        .map(|(i, entry)| {
+            let host_path = entry["host_path"]
+                .as_str()
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| anyhow::anyhow!("mounts[{i}]: missing 'host_path'"))?;
+            let container_path = entry["container_path"]
+                .as_str()
+                .map(std::path::PathBuf::from)
+                .ok_or_else(|| anyhow::anyhow!("mounts[{i}]: missing 'container_path'"))?;
+            let read_only = entry["read_only"].as_bool().unwrap_or(false);
+            Ok(minibox_core::domain::BindMount {
+                host_path,
+                container_path,
+                read_only,
+            })
+        })
+        .collect()
+}
 
 fn str_field(v: &Value, key: &str) -> Result<String> {
     v[key]
@@ -416,6 +442,55 @@ mod tests {
         // "id" is required for stop
         let result = build_request("minibox::container::stop", &json!({}));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_request_container_run_with_mounts() {
+        let input = json!({
+            "image": "alpine:latest",
+            "command": ["/bin/sh"],
+            "mounts": [
+                {
+                    "host_path": "/tmp/data",
+                    "container_path": "/data",
+                    "read_only": true
+                },
+                {
+                    "host_path": "/home/user/src",
+                    "container_path": "/src",
+                    "read_only": false
+                }
+            ]
+        });
+        let req =
+            build_request("minibox::container::run", &input).expect("build_request must succeed");
+        match req {
+            DaemonRequest::Run { mounts, .. } => {
+                assert_eq!(mounts.len(), 2, "expected 2 mounts");
+                assert_eq!(mounts[0].host_path, std::path::PathBuf::from("/tmp/data"));
+                assert_eq!(mounts[0].container_path, std::path::PathBuf::from("/data"));
+                assert!(mounts[0].read_only, "first mount must be read_only");
+                assert_eq!(
+                    mounts[1].host_path,
+                    std::path::PathBuf::from("/home/user/src")
+                );
+                assert!(!mounts[1].read_only, "second mount must not be read_only");
+            }
+            other => panic!("unexpected request: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_request_container_run_empty_mounts_when_absent() {
+        let input = json!({"image": "alpine:latest", "command": ["/bin/sh"]});
+        let req =
+            build_request("minibox::container::run", &input).expect("build_request must succeed");
+        match req {
+            DaemonRequest::Run { mounts, .. } => {
+                assert!(mounts.is_empty(), "mounts must be empty when not provided");
+            }
+            other => panic!("unexpected request: {other:?}"),
+        }
     }
 
     #[test]
