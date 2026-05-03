@@ -56,19 +56,13 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 /// and skipped automatically on macOS) and the protocol e2e tests (which need
 /// a pre-built binary and run separately via `test-e2e`).
 pub fn test_unit(sh: &Shell) -> Result<()> {
-    cmd!(
-        sh,
-        "cargo nextest run --workspace --exclude miniboxd"
-    )
-    .run()
-    .context("nextest workspace tests failed")?;
+    cmd!(sh, "cargo nextest run --workspace --exclude miniboxd")
+        .run()
+        .context("nextest workspace tests failed")?;
     // Run miniboxd lib tests (excludes integration test files that need Linux root).
-    cmd!(
-        sh,
-        "cargo nextest run -p miniboxd --lib"
-    )
-    .run()
-    .context("miniboxd lib tests failed")?;
+    cmd!(sh, "cargo nextest run -p miniboxd --lib")
+        .run()
+        .context("miniboxd lib tests failed")?;
     Ok(())
 }
 
