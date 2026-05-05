@@ -11,7 +11,7 @@ use minibox_conformance::harness::{ReportConfig, ReportGenerator, TestRunner};
 
 fn main() {
     let adapter_filter = std::env::var("CONFORMANCE_ADAPTER").ok();
-    let verbose = std::env::var("CONFORMANCE_VERBOSE").map_or(false, |v| v == "1");
+    let verbose = std::env::var("CONFORMANCE_VERBOSE").is_ok_and(|v| v == "1");
 
     let mut runner = TestRunner::new();
     runner.add_all(adapters::all());
