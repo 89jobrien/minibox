@@ -1,9 +1,5 @@
 # minibox
 
-[![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
-[![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)
-
 A container runtime written in Rust with daemon/client architecture, OCI image
 pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay
 filesystem support. Hexagonal architecture makes adapter suites swappable at
