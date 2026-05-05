@@ -367,8 +367,8 @@ See `docs/FEATURE_MATRIX.md` for the full per-platform breakdown. Key constraint
   for the `native` adapter. GKE, Colima, and macOS adapters return an error.
 - **No Dockerfile parser**: `MiniboxImageBuilder` exists but there is no Dockerfile DSL. Build
   support is experimental and native-only.
-- **Push/commit are experimental and native-only**: `OciPushAdapter` and `overlay_commit_adapter`
-  are wired in the native suite only and have limited test coverage.
+- **Push/commit are experimental**: `OciPushAdapter` is wired in native and GKE suites;
+  `overlay_commit_adapter` is wired in native and Colima suites. Both have limited test coverage.
 - **Adapter wiring incomplete**: `docker_desktop`, `wsl2`, `vf`, and `hcs` adapters exist as
   library code but are not wired into `miniboxd`. Passing unrecognized values to
   `MINIBOX_ADAPTER` causes the daemon to exit at startup.
