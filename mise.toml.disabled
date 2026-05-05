@@ -279,7 +279,7 @@ spin() {
 
 step "building"
 if [[ "$(uname)" == "Linux" ]]; then
-    cargo build --release -p minibox -p minibox-cli -p miniboxd --example showcase \
+    cargo build --release -p minibox -p mbx -p miniboxd --example showcase \
         2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 else
     cargo build --release -p minibox --example showcase \
@@ -340,7 +340,7 @@ fi
 hdr "minibox · hello world"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+cargo build --release -p mbx -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -382,7 +382,7 @@ fi
 hdr "minibox · namespace isolation"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+cargo build --release -p mbx -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -444,7 +444,7 @@ fi
 hdr "minibox · dogfood"
 
 step "building"
-cargo build --release -p minibox-cli -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+cargo build --release -p mbx -p miniboxd 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
@@ -502,7 +502,7 @@ if ! colima status &>/dev/null; then
 fi
 
 step "building"
-cargo build --release -p miniboxd -p minibox-cli 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
+cargo build --release -p miniboxd -p mbx 2>&1 | grep -E "^(Compiling|Finished|error)" | tail -1 || true
 ok "binaries ready"; echo ""
 
 step "starting daemon"
