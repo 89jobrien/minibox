@@ -313,6 +313,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            image_ref: None,
         };
 
         let result = runtime.spawn_process(&config).await;
@@ -337,6 +338,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            image_ref: None,
         };
 
         let pid1 = runtime.spawn_process(&config).await.unwrap().pid;
@@ -1177,6 +1179,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            image_ref: None,
         };
 
         let r1 = runtime.spawn_process(&config).await.unwrap();
@@ -1210,6 +1213,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            image_ref: None,
         };
 
         // All three attempts fail, but spawn_count must still increment

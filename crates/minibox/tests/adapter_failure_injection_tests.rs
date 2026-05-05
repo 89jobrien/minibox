@@ -137,6 +137,7 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        image_ref: None,
     };
 
     let result = runtime.spawn_process(&config).await;

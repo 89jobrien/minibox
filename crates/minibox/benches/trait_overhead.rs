@@ -93,6 +93,7 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            image_ref: None,
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));
@@ -115,6 +116,7 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            image_ref: None,
         };
 
         b.iter(|| rt.block_on(async { black_box(runtime.spawn_process(&config).await).ok() }));

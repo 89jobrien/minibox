@@ -368,6 +368,7 @@ async fn conformance_mock_runtime_spawn_increments_pid() {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
+        image_ref: None,
     };
 
     let result1 = runtime.spawn_process(&config).await;
@@ -398,6 +399,7 @@ async fn conformance_mock_runtime_spawn_failure() {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
+        image_ref: None,
     };
 
     let result = runtime.spawn_process(&config).await;
