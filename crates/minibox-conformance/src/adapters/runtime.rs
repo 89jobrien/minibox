@@ -20,6 +20,7 @@ fn default_config() -> ContainerSpawnConfig {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
+        image_ref: None,
     }
 }
 

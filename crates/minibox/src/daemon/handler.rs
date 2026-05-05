@@ -813,6 +813,7 @@ async fn run_inner_capture(
         skip_network_namespace: skip_net_ns,
         mounts,
         privileged,
+        image_ref: Some(image_label.clone()),
     };
 
     let _spawn_permit = state
@@ -1057,6 +1058,7 @@ async fn run_inner(
         skip_network_namespace: skip_net_ns,
         mounts,
         privileged,
+        image_ref: Some(image_label.clone()),
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns

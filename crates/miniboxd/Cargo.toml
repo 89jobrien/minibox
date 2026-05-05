@@ -26,10 +26,10 @@ tailnet = []
 vz = ["macbox/vz"]
 
 [dependencies]
-# minibox is Unix-only at the source level (uses nix crate), but Cargo requires
-# feature forwarding (metrics/otel) to reference a dep in [dependencies], not
-# a target-conditional section. The minibox crate itself cfg-gates all
-# Linux-specific code, so it compiles on macOS as well.
+# minibox is Unix-centric (uses nix) but must stay in [dependencies] (not a
+# target-conditional section) so that the metrics/otel features can forward to
+# minibox/metrics and minibox/otel. All Linux-only code inside minibox is
+# guarded by #[cfg(target_os = "linux")] at the module level.
 minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }

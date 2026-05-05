@@ -207,6 +207,7 @@ impl ImageBuilder for MiniboxImageBuilder {
                         skip_network_namespace: true,
                         mounts: vec![],
                         privileged: false,
+                        image_ref: None,
                     };
 
                     let spawn_result = self
