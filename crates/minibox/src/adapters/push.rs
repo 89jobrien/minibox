@@ -27,7 +27,7 @@ use minibox_core::domain::{
     DynImagePusher, ImagePusher, PushProgress, PushResult, RegistryCredentials,
 };
 use minibox_core::image::ImageStore;
-use minibox_core::image::registry::RegistryClient;
+use minibox_core::image::registry::{PushAuth, RegistryClient};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tracing::info;
@@ -53,22 +53,24 @@ impl ImagePusher for OciPushAdapter {
         credentials: &RegistryCredentials,
         progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
     ) -> Result<PushResult> {
-        let (username, password) = match credentials {
-            RegistryCredentials::Basic { username, password } => {
-                (Some(username.as_str()), Some(password.as_str()))
-            }
-            _ => (None, None),
-        };
-
         let repo = image_ref.repository();
         let registry_host = image_ref.registry_host();
         let registry_base = format!("{}://{}", registry_scheme(registry_host), registry_host);
 
-        let auth = self
-            .client
-            .resolve_push_auth(&registry_base, &repo, username, password)
-            .await
-            .with_context(|| format!("push auth for {repo}"))?;
+        let auth = if let Some(bearer) = push_auth_from_credentials(credentials) {
+            bearer
+        } else {
+            let (username, password) = match credentials {
+                RegistryCredentials::Basic { username, password } => {
+                    (Some(username.as_str()), Some(password.as_str()))
+                }
+                _ => (None, None),
+            };
+            self.client
+                .resolve_push_auth(&registry_base, &repo, username, password)
+                .await
+                .with_context(|| format!("push auth for {repo}"))?
+        };
 
         // Load the stored manifest to get layer descriptors.
         let cache_name = image_ref.cache_name();
@@ -207,6 +209,20 @@ fn retar_layer_dir(dir: &std::path::Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Map [`RegistryCredentials::Token`] directly to [`PushAuth::Bearer`].
+///
+/// Returns `Some(PushAuth::Bearer(token))` when the caller has already
+/// obtained a bearer token (e.g. from GHCR or a CI token source) and we
+/// should skip the `resolve_push_auth` round-trip entirely.  Returns `None`
+/// for all other credential variants so the caller falls through to the
+/// normal `resolve_push_auth` path.
+fn push_auth_from_credentials(credentials: &RegistryCredentials) -> Option<PushAuth> {
+    match credentials {
+        RegistryCredentials::Token(token) => Some(PushAuth::Bearer(token.clone())),
+        _ => None,
+    }
+}
+
 fn registry_scheme(registry_host: &str) -> &'static str {
     match registry_host {
         "localhost" | "127.0.0.1" => "http",
@@ -223,6 +239,24 @@ pub fn oci_push_adapter(client: RegistryClient, store: Arc<ImageStore>) -> DynIm
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credentials_token_maps_to_bearer_push_auth() {
+        use minibox_core::image::registry::PushAuth;
+        let creds = RegistryCredentials::Token("my-token".to_owned());
+        let push_auth = push_auth_from_credentials(&creds);
+        assert_eq!(push_auth, Some(PushAuth::Bearer("my-token".to_owned())));
+    }
+
+    #[test]
+    fn credentials_basic_returns_none_from_helper() {
+        let creds = RegistryCredentials::Basic {
+            username: "u".to_owned(),
+            password: "p".to_owned(),
+        };
+        let push_auth = push_auth_from_credentials(&creds);
+        assert_eq!(push_auth, None);
+    }
 
     #[test]
     fn push_adapter_constructs() {

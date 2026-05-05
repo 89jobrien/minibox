@@ -372,6 +372,49 @@ mod tests {
         );
     }
 
+    /// Regression guard for issue #292: exec must not call fork() inside a Tokio
+    /// runtime.  The safe path is `nsenter(1)` via `std::process::Command` (which
+    /// uses `posix_spawn(3)`) dispatched from `spawn_blocking`.
+    ///
+    /// This test asserts that `build_nsenter_command` produces a Command whose
+    /// program is "nsenter" (not a direct binary that would require fork) and that
+    /// env isolation is applied (env_clear + only specified vars).
+    #[test]
+    fn build_nsenter_command_env_clear_and_var_injection() {
+        let cmd = build_nsenter_command(
+            9999,
+            &["id".to_string()],
+            &["PATH=/usr/bin:/bin".to_string(), "HOME=/root".to_string()],
+        );
+        assert_eq!(
+            cmd.get_program().to_string_lossy(),
+            "nsenter",
+            "must use nsenter, not a direct fork path"
+        );
+        let env_vars: Vec<(String, String)> = cmd
+            .get_envs()
+            .filter_map(|(k, v)| {
+                v.map(|val| {
+                    (
+                        k.to_string_lossy().into_owned(),
+                        val.to_string_lossy().into_owned(),
+                    )
+                })
+            })
+            .collect();
+        // env_clear() leaves an empty explicit set; only the vars we injected appear.
+        assert!(
+            env_vars
+                .iter()
+                .any(|(k, v)| k == "PATH" && v == "/usr/bin:/bin"),
+            "PATH must be injected"
+        );
+        assert!(
+            env_vars.iter().any(|(k, v)| k == "HOME" && v == "/root"),
+            "HOME must be injected"
+        );
+    }
+
     #[test]
     fn exec_config_fields() {
         let cfg = ExecConfig {

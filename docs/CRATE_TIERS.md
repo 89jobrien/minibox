@@ -27,10 +27,11 @@ that breaks callers outside the workspace is a semver-major event.
 
 | Crate          | Path                  | Role                                                                                                                                                                                                        |
 | -------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minibox-core` | `crates/minibox-core` | Cross-platform shared types: protocol, domain traits, error types, OCI image types, `ImageStore`, `RegistryClient`, `DaemonClient`, preflight. Single source of truth for `DaemonRequest`/`DaemonResponse`. |
-| `minibox`      | `crates/minibox`      | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
-| `miniboxd`     | `crates/miniboxd`     | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
-| `mbx`          | `crates/mbx`          | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
+| `minibox-core`          | `crates/minibox-core`          | Cross-platform shared types: protocol, domain traits, error types, OCI image types, `ImageStore`, `RegistryClient`, `DaemonClient`, preflight. Single source of truth for `DaemonRequest`/`DaemonResponse`. |
+| `minibox`               | `crates/minibox`               | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
+| `miniboxd`              | `crates/miniboxd`               | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
+| `mbx`                   | `crates/mbx`                   | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
+| `minibox-crux-plugin`   | `crates/minibox-crux-plugin`   | Crux plugin binary. Exposes minibox ops over JSON-RPC stdio for crux agent pipelines.                                                                                                                       |
 
 **Stability expectations for Core crates:**
 
@@ -47,12 +48,13 @@ that breaks callers outside the workspace is a semver-major event.
 Adapter suites for specific host environments. Each `{platform}box` crate implements
 the domain traits from `minibox-core` for its target platform.
 
-| Crate       | Path               | Role                                                                                                                                                        |
-| ----------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macbox`    | `crates/macbox`    | macOS adapter suite: Colima (nerdctl/limactl) and Virtualization.framework (VZ) backends.                                                                   |
-| `winbox`    | `crates/winbox`    | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
-| `dockerbox` | `crates/dockerbox` | Docker API shim: HTTP-over-Unix-socket bridge that translates Docker API calls to the minibox protocol. (Extracted to `minibox-plugins` workspace.)          |
-| `tailbox`   | `crates/tailbox`   | Tailscale/tailnet adapter: auth, config, experimental network experiments. (Extracted to `minibox-plugins` workspace.)                                      |
+| Crate    | Path            | Role                                                                                                                                                        |
+| -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `macbox` | `crates/macbox` | macOS adapter suite: Colima (nerdctl/limactl), krun (libkrun micro-VMs), smolvm, and VZ backends.                                                          |
+| `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
+
+Note: `dockerbox` and `tailbox` were extracted to the separate `minibox-plugins`
+workspace and are no longer members of this workspace.
 
 **Stability expectations for Platform crates:**
 
@@ -90,10 +92,11 @@ No crates are currently in this tier. The six former experimental crates
 Dev tooling. These crates are workspace members but are never published or included
 in release binaries.
 
-| Crate            | Path                    | Role                                                                                                               |
-| ---------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `xtask`          | `crates/xtask`          | Cargo xtask runner: `pre-commit`, `prepush`, `test-unit`, `test-conformance`, `bench`, `build-vm-image`, and more. |
-| `minibox-macros` | `crates/minibox-macros` | Proc-macro crate: `as_any!` and `adapt!` derive macros used by `minibox`.                                          |
+| Crate                 | Path                         | Role                                                                                                               |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `xtask`               | `crates/xtask`               | Cargo xtask runner: `pre-commit`, `prepush`, `test-unit`, `test-conformance`, `bench`, `build-vm-image`, and more. |
+| `minibox-macros`      | `crates/minibox-macros`      | Proc-macro crate: `as_any!` and `adapt!` derive macros used by `minibox`.                                          |
+| `minibox-conformance` | `crates/minibox-conformance` | Conformance test harness (`run-conformance`, `generate-report`). Not published.                                    |
 
 **Stability expectations for Internal crates:**
 

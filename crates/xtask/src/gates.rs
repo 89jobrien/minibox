@@ -8,7 +8,8 @@ use crate::docs_lint;
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     // Re-stage any files rustfmt modified so the commit includes the formatted versions.
-    cmd!(sh, "git add -u")
+    // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
+    cmd!(sh, "git add -u -- . :!.worktrees")
         .run()
         .context("git add -u after fmt failed")?;
     cmd!(
@@ -18,7 +19,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     .run()
     .context("clippy --fix failed")?;
     // Re-stage any files clippy --fix modified.
-    cmd!(sh, "git add -u")
+    cmd!(sh, "git add -u -- . :!.worktrees")
         .run()
         .context("git add -u after clippy --fix failed")?;
     cmd!(sh, "cargo fmt --all --check")
