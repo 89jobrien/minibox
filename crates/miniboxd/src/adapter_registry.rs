@@ -438,6 +438,28 @@ mod tests {
         );
     }
 
+    /// Verify that Linux-only adapters (native, gke) are marked unavailable
+    /// on non-Linux platforms. This is the compile-time cfg-gate contract: the
+    /// `AdapterInfo::available` field must reflect the current build target.
+    ///
+    /// On Linux this test is a no-op (all adapters are available there).
+    #[test]
+    #[cfg(not(target_os = "linux"))]
+    fn linux_only_adapters_are_unavailable_on_non_linux() {
+        let adapters = all_adapters();
+        for linux_only in &["native", "gke"] {
+            let info = adapters
+                .iter()
+                .find(|a| &a.name == linux_only)
+                .unwrap_or_else(|| panic!("{linux_only} must appear in all_adapters()"));
+            assert!(
+                !info.available,
+                "adapter '{linux_only}' must be unavailable on non-Linux targets \
+                 (cfg gate missing in AdapterInfo::available)"
+            );
+        }
+    }
+
     #[test]
     fn colima_metadata_targets_any() {
         let info = all_adapters();
