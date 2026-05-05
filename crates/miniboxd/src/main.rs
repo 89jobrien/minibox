@@ -699,6 +699,10 @@ fn build_gke_handler_dependencies(
     ));
     let proot_runtime =
         ProotRuntime::from_env().context("initialising proot runtime for GKE adapter")?;
+    let image_pusher = minibox::adapters::push::oci_push_adapter(
+        RegistryClient::new().context("creating OCI push registry client for GKE adapter")?,
+        Arc::clone(&state.image_store),
+    );
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router,
@@ -719,7 +723,7 @@ fn build_gke_handler_dependencies(
             pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
         },
         build: minibox::daemon::handler::BuildDeps {
-            image_pusher: None,
+            image_pusher: Some(image_pusher),
             commit_adapter: None,
             image_builder: None,
         },
@@ -1155,5 +1159,45 @@ mod tests {
         .unwrap();
 
         assert!(deps.build.image_pusher.is_none());
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn gke_suite_wires_oci_image_pusher() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let data_dir = temp_dir.path().to_path_buf();
+        let images_dir = data_dir.join("images");
+        std::fs::create_dir_all(&images_dir).unwrap();
+        let image_store = ImageStore::new(&images_dir).unwrap();
+        let state = Arc::new(DaemonState::new(image_store, &data_dir));
+        let lease_service = Arc::new(
+            DiskLeaseService::new(data_dir.join("leases.json"))
+                .await
+                .unwrap(),
+        );
+        let image_gc: Arc<dyn ImageGarbageCollector> =
+            Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+        let event_broker = Arc::new(BroadcastEventBroker::new());
+        let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
+            Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
+
+        let deps = build_gke_handler_dependencies(
+            Arc::clone(&state),
+            data_dir.join("containers"),
+            data_dir.join("run/containers"),
+            metrics_recorder,
+            event_broker,
+            image_gc,
+        )
+        .expect("gke deps");
+
+        assert!(
+            deps.build.image_pusher.is_some(),
+            "gke suite should wire OCI image pusher"
+        );
+        // GKE uses CopyFilesystem — overlay commit is not available
+        assert!(deps.build.commit_adapter.is_none());
+        // No image builder wired for GKE
+        assert!(deps.build.image_builder.is_none());
     }
 }
