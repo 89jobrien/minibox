@@ -4,15 +4,11 @@ use std::path::{Path, PathBuf};
 
 use crate::vm_run::HostPlatform;
 
-#[allow(dead_code)]
 pub const ALPINE_VERSION: &str = "3.21.3";
-#[allow(dead_code)]
 pub const ALPINE_ARCH: &str = "aarch64";
-#[allow(dead_code)]
 pub const ALPINE_CDN: &str = "https://dl-cdn.alpinelinux.org/alpine";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[allow(dead_code)]
 pub struct VmImageManifest {
     pub alpine_version: String,
     pub agent_rustc_version: String,
@@ -20,8 +16,10 @@ pub struct VmImageManifest {
     pub built_at: u64, // Unix timestamp seconds
 }
 
-#[allow(dead_code)]
 impl VmImageManifest {
+    // Retained for callers that read manifests back from disk (e.g. cache-staleness checks,
+    // future `xtask vm-image info` subcommand). Used in tests today.
+    #[allow(dead_code)]
     pub fn load(path: &Path) -> Result<Option<Self>> {
         if !path.exists() {
             return Ok(None);
@@ -47,7 +45,6 @@ impl VmImageManifest {
 
 /// Alpine Linux asset URLs for a specific version and architecture.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AlpineAssets {
     pub kernel: String,
     pub initramfs: String,
@@ -57,7 +54,6 @@ pub struct AlpineAssets {
 impl AlpineAssets {
     /// Construct URLs for Alpine assets. Extracts major.minor from version string
     /// (e.g., "3.21.3" → "3.21") for the release path.
-    #[allow(dead_code)]
     pub fn for_version(version: &str, arch: &str) -> Self {
         let major_minor: String = version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".");
         let base = format!("{ALPINE_CDN}/v{major_minor}/releases/{arch}");
@@ -70,7 +66,6 @@ impl AlpineAssets {
 }
 
 /// Download `url` to `dest`, skipping if file already exists and `force` is false.
-#[allow(dead_code)]
 pub fn download_file(url: &str, dest: &Path, force: bool) -> Result<()> {
     if dest.exists() && !force {
         println!("  cached  {}", dest.display());
@@ -95,7 +90,6 @@ pub fn download_file(url: &str, dest: &Path, force: bool) -> Result<()> {
 
 /// Extract Alpine minirootfs tarball into `rootfs_dir`.
 /// Skips if `rootfs_dir/bin` exists (already extracted) and `force` is false.
-#[allow(dead_code)]
 pub fn extract_rootfs_if_needed(tarball: &Path, rootfs_dir: &Path, force: bool) -> Result<()> {
     let marker = rootfs_dir.join("bin");
     if marker.exists() && !force {
@@ -119,7 +113,6 @@ pub fn extract_rootfs_if_needed(tarball: &Path, rootfs_dir: &Path, force: bool) 
 }
 
 /// Return the agent destination path within rootfs.
-#[allow(dead_code)]
 pub fn agent_dest_path(rootfs_dir: &Path) -> std::path::PathBuf {
     rootfs_dir.join("sbin").join("minibox-agent")
 }
@@ -127,7 +120,6 @@ pub fn agent_dest_path(rootfs_dir: &Path) -> std::path::PathBuf {
 /// Cross-compile miniboxd for aarch64-unknown-linux-musl and copy into rootfs.
 /// Skips if agent already exists at dest and `force` is false.
 /// Returns the rustc version string (for the manifest).
-#[allow(dead_code)]
 pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String> {
     let dest = agent_dest_path(rootfs_dir);
     let target = "aarch64-unknown-linux-musl";
@@ -194,6 +186,9 @@ pub fn build_and_install_agent(rootfs_dir: &Path, force: bool) -> Result<String>
 /// Cross-compile miniboxd for an explicit musl `target` and copy into rootfs.
 /// Skips if agent already exists at dest and `force` is false.
 /// Returns the rustc version string (for the manifest).
+// Retained for multi-arch support: called by build_vm_image_with_platform when the
+// host platform differs from the default aarch64 target. Wired in tests today;
+// production entry point will be a future `--platform` flag on `xtask build-vm-image`.
 #[allow(dead_code)]
 pub fn build_and_install_agent_for_target(
     rootfs_dir: &Path,
@@ -259,6 +254,9 @@ pub fn build_and_install_agent_for_target(
 
 /// Build or refresh the VM image directory using an explicit platform.
 /// Downloads Alpine assets, extracts rootfs, cross-compiles agent, writes manifest.
+// Retained for multi-arch build support. The current `xtask build-vm-image` entry point
+// calls build_vm_image (hardcoded aarch64). This variant will be wired in when a
+// `--platform` flag is added to the subcommand. Used in tests today.
 #[allow(dead_code)]
 pub fn build_vm_image_with_platform(
     vm_dir: &Path,
@@ -327,7 +325,6 @@ pub fn build_vm_image_with_platform(
 
 /// Get the default VM directory for the host.
 /// Uses ~/.minibox/vm if home directory is available, otherwise /tmp/.minibox/vm.
-#[allow(dead_code)]
 pub fn default_vm_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -337,7 +334,6 @@ pub fn default_vm_dir() -> PathBuf {
 
 /// Build or refresh the VM image directory.
 /// Downloads Alpine assets, extracts rootfs, cross-compiles agent, writes manifest.
-#[allow(dead_code)]
 pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
     println!("Building VM image in {}", vm_dir.display());
 
@@ -416,7 +412,6 @@ pub fn build_vm_image(vm_dir: &Path, force: bool) -> Result<()> {
 ///   - default (no mode): exec minibox-agent (VZ backward compat)
 ///   - shell: exec /bin/sh -i (interactive)
 ///   - test: mount 9p target, run tests, poweroff
-#[allow(dead_code)]
 pub fn install_init_files(rootfs_dir: &Path) -> Result<()> {
     let etc = rootfs_dir.join("etc");
     std::fs::create_dir_all(&etc).context("creating rootfs/etc")?;
@@ -585,7 +580,6 @@ echo "=== $PASS ok, $FAIL failed ==="
 /// Copy `~/.minibox/vm/overlay/` into `rootfs_dir`, overwriting any existing files.
 /// Silently skips if the overlay directory is absent.
 /// Prints a count of files copied if any were found.
-#[allow(dead_code)]
 pub fn install_overlay(rootfs_dir: &Path, vm_dir: &Path) -> Result<()> {
     let overlay_dir = vm_dir.join("overlay");
     if !overlay_dir.exists() {
@@ -641,7 +635,6 @@ fn copy_dir_recursive(src: &Path, dst: &Path, count: &mut usize) -> Result<()> {
 
 /// Create a gzip-compressed cpio initramfs from `rootfs_dir` at `initramfs_path`.
 /// Skips if the file already exists and `force` is false.
-#[allow(dead_code)]
 pub fn create_initramfs(rootfs_dir: &Path, initramfs_path: &Path, force: bool) -> Result<()> {
     if initramfs_path.exists() && !force {
         println!("  cached  {}", initramfs_path.display());
