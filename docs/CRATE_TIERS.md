@@ -4,7 +4,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-04-27
+Last updated: 2026-05-06
 
 ---
 
@@ -119,7 +119,7 @@ Non-Rust modules with their own toolchain and release lifecycle.
 
 ### No new Core or Platform crates until stabilization gates are met
 
-The workspace currently has 8 shipped crates across all tiers. Adding more crates before
+The workspace currently has 10 crates across all tiers. Adding more crates before
 the core runtime is hardened increases maintenance surface without shipping value.
 
 **A new crate MAY be added to the Core or Platform tier only when ALL of the

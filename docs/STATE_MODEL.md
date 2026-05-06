@@ -2,7 +2,7 @@
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-04-27
+Last updated: 2026-05-06
 
 ---
 
@@ -10,8 +10,8 @@ Last updated: 2026-04-27
 
 `DaemonState` (defined in `crates/minibox/src/daemon/state.rs`) is the single
 shared data structure for all container metadata. It is held behind
-`Arc<RwLock<...>>` so many readers proceed concurrently while writes are
-exclusive.
+`Arc<RwLock<...>>` (verified against source 2026-05-06) so many readers
+proceed concurrently while writes are exclusive.
 
 State is persisted to a JSON file after **every mutation** (add, remove, state
 transition, PID assignment). The file is written atomically via rename so

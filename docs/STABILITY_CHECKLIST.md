@@ -3,7 +3,7 @@
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
 crate. See `docs/CRATE_TIERS.md` for the full stabilization policy.
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
 ---
 
@@ -38,7 +38,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 | --- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------ |
 | 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
 | 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
-| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima all tested             |
+| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm all tested     |
 | 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | fmt + clippy + release build               |
 | 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~760 tests                                 |
 | 6   | `cargo deny check` passes                                  | [GATE]     | Met     | License + advisory audit in CI             |

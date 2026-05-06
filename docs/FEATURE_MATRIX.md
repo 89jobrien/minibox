@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-04-27
+Last updated: 2026-05-06
 
 ---
 
@@ -39,7 +39,7 @@ Last updated: 2026-04-27
 | ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | prune / rmi             | Yes    | No   | No      | No     | No   | Blocked | No     |
-| push (exp)              | Yes    | No   | No      | No     | No   | Blocked | No     |
+| push (exp)              | Yes    | Yes  | No      | No     | No   | Blocked | No     |
 | commit (exp)            | Yes    | No   | No      | No     | No   | Blocked | No     |
 | build (exp)             | Yes    | No   | No      | No     | No   | Blocked | No     |
 | **Isolation**           |        |      |         |        |      |         |        |
@@ -102,3 +102,7 @@ Last updated: 2026-04-27
   ([GH #61](https://github.com/89jobrien/minibox/issues/61)).
 - **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
   server, HCS/WSL2 wiring) has not started.
+- **Observability env vars** (daemon startup):
+  - `MINIBOX_OTLP_ENDPOINT` — OTLP trace export endpoint (`otel` feature required).
+  - `MINIBOX_METRICS_ADDR` — Prometheus metrics bind address (e.g. `0.0.0.0:9090`);
+    `metrics` feature required.

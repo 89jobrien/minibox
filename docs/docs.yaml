@@ -1,0 +1,12 @@
+files:
+    - ARCHITECTURE.md
+    - CRATE_INVENTORY.md
+    - CRATE_TIERS.md
+    - DOCS_AUDIT.md
+    - FEATURE_MATRIX.md
+    - GOTCHAS.md
+    - ROADMAP.md
+    - SECURITY_INVARIANTS.md
+    - STABILITY_CHECKLIST.md
+    - STATE_MODEL.md
+    - TEST_INFRASTRUCTURE.md

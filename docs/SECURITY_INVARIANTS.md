@@ -6,6 +6,8 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
+Last updated: 2026-05-06
+
 ---
 
 ## 1. Zip Slip / Path Traversal Prevention
