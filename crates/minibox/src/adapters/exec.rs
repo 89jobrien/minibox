@@ -4,12 +4,13 @@
 //! then forks a child process that executes the requested command inside the
 //! container's isolation boundary.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use base64::Engine as _;
 use minibox_core::as_any;
 use minibox_core::domain::{ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
 use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -59,6 +60,7 @@ impl ExecRuntime for NativeExecRuntime {
         spec: ExecSpec,
         tx: mpsc::Sender<DaemonResponse>,
     ) -> Result<ExecHandle> {
+        validate_exec_spec(&spec)?;
         let id = container_id.as_str().to_string();
         let pid = self
             .state
@@ -126,6 +128,7 @@ pub(crate) fn build_nsenter_command(
     container_pid: u32,
     cmd: &[String],
     env: &[String],
+    working_dir: Option<&Path>,
 ) -> std::process::Command {
     let mut c = std::process::Command::new("nsenter");
     c.args([
@@ -136,8 +139,11 @@ pub(crate) fn build_nsenter_command(
         "--net",
         "--uts",
         "--ipc",
-        "--",
     ]);
+    if let Some(working_dir) = working_dir {
+        c.arg("--wd").arg(working_dir);
+    }
+    c.arg("--");
     if let Some((prog, rest)) = cmd.split_first() {
         c.arg(prog);
         c.args(rest);
@@ -152,6 +158,43 @@ pub(crate) fn build_nsenter_command(
     c
 }
 
+fn validate_exec_spec(spec: &ExecSpec) -> Result<()> {
+    let Some(program) = spec.cmd.first() else {
+        return Err(anyhow!("exec command must not be empty"));
+    };
+    if program.is_empty() {
+        return Err(anyhow!("exec command program must not be empty"));
+    }
+    for part in &spec.cmd {
+        if part.contains('\0') {
+            return Err(anyhow!("exec command arguments must not contain NUL bytes"));
+        }
+    }
+    for kv in &spec.env {
+        let Some((key, value)) = kv.split_once('=') else {
+            return Err(anyhow!("exec env entries must use KEY=VALUE format"));
+        };
+        if key.is_empty() {
+            return Err(anyhow!("exec env key must not be empty"));
+        }
+        if key.contains('\0') || value.contains('\0') {
+            return Err(anyhow!("exec env entries must not contain NUL bytes"));
+        }
+    }
+    if let Some(working_dir) = &spec.working_dir {
+        let Some(working_dir) = working_dir.to_str() else {
+            return Err(anyhow!("exec working directory must be valid UTF-8"));
+        };
+        if working_dir.is_empty() {
+            return Err(anyhow!("exec working directory must not be empty"));
+        }
+        if working_dir.contains('\0') {
+            return Err(anyhow!("exec working directory must not contain NUL bytes"));
+        }
+    }
+    Ok(())
+}
+
 /// Execute a command inside a container using `nsenter(1)` + `std::process::Command`
 /// (tty=false, pipe mode).
 ///
@@ -164,10 +207,15 @@ fn run_pipe_exec_command(
     config: ExecConfig,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    let mut child = match build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
+    let mut child = match build_nsenter_command(
+        container_pid,
+        &config.spec.cmd,
+        &config.spec.env,
+        config.spec.working_dir.as_deref(),
+    )
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()
     {
         Ok(c) => c,
         Err(e) => {
@@ -251,7 +299,12 @@ fn run_pty_exec(
         }
     };
 
-    let mut cmd = build_nsenter_command(container_pid, &config.spec.cmd, &config.spec.env);
+    let mut cmd = build_nsenter_command(
+        container_pid,
+        &config.spec.cmd,
+        &config.spec.env,
+        config.spec.working_dir.as_deref(),
+    );
     cmd.stdin(dup_slave())
         .stdout(dup_slave())
         .stderr(dup_slave());
@@ -353,6 +406,7 @@ mod tests {
             1234,
             &["/bin/echo".to_string(), "hello".to_string()],
             &["HOME=/root".to_string()],
+            None,
         );
         let prog = cmd.get_program().to_string_lossy().into_owned();
         let args: Vec<String> = cmd
@@ -385,6 +439,7 @@ mod tests {
             9999,
             &["id".to_string()],
             &["PATH=/usr/bin:/bin".to_string(), "HOME=/root".to_string()],
+            None,
         );
         assert_eq!(
             cmd.get_program().to_string_lossy(),
@@ -432,6 +487,49 @@ mod tests {
         assert_eq!(cfg.spec.env[0], "HOME=/root");
         assert!(cfg.stdin_tx.is_none());
         assert!(cfg.resize_rx.is_none());
+    }
+
+    #[test]
+    fn validate_exec_spec_rejects_empty_command() {
+        let spec = ExecSpec {
+            cmd: vec![],
+            env: vec![],
+            working_dir: None,
+            tty: false,
+        };
+        assert!(validate_exec_spec(&spec).is_err());
+    }
+
+    #[test]
+    fn validate_exec_spec_rejects_invalid_env() {
+        let spec = ExecSpec {
+            cmd: vec!["id".to_string()],
+            env: vec!["NO_SEPARATOR".to_string()],
+            working_dir: None,
+            tty: false,
+        };
+        assert!(validate_exec_spec(&spec).is_err());
+    }
+
+    #[test]
+    fn build_nsenter_command_applies_working_dir_inside_namespace() {
+        let cmd = build_nsenter_command(
+            1234,
+            &["pwd".to_string()],
+            &[],
+            Some(Path::new("/workspace")),
+        );
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let wd_pos = args.iter().position(|a| a == "--wd").expect("--wd missing");
+        let sep_pos = args.iter().position(|a| a == "--").expect("-- missing");
+        assert_eq!(args.get(wd_pos + 1).map(String::as_str), Some("/workspace"));
+        assert!(
+            wd_pos < sep_pos,
+            "--wd must be passed to nsenter before the command separator"
+        );
     }
 
     #[cfg(target_os = "linux")]

@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 ---
 
@@ -12,10 +12,10 @@ Last updated: 2026-05-06
 | -------- | -------------------- | ------------ | ------- | ---------------------------- |
 | `native` | Linux (x86_64/arm64) | Production   | minibox | --                           |
 | `gke`    | Linux (GKE pods)     | Production   | minibox | --                           |
-| `colima` | macOS/Linux (Colima) | Experimental | macbox  | --                           |
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | macbox  | Yes (falls back to `krun`)   |
-| `krun`   | macOS/Linux (krun)   | In progress  | macbox  | Fallback when smolvm absent  |
-| `vz`     | macOS (VZ.framework) | Blocked      | macbox  | --                           |
+| `colima` | macOS/Linux (Colima) | Experimental | minibox | --                           |
+| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (falls back to `krun`)   |
+| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback when smolvm absent  |
+| `vz`     | macOS (VZ.framework) | Blocked      | macbox  | -- (not wired into daemon)   |
 | `winbox` | Windows              | Stub         | winbox  | --                           |
 
 ---
@@ -26,14 +26,14 @@ Last updated: 2026-05-06
 | ----------------------- | ------ | ---- | ------- | ------ | ---- | ------- | ------ |
 | **Container lifecycle** |        |      |         |        |      |         |        |
 | pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | WIP  | Blocked | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | WIP  | Blocked | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | WIP  | Blocked | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | WIP  | Blocked | No     |
+| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | pause/resume            | Yes    | No   | No      | No     | No   | Blocked | No     |
 | exec (-it)              | Yes    | No   | Limited | No     | No   | Blocked | No     |
 | logs                    | Yes    | No   | Limited | No     | No   | Blocked | No     |
-| events                  | Yes    | No   | No      | No     | No   | Blocked | No     |
+| events                  | Yes    | Yes  | No      | No     | No   | Blocked | No     |
 | **Image management**    |        |      |         |        |      |         |        |
 | Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
@@ -48,7 +48,7 @@ Last updated: 2026-05-06
 | Network namespace       | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
 | UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
 | IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| cgroups v2              | Yes    | No   | No      | No     | No   | Blocked | No     |
+| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Blocked | No     |
 | Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Blocked | No     |
 | **Networking**          |        |      |         |        |      |         |        |
 | Bridge (exp)            | Yes    | No   | No      | No     | No   | Blocked | No     |
@@ -94,12 +94,18 @@ Last updated: 2026-05-06
   the `smolvm` binary is present on PATH. Automatically falls back to `krun`
   when the binary is absent. Lightweight Linux VMs with subsecond boot.
 - **`krun` adapter** uses libkrun to run containers in lightweight VMs.
-  Phases 1-3 (runtime, registry, filesystem, limiter adapters) are
-  complete with 31 conformance tests. Daemon wiring is in progress.
-  Acts as the fallback when `smolvm` is unavailable.
+  All four adapter ports (runtime, registry, filesystem, limiter) are wired
+  into the daemon and pass 31 conformance tests. Acts as the fallback when
+  `smolvm` is unavailable.
 - **`vz` adapter** targets Apple's Virtualization.framework directly.
-  Blocked by `VZErrorInternal(code=1)` on macOS 26 ARM64
+  The adapter code exists in `macbox` but is **not wired into the daemon**
+  (`AdapterSuite` has no `Vz` variant). Additionally blocked by
+  `VZErrorInternal(code=1)` on macOS 26 ARM64
   ([GH #61](https://github.com/89jobrien/minibox/issues/61)).
+- **`docker_desktop` adapter** (`DockerDesktopRuntime`/`Filesystem`/`Limiter`)
+  exists in `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
+  exported, but is not registered in `AdapterSuite` or wired into the daemon.
+  Not included in the matrix above.
 - **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
   server, HCS/WSL2 wiring) has not started.
 - **Observability env vars** (daemon startup):

@@ -55,7 +55,7 @@ pub trait ServerListener: Send + 'static {
 /// | `require_root_auth` | `creds`       | Result  |
 /// |---------------------|---------------|---------|
 /// | `false`             | any / None    | allowed |
-/// | `true`              | None          | allowed (warning logged at call site) |
+/// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
 pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
@@ -63,7 +63,7 @@ pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool
         return true;
     }
     match creds {
-        None => true, // credentials unavailable — warn logged by caller
+        None => false,
         Some(c) => c.uid == 0,
     }
 }
@@ -125,15 +125,20 @@ where
                 match accept_result {
                     Ok((stream, peer_creds)) => {
                         if !is_authorized(peer_creds.as_ref(), require_root_auth) {
-                            // is_authorized returns false only when creds is Some and uid != 0
-                            let creds = peer_creds
-                                .as_ref()
-                                .expect("is_authorized false requires Some(creds)");
-                            warn!(
-                                uid = creds.uid,
-                                pid = creds.pid,
-                                "server: rejecting non-root connection"
-                            );
+                            match peer_creds.as_ref() {
+                                Some(creds) => {
+                                    warn!(
+                                        uid = creds.uid,
+                                        pid = creds.pid,
+                                        "server: rejecting non-root connection"
+                                    );
+                                }
+                                None => {
+                                    warn!(
+                                        "server: rejecting unauthenticated connection; peer credentials unavailable"
+                                    );
+                                }
+                            }
                             continue;
                         }
                         match &peer_creds {
@@ -141,9 +146,6 @@ where
                                 info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
                             }
                             None => {
-                                if require_root_auth {
-                                    warn!("server: peer credentials unavailable; require_root_auth bypassed");
-                                }
                                 info!("server: accepted connection (no peer credentials)");
                             }
                         }
@@ -682,6 +684,24 @@ mod tests {
         let q = p.clone();
         assert_eq!(q.uid, 0);
         assert_eq!(q.pid, 1);
+    }
+
+    #[test]
+    fn is_authorized_requires_root_when_enabled() {
+        assert!(is_authorized(None, false));
+        assert!(is_authorized(
+            Some(&PeerCreds { uid: 1000, pid: 42 }),
+            false
+        ));
+        assert!(is_authorized(Some(&PeerCreds { uid: 0, pid: 42 }), true));
+        assert!(!is_authorized(
+            Some(&PeerCreds { uid: 1000, pid: 42 }),
+            true
+        ));
+        assert!(
+            !is_authorized(None, true),
+            "root-auth mode must fail closed when peer credentials are unavailable"
+        );
     }
 
     // ─── is_terminal_response ────────────────────────────────────────────────
@@ -1247,7 +1267,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run_server_no_creds_require_root_bypasses() {
+    async fn test_run_server_no_creds_require_root_rejects() {
         let tmp = TempDir::new().expect("tempdir");
         let (state, deps) = test_deps(&tmp);
 
@@ -1256,8 +1276,7 @@ mod tests {
             rx: tokio::sync::Mutex::new(rx),
         };
 
-        // Connection with no peer credentials — should trigger the bypass-warning
-        // path and still accept (no UID to check against).
+        // Connection with no peer credentials must be rejected when root auth is required.
         let (_client, server) = tokio::io::duplex(4096);
         tx.send((server, None)).await.expect("send connection");
         drop(tx);
