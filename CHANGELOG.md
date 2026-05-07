@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `TESTING.md` — full test strategy reference: category table, platform/root/CI matrix,
+  per-category commands, test helpers guide, CI coverage map and gaps, writing conventions
+
+---
+
 ## [v0.24.0] - 2026-05-07
 
 First public release.

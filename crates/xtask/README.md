@@ -15,9 +15,12 @@ cargo xtask test-conformance  # commit+build+push conformance suite + artifact r
 cargo xtask test-krun-conformance  # krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)
 cargo xtask test-property     # property-based tests (proptest, any platform)
 cargo xtask test-integration  # cgroup + integration tests (Linux, root)
-cargo xtask test-e2e-suite    # daemon+CLI e2e tests (Linux, root)
+cargo xtask test-e2e          # protocol e2e tests (any platform, no root required)
+cargo xtask test-system-suite # full-stack system tests (Linux, root, cgroups v2)
+cargo xtask test-e2e-suite    # alias for test-system-suite (backward compat)
 cargo xtask test-sandbox      # sandbox contract tests (Linux, root, Docker Hub)
 cargo xtask coverage-check    # llvm-cov minibox; fail if handler.rs fns < 80%
+cargo xtask check-repo-clean  # warn if generated artifacts (target/, traces/, *.profraw) are tracked
 ```
 
 ### Benchmarks
@@ -55,9 +58,11 @@ cargo xtask cas-check                      # verify all overlay refs match their
 ```bash
 cargo xtask bump [patch|minor|major]  # bump workspace version in Cargo.toml
 cargo xtask preflight                 # check required tools are on PATH and functional
+cargo xtask doctor                    # full preflight: tools + CARGO_TARGET_DIR + Linux system checks
 cargo xtask available                 # verify cargo xtask is runnable (real capability check)
 cargo xtask lint-docs                 # validate frontmatter + status values in docs/superpowers/
 cargo xtask context [--save]          # dump machine-readable repo context snapshot (JSON)
+cargo xtask check-stale-names         # audit workspace for banned old crate/binary names
 cargo xtask check-protocol-sites [<file>] [--expected N] [--warn-only]
                                       # verify HandlerDependencies construction site count
 ```
@@ -82,8 +87,9 @@ cargo xtask clean-artifacts   # remove non-critical build outputs
 | `cgroup_tests.rs`   | cgroup v2 integration test runner (delegated hierarchy)       |
 | `cas.rs`            | Content-addressed overlay store operations                    |
 | `bump.rs`           | Workspace version bumping                                     |
-| `preflight.rs`      | Tool availability probing                                     |
+| `preflight.rs`      | Tool availability probing and doctor checks                   |
 | `docs_lint.rs`      | Frontmatter and status validation for docs/superpowers/       |
 | `protocol_sites.rs` | HandlerDependencies construction site counter                 |
+| `stale_names.rs`    | Audit for banned old crate/binary names                       |
 | `context.rs`        | Repo context snapshot (JSON)                                  |
 | `cleanup.rs`        | Test state cleanup (cgroups, overlays, orphan processes)      |
