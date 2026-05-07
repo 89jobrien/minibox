@@ -32,8 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 **macOS / krun adapter:**
 
-- krun Phases 1-3 complete: `KrunRuntime`, `KrunRegistry`, `KrunFilesystem`,
-  `KrunLimiter` adapters with 31 TDD conformance tests
+- krun fully wired: `KrunRuntime`, `KrunRegistry`, `KrunFilesystem`,
+  `KrunLimiter` adapters wired into miniboxd; 31 conformance tests pass
 - `SmolVM` adapter suite wired into `miniboxd`
 - QEMU cross-platform VM runner — `HostPlatform` detection, `VmRunner`/`VmHandle`,
   `build-vm-image` with platform-aware cross-compilation

@@ -38,9 +38,9 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 | --- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------ |
 | 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
 | 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
-| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm all tested     |
+| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
 | 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | fmt + clippy + release build               |
-| 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~760 tests                                 |
+| 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)   |
 | 6   | `cargo deny check` passes                                  | [GATE]     | Met     | License + advisory audit in CI             |
 | 7   | New domain trait has an in-memory mock double in tests     | [ADVISORY] | —       | Required for hexagonal port compliance     |
 | 8   | No `.unwrap()` in production paths of new code             | [ADVISORY] | —       | See rust-patterns.md rule 1                |

@@ -4,7 +4,8 @@
 > Updated 2026-05-05: crate count, version, dep graph, default adapter, protocol counts.
 > Updated 2026-05-06: GKE adapter ImagePusher wired (OciPushAdapter via oci_push_adapter).
 > Updated 2026-05-07: colima push/commit/build corrected to -- (not wired in daemon); colima
-> wiring note corrected (minibox crate, not macbox); vz wiring clarified (not selectable).
+> wiring note corrected (minibox crate, not macbox); vz wiring row corrected (selectable via
+> macbox env-var branch, feature-gated, macOS only — not in AdapterSuite enum).
 
 ## Workspace Overview
 
@@ -109,7 +110,7 @@ broker — an inconsistency vs native/gke/smolvm.
 | colima                        | `build_colima_handler_dependencies`              | `colima`                | Unix         |
 | smolvm                        | `build_smolvm_handler_dependencies`              | `smolvm` (default)      | Unix         |
 | krun                          | `build_krun_handler_dependencies`                | `krun` (fallback)       | Unix         |
-| vz                            | **not wired** (no AdapterSuite variant)          | --                      | library only |
+| vz                            | `macbox::start_vz()` (feature-gated, macOS only) | `vz` + `--features vz`  | macOS only   |
 | vf, hcs, wsl2, docker_desktop | **not wired**                                    | --                      | library only |
 
 ---

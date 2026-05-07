@@ -50,7 +50,7 @@ the domain traits from `minibox-core` for its target platform.
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macbox` | `crates/macbox` | macOS adapter suite: Colima (nerdctl/limactl), krun (libkrun micro-VMs), smolvm, and VZ backends.                                                          |
+| `macbox` | `crates/macbox` | macOS adapter suite: krun (libkrun micro-VMs) and VZ backends. Colima and smolvm adapters live in `minibox` but are wired via macbox's daemon entry point. |
 | `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
 
 Note: `dockerbox` and `tailbox` were extracted to the separate `minibox-plugins`
@@ -129,7 +129,7 @@ following gates in `docs/STABILITY_CHECKLIST.md` are green:**
 2. Handler coverage >= 80% function coverage in `minibox/src/daemon/handler.rs`.
 3. All wired adapters have at least one integration test.
 4. `cargo xtask pre-commit` passes on macOS (fmt + clippy + release build).
-5. `cargo xtask test-unit` passes (~760+ tests).
+5. `cargo xtask test-unit` passes (~506+ tests on macOS cross-platform subset).
 6. `cargo deny check` passes (license + advisory audit).
 
 Until these gates are met:
