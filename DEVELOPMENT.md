@@ -11,6 +11,10 @@ details and `TESTING.md` for the full test strategy.
 - [uv](https://docs.astral.sh/uv/) for Python script dependencies
 - Linux + root for integration/e2e tests (unit tests run on macOS)
 
+## Good to have
+
+- [Nushell](https://www.nushell.sh/) is my default terminal shell and most scripts are written in `nu` then translated to `bash` shellscripts
+
 ## Runner Hierarchy
 
 Minibox has two task runners. They are complementary, not competing:
