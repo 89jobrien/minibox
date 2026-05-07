@@ -6,7 +6,7 @@ A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux 
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
 
-**Status:** Active development — `v0.24.0`. Linux is production-ready; macOS is experimental
+**Status:** Active development — `v0.24.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -32,7 +32,7 @@ structured tracing, property testing.
 - Log capture — `minibox logs <id>` for stored stdout/stderr
 - Container events — `minibox events` streams lifecycle events
 
-### Experimental
+### Experimental-ish
 
 - **Container exec** — `setns`-based exec with PTY support (`-it`)
 - **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`)
