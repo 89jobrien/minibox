@@ -7,12 +7,21 @@ use crate::docs_lint;
 /// Pre-commit gate: fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+    // Re-stage any files rustfmt modified so the commit includes the formatted versions.
+    // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
+    cmd!(sh, "git add -u -- . :!.worktrees")
+        .run()
+        .context("git add -u after fmt failed")?;
     cmd!(
         sh,
         "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
     )
     .run()
     .context("clippy --fix failed")?;
+    // Re-stage any files clippy --fix modified.
+    cmd!(sh, "git add -u -- . :!.worktrees")
+        .run()
+        .context("git add -u after clippy --fix failed")?;
     cmd!(sh, "cargo fmt --all --check")
         .run()
         .context("fmt-check failed")?;
@@ -32,6 +41,8 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
     test_conformance(sh)?;
+    // Warn (non-fatal) if generated artifacts are tracked by git.
+    check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
     Ok(())
 }
@@ -47,60 +58,71 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Unit tests only (any platform)
+/// Unit + integration tests (any platform).
+///
+/// Runs the full workspace test suite via nextest, excluding test files that
+/// require Linux root/cgroups (those are gated with `#[cfg(target_os = "linux")]`
+/// and skipped automatically on macOS) and the protocol e2e tests (which need
+/// a pre-built binary and run separately via `test-e2e`).
 pub fn test_unit(sh: &Shell) -> Result<()> {
-    cmd!(
-        sh,
-        "cargo test --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
-    )
-    .run()
-    .context("lib tests failed")?;
+    cmd!(sh, "cargo nextest run --workspace --exclude miniboxd")
+        .run()
+        .context("nextest workspace tests failed")?;
+    // Run miniboxd lib tests (excludes integration test files that need Linux root).
+    cmd!(sh, "cargo nextest run -p miniboxd --lib")
+        .run()
+        .context("miniboxd lib tests failed")?;
     Ok(())
 }
 
-/// Conformance suite: auto-discovers all `conformance_*` test binaries across the workspace.
+/// Conformance suite: builds and runs the `minibox-conformance` harness.
 ///
-/// After running all conformance tests, emits MD + JSON reports via `conformance_report`.
+/// The harness executes all adapter conformance tests and emits JSON + JUnit XML
+/// reports to `artifacts/conformance/` via the `generate-report` binary.
 ///
-/// Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` (and run a local OCI registry)
-/// to activate tier-2 push tests.
+/// Set `CONFORMANCE_ADAPTER=<name>` to restrict to a single adapter.
+/// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
-    // Run all conformance_* tests across the entire workspace in one shot.
-    // The glob matches any test binary whose name starts with `conformance_`,
-    // excluding `conformance_report` which needs special output handling.
-    let filter = "not binary(conformance_report)";
-    cmd!(
-        sh,
-        "cargo nextest run --workspace --test conformance_* -E {filter}"
-    )
-    .run()
-    .context("conformance tests failed")?;
+    // Build the harness binaries first so errors surface before test execution.
+    cmd!(sh, "cargo build -p minibox-conformance --bins")
+        .run()
+        .context("failed to build minibox-conformance")?;
 
-    // --- Emit reports ---
-    // Run the report emitter with `--nocapture` so the artifact paths are visible.
-    let output = cmd!(
-        sh,
-        "cargo test --release -p minibox --test conformance_report -- --nocapture"
-    )
-    .output()
-    .context("conformance_report failed")?;
+    // Run the full suite via `run-conformance` (fast, exits 1 on failure).
+    let output = cmd!(sh, "cargo run -p minibox-conformance --bin run-conformance")
+        .output()
+        .context("run-conformance failed to launch")?;
 
-    // Surface conformance: lines from stdout.
+    // Surface test output regardless of pass/fail.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        if line.starts_with("conformance:") {
-            if let Some(rest) = line.strip_prefix("conformance:md=") {
-                eprintln!("  report.md   : {rest}");
-            } else if let Some(rest) = line.strip_prefix("conformance:json=") {
-                eprintln!("  report.json : {rest}");
-            } else if let Some(rest) = line.strip_prefix("conformance:summary ") {
-                eprintln!("  summary     : {rest}");
-            }
-        }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.trim().is_empty() {
+        eprint!("{stdout}");
+    }
+    if !stderr.trim().is_empty() {
+        eprint!("{stderr}");
     }
 
     if !output.status.success() {
-        anyhow::bail!("conformance_report test failed");
+        anyhow::bail!("conformance tests failed");
+    }
+
+    // Generate JSON + JUnit XML reports.
+    let report_output = cmd!(sh, "cargo run -p minibox-conformance --bin generate-report")
+        .output()
+        .context("generate-report failed to launch")?;
+
+    let report_stdout = String::from_utf8_lossy(&report_output.stdout);
+    for line in report_stdout.lines() {
+        if line.starts_with("conformance:") {
+            if let Some(rest) = line.strip_prefix("conformance:json=") {
+                eprintln!("  report.json  : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:junit=") {
+                eprintln!("  report.junit : {rest}");
+            } else if let Some(rest) = line.strip_prefix("conformance:summary ") {
+                eprintln!("  summary      : {rest}");
+            }
+        }
     }
 
     eprintln!("conformance suite passed");
@@ -159,21 +181,46 @@ pub fn test_integration(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Daemon+CLI e2e tests (Linux, root required)
-pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
+/// Protocol e2e tests — any platform, no root required.
+///
+/// Starts a real `miniboxd` process and exercises the JSON-over-Unix-socket
+/// protocol without Linux namespaces, cgroups, or root. On macOS the daemon
+/// dispatches to macbox; on Linux it uses the native adapter (but avoids
+/// operations that require root).
+pub fn test_e2e(sh: &Shell) -> Result<()> {
+    // Build the daemon binary first so find_binary() can locate it.
+    cmd!(sh, "cargo build -p miniboxd")
+        .run()
+        .context("failed to build miniboxd for protocol e2e tests")?;
+    cmd!(
+        sh,
+        "cargo nextest run -p miniboxd --test protocol_e2e_tests -j 1"
+    )
+    .run()
+    .context("protocol e2e tests failed")?;
+    eprintln!("protocol e2e tests passed");
+    Ok(())
+}
+
+/// System tests: full-stack daemon+CLI tests (Linux, root, cgroups v2 required).
+///
+/// Renamed from `test_e2e_suite` — these tests exercise real kernel facilities
+/// (namespaces, overlay FS, cgroups v2) and live above integration tests in
+/// the tier hierarchy.
+pub fn test_system_suite(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
 
     cmd!(
         sh,
-        "cargo test -p miniboxd --test e2e_tests --release --no-run"
+        "cargo test -p miniboxd --test system_tests --release --no-run"
     )
     .run()
-    .context("failed to build e2e test binary")?;
+    .context("failed to build system test binary")?;
 
-    let binary = find_test_binary("target/release/deps", "e2e_tests")
-        .context("could not locate e2e test binary in target/release/deps")?;
+    let binary = find_test_binary("target/release/deps", "system_tests")
+        .context("could not locate system test binary in target/release/deps")?;
 
     let bin_dir = env::current_dir()?.join("target/release");
     cmd!(
@@ -181,8 +228,16 @@ pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
         "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --nocapture"
     )
     .run()
-    .context("e2e tests failed")?;
+    .context("system tests failed")?;
     Ok(())
+}
+
+/// Daemon+CLI e2e tests (Linux, root required)
+///
+/// Deprecated alias for `test_system_suite`. Kept for backward compatibility
+/// with existing CI jobs that reference `test-e2e-suite`.
+pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
+    test_system_suite(sh)
 }
 
 /// Sandbox contract tests (Linux, root, Docker Hub required)
@@ -256,6 +311,57 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Warn (non-fatal) if generated artifacts are tracked by git.
+///
+/// Checks for files under `target/`, `artifacts/`, `traces/`, or with `.profraw`/`.crate`
+/// extensions that should never be committed. Prints a warning for each found file but does
+/// not fail — callers that need a hard failure should use `check_repo_cleanliness_strict`.
+pub fn check_repo_cleanliness(sh: &Shell) {
+    let patterns = &[
+        "target/",
+        "artifacts/conformance/",
+        "traces/",
+        "*.profraw",
+        "*.crate",
+    ];
+
+    let output = cmd!(sh, "git ls-files")
+        .output()
+        .unwrap_or_else(|_| std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: vec![],
+            stderr: vec![],
+        });
+
+    let tracked = String::from_utf8_lossy(&output.stdout);
+    let mut found: Vec<&str> = Vec::new();
+
+    for line in tracked.lines() {
+        for pat in patterns {
+            let matches = if pat.ends_with('/') {
+                line.starts_with(pat) || line.contains(&format!("/{pat}"))
+            } else if pat.starts_with("*.") {
+                let ext = pat.trim_start_matches('*');
+                line.ends_with(ext)
+            } else {
+                line == *pat
+            };
+            if matches {
+                found.push(line);
+                break;
+            }
+        }
+    }
+
+    if !found.is_empty() {
+        eprintln!("warning: the following generated artifacts are tracked by git:");
+        for f in &found {
+            eprintln!("  {f}");
+        }
+        eprintln!("warning: run `git rm -r --cached <path>` to untrack them (see issue #154)");
+    }
 }
 
 /// Parse the function-coverage percentage for `handler.rs` from `cargo llvm-cov --text` output.

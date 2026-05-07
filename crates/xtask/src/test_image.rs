@@ -190,7 +190,7 @@ fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
     // -- test binaries --
     let test_suites: &[(&str, &str, &str)] = &[
         ("cgroup_tests", "miniboxd", "cgroup_tests"),
-        ("e2e_tests", "miniboxd", "e2e_tests"),
+        ("system_tests", "miniboxd", "system_tests"),
         ("integration_tests", "miniboxd", "integration_tests"),
         ("sandbox_tests", "miniboxd", "sandbox_tests"),
     ];
@@ -529,8 +529,8 @@ echo "=== cgroup_tests ==="
 echo "=== integration_tests ==="
 /usr/local/bin/integration_tests --test-threads=1 --ignored --nocapture
 
-echo "=== e2e_tests ==="
-MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/e2e_tests --test-threads=1 --nocapture
+echo "=== system_tests ==="
+MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/system_tests --test-threads=1 --nocapture
 
 echo "=== sandbox_tests ==="
 MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/sandbox_tests --test-threads=1 --ignored --nocapture
@@ -750,7 +750,7 @@ mod tests {
         let s = entrypoint_script();
         assert!(s.contains("cgroup_tests"));
         assert!(s.contains("integration_tests"));
-        assert!(s.contains("e2e_tests"));
+        assert!(s.contains("system_tests"));
         assert!(s.contains("sandbox_tests"));
         assert!(s.contains("all Linux tests passed"));
     }

@@ -8,9 +8,10 @@
 //! State is persisted to a JSON file after every mutation so that
 //! container records survive daemon restarts.
 
-use minibox_core::domain::HookSpec;
+use minibox_core::domain::{BindMount, HookSpec, NetworkMode};
 use minibox_core::image::ImageStore;
 use minibox_core::protocol::ContainerInfo;
+use minibox_core::trace::TraceStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -145,6 +146,36 @@ const MAX_CONCURRENT_SPAWNS: usize = 100;
 /// Default state file name within the data directory.
 const STATE_FILENAME: &str = "state.json";
 
+/// Snapshot of the `DaemonRequest::Run` parameters used to create a container.
+///
+/// Stored inside [`ContainerRecord`] so the daemon can replay or inspect the
+/// original creation request (e.g. for container restart support).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunCreationParams {
+    pub image: String,
+    pub tag: Option<String>,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub network: Option<NetworkMode>,
+    #[serde(default)]
+    pub env: Vec<String>,
+    #[serde(default)]
+    pub mounts: Vec<BindMount>,
+    #[serde(default)]
+    pub privileged: bool,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub tty: bool,
+    #[serde(default)]
+    pub entrypoint: Option<String>,
+    #[serde(default)]
+    pub user: Option<String>,
+    #[serde(default)]
+    pub platform: Option<String>,
+}
+
 /// A complete record for a container tracked by the daemon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContainerRecord {
@@ -179,6 +210,9 @@ pub struct ContainerRecord {
     /// Execution context passed from the pipeline runner.
     #[serde(default)]
     pub execution_context: Option<slashcrux::ExecutionContext>,
+    /// Original creation parameters, enabling container restart.
+    #[serde(default)]
+    pub creation_params: Option<RunCreationParams>,
 }
 
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
@@ -194,20 +228,34 @@ pub struct DaemonState {
     state_file: PathBuf,
     /// IP addresses currently allocated by bridge network, keyed by container_id.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
+    /// Pipeline trace persistence adapter.
+    pub trace_store: Arc<dyn TraceStore>,
 }
 
 impl DaemonState {
     /// Create a fresh `DaemonState` using the given image store.
     ///
     /// `data_dir` is the base directory where `state.json` will be written
-    /// (e.g. `/var/lib/minibox`).
+    /// (e.g. `/var/lib/minibox`). A [`FileTraceStore`] is created under
+    /// `data_dir/traces/` by default.
+    ///
+    /// [`FileTraceStore`]: minibox_core::trace::FileTraceStore
     pub fn new(image_store: ImageStore, data_dir: &Path) -> Self {
+        let trace_store: Arc<dyn TraceStore> =
+            minibox_core::trace::FileTraceStore::new(data_dir.join("traces"))
+                .map(|s| Arc::new(s) as Arc<dyn TraceStore>)
+                .unwrap_or_else(|e| {
+                    warn!("trace store: failed to create FileTraceStore: {e}, using noop");
+                    Arc::new(minibox_core::trace::NoopTraceStore)
+                });
+
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: data_dir.join(STATE_FILENAME),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
+            trace_store,
         }
     }
 
@@ -229,6 +277,7 @@ impl DaemonState {
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: PathBuf::new(),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
+            trace_store: Arc::new(minibox_core::trace::NoopTraceStore),
         }
     }
 
@@ -529,7 +578,7 @@ impl DaemonState {
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl crate::daemonbox_state::ContainerStateAccess for DaemonState {
+impl crate::container_state::ContainerStateAccess for DaemonState {
     async fn get_container_pid(&self, container_id: &str) -> anyhow::Result<u32> {
         let map = self.containers.read().await;
         let record = map
@@ -592,6 +641,7 @@ mod tests {
             priority: None,
             urgency: None,
             execution_context: None,
+            creation_params: None,
         }
     }
 
@@ -872,5 +922,83 @@ mod tests {
             containers[0].state, "Stopped",
             "Stopped containers must remain Stopped — not double-reset"
         );
+    }
+
+    #[test]
+    fn container_record_deserializes_without_creation_params() {
+        let json = r#"{
+            "info": {
+                "id": "abc123",
+                "name": null,
+                "image": "alpine:latest",
+                "command": "/bin/sh",
+                "state": "Stopped",
+                "created_at": "2026-01-01T00:00:00Z",
+                "pid": null
+            },
+            "pid": null,
+            "rootfs_path": "/tmp/rootfs",
+            "cgroup_path": "/tmp/cgroup",
+            "post_exit_hooks": [],
+            "rootfs_metadata": null,
+            "source_image_ref": null,
+            "step_state": null,
+            "priority": null,
+            "urgency": null,
+            "execution_context": null
+        }"#;
+        let record: ContainerRecord =
+            serde_json::from_str(json).expect("must deserialize without creation_params");
+        assert!(
+            record.creation_params.is_none(),
+            "missing creation_params must deserialize as None"
+        );
+    }
+
+    #[test]
+    fn container_record_roundtrips_creation_params() {
+        use minibox_core::domain::{BindMount, NetworkMode};
+        let params = RunCreationParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: Some(134_217_728),
+            cpu_weight: Some(512),
+            network: Some(NetworkMode::Bridge),
+            env: vec!["FOO=bar".to_string()],
+            mounts: vec![BindMount {
+                host_path: std::path::PathBuf::from("/tmp/host"),
+                container_path: std::path::PathBuf::from("/tmp/guest"),
+                read_only: false,
+            }],
+            privileged: false,
+            name: Some("my-container".to_string()),
+            tty: true,
+            entrypoint: Some("/bin/bash".to_string()),
+            user: Some("root".to_string()),
+            platform: Some("linux/amd64".to_string()),
+        };
+        let mut record = make_test_record();
+        record.creation_params = Some(params.clone());
+
+        let json = serde_json::to_string(&record).expect("serialize");
+        let back: ContainerRecord = serde_json::from_str(&json).expect("deserialize");
+        let cp = back.creation_params.expect("creation_params must be Some");
+
+        assert_eq!(cp.image, "alpine");
+        assert_eq!(cp.tag, Some("latest".to_string()));
+        assert_eq!(cp.command, vec!["/bin/sh"]);
+        assert_eq!(cp.memory_limit_bytes, Some(134_217_728));
+        assert_eq!(cp.cpu_weight, Some(512));
+        assert_eq!(cp.network, Some(NetworkMode::Bridge));
+        assert_eq!(cp.env, vec!["FOO=bar"]);
+        assert_eq!(cp.mounts.len(), 1);
+        assert_eq!(cp.mounts[0].host_path, std::path::Path::new("/tmp/host"));
+        assert!(!cp.privileged);
+        assert_eq!(cp.name, Some("my-container".to_string()));
+        assert!(cp.tty);
+        assert_eq!(cp.entrypoint, Some("/bin/bash".to_string()));
+        assert_eq!(cp.user, Some("root".to_string()));
+        assert_eq!(cp.platform, Some("linux/amd64".to_string()));
     }
 }

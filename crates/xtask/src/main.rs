@@ -25,6 +25,7 @@ mod docs_lint;
 mod gates;
 mod preflight;
 mod protocol_sites;
+mod stale_names;
 mod test_image;
 mod test_linux;
 mod vm_image;
@@ -53,6 +54,7 @@ fn main() -> Result<()> {
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
         }
+        Some("doctor") => preflight::doctor(&preflight::ProcessProbe),
         Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
@@ -61,6 +63,8 @@ fn main() -> Result<()> {
         Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-integration") => gates::test_integration(&sh),
+        Some("test-e2e") => gates::test_e2e(&sh),
+        Some("test-system-suite") => gates::test_system_suite(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),
         Some("test-sandbox") => gates::test_sandbox(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
@@ -107,6 +111,10 @@ fn main() -> Result<()> {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
         }
+        Some("check-repo-clean") => {
+            gates::check_repo_cleanliness(&sh);
+            Ok(())
+        }
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("test-linux") => test_linux::test_linux(),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
@@ -116,6 +124,7 @@ fn main() -> Result<()> {
             let save = env::args().any(|a| a == "--save");
             context::context(&sh, root, save)
         }
+        Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-sites") => {
             let file = env::args()
                 .nth(2)
@@ -135,6 +144,9 @@ fn main() -> Result<()> {
             eprintln!("Available tasks:");
             eprintln!("  bump [patch|minor|major]  bump workspace version in Cargo.toml");
             eprintln!("  preflight        check required tools are on PATH and functional");
+            eprintln!(
+                "  doctor           full preflight: tools + CARGO_TARGET_DIR + Linux system checks"
+            );
             eprintln!("  available        verify cargo xtask is runnable (real capability check)");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          fast lib tests (debug, incremental)");
@@ -145,7 +157,9 @@ fn main() -> Result<()> {
             );
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
-            eprintln!("  test-e2e-suite   daemon+CLI e2e tests (Linux, root)");
+            eprintln!("  test-e2e         protocol e2e tests (any platform, no root required)");
+            eprintln!("  test-system-suite full-stack system tests (Linux, root, cgroups v2)");
+            eprintln!("  test-e2e-suite   alias for test-system-suite (backward compat)");
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
@@ -163,6 +177,9 @@ fn main() -> Result<()> {
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"
             );
+            eprintln!(
+                "  check-repo-clean warn if generated artifacts (target/, traces/, *.profraw) are tracked"
+            );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!(
                 "  lint-docs        validate frontmatter + status values in docs/superpowers/"
@@ -172,6 +189,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
+            eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(

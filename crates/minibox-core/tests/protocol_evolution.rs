@@ -21,6 +21,7 @@
 //! When adding a new `DaemonRequest` variant with optional/defaulted fields:
 //! - Add a case to `test_request_serde_default_fields`.
 
+use minibox_core::domain::SnapshotInfo;
 use minibox_core::events::ContainerEvent;
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::time::SystemTime;
@@ -118,6 +119,28 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         DaemonResponse::UpdateProgress {
             image: "alpine:latest".to_string(),
             status: "up to date".to_string(),
+        },
+        // --- terminal variants added after initial list ---
+        DaemonResponse::ImageList {
+            images: vec!["alpine:latest".to_string()],
+        },
+        DaemonResponse::SnapshotSaved {
+            info: SnapshotInfo {
+                container_id: "abc123".to_string(),
+                name: "snap-1".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                adapter: "smolvm".to_string(),
+                image: "alpine:latest".to_string(),
+                size_bytes: 1024,
+            },
+        },
+        DaemonResponse::SnapshotRestored {
+            id: "abc123".to_string(),
+            name: "snap-1".to_string(),
+        },
+        DaemonResponse::SnapshotList {
+            id: "abc123".to_string(),
+            snapshots: vec![],
         },
     ]
 }
@@ -304,7 +327,8 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::PipelineComplete { .. }
         | DaemonResponse::SnapshotSaved { .. }
         | DaemonResponse::SnapshotRestored { .. }
-        | DaemonResponse::SnapshotList { .. } => true,
+        | DaemonResponse::SnapshotList { .. }
+        | DaemonResponse::ImageList { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }
@@ -352,6 +376,27 @@ fn test_terminal_classification_is_exhaustive() {
             trace: serde_json::json!({"steps": [], "result": "ok"}),
             container_id: "abc123def456".into(),
             exit_code: 0,
+        },
+        DaemonResponse::ImageList {
+            images: vec!["alpine:latest".to_string()],
+        },
+        DaemonResponse::SnapshotSaved {
+            info: SnapshotInfo {
+                container_id: "abc123".to_string(),
+                name: "snap-1".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                adapter: "smolvm".to_string(),
+                image: "alpine:latest".to_string(),
+                size_bytes: 1024,
+            },
+        },
+        DaemonResponse::SnapshotRestored {
+            id: "abc123".to_string(),
+            name: "snap-1".to_string(),
+        },
+        DaemonResponse::SnapshotList {
+            id: "abc123".to_string(),
+            snapshots: vec![],
         },
     ];
 

@@ -733,6 +733,14 @@ pub struct ContainerSpawnConfig {
     /// If `true`, the container process is granted a full Linux capability set
     /// via `capset(2)` before `execvp`. Required for DinD.
     pub privileged: bool,
+    /// OCI image reference that produced this container's rootfs
+    /// (e.g. `"alpine:latest"`, `"ghcr.io/org/img:v1"`).
+    ///
+    /// VM-based backends (krun/smolvm) use this to pass `--image` to the
+    /// hypervisor instead of re-deriving the ref from the rootfs path.
+    /// `None` for Linux-native backends that operate on the extracted rootfs
+    /// directly.
+    pub image_ref: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

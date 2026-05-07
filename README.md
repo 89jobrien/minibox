@@ -1,30 +1,33 @@
 # minibox
 
-[![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/89jobrien/minibox/branch/main/graph/badge.svg)](https://codecov.io/gh/89jobrien/minibox)
-[![dependency status](https://deps.rs/repo/github/89jobrien/minibox/status.svg)](https://deps.rs/repo/github/89jobrien/minibox)
-
 A container runtime written in Rust with daemon/client architecture, OCI image
 pulling, Linux namespace isolation, cgroups v2 resource limits, and overlay
 filesystem support. Hexagonal architecture makes adapter suites swappable at
 startup.
 
-**Status:** Development (`v0.21.0`)
+**Status:** Development (`v0.23.0`)
+
+**Platform tiers:** Linux is production-ready. macOS is experimental (VM-backed, limited
+exec/logs). Windows is a planned stub only — `winbox::start()` returns an error unconditionally.
+See the [Platform Support](#platform-support) table below.
 
 ---
 
 ## What Works Today (Linux)
 
-The `native` adapter suite on Linux is the production path. It provides:
+The `native` adapter suite on Linux is the **production** path. These features are stable:
 
 - **Container lifecycle** -- pull, run, stop, rm, ps, pause/resume
-- **Container exec** -- `setns`-based exec with `-it` PTY support (native adapter only)
 - **OCI image pull** -- Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
 - **Image management** -- `prune` / `rmi` with lease-based GC
 - **Bind mounts + privileged mode** -- `-v`/`--mount`, `--privileged`
 - **Log capture** -- `minibox logs <id>` for stored stdout/stderr
 - **Container events** -- `minibox events` streams lifecycle events
-- **Bridge networking** (experimental) -- veth pairs, NAT via iptables DNAT
+
+These features exist but are **experimental** (native Linux only, limited test coverage):
+
+- **Container exec** -- `setns`-based exec with `-it` PTY support
+- **Bridge networking** -- `MINIBOX_NETWORK_MODE=bridge`; veth pairs, NAT via iptables DNAT
 
 ---
 
@@ -45,6 +48,12 @@ sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
 sudo ./target/release/mbx ps
 sudo ./target/release/mbx stop <id>
 sudo ./target/release/mbx rm <id>
+
+# Diagnose a container
+sudo ./target/release/mbx diagnose <id>
+
+# Show compiled adapter info (no daemon needed)
+./target/release/mbx doctor
 ```
 
 ---
@@ -64,8 +73,9 @@ See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-platform
 capability breakdown.
 
 `miniboxd` selects the platform crate at compile time (`cfg` gates) and the
-adapter suite at startup via `MINIBOX_ADAPTER`. Unrecognized values cause the
-daemon to exit before binding the socket.
+adapter suite at startup via `MINIBOX_ADAPTER`. Unrecognized values produce a
+structured error listing valid options. Run `mbx doctor` to see which adapter
+suites are compiled into the current build.
 
 ---
 
@@ -88,7 +98,7 @@ the full threat model.
 
 ## Architecture
 
-Eight crates in the workspace:
+Nine crates in the workspace:
 
 ```rust
                          +--------------+
@@ -112,9 +122,11 @@ Eight crates in the workspace:
         |  macros    |
         +------------+
 
-        +------------+         +------------+
-        |    mbx     |  CLI    |  xtask     |  dev tooling
-        +------------+         +------------+
+        +------------+   +------------------+   +------------+
+        |    mbx     |   | minibox-crux-    |   |  xtask     |
+        |   CLI      |   | plugin  (agent   |   | dev tool   |
+        |            |   | JSON-RPC bridge) |   |            |
+        +------------+   +------------------+   +------------+
 ```
 
 **Hexagonal architecture.** Domain traits (`ImageRegistry`, `FilesystemProvider`,
@@ -148,7 +160,7 @@ Roadmap details in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 ## Testing
 
 ```bash
-cargo xtask test-unit              # ~760 unit/conformance/property tests (any platform)
+cargo xtask test-unit              # ~1200+ unit/conformance/property tests (any platform)
 just test-integration              # cgroup tests (Linux + root)
 just test-e2e                      # daemon + CLI (Linux + root)
 cargo xtask test-conformance       # OCI conformance matrix
@@ -159,14 +171,43 @@ See `CLAUDE.md` for the full testing strategy.
 
 ---
 
-## Development
+## Developer Workflow
+
+Three tooling layers exist — each with a distinct role:
+
+| Layer      | Role                                                                         | When to use                          |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| **`just`** | Primary task runner; thin wrappers over `xtask` and `cargo`                  | Day-to-day build, test, lint         |
+| **`xtask`**| CI engine; owns all quality gates (`pre-commit`, `test-unit`, `prepush`)     | Called by `just` and GitHub Actions  |
+| **`mise`** | Interactive / ops tasks (`ssh-vps`, `fix-socket`, `smoke`, git ops)          | One-off VPS ops, interactive demos   |
+
+### Golden paths
 
 ```bash
+# Build
 cargo build --release
-cargo check --workspace
+
+# Lint (macOS-safe)
 cargo clippy --workspace -- -D warnings
-cargo xtask pre-commit             # fmt + clippy + release build gate
+
+# Unit tests (any platform)
+just test-unit                     # wraps cargo xtask test-unit
+
+# Pre-commit gate (fmt + clippy + release build)
+cargo xtask pre-commit
+
+# Run the daemon (Linux, root required)
+sudo ./target/release/miniboxd
+
+# End-to-end tests (Linux, root required)
+just test-e2e
 ```
+
+Use `just --list` to see all available recipes. Use `mise tasks` for interactive/ops tasks.
+Avoid calling `mise` for tasks that appear in the `just` list — they are duplicated there
+intentionally as thin wrappers.
+
+## Development
 
 | Variable              | Default                                         | Purpose                   |
 | --------------------- | ----------------------------------------------- | ------------------------- |

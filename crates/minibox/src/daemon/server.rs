@@ -55,7 +55,7 @@ pub trait ServerListener: Send + 'static {
 /// | `require_root_auth` | `creds`       | Result  |
 /// |---------------------|---------------|---------|
 /// | `false`             | any / None    | allowed |
-/// | `true`              | None          | allowed (warning logged at call site) |
+/// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
 pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
@@ -63,7 +63,7 @@ pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool
         return true;
     }
     match creds {
-        None => true, // credentials unavailable — warn logged by caller
+        None => false,
         Some(c) => c.uid == 0,
     }
 }
@@ -125,15 +125,20 @@ where
                 match accept_result {
                     Ok((stream, peer_creds)) => {
                         if !is_authorized(peer_creds.as_ref(), require_root_auth) {
-                            // is_authorized returns false only when creds is Some and uid != 0
-                            let creds = peer_creds
-                                .as_ref()
-                                .expect("is_authorized false requires Some(creds)");
-                            warn!(
-                                uid = creds.uid,
-                                pid = creds.pid,
-                                "server: rejecting non-root connection"
-                            );
+                            match peer_creds.as_ref() {
+                                Some(creds) => {
+                                    warn!(
+                                        uid = creds.uid,
+                                        pid = creds.pid,
+                                        "server: rejecting non-root connection"
+                                    );
+                                }
+                                None => {
+                                    warn!(
+                                        "server: rejecting unauthenticated connection; peer credentials unavailable"
+                                    );
+                                }
+                            }
                             continue;
                         }
                         match &peer_creds {
@@ -141,9 +146,6 @@ where
                                 info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
                             }
                             None => {
-                                if require_root_auth {
-                                    warn!("server: peer credentials unavailable; require_root_auth bypassed");
-                                }
                                 info!("server: accepted connection (no peer credentials)");
                             }
                         }
@@ -290,6 +292,7 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::SnapshotSaved { .. }
             | DaemonResponse::SnapshotRestored { .. }
             | DaemonResponse::SnapshotList { .. }
+            | DaemonResponse::ImageList { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -473,6 +476,12 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::ListImages => {
+            tokio::spawn(handler::handle_list_images(
+                Arc::clone(&deps.image.image_store),
+                tx,
+            ));
+        }
         DaemonRequest::RemoveImage { image_ref } => {
             tokio::spawn(handler::handle_remove_image(
                 image_ref,
@@ -518,26 +527,32 @@ async fn dispatch(
             let response = handler::handle_list_snapshots(id, deps).await;
             send_terminal_response(&tx, "ListSnapshots", response).await;
         }
-        DaemonRequest::RunPipeline { .. } => {
-            send_terminal_response(
-                &tx,
-                "RunPipeline",
-                DaemonResponse::Error {
-                    message: "RunPipeline is not yet implemented".to_string(),
-                },
-            )
-            .await;
+        DaemonRequest::RunPipeline {
+            pipeline_path,
+            input,
+            image,
+            budget,
+            env,
+            ..
+        } => {
+            handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
+                .await;
         }
-        // TODO(wave3): wire handle_update via spawn — currently returns a stub error
-        DaemonRequest::Update { .. } => {
-            send_terminal_response(
-                &tx,
-                "Update",
-                DaemonResponse::Error {
-                    message: "Update is not yet implemented".to_string(),
-                },
-            )
-            .await;
+        DaemonRequest::Update {
+            images,
+            all,
+            containers,
+            restart,
+        } => {
+            tokio::spawn(handler::handle_update(
+                images,
+                all,
+                containers,
+                restart,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
         }
     }
 }
@@ -671,6 +686,24 @@ mod tests {
         assert_eq!(q.pid, 1);
     }
 
+    #[test]
+    fn is_authorized_requires_root_when_enabled() {
+        assert!(is_authorized(None, false));
+        assert!(is_authorized(
+            Some(&PeerCreds { uid: 1000, pid: 42 }),
+            false
+        ));
+        assert!(is_authorized(Some(&PeerCreds { uid: 0, pid: 42 }), true));
+        assert!(!is_authorized(
+            Some(&PeerCreds { uid: 1000, pid: 42 }),
+            true
+        ));
+        assert!(
+            !is_authorized(None, true),
+            "root-auth mode must fail closed when peer credentials are unavailable"
+        );
+    }
+
     // ─── is_terminal_response ────────────────────────────────────────────────
 
     /// Exhaustive coverage test: every `DaemonResponse` variant must appear in
@@ -797,6 +830,12 @@ mod tests {
                 },
                 false, // non-terminal: one per image, Success/Error follows
             ),
+            (
+                DaemonResponse::ImageList {
+                    images: vec!["alpine:latest".to_string()],
+                },
+                true, // terminal: complete list returned in one response
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -833,6 +872,7 @@ mod tests {
                 DaemonResponse::SnapshotRestored { .. } => true,
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
+                DaemonResponse::ImageList { .. } => true,
             };
         }
     }
@@ -1227,7 +1267,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run_server_no_creds_require_root_bypasses() {
+    async fn test_run_server_no_creds_require_root_rejects() {
         let tmp = TempDir::new().expect("tempdir");
         let (state, deps) = test_deps(&tmp);
 
@@ -1236,8 +1276,7 @@ mod tests {
             rx: tokio::sync::Mutex::new(rx),
         };
 
-        // Connection with no peer credentials — should trigger the bypass-warning
-        // path and still accept (no UID to check against).
+        // Connection with no peer credentials must be rejected when root auth is required.
         let (_client, server) = tokio::io::duplex(4096);
         tx.send((server, None)).await.expect("send connection");
         drop(tx);

@@ -53,6 +53,10 @@ impl HostPlatform {
         }
     }
 
+    // Retained for use by build_vm_image_with_platform (multi-arch VM image builds).
+    // Currently only exercised in tests; will be used when `xtask build-vm-image --platform`
+    // is wired to the platform-aware build path.
+    #[allow(dead_code)]
     pub fn alpine_arch(&self) -> &'static str {
         match self {
             Self::MacOsArm64 | Self::LinuxArm64 => "aarch64",

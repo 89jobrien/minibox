@@ -1,0 +1,19 @@
+runner:
+  clippy:
+    cmd: cargo clippy --workspace --message-format=short 2>&1
+    errorformat:
+      - "%f:%l:%c: %t%*[^:]: %m"
+    level: warning
+
+  rustfmt:
+    cmd: cargo fmt --all -- --check 2>&1
+    format: diff
+    level: warning
+
+  cargo-deny:
+    cmd: cargo deny check 2>&1
+    errorformat:
+      - "%f:%l:%c: %m"
+      - "warning[%*[^]]]:%m"
+      - "error[%*[^]]]:%m"
+    level: error

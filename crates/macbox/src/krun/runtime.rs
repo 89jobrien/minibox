@@ -357,8 +357,12 @@ impl ContainerRuntime for KrunRuntime {
         let mut command = vec![config.command.clone()];
         command.extend(config.args.clone());
 
-        // Use the rootfs path as the smolvm image identifier.
-        let image = config.rootfs.to_string_lossy().to_string();
+        // Use the OCI image ref when available; fall back to rootfs path.
+        let image = config
+            .image_ref
+            .as_deref()
+            .unwrap_or_else(|| config.rootfs.to_str().unwrap_or("alpine"))
+            .to_owned();
 
         let id = self.create(&image, &command, &env).await?;
 

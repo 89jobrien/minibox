@@ -247,7 +247,7 @@ pub fn run_pipeline(
 
     let test_suites = &[
         "cgroup_tests",
-        "e2e_tests",
+        "system_tests",
         "integration_tests",
         "sandbox_tests",
     ];

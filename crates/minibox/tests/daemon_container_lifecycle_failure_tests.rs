@@ -116,6 +116,7 @@ fn make_record(id: &str) -> ContainerRecord {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
     }
 }
 

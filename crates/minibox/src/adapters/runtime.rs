@@ -182,6 +182,7 @@ mod tests {
             skip_network_namespace: false,
             mounts: vec![bind.clone()],
             privileged: true,
+            image_ref: None,
         };
 
         // Build ContainerConfig the same way spawn_process does.

@@ -315,6 +315,7 @@ async fn runtime_spawn_process_extracts_pid_from_executor_output() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        image_ref: None,
     };
 
     let result = runtime
@@ -343,6 +344,7 @@ async fn runtime_spawn_process_errors_on_invalid_pid() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        image_ref: None,
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -368,6 +370,7 @@ async fn runtime_spawn_process_propagates_executor_error() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        image_ref: None,
     };
 
     let result = runtime.spawn_process(&config).await;
@@ -407,6 +410,7 @@ async fn runtime_spawn_script_embeds_args() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        image_ref: None,
     };
 
     let result = runtime.spawn_process(&config).await.unwrap();

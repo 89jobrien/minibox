@@ -23,7 +23,7 @@ def main [
         ^cargo build --target $target -p miniboxd
         ^cargo build --target $target -p minibox-cli
         ^cargo test --no-run --target $target -p miniboxd --test cgroup_tests
-        ^cargo test --no-run --target $target -p miniboxd --test e2e_tests
+        ^cargo test --no-run --target $target -p miniboxd --test system_tests
         ^cargo test --no-run --target $target -p miniboxd --test integration_tests
         ^cargo test --no-run --target $target -p miniboxd --test sandbox_tests
     }
@@ -33,7 +33,7 @@ def main [
         {name: "miniboxd",          path: ($bin_dir | path join "miniboxd")}
         {name: "minibox",           path: ($bin_dir | path join "minibox")}
         {name: "cgroup_tests",      path: (find-test-bin $deps_dir "cgroup_tests")}
-        {name: "e2e_tests",         path: (find-test-bin $deps_dir "e2e_tests")}
+        {name: "system_tests",         path: (find-test-bin $deps_dir "system_tests")}
         {name: "integration_tests", path: (find-test-bin $deps_dir "integration_tests")}
         {name: "sandbox_tests",     path: (find-test-bin $deps_dir "sandbox_tests")}
     ]
@@ -60,8 +60,8 @@ echo "=== cgroup_tests ==="
 echo "=== integration_tests ==="
 /usr/local/bin/integration_tests --test-threads=1 --ignored --nocapture
 
-echo "=== e2e_tests ==="
-MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/e2e_tests --test-threads=1 --nocapture
+echo "=== system_tests ==="
+MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/system_tests --test-threads=1 --nocapture
 
 echo "=== sandbox_tests ==="
 MINIBOX_TEST_BIN_DIR=/usr/local/bin /usr/local/bin/sandbox_tests --test-threads=1 --ignored --nocapture

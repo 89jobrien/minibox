@@ -264,6 +264,9 @@ pub enum DaemonRequest {
         dry_run: bool,
     },
 
+    /// List all cached images.
+    ListImages,
+
     /// Remove a specific image by reference.
     RemoveImage {
         /// Image reference, e.g. `"alpine:latest"`.
@@ -498,6 +501,12 @@ pub enum DaemonResponse {
     Event {
         /// The container lifecycle event payload.
         event: crate::events::ContainerEvent,
+    },
+
+    /// List of cached images returned by `ListImages`.
+    ImageList {
+        /// Image references available on disk (e.g. `"alpine:latest"`).
+        images: Vec<String>,
     },
 
     /// Result of a prune operation.

@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-04-29
+updated: 2026-05-06
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
@@ -196,67 +196,38 @@ items:
     note: null
     number: 87
     url: https://github.com/89jobrien/minibox/issues/87
-- id: minibox-agent-llm-api
+- id: minibox-crux-plugin
   doob_uuid: null
-  name: minibox-agent-llm-api
-  priority: P1
-  status: blocked
-  title: Extend minibox-llm with infer() API, then re-land minibox-agent
-  description: |
-    feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
-    NOTE: minibox-llm is being dropped in crate consolidation Phase 0 (GH #153). Re-evaluate
-    whether LLM support moves into minibox-core or a separate plugin before implementing.
-  files:
-  - crates/minibox-llm/src/provider.rs
-  - crates/minibox-llm/src/types.rs
-  - crates/minibox-agent/src/agent.rs
-  - crates/minibox-agent/src/conversation.rs
-  completed: null
-  extra:
-  - date: null
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
-  - date: 20260426:051901
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: minibox-llm being dropped in crate consolidation Phase 0 (GH
-- id: minibox-77
-  doob_uuid: null
-  name: publish-core-crates
+  name: minibox-crux-plugin
   priority: P1
   status: open
-  title: 'chore: promote to stable and cut v0.22.0 release tag'
+  title: 'feat: minibox-crux-plugin binary — crux JSON-RPC plugin for minibox adapter'
   description: |
-    GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
-    Phases 0-6 complete (13->8 crates, slashcrux path dep fixed, dry-run passes). Remaining:
-    promote main→next (wait for CI green), then promote next→stable and cut v0.22.0 release tag.
-    GitHub Actions release.yml will publish minibox-core and minibox-macros to crates.io automatically.
+    Plan at docs/superpowers/plans/2026-04-30-crux-maestro-portability.md. minibox-agent crate
+    never existed — planned replacement is minibox-crux-plugin using cruxx-plugin protocol
+    (JSON-RPC over stdio: Declare/Invoke/Shutdown). cruxx-plugin + cruxx-types exist in
+    ~/dev/crux/crates/. Default adapter is now smolvm (krun fallback) per adapter_registry.rs.
   files:
-  - docs/superpowers/plans/2026-04-26-crate-consolidation.md
-  - Cargo.toml
-  - crates/minibox-core/Cargo.toml
+  - crates/miniboxd/src/adapter_registry.rs
+  - docs/superpowers/plans/2026-04-30-crux-maestro-portability.md
   completed: null
-  extra:
-  - date: 20260426:051901
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 153
-    url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260429:042914
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: 'Session 38: v0.22.0 bumped this session (761fd26). CI e2e job added (5a4aadf). Ready for next→stable promotion once CI is green.'
+  extra: []
 log:
+- date: '20260502.192909'
+  summary: 'Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean'
+  commits: []
+  session: 42
+- date: 20260430:143952
+  summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes (all pre-rename era); merged next->stable and tagged v0.23.0; synced xtask README with full command inventory; dropped stale minibox-agent-llm-api item.'
+  commits:
+  - cb36b64
+  - 17a873d
+  - b596a27
+  - 78d8e11
+  - eee7a61
+  - cdb1ab2
+  - fa6f2e9
+  session: 39
 - date: 20260429:042914
   summary: 'Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified).'
   commits:
@@ -284,14 +255,24 @@ log:
   - ade65b9
   - eb6bef2
   session: 36
+- date: 20260428:080155
+  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
+  commits:
+  - 5b4c4d8
+  session: 34
 - date: 20260428:062906
   summary: 'Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree.'
   commits:
   - b8720ac
   - 4e4bdba
   session: 35
-- date: 20260428:080155
-  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
+- date: 2026-05-02
+  summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
   commits:
-  - 5b4c4d8
-  session: 34
+  - 788c10f
+  session: 41
+- date: 2026-05-02
+  summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
+  commits:
+  - 18eb8ea
+  session: 40

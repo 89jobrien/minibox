@@ -68,11 +68,24 @@ pub fn build_colima_handler_dependencies(
     let image_loader: DynImageLoader = registry.clone();
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as minibox::daemonbox_state::StateHandle,
+        Arc::clone(&state) as minibox::container_state::StateHandle,
+    );
+    let registry_router = Arc::new(HostnameRegistryRouter::new(
+        registry_port,
+        std::iter::empty::<(&str, DynImageRegistry)>(),
+    ));
+    let filesystem = Arc::new(ColimaFilesystem::new());
+    let runtime = Arc::new(
+        ColimaRuntime::new()
+            .with_executor(executor.clone())
+            .with_spawner(spawner),
     );
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
         data_dir.clone(),
+        Arc::clone(&filesystem) as minibox_core::domain::DynFilesystemProvider,
+        Arc::clone(&runtime) as minibox_core::domain::DynContainerRuntime,
+        Arc::clone(&registry_router) as minibox_core::domain::DynRegistryRouter,
     );
     let image_pusher = minibox::adapters::colima_image_pusher(
         Arc::clone(&state.image_store),
@@ -85,22 +98,15 @@ pub fn build_colima_handler_dependencies(
         image: minibox::daemon::handler::ImageDeps {
             // Colima's nerdctl handles any registry (ghcr.io included) via the same adapter,
             // so we use it as the default with no hostname overrides.
-            registry_router: Arc::new(HostnameRegistryRouter::new(
-                registry_port,
-                std::iter::empty::<(&str, DynImageRegistry)>(),
-            )),
+            registry_router,
             image_loader,
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
         lifecycle: minibox::daemon::handler::LifecycleDeps {
-            filesystem: Arc::new(ColimaFilesystem::new()),
+            filesystem,
             resource_limiter: Arc::new(ColimaLimiter::new().with_executor(executor.clone())),
-            runtime: Arc::new(
-                ColimaRuntime::new()
-                    .with_executor(executor.clone())
-                    .with_spawner(spawner),
-            ),
+            runtime,
             network_provider: Arc::new(NoopNetwork::new()),
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,

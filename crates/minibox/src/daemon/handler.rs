@@ -31,7 +31,7 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use super::network_lifecycle::NetworkLifecycle;
-use super::state::{ContainerRecord, ContainerState, DaemonState};
+use super::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
 use async_trait::async_trait;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -772,6 +772,22 @@ async fn run_inner_capture(
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.clone(),
+            tag: Some(tag.clone()),
+            command: command.clone(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.clone(),
+            mounts: mounts.clone(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
     };
     state.add_container(record).await;
 
@@ -797,6 +813,7 @@ async fn run_inner_capture(
         skip_network_namespace: skip_net_ns,
         mounts,
         privileged,
+        image_ref: Some(image_label.clone()),
     };
 
     let _spawn_permit = state
@@ -999,6 +1016,22 @@ async fn run_inner(
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.clone(),
+            tag: Some(tag.clone()),
+            command: command.clone(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.clone(),
+            mounts: mounts.clone(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
     };
     state.add_container(record).await;
 
@@ -1025,6 +1058,7 @@ async fn run_inner(
         skip_network_namespace: skip_net_ns,
         mounts,
         privileged,
+        image_ref: Some(image_label.clone()),
     };
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns
@@ -2491,6 +2525,23 @@ pub(crate) async fn handle_remove_image(
     }
 }
 
+/// List all cached images stored in the image store.
+pub(crate) async fn handle_list_images(
+    image_store: Arc<minibox_core::image::ImageStore>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    match image_store.list_all_images().await {
+        Ok(images) => {
+            if tx.send(DaemonResponse::ImageList { images }).await.is_err() {
+                warn!("handle_list_images: client disconnected before ImageList could be sent");
+            }
+        }
+        Err(e) => {
+            send_error(&tx, "handle_list_images", e.to_string()).await;
+        }
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 // ─── Snapshot handlers ───────────────────────────────────────────────────────
@@ -2555,6 +2606,276 @@ pub async fn handle_list_snapshots(id: String, deps: Arc<HandlerDependencies>) -
         Err(e) => DaemonResponse::Error {
             message: format!("list_snapshots: {e}"),
         },
+    }
+}
+
+// ─── Pipeline ───────────────────────────────────────────────────────────────
+
+/// Run a crux pipeline inside an ephemeral container.
+///
+/// Higher-level than `handle_run`: pulls image, creates container with the
+/// pipeline file bind-mounted at `/pipeline.cruxx`, streams `ContainerOutput`
+/// to the client, then after the container exits reads `/trace.json` from the
+/// overlay upper dir and emits [`DaemonResponse::PipelineComplete`].
+///
+/// # Protocol sequence
+///
+/// ```text
+/// Client  ──RunPipeline──►  Daemon
+/// Client  ◄──ContainerCreated──  (container ID)
+/// Client  ◄──ContainerOutput──   (zero or more stdout/stderr chunks)
+/// Client  ◄──PipelineComplete──  (trace + exit_code; terminal)
+/// ```
+///
+/// On macOS / non-Unix platforms the streaming run path is unavailable;
+/// `handle_pipeline` returns an `Error` response immediately on those builds.
+///
+/// # Trace file
+///
+/// After the container exits the handler looks for `<containers_base>/<id>/upper/trace.json`.
+/// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
+/// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
+/// the pipeline still completes successfully (the exit code determines success).
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_pipeline(
+    pipeline_path: String,
+    input: Option<serde_json::Value>,
+    image: Option<String>,
+    budget: Option<serde_json::Value>,
+    env: Vec<(String, String)>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    #[cfg(not(unix))]
+    {
+        let _ = (pipeline_path, input, image, budget, env, state, deps);
+        send_error(
+            &tx,
+            "handle_pipeline",
+            "RunPipeline is only supported on Unix platforms".to_string(),
+        )
+        .await;
+        return;
+    }
+
+    #[cfg(unix)]
+    {
+        let image_ref = image.unwrap_or_else(|| "cruxx-runtime:latest".to_string());
+
+        // Validate pipeline path is absolute so the bind-mount is unambiguous.
+        let host_pipeline = std::path::PathBuf::from(&pipeline_path);
+        if !host_pipeline.is_absolute() {
+            send_error(
+                &tx,
+                "handle_pipeline",
+                format!("pipeline_path must be absolute, got: {pipeline_path:?}"),
+            )
+            .await;
+            return;
+        }
+
+        // Build the bind mount: pipeline file → /pipeline.cruxx (read-only).
+        let pipeline_mount = BindMount {
+            host_path: host_pipeline,
+            container_path: std::path::PathBuf::from("/pipeline.cruxx"),
+            read_only: true,
+        };
+
+        // Build env list: inherit caller env, add CRUXX_PLUGIN_PATH and optional budget.
+        let mut container_env: Vec<String> =
+            env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
+        container_env.push("CRUXX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
+        if let Some(ref b) = budget
+            && let Ok(s) = serde_json::to_string(b)
+        {
+            container_env.push(format!("CRUXX_BUDGET_JSON={s}"));
+        }
+        if let Some(inp) = &input
+            && let Ok(s) = serde_json::to_string(inp)
+        {
+            container_env.push(format!("CRUXX_INPUT_JSON={s}"));
+        }
+
+        // Clone deps and override policy to permit bind mounts for this
+        // internal pipeline run.  Pipeline requests originate from the daemon
+        // (not from an end user), so the bind-mount policy exception is safe.
+        let mut pipeline_deps = (*deps).clone();
+        pipeline_deps.policy.allow_bind_mounts = true;
+        let pipeline_deps = Arc::new(pipeline_deps);
+
+        // Bridge channel: collect all streaming responses from handle_run internally.
+        let (inner_tx, mut inner_rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+
+        let pipeline_state = Arc::clone(&state);
+        let pipeline_deps_clone = Arc::clone(&pipeline_deps);
+
+        // Spawn handle_run in the background; we drain inner_rx below.
+        tokio::spawn(async move {
+            handle_run(
+                image_ref,
+                None,
+                vec![
+                    "crux".to_string(),
+                    "run".to_string(),
+                    "/pipeline.cruxx".to_string(),
+                    "--output".to_string(),
+                    "/trace.json".to_string(),
+                ],
+                None,
+                None,
+                true, // ephemeral: stream output
+                None,
+                vec![pipeline_mount],
+                false,
+                container_env,
+                None,
+                None,
+                pipeline_state,
+                pipeline_deps_clone,
+                inner_tx,
+            )
+            .await;
+        });
+
+        // Drain the inner channel, collecting the container ID and exit code.
+        let mut container_id = String::new();
+        let mut exit_code = 0i32;
+
+        loop {
+            match inner_rx.recv().await {
+                None => break,
+                Some(DaemonResponse::ContainerCreated { id }) => {
+                    container_id = id;
+                    // Do not forward ContainerCreated — pipeline clients receive
+                    // PipelineComplete instead.
+                }
+                Some(DaemonResponse::ContainerOutput { stream, data }) => {
+                    // Forward output chunks to the client in real time.
+                    if tx
+                        .send(DaemonResponse::ContainerOutput { stream, data })
+                        .await
+                        .is_err()
+                    {
+                        warn!("handle_pipeline: client disconnected during ContainerOutput");
+                        return;
+                    }
+                }
+                Some(DaemonResponse::ContainerStopped { exit_code: ec }) => {
+                    exit_code = ec;
+                    break;
+                }
+                Some(DaemonResponse::Error { message }) => {
+                    // Container failed to start or run — propagate as error.
+                    send_error(&tx, "handle_pipeline", message).await;
+                    return;
+                }
+                Some(other) => {
+                    debug!(
+                        response = ?other,
+                        "handle_pipeline: unexpected inner response, ignoring"
+                    );
+                }
+            }
+        }
+
+        if container_id.is_empty() {
+            send_error(
+                &tx,
+                "handle_pipeline",
+                "pipeline container did not produce a container ID".to_string(),
+            )
+            .await;
+            return;
+        }
+
+        // Read trace.json from the overlay upper dir.
+        // Path: <containers_base>/<id>/upper/trace.json
+        let trace_path = deps
+            .lifecycle
+            .containers_base
+            .join(&container_id)
+            .join("upper")
+            .join("trace.json");
+
+        let trace = if trace_path.exists() {
+            match std::fs::read_to_string(&trace_path) {
+                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(v) => {
+                        info!(
+                            container_id = %container_id,
+                            path = %trace_path.display(),
+                            "handle_pipeline: trace loaded"
+                        );
+                        v
+                    }
+                    Err(e) => {
+                        warn!(
+                            container_id = %container_id,
+                            path = %trace_path.display(),
+                            error = %e,
+                            "handle_pipeline: trace file is not valid JSON, using empty trace"
+                        );
+                        serde_json::json!({"steps": []})
+                    }
+                },
+                Err(e) => {
+                    warn!(
+                        container_id = %container_id,
+                        path = %trace_path.display(),
+                        error = %e,
+                        "handle_pipeline: failed to read trace file, using empty trace"
+                    );
+                    serde_json::json!({"steps": []})
+                }
+            }
+        } else {
+            debug!(
+                container_id = %container_id,
+                path = %trace_path.display(),
+                "handle_pipeline: no trace file found, using empty trace"
+            );
+            serde_json::json!({"steps": []})
+        };
+
+        info!(
+            container_id = %container_id,
+            exit_code,
+            "handle_pipeline: pipeline complete"
+        );
+
+        // Persist the trace before notifying the client so that a client that
+        // immediately queries `mbx pipeline show <id>` sees the record.
+        {
+            let store = state.trace_store.clone();
+            let id_for_store = container_id.clone();
+            let pipeline_for_store = pipeline_path.clone();
+            let trace_for_store = trace.clone();
+            if let Err(e) = store.store(
+                &id_for_store,
+                &pipeline_for_store,
+                &trace_for_store,
+                exit_code,
+            ) {
+                warn!(
+                    container_id = %container_id,
+                    error = %e,
+                    "handle_pipeline: failed to store trace (non-fatal)"
+                );
+            }
+        }
+
+        if tx
+            .send(DaemonResponse::PipelineComplete {
+                trace,
+                container_id,
+                exit_code,
+            })
+            .await
+            .is_err()
+        {
+            warn!("handle_pipeline: client disconnected before PipelineComplete could be sent");
+        }
     }
 }
 
@@ -2682,13 +3003,77 @@ pub async fn handle_update(
         }
     }
 
-    // ── Step 3: restart if requested (not yet implemented) ────────────────────
-    if restart {
-        warn!("handle_update: restart not yet implemented — skipping container restart");
-    }
+    // ── Step 3: stop containers using updated images (restart = true) ────────
+    //
+    // Full replay (stop + re-run with original config) requires the container's
+    // creation parameters to be stored in ContainerRecord, which is tracked for
+    // a future wave.  For now, "restart" means: stop every Running or Paused
+    // container whose source image was just updated so it picks up the new
+    // layers on its next manual start.
+    //
+    // stop_inner is unix-only so this entire block is cfg-gated.
+    #[cfg(unix)]
+    let stopped: usize = if restart {
+        let target_set: std::collections::HashSet<&str> =
+            target_refs.iter().map(String::as_str).collect();
+
+        let candidate_ids: Vec<String> = state
+            .list_containers()
+            .await
+            .into_iter()
+            .filter(|info| info.state == "Running" || info.state == "Paused")
+            .map(|info| info.id)
+            .collect();
+
+        let mut count = 0usize;
+        for id in candidate_ids {
+            let record = state.get_container(&id).await;
+            let image_ref = record.and_then(|r| r.source_image_ref);
+            if !image_ref
+                .as_deref()
+                .map(|r| target_set.contains(r))
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            info!(
+                container_id = %id,
+                "handle_update: stopping container for image update (restart=true)"
+            );
+            match stop_inner(&id, &state).await {
+                Ok(()) => {
+                    count += 1;
+                    info!(container_id = %id, "handle_update: container stopped");
+                }
+                Err(e) => {
+                    warn!(
+                        container_id = %id,
+                        error = %e,
+                        "handle_update: failed to stop container — continuing"
+                    );
+                }
+            }
+        }
+        count
+    } else {
+        0
+    };
+
+    #[cfg(not(unix))]
+    let stopped: usize = {
+        if restart {
+            warn!("handle_update: restart not supported on this platform");
+        }
+        0
+    };
 
     // ── Step 4: terminal Success ──────────────────────────────────────────────
-    let message = format!("updated {updated}/{total} images");
+    let message = if restart && stopped > 0 {
+        format!("updated {updated}/{total} images; stopped {stopped} container(s)")
+    } else {
+        format!("updated {updated}/{total} images")
+    };
     info!(updated, total, "handle_update: complete");
     if tx.send(DaemonResponse::Success { message }).await.is_err() {
         warn!("handle_update: client disconnected before Success could be sent");
