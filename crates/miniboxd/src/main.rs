@@ -167,7 +167,9 @@ use macbox::krun::{
 #[cfg(unix)]
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
-use minibox::adapters::{SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
+use minibox::adapters::{
+    GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime,
+};
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 #[cfg(unix)]
@@ -202,8 +204,7 @@ use tracing::{info, warn};
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
-    CgroupV2Limiter, DockerHubRegistry, GhcrRegistry, LinuxNamespaceRuntime, NativeImageLoader,
-    OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
@@ -328,6 +329,10 @@ async fn run_daemon() -> Result<()> {
         available_adapters = ?available,
         "adapter suite selected"
     );
+
+    // ── Native preflight warning ─────────────────────────────────────────
+    #[cfg(target_os = "linux")]
+    adapter_registry::warn_if_native_without_root();
 
     // ── Privilege check (native only) ────────────────────────────────────
     #[cfg(target_os = "linux")]
@@ -555,6 +560,8 @@ async fn build_handler_deps(
             Arc::clone(&state),
             paths.containers_dir.clone(),
             paths.run_containers_dir.clone(),
+            metrics_recorder,
+            event_broker,
             image_gc,
         ),
         // On macOS, native/gke are not available — the adapter_registry already
@@ -799,9 +806,13 @@ fn build_smolvm_handler_dependencies(
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
+    let ghcr = Arc::new(
+        GhcrRegistry::new(Arc::clone(&state.image_store))
+            .context("creating GHCR registry adapter for smolvm")?,
+    ) as minibox_core::domain::DynImageRegistry;
     let registry_router = Arc::new(HostnameRegistryRouter::new(
         Arc::new(SmolVmRegistry::new()) as minibox_core::domain::DynImageRegistry,
-        std::iter::empty::<(&str, minibox_core::domain::DynImageRegistry)>(),
+        [("ghcr.io", ghcr)],
     ));
     let filesystem = Arc::new(SmolVmFilesystem::new());
     let runtime = Arc::new(SmolVmRuntime::new());
@@ -853,6 +864,8 @@ fn build_krun_handler_dependencies(
     state: Arc<DaemonState>,
     containers_dir: PathBuf,
     run_containers_dir: PathBuf,
+    metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder>,
+    event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
     let registry = Arc::new(
@@ -860,12 +873,16 @@ fn build_krun_handler_dependencies(
             .context("creating krun registry adapter")?,
     );
     let registry_port: minibox_core::domain::DynImageRegistry = registry;
+    let ghcr = Arc::new(
+        GhcrRegistry::new(Arc::clone(&state.image_store))
+            .context("creating GHCR registry adapter for krun")?,
+    ) as minibox_core::domain::DynImageRegistry;
 
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
                 registry_port,
-                std::iter::empty::<(&str, minibox_core::domain::DynImageRegistry)>(),
+                [("ghcr.io", ghcr)],
             )),
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc,
@@ -889,9 +906,9 @@ fn build_krun_handler_dependencies(
             image_builder: None,
         },
         events: minibox::daemon::handler::EventDeps {
-            event_sink: Arc::new(minibox_core::events::NoopEventSink),
-            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+            event_sink: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSink>,
+            event_source: Arc::clone(&event_broker) as Arc<dyn minibox_core::events::EventSource>,
+            metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1113,10 +1130,15 @@ mod tests {
         let image_gc: Arc<dyn ImageGarbageCollector> =
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
 
+        let event_broker = Arc::new(BroadcastEventBroker::new());
+        let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
+            Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
         let deps = build_krun_handler_dependencies(
             state,
             data_dir.join("containers"),
             data_dir.join("run/containers"),
+            metrics_recorder,
+            event_broker,
             image_gc,
         )
         .unwrap();

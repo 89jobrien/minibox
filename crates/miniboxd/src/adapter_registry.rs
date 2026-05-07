@@ -83,13 +83,13 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
         },
         AdapterInfo {
             name: "smolvm",
-            description: "SmolVM lightweight Linux VMs with subsecond boot",
+            description: "SmolVM lightweight Linux VMs (recommended default, cross-platform)",
             available: cfg!(unix),
             platform: "any",
         },
         AdapterInfo {
             name: "krun",
-            description: "libkrun micro-VM (KVM on Linux, HVF on macOS)",
+            description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
             available: true,
             platform: "any",
         },
@@ -233,6 +233,26 @@ impl fmt::Display for AdapterSelectionError {
 }
 
 impl std::error::Error for AdapterSelectionError {}
+
+/// Emit a structured tracing warning when `MINIBOX_ADAPTER=native` is set
+/// but the current process is not running as UID 0.
+///
+/// The native adapter requires root for namespace creation, overlay mounts,
+/// and cgroup v2 management. Running it as non-root will fail at runtime;
+/// warn early so operators catch the misconfiguration at startup.
+#[cfg(target_os = "linux")]
+pub fn warn_if_native_without_root() {
+    use nix::unistd::getuid;
+
+    if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("native") && !getuid().is_root() {
+        tracing::warn!(
+            uid = getuid().as_raw(),
+            adapter = "native",
+            "adapter: MINIBOX_ADAPTER=native requires root (UID 0); \
+             container operations will fail — consider smolvm or krun instead"
+        );
+    }
+}
 
 #[cfg(test)]
 mod tests {
