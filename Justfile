@@ -116,14 +116,6 @@ test-sandbox:
 test-linux:
     cargo xtask test-linux
 
-# Boot Alpine VM with interactive shell under QEMU HVF (Ctrl-A X to exit)
-run-vm:
-    cargo xtask run-vm
-
-# Cross-compile test binaries for aarch64-musl + run inside QEMU VM
-test-vm:
-    cargo xtask test-vm
-
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
     ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'

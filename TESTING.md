@@ -18,7 +18,6 @@ Full test strategy for minibox. See `DEVELOPMENT.md` for the developer workflow 
 | Sandbox               | ~17          | Linux       | yes   | no          |
 | E2E daemon+CLI        | 15           | Linux       | yes   | next/stable |
 | Cgroup integration    | 16           | Linux       | yes   | next/stable |
-| VZ smoke              | ~1           | macOS       | no    | no          |
 | Protocol evolution    | 11           | any         | no    | yes         |
 
 `cargo nextest` on macOS reports ~506 tests — that is the cross-platform subset. Linux-only,
@@ -105,7 +104,6 @@ Colima and handler adapter swap tests. Cross-platform; no root required.
 ```bash
 just test-adapters
 just test-cli-subprocess    # 30 CLI subprocess tests
-just test-vz-isolation      # macOS VZ (requires VM image from cargo xtask build-vm-image)
 ```
 
 ### Conformance suite

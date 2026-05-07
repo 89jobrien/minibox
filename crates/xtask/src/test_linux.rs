@@ -1,15 +1,16 @@
 //! test_linux — hexagonal architecture for `cargo xtask test-linux`.
 //!
 //! Three port traits define the pipeline:
-//!   Compiler        — cross-compile test binaries to musl
+//!   Compiler         — cross-compile test binaries to musl
 //!   InitramfsBuilder — assemble gzip cpio initramfs from a rootfs directory
-//!   VmRunner        — boot QEMU, stream serial, detect sentinel
+//!   VmRunner         — boot VM, stream serial, detect sentinel
 //!
-//! Real adapters delegate to the existing `vm_run` and `test_image` machinery.
-//! Mock adapters enable unit tests that run without QEMU, cargo, or a VM image.
+//! TODO (#306): wire real adapters for smolvm once the QEMU/VZ path is removed.
+
+#![allow(dead_code)] // TODO(#306): wire smolvm real adapters
 
 use anyhow::{Context, Result, bail};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // Ports
@@ -141,76 +142,6 @@ impl Compiler for ZigbuildCompiler {
     }
 }
 
-/// Build gzip-compressed cpio initramfs by delegating to `vm_image`.
-pub struct CpioInitramfsBuilder;
-
-impl InitramfsBuilder for CpioInitramfsBuilder {
-    fn build(&self, rootfs_dir: &Path, output_path: &Path) -> Result<()> {
-        crate::vm_image::create_initramfs(rootfs_dir, output_path, true)
-            .with_context(|| format!("building initramfs from {}", rootfs_dir.display()))
-    }
-}
-
-/// Boot QEMU and watch serial output for the `MINIBOX_TESTS_DONE rc=` sentinel.
-/// Wraps the existing `vm_run::VmRunner` machinery.
-pub struct QemuVmRunner {
-    platform: crate::vm_run::HostPlatform,
-    /// VM directory (contains `boot/vmlinuz-virt`, etc.).
-    vm_dir: PathBuf,
-}
-
-impl QemuVmRunner {
-    pub fn new(platform: crate::vm_run::HostPlatform, vm_dir: PathBuf) -> Self {
-        Self { platform, vm_dir }
-    }
-}
-
-impl VmRunner for QemuVmRunner {
-    fn run(&self, _kernel_path: &Path, _initramfs_path: &Path, cmdline: &str) -> Result<()> {
-        use std::io::BufRead;
-
-        let inner = crate::vm_run::VmRunner::new(
-            self.platform.clone(),
-            self.vm_dir.clone(),
-            PathBuf::from("target"), // not used — initramfs already built
-        );
-
-        let handle = inner.spawn_vm(cmdline)?;
-        let stream = handle.connect_serial()?;
-        let reader = std::io::BufReader::new(stream);
-        let mut final_rc: Option<i32> = None;
-
-        for line in reader.lines() {
-            match line {
-                Ok(l) => {
-                    println!("[vm] {l}");
-                    if let Some(rest) = l.strip_prefix("MINIBOX_TESTS_DONE rc=") {
-                        final_rc = rest.trim().parse::<i32>().ok();
-                        break;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("[vm] read error: {e}");
-                    break;
-                }
-            }
-        }
-
-        handle.wait()?;
-
-        match final_rc {
-            Some(0) => {
-                println!("All VM tests passed.");
-                Ok(())
-            }
-            Some(n) => bail!("VM tests failed (rc={n})"),
-            None => {
-                bail!("VM tests did not produce a MINIBOX_TESTS_DONE sentinel — check VM output")
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Pipeline
 // ---------------------------------------------------------------------------
@@ -298,11 +229,7 @@ pub fn run_pipeline(
         }
     }
 
-    // 3. Install init files
-    println!("[3/4] installing init …");
-    crate::vm_image::install_init_files(&rootfs)?;
-
-    // 4. Build initramfs
+    // 3/4. Build initramfs
     let initramfs_path = vm_dir.join("minibox-initramfs-test.img");
     println!("[4/4] building initramfs …");
     initramfs_builder.build(&rootfs, &initramfs_path)?;
@@ -313,43 +240,6 @@ pub fn run_pipeline(
     vm_runner.run(kernel_path, &initramfs_path, cmdline)?;
 
     Ok(())
-}
-
-/// Entry point: wire real adapters and run the pipeline.
-///
-/// Replaces the old `test_image::test_linux` stub.
-pub fn test_linux() -> Result<()> {
-    let platform = crate::vm_run::HostPlatform::detect()?;
-    let target = platform.musl_target();
-    let vm_dir = crate::vm_image::default_vm_dir();
-    let cargo_target = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("target"));
-
-    let kernel_path = vm_dir.join("boot").join("vmlinuz-virt");
-    if !kernel_path.exists() {
-        bail!(
-            "kernel not found at {}; run `cargo xtask build-vm-image` first",
-            kernel_path.display()
-        );
-    }
-
-    let compiler = ZigbuildCompiler::new(
-        vec!["miniboxd".to_string(), "mbx".to_string()],
-        vec!["miniboxd".to_string()],
-    );
-    let initramfs_builder = CpioInitramfsBuilder;
-    let vm_runner = QemuVmRunner::new(platform, vm_dir.clone());
-
-    run_pipeline(
-        &compiler,
-        &initramfs_builder,
-        &vm_runner,
-        target,
-        &vm_dir,
-        &cargo_target,
-        &kernel_path,
-    )
 }
 
 // ---------------------------------------------------------------------------

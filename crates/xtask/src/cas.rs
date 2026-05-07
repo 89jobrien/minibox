@@ -4,6 +4,8 @@
 //!   cas/<sha256>   — file content, named by sha256 of content
 //!   refs/<name>    — text file containing a sha256, maps name → CAS object
 
+#![allow(dead_code)] // TODO(#306): cas overlay used by vm_image pipeline; re-wire for smolvm
+
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
@@ -13,7 +15,11 @@ use std::{
 
 /// Return the default overlay directory: `~/.minibox/vm/overlay/`.
 pub fn default_overlay_dir() -> PathBuf {
-    crate::vm_image::default_vm_dir().join("overlay")
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".minibox")
+        .join("vm")
+        .join("overlay")
 }
 
 /// SHA-256 hash a file, returning the lowercase hex digest.

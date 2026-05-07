@@ -8,9 +8,6 @@
 //! |-------------|-------------------------------------------------------------|
 //! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
 //! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
-//! | `vm_image`  | VM image build: Alpine kernel + minibox agent (macOS/vz)    |
-//! | `vm_run`    | VM boot: interactive shell or test execution under QEMU      |
-
 use anyhow::{Result, bail};
 use std::{env, path::Path};
 use xshell::Shell;
@@ -28,8 +25,6 @@ mod protocol_sites;
 mod stale_names;
 mod test_image;
 mod test_linux;
-mod vm_image;
-mod vm_run;
 
 fn main() -> Result<()> {
     let task = env::args().nth(1);
@@ -69,24 +64,6 @@ fn main() -> Result<()> {
         Some("test-sandbox") => gates::test_sandbox(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
         Some("nuke-test-state") => cleanup::nuke_test_state(&sh),
-        Some("build-vm-image") => {
-            let force = env::args().any(|a| a == "--force");
-            let vm_dir = vm_image::default_vm_dir();
-            vm_image::build_vm_image(&vm_dir, force)
-        }
-        Some("run-vm") => {
-            let vm_dir = vm_image::default_vm_dir();
-            let platform = vm_run::HostPlatform::detect()?;
-            vm_run::run_vm_interactive(&vm_dir, &platform)
-        }
-        Some("test-vm") => {
-            let vm_dir = vm_image::default_vm_dir();
-            let cargo_target = env::var("CARGO_TARGET_DIR")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| std::path::Path::new("target").to_path_buf());
-            let platform = vm_run::HostPlatform::detect()?;
-            vm_run::test_vm(&vm_dir, &cargo_target, &platform)
-        }
         Some("cas-add") => {
             let file_path = env::args()
                 .nth(2)
@@ -116,7 +93,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some("coverage-check") => gates::coverage_check(&sh),
-        Some("test-linux") => test_linux::test_linux(),
+        Some("test-linux") => bail!("test-linux is not yet implemented for smolvm; see #306"),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
         Some("bench") => bench::bench(&sh, root),
@@ -163,13 +140,6 @@ fn main() -> Result<()> {
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
-            eprintln!(
-                "  build-vm-image   download Alpine kernel/rootfs, cross-compile agent, build initramfs"
-            );
-            eprintln!(
-                "  run-vm           boot VM with interactive shell (QEMU HVF, Ctrl-A X to exit)"
-            );
-            eprintln!("  test-vm          build musl test binaries + run in VM, stream results");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
             eprintln!(
                 "  test-linux       build image + load into minibox + run tests in container"

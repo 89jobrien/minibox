@@ -47,7 +47,6 @@ and root-required tests add ~700 more.
 | Sandbox                                      | ~17          | Linux       | yes    | **no**      |
 | CLI subprocess                               | 30           | any         | no     | **no**      |
 | krun conformance                             | ~29          | macOS/Linux | no     | **no**      |
-| VZ smoke                                     | ~1           | macOS       | no     | **no**      |
 | Protocol evolution                           | 11           | any         | no     | yes         |
 
 ---
@@ -80,7 +79,6 @@ and root-required tests add ~700 more.
 | Sandbox tests      | `cargo xtask test-sandbox`          | ~17 sandbox tests                |
 | CLI subprocess     | `just test-cli-subprocess`          | 30 CLI e2e tests                 |
 | krun conformance   | `cargo xtask test-krun-conformance` | ~29 tests                        |
-| VZ smoke/isolation | `just test-vz-isolation`            | ~1 test                          |
 | Coverage gate      | `cargo xtask coverage-check`        | handler.rs fn coverage threshold |
 
 ### Scope mismatches
@@ -111,7 +109,6 @@ and root-required tests add ~700 more.
 | `coverage-check`        | handler.rs fn coverage >= 80% gate                     |
 | `bench`                 | criterion benchmarks (trait_overhead + protocol_codec) |
 | `check-stale-names`     | audit workspace for banned old crate/binary names      |
-| `build-vm-image`        | Alpine kernel + minibox agent for VZ                   |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups          |
 
 ---

@@ -73,8 +73,6 @@ Set `RUST_LOG=debug` for verbose tracing output.
 cargo build --release                # all crates
 just build-release                   # optimised (macOS-safe)
 just build-linux                     # static musl binary (auto-detects arch)
-cargo xtask build-vm-image           # Alpine VM image for macOS VZ tests
-cargo xtask build-vm-image --force   # force re-download + recompile
 ```
 
 ## Testing
@@ -111,14 +109,11 @@ cargo xtask test-property
 ```bash
 just test-adapters           # Colima + handler adapter swap tests
 just test-cli-subprocess     # CLI subprocess integration tests
-just test-vz-isolation       # macOS VZ isolation (requires VM image)
 ```
 
 ### VM tests
 
 ```bash
-just run-vm                  # boot Alpine VM with interactive shell (QEMU HVF)
-just test-vm                 # cross-compile + run tests inside QEMU VM
 just test-linux              # dogfood: build image + run tests in container
 ```
 
@@ -163,7 +158,7 @@ GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
 
 | Variable               | Purpose                                    | Default                          |
 | ---------------------- | ------------------------------------------ | -------------------------------- |
-| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun, vz | `smolvm` (macOS) / `native` (Linux) |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun     | `smolvm` (macOS) / `native` (Linux) |
 | `MINIBOX_DATA_DIR`     | Image/container storage                    | `/var/lib/minibox` (root)        |
 | `MINIBOX_RUN_DIR`      | Socket/runtime directory                   | `/run/minibox`                   |
 | `MINIBOX_SOCKET_PATH`  | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
