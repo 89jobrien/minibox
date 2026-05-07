@@ -1,4 +1,4 @@
-pipeline: minibox_conformance
+pipeline: minibox_testsuite
 # Run the conformance suite and post a summary, mirroring .github/workflows/conformance.yml.
 # Requires: mise on PATH, cargo xtask test-conformance must pass on the current platform.
 #

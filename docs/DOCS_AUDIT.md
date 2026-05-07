@@ -4,7 +4,7 @@
 > Updated 2026-04-28: items 1-7 addressed (see Recommendations).
 > Updated 2026-05-05: ARCHITECTURE, CRATE_INVENTORY, CRATE_TIERS, FEATURE_MATRIX corrected
 > for 10-crate workspace, version 0.24.0, smolvm as default adapter, protocol variant counts,
-> minibox-crux-plugin and minibox-conformance added throughout, dockerbox/tailbox removed from
+> minibox-crux-plugin and minibox-testsuite added throughout, dockerbox/tailbox removed from
 > Platform tier table.
 > Updated 2026-05-06: ARCHITECTURE (GKE ImagePusher Y), FEATURE_MATRIX (GKE push Yes,
 > OTEL env vars documented), CRATE_TIERS (10 crates), STATE_MODEL (RwLock verified).

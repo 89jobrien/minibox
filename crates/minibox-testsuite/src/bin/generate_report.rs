@@ -11,8 +11,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use minibox_conformance::adapters;
-use minibox_conformance::harness::{ReportConfig, ReportGenerator, TestRunner};
+use minibox_testsuite::adapters;
+use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
 
 fn main() {
     let artifact_dir = std::env::var("CONFORMANCE_ARTIFACT_DIR")

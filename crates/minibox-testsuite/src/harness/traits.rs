@@ -55,7 +55,7 @@ impl TestResult {
 /// # Example
 ///
 /// ```rust,ignore
-/// use minibox_conformance::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
+/// use minibox_testsuite::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 ///
 /// struct RegistryPullCountTest;
 ///

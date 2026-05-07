@@ -6,8 +6,8 @@
 //!   `CONFORMANCE_ADAPTER`  — run only the named adapter (e.g. `registry`)
 //!   `CONFORMANCE_VERBOSE`  — set to `1` to print every test result, not just failures
 
-use minibox_conformance::adapters;
-use minibox_conformance::harness::{ReportConfig, ReportGenerator, TestRunner};
+use minibox_testsuite::adapters;
+use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
 
 fn main() {
     let adapter_filter = std::env::var("CONFORMANCE_ADAPTER").ok();

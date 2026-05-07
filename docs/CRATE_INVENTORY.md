@@ -1,7 +1,7 @@
 # Crate Inventory
 
 > Generated 2026-04-28 from automated codebase analysis.
-> Updated 2026-05-05: added minibox-crux-plugin and minibox-conformance; corrected version.
+> Updated 2026-05-05: added minibox-crux-plugin and minibox-testsuite; corrected version.
 > Updated 2026-05-06: date refresh; no structural changes.
 
 ## Summary
@@ -16,7 +16,7 @@
 | winbox                 | lib        | ~280   | 5            | 0                       | --                         |
 | mbx                    | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests           |
 | minibox-crux-plugin    | bin        | --     | --           | --                      | --                         |
-| minibox-conformance    | bin        | --     | --           | --                      | --                         |
+| minibox-testsuite      | bin        | --     | --           | --                      | --                         |
 | xtask                  | bin        | ~5k    | 15           | 0                       | --                         |
 
 **Estimated total:** ~48k+ lines of Rust across 159+ source files. All crates at
@@ -133,7 +133,7 @@ rm) over JSON-RPC stdio for integration with the crux agentic DSL runtime.
 
 ---
 
-## minibox-conformance
+## minibox-testsuite
 
 Conformance test harness for adapter trait contracts. Not published; used
 internally by `cargo xtask test-conformance`.

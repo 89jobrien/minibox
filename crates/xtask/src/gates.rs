@@ -75,7 +75,7 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Conformance suite: builds and runs the `minibox-conformance` harness.
+/// Conformance suite: builds and runs the `minibox-testsuite` harness.
 ///
 /// The harness executes all adapter conformance tests and emits JSON + JUnit XML
 /// reports to `artifacts/conformance/` via the `generate-report` binary.
@@ -84,12 +84,12 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 /// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
     // Build the harness binaries first so errors surface before test execution.
-    cmd!(sh, "cargo build -p minibox-conformance --bins")
+    cmd!(sh, "cargo build -p minibox-testsuite --bins")
         .run()
-        .context("failed to build minibox-conformance")?;
+        .context("failed to build minibox-testsuite")?;
 
     // Run the full suite via `run-conformance` (fast, exits 1 on failure).
-    let output = cmd!(sh, "cargo run -p minibox-conformance --bin run-conformance")
+    let output = cmd!(sh, "cargo run -p minibox-testsuite --bin run-conformance")
         .output()
         .context("run-conformance failed to launch")?;
 
@@ -108,7 +108,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     }
 
     // Generate JSON + JUnit XML reports.
-    let report_output = cmd!(sh, "cargo run -p minibox-conformance --bin generate-report")
+    let report_output = cmd!(sh, "cargo run -p minibox-testsuite --bin generate-report")
         .output()
         .context("generate-report failed to launch")?;
 
