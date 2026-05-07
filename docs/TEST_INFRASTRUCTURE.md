@@ -56,16 +56,17 @@ and root-required tests add ~700 more.
 
 8 workflows in `.github/workflows/`:
 
-| Workflow                | Trigger                                          | Key jobs                                                                                             |
-| ----------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `ci.yml` (Quality)      | all pushes + PRs                                 | lint, build-test-archive, test-unit, test-archive, audit/deny/machete (next/stable), geiger (stable) |
-| `stability-gates.yml`   | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                            |
-| `conformance.yml`       | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                  |
-| `bench-regression.yml`  | next/stable + dispatch                           | `cargo xtask bench` + 10% regression check                                                           |
-| `protocol-drift.yml`    | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                               |
-| `nightly.yml`           | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                          |
-| `release.yml`           | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                              |
-| `phased-deployment.yml` | dispatch only                                    | **disabled** (prints message)                                                                        |
+| Workflow              | Trigger                                          | Key jobs                                                                                                                       |
+| --------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                            |
+| `merge.yml`           | pushes to main/next/stable/feature/hotfix/chore  | lint+fmt, unit tests, protocol e2e (macOS + Linux); build-test-archive, test-archive, test-all-features, audit/deny/machete, e2e+integration (next/stable) |
+| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                |
+| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                      |
+| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                            |
+| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                         |
+| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                    |
+| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                        |
+| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                     |
 
 ---
 
@@ -109,7 +110,7 @@ and root-required tests add ~700 more.
 | `test-sandbox`          | sandbox tests (Linux+root)                             |
 | `coverage-check`        | handler.rs fn coverage >= 80% gate                     |
 | `bench`                 | criterion benchmarks (trait_overhead + protocol_codec) |
-| `bench-vps`             | benchmarks on VPS (optional --commit --push)           |
+| `check-stale-names`     | audit workspace for banned old crate/binary names      |
 | `build-vm-image`        | Alpine kernel + minibox agent for VZ                   |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups          |
 

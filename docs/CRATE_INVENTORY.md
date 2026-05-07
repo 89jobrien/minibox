@@ -120,14 +120,15 @@ CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.
 
 **Subcommands:** run, ps, stop, pause, resume, rm, pull, exec, logs, events,
-prune, rmi, sandbox, snapshot (save/restore/list), load.
+prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.
 
 ---
 
 ## minibox-crux-plugin
 
 Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
-rm) over JSON-RPC stdio for integration with the crux agentic DSL runtime.
+rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
+the crux agentic DSL runtime.
 
 **Depends on:** minibox-core, cruxx-plugin (git dep).
 
@@ -149,6 +150,6 @@ internally by `cargo xtask test-conformance`.
 Development tool. All CI gate commands.
 
 **Key commands:** pre-commit, prepush, test-unit, test-conformance,
-test-krun-conformance, test-property, test-integration, test-e2e-suite,
-test-sandbox, bench, bench-vps, build-vm-image, run-vm, test-vm, bump,
-nuke-test-state, clean-artifacts, docs-lint, preflight.
+test-krun-conformance, test-property, test-integration, test-e2e, test-e2e-suite,
+test-system-suite, test-sandbox, bench, build-vm-image, run-vm, test-vm, bump,
+nuke-test-state, clean-artifacts, lint-docs, preflight, doctor, check-stale-names.

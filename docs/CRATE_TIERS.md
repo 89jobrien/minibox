@@ -109,9 +109,8 @@ in release binaries.
 
 Non-Rust modules with their own toolchain and release lifecycle.
 
-| Module     | Path        | Language | Role                                                                                                                                                                     |
-| ---------- | ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agentbox` | `agentbox/` | Go       | AI agent tooling: `cmd/agentbox/` (council, meta-agent CLI), `cmd/mbx-commit-msg/` (commit message generator). Build: `just agentbox-build`. Test: `just agentbox-test`. |
+No active external modules. The `agentbox/` Go module (council agent, commit-msg tool)
+was removed during the v0.23.0 consolidation; only a pre-built binary artifact remains.
 
 ---
 

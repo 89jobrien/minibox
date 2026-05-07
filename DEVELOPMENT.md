@@ -143,12 +143,10 @@ just test-all                # nuke state -> doctor -> unit + integration + e2e 
 ## Benchmarks
 
 ```bash
-cargo xtask bench                          # run locally, save to bench/results/
-cargo xtask bench-vps                      # run on VPS, fetch results
-cargo xtask bench-vps --commit --push      # ... and commit + push
-just bench-sync                            # sync VPS results to local jsonl
-just flamegraph [suite]                    # profile with samply/flamegraph
-just bench-agent report                    # AI bench analysis
+cargo xtask bench            # run locally, save to bench/results/
+just bench-sync              # sync VPS results to local jsonl
+just flamegraph [suite]      # profile with samply/flamegraph
+just bench-agent report      # AI bench analysis
 ```
 
 ## CI Gates
@@ -158,14 +156,14 @@ Local validation should match CI. The two commands that matter:
 1. **Before every commit:** `cargo xtask pre-commit`
 2. **Before every push:** `cargo xtask prepush`
 
-GitHub Actions (`.github/workflows/ci.yml`) runs the same xtask commands plus
-`cargo deny` and `cargo audit` on the `next` and `stable` branches.
+GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
+`cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `stable` branches.
 
 ## Environment Variables
 
 | Variable               | Purpose                                    | Default                          |
 | ---------------------- | ------------------------------------------ | -------------------------------- |
-| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, vz     | `native`                         |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun, vz | `smolvm` (macOS) / `native` (Linux) |
 | `MINIBOX_DATA_DIR`     | Image/container storage                    | `/var/lib/minibox` (root)        |
 | `MINIBOX_RUN_DIR`      | Socket/runtime directory                   | `/run/minibox`                   |
 | `MINIBOX_SOCKET_PATH`  | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
