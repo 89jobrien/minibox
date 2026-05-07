@@ -8,6 +8,10 @@
 > Platform tier table.
 > Updated 2026-05-06: ARCHITECTURE (GKE ImagePusher Y), FEATURE_MATRIX (GKE push Yes,
 > OTEL env vars documented), CRATE_TIERS (10 crates), STATE_MODEL (RwLock verified).
+> Updated 2026-05-07: ARCHITECTURE (colima push/commit/build -- not wired, vz not selectable,
+> colima crate corrected to minibox), FEATURE_MATRIX (crate columns, krun Experimental, cgroups
+> v2 Lima VM/VM, gke events Yes, docker_desktop note, vz note), ROADMAP (krun moved to done),
+> TEST_INFRASTRUCTURE (macOS nextest count 506).
 
 ## Top-Level Docs Status
 
@@ -17,7 +21,7 @@
 | STATE_MODEL.md                 | **current**  | Clean (RwLock verified 2026-05-06)                                                                                                         |
 | STABILITY_CHECKLIST.md         | **current**  | Clean                                                                                                                                      |
 | CRATE_TIERS.md                 | **current**  | Clean                                                                                                                                      |
-| ROADMAP.md                     | **stale**    | Only covers dogfooding; missing engineering roadmap (krun wiring, handler coverage, Windows phase 2)                                       |
+| ROADMAP.md                     | **current**  | Engineering P0-P3 sections present; krun moved to done 2026-05-07                                                                          |
 | PRERELEASE_CHANGELOG.md        | **current**  | Minor: minibox-agent revert not explicitly noted; no target version on [Unreleased]                                                        |
 | minibox-agent-design.md        | **outdated** | Describes removed crates (minibox-agent, minibox-llm) with no "removed" header                                                             |
 | parallel-layer-pulls-design.md | **outdated** | Feature shipped in v0.1.0; all crate paths stale (minibox-lib, linuxbox)                                                                   |
@@ -55,10 +59,9 @@ extracted crates (dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench,
 searchbox). This workspace does not exist at the expected path. Any
 cross-reference is currently broken.
 
-### 4. ROADMAP.md is undersized
+### 4. ~~ROADMAP.md is undersized~~ RESOLVED 2026-04-28
 
-Only covers dogfooding ideas. Missing engineering priorities: handler coverage
-gate, krun daemon wiring, dockerbox shim, ATIF implementation, Windows phase 2.
+Engineering P0-P3 sections added. krun daemon wiring marked done 2026-05-07.
 
 ### 5. dagu-integration.md is the most misleading doc
 

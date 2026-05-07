@@ -1,6 +1,6 @@
 # Minibox Roadmap
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 ## Engineering Priorities
 
@@ -14,13 +14,16 @@ Last updated: 2026-05-06
 
 ### P1 -- Platform Wiring
 
-- **krun daemon wiring**: `KrunRuntime`/`KrunRegistry`/`KrunFilesystem`/
-  `KrunLimiter` adapters exist in macbox. krun is the fallback when smolvm
-  binary is absent; smolvm remains the primary default.
 - **Windows phase 2**: Named Pipe server, HCS/WSL2 adapter wiring in
   winbox. Currently a stub.
 - **VZ Apple bug**: VZ.framework adapter blocked by VZErrorInternal on
   macOS 26 ARM64 (GH #61). Waiting on Apple fix.
+
+### Done (recently shipped)
+
+- **krun daemon wiring**: `KrunRuntime`/`KrunRegistry`/`KrunFilesystem`/
+  `KrunLimiter` all wired in miniboxd. 31 conformance tests pass. krun is
+  the fallback when smolvm binary is absent; smolvm remains the primary default.
 
 ### P2 -- Feature Gaps
 

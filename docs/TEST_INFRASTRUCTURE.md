@@ -1,7 +1,7 @@
 # Test Infrastructure Report
 
 > Generated 2026-04-27 from automated codebase analysis.
-> Updated 2026-05-06: date refresh; no structural changes.
+> Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).
 
 ## Test Counts
 
@@ -11,7 +11,7 @@
 | Inline (#[cfg(test)] in src/)             | ~728         |
 | **Grand total**                           | **~1,467**   |
 
-Note: `cargo nextest` on macOS reports ~760 — that's the cross-platform
+Note: `cargo nextest` on macOS reports ~506 — that's the cross-platform
 subset (lib tests + included integration files). Linux-only, feature-gated,
 and root-required tests add ~700 more.
 

@@ -3,6 +3,8 @@
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-05: crate count, version, dep graph, default adapter, protocol counts.
 > Updated 2026-05-06: GKE adapter ImagePusher wired (OciPushAdapter via oci_push_adapter).
+> Updated 2026-05-07: colima push/commit/build corrected to -- (not wired in daemon); colima
+> wiring note corrected (minibox crate, not macbox); vz wiring clarified (not selectable).
 
 ## Workspace Overview
 
@@ -87,9 +89,9 @@ All defined in `minibox-core/src/domain.rs` and re-exported via `minibox`.
 | NetworkProvider    |   Y    | noop |  noop  |  noop  |  noop  |  --  |  --  |  --  |   --   |
 | MetricsRecorder    |   Y    |  Y   |   --   |   Y    | noop\* |  --  |  --  |  --  |   --   |
 | ExecRuntime        |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
-| ImagePusher        |   Y    |  Y   |   Y    |   --   |   --   |  --  |  --  |  --  |   --   |
-| ContainerCommitter |   Y    |  --  |   Y    |   --   |   --   |  --  |  --  |  --  |   --   |
-| ImageBuilder       |   Y    |  --  |   Y    |   --   |   --   |  --  |  --  |  --  |   --   |
+| ImagePusher        |   Y    |  Y   |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
+| ContainerCommitter |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
+| ImageBuilder       |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
 | VmCheckpoint       |  noop  | noop |  noop  |  noop  |  noop  |  --  |  --  |  --  |   --   |
 
 Key: **Y** = real impl wired, **noop** = no-op wired, **stub** = returns Err (library only),
@@ -104,10 +106,10 @@ broker — an inconsistency vs native/gke/smolvm.
 | ----------------------------- | ------------------------------------------------ | ----------------------- | ------------ |
 | native                        | `build_native_handler_dependencies`              | `native`                | Linux only   |
 | gke                           | `build_gke_handler_dependencies`                 | `gke`                   | Linux only   |
-| colima                        | `build_colima_handler_dependencies` (via macbox) | `colima`                | Unix         |
+| colima                        | `build_colima_handler_dependencies`              | `colima`                | Unix         |
 | smolvm                        | `build_smolvm_handler_dependencies`              | `smolvm` (default)      | Unix         |
 | krun                          | `build_krun_handler_dependencies`                | `krun` (fallback)       | Unix         |
-| vz                            | macbox internal (`vz_main()`)                    | `vz` + feature flag     | macOS only   |
+| vz                            | **not wired** (no AdapterSuite variant)          | --                      | library only |
 | vf, hcs, wsl2, docker_desktop | **not wired**                                    | --                      | library only |
 
 ---
