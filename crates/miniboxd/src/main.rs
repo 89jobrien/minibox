@@ -14,12 +14,10 @@
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
 //! - **gke** (Linux only): proot (ptrace), copy FS, no-op limiter. Unprivileged.
 //! - **colima**: Colima/Lima VM via limactl + nerdctl. Cross-platform.
-//! - **vz** (macOS only, feature-gated, opt-in): VZ.framework micro-VM.
 //!
 //! # Startup sequence
-//! 1. Detect VZ adapter — if so, use GCD dispatch_main pattern (macOS only).
-//! 2. Otherwise: build tokio runtime, run `run_daemon()`.
-//! 3. `run_daemon()`: tracing → adapter selection → privilege check →
+//! 1. Build tokio runtime, run `run_daemon()`.
+//! 2. `run_daemon()`: tracing → adapter selection → privilege check →
 //!    path resolution → directory creation → state load → dependency injection →
 //!    socket bind → signal handler → accept loop.
 
@@ -33,8 +31,6 @@ async fn main() -> anyhow::Result<()> {
 // ── Unix (Linux + macOS) ──────────────────────────────────────────────────
 #[cfg(unix)]
 fn main() {
-    use miniboxd::adapter_registry;
-
     // Parse --restart flag before building the tokio runtime.
     let args: Vec<String> = std::env::args().collect();
     let restart = args.iter().any(|a| a == "--restart");
@@ -43,18 +39,7 @@ fn main() {
         graceful_restart();
     }
 
-    // Peek at the adapter before building the tokio runtime.
-    // VZ needs GCD dispatch_main on the real main thread.
-    let _adapter_name = std::env::var("MINIBOX_ADAPTER")
-        .unwrap_or_else(|_| adapter_registry::DEFAULT_ADAPTER_SUITE.to_string());
-
-    #[cfg(all(target_os = "macos", feature = "vz"))]
-    if _adapter_name == "vz" {
-        vz_main();
-        // vz_main never returns (dispatch_main is divergent)
-    }
-
-    // All non-VZ adapters: standard tokio runtime.
+    // Standard tokio runtime for all adapters.
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -95,65 +80,6 @@ fn graceful_restart() {
             eprintln!("miniboxd: --restart: pkill failed: {e} (continuing)");
         }
     }
-}
-
-/// VZ adapter entry point — keeps the main thread for GCD dispatch_main.
-///
-/// VZ.framework (Tahoe/macOS 26+) asserts that VZVirtualMachineConfiguration
-/// and VZVirtualMachine are constructed on the GCD main queue. `#[tokio::main]`
-/// parks the main thread inside the tokio scheduler, so dispatch_sync to
-/// the main queue from any worker thread deadlocks.
-///
-/// Fix: build the tokio runtime on a background thread, keep the main thread
-/// free, then call `dispatch_main()` to spin the GCD main-queue runloop.
-#[cfg(all(target_os = "macos", feature = "vz"))]
-fn vz_main() -> ! {
-    #[link(name = "System", kind = "dylib")]
-    unsafe extern "C" {
-        static _dispatch_main_q: std::ffi::c_void;
-        fn dispatch_async_f(
-            queue: *const std::ffi::c_void,
-            context: *mut std::ffi::c_void,
-            work: unsafe extern "C" fn(*mut std::ffi::c_void),
-        );
-        fn dispatch_main() -> !;
-    }
-
-    // SAFETY: ctx is a valid Box<i32> allocated below; called exactly once by GCD.
-    unsafe extern "C" fn exit_trampoline(ctx: *mut std::ffi::c_void) {
-        // SAFETY: ctx was created via Box::into_raw(Box::new(code)) below.
-        let code = unsafe { *Box::from_raw(ctx as *mut i32) };
-        std::process::exit(code);
-    }
-
-    // VZ adapter delegates to macbox::start() which handles the VZ-specific
-    // dispatch_sync_f pattern for VM creation on the GCD main queue.
-    std::thread::Builder::new()
-        .name("tokio-main".into())
-        .spawn(move || {
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .expect("failed to build tokio runtime");
-            let code = match rt.block_on(macbox::start()) {
-                Ok(()) => 0i32,
-                Err(e) => {
-                    eprintln!("miniboxd: fatal: {e:#}");
-                    1
-                }
-            };
-            // SAFETY: _dispatch_main_q is a valid dispatch queue; ctx is a
-            // heap-allocated i32 owned by exit_trampoline.
-            unsafe {
-                let ctx = Box::into_raw(Box::new(code)) as *mut std::ffi::c_void;
-                dispatch_async_f(&_dispatch_main_q, ctx, exit_trampoline);
-            }
-        })
-        .expect("failed to spawn tokio-main thread");
-
-    // SAFETY: dispatch_main() is the documented entry point for GCD-based CLI
-    // processes on macOS. It does not return.
-    unsafe { dispatch_main() }
 }
 
 // ── Imports (unix only) ───────────────────────────────────────────────────
