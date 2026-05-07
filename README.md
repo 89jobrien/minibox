@@ -1,6 +1,5 @@
 # minibox
 
-[![CI](https://github.com/89jobrien/minibox/actions/workflows/ci.yml/badge.svg)](https://github.com/89jobrien/minibox/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
