@@ -43,6 +43,7 @@ impl ProtocolFixture {
             .env("MINIBOX_DATA_DIR", data_dir.path())
             .env("MINIBOX_RUN_DIR", run_dir.path())
             .env("MINIBOX_SOCKET_PATH", &socket_path)
+            .env("MINIBOX_METRICS_ADDR", "127.0.0.1:0")
             .env("RUST_LOG", "miniboxd=debug")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
