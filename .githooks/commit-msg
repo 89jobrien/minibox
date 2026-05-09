@@ -1,0 +1,21 @@
+#!/bin/sh
+commit_msg_file=$1
+commit_msg=$(cat "$commit_msg_file")
+
+# Allow merge commits and reverts
+if echo "$commit_msg" | grep -qE "^(Merge|Revert)"; then
+    exit 0
+fi
+
+# Check format (warn only, does not fail)
+if ! echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|obs)(\(.+\))?: .+"; then
+    echo "Warning: Commit message doesn't follow conventional format"
+    echo "Recommended format: type(scope): subject"
+    echo "Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, obs"
+    echo
+    echo "Your commit message:"
+    echo "$commit_msg"
+    echo
+fi
+
+exit 0

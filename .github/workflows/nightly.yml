@@ -21,12 +21,27 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
-          cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
+          geiger_status=0
+          : > geiger-report.txt
+          for manifest in \
+            crates/minibox/Cargo.toml \
+            crates/minibox-macros/Cargo.toml \
+            crates/mbx/Cargo.toml \
+            crates/miniboxd/Cargo.toml
+          do
+            printf '\n## %s\n' "$manifest" | tee -a geiger-report.txt
+            cargo geiger --manifest-path "$manifest" 2>&1 | tee -a geiger-report.txt
+            status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then
+              geiger_status="$status"
+            fi
+          done
           # Extract unsafe counts and write to job summary
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit "$geiger_status"
       - name: upload geiger report
         if: always()
         uses: actions/upload-artifact@v4

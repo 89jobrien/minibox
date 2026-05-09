@@ -4,6 +4,13 @@
 # minor — new files added (new crate, new module)
 # major — manual only (cargo xtask bump major)
 
+# Re-entry guard: the global hook calls back into this file; exit immediately
+# if we are already executing (prevents infinite mutual recursion).
+if [ -n "${MINIBOX_PRE_COMMIT_RUNNING:-}" ]; then
+  exit 0
+fi
+export MINIBOX_PRE_COMMIT_RUNNING=1
+
 RUST_STAGED=$(git diff --cached --name-only \
   | grep -E '\.(rs|toml)$' \
   | grep -v '^Cargo\.lock$' || true)
