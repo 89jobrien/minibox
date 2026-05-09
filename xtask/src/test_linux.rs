@@ -249,6 +249,7 @@ pub fn run_pipeline(
 #[cfg(test)]
 pub mod mocks {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     /// Records `compile()` calls and optionally injects a failure.

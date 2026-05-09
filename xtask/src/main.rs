@@ -18,6 +18,7 @@ mod cas;
 mod cgroup_tests;
 mod cleanup;
 mod context;
+mod daily_orchestration;
 mod docs_lint;
 mod gates;
 mod preflight;
@@ -97,6 +98,14 @@ fn main() -> Result<()> {
             let save = env::args().any(|a| a == "--save");
             context::context(&sh, root, save)
         }
+        Some("daily-orchestration") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            if args.iter().any(|a| a != "--dry-run") {
+                bail!("usage: cargo xtask daily-orchestration [--dry-run]");
+            }
+            daily_orchestration::run(dry_run)
+        }
         Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-sites") => {
             let file = env::args()
@@ -157,6 +166,9 @@ fn main() -> Result<()> {
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
+            eprintln!(
+                "  daily-orchestration [--dry-run]  run the Claude daily orchestration workflow"
+            );
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(
                 "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"
