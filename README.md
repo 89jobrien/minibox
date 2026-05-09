@@ -16,7 +16,7 @@ keeps adapter suites swappable at startup with no recompile.
 Most container runtimes are large, opaque, and hard to embed or extend. Minibox is an
 intentionally small Rust implementation where every layer — protocol, domain traits, adapters,
 daemon — is readable and swappable. It exists as both a working runtime and a reference for
-how to structure systems software in Rust: hexagonal architecture, async/sync boundaries,
+how I structure systems software in Rust: hexagonal architecture, async/sync boundaries,
 structured tracing, property testing.
 
 ---
