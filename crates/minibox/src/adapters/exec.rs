@@ -534,6 +534,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[ignore] // requires nsenter privileges; run in privileged CI only
     fn pty_exec_echo_roundtrip() {
         use tokio::sync::mpsc;
 
