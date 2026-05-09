@@ -31,11 +31,7 @@ fn main() -> Result<()> {
 
     // Set process CWD to workspace root before Shell::new() so xshell does not
     // inherit a stale/missing directory (e.g. a deleted git worktree).
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     env::set_current_dir(root)?;
 
     let sh = Shell::new()?;
