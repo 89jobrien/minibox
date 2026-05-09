@@ -160,9 +160,10 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
 
-  cancel-on-failure:
-    name: cancel on failure
+  ci-ok:
+    name: CI passed
     runs-on: ubuntu-latest
+    if: always()
     needs:
       - lint
       - test-unit
@@ -175,14 +176,29 @@ jobs:
       - test-e2e
       - test-integration
       - test-protocol-e2e-linux
-    if: failure()
     steps:
-      - name: cancel workflow run
-        run: gh run cancel $RUN_ID --repo $REPO
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-          REPO: ${{ github.repository }}
+      - name: check job results
+        run: |
+          results=(
+            "${{ needs.lint.result }}"
+            "${{ needs.test-unit.result }}"
+            "${{ needs.build-test-archive.result }}"
+            "${{ needs.test-archive.result }}"
+            "${{ needs.test-all-features.result }}"
+            "${{ needs.audit.result }}"
+            "${{ needs.deny.result }}"
+            "${{ needs.machete.result }}"
+            "${{ needs.test-e2e.result }}"
+            "${{ needs.test-integration.result }}"
+            "${{ needs.test-protocol-e2e-linux.result }}"
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "CI failed: at least one job reported $r"
+              exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped"
 
   cleanup-linux:
     name: cleanup (Linux)
