@@ -12,6 +12,9 @@
 > colima crate corrected to minibox), FEATURE_MATRIX (crate columns, krun Experimental, cgroups
 > v2 Lima VM/VM, gke events Yes, docker_desktop note, vz note), ROADMAP (krun moved to done),
 > TEST_INFRASTRUCTURE (macOS nextest count 506).
+> Updated 2026-05-08: vz adapter dropped across ARCHITECTURE, FEATURE_MATRIX, ROADMAP,
+> CRATE_INVENTORY, GOTCHAS, PRERELEASE_CHANGELOG; QEMU xtask commands removed from
+> CRATE_INVENTORY and PRERELEASE_CHANGELOG.
 
 ## Top-Level Docs Status
 

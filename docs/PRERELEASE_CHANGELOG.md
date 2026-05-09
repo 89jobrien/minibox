@@ -35,8 +35,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - krun fully wired: `KrunRuntime`, `KrunRegistry`, `KrunFilesystem`,
   `KrunLimiter` adapters wired into miniboxd; 31 conformance tests pass
 - `SmolVM` adapter suite wired into `miniboxd`
-- QEMU cross-platform VM runner — `HostPlatform` detection, `VmRunner`/`VmHandle`,
-  `build-vm-image` with platform-aware cross-compilation
 
 **Tailnet integration:**
 
@@ -128,16 +126,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Structured tracing contract — canonical `key = value` fields, message prefix convention,
   severity rules enforced across all handlers
 
-**macOS / VZ.framework:**
-
-- VM image pipeline — `cargo xtask build-vm-image`; downloads Alpine aarch64 kernel + initrd,
-  cross-compiles `minibox-agent`, assembles bootable VM image directory
-- VZ.framework adapter — `VzAdapter` implementing all four domain traits via JSON-over-newline
-  commands to `minibox-agent` over vsock; `VzProxy`; `MINIBOX_ADAPTER=vz`
-- vsock I/O bridge — streams container stdout/stderr from VM to host
-- virtiofs host-path mounts — OCI layers and bind mounts via virtio shared directories
-- macOS Tahoe GCD main-queue dispatch fix for VZ.framework
-
 **Dashbox TUI:**
 
 - Initial `dashbox` binary (`crates/dashbox`) — 8-tab Ratatui TUI: Agents, Bench, Bench History,
@@ -179,7 +167,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `cargo xtask test-conformance` — backend conformance report emission (Markdown + JSON)
 - `cargo xtask test-linux` — cross-compile Linux test suite into OCI image, load + run via minibox
 - `cargo xtask bench-vps` — VPS bench with optional `--commit`/`--push` (explicit opt-in)
-- `cargo xtask build-vm-image` — macOS VM image pipeline (cached, `--force` to rebuild)
 - VPS bench safety — `sshpass -f <tmpfile>` instead of `-p <password>` to prevent credential leak
 - Pre-push commit range resolver — hooks correctly identify the push range for new branches
 - Gitea primary CI + GitHub mirror — 5-job pipeline (unit → property → integration+e2e → bench)
@@ -224,7 +211,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Stdin relay fd exhaustion, exec registry leak, SIGWINCH reliability (#57 #58 #59)
 - Colima: `docker images --filter` for `has_image`, strip `library/` prefix for nerdctl
 - Colima: drop to `SUDO_USER` before invoking `limactl` when running as root
-- VZ: GCD main-queue dispatch for `connectToPort:completionHandler:`
 - CI: unit tests run on all branches (not just `next`/`stable`)
 - CI: `rust-cache` removed from self-hosted jobs (shared `CARGO_TARGET_DIR`)
 - CI: mise shims added to PATH before `rust-cache` on self-hosted runner

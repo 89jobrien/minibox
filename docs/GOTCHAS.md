@@ -1,6 +1,6 @@
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -69,13 +69,8 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
 - **Linux-only cfg-gated imports** — manually verify all `use` statements in Linux-only modules
   (`cgroup_tests.rs`, `bridge.rs`, etc.) — the macOS compiler won't catch missing imports.
 
-## macbox / VZ
+## macbox
 
-- **`MINIBOX_ADAPTER=vz` requires compile-time feature** — build with `--features vz` for
-  `macbox`/`miniboxd`; the env var alone is not enough.
-- **Duplicate `pub mod vz;` after merges** — `crates/macbox/src/lib.rs` should have exactly
-  one `#[cfg(feature = "vz")] pub mod vz;`. Merges can silently introduce a duplicate
-  unconditional declaration; `cargo check` catches it immediately.
 - **Stale crate name** — the lib crate was briefly `linuxbox` (2026-04-21 to 2026-04-26). Any
   `linuxbox::` reference is stale; use `minibox::`.
 - **App Sandbox blocks fork** — see "macOS Notarization / App Sandbox Constraints" in CLAUDE.md

@@ -3,6 +3,8 @@
 > Generated 2026-04-28 from automated codebase analysis.
 > Updated 2026-05-05: added minibox-crux-plugin and minibox-conformance; corrected version.
 > Updated 2026-05-06: date refresh; no structural changes.
+> Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
+> build-vm-image/run-vm/test-vm xtask commands removed.
 
 ## Summary
 
@@ -11,8 +13,8 @@
 | minibox-core           | lib        | ~12.6k | 28           | 7 integration + inline  | test-utils, fuzzing        |
 | minibox                | lib        | ~21.5k | 71           | 36 integration + inline | test-utils, metrics, otel  |
 | minibox-macros         | proc-macro | ~280   | 2            | 0                       | --                         |
-| miniboxd               | bin+lib    | ~1.6k  | 4            | 7 integration + inline  | metrics, otel, tailnet, vz |
-| macbox                 | lib        | ~3.6k  | 16           | 4                       | vz                         |
+| miniboxd               | bin+lib    | ~1.6k  | 4            | 7 integration + inline  | metrics, otel, tailnet |
+| macbox                 | lib        | ~3.6k  | 16           | 4                       | --                     |
 | winbox                 | lib        | ~280   | 5            | 0                       | --                         |
 | mbx                    | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests           |
 | minibox-crux-plugin    | bin        | --     | --           | --                      | --                         |
@@ -100,8 +102,6 @@ macOS daemon implementation.
   `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl
 - **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
   libkrun micro-VMs (HVF on macOS, KVM on Linux)
-- **VZ** (feature-gated): VZ.framework + vsock, requires macOS 26+,
-  blocked by VZErrorInternal Apple bug (GH #61)
 
 ---
 
@@ -151,5 +151,5 @@ Development tool. All CI gate commands.
 
 **Key commands:** pre-commit, prepush, test-unit, test-conformance,
 test-krun-conformance, test-property, test-integration, test-e2e, test-e2e-suite,
-test-system-suite, test-sandbox, bench, build-vm-image, run-vm, test-vm, bump,
-nuke-test-state, clean-artifacts, lint-docs, preflight, doctor, check-stale-names.
+test-system-suite, test-sandbox, bench, bump, nuke-test-state, clean-artifacts,
+lint-docs, preflight, doctor, check-stale-names.

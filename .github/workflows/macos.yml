@@ -1,8 +1,14 @@
-name: PR
+name: macOS
 
 on:
+  push:
+    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
   pull_request:
     branches: [main, next]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -10,7 +16,7 @@ env:
 jobs:
   lint:
     name: lint + fmt
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -18,12 +24,12 @@ jobs:
       - name: cargo fmt + clippy + check
         run: |
           cargo fmt --all --check
-          cargo clippy -p minibox -p minibox-macros -p mbx -p miniboxd -p minibox-core -p winbox -- -D warnings
+          cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
           cargo check --workspace
 
   test-unit:
-    name: unit tests
-    runs-on: ubuntu-latest
+    name: unit tests (macOS)
+    runs-on: macos-latest
     needs: lint
     steps:
       - uses: actions/checkout@v4
@@ -33,12 +39,25 @@ jobs:
         with:
           tool: cargo-nextest
       - name: cargo nextest run (unit tests)
-        run: cargo nextest run --workspace --exclude macbox --lib
+        run: cargo nextest run --workspace --lib
+
+  test-protocol-e2e:
+    name: protocol e2e (macOS)
+    runs-on: macos-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build daemon + cli
+        run: cargo build --release -p miniboxd -p mbx
+      - name: protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
 
   cancel-on-failure:
     name: cancel on failure
     runs-on: ubuntu-latest
-    needs: [lint, test-unit]
+    needs: [lint, test-unit, test-protocol-e2e]
     if: failure()
     steps:
       - name: cancel workflow run

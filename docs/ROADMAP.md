@@ -1,6 +1,6 @@
 # Minibox Roadmap
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ## Engineering Priorities
 
@@ -16,8 +16,6 @@ Last updated: 2026-05-07
 
 - **Windows phase 2**: Named Pipe server, HCS/WSL2 adapter wiring in
   winbox. Currently a stub.
-- **VZ Apple bug**: VZ.framework adapter blocked by VZErrorInternal on
-  macOS 26 ARM64 (GH #61). Waiting on Apple fix.
 
 ### Done (recently shipped)
 

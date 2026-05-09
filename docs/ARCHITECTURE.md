@@ -6,6 +6,8 @@
 > Updated 2026-05-07: colima push/commit/build corrected to -- (not wired in daemon); colima
 > wiring note corrected (minibox crate, not macbox); vz wiring row corrected (selectable via
 > macbox env-var branch, feature-gated, macOS only — not in AdapterSuite enum).
+> Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
+> removed.
 
 ## Workspace Overview
 
@@ -18,7 +20,7 @@ minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain trait
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
     ^     ^
-macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm/vz) | Windows stub
+macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
     ^          ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
@@ -95,6 +97,8 @@ All defined in `minibox-core/src/domain.rs` and re-exported via `minibox`.
 | ImageBuilder       |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
 | VmCheckpoint       |  noop  | noop |  noop  |  noop  |  noop  |  --  |  --  |  --  |   --   |
 
+Note: `vz` (VZ.framework) adapter was removed in 2026-05-08. See git history for prior state.
+
 Key: **Y** = real impl wired, **noop** = no-op wired, **stub** = returns Err (library only),
 **--** = not implemented
 
@@ -110,7 +114,6 @@ broker — an inconsistency vs native/gke/smolvm.
 | colima                        | `build_colima_handler_dependencies`              | `colima`                | Unix         |
 | smolvm                        | `build_smolvm_handler_dependencies`              | `smolvm` (default)      | Unix         |
 | krun                          | `build_krun_handler_dependencies`                | `krun` (fallback)       | Unix         |
-| vz                            | `macbox::start_vz()` (feature-gated, macOS only) | `vz` + `--features vz`  | macOS only   |
 | vf, hcs, wsl2, docker_desktop | **not wired**                                    | --                      | library only |
 
 ---

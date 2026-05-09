@@ -2,72 +2,71 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ---
 
 ## Adapter Suites
 
-| Adapter  | Platform             | Status       | Crate   | Default?                     |
-| -------- | -------------------- | ------------ | ------- | ---------------------------- |
-| `native` | Linux (x86_64/arm64) | Production   | minibox | --                           |
-| `gke`    | Linux (GKE pods)     | Production   | minibox | --                           |
-| `colima` | macOS/Linux (Colima) | Experimental | minibox | --                           |
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (falls back to `krun`)   |
-| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback when smolvm absent  |
-| `vz`     | macOS (VZ.framework) | Blocked      | macbox  | -- (not wired into daemon)   |
-| `winbox` | Windows              | Stub         | winbox  | --                           |
+| Adapter  | Platform             | Status       | Crate   | Default?                    |
+| -------- | -------------------- | ------------ | ------- | --------------------------- |
+| `native` | Linux (x86_64/arm64) | Production   | minibox | --                          |
+| `gke`    | Linux (GKE pods)     | Production   | minibox | --                          |
+| `colima` | macOS/Linux (Colima) | Experimental | minibox | --                          |
+| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (falls back to `krun`)  |
+| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback when smolvm absent |
+| `winbox` | Windows              | Stub         | winbox  | --                          |
 
 ---
 
 ## Capability Matrix
 
-| Feature                 | native | gke  | colima  | smolvm | krun | vz      | winbox |
-| ----------------------- | ------ | ---- | ------- | ------ | ---- | ------- | ------ |
-| **Container lifecycle** |        |      |         |        |      |         |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| pause/resume            | Yes    | No   | No      | No     | No   | Blocked | No     |
-| exec (-it)              | Yes    | No   | Limited | No     | No   | Blocked | No     |
-| logs                    | Yes    | No   | Limited | No     | No   | Blocked | No     |
-| events                  | Yes    | Yes  | No      | No     | No   | Blocked | No     |
-| **Image management**    |        |      |         |        |      |         |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| prune / rmi             | Yes    | No   | No      | No     | No   | Blocked | No     |
-| push (exp)              | Yes    | Yes  | No      | No     | No   | Blocked | No     |
-| commit (exp)            | Yes    | No   | No      | No     | No   | Blocked | No     |
-| build (exp)             | Yes    | No   | No      | No     | No   | Blocked | No     |
-| **Isolation**           |        |      |         |        |      |         |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Blocked | No     |
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Blocked | No     |
-| **Networking**          |        |      |         |        |      |         |        |
-| Bridge (exp)            | Yes    | No   | No      | No     | No   | Blocked | No     |
-| Port forwarding         | No     | No   | No      | No     | No   | No      | No     |
-| DNS                     | No     | No   | No      | No     | No   | No      | No     |
-| **Mounts & Privileges** |        |      |         |        |      |         |        |
-| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | Blocked | No     |
-| Privileged mode         | Yes    | No   | No      | No     | No   | Blocked | No     |
-| **Security**            |        |      |         |        |      |         |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes     | Yes    |
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes     | Yes    |
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes     | Yes    |
-| **State persistence**   |        |      |         |        |      |         |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| PID reconciliation      | Yes    | No   | No      | No     | No   | Blocked | No     |
-| **Observability**       |        |      |         |        |      |         |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Feature                 | native | gke  | colima  | smolvm | krun | winbox |
+| ----------------------- | ------ | ---- | ------- | ------ | ---- | ------ |
+| **Container lifecycle** |        |      |         |        |      |        |
+| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| pause/resume            | Yes    | No   | No      | No     | No   | No     |
+| exec (-it)              | Yes    | No   | Limited | No     | No   | No     |
+| logs                    | Yes    | No   | Limited | No     | No   | No     |
+| events                  | Yes    | Yes  | No      | No     | No   | No     |
+| **Image management**    |        |      |         |        |      |        |
+| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| prune / rmi             | Yes    | No   | No      | No     | No   | No     |
+| push (exp)              | Yes    | Yes  | No      | No     | No   | No     |
+| commit (exp)            | Yes    | No   | No      | No     | No   | No     |
+| build (exp)             | Yes    | No   | No      | No     | No   | No     |
+| **Isolation**           |        |      |         |        |      |        |
+| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | No     |
+| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | No     |
+| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | No     |
+| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | No     |
+| **Networking**          |        |      |         |        |      |        |
+| Bridge (exp)            | Yes    | No   | No      | No     | No   | No     |
+| Port forwarding         | No     | No   | No      | No     | No   | No     |
+| DNS                     | No     | No   | No      | No     | No   | No     |
+| **Mounts & Privileges** |        |      |         |        |      |        |
+| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No     |
+| Privileged mode         | Yes    | No   | No      | No     | No   | No     |
+| **Security**            |        |      |         |        |      |        |
+| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| **State persistence**   |        |      |         |        |      |        |
+| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| PID reconciliation      | Yes    | No   | No      | No     | No   | No     |
+| **Observability**       |        |      |         |        |      |        |
+| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 
 ---
 
@@ -77,7 +76,6 @@ Last updated: 2026-05-07
 - **No** — not implemented for this adapter
 - **Limited** — partially working, known gaps
 - **WIP** — actively being developed
-- **Blocked** — VZ.framework blocked by Apple bug (GH #61)
 - **Copy** — uses copy-based filesystem instead of overlay
 - **VM** — isolation provided by the underlying VM, not minibox namespaces
 
@@ -97,11 +95,6 @@ Last updated: 2026-05-07
   All four adapter ports (runtime, registry, filesystem, limiter) are wired
   into the daemon and pass 31 conformance tests. Acts as the fallback when
   `smolvm` is unavailable.
-- **`vz` adapter** targets Apple's Virtualization.framework directly.
-  The adapter code exists in `macbox` but is **not wired into the daemon**
-  (`AdapterSuite` has no `Vz` variant). Additionally blocked by
-  `VZErrorInternal(code=1)` on macOS 26 ARM64
-  ([GH #61](https://github.com/89jobrien/minibox/issues/61)).
 - **`docker_desktop` adapter** (`DockerDesktopRuntime`/`Filesystem`/`Limiter`)
   exists in `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
   exported, but is not registered in `AdapterSuite` or wired into the daemon.
