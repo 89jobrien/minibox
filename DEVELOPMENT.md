@@ -40,6 +40,11 @@ cargo fmt --all
 
 # Lint (all workspace crates, deny warnings)
 cargo clippy --workspace -- -D warnings
+# Read-only local verification gate
+cargo xtask verify
+
+# Borrow-reasoning fixtures only
+cargo xtask borrow-fixtures
 
 # Unit tests (any platform)
 cargo xtask test-unit
@@ -83,6 +88,20 @@ just build-linux                     # static musl binary (auto-detects arch)
 cargo xtask test-unit        # canonical
 just test-unit               # equivalent shorthand
 ```
+
+### Borrow-reasoning fixtures (any platform)
+
+```bash
+cargo xtask borrow-fixtures  # standalone must-pass/must-fail Rust borrow examples
+cargo xtask borrow fixtures  # equivalent alias
+```
+
+The fixture suite checks standalone Rust examples directly with `rustc`:
+fixtures under `xtask/fixtures/borrow/pass` are `must-pass`, while fixtures under
+`xtask/fixtures/borrow/fail` are `must-fail` with their declared `// expect: ...`
+diagnostic snippets. The examples cover moves, shared and unique borrows,
+disjoint field borrows, reborrowing, NLL last-use behavior, and conservative
+branch joins.
 
 ### Integration tests (Linux + root)
 
@@ -146,25 +165,26 @@ just bench-agent report      # AI bench analysis
 
 ## CI Gates
 
-Local validation should match CI. The two commands that matter:
+Local validation should match CI. The commands that matter:
 
-1. **Before every commit:** `cargo xtask pre-commit`
-2. **Before every push:** `cargo xtask prepush`
+1. **Read-only local gate:** `cargo xtask verify`
+2. **Before every commit:** `cargo xtask pre-commit`
+3. **Before every push:** `cargo xtask prepush`
 
 GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
 `cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `stable` branches.
 
 ## Environment Variables
 
-| Variable               | Purpose                                    | Default                          |
-| ---------------------- | ------------------------------------------ | -------------------------------- |
-| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun     | `smolvm` (macOS) / `native` (Linux) |
-| `MINIBOX_DATA_DIR`     | Image/container storage                    | `/var/lib/minibox` (root)        |
-| `MINIBOX_RUN_DIR`      | Socket/runtime directory                   | `/run/minibox`                   |
-| `MINIBOX_SOCKET_PATH`  | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
-| `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                 | systemd slice path               |
-| `MINIBOX_NETWORK_MODE` | Network mode: none, bridge                 | `none`                           |
-| `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc) | unset                            |
+| Variable               | Purpose                                          | Default                             |
+| ---------------------- | ------------------------------------------------ | ----------------------------------- |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun | `smolvm` (macOS) / `native` (Linux) |
+| `MINIBOX_DATA_DIR`     | Image/container storage                          | `/var/lib/minibox` (root)           |
+| `MINIBOX_RUN_DIR`      | Socket/runtime directory                         | `/run/minibox`                      |
+| `MINIBOX_SOCKET_PATH`  | Unix socket path                                 | `$MINIBOX_RUN_DIR/miniboxd.sock`    |
+| `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                       | systemd slice path                  |
+| `MINIBOX_NETWORK_MODE` | Network mode: none, bridge                       | `none`                              |
+| `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc)       | unset                               |
 
 ## Cleanup
 

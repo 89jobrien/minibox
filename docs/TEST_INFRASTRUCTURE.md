@@ -41,6 +41,7 @@ and root-required tests add ~700 more.
 | minibox-core conformance                     | 126          | any         | no     | yes         |
 | Adapter isolation (colima/gke/native/smolvm) | ~66          | varies      | varies | partial     |
 | Property tests (proptest)                    | ~46          | any         | no     | **no**      |
+| Borrow-reasoning fixtures                    | 11           | any         | no     | local       |
 | Security regression                          | ~19          | any         | no     | yes         |
 | Cgroup integration                           | 16           | Linux       | yes    | next/stable |
 | E2E daemon+CLI                               | 15           | Linux       | yes    | next/stable |
@@ -55,17 +56,17 @@ and root-required tests add ~700 more.
 
 8 workflows in `.github/workflows/`:
 
-| Workflow              | Trigger                                          | Key jobs                                                                                                                       |
-| --------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                            |
+| Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
+| --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                         |
 | `merge.yml`           | pushes to main/next/stable/feature/hotfix/chore  | lint+fmt, unit tests, protocol e2e (macOS + Linux); build-test-archive, test-archive, test-all-features, audit/deny/machete, e2e+integration (next/stable) |
-| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                |
-| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                      |
-| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                            |
-| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                         |
-| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                    |
-| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                        |
-| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                     |
+| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                            |
+| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                                  |
+| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                                                        |
+| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                                                     |
+| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                                                |
+| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                                                    |
+| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                                                 |
 
 ---
 
@@ -73,13 +74,14 @@ and root-required tests add ~700 more.
 
 ### Not tested in any CI workflow
 
-| Test category      | Command                             | Tests missed                     |
-| ------------------ | ----------------------------------- | -------------------------------- |
-| Property tests     | `cargo xtask test-property`         | ~46 proptest tests               |
-| Sandbox tests      | `cargo xtask test-sandbox`          | ~17 sandbox tests                |
-| CLI subprocess     | `just test-cli-subprocess`          | 30 CLI e2e tests                 |
-| krun conformance   | `cargo xtask test-krun-conformance` | ~29 tests                        |
-| Coverage gate      | `cargo xtask coverage-check`        | handler.rs fn coverage threshold |
+| Test category    | Command                             | Tests missed                     |
+| ---------------- | ----------------------------------- | -------------------------------- |
+| Property tests   | `cargo xtask test-property`         | ~46 proptest tests               |
+| Borrow fixtures  | `cargo xtask borrow-fixtures`       | 11 borrow reasoning fixtures     |
+| Sandbox tests    | `cargo xtask test-sandbox`          | ~17 sandbox tests                |
+| CLI subprocess   | `just test-cli-subprocess`          | 30 CLI e2e tests                 |
+| krun conformance | `cargo xtask test-krun-conformance` | ~29 tests                        |
+| Coverage gate    | `cargo xtask coverage-check`        | handler.rs fn coverage threshold |
 
 ### Scope mismatches
 
@@ -95,21 +97,23 @@ and root-required tests add ~700 more.
 
 ## xtask Commands
 
-| Command                 | What                                                   |
-| ----------------------- | ------------------------------------------------------ |
-| `pre-commit`            | fmt-check + clippy + release build + docs-lint         |
-| `prepush`               | nextest + llvm-cov + ai-review (non-fatal)             |
-| `test-unit`             | lib + select integration tests + conformance           |
-| `test-conformance`      | commit/build/push/report conformance suite             |
-| `test-krun-conformance` | krun-specific conformance                              |
-| `test-property`         | proptest suites                                        |
-| `test-integration`      | cgroup tests (Linux+root)                              |
-| `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                            |
-| `test-sandbox`          | sandbox tests (Linux+root)                             |
-| `coverage-check`        | handler.rs fn coverage >= 80% gate                     |
-| `bench`                 | criterion benchmarks (trait_overhead + protocol_codec) |
-| `check-stale-names`     | audit workspace for banned old crate/binary names      |
-| `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups          |
+| Command                 | What                                                     |
+| ----------------------- | -------------------------------------------------------- |
+| `verify`                | read-only fmt/check/clippy + borrow fixtures + docs-lint |
+| `borrow-fixtures`       | standalone Rust borrow must-pass/must-fail fixtures      |
+| `pre-commit`            | fmt-check + clippy + release build + docs-lint           |
+| `prepush`               | nextest + llvm-cov + ai-review (non-fatal)               |
+| `test-unit`             | lib + select integration tests + conformance             |
+| `test-conformance`      | commit/build/push/report conformance suite               |
+| `test-krun-conformance` | krun-specific conformance                                |
+| `test-property`         | proptest suites                                          |
+| `test-integration`      | cgroup tests (Linux+root)                                |
+| `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                              |
+| `test-sandbox`          | sandbox tests (Linux+root)                               |
+| `coverage-check`        | handler.rs fn coverage >= 80% gate                       |
+| `bench`                 | criterion benchmarks (trait_overhead + protocol_codec)   |
+| `check-stale-names`     | audit workspace for banned old crate/binary names        |
+| `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
 
 ---
 
