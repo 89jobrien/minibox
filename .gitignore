@@ -155,3 +155,13 @@ __pycache__/
 # cargo-ai
 minibox-assistant
 docs/archive/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.json
+!.ctx/handoff.*.config.toml.example
+.ctx/HANDOFF.*.*.state.json
+.ctx/HANDOFF.hj.hj.state.json
+.ctx/.initialized
+# handoff-end
