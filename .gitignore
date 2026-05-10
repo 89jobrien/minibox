@@ -53,6 +53,9 @@ fuzz/*
 # Go build artifacts (agentbox)
 agentbox/bin/
 
+# Version bump state
+.minibox-bump-state
+
 # Rust build artifacts
 /target/
 **/*.rs.bk

@@ -19,6 +19,7 @@ if [ -n "$RUST_STAGED" ]; then
   NEW_FILES=$(git diff --cached --name-only --diff-filter=A \
     | grep -E '\.(rs|toml)$' || true)
   if [ -n "$NEW_FILES" ]; then
+    # xtask bump enforces once-per-day minor; downgrades to patch if already bumped today
     cargo xtask bump minor
   else
     cargo xtask bump patch
