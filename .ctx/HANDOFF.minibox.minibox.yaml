@@ -266,6 +266,10 @@ log:
   - b8720ac
   - 4e4bdba
   session: 35
+- date: 2026-05-09
+  summary: activated .githooks via core.hooksPath, fixed infinite pre-commit recursion with re-entry guard, added prepush quality gate and commit-msg hook
+  commits:
+  - df5dca0
 - date: 2026-05-02
   summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
   commits:

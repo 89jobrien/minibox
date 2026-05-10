@@ -10,6 +10,9 @@ jobs:
     name: conformance suite
     runs-on: [self-hosted, minibox]
     steps:
+      - name: trust workspace dir
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@v4
 
       - name: cargo xtask test-conformance

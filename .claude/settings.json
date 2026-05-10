@@ -48,10 +48,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "self-review"
-          },
-          {
-            "type": "command",
             "command": "knowledge-update"
           }
         ]
