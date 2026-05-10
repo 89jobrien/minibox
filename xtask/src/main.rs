@@ -22,6 +22,7 @@ mod daily_orchestration;
 mod docs_lint;
 mod gates;
 mod preflight;
+mod protocol_drift;
 mod protocol_sites;
 mod stale_names;
 mod test_image;
@@ -108,6 +109,19 @@ fn main() -> Result<()> {
             daily_orchestration::run(dry_run, ci)
         }
         Some("check-stale-names") => stale_names::check_stale_names(root),
+        Some("check-protocol-drift") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let update = args.iter().any(|a| a == "--update");
+            let warn_only = args.iter().any(|a| a == "--warn-only");
+            let hook = args.iter().any(|a| a == "--hook");
+            if args
+                .iter()
+                .any(|a| a != "--update" && a != "--warn-only" && a != "--hook")
+            {
+                bail!("usage: cargo xtask check-protocol-drift [--update] [--warn-only] [--hook]");
+            }
+            protocol_drift::run(root, update, warn_only, hook)
+        }
         Some("check-protocol-sites") => {
             let file = env::args()
                 .nth(2)
@@ -166,6 +180,9 @@ fn main() -> Result<()> {
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
+            eprintln!(
+                "  check-protocol-drift [--update] [--warn-only] [--hook]  verify core contract hashes"
+            );
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!(
                 "  daily-orchestration [--ci] [--dry-run]  run the Claude daily orchestration workflow"

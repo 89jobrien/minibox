@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/protocol-drift-check.sh"
+            "command": "cargo xtask check-protocol-drift --hook --warn-only"
           }
         ]
       }
@@ -36,6 +36,10 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
+          {
+            "type": "command",
+            "command": "cargo xtask check-protocol-drift --hook --warn-only"
+          },
           {
             "type": "command",
             "command": "secret-scanner"

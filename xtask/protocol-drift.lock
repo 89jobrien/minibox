@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "algorithm": "sha256-normalized-core-contract-v1",
+  "surfaces": [
+    {
+      "name": "wire-protocol",
+      "path": "crates/minibox-core/src/protocol.rs",
+      "hash": "42fabd64525a97e49930b7db16ee728a0a079bd45741eb7ad6b22fd0bccea9b3"
+    },
+    {
+      "name": "domain-ports",
+      "path": "crates/minibox-core/src/domain.rs",
+      "hash": "fb6a86ea8f8caf3b0a79e7f78e13d9f716ac670c392d704e5aeb6c3ad1722a9e"
+    },
+    {
+      "name": "domain-networking",
+      "path": "crates/minibox-core/src/domain/networking.rs",
+      "hash": "71e2fd83d8b18e086cc13589a1bbfade36d848c415294cb6540a57d0ccab30e4"
+    },
+    {
+      "name": "domain-extensions",
+      "path": "crates/minibox-core/src/domain/extensions.rs",
+      "hash": "e956b9d635eced32dbcd8deacea490245ecd5cfa6287fcd78a4dd0d92a00fad9"
+    },
+    {
+      "name": "lifecycle-events",
+      "path": "crates/minibox-core/src/events.rs",
+      "hash": "b5847f7a6bb123ef698845eeb294c875d7ece0d8f99f2ee08115a349ba379b97"
+    }
+  ]
+}

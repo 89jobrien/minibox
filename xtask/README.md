@@ -63,6 +63,8 @@ cargo xtask available                 # verify cargo xtask is runnable (real cap
 cargo xtask lint-docs                 # validate frontmatter + status values in docs/superpowers/
 cargo xtask context [--save]          # dump machine-readable repo context snapshot (JSON)
 cargo xtask check-stale-names         # audit workspace for banned old crate/binary names
+cargo xtask check-protocol-drift [--update] [--warn-only] [--hook]
+                                      # verify core contract hashes
 cargo xtask check-protocol-sites [<file>] [--expected N] [--warn-only]
                                       # verify HandlerDependencies construction site count
 ```
@@ -89,6 +91,7 @@ cargo xtask clean-artifacts   # remove non-critical build outputs
 | `bump.rs`           | Workspace version bumping                                     |
 | `preflight.rs`      | Tool availability probing and doctor checks                   |
 | `docs_lint.rs`      | Frontmatter and status validation for docs/superpowers/       |
+| `protocol_drift.rs` | Core contract hash drift checker                              |
 | `protocol_sites.rs` | HandlerDependencies construction site counter                 |
 | `stale_names.rs`    | Audit for banned old crate/binary names                       |
 | `context.rs`        | Repo context snapshot (JSON)                                  |
