@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jit-context"
+            "command": ".claude/hooks/jit-context"
           }
         ]
       }
@@ -42,7 +42,7 @@
           },
           {
             "type": "command",
-            "command": "secret-scanner"
+            "command": ".claude/hooks/secret-scanner"
           }
         ]
       }
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "knowledge-update"
+            "command": ".claude/hooks/knowledge-update"
           }
         ]
       }

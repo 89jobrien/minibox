@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Stop hook: delegates to the knowledge-update binary, resolving it via
+# common user-local PATH locations so the hook works across machines.
+set -euo pipefail
+
+for dir in "$HOME/.local/bin" "$HOME/.cargo/bin" "/usr/local/bin"; do
+  if [[ -x "$dir/knowledge-update" ]]; then
+    exec "$dir/knowledge-update" "$@"
+  fi
+done
+
+# Not installed — exit silently rather than block the session.
+exit 0
