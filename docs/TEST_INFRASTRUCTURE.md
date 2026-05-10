@@ -41,7 +41,7 @@ and root-required tests add ~700 more.
 | minibox-core conformance                     | 126          | any         | no     | yes         |
 | Adapter isolation (colima/gke/native/smolvm) | ~66          | varies      | varies | partial     |
 | Property tests (proptest)                    | ~46          | any         | no     | **no**      |
-| Borrow-reasoning fixtures                    | 11           | any         | no     | local       |
+| Borrow-reasoning fixtures                    | 19           | any         | no     | local       |
 | Security regression                          | ~19          | any         | no     | yes         |
 | Cgroup integration                           | 16           | Linux       | yes    | next/stable |
 | E2E daemon+CLI                               | 15           | Linux       | yes    | next/stable |
@@ -77,7 +77,7 @@ and root-required tests add ~700 more.
 | Test category    | Command                             | Tests missed                     |
 | ---------------- | ----------------------------------- | -------------------------------- |
 | Property tests   | `cargo xtask test-property`         | ~46 proptest tests               |
-| Borrow fixtures  | `cargo xtask borrow-fixtures`       | 11 borrow reasoning fixtures     |
+| Borrow fixtures  | `cargo xtask borrow-fixtures`       | 19 borrow reasoning fixtures     |
 | Sandbox tests    | `cargo xtask test-sandbox`          | ~17 sandbox tests                |
 | CLI subprocess   | `just test-cli-subprocess`          | 30 CLI e2e tests                 |
 | krun conformance | `cargo xtask test-krun-conformance` | ~29 tests                        |

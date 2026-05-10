@@ -100,7 +100,8 @@ The fixture suite checks standalone Rust examples directly with `rustc`:
 fixtures under `xtask/fixtures/borrow/pass` are `must-pass`, while fixtures under
 `xtask/fixtures/borrow/fail` are `must-fail` with their declared `// expect: ...`
 diagnostic snippets. The examples cover moves, shared and unique borrows,
-disjoint field borrows, reborrowing, NLL last-use behavior, and conservative
+Copy values, partial moves, place/projection conflicts, disjoint field borrows,
+reborrowing, NLL last-use behavior, two-phase method borrows, and conservative
 branch joins.
 
 ### Integration tests (Linux + root)
