@@ -1,23 +1,57 @@
 use anyhow::{Context, Result};
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    io::Write,
+    path::Path,
+    process::{Command, Stdio},
+};
 use xshell::{Shell, cmd};
 
-use crate::{bump, docs_lint};
+use crate::{borrow_fixtures, bump, docs_lint};
 
-/// Pre-commit gate: version bump → fmt → clippy --fix → lint check (macOS-safe, fast)
+/// Local verification gate: fmt-check → cargo check → clippy -D warnings →
+/// borrow-reasoning fixtures → docs-lint.
+///
+/// Unlike `pre-commit`, this is read-only: it does not auto-bump versions,
+/// run rustfmt in fix mode, or stage files.
+pub fn verify(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo fmt --all --check")
+        .run()
+        .context("fmt-check failed")?;
+    cmd!(sh, "cargo check --workspace")
+        .run()
+        .context("cargo check failed")?;
+    cmd!(
+        sh,
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p xtask -- -D warnings"
+    )
+    .run()
+    .context("clippy failed")?;
+
+    let root = sh.current_dir();
+    borrow_fixtures::run(&root).context("borrow-reasoning fixtures failed")?;
+    docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    check_repo_cleanliness(sh);
+    eprintln!("verify checks passed");
+    Ok(())
+}
+
+/// Pre-commit gate: Markdown fmt → Rust fmt → version bump → clippy --fix →
+/// lint check (macOS-safe, fast)
 ///
 /// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
+    format_staged_markdown(sh)?;
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
-        auto_bump(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
         // Re-stage any files rustfmt modified so the commit includes the formatted versions.
         // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
         cmd!(sh, "git add -u -- . :!.worktrees")
             .run()
             .context("git add -u after fmt failed")?;
+        auto_bump(sh)?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
@@ -99,14 +133,17 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 /// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
     // Build the harness binaries first so errors surface before test execution.
-    cmd!(sh, "cargo build -p minibox-conformance --bins")
+    cmd!(sh, "cargo build --release -p minibox-conformance --bins")
         .run()
         .context("failed to build minibox-conformance")?;
 
     // Run the full suite via `run-conformance` (fast, exits 1 on failure).
-    let output = cmd!(sh, "cargo run -p minibox-conformance --bin run-conformance")
-        .output()
-        .context("run-conformance failed to launch")?;
+    let output = cmd!(
+        sh,
+        "cargo run --release -p minibox-conformance --bin run-conformance"
+    )
+    .output()
+    .context("run-conformance failed to launch")?;
 
     // Surface test output regardless of pass/fail.
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -123,9 +160,12 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     }
 
     // Generate JSON + JUnit XML reports.
-    let report_output = cmd!(sh, "cargo run -p minibox-conformance --bin generate-report")
-        .output()
-        .context("generate-report failed to launch")?;
+    let report_output = cmd!(
+        sh,
+        "cargo run --release -p minibox-conformance --bin generate-report"
+    )
+    .output()
+    .context("generate-report failed to launch")?;
 
     let report_stdout = String::from_utf8_lossy(&report_output.stdout);
     for line in report_stdout.lines() {
@@ -429,6 +469,78 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
         .lines()
         .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
 }
+/// Format staged Markdown files before any version bump or Rust fixer mutates
+/// the index.
+fn format_staged_markdown(sh: &Shell) -> Result<()> {
+    let files = staged_markdown_files(sh)?;
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let prettier_files = files.clone();
+    cmd!(sh, "prettier --write --parser=markdown {prettier_files...}")
+        .run()
+        .context("markdown format failed")?;
+
+    // Only re-stage files that are not gitignored. Staged files in directories
+    // that are gitignored (e.g. `.ctx/`) are rejected by `git add` with
+    // "paths are ignored by .gitignore", which aborts the pre-commit hook.
+    let addable = non_ignored_files(sh, files)?;
+    if !addable.is_empty() {
+        cmd!(sh, "git add -- {addable...}")
+            .run()
+            .context("git add markdown files after prettier failed")?;
+    }
+    Ok(())
+}
+
+fn staged_markdown_files(sh: &Shell) -> Result<Vec<String>> {
+    let staged = cmd!(sh, "git diff --cached --name-only --diff-filter=ACM")
+        .output()
+        .context("git diff --cached markdown files failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .filter(|line| line.ends_with(".md"))
+        .map(ToOwned::to_owned)
+        .collect())
+}
+
+/// Returns the subset of `paths` that are not gitignored.
+///
+/// `git check-ignore --stdin` exits 0 when at least one path is ignored, 1
+/// when none are ignored, and 128 on a real error. We parse its stdout (the
+/// ignored paths) and subtract that set from the input.
+fn non_ignored_files(sh: &Shell, paths: Vec<String>) -> Result<Vec<String>> {
+    let input = paths.join("\n");
+    let mut child = Command::new("git")
+        .args(["check-ignore", "--stdin"])
+        .current_dir(sh.current_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("launch git check-ignore")?;
+    child
+        .stdin
+        .as_mut()
+        .context("open git check-ignore stdin")?
+        .write_all(input.as_bytes())
+        .context("write paths to git check-ignore")?;
+    let output = child
+        .wait_with_output()
+        .context("wait for git check-ignore")?;
+    // exit 128 is a real error; exit 0/1 mean "some/none ignored" — both are fine
+    if !matches!(output.status.code(), Some(0) | Some(1)) {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git check-ignore error: {}", stderr.trim());
+    }
+    let ignored: std::collections::HashSet<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect();
+    Ok(paths.into_iter().filter(|p| !ignored.contains(p)).collect())
+}
 
 /// Auto-bump workspace version based on staged Rust changes.
 ///
@@ -438,6 +550,10 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 /// After bumping, re-stages `Cargo.toml` so the version change is included
 /// in the commit.
 fn auto_bump(sh: &Shell) -> Result<()> {
+    if workspace_version_already_staged(sh)? {
+        eprintln!("[minibox] workspace version already staged — skipping auto bump");
+        return Ok(());
+    }
     let new_files = cmd!(sh, "git diff --cached --name-only --diff-filter=A")
         .output()
         .context("git diff --cached --diff-filter=A failed")?;
@@ -457,6 +573,42 @@ fn auto_bump(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+fn workspace_version_already_staged(sh: &Shell) -> Result<bool> {
+    let head = match cmd!(sh, "git show HEAD:Cargo.toml").output() {
+        Ok(output) => output,
+        Err(_) => return Ok(false),
+    };
+    let index = match cmd!(sh, "git show :Cargo.toml").output() {
+        Ok(output) => output,
+        Err(_) => return Ok(false),
+    };
+
+    let head = String::from_utf8_lossy(&head.stdout);
+    let index = String::from_utf8_lossy(&index.stdout);
+    Ok(parse_workspace_version(&head) != parse_workspace_version(&index))
+}
+
+fn parse_workspace_version(content: &str) -> Option<&str> {
+    let mut in_workspace_package = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[workspace.package]" {
+            in_workspace_package = true;
+            continue;
+        }
+        if in_workspace_package {
+            if trimmed.starts_with('[') {
+                break;
+            }
+            if let Some(v) = trimmed.strip_prefix("version = \"")
+                && let Some(v) = v.strip_suffix('"')
+            {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
 /// Find the most recently modified test binary matching a name prefix (no `.d` extension)
 pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> {
     let dir = Path::new(deps_dir);

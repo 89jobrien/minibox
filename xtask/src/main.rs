@@ -13,6 +13,7 @@ use std::{env, path::Path};
 use xshell::Shell;
 
 mod bench;
+mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
@@ -49,6 +50,13 @@ fn main() -> Result<()> {
         }
         Some("doctor") => preflight::doctor(&preflight::ProcessProbe),
         Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
+        Some("verify") => gates::verify(&sh),
+        Some("borrow-fixtures") => borrow_fixtures::run(root),
+        Some("borrow") => match env::args().nth(2).as_deref() {
+            Some("fixtures") => borrow_fixtures::run(root),
+            Some(other) => bail!("unknown borrow task: {other}. Available: fixtures"),
+            None => bail!("usage: cargo xtask borrow fixtures"),
+        },
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -145,7 +153,12 @@ fn main() -> Result<()> {
                 "  doctor           full preflight: tools + CARGO_TARGET_DIR + Linux system checks"
             );
             eprintln!("  available        verify cargo xtask is runnable (real capability check)");
-            eprintln!("  pre-commit       fmt-check + lint + build-release");
+            eprintln!(
+                "  verify           fmt-check + cargo check + clippy -D warnings + borrow fixtures + docs-lint"
+            );
+            eprintln!("  borrow-fixtures  run Rust borrow-reasoning must-pass/must-fail fixtures");
+            eprintln!("  borrow fixtures  alias for borrow-fixtures");
+            eprintln!("  pre-commit       Markdown/Rust fmt + lint + docs-lint");
             eprintln!("  prepush          fast lib tests (debug, incremental)");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
