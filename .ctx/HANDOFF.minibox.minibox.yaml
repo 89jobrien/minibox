@@ -308,7 +308,7 @@ log:
     00ee442 drop(vz): remove VZ adapter and all associated code
     30bfa14 Fix typo in README.md regarding software structure
   commits:
-  - 6aaf6b3
+  - !Sha 6aaf6b3
 - date: 2026-05-09
   summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
   commits: []

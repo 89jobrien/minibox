@@ -476,9 +476,16 @@ fn format_staged_markdown(sh: &Shell) -> Result<()> {
     cmd!(sh, "prettier --write --parser=markdown {prettier_files...}")
         .run()
         .context("markdown format failed")?;
-    cmd!(sh, "git add -- {files...}")
-        .run()
-        .context("git add markdown files after prettier failed")?;
+
+    // Only re-stage files that are not gitignored. Staged files in directories
+    // that are gitignored (e.g. `.ctx/`) are rejected by `git add` with
+    // "paths are ignored by .gitignore", which aborts the pre-commit hook.
+    let addable = non_ignored_files(sh, files)?;
+    if !addable.is_empty() {
+        cmd!(sh, "git add -- {addable...}")
+            .run()
+            .context("git add markdown files after prettier failed")?;
+    }
     Ok(())
 }
 
@@ -492,6 +499,29 @@ fn staged_markdown_files(sh: &Shell) -> Result<Vec<String>> {
         .filter(|line| line.ends_with(".md"))
         .map(ToOwned::to_owned)
         .collect())
+}
+
+/// Returns the subset of `paths` that are not gitignored.
+///
+/// `git check-ignore --stdin` exits 0 when at least one path is ignored, 1
+/// when none are ignored, and 128 on a real error. We parse its stdout (the
+/// ignored paths) and subtract that set from the input.
+fn non_ignored_files(sh: &Shell, paths: Vec<String>) -> Result<Vec<String>> {
+    let input = paths.join("\n");
+    let output = cmd!(sh, "git check-ignore --stdin")
+        .stdin(input.as_str())
+        .output()
+        .context("git check-ignore failed")?;
+    // exit 128 is a real error; exit 0/1 mean "some/none ignored" — both are fine
+    if output.status.code() == Some(128) {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git check-ignore error: {}", stderr.trim());
+    }
+    let ignored: std::collections::HashSet<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(ToOwned::to_owned)
+        .collect();
+    Ok(paths.into_iter().filter(|p| !ignored.contains(p)).collect())
 }
 
 /// Auto-bump workspace version based on staged Rust changes.
