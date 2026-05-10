@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use std::{env, fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::docs_lint;
+use crate::{bump, docs_lint};
 
-/// Pre-commit gate: fmt → clippy --fix → lint check → release build (macOS-safe)
+/// Pre-commit gate: version bump → fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
+    auto_bump(sh)?;
     cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
     // Re-stage any files rustfmt modified so the commit includes the formatted versions.
     // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
@@ -385,6 +386,48 @@ fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
         }
     }
     None
+}
+
+/// Auto-bump workspace version based on staged Rust changes.
+///
+/// - New `.rs` or `.toml` files → minor bump (rate-limited to once per day)
+/// - Modified `.rs` or `.toml` files → patch bump
+/// - No Rust changes staged → no bump
+///
+/// After bumping, re-stages `Cargo.toml` so the version change is included
+/// in the commit.
+fn auto_bump(sh: &Shell) -> Result<()> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+
+    let rust_staged: Vec<&str> = staged
+        .lines()
+        .filter(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && *l != "Cargo.lock")
+        .collect();
+
+    if rust_staged.is_empty() {
+        return Ok(());
+    }
+
+    let new_files = cmd!(sh, "git diff --cached --name-only --diff-filter=A")
+        .output()
+        .context("git diff --cached --diff-filter=A failed")?;
+    let new_files = String::from_utf8_lossy(&new_files.stdout);
+    let has_new_rust = new_files
+        .lines()
+        .any(|l| l.ends_with(".rs") || l.ends_with(".toml"));
+
+    let level = if has_new_rust { "minor" } else { "patch" };
+    let root = sh.current_dir();
+    bump::bump(&root, level)?;
+
+    cmd!(sh, "git add Cargo.toml")
+        .run()
+        .context("git add Cargo.toml after bump failed")?;
+
+    Ok(())
 }
 
 /// Find the most recently modified test binary matching a name prefix (no `.d` extension)
