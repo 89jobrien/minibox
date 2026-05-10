@@ -101,10 +101,11 @@ fn main() -> Result<()> {
         Some("daily-orchestration") => {
             let args: Vec<String> = env::args().skip(2).collect();
             let dry_run = args.iter().any(|a| a == "--dry-run");
-            if args.iter().any(|a| a != "--dry-run") {
-                bail!("usage: cargo xtask daily-orchestration [--dry-run]");
+            let ci = args.iter().any(|a| a == "--ci");
+            if args.iter().any(|a| a != "--dry-run" && a != "--ci") {
+                bail!("usage: cargo xtask daily-orchestration [--ci] [--dry-run]");
             }
-            daily_orchestration::run(dry_run)
+            daily_orchestration::run(dry_run, ci)
         }
         Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-sites") => {
@@ -167,7 +168,7 @@ fn main() -> Result<()> {
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!(
-                "  daily-orchestration [--dry-run]  run the Claude daily orchestration workflow"
+                "  daily-orchestration [--ci] [--dry-run]  run the Claude daily orchestration workflow"
             );
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(

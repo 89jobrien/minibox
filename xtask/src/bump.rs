@@ -22,10 +22,11 @@ pub fn bump(root: &Path, level: &str) -> Result<()> {
         other => bail!("unknown bump level: {other} (expected patch, minor, or major)"),
     };
 
-    let updated = content.replacen(
+    // Replace workspace.package version (first occurrence) and all internal
+    // crate dependency versions that reference the current version.
+    let updated = content.replace(
         &format!("version = \"{current}\""),
         &format!("version = \"{next}\""),
-        1,
     );
 
     if updated == content {
