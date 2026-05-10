@@ -8,7 +8,7 @@ builds, and test infrastructure as a compiled Rust binary (not shell scripts).
 ### Quality Gates
 
 ```bash
-cargo xtask pre-commit        # fmt-check + lint + release build (macOS-safe)
+cargo xtask pre-commit        # Markdown/Rust fmt + lint + docs-lint (macOS-safe)
 cargo xtask prepush           # fast lib tests (debug, incremental)
 cargo xtask test-unit         # all unit + conformance tests
 cargo xtask test-conformance  # commit+build+push conformance suite + artifact reports

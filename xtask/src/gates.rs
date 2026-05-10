@@ -1,5 +1,10 @@
 use anyhow::{Context, Result};
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    io::Write,
+    path::Path,
+    process::{Command, Stdio},
+};
 use xshell::{Shell, cmd};
 
 use crate::{borrow_fixtures, bump, docs_lint};
@@ -508,12 +513,25 @@ fn staged_markdown_files(sh: &Shell) -> Result<Vec<String>> {
 /// ignored paths) and subtract that set from the input.
 fn non_ignored_files(sh: &Shell, paths: Vec<String>) -> Result<Vec<String>> {
     let input = paths.join("\n");
-    let output = cmd!(sh, "git check-ignore --stdin")
-        .stdin(input.as_str())
-        .output()
-        .context("git check-ignore failed")?;
+    let mut child = Command::new("git")
+        .args(["check-ignore", "--stdin"])
+        .current_dir(sh.current_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("launch git check-ignore")?;
+    child
+        .stdin
+        .as_mut()
+        .context("open git check-ignore stdin")?
+        .write_all(input.as_bytes())
+        .context("write paths to git check-ignore")?;
+    let output = child
+        .wait_with_output()
+        .context("wait for git check-ignore")?;
     // exit 128 is a real error; exit 0/1 mean "some/none ignored" — both are fine
-    if output.status.code() == Some(128) {
+    if !matches!(output.status.code(), Some(0) | Some(1)) {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("git check-ignore error: {}", stderr.trim());
     }

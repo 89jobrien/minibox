@@ -49,7 +49,7 @@ cargo xtask borrow-fixtures
 # Unit tests (any platform)
 cargo xtask test-unit
 
-# Pre-commit gate (format check + clippy + release build)
+# Pre-commit gate (Markdown/Rust format + clippy + docs lint)
 cargo xtask pre-commit
 
 # Pre-push gate (nextest + llvm-cov coverage)

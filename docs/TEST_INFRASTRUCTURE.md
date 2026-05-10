@@ -101,7 +101,7 @@ and root-required tests add ~700 more.
 | ----------------------- | -------------------------------------------------------- |
 | `verify`                | read-only fmt/check/clippy + borrow fixtures + docs-lint |
 | `borrow-fixtures`       | standalone Rust borrow must-pass/must-fail fixtures      |
-| `pre-commit`            | fmt-check + clippy + release build + docs-lint           |
+| `pre-commit`            | Markdown/Rust fmt + clippy + docs-lint                   |
 | `prepush`               | nextest + llvm-cov + ai-review (non-fatal)               |
 | `test-unit`             | lib + select integration tests + conformance             |
 | `test-conformance`      | commit/build/push/report conformance suite               |

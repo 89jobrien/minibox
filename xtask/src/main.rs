@@ -158,7 +158,7 @@ fn main() -> Result<()> {
             );
             eprintln!("  borrow-fixtures  run Rust borrow-reasoning must-pass/must-fail fixtures");
             eprintln!("  borrow fixtures  alias for borrow-fixtures");
-            eprintln!("  pre-commit       fmt-check + lint + build-release");
+            eprintln!("  pre-commit       Markdown/Rust fmt + lint + docs-lint");
             eprintln!("  prepush          fast lib tests (debug, incremental)");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
