@@ -17,6 +17,7 @@ filesystem write occurs. This prevents a malicious OCI layer from writing files 
 container rootfs (e.g. `../../../etc/cron.d/evil`).
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — `validate_tar_entry_path()` called for every entry
   before `entry.unpack_in()`.
 - Rejects any path containing a `Component::ParentDir` (`..`) component.
@@ -38,6 +39,7 @@ Extracting them allows a container image to ship files that grant raw access to 
 (disks, serial ports, `/dev/mem`, etc.).
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — entry type check before `unpack_in`; `Block` and
   `Char` entries return `ImageError::DeviceNodeRejected`.
 
@@ -59,6 +61,7 @@ the host filesystem. Targets that still contain `..` after relativisation (e.g.
 `/../../etc/shadow` → `../../etc/shadow`) must be rejected entirely.
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — `relative_path(entry_dir, abs_target)` rewrites the
   target; `has_parent_dir_component()` on the rewritten target gates rejection.
 - Safe busybox applet symlinks (e.g. `bin/echo -> /bin/busybox`) are rewritten to relative
@@ -81,6 +84,7 @@ the host filesystem. Targets that still contain `..` after relativisation (e.g.
 container image could allow privilege escalation to root once the container process runs.
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — `entry.header_mut().set_mode(mode & 0o777)` applied
   before `entry.unpack_in()` for `Regular` and `Link` entries.
 
@@ -101,6 +105,7 @@ visible inside the container, potentially leaking secrets or enabling container 
 daemon socket access.
 
 **Code path:**
+
 - `crates/minibox/src/container/process.rs` — `close_extra_fds()` called inside `child_init`
   before `execve`.
 - Fast path: `SYS_close_range(3, u32::MAX, 0)` (Linux 5.9+, kernel `close_range(2)` syscall).
@@ -121,6 +126,7 @@ daemon's entire environment — including API keys, secrets, and host configurat
 every container.
 
 **Code path:**
+
 - `crates/minibox/src/container/process.rs` — `child_init` calls
   `nix::unistd::execve(&cmd, &argv, &envp)` where `envp` is built exclusively from
   `config.env` (caller-supplied container environment variables).
@@ -141,6 +147,7 @@ every container.
 processing occurs.
 
 **Code path:**
+
 - `crates/minibox/src/daemon/server.rs` — `is_authorized(creds, require_root_auth)` is the
   single authorisation predicate.
 - `PeerCreds` is populated from `SO_PEERCRED` on the accepted socket.
@@ -149,12 +156,12 @@ processing occurs.
 
 **Behaviour table:**
 
-| `require_root_auth` | `creds`        | Result  |
-|---------------------|----------------|---------|
-| `false`             | any / `None`   | allowed |
-| `true`              | `None`         | allowed (warning logged) |
-| `true`              | `Some(uid = 0)`| allowed |
-| `true`              | `Some(uid > 0)`| denied  |
+| `require_root_auth` | `creds`         | Result               |
+| ------------------- | --------------- | -------------------- |
+| `false`             | any / `None`    | allowed              |
+| `true`              | `None`          | denied (fail-closed) |
+| `true`              | `Some(uid = 0)` | allowed              |
+| `true`              | `Some(uid > 0)` | denied               |
 
 **Regression tests:**
 | Test name | File |
@@ -164,7 +171,7 @@ processing occurs.
 | `uid_1_rejected_when_root_required` | `crates/minibox/tests/daemon_security_regression.rs` |
 | `any_uid_accepted_when_root_not_required` | `crates/minibox/tests/daemon_security_regression.rs` |
 | `missing_creds_accepted_when_root_not_required` | `crates/minibox/tests/daemon_security_regression.rs` |
-| `missing_creds_still_allowed_through_when_root_required` | `crates/minibox/tests/daemon_security_regression.rs` |
+| `missing_creds_rejected_when_root_required` | `crates/minibox/tests/daemon_security_regression.rs` |
 | `max_uid_rejected_when_root_required` | `crates/minibox/tests/daemon_security_regression.rs` |
 
 ---
@@ -177,6 +184,7 @@ a false-positive path-escape error because `Path::join("./")` normalises away th
 component.
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — explicit check for `"."` and `"./"` before
   `validate_tar_entry_path`.
 
@@ -194,6 +202,7 @@ daemon state. FIFOs are not explicitly rejected like device nodes, but extractio
 complete without crashing.
 
 **Code path:**
+
 - `crates/minibox/src/image/layer.rs` — FIFO entries fall through to `unpack_in`; behaviour
   is platform-dependent but must not panic.
 
@@ -210,11 +219,12 @@ complete without crashing.
 clients sending oversized JSON.
 
 **Code path:**
+
 - `crates/minibox/src/daemon/server.rs` — `MAX_REQUEST_SIZE = 1_048_576` (1 MB) enforced
   before deserialisation.
 
-*(No dedicated regression test — enforced by the constant and the `read_line` size check in
-`serve_connection`.)*
+_(No dedicated regression test — enforced by the constant and the `read_line` size check in
+`serve_connection`.)_
 
 ---
 
@@ -224,12 +234,13 @@ clients sending oversized JSON.
 oversized manifest or layer downloads.
 
 **Code path:**
+
 - `crates/minibox/src/image/registry.rs`:
   - Max manifest size: 10 MB
   - Max layer size: 1 GB per layer
   - Total image size limit: 5 GB
 
-*(No dedicated regression test — enforced by constants checked during streaming reads.)*
+_(No dedicated regression test — enforced by constants checked during streaming reads.)_
 
 ---
 

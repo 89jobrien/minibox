@@ -71,15 +71,13 @@ mod security_regression {
     }
 
     #[test]
-    fn missing_creds_still_allowed_through_when_root_required() {
-        // When creds are unavailable (None) but root auth is required, the
-        // server logs a warning and allows the connection through (bypassed).
-        // This matches the current server.rs behaviour: the warn is emitted
-        // but the connection proceeds. The test pins this behaviour so any
-        // intentional change (e.g. reject on missing creds) must update here.
+    fn missing_creds_rejected_when_root_required() {
+        // When creds are unavailable (None) and root auth is required, the
+        // connection is rejected (fail-closed). This is the correct security
+        // posture: unknown identity must not bypass the root gate.
         assert!(
-            is_authorized(None, true),
-            "None creds bypass require_root_auth (logged as warning, not rejected)"
+            !is_authorized(None, true),
+            "None creds must be rejected when require_root_auth=true (fail-closed)"
         );
     }
 
