@@ -30,7 +30,7 @@ jobs:
             crates/miniboxd/Cargo.toml
           do
             printf '\n## %s\n' "$manifest" | tee -a geiger-report.txt
-            cargo geiger --manifest-path "$manifest" 2>&1 | tee -a geiger-report.txt
+            cargo geiger --manifest-path "$GITHUB_WORKSPACE/$manifest" 2>&1 | tee -a geiger-report.txt
             status=${PIPESTATUS[0]}
             if [ "$status" -ne 0 ]; then
               geiger_status="$status"
