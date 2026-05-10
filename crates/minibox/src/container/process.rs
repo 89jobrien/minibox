@@ -124,7 +124,18 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
         // exec replaces the process image, so we never reach here.
         unsafe { libc::_exit(1) };
     })
-    .with_context(|| "failed to spawn container process")?;
+    .with_context(|| "failed to spawn container process");
+
+    if let Err(ref _e) = pid {
+        // Clone failed — the forgotten OwnedFds were never consumed by a
+        // child (no child was created). Close both raw FDs to prevent leaks.
+        if capture_output && read_fd_raw >= 0 {
+            unsafe { libc::close(read_fd_raw) };
+            unsafe { libc::close(write_fd_raw) };
+        }
+    }
+
+    let pid = pid?;
 
     // Parent: close the write end so the read end gets EOF when the child exits.
     if capture_output && write_fd_raw >= 0 {
