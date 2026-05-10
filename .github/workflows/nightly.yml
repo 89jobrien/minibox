@@ -36,7 +36,6 @@ jobs:
               geiger_status="$status"
             fi
           done
-          # Extract unsafe counts and write to job summary
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
@@ -49,3 +48,17 @@ jobs:
           name: geiger-report
           path: geiger-report.txt
           retention-days: 30
+
+  tag-nightly:
+    name: tag nightly release
+    runs-on: ubuntu-latest
+    needs: geiger
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: push nightly tag
+        run: |
+          TAG="nightly/$(date -u +%Y%m%d)"
+          git tag "$TAG"
+          git push origin "$TAG"

@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+      - "nightly/*"
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,6 +13,7 @@ jobs:
   publish-crates:
     name: Publish crates to crates.io
     runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'v')
 
     steps:
       - uses: actions/checkout@v4
@@ -62,12 +64,11 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME}
           TARGET=${{ matrix.target }}
-          ARCHIVE="minibox-${VERSION}-${TARGET}.tar.gz"
+          ARCHIVE="minibox-${VERSION//\//-}-${TARGET}.tar.gz"
           mkdir -p dist
           cp target/${{ matrix.target }}/release/miniboxd dist/
           cp target/${{ matrix.target }}/release/mbx dist/
           tar -czf "${ARCHIVE}" -C dist miniboxd mbx
-          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -98,4 +99,4 @@ jobs:
           files: artifacts/*.tar.gz
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ startsWith(github.ref_name, 'nightly/') }}
