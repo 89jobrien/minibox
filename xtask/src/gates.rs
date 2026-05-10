@@ -6,42 +6,47 @@ use crate::{bump, docs_lint};
 
 /// Pre-commit gate: version bump → fmt → clippy --fix → lint check → release build (macOS-safe)
 pub fn pre_commit(sh: &Shell) -> Result<()> {
-    auto_bump(sh)?;
-    cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-    // Re-stage any files rustfmt modified so the commit includes the formatted versions.
-    // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
-    cmd!(sh, "git add -u -- . :!.worktrees")
+    let rust_staged = staged_rust_files(sh)?;
+
+    if rust_staged {
+        auto_bump(sh)?;
+        cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+        // Re-stage any files rustfmt modified so the commit includes the formatted versions.
+        // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
+        cmd!(sh, "git add -u -- . :!.worktrees")
+            .run()
+            .context("git add -u after fmt failed")?;
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
+        )
         .run()
-        .context("git add -u after fmt failed")?;
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
-    )
-    .run()
-    .context("clippy --fix failed")?;
-    // Re-stage any files clippy --fix modified.
-    cmd!(sh, "git add -u -- . :!.worktrees")
+        .context("clippy --fix failed")?;
+        // Re-stage any files clippy --fix modified.
+        cmd!(sh, "git add -u -- . :!.worktrees")
+            .run()
+            .context("git add -u after clippy --fix failed")?;
+        cmd!(sh, "cargo fmt --all --check")
+            .run()
+            .context("fmt-check failed")?;
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
+        )
         .run()
-        .context("git add -u after clippy --fix failed")?;
-    cmd!(sh, "cargo fmt --all --check")
+        .context("lint failed")?;
+        cmd!(
+            sh,
+            "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+        )
         .run()
-        .context("fmt-check failed")?;
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
-    )
-    .run()
-    .context("lint failed")?;
-    cmd!(
-        sh,
-        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
-    )
-    .run()
-    .context("build-release failed")?;
+        .context("build-release failed")?;
+        test_conformance(sh)?;
+    }
+
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
-    test_conformance(sh)?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
@@ -388,29 +393,25 @@ fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
     None
 }
 
-/// Auto-bump workspace version based on staged Rust changes.
-///
-/// - New `.rs` or `.toml` files → minor bump (rate-limited to once per day)
-/// - Modified `.rs` or `.toml` files → patch bump
-/// - No Rust changes staged → no bump
-///
-/// After bumping, re-stages `Cargo.toml` so the version change is included
-/// in the commit.
-fn auto_bump(sh: &Shell) -> Result<()> {
+/// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
+fn staged_rust_files(sh: &Shell) -> Result<bool> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
-
-    let rust_staged: Vec<&str> = staged
+    Ok(staged
         .lines()
-        .filter(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && *l != "Cargo.lock")
-        .collect();
+        .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
+}
 
-    if rust_staged.is_empty() {
-        return Ok(());
-    }
-
+/// Auto-bump workspace version based on staged Rust changes.
+///
+/// - New `.rs` or `.toml` files → minor bump (rate-limited to once per day)
+/// - Modified `.rs` or `.toml` files → patch bump
+///
+/// After bumping, re-stages `Cargo.toml` so the version change is included
+/// in the commit.
+fn auto_bump(sh: &Shell) -> Result<()> {
     let new_files = cmd!(sh, "git diff --cached --name-only --diff-filter=A")
         .output()
         .context("git diff --cached --diff-filter=A failed")?;
