@@ -1069,94 +1069,82 @@ async fn run_inner(
         .await
         .expect("semaphore closed");
 
-    // Spawn the container process (using injected runtime trait).
-    let id_clone = id.clone();
-    let state_clone = Arc::clone(&state);
-    let runtime_clone = Arc::clone(&deps.lifecycle.runtime);
-    let metrics_clone = Arc::clone(&deps.events.metrics);
-    let net_clone = net.clone();
-    let run_containers_base_clone = deps.lifecycle.run_containers_base.clone();
-    let event_sink_clone = Arc::clone(&deps.events.event_sink);
-    let image_label_clone = image_label.clone();
-
-    tokio::task::spawn(async move {
-        // Permit is held until this task completes (via _spawn_permit drop)
-        match runtime_clone.spawn_process(&spawn_config).await {
-            Ok(spawn_result) => {
-                let pid = spawn_result.pid;
-                info!(container_id = %id_clone, pid = pid, "container: process started");
-
-                event_sink_clone.emit(ContainerEvent::Created {
-                    id: id_clone.clone(),
-                    image: image_label_clone,
-                    timestamp: std::time::SystemTime::now(),
-                });
-                event_sink_clone.emit(ContainerEvent::Started {
-                    id: id_clone.clone(),
-                    pid,
-                    timestamp: std::time::SystemTime::now(),
-                });
-
-                metrics_clone.increment_counter(
-                    "minibox_container_ops_total",
-                    &[("op", "run"), ("adapter", "daemon"), ("status", "ok")],
-                );
-                let active = state_clone.list_containers().await.len() as f64;
-                metrics_clone.set_gauge("minibox_active_containers", active, &[]);
-
-                // ── Network attach ─────────────────────────────────────
-                net_clone.attach(&id_clone, pid).await.ok();
-
-                // Write PID file.
-                let pid_file = run_containers_base_clone.join(&id_clone).join("pid");
-                if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
-                    warn!(
-                        pid_file = %pid_file.display(),
-                        error = %e,
-                        "container: failed to write pid file"
-                    );
-                }
-
-                state_clone.set_container_pid(&id_clone, pid).await;
-
-                // Wait for the process to exit in a background task.
-                let state_wait = Arc::clone(&state_clone);
-                let id_wait = id_clone.clone();
-                let rootfs_wait = spawn_config.rootfs.clone();
-                let hooks_wait = spawn_config.hooks.post_exit.clone();
-                let event_sink_wait = Arc::clone(&event_sink_clone);
-                let cgroup_path_wait = spawn_config.cgroup_path.clone();
-                let runtime_wait = Arc::clone(&runtime_clone);
-                let runtime_id = spawn_result.runtime_id.clone();
-                tokio::spawn(async move {
-                    daemon_wait_for_exit(
-                        pid,
-                        &id_wait,
-                        state_wait,
-                        rootfs_wait,
-                        hooks_wait,
-                        event_sink_wait,
-                        cgroup_path_wait,
-                        runtime_wait,
-                        runtime_id,
-                    )
-                    .await;
-                });
+    // Spawn the container process synchronously so failures propagate to the caller.
+    let spawn_result = match deps.lifecycle.runtime.spawn_process(&spawn_config).await {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to spawn container {id}: {e:#}");
+            deps.events.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
+            );
+            if let Err(ue) = state
+                .update_container_state(&id, ContainerState::Failed)
+                .await
+            {
+                warn!(container_id = %id, error = %ue, "state: failed to mark container Failed");
             }
-            Err(e) => {
-                error!("failed to spawn container {id_clone}: {e:#}");
-                metrics_clone.increment_counter(
-                    "minibox_container_ops_total",
-                    &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
-                );
-                if let Err(e) = state_clone
-                    .update_container_state(&id_clone, ContainerState::Failed)
-                    .await
-                {
-                    warn!(container_id = %id_clone, error = %e, "state: failed to mark container Failed");
-                }
-            }
+            return Err(e);
         }
+    };
+    // Release the permit now that the process is running.
+    drop(_spawn_permit);
+
+    let pid = spawn_result.pid;
+    info!(container_id = %id, pid = pid, "container: process started");
+
+    deps.events.event_sink.emit(ContainerEvent::Created {
+        id: id.clone(),
+        image: image_label.clone(),
+        timestamp: std::time::SystemTime::now(),
+    });
+    deps.events.event_sink.emit(ContainerEvent::Started {
+        id: id.clone(),
+        pid,
+        timestamp: std::time::SystemTime::now(),
+    });
+
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "run"), ("adapter", "daemon"), ("status", "ok")],
+    );
+    let active = state.list_containers().await.len() as f64;
+    deps.events
+        .metrics
+        .set_gauge("minibox_active_containers", active, &[]);
+
+    net.attach(&id, pid).await.ok();
+
+    let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
+    if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
+        warn!(
+            pid_file = %pid_file.display(),
+            error = %e,
+            "container: failed to write pid file"
+        );
+    }
+
+    state.set_container_pid(&id, pid).await;
+
+    // Hand off wait-for-exit to a background task.
+    let state_wait = Arc::clone(&state);
+    let id_wait = id.clone();
+    let event_sink_wait = Arc::clone(&deps.events.event_sink);
+    let runtime_wait = Arc::clone(&deps.lifecycle.runtime);
+    let runtime_id = spawn_result.runtime_id.clone();
+    tokio::spawn(async move {
+        daemon_wait_for_exit(
+            pid,
+            &id_wait,
+            state_wait,
+            spawn_config.rootfs,
+            spawn_config.hooks.post_exit,
+            event_sink_wait,
+            spawn_config.cgroup_path,
+            runtime_wait,
+            runtime_id,
+        )
+        .await;
     });
 
     Ok(id)
