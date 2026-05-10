@@ -260,27 +260,9 @@ items:
   completed: null
   extra: []
 log:
-- date: 2026-05-09
-  summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
-  commits:
-  - !Object
-    sha: f9229da
-    branch: main
 - date: '20260509.225051'
   summary: 'Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart)'
-  commits:
-  - !Object
-    sha: 659f1c2
-    branch: main
-  - !Object
-    sha: '7.516e56'
-    branch: main
-  - !Object
-    sha: 0b93001
-    branch: main
-  - !Object
-    sha: f9229da
-    branch: main
+  commits: []
   session: 43
 - date: '20260502.192909'
   summary: 'Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean'
@@ -288,40 +270,16 @@ log:
   session: 42
 - date: '20260502.000000'
   summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
-  commits:
-  - !Object
-    sha: 788c10f
-    branch: main
+  commits: []
   session: 41
 - date: '20260502.000000'
   summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
-  commits:
-  - !Object
-    sha: 18eb8ea
-    branch: main
+  commits: []
   session: 40
 - date: '20260430.143952'
   summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes; merged next->stable and tagged v0.23.0; synced xtask README; dropped stale minibox-agent-llm-api item.'
-  commits:
-  - !Object
-    sha: cb36b64
-    branch: main
-  - !Object
-    sha: 17a873d
-    branch: main
-  - !Object
-    sha: b596a27
-    branch: main
-  - !Object
-    sha: 78d8e11
-    branch: main
-  - !Object
-    sha: eee7a61
-    branch: main
-  - !Object
-    sha: cdb1ab2
-    branch: main
-  - !Object
-    sha: fa6f2e9
-    branch: main
+  commits: []
   session: 39
+- date: 2026-05-09
+  summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
+  commits: []

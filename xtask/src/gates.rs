@@ -4,7 +4,9 @@ use xshell::{Shell, cmd};
 
 use crate::{bump, docs_lint};
 
-/// Pre-commit gate: version bump → fmt → clippy --fix → lint check → release build (macOS-safe)
+/// Pre-commit gate: version bump → fmt → clippy --fix → lint check (macOS-safe, fast)
+///
+/// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
@@ -35,13 +37,6 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("lint failed")?;
-        cmd!(
-            sh,
-            "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
-        )
-        .run()
-        .context("build-release failed")?;
-        test_conformance(sh)?;
     }
 
     // Docs frontmatter lint (fast, no external tools).
@@ -53,18 +48,28 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-push gate: fast lib tests (debug, incremental)
+/// Pre-push gate: release build → lib tests → conformance suite
+///
+/// One release compile covers both nextest (--release) and the conformance
+/// harness, so the full gate costs a single incremental release build.
 pub fn prepush(sh: &Shell) -> Result<()> {
     if !pushed_rust_files(sh)? {
-        eprintln!("pre-push: no Rust files in push range, skipping nextest");
+        eprintln!("pre-push: no Rust files in push range, skipping build and tests");
         return Ok(());
     }
     cmd!(
         sh,
-        "cargo nextest run -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
+        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+    )
+    .run()
+    .context("release build failed")?;
+    cmd!(
+        sh,
+        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
     )
     .run()
     .context("nextest failed")?;
+    test_conformance(sh)?;
     Ok(())
 }
 
