@@ -212,71 +212,116 @@ items:
   - docs/superpowers/plans/2026-04-30-crux-maestro-portability.md
   completed: null
   extra: []
+- id: minibox-nightly-geiger
+  doob_uuid: null
+  name: nightly-geiger-nonblocking
+  priority: P1
+  status: open
+  title: 'fix(ci): make cargo-geiger non-blocking in nightly workflow'
+  description: |
+    cargo-geiger exits 1 on "Failed to match (ignoring source) package: valuable@0.1.1" —
+    a known geiger bug with certain crate graphs. This blocks tag-nightly from running.
+    Fix: add `continue-on-error: true` to the geiger job in nightly.yml so the nightly
+    tag always fires regardless of geiger result.
+  files:
+  - .github/workflows/nightly.yml
+  completed: null
+  extra: []
+- id: minibox-godmode-hook
+  doob_uuid: null
+  name: godmode-hook-plugin-root
+  priority: P1
+  status: open
+  title: 'fix: godmode pre-commit-gate hook CLAUDE_PLUGIN_ROOT not resolving'
+  description: |
+    When running from an atelier skill context, CLAUDE_PLUGIN_ROOT resolves to atelier's root,
+    not godmode's. Both hooks.json files patched to use absolute path
+    (/Users/joe/.claude/plugins/cache/local/godmode/0.6.0/hooks/scripts/pre-commit-gate.nu).
+    Requires Claude Code session restart to take effect. Until then, git commit from Claude
+    is blocked — use terminal directly.
+  files:
+  - /Users/joe/.claude/plugins/cache/local/godmode/0.6.0/hooks/hooks.json
+  - /Users/joe/.claude/plugins/cache/bazaar/godmode/0.6.0/hooks/hooks.json
+  completed: null
+  extra: []
+- id: minibox-prepush-skip
+  doob_uuid: null
+  name: prepush-skip-uncommitted
+  priority: P1
+  status: open
+  title: 'chore: commit staged prepush skip (gates.rs) — blocked by godmode hook'
+  description: |
+    xtask/src/gates.rs has staged changes adding pushed_rust_files() and skipping nextest
+    in pre-push when no Rust files are in the push range. Cannot commit from Claude due to
+    godmode hook CLAUDE_PLUGIN_ROOT issue. Commit from terminal:
+    git add xtask/src/gates.rs && git commit -m "perf(xtask): skip nextest in pre-push when no Rust files in push range" && git push
+  files:
+  - xtask/src/gates.rs
+  completed: null
+  extra: []
 log:
+- date: 2026-05-09
+  summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
+  commits:
+  - !Object
+    sha: f9229da
+    branch: main
+- date: '20260509.225051'
+  summary: 'Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart)'
+  commits:
+  - !Object
+    sha: 659f1c2
+    branch: main
+  - !Object
+    sha: '7.516e56'
+    branch: main
+  - !Object
+    sha: 0b93001
+    branch: main
+  - !Object
+    sha: f9229da
+    branch: main
+  session: 43
 - date: '20260502.192909'
   summary: 'Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean'
   commits: []
   session: 42
-- date: 20260430:143952
-  summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes (all pre-rename era); merged next->stable and tagged v0.23.0; synced xtask README with full command inventory; dropped stale minibox-agent-llm-api item.'
-  commits:
-  - cb36b64
-  - 17a873d
-  - b596a27
-  - 78d8e11
-  - eee7a61
-  - cdb1ab2
-  - fa6f2e9
-  session: 39
-- date: 20260429:042914
-  summary: 'Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified).'
-  commits:
-  - '9574520'
-  - d3459f4
-  - e08a7dc
-  - 277dbf2
-  - 761fd26
-  - 5a4aadf
-  session: 38
-- date: 20260428:124518
-  summary: 'Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI).'
-  commits:
-  - 54df5d0
-  - 1bc83c5
-  session: 37
-- date: 20260428:121625
-  summary: 'Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests.'
-  commits:
-  - c669ca8
-  - f423e19
-  - 49fc9a1
-  - 73703f8
-  - 93b4814
-  - ade65b9
-  - eb6bef2
-  session: 36
-- date: 20260428:080155
-  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
-  commits:
-  - 5b4c4d8
-  session: 34
-- date: 20260428:062906
-  summary: 'Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree.'
-  commits:
-  - b8720ac
-  - 4e4bdba
-  session: 35
-- date: 2026-05-09
-  summary: activated .githooks via core.hooksPath, fixed infinite pre-commit recursion with re-entry guard, added prepush quality gate and commit-msg hook
-  commits:
-  - df5dca0
-- date: 2026-05-02
+- date: '20260502.000000'
   summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
   commits:
-  - 788c10f
+  - !Object
+    sha: 788c10f
+    branch: main
   session: 41
-- date: 2026-05-02
+- date: '20260502.000000'
   summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
   commits:
-  - 18eb8ea
+  - !Object
+    sha: 18eb8ea
+    branch: main
   session: 40
+- date: '20260430.143952'
+  summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes; merged next->stable and tagged v0.23.0; synced xtask README; dropped stale minibox-agent-llm-api item.'
+  commits:
+  - !Object
+    sha: cb36b64
+    branch: main
+  - !Object
+    sha: 17a873d
+    branch: main
+  - !Object
+    sha: b596a27
+    branch: main
+  - !Object
+    sha: 78d8e11
+    branch: main
+  - !Object
+    sha: eee7a61
+    branch: main
+  - !Object
+    sha: cdb1ab2
+    branch: main
+  - !Object
+    sha: fa6f2e9
+    branch: main
+  session: 39

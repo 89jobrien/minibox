@@ -55,6 +55,10 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
 /// Pre-push gate: fast lib tests (debug, incremental)
 pub fn prepush(sh: &Shell) -> Result<()> {
+    if !pushed_rust_files(sh)? {
+        eprintln!("pre-push: no Rust files in push range, skipping nextest");
+        return Ok(());
+    }
     cmd!(
         sh,
         "cargo nextest run -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
@@ -391,6 +395,23 @@ fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
         }
     }
     None
+}
+
+/// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) differ between
+/// HEAD and the upstream tracking branch. Falls back to `true` when upstream is absent
+/// (new branch) so tests always run in that case.
+fn pushed_rust_files(sh: &Shell) -> Result<bool> {
+    let range = "@{u}..HEAD";
+    let out = cmd!(sh, "git diff --name-only {range}").output();
+    match out {
+        Err(_) => Ok(true), // no upstream — run tests
+        Ok(out) => {
+            let diff = String::from_utf8_lossy(&out.stdout);
+            Ok(diff
+                .lines()
+                .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
+        }
+    }
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.

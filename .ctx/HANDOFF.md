@@ -10,6 +10,9 @@
 | minibox-46 | P1 | open | feat: PTY/stdio piping for interactive containers (#19) — plan written |
 | minibox-55 | P1 | open | feat: minibox owns the full container stack on every OS |
 | minibox-crux-plugin | P1 | open | feat: minibox-crux-plugin binary — crux JSON-RPC plugin for minibox adapter |
+| minibox-godmode-hook | P1 | open | fix: godmode pre-commit-gate hook CLAUDE_PLUGIN_ROOT not resolving |
+| minibox-nightly-geiger | P1 | open | fix(ci): make cargo-geiger non-blocking in nightly workflow |
+| minibox-prepush-skip | P1 | open | chore: commit staged prepush skip (gates.rs) — blocked by godmode hook |
 | minibox-update-upgrade | P1 | open | feat: mbx update + mbx upgrade — restart support stubbed (Wave 3) |
 | minibox-43 | P2 | blocked | feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75) |
 | minibox-52 | P2 | blocked | feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84) |
@@ -19,8 +22,8 @@
 
 ## Log
 
+- 2026-05-09: Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean [f9229da]
+- 20260509.225051: Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart) [659f1c2, 7.516e56, 0b93001, f9229da]
 - 20260502.192909: Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean
-- 20260430:143952: Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes (all pre-rename era); merged next->stable and tagged v0.23.0; synced xtask README with full command inventory; dropped stale minibox-agent-llm-api item. [cb36b64, 17a873d, b596a27, 78d8e11, eee7a61, cdb1ab2, fa6f2e9]
-- 20260429:042914: Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified). [9574520, d3459f4, e08a7dc, 277dbf2, 761fd26, 5a4aadf]
-- 20260428:124518: Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI). [54df5d0, 1bc83c5]
-- 20260428:121625: Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests. [c669ca8, f423e19, 49fc9a1, 73703f8, 93b4814, ade65b9, eb6bef2]
+- 20260502.000000: Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note [788c10f]
+- 20260502.000000: Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop) [18eb8ea]
