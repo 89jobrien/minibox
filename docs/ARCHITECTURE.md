@@ -153,7 +153,7 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-24 request variants, 22 response variants. Canonical source:
+26 request variants, 24 response variants. Canonical source:
 `minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
@@ -161,17 +161,63 @@ HandlerDependencies
 Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
-RestoreSnapshot, ListSnapshots, Update
+RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest
 
 ### DaemonResponse Variants
 
 **Terminal** (end a request): ContainerCreated, Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
 ContainerStopped, BuildComplete, Pruned, PipelineComplete, SnapshotSaved,
-SnapshotRestored, SnapshotList
+SnapshotRestored, SnapshotList, Manifest, VerifyResult
 
 **Non-terminal** (streaming): ContainerOutput, ExecStarted, PushProgress,
 BuildOutput, Event, LogLine, UpdateProgress
+
+---
+
+## Execution Manifest
+
+Every container run produces a persisted `execution-manifest.json` at
+`{containers_base}/{id}/execution-manifest.json` **before** the process
+is spawned. The manifest captures every measured input:
+
+| Field | Source |
+|---|---|
+| `subject.image_ref` | Image reference as provided |
+| `subject.image.layer_digests` | Resolved layer paths |
+| `runtime.command` | Command and arguments |
+| `runtime.env[].value_digest` | SHA-256 of each env value (never plaintext) |
+| `runtime.mounts` | Bind mount host/container paths + read-only flag |
+| `runtime.resource_limits` | Memory limit, CPU weight |
+| `runtime.network_mode` | Network isolation mode |
+| `runtime.privileged` | Privileged mode flag |
+
+### Workload Digest
+
+A deterministic `sha256` digest computed from a stable JSON projection
+that excludes volatile fields (`created_at`, `manifest_path`,
+`workload_digest` itself). Equal semantic inputs always produce equal
+digests. Canonical implementation: `ExecutionManifest::seal()` in
+`minibox-core/src/domain/execution_manifest.rs`.
+
+### Execution Policy
+
+`ExecutionPolicy` evaluates a manifest against a rule set:
+allowed/denied image patterns, network mode restrictions, privileged
+gate, memory limit cap, mount path prefix allowlist. Loaded from JSON.
+Canonical implementation: `minibox-core/src/domain/execution_policy.rs`.
+
+### CLI
+
+- `mbx manifest <id>` — print the execution manifest as JSON.
+- `mbx verify <id> --policy <file>` — evaluate policy, exit 0 (allow)
+  or 1 (deny).
+
+### Future: Attestation
+
+The manifest format is designed for future integration with Sigstore
+cosign or in-toto attestation frameworks. The sealed workload digest
+serves as the attestation subject.
 
 ---
 

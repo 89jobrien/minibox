@@ -257,3 +257,31 @@ required for the current invariant regression suite.
 If implemented, the newtype should live in `crates/minibox/src/image/layer.rs` (for tar
 paths) and `crates/minibox/src/container/filesystem.rs` (for overlay paths), with
 `TryFrom<&Path>` as the validated constructor.
+
+---
+
+## 9. Execution Manifest Integrity
+
+**Invariant:** Every container run persists an `execution-manifest.json`
+before the container process is spawned. The manifest captures all
+measured inputs with a deterministic workload digest. Environment
+variable values are stored as SHA-256 digests, never plaintext.
+
+**Code path:**
+- `minibox-core/src/domain/execution_manifest.rs` — manifest types,
+  digest computation, `seal()`.
+- `minibox/src/daemon/handler.rs` — `prepare_run()` builds and persists
+  the manifest before returning.
+
+**Regression tests:**
+- `execution_manifest::tests::env_var_value_is_never_plaintext`
+- `execution_manifest::tests::equal_inputs_produce_equal_digest`
+- `execution_manifest::tests::volatile_fields_do_not_affect_digest`
+- `execution_manifest::tests::seal_sets_workload_digest`
+- `execution_manifest::tests::manifest_roundtrips_through_json`
+
+**What must not change:**
+- Env values must never appear in plaintext in the manifest.
+- The digest must exclude `created_at`, `manifest_path`, and
+  `workload_digest` so that volatile fields do not affect identity.
+- The manifest must be written before `spawn_process` is called.
