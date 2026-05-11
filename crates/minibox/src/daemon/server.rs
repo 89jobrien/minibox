@@ -293,6 +293,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::SnapshotRestored { .. }
             | DaemonResponse::SnapshotList { .. }
             | DaemonResponse::ImageList { .. }
+            | DaemonResponse::Manifest { .. }
+            | DaemonResponse::VerifyResult { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -549,6 +551,23 @@ async fn dispatch(
                 all,
                 containers,
                 restart,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::GetManifest { id } => {
+            tokio::spawn(handler::handle_get_manifest(
+                id,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::VerifyManifest { id, policy_json } => {
+            tokio::spawn(handler::handle_verify_manifest(
+                id,
+                policy_json,
                 Arc::clone(&state),
                 Arc::clone(&deps),
                 tx,
@@ -836,6 +855,19 @@ mod tests {
                 },
                 true, // terminal: complete list returned in one response
             ),
+            (
+                DaemonResponse::Manifest {
+                    manifest: serde_json::json!({}),
+                },
+                true, // terminal: single manifest returned
+            ),
+            (
+                DaemonResponse::VerifyResult {
+                    allowed: true,
+                    reason: None,
+                },
+                true, // terminal: single verify result returned
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -873,6 +905,8 @@ mod tests {
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
                 DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::Manifest { .. } => true,
+                DaemonResponse::VerifyResult { .. } => true,
             };
         }
     }

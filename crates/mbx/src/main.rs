@@ -311,6 +311,21 @@ enum Commands {
     /// be selected given the current environment, and basic platform info.
     Doctor,
 
+    /// Show the execution manifest for a container.
+    Manifest {
+        /// Container ID or name.
+        id: String,
+    },
+
+    /// Verify a container's execution manifest against a policy file.
+    Verify {
+        /// Container ID or name.
+        id: String,
+        /// Path to the JSON policy file.
+        #[arg(long)]
+        policy: String,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -478,6 +493,12 @@ async fn main() -> Result<()> {
         },
 
         Commands::Doctor => commands::doctor::execute(),
+
+        Commands::Manifest { id } => commands::manifest::execute(id, socket_path).await,
+
+        Commands::Verify { id, policy } => {
+            commands::manifest::verify(id, policy, socket_path).await
+        }
 
         Commands::Upgrade { dry_run, version } => {
             commands::upgrade::execute(dry_run, version).await

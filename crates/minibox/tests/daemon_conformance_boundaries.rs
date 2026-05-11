@@ -42,6 +42,8 @@ fn make_container_record(id: &str, name: Option<&str>, state: &str) -> Container
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 

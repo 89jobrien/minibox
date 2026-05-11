@@ -57,6 +57,8 @@ fn make_record(id: &str, state: &str, pid: Option<u32>) -> ContainerRecord {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 

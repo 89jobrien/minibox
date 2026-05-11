@@ -145,6 +145,8 @@ fn make_record(id: &str) -> ContainerRecord {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 

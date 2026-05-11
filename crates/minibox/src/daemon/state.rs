@@ -213,6 +213,12 @@ pub struct ContainerRecord {
     /// Original creation parameters, enabling container restart.
     #[serde(default)]
     pub creation_params: Option<RunCreationParams>,
+    /// Path to the persisted execution manifest JSON file.
+    #[serde(default)]
+    pub manifest_path: Option<PathBuf>,
+    /// Sealed workload digest from the execution manifest.
+    #[serde(default)]
+    pub workload_digest: Option<String>,
 }
 
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
@@ -642,6 +648,8 @@ mod tests {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         }
     }
 

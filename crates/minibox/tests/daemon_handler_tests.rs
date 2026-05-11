@@ -1526,6 +1526,8 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -1811,6 +1813,8 @@ async fn test_handle_stop_dead_pid_succeeds() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -2176,6 +2180,8 @@ async fn test_handle_stop_triggers_network_cleanup() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -2346,6 +2352,8 @@ async fn test_handle_remove_created_container_succeeds() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -3242,6 +3250,8 @@ async fn test_stop_dead_pid_exits_immediately() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -3312,6 +3322,8 @@ async fn test_stop_container_no_pid_returns_error() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -3987,6 +3999,8 @@ async fn test_handle_logs_reads_log_files() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -4095,6 +4109,8 @@ async fn test_pause_stopped_container_returns_error() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -4146,6 +4162,8 @@ async fn test_resume_running_container_returns_error() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -4201,6 +4219,8 @@ async fn test_pause_missing_cgroup_returns_error() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -4254,6 +4274,8 @@ async fn test_resume_missing_cgroup_returns_error() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -4886,6 +4908,8 @@ async fn test_handle_pause_running_container_succeeds() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -4948,6 +4972,8 @@ async fn test_handle_resume_paused_container_succeeds() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         })
         .await;
 
@@ -5417,6 +5443,8 @@ async fn test_handle_remove_running_container_returns_error() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -5625,6 +5653,8 @@ async fn test_daemon_state_persistence_survives_restart() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         };
         state.add_container(record).await;
     }
@@ -5676,6 +5706,8 @@ async fn test_daemon_state_remove_persists_to_disk() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;
@@ -5779,6 +5811,8 @@ async fn test_handle_remove_resolves_by_name() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -5902,6 +5936,8 @@ async fn test_handle_logs_client_disconnect_mid_stream() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -6740,6 +6776,8 @@ async fn test_handle_update_containers_collects_source_image_refs() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -6811,6 +6849,8 @@ async fn test_handle_update_restart_stops_running_containers() {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
@@ -7232,6 +7272,8 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
                 urgency: None,
                 execution_context: None,
                 creation_params: None,
+                manifest_path: None,
+                workload_digest: None,
             })
             .await;
     }

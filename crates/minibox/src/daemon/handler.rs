@@ -633,24 +633,35 @@ async fn handle_run_streaming(
     debug!(pid = pid, "streaming: ContainerStopped sent");
 }
 
-/// Variant of `run_inner` that enables output capture for ephemeral containers.
+// ─── PreparedRun: shared setup extracted from run_inner / run_inner_capture ───
+
+/// All state produced by container preparation, before the process is spawned.
+#[cfg(unix)]
+#[allow(dead_code)]
+struct PreparedRun {
+    id: String,
+    spawn_config: ContainerSpawnConfig,
+    container_dir: PathBuf,
+    merged_dir: PathBuf,
+    cgroup_dir: PathBuf,
+    image_label: String,
+    image_ref: ImageRef,
+    layer_dirs: Vec<PathBuf>,
+    /// Network lifecycle handle — must stay alive until attach is called.
+    net: NetworkLifecycle,
+    manifest_path: PathBuf,
+    workload_digest: String,
+}
+
+/// Shared container preparation: image pull, overlay setup, cgroup creation,
+/// network setup, container record registration, spawn config construction,
+/// and execution manifest persistence.
 ///
-/// Sets `capture_output = true` in the spawn config so the runtime creates a
-/// pipe between the container process and the daemon.  Returns the container ID,
-/// the child PID, and the read end of the output pipe as an [`OwnedFd`].
-///
-/// The caller is responsible for draining the pipe (to avoid blocking the child
-/// on a full pipe buffer) and for calling `wait_for_exit` to reap the process.
-///
-/// Container state transitions: `"Created"` → `"Running"` (via
-/// `set_container_pid`).  The `"Stopped"` transition is handled by the caller
-/// (`handle_run_streaming`) after the process exits.
-///
-/// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
-/// and `waitpid` — both available on any Unix via the `nix` crate.
+/// The `capture_output` flag is the only behavioural difference between the
+/// streaming (`run_inner_capture`) and fire-and-forget (`run_inner`) paths.
 #[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
-async fn run_inner_capture(
+async fn prepare_run(
     image: String,
     tag: Option<String>,
     command: Vec<String>,
@@ -662,11 +673,16 @@ async fn run_inner_capture(
     env: Vec<String>,
     name: Option<String>,
     platform: Option<String>,
+    capture_output: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
-) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
+) -> Result<PreparedRun> {
     use anyhow::Context;
-    use minibox_core::domain::NetworkConfig;
+    use minibox_core::domain::{
+        ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
+        ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
+        ExecutionManifestSubject, NetworkConfig,
+    };
 
     // Build full ref string from image + optional tag, then parse into ImageRef.
     let ref_str = match &tag {
@@ -687,6 +703,7 @@ async fn run_inner_capture(
         None => default_registry,
     };
 
+    // Pull image if not cached.
     if !registry.has_image(&full_image, &tag).await {
         info!("image {full_image}:{tag} not cached, pulling…");
         registry
@@ -710,6 +727,7 @@ async fn run_inner_capture(
 
     let id = generate_container_id();
 
+    // SECURITY: Verify no collision with existing containers.
     if state.get_container(&id).await.is_some() {
         return Err(DomainError::InvalidConfig(format!(
             "container ID collision (extremely rare): {id}"
@@ -720,6 +738,7 @@ async fn run_inner_capture(
     let container_dir = deps.lifecycle.containers_base.join(&id);
     let run_dir = deps.lifecycle.run_containers_base.join(&id);
 
+    // SECURITY: Create container directories with restricted permissions (0700).
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -736,12 +755,14 @@ async fn run_inner_capture(
         std::fs::create_dir_all(&run_dir)?;
     }
 
+    // Setup overlayfs.
     let rootfs_layout = deps
         .lifecycle
         .filesystem
         .setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir = rootfs_layout.merged_dir.clone();
 
+    // Setup cgroup.
     let resource_config = ResourceConfig {
         memory_limit_bytes,
         cpu_weight,
@@ -768,6 +789,7 @@ async fn run_inner_capture(
 
     let skip_net_ns = net_mode == NetworkMode::Host;
 
+    // Build ContainerRecord in Created state.
     let image_label = format!("{image}:{tag}");
     let command_str = command.join(" ");
     let record = ContainerRecord {
@@ -809,9 +831,12 @@ async fn run_inner_capture(
             user: None,
             platform: platform.clone(),
         }),
+        manifest_path: None,
+        workload_digest: None,
     };
     state.add_container(record).await;
 
+    // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
         .first()
         .cloned()
@@ -821,7 +846,7 @@ async fn run_inner_capture(
         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
         "TERM=xterm".to_string(),
     ];
-    container_env.extend(env);
+    container_env.extend(env.clone());
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir.clone(),
         command: spawn_command,
@@ -829,13 +854,136 @@ async fn run_inner_capture(
         env: container_env,
         cgroup_path: cgroup_dir.clone(),
         hostname: format!("minibox-{}", &id[..8]),
-        capture_output: true,
+        capture_output,
         hooks: ContainerHooks::default(),
         skip_network_namespace: skip_net_ns,
-        mounts,
+        mounts: mounts.clone(),
         privileged,
         image_ref: Some(image_label.clone()),
     };
+
+    // ── Persist execution manifest ─────────────────────────────────────
+    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    let mut manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: id.clone(),
+        created_at: Utc::now().to_rfc3339(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: ref_str.clone(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: layer_dirs
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect(),
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: command.clone(),
+            env: env
+                .iter()
+                .filter_map(|e| {
+                    let (k, v) = e.split_once('=')?;
+                    Some(ExecutionManifestEnvVar::new(k, v))
+                })
+                .collect(),
+            mounts: mounts
+                .iter()
+                .map(ExecutionManifestMount::from_bind_mount)
+                .collect(),
+            resource_limits: Some(ExecutionManifestResourceLimits {
+                memory_limit_bytes,
+                cpu_weight,
+            }),
+            network_mode: net_mode_str,
+            privileged,
+            platform: platform.clone(),
+        },
+        request: ExecutionManifestRequest {
+            name: name.clone(),
+            ephemeral: capture_output,
+        },
+    };
+    manifest.seal();
+
+    let manifest_path = container_dir.join("execution-manifest.json");
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).context("serialise execution manifest")?;
+    std::fs::write(&manifest_path, &manifest_json)
+        .with_context(|| format!("write execution manifest to {}", manifest_path.display()))?;
+    manifest.manifest_path = Some(manifest_path.clone());
+
+    let workload_digest = manifest.workload_digest.clone().unwrap_or_default();
+
+    Ok(PreparedRun {
+        id,
+        spawn_config,
+        container_dir,
+        merged_dir,
+        cgroup_dir,
+        image_label,
+        image_ref,
+        layer_dirs,
+        net,
+        manifest_path,
+        workload_digest,
+    })
+}
+
+/// Variant of `run_inner` that enables output capture for ephemeral containers.
+///
+/// Sets `capture_output = true` in the spawn config so the runtime creates a
+/// pipe between the container process and the daemon.  Returns the container ID,
+/// the child PID, and the read end of the output pipe as an [`OwnedFd`].
+///
+/// The caller is responsible for draining the pipe (to avoid blocking the child
+/// on a full pipe buffer) and for calling `wait_for_exit` to reap the process.
+///
+/// Container state transitions: `"Created"` → `"Running"` (via
+/// `set_container_pid`).  The `"Stopped"` transition is handled by the caller
+/// (`handle_run_streaming`) after the process exits.
+///
+/// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
+/// and `waitpid` — both available on any Unix via the `nix` crate.
+#[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
+async fn run_inner_capture(
+    image: String,
+    tag: Option<String>,
+    command: Vec<String>,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    network: Option<NetworkMode>,
+    mounts: Vec<BindMount>,
+    privileged: bool,
+    env: Vec<String>,
+    name: Option<String>,
+    platform: Option<String>,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
+    use anyhow::Context;
+
+    let prepared = prepare_run(
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        mounts,
+        privileged,
+        env,
+        name,
+        platform,
+        true,
+        Arc::clone(&state),
+        Arc::clone(&deps),
+    )
+    .await?;
 
     let _spawn_permit = state
         .spawn_semaphore
@@ -843,7 +991,11 @@ async fn run_inner_capture(
         .await
         .expect("semaphore closed");
 
-    let spawn_result = deps.lifecycle.runtime.spawn_process(&spawn_config).await?;
+    let spawn_result = deps
+        .lifecycle
+        .runtime
+        .spawn_process(&prepared.spawn_config)
+        .await?;
 
     let pid = spawn_result.pid;
     let runtime_id = spawn_result.runtime_id;
@@ -852,10 +1004,18 @@ async fn run_inner_capture(
     })?;
 
     // ── Network attach ─────────────────────────────────────────────────
-    net.attach(&id, pid).await.context("network attach")?;
+    prepared
+        .net
+        .attach(&prepared.id, pid)
+        .await
+        .context("network attach")?;
 
     // Write PID file and update state.
-    let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
+    let pid_file = deps
+        .lifecycle
+        .run_containers_base
+        .join(&prepared.id)
+        .join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
         warn!(
             pid_file = %pid_file.display(),
@@ -863,9 +1023,9 @@ async fn run_inner_capture(
             "container: failed to write pid file"
         );
     }
-    state.set_container_pid(&id, pid).await;
+    state.set_container_pid(&prepared.id, pid).await;
 
-    Ok((id, pid, output_reader, runtime_id))
+    Ok((prepared.id, pid, output_reader, runtime_id))
 }
 
 /// Pull the image if needed, set up the overlay rootfs and cgroup, register the
@@ -900,190 +1060,29 @@ async fn run_inner(
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
-    use anyhow::Context;
-    use minibox_core::domain::NetworkConfig;
-
-    // Build full ref string from image + optional tag, then parse into ImageRef.
-    let ref_str = match &tag {
-        Some(t) => format!("{image}:{t}"),
-        None => image.clone(),
-    };
-    let image_ref = ImageRef::parse(&ref_str)
-        .with_context(|| format!("invalid image reference {ref_str:?}"))
-        .map_err(|e| DomainError::InvalidConfig(e.to_string()))?;
-    let tag = image_ref.tag.clone();
-    let full_image = image_ref.cache_name();
-
-    // Resolve platform-overridden registry if requested, otherwise route by hostname.
-    let platform_registry = resolve_platform_registry(&platform, &image_ref, &deps)?;
-    let default_registry = deps.image.registry_router.route(&image_ref);
-    let registry: &dyn minibox_core::domain::ImageRegistry = match &platform_registry {
-        Some(r) => r.as_ref(),
-        None => default_registry,
-    };
-
-    // Pull image if not cached (using injected registry trait).
-    if !registry.has_image(&full_image, &tag).await {
-        info!("image {full_image}:{tag} not cached, pulling…");
-        registry
-            .pull_image(&image_ref)
-            .await
-            .map_err(|e| DomainError::ImagePullFailed {
-                image: full_image.clone(),
-                tag: tag.clone(),
-                source: e,
-            })?;
-    }
-
-    let layer_dirs = registry.get_image_layers(&full_image, &tag)?;
-    if layer_dirs.is_empty() {
-        return Err(DomainError::EmptyImage {
-            name: full_image.clone(),
-            tag: tag.clone(),
-        }
-        .into());
-    }
-
-    let id = generate_container_id();
-
-    // SECURITY: Verify no collision with existing containers
-    if state.get_container(&id).await.is_some() {
-        return Err(DomainError::InvalidConfig(format!(
-            "container ID collision (extremely rare): {id}"
-        ))
-        .into());
-    }
-
-    let container_dir = deps.lifecycle.containers_base.join(&id);
-    let run_dir = deps.lifecycle.run_containers_base.join(&id);
-
-    // SECURITY: Create container directories with restricted permissions (0700)
-    // to prevent unauthorized access to container data
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-
-        let mut builder = std::fs::DirBuilder::new();
-        builder.mode(0o700); // Owner (root) only
-        builder.recursive(true);
-        builder.create(&container_dir)?;
-        builder.create(&run_dir)?;
-    }
-
-    #[cfg(not(unix))]
-    {
-        std::fs::create_dir_all(&container_dir)?;
-        std::fs::create_dir_all(&run_dir)?;
-    }
-
-    // Setup overlayfs (using injected filesystem trait).
-    let rootfs_layout = deps
-        .lifecycle
-        .filesystem
-        .setup_rootfs(&layer_dirs, &container_dir)?;
-    let merged_dir_from_overlay = rootfs_layout.merged_dir.clone();
-
-    // Setup cgroup (using injected resource limiter trait).
-    let resource_config = ResourceConfig {
+    let prepared = prepare_run(
+        image,
+        tag,
+        command,
         memory_limit_bytes,
         cpu_weight,
-        pids_max: Some(1024), // Default PID limit for security
-        io_max_bytes_per_sec: None,
-    };
-    let cgroup_dir_str = deps
-        .lifecycle
-        .resource_limiter
-        .create(&id, &resource_config)?;
-    let cgroup_dir = PathBuf::from(cgroup_dir_str);
-
-    // ── Network setup ──────────────────────────────────────────────────
-    let net_mode = network.unwrap_or(NetworkMode::None);
-    let network_config = NetworkConfig {
-        mode: net_mode,
-        ..NetworkConfig::default()
-    };
-    let net = NetworkLifecycle::new(deps.lifecycle.network_provider.clone());
-    let _net_ns = net
-        .setup(&id, &network_config)
-        .await
-        .context("network setup")?;
-
-    let skip_net_ns = net_mode == NetworkMode::Host;
-
-    // Build ContainerRecord in Created state; updated to Running once the
-    // child PID is known.
-    let image_label = format!("{image}:{tag}");
-    let command_str = command.join(" ");
-    let record = ContainerRecord {
-        info: ContainerInfo {
-            id: id.clone(),
-            name: name.clone(),
-            image: image_label.clone(),
-            command: command_str,
-            state: "Created".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            pid: None,
-        },
-        pid: None,
-        rootfs_path: merged_dir_from_overlay.clone(),
-        cgroup_path: cgroup_dir.clone(),
-        post_exit_hooks: vec![],
-        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
-        source_image_ref: rootfs_layout
-            .source_image_ref
-            .clone()
-            .or_else(|| Some(image_label.clone())),
-        step_state: None,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-        creation_params: Some(RunCreationParams {
-            image: image.clone(),
-            tag: Some(tag.clone()),
-            command: command.clone(),
-            memory_limit_bytes,
-            cpu_weight,
-            network,
-            env: env.clone(),
-            mounts: mounts.clone(),
-            privileged,
-            name: name.clone(),
-            tty: false,
-            entrypoint: None,
-            user: None,
-            platform: platform.clone(),
-        }),
-    };
-    state.add_container(record).await;
-
-    // Build the ContainerSpawnConfig for the runtime.
-    let spawn_command = command
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "/bin/sh".to_string());
-    let spawn_args = command.iter().skip(1).cloned().collect();
-    let mut container_env = vec![
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-        "TERM=xterm".to_string(),
-    ];
-    container_env.extend(env);
-    let spawn_config = ContainerSpawnConfig {
-        rootfs: merged_dir_from_overlay.clone(),
-        command: spawn_command,
-        args: spawn_args,
-        env: container_env,
-        cgroup_path: cgroup_dir.clone(),
-        hostname: format!("minibox-{}", &id[..8]),
-        capture_output: false,
-        hooks: ContainerHooks::default(),
-        skip_network_namespace: skip_net_ns,
+        network,
         mounts,
         privileged,
-        image_ref: Some(image_label.clone()),
-    };
+        env,
+        name,
+        platform,
+        false,
+        Arc::clone(&state),
+        Arc::clone(&deps),
+    )
+    .await?;
 
-    // SECURITY: Acquire semaphore permit to limit concurrent spawns
-    // This prevents fork bomb attacks from overwhelming the system
+    let id = prepared.id.clone();
+    let image_label = prepared.image_label.clone();
+    let spawn_config = prepared.spawn_config;
+
+    // SECURITY: Acquire semaphore permit to limit concurrent spawns.
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -1134,7 +1133,7 @@ async fn run_inner(
         .metrics
         .set_gauge("minibox_active_containers", active, &[]);
 
-    net.attach(&id, pid).await.ok();
+    prepared.net.attach(&id, pid).await.ok();
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {
@@ -3086,6 +3085,163 @@ pub async fn handle_update(
     info!(updated, total, "handle_update: complete");
     if tx.send(DaemonResponse::Success { message }).await.is_err() {
         warn!("handle_update: client disconnected before Success could be sent");
+    }
+}
+
+// ─── Manifest inspection and verification ───────────────────────────────────
+
+/// Retrieve the execution manifest for a container.
+pub async fn handle_get_manifest(
+    id: String,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    let record = match state.get_container(&id).await {
+        Some(r) => r,
+        None => {
+            send_error(
+                &tx,
+                "handle_get_manifest",
+                format!("container not found: {id}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let manifest_path = match record.manifest_path {
+        Some(p) => p,
+        None => deps
+            .lifecycle
+            .containers_base
+            .join(&id)
+            .join("execution-manifest.json"),
+    };
+
+    let content = match std::fs::read_to_string(&manifest_path) {
+        Ok(c) => c,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_get_manifest",
+                format!(
+                    "failed to read manifest at {}: {e}",
+                    manifest_path.display()
+                ),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let manifest_value: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_get_manifest",
+                format!("failed to parse manifest JSON: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    if tx
+        .send(DaemonResponse::Manifest {
+            manifest: manifest_value,
+        })
+        .await
+        .is_err()
+    {
+        warn!(container_id = %id, "handle_get_manifest: client disconnected");
+    }
+}
+
+/// Verify a container's execution manifest against an execution policy.
+pub async fn handle_verify_manifest(
+    id: String,
+    policy_json: String,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    use minibox_core::domain::{ExecutionManifest, ExecutionPolicy, PolicyDecision};
+
+    let record = match state.get_container(&id).await {
+        Some(r) => r,
+        None => {
+            send_error(
+                &tx,
+                "handle_verify_manifest",
+                format!("container not found: {id}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let manifest_path = match record.manifest_path {
+        Some(p) => p,
+        None => deps
+            .lifecycle
+            .containers_base
+            .join(&id)
+            .join("execution-manifest.json"),
+    };
+
+    let content = match std::fs::read_to_string(&manifest_path) {
+        Ok(c) => c,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_verify_manifest",
+                format!("failed to read manifest: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let manifest: ExecutionManifest = match serde_json::from_str(&content) {
+        Ok(m) => m,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_verify_manifest",
+                format!("failed to parse manifest: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let policy: ExecutionPolicy = match serde_json::from_str(&policy_json) {
+        Ok(p) => p,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_verify_manifest",
+                format!("failed to parse policy: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let decision = policy.evaluate(&manifest);
+    let (allowed, reason) = match decision {
+        PolicyDecision::Allow => (true, None),
+        PolicyDecision::Deny(reason) => (false, Some(reason)),
+    };
+
+    if tx
+        .send(DaemonResponse::VerifyResult { allowed, reason })
+        .await
+        .is_err()
+    {
+        warn!(container_id = %id, "handle_verify_manifest: client disconnected");
     }
 }
 

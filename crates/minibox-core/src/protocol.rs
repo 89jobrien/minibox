@@ -363,6 +363,20 @@ pub enum DaemonRequest {
         #[serde(default)]
         restart: bool,
     },
+
+    /// Retrieve the execution manifest for a container.
+    GetManifest {
+        /// Container ID or name.
+        id: String,
+    },
+
+    /// Verify a container's execution manifest against a policy file.
+    VerifyManifest {
+        /// Container ID or name.
+        id: String,
+        /// JSON-serialized `ExecutionPolicy` to evaluate against.
+        policy_json: String,
+    },
 }
 
 fn default_max_depth() -> u32 {
@@ -575,6 +589,20 @@ pub enum DaemonResponse {
         image: String,
         /// Human-readable status: `"up to date"`, `"updated"`, `"error: ..."`.
         status: String,
+    },
+
+    /// The execution manifest for a container.
+    Manifest {
+        /// The full execution manifest as a JSON value.
+        manifest: serde_json::Value,
+    },
+
+    /// Result of verifying a manifest against an execution policy.
+    VerifyResult {
+        /// Whether the policy allowed the workload.
+        allowed: bool,
+        /// Human-readable reason (populated on deny).
+        reason: Option<String>,
     },
 }
 

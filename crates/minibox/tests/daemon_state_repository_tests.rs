@@ -56,6 +56,8 @@ async fn json_file_repository_round_trips() {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         },
     );
 

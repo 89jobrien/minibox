@@ -1934,6 +1934,8 @@ mod pause_resume_conformance {
             urgency: None,
             execution_context: None,
             creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
         }
     }
 
