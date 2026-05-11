@@ -49,6 +49,7 @@ fn main() -> Result<()> {
         }
         Some("doctor") => preflight::doctor(&preflight::ProcessProbe),
         Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
+        Some("lint") => gates::lint(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -150,6 +151,7 @@ fn main() -> Result<()> {
                 "  doctor           full preflight: tools + CARGO_TARGET_DIR + Linux system checks"
             );
             eprintln!("  available        verify cargo xtask is runnable (real capability check)");
+            eprintln!("  lint             fmt-check + clippy + cargo check (CI lint gate)");
             eprintln!("  pre-commit       fmt-check + lint + build-release");
             eprintln!("  prepush          fast lib tests (debug, incremental)");
             eprintln!("  test-unit        all unit + conformance tests");

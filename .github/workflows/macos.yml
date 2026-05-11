@@ -21,11 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo fmt + clippy + check
-        run: |
-          cargo fmt --all --check
-          cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -p minibox-core -p winbox -- -D warnings
-          cargo check --workspace
+      - name: cargo xtask lint
+        run: cargo xtask lint
 
   test-unit:
     name: unit tests (macOS)
@@ -38,8 +35,8 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: cargo nextest run (unit tests)
-        run: cargo nextest run --workspace --lib
+      - name: cargo xtask test-unit
+        run: cargo xtask test-unit
 
   test-protocol-e2e:
     name: protocol e2e (macOS)
@@ -49,10 +46,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: build daemon + cli
-        run: cargo build --release -p miniboxd -p mbx
-      - name: protocol e2e tests
-        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+      - name: cargo xtask test-e2e
+        run: cargo xtask test-e2e
 
   cancel-on-failure:
     name: cancel on failure

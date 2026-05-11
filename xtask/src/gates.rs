@@ -4,6 +4,27 @@ use xshell::{Shell, cmd};
 
 use crate::{bump, docs_lint};
 
+/// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
+///
+/// Includes all workspace crates. On macOS, macbox is included in clippy;
+/// on Linux it compiles but has gated code — still linted for syntax.
+pub fn lint(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo fmt --all --check")
+        .run()
+        .context("cargo fmt --check failed")?;
+    cmd!(
+        sh,
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+    )
+    .run()
+    .context("cargo clippy failed")?;
+    cmd!(sh, "cargo check --workspace")
+        .run()
+        .context("cargo check --workspace failed")?;
+    eprintln!("lint gate passed");
+    Ok(())
+}
+
 /// Pre-commit gate: version bump → fmt → clippy --fix → lint check (macOS-safe, fast)
 ///
 /// Release build and conformance suite run at pre-push time, not here.
@@ -73,20 +94,21 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Unit + integration tests (any platform).
+/// Unit tests (any platform, matches CI).
 ///
-/// Runs the full workspace test suite via nextest, excluding test files that
-/// require Linux root/cgroups (those are gated with `#[cfg(target_os = "linux")]`
-/// and skipped automatically on macOS) and the protocol e2e tests (which need
-/// a pre-built binary and run separately via `test-e2e`).
+/// Runs `--lib` tests only (no integration test files that require Linux root
+/// or a running daemon). On Linux, excludes macbox (macOS-only crate) to match
+/// CI behavior. Integration and e2e tests have dedicated gates.
 pub fn test_unit(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo nextest run --workspace --exclude miniboxd")
-        .run()
-        .context("nextest workspace tests failed")?;
-    // Run miniboxd lib tests (excludes integration test files that need Linux root).
-    cmd!(sh, "cargo nextest run -p miniboxd --lib")
-        .run()
-        .context("miniboxd lib tests failed")?;
+    if cfg!(target_os = "macos") {
+        cmd!(sh, "cargo nextest run --workspace --lib")
+            .run()
+            .context("nextest workspace --lib tests failed")?;
+    } else {
+        cmd!(sh, "cargo nextest run --workspace --exclude macbox --lib")
+            .run()
+            .context("nextest workspace --lib tests failed")?;
+    }
     Ok(())
 }
 
@@ -212,14 +234,16 @@ pub fn test_integration(sh: &Shell) -> Result<()> {
 /// protocol without Linux namespaces, cgroups, or root. On macOS the daemon
 /// dispatches to macbox; on Linux it uses the native adapter (but avoids
 /// operations that require root).
+///
+/// Uses `--release` to match CI behavior and catch optimisation-sensitive bugs.
 pub fn test_e2e(sh: &Shell) -> Result<()> {
-    // Build the daemon binary first so find_binary() can locate it.
-    cmd!(sh, "cargo build -p miniboxd")
+    // Build daemon + CLI in release mode so find_binary() can locate them.
+    cmd!(sh, "cargo build --release -p miniboxd -p mbx")
         .run()
-        .context("failed to build miniboxd for protocol e2e tests")?;
+        .context("failed to build miniboxd/mbx for protocol e2e tests")?;
     cmd!(
         sh,
-        "cargo nextest run -p miniboxd --test protocol_e2e_tests -j 1"
+        "cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture"
     )
     .run()
     .context("protocol e2e tests failed")?;
