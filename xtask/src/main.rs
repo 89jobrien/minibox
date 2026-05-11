@@ -91,6 +91,11 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some("coverage-check") => gates::coverage_check(&sh),
+        Some("check-adapter-coverage") => gates::check_adapter_coverage(&sh),
+        Some("check-no-unwrap") => {
+            let strict = env::args().any(|a| a == "--strict");
+            gates::check_no_unwrap(&sh, strict)
+        }
         Some("test-linux") => bail!("test-linux is not yet implemented for smolvm; see #306"),
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
@@ -171,6 +176,12 @@ fn main() -> Result<()> {
                 "  check-repo-clean warn if generated artifacts (target/, traces/, *.profraw) are tracked"
             );
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
+            eprintln!(
+                "  check-adapter-coverage  verify each wired adapter has integration test files"
+            );
+            eprintln!(
+                "  check-no-unwrap [--strict]  scan production code for .unwrap() (advisory by default)"
+            );
             eprintln!(
                 "  lint-docs        validate frontmatter + status values in docs/superpowers/"
             );

@@ -467,6 +467,124 @@ fn auto_bump(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Check that every wired adapter has at least one integration test file.
+///
+/// Mirrors the `adapter-integration-tests` job in `stability-gates.yml`.
+pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
+    let adapters = ["native", "gke", "colima"];
+    let test_dir = sh.current_dir().join("crates/minibox/tests");
+    let mut missing = Vec::new();
+
+    for adapter in &adapters {
+        let has_test = fs::read_dir(&test_dir)
+            .with_context(|| format!("cannot read {}", test_dir.display()))?
+            .filter_map(|e| e.ok())
+            .any(|e| e.file_name().to_string_lossy().contains(adapter));
+        if has_test {
+            eprintln!("OK: adapter '{adapter}' has integration test file(s)");
+        } else {
+            eprintln!(
+                "ERROR: no integration test file for adapter '{adapter}' in {}",
+                test_dir.display()
+            );
+            missing.push(*adapter);
+        }
+    }
+
+    if !missing.is_empty() {
+        anyhow::bail!(
+            "missing integration tests for adapter(s): {}",
+            missing.join(", ")
+        );
+    }
+    eprintln!("adapter coverage check passed");
+    Ok(())
+}
+
+/// Scan production Rust source for `.unwrap()` calls outside test infrastructure.
+///
+/// Mirrors the `no-unwrap-in-prod` job in `stability-gates.yml`. Advisory by default —
+/// prints warnings but does not fail. Pass `strict = true` to fail on any hit.
+pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
+    let root = sh.current_dir().join("crates");
+    let skip_dirs = ["xtask", "testing", "tests", "examples", "benches"];
+    let mut hits: Vec<String> = Vec::new();
+
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let ft = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+            if ft.is_dir() {
+                stack.push(entry.path());
+                continue;
+            }
+            if !ft.is_file() || entry.path().extension().is_none_or(|ext| ext != "rs") {
+                continue;
+            }
+
+            let path = entry.path();
+            let rel = path.strip_prefix(sh.current_dir()).unwrap_or(&path);
+            let rel_str = rel.to_string_lossy();
+
+            // Skip test infrastructure directories.
+            if skip_dirs.iter().any(|d| {
+                rel_str.contains(&format!("/{d}/")) || rel_str.starts_with(&format!("{d}/"))
+            }) {
+                continue;
+            }
+            // Skip adapter mock files.
+            if rel_str.contains("adapters/") {
+                continue;
+            }
+
+            let content =
+                fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+
+            // Find the line where #[cfg(test)] starts (if any) — skip everything after.
+            let test_start = content
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| line.contains("#[cfg(test)]"))
+                .map(|(i, _)| i)
+                .last();
+
+            for (i, line) in content.lines().enumerate() {
+                if let Some(ts) = test_start {
+                    if i >= ts {
+                        break;
+                    }
+                }
+                if line.contains(".unwrap()") && !line.contains("// allow:unwrap") {
+                    hits.push(format!("{}:{}: {}", rel.display(), i + 1, line.trim()));
+                }
+            }
+        }
+    }
+
+    if hits.is_empty() {
+        eprintln!("OK: no .unwrap() calls in production code");
+    } else {
+        eprintln!(
+            "WARNING: {} .unwrap() call(s) found outside test infrastructure:",
+            hits.len()
+        );
+        for h in &hits {
+            eprintln!("  {h}");
+        }
+        if strict {
+            anyhow::bail!("{} .unwrap() calls in production code", hits.len());
+        }
+    }
+    Ok(())
+}
+
 /// Find the most recently modified test binary matching a name prefix (no `.d` extension)
 pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> {
     let dir = Path::new(deps_dir);
