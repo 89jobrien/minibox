@@ -3457,7 +3457,6 @@ async fn test_resume_nonexistent_container_returns_error() {
 // Task 1: ContainerPolicy tests (auth-policy-gate)
 // ---------------------------------------------------------------------------
 
-use minibox::daemon::handler::ContainerPolicy;
 use minibox_core::domain::BindMount;
 
 fn make_deps_with_policy(temp_dir: &TempDir, policy: ContainerPolicy) -> Arc<HandlerDependencies> {
@@ -7490,22 +7489,7 @@ fn sample_bind_mount() -> minibox_core::domain::BindMount {
 }
 
 #[tokio::test]
-async fn test_policy_denies_bind_mount_by_default() {
-    let response =
-        handle_run_with_policy(vec![sample_bind_mount()], false, ContainerPolicy::default()).await;
-    match response {
-        DaemonResponse::Error { message } => {
-            assert!(
-                message.contains("bind mount"),
-                "expected bind mount policy error, got: {message}"
-            );
-        }
-        other => panic!("expected Error response for denied bind mount, got {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn test_policy_denies_privileged_by_default() {
+async fn test_policy_denies_privileged_by_default_via_helper() {
     let response = handle_run_with_policy(vec![], true, ContainerPolicy::default()).await;
     match response {
         DaemonResponse::Error { message } => {
