@@ -7,8 +7,8 @@ use minibox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox::daemon::handler::{
-    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
-    handle_resize_pty, handle_send_input,
+    self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
+    LifecycleDeps, handle_resize_pty, handle_send_input,
 };
 use minibox::daemon::state::{ContainerState, DaemonState};
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -7403,8 +7403,180 @@ async fn handle_run_stores_creation_params() {
 }
 
 // ---------------------------------------------------------------------------
-// ContainerPolicy::from_env tests
+// ContainerPolicy gate tests
 // ---------------------------------------------------------------------------
+
+/// Helper: call `handle_run` with specific mounts, privileged flag, and policy.
+async fn handle_run_with_policy(
+    mounts: Vec<minibox_core::domain::BindMount>,
+    privileged: bool,
+    policy: ContainerPolicy,
+) -> DaemonResponse {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images"))
+            .expect("create image store"),
+    );
+    let mock_registry = Arc::new(MockRegistry::new());
+    let deps = Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                mock_registry as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime: Arc::new(MockRuntime::new()),
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers"),
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: Arc::new(tokio::sync::Mutex::new(
+                minibox::daemon::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy,
+        checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
+    });
+    let state = Arc::new(DaemonState::new(
+        minibox::image::ImageStore::new(temp_dir.path().join("images2")).expect("image store"),
+        temp_dir.path(),
+    ));
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_run(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        None,
+        mounts,
+        privileged,
+        vec![],
+        None,
+        None,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    rx.recv().await.expect("handler sent no response")
+}
+
+fn sample_bind_mount() -> minibox_core::domain::BindMount {
+    minibox_core::domain::BindMount {
+        host_path: std::path::PathBuf::from("/tmp/host"),
+        container_path: std::path::PathBuf::from("/mnt/data"),
+        read_only: false,
+    }
+}
+
+#[tokio::test]
+async fn test_policy_denies_bind_mount_by_default() {
+    let response =
+        handle_run_with_policy(vec![sample_bind_mount()], false, ContainerPolicy::default()).await;
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("bind mount"),
+                "expected bind mount policy error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response for denied bind mount, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_policy_denies_privileged_by_default() {
+    let response = handle_run_with_policy(vec![], true, ContainerPolicy::default()).await;
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("privileged"),
+                "expected privileged policy error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response for denied privileged, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_policy_allows_bind_mount_when_permitted() {
+    let policy = ContainerPolicy {
+        allow_bind_mounts: true,
+        allow_privileged: false,
+    };
+    let response = handle_run_with_policy(vec![sample_bind_mount()], false, policy).await;
+    // Should NOT be a policy error (may be ContainerCreated or other non-policy error).
+    if let DaemonResponse::Error { message } = &response {
+        assert!(
+            !message.contains("policy violation"),
+            "bind mount should be allowed but got policy error: {message}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_policy_allows_privileged_when_permitted() {
+    let policy = ContainerPolicy {
+        allow_bind_mounts: false,
+        allow_privileged: true,
+    };
+    let response = handle_run_with_policy(vec![], true, policy).await;
+    if let DaemonResponse::Error { message } = &response {
+        assert!(
+            !message.contains("policy violation"),
+            "privileged should be allowed but got policy error: {message}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_policy_denies_both_bind_mount_and_privileged() {
+    let response =
+        handle_run_with_policy(vec![sample_bind_mount()], true, ContainerPolicy::default()).await;
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("policy violation"),
+                "expected policy violation error, got: {message}"
+            );
+        }
+        other => panic!("expected Error response, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_policy_empty_mounts_privileged_true_denied() {
+    let response = handle_run_with_policy(vec![], true, ContainerPolicy::default()).await;
+    match response {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("privileged"),
+                "expected privileged policy error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+}
 
 #[tokio::test]
 async fn test_policy_from_env_defaults() {
