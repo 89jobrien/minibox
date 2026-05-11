@@ -556,10 +556,10 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
                 .last();
 
             for (i, line) in content.lines().enumerate() {
-                if let Some(ts) = test_start {
-                    if i >= ts {
-                        break;
-                    }
+                if let Some(ts) = test_start
+                    && i >= ts
+                {
+                    break;
                 }
                 if line.contains(".unwrap()") && !line.contains("// allow:unwrap") {
                     hits.push(format!("{}:{}: {}", rel.display(), i + 1, line.trim()));
