@@ -7401,3 +7401,14 @@ async fn handle_run_stores_creation_params() {
         other => panic!("expected ContainerCreated, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// ContainerPolicy::from_env tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_policy_from_env_defaults() {
+    let policy = ContainerPolicy::from_env();
+    assert!(!policy.allow_bind_mounts, "default should deny bind mounts");
+    assert!(!policy.allow_privileged, "default should deny privileged");
+}

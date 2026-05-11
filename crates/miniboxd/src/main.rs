@@ -345,6 +345,13 @@ async fn run_daemon() -> Result<()> {
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
+    let policy = ContainerPolicy::from_env();
+    tracing::info!(
+        allow_bind_mounts = policy.allow_bind_mounts,
+        allow_privileged = policy.allow_privileged,
+        "container policy configured"
+    );
+
     let deps = build_handler_deps(
         suite,
         Arc::clone(&state),
@@ -352,6 +359,7 @@ async fn run_daemon() -> Result<()> {
         metrics_recorder.clone(),
         Arc::clone(&event_broker),
         Arc::clone(&image_gc),
+        policy,
     )
     .await?;
 
@@ -441,8 +449,9 @@ async fn build_handler_deps(
     metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder>,
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
+    policy: ContainerPolicy,
 ) -> Result<Arc<HandlerDependencies>> {
-    match suite {
+    let deps = match suite {
         #[cfg(target_os = "linux")]
         AdapterSuite::Native => {
             let native_network = resolve_native_network().await?;
@@ -496,7 +505,13 @@ async fn build_handler_deps(
         AdapterSuite::Native | AdapterSuite::Gke => {
             anyhow::bail!("{suite} adapter requires Linux");
         }
-    }
+    }?;
+
+    // Apply operator-configured policy, overriding the deny-all defaults
+    // set by each adapter builder.
+    let mut deps_inner = Arc::try_unwrap(deps).unwrap_or_else(|arc| (*arc).clone());
+    deps_inner.policy = policy;
+    Ok(Arc::new(deps_inner))
 }
 
 // ── Native adapter (Linux only) ──────────────────────────────────────────

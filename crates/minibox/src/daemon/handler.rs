@@ -265,6 +265,27 @@ pub struct ContainerPolicy {
     pub allow_privileged: bool,
 }
 
+impl ContainerPolicy {
+    /// Build a `ContainerPolicy` from environment variables.
+    ///
+    /// - `MINIBOX_ALLOW_BIND_MOUNTS=1|true|yes` enables bind mounts (default: deny).
+    /// - `MINIBOX_ALLOW_PRIVILEGED=1|true|yes` enables privileged mode (default: deny).
+    pub fn from_env() -> Self {
+        Self {
+            allow_bind_mounts: env_flag("MINIBOX_ALLOW_BIND_MOUNTS"),
+            allow_privileged: env_flag("MINIBOX_ALLOW_PRIVILEGED"),
+        }
+    }
+}
+
+/// Parse a boolean-ish environment variable (absent or unrecognised = false).
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+}
+
 /// Validate a container run request against the active policy.
 ///
 /// Returns `Ok(())` if the request is permitted; returns an error string
