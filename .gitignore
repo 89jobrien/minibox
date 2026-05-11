@@ -1,5 +1,6 @@
 # Markdown files (except core documentation)
 *.md
+!.claude/**/*.md
 !README.md
 !CLAUDE.md
 !HANDOFF.md
@@ -33,17 +34,11 @@
 fuzz/*
 !fuzz/fuzz_targets/
 
-# Claude Code local configuration — track skills and hooks, ignore everything else
-.claude/*
-!.claude/hooks
-!.claude/skills
-.claude/skills/*
-!.claude/skills/wave-integration
-.claude/skills/wave-integration/*
-!.claude/skills/wave-integration/SKILL.md
-!.claude/skills/wave-integration/helpers
-!.claude/skills/wave-integration/references
-!.claude/skills/wave-integration/references/*.md
+# Claude Code — track everything except local settings and ephemeral state
+.claude/settings.local.json
+.claude/.DS_Store
+.claude/*/local/
+.claude/*/*/local/
 .worktrees/
 .superpowers/
 .remember/
