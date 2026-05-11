@@ -2386,11 +2386,20 @@ mod list_conformance {
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
-        // Force the state to Stopped via Running (state machine: Created→Running→Stopped).
-        state
-            .update_container_state(&id, ContainerState::Running)
+        // Force the state to Stopped without reapplying Running if handle_run
+        // already advanced the state machine to Running.
+        let current = state
+            .get_container(&id)
             .await
-            .expect("update state to Running must succeed");
+            .expect("container must exist")
+            .info
+            .state;
+        if current == "Created" {
+            state
+                .update_container_state(&id, ContainerState::Running)
+                .await
+                .expect("update state to Running must succeed");
+        }
         state
             .update_container_state(&id, ContainerState::Stopped)
             .await
@@ -2433,11 +2442,20 @@ mod list_conformance {
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
-        // Stop then remove (state machine: Created→Running→Stopped).
-        state
-            .update_container_state(&id, ContainerState::Running)
+        // Stop then remove without reapplying Running if handle_run already
+        // advanced the state machine.
+        let current = state
+            .get_container(&id)
             .await
-            .expect("update state to Running");
+            .expect("container must exist")
+            .info
+            .state;
+        if current == "Created" {
+            state
+                .update_container_state(&id, ContainerState::Running)
+                .await
+                .expect("update state to Running");
+        }
         state
             .update_container_state(&id, ContainerState::Stopped)
             .await

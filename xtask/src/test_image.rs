@@ -18,7 +18,7 @@ use xshell::{Shell, cmd};
 const TARGET: &str = "aarch64-unknown-linux-musl";
 const ALPINE_IMAGE: &str = "alpine";
 const ALPINE_TAG: &str = "3.21";
-const ALPINE_ARCH: &str = "arm64"; // Docker Hub arch name for aarch64
+const ALPINE_ARCH: &str = "arm64";
 const DOCKER_REGISTRY: &str = "https://registry-1.docker.io";
 const DOCKER_AUTH: &str = "https://auth.docker.io";
 

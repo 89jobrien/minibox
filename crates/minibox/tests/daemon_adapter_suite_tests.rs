@@ -19,9 +19,9 @@
 //! - **colima**: uses `MockRegistry` + `ColimaRuntime::with_executor` +
 //!   `ColimaFilesystem` + `ColimaLimiter` + `NoopNetwork`.
 
-use minibox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
+use minibox::adapters::mocks::{MockFilesystem, MockRegistry, MockRuntime};
+#[cfg(target_os = "linux")]
+use minibox::adapters::mocks::{MockLimiter, MockNetwork};
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
     NoopImageLoader,
@@ -308,7 +308,7 @@ async fn test_colima_adapter_suite_run_returns_container_created() {
 
     // Inject a fake executor so ColimaRuntime never shells out to limactl/nerdctl.
     let colima_runtime =
-        ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
+        ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok("42\n".to_string())));
 
     let colima_limiter =
         ColimaLimiter::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));

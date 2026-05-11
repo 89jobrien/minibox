@@ -35,9 +35,6 @@ d4fb4b7 ci: trigger workflow
 | minibox-46 | P1 | open | feat: PTY/stdio piping for interactive containers (#19) — plan written |
 | minibox-55 | P1 | open | feat: minibox owns the full container stack on every OS |
 | minibox-crux-plugin | P1 | open | feat: minibox-crux-plugin binary — crux JSON-RPC plugin for minibox adapter |
-| minibox-godmode-hook | P1 | open | fix: godmode pre-commit-gate hook CLAUDE_PLUGIN_ROOT not resolving |
-| minibox-nightly-geiger | P1 | open | fix(ci): make cargo-geiger non-blocking in nightly workflow |
-| minibox-prepush-skip | P1 | open | chore: commit staged prepush skip (gates.rs) — blocked by godmode hook |
 | minibox-update-upgrade | P1 | open | feat: mbx update + mbx upgrade — restart support stubbed (Wave 3) |
 | minibox-43 | P2 | blocked | feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75) |
 | minibox-52 | P2 | blocked | feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84) |

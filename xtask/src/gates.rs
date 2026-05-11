@@ -127,6 +127,16 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
         .output()
         .context("generate-report failed to launch")?;
 
+    if !report_output.status.success() {
+        let code = report_output
+            .status
+            .code()
+            .map_or("signal".to_string(), |c| c.to_string());
+        let stderr = String::from_utf8_lossy(&report_output.stderr);
+        let stdout = String::from_utf8_lossy(&report_output.stdout);
+        anyhow::bail!("generate-report exited with {code}\nstderr: {stderr}\nstdout: {stdout}");
+    }
+
     let report_stdout = String::from_utf8_lossy(&report_output.stdout);
     for line in report_stdout.lines() {
         if line.starts_with("conformance:") {

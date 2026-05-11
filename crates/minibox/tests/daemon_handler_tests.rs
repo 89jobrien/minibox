@@ -449,7 +449,7 @@ async fn test_handle_run_pulls_uncached_image() {
         DaemonResponse::ContainerCreated { .. } => {
             // Success - image was pulled
         }
-        _ => panic!("expected ContainerCreated, got {response:?}"),
+        _ => panic!("expected Error, got {response:?}"),
     }
 
     // Image was not cached, so pull SHOULD have been called
@@ -652,19 +652,19 @@ async fn test_handle_run_runtime_spawn_failure() {
     )
     .await;
 
-    // Container creation succeeds (spawn happens asynchronously)
     match response {
-        DaemonResponse::ContainerCreated { id } => {
-            // Wait for async spawn to fail
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-            // Container should be marked as Failed
-            let container = state.get_container(&id).await;
-            assert!(container.is_some());
-            assert_eq!(container.unwrap().info.state, "Failed");
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("mock spawn failure"),
+                "unexpected error message: {message}"
+            );
         }
-        _ => panic!("expected ContainerCreated, got {response:?}"),
+        _ => panic!("expected Error, got {response:?}"),
     }
+
+    let containers = state.list_containers().await;
+    assert_eq!(containers.len(), 1, "failed run should retain one record");
+    assert_eq!(containers[0].state, "Failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -2409,7 +2409,8 @@ async fn test_handle_remove_failed_container_succeeds() {
     });
     let state = create_test_state_with_dir(&temp_dir);
 
-    // Run will return ContainerCreated immediately; async spawn fails → "Failed".
+    // Spawn failure is reported synchronously, leaving a Failed-state record
+    // that can be removed.
     let response = handle_run_once(
         "alpine".to_string(),
         None,
@@ -2421,12 +2422,20 @@ async fn test_handle_remove_failed_container_succeeds() {
         deps.clone(),
     )
     .await;
-    let id = extract_container_id(&response);
+    match response {
+        DaemonResponse::Error { ref message } => {
+            assert!(
+                message.contains("mock spawn failure"),
+                "unexpected error message: {message}"
+            );
+        }
+        _ => panic!("expected Error, got {response:?}"),
+    }
 
-    // Wait for async spawn task to mark container as Failed.
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-    let container = state.get_container(&id).await.expect("container exists");
-    assert_eq!(container.info.state, "Failed", "container should be Failed");
+    let containers = state.list_containers().await;
+    assert_eq!(containers.len(), 1, "failed run should retain one record");
+    assert_eq!(containers[0].state, "Failed", "container should be Failed");
+    let id = containers[0].id.clone();
 
     // Now remove it — should succeed because "Failed" != "Running".
     let remove_response = handler::handle_remove(id.clone(), state.clone(), deps).await;
