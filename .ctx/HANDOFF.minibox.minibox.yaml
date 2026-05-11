@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-09
+updated: 2026-05-11
 items:
 - id: minibox-update-upgrade
   doob_uuid: null
@@ -60,6 +60,13 @@ items:
     value: null
     reviewed: null
     note: captured in doob — todo id 34l16mxn2y29do1562s9
+  - date: 2026-05-10
+    type: note
+    field: null
+    value: null
+    reviewed: null
+    note: |
+      Blocker last confirmed 2026-04-01 (39 days ago). No upstream fix from Apple yet. Monitor apple/container#1254 before next VZ work.
 - id: minibox-33
   doob_uuid: null
   name: winbox-hyper-v-wsl2
@@ -211,12 +218,20 @@ items:
   - crates/miniboxd/src/adapter_registry.rs
   - docs/superpowers/plans/2026-04-30-crux-maestro-portability.md
   completed: null
-  extra: []
+  extra:
+  - date: 2026-05-10
+    type: discovery
+    field: null
+    value: null
+    reviewed: null
+    note: |
+      Cross-project dependency on crux (cruxx-plugin + cruxx-types at ~/dev/crux/crates/). crux has no open items — dependency is stable and available.
 - id: minibox-nightly-geiger
   doob_uuid: null
   name: nightly-geiger-nonblocking
   priority: P1
-  status: open
+  status: done
+  completed: 2026-05-09
   title: 'fix(ci): make cargo-geiger non-blocking in nightly workflow'
   description: |
     cargo-geiger exits 1 on "Failed to match (ignoring source) package: valuable@0.1.1" —
@@ -231,7 +246,8 @@ items:
   doob_uuid: null
   name: godmode-hook-plugin-root
   priority: P1
-  status: open
+  status: done
+  completed: 2026-05-09
   title: 'fix: godmode pre-commit-gate hook CLAUDE_PLUGIN_ROOT not resolving'
   description: |
     When running from an atelier skill context, CLAUDE_PLUGIN_ROOT resolves to atelier's root,
@@ -248,7 +264,8 @@ items:
   doob_uuid: null
   name: prepush-skip-uncommitted
   priority: P1
-  status: open
+  status: done
+  completed: 2026-05-09
   title: 'chore: commit staged prepush skip (gates.rs) — blocked by godmode hook'
   description: |
     xtask/src/gates.rs has staged changes adding pushed_rust_files() and skipping nextest
@@ -260,6 +277,9 @@ items:
   completed: null
   extra: []
 log:
+- date: 2026-05-11
+  summary: 'handup triage: marked minibox-nightly-geiger, minibox-godmode-hook, minibox-prepush-skip as done (commits 3b9901a, 3650cad from 2026-05-09 already resolved them). HANDOFF was stale.'
+  commits: []
 - date: '20260509.225051'
   summary: 'Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart)'
   commits: []
@@ -280,6 +300,10 @@ log:
   summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes; merged next->stable and tagged v0.23.0; synced xtask README; dropped stale minibox-agent-llm-api item.'
   commits: []
   session: 39
+- date: 2026-05-10
+  summary: |
+    handdown analysis pass — 2 item(s) annotated. minibox-crux-plugin cross-project dependency on crux noted; minibox-7 VZ blocker staleness flagged (39 days since last confirmation).
+  commits: []
 - date: 2026-05-09
   summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
   commits: []
