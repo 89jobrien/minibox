@@ -283,9 +283,7 @@ impl ImageStore {
         let actual_hex = hashing_reader.finalize();
         let expected_hex = expected_digest
             .strip_prefix("sha256:")
-            .ok_or_else(|| {
-                anyhow::anyhow!("digest missing sha256: prefix: {expected_digest}")
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("digest missing sha256: prefix: {expected_digest}"))?;
 
         if actual_hex != expected_hex {
             if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
@@ -312,9 +310,7 @@ impl ImageStore {
                     "layer: failed to clean up tmp dir after extract error"
                 );
             }
-            return Err(e).with_context(|| {
-                format!("extracting layer {expected_digest}")
-            });
+            return Err(e).with_context(|| format!("extracting layer {expected_digest}"));
         }
 
         // Atomic rename: tmp -> final dest.
