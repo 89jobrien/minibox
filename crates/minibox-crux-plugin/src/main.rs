@@ -418,7 +418,8 @@ mod tests {
     #[test]
     fn build_request_container_run_minimal() {
         let input = json!({"image": "alpine:latest", "command": ["/bin/sh"]});
-        let req = build_request("minibox::container::run", &input).unwrap();
+        let req = build_request("minibox::container::run", &input)
+            .expect("build_request for minimal run input");
         match req {
             DaemonRequest::Run { image, command, .. } => {
                 assert_eq!(image, "alpine:latest");
@@ -495,7 +496,8 @@ mod tests {
     fn build_request_unknown_handler_returns_err() {
         let result = build_request("minibox::unknown::handler", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown handler"));
+        let msg = result.expect_err("unknown handler must fail").to_string();
+        assert!(msg.contains("unknown handler"));
     }
 
     #[test]
@@ -577,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn handler_decls_covers_all_nine_handlers() {
+    fn handler_decls_covers_all_handlers() {
         let decls = handler_decls();
         assert_eq!(decls.len(), 13, "expected 13 handler declarations");
         let names: Vec<&str> = decls.iter().map(|d| d.name.as_str()).collect();
@@ -676,6 +678,66 @@ mod tests {
         assert!(
             msg.contains("image_ref"),
             "error message should mention 'image_ref', got: {msg}"
+        );
+    }
+
+    // ── parse_mounts path-traversal rejection ────────────────────────────────
+
+    #[test]
+    fn parse_mounts_rejects_relative_host_path() {
+        let input = json!({
+            "mounts": [{"host_path": "relative/path", "container_path": "/data"}]
+        });
+        let result = parse_mounts(&input);
+        let msg = result
+            .expect_err("relative host_path must fail")
+            .to_string();
+        assert!(
+            msg.contains("host_path"),
+            "error should mention host_path: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_mounts_rejects_dotdot_in_host_path() {
+        let input = json!({
+            "mounts": [{"host_path": "/tmp/../etc/shadow", "container_path": "/data"}]
+        });
+        let result = parse_mounts(&input);
+        let msg = result.expect_err(".. in host_path must fail").to_string();
+        assert!(
+            msg.contains("host_path"),
+            "error should mention host_path: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_mounts_rejects_relative_container_path() {
+        let input = json!({
+            "mounts": [{"host_path": "/tmp/data", "container_path": "data"}]
+        });
+        let result = parse_mounts(&input);
+        let msg = result
+            .expect_err("relative container_path must fail")
+            .to_string();
+        assert!(
+            msg.contains("container_path"),
+            "error should mention container_path: {msg}"
+        );
+    }
+
+    #[test]
+    fn parse_mounts_rejects_dotdot_in_container_path() {
+        let input = json!({
+            "mounts": [{"host_path": "/tmp/data", "container_path": "/data/../etc"}]
+        });
+        let result = parse_mounts(&input);
+        let msg = result
+            .expect_err(".. in container_path must fail")
+            .to_string();
+        assert!(
+            msg.contains("container_path"),
+            "error should mention container_path: {msg}"
         );
     }
 

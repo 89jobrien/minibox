@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-11
+updated: 2026-05-12
 items:
 - id: crux-plugin-2
   name: add-mounts-field-wiring-to-minibox--container--run-handler
@@ -9,7 +9,7 @@ items:
   title: Add mounts field wiring to minibox::container::run handler
   description: 'code review: 2 blocking issues (parse_mounts path traversal, .unwrap in main), 5 suggestions, 3 nitpicks — fix in crux-plugin-2-fixes first'
   extra:
-  - date: 2026-05-11
+  - date: 2026-05-12
     type: blocker
     note: 'code review: 2 blocking issues (parse_mounts path traversal, .unwrap in main), 5 suggestions, 3 nitpicks — fix in crux-plugin-2-fixes first'
 - id: uncommitted-work
@@ -21,18 +21,278 @@ items:
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    crates/minibox-core/src/domain/execution_manifest.rs
-    crates/minibox-core/src/domain/execution_policy.rs
-    crates/minibox/src/daemon/handler.rs
-    crates/minibox/src/daemon/state.rs
+    crates/minibox-crux-plugin/src/main.rs
+    crates/minibox-crux-plugin/tests/integration.rs
+    geiger-report.txt
+    docs/plans/
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - crates/minibox-core/src/domain/execution_manifest.rs
-  - crates/minibox-core/src/domain/execution_policy.rs
-  - crates/minibox/src/daemon/handler.rs
-  - crates/minibox/src/daemon/state.rs
+  - crates/minibox-crux-plugin/src/main.rs
+  - crates/minibox-crux-plugin/tests/integration.rs
+  - geiger-report.txt
+  - docs/plans/
 log:
+- date: '20260512.024124'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.024124'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.023740'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.023740'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.022208'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021930'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021735'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021703'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021517'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021428'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021351'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021351'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021316'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021316'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.021249'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.020927'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.011857'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.011857'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.001004'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+- date: '20260512.001004'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - ee5f53a3bd09d31af9753e2e33f92786d4e383b9
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
 - date: '20260511.235816'
   summary: done=3 running=0 pending=20 blocked=1
   commits:
