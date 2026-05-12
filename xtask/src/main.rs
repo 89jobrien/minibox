@@ -13,6 +13,7 @@ use std::{env, path::Path};
 use xshell::Shell;
 
 mod bench;
+mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::{env, fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{bump, docs_lint};
+use crate::{borrow_fixtures, bump, docs_lint};
 
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
@@ -32,13 +32,13 @@ pub fn fix(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
-        auto_bump(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
         // Re-stage any files rustfmt modified so the commit includes the formatted versions.
         // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
         cmd!(sh, "git add -u -- . :!.worktrees")
             .run()
             .context("git add -u after fmt failed")?;
+        auto_bump(sh)?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
@@ -135,14 +135,17 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 /// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
 pub fn test_conformance(sh: &Shell) -> Result<()> {
     // Build the harness binaries first so errors surface before test execution.
-    cmd!(sh, "cargo build -p minibox-conformance --bins")
+    cmd!(sh, "cargo build --release -p minibox-conformance --bins")
         .run()
         .context("failed to build minibox-conformance")?;
 
     // Run the full suite via `run-conformance` (fast, exits 1 on failure).
-    let output = cmd!(sh, "cargo run -p minibox-conformance --bin run-conformance")
-        .output()
-        .context("run-conformance failed to launch")?;
+    let output = cmd!(
+        sh,
+        "cargo run --release -p minibox-conformance --bin run-conformance"
+    )
+    .output()
+    .context("run-conformance failed to launch")?;
 
     // Surface test output regardless of pass/fail.
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -159,9 +162,12 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     }
 
     // Generate JSON + JUnit XML reports.
-    let report_output = cmd!(sh, "cargo run -p minibox-conformance --bin generate-report")
-        .output()
-        .context("generate-report failed to launch")?;
+    let report_output = cmd!(
+        sh,
+        "cargo run --release -p minibox-conformance --bin generate-report"
+    )
+    .output()
+    .context("generate-report failed to launch")?;
 
     if !report_output.status.success() {
         let code = report_output
@@ -477,6 +483,35 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
         .lines()
         .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
 }
+/// Format staged Markdown files before any version bump or Rust fixer mutates
+/// the index.
+fn format_staged_markdown(sh: &Shell) -> Result<()> {
+    let files = staged_markdown_files(sh)?;
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let prettier_files = files.clone();
+    cmd!(sh, "prettier --write --parser=markdown {prettier_files...}")
+        .run()
+        .context("markdown format failed")?;
+    cmd!(sh, "git add -- {files...}")
+        .run()
+        .context("git add markdown files after prettier failed")?;
+    Ok(())
+}
+
+fn staged_markdown_files(sh: &Shell) -> Result<Vec<String>> {
+    let staged = cmd!(sh, "git diff --cached --name-only --diff-filter=ACM")
+        .output()
+        .context("git diff --cached markdown files failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .filter(|line| line.ends_with(".md"))
+        .map(ToOwned::to_owned)
+        .collect())
+}
 
 /// Auto-bump workspace version based on staged Rust changes.
 ///
@@ -486,6 +521,10 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 /// After bumping, re-stages `Cargo.toml` so the version change is included
 /// in the commit.
 fn auto_bump(sh: &Shell) -> Result<()> {
+    if workspace_version_already_staged(sh)? {
+        eprintln!("[minibox] workspace version already staged — skipping auto bump");
+        return Ok(());
+    }
     let new_files = cmd!(sh, "git diff --cached --name-only --diff-filter=A")
         .output()
         .context("git diff --cached --diff-filter=A failed")?;
