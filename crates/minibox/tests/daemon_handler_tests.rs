@@ -6875,12 +6875,16 @@ async fn test_handle_update_restart_stops_running_containers() {
         }
     };
 
-    // The success message must mention "stopped 1 container(s)" because the
-    // running container should have been stopped (or attempted — stop_inner
-    // logs a warn on ESRCH but still counts the container).
+    // The success message must mention "stopped" because the running container
+    // should have been stopped. Without creation_params it cannot be restarted,
+    // so restarted count should be 0.
     assert!(
         success_msg.contains("stopped"),
         "expected 'stopped' in success message when restart=true, got: {success_msg}"
+    );
+    assert!(
+        success_msg.contains("restarted 0"),
+        "expected 'restarted 0' (no creation_params), got: {success_msg}"
     );
 }
 

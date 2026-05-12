@@ -1190,6 +1190,34 @@ async fn run_inner(
     Ok(id)
 }
 
+/// Re-run a container from its stored `RunCreationParams`.
+///
+/// Used by `handle_update` to restart containers after an image update.
+/// Delegates to `run_inner` with all fields from the stored params.
+#[cfg(unix)]
+async fn run_from_params(
+    params: &RunCreationParams,
+    state: Arc<DaemonState>,
+    deps: Arc<HandlerDependencies>,
+) -> Result<String> {
+    run_inner(
+        params.image.clone(),
+        params.tag.clone(),
+        params.command.clone(),
+        params.memory_limit_bytes,
+        params.cpu_weight,
+        params.network,
+        params.mounts.clone(),
+        params.privileged,
+        params.env.clone(),
+        params.name.clone(),
+        params.platform.clone(),
+        state,
+        deps,
+    )
+    .await
+}
+
 /// Check if a container was OOM-killed by reading cgroup v2 `memory.events`.
 ///
 /// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
@@ -2921,8 +2949,8 @@ pub async fn handle_pipeline(
 ///    container records held in `state`.
 /// 3. Otherwise: the explicit `images` list.
 ///
-/// When `restart` is `true` a warning is logged for each affected container;
-/// the actual restart is not yet implemented (tracked for a later wave).
+/// When `restart` is `true`, Running or Paused containers whose source image
+/// was updated are stopped and re-run from their stored `creation_params`.
 pub async fn handle_update(
     images: Vec<String>,
     all: bool,
@@ -3031,17 +3059,17 @@ pub async fn handle_update(
         }
     }
 
-    // ── Step 3: stop containers using updated images (restart = true) ────────
+    // ── Step 3: restart containers using updated images (restart = true) ──────
     //
-    // Full replay (stop + re-run with original config) requires the container's
-    // creation parameters to be stored in ContainerRecord, which is tracked for
-    // a future wave.  For now, "restart" means: stop every Running or Paused
-    // container whose source image was just updated so it picks up the new
-    // layers on its next manual start.
+    // For each Running or Paused container whose source image was just updated:
+    // 1. Stop the container
+    // 2. Re-run it from stored creation_params so it picks up the new layers
+    //
+    // Containers without creation_params are stop-only (legacy records).
     //
     // stop_inner is unix-only so this entire block is cfg-gated.
     #[cfg(unix)]
-    let stopped: usize = if restart {
+    let (stopped, restarted): (usize, usize) = if restart {
         let target_set: std::collections::HashSet<&str> =
             target_refs.iter().map(String::as_str).collect();
 
@@ -3053,15 +3081,15 @@ pub async fn handle_update(
             .map(|info| info.id)
             .collect();
 
-        let mut count = 0usize;
+        let mut stop_count = 0usize;
+        let mut restart_count = 0usize;
         for id in candidate_ids {
             let record = state.get_container(&id).await;
-            let image_ref = record.and_then(|r| r.source_image_ref);
-            if !image_ref
-                .as_deref()
-                .map(|r| target_set.contains(r))
-                .unwrap_or(false)
-            {
+            let (image_ref, creation_params) = match &record {
+                Some(r) => (r.source_image_ref.as_deref(), r.creation_params.clone()),
+                None => (None, None),
+            };
+            if !image_ref.map(|r| target_set.contains(r)).unwrap_or(false) {
                 continue;
             }
 
@@ -3071,7 +3099,7 @@ pub async fn handle_update(
             );
             match stop_inner(&id, &state).await {
                 Ok(()) => {
-                    count += 1;
+                    stop_count += 1;
                     info!(container_id = %id, "handle_update: container stopped");
                 }
                 Err(e) => {
@@ -3080,25 +3108,65 @@ pub async fn handle_update(
                         error = %e,
                         "handle_update: failed to stop container — continuing"
                     );
+                    continue;
                 }
             }
+
+            // Re-run from stored creation params if available.
+            if let Some(params) = creation_params {
+                match run_from_params(&params, Arc::clone(&state), Arc::clone(&deps)).await {
+                    Ok(new_id) => {
+                        restart_count += 1;
+                        info!(
+                            old_id = %id,
+                            new_id = %new_id,
+                            "handle_update: container restarted with updated image"
+                        );
+                        if tx
+                            .send(DaemonResponse::UpdateProgress {
+                                image: params.image.clone(),
+                                status: format!("restarted {id} as {new_id}"),
+                            })
+                            .await
+                            .is_err()
+                        {
+                            warn!("handle_update: client disconnected during restart progress");
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            container_id = %id,
+                            error = %e,
+                            "handle_update: failed to restart container — stopped but not re-run"
+                        );
+                    }
+                }
+            } else {
+                warn!(
+                    container_id = %id,
+                    "handle_update: no creation_params — stopped but cannot restart"
+                );
+            }
         }
-        count
+        (stop_count, restart_count)
     } else {
-        0
+        (0, 0)
     };
 
     #[cfg(not(unix))]
-    let stopped: usize = {
+    let (stopped, restarted): (usize, usize) = {
         if restart {
             warn!("handle_update: restart not supported on this platform");
         }
-        0
+        (0, 0)
     };
 
     // ── Step 4: terminal Success ──────────────────────────────────────────────
     let message = if restart && stopped > 0 {
-        format!("updated {updated}/{total} images; stopped {stopped} container(s)")
+        format!(
+            "updated {updated}/{total} images; stopped {stopped}, restarted {restarted} container(s)"
+        )
     } else {
         format!("updated {updated}/{total} images")
     };
