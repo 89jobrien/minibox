@@ -20,6 +20,20 @@ use super::state::DaemonState;
 // SECURITY: Maximum request size to prevent memory exhaustion
 const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
 
+/// A bidirectional async byte stream that can be used as a daemon connection.
+///
+/// This trait is a named alias for the `AsyncRead + AsyncWrite + Unpin + Send`
+/// bound required by [`handle_connection`].  It is implemented for:
+///
+/// - [`tokio::net::UnixStream`] — production Unix socket connections
+/// - [`tokio::io::DuplexStream`] — in-memory test doubles
+///
+/// Any type implementing all four super-traits satisfies this bound
+/// automatically via the blanket impl below.
+pub trait AsyncStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> AsyncStream for T {}
+
 /// Peer credentials from an accepted connection.
 #[derive(Debug, Clone)]
 pub struct PeerCreds {
@@ -1486,5 +1500,102 @@ mod tests {
             matches!(received, DaemonResponse::Success { ref message } if message == "delivered"),
             "unexpected response: {received:?}"
         );
+    }
+
+    // ─── MockStream failure tests ────────────────────────────────────────────
+    //
+    // These tests exercise `handle_connection` via `tokio::io::duplex` streams
+    // (the in-memory `AsyncStream` double) to verify protocol-level failure
+    // modes without a real Unix socket.
+
+    /// half_frame_request: `MockStream` read_buf contains truncated JSON (no
+    /// newline terminator).  `handle_connection` must not panic — it should
+    /// exit either cleanly (`Ok`) or with an I/O error (broken pipe / write
+    /// on closed) when trying to send a parse-error response back to a
+    /// client that has already closed its read end.
+    #[tokio::test]
+    async fn mock_stream_half_frame_request_exits_cleanly() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (mut client, server) = tokio::io::duplex(4096);
+        let join = tokio::spawn(async move { handle_connection(server, state, deps).await });
+
+        // Write a truncated JSON line — no trailing newline, so `bounded_read_line`
+        // returns the partial content as-is at EOF.
+        client
+            .write_all(b"{\"List\":")
+            .await
+            .expect("write half-frame");
+
+        // Drop the entire client — signals EOF on the server's read side.
+        // The server will attempt to parse the incomplete JSON, produce a parse
+        // error response, and fail to write it (broken pipe).  Both outcomes
+        // (Ok and Err(broken pipe)) are acceptable — the key invariant is no
+        // panic/task failure.
+        drop(client);
+
+        let task_result = tokio::time::timeout(std::time::Duration::from_secs(2), join)
+            .await
+            .expect("server task should not time out")
+            .expect("task did not panic");
+
+        // Accept Ok(()) or an I/O error from writing the error response back.
+        // A panic would be caught above; reaching here means the server handled
+        // the truncated frame gracefully.
+        match &task_result {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = format!("{e:#}");
+                assert!(
+                    msg.contains("broken pipe")
+                        || msg.contains("flushing")
+                        || msg.contains("writing"),
+                    "unexpected error from half-frame handling: {msg}"
+                );
+            }
+        }
+    }
+
+    /// oversized_request_via_mock_stream: send a 2 MB payload through a duplex
+    /// stream.  The server must respond with an `Error` containing
+    /// "request too large" rather than buffering the entire payload.
+    ///
+    /// This is a duplicate of `test_handle_connection_oversized_request` but
+    /// explicitly documents the `MockStream` (duplex) path.
+    #[tokio::test]
+    async fn mock_stream_oversized_request_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        // Buffer must be large enough to hold the oversized write.
+        let (client, server) = tokio::io::duplex(3 * 1024 * 1024);
+        let state_c = Arc::clone(&state);
+        let deps_c = Arc::clone(&deps);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // 2 MB payload — exceeds MAX_REQUEST_SIZE (1 MB).
+        let big_value = "y".repeat(2 * 1024 * 1024);
+        let oversized = format!("{{\"__pad\":\"{big_value}\"}}\n");
+        write_half
+            .write_all(oversized.as_bytes())
+            .await
+            .expect("write oversized payload");
+
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("request too large"),
+                    "expected 'request too large', got: {message}"
+                );
+            }
+            other => panic!("expected Error for 2 MB payload, got {other:?}"),
+        }
     }
 }
