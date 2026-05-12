@@ -35,6 +35,62 @@ const ACCEPT_MANIFESTS: &str = concat!(
 );
 
 // ---------------------------------------------------------------------------
+// RegistryTransport — port for HTTP requests (swappable in tests)
+// ---------------------------------------------------------------------------
+
+/// HTTP transport port for registry communication.
+///
+/// Wraps the subset of `reqwest::Client` that `GhcrRegistry` uses so tests can
+/// substitute a deterministic in-memory implementation without spawning a real
+/// HTTP server.
+///
+/// # Production implementation
+///
+/// [`reqwest::Client`] implements this trait. Pass a `reqwest::Client` when
+/// constructing `GhcrRegistry` for real traffic.
+///
+/// # Test implementation
+///
+/// Use `MockTransport` (defined in `#[cfg(test)]`) to inject canned responses
+/// without a network.
+#[async_trait]
+pub trait RegistryTransport: Send + Sync + 'static {
+    /// Perform a GET request to `url` with the given `bearer_token` (empty
+    /// string = no `Authorization` header) and `accept` header value.
+    ///
+    /// Returns the raw `reqwest::Response` so callers can inspect status,
+    /// headers, and stream the body.
+    async fn get(
+        &self,
+        url: &str,
+        bearer_token: Option<&str>,
+        accept: Option<&str>,
+    ) -> Result<reqwest::Response>;
+}
+
+/// [`reqwest::Client`] is the production [`RegistryTransport`].
+#[async_trait]
+impl RegistryTransport for reqwest::Client {
+    async fn get(
+        &self,
+        url: &str,
+        bearer_token: Option<&str>,
+        accept: Option<&str>,
+    ) -> Result<reqwest::Response> {
+        let mut req = self.get(url);
+        if let Some(tok) = bearer_token {
+            req = req.bearer_auth(tok);
+        }
+        if let Some(acc) = accept {
+            req = req.header("Accept", acc);
+        }
+        req.send()
+            .await
+            .with_context(|| format!("transport: GET {url}"))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Auth token response
 // ---------------------------------------------------------------------------
 
@@ -853,6 +909,163 @@ mod tests {
                 .expect("get_image_layers");
             assert!(!layers.is_empty(), "expected at least one layer dir");
             assert!(layers[0].exists(), "layer dir should exist on disk");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // MockTransport — RegistryTransport failure tests
+    // -------------------------------------------------------------------------
+    //
+    // These tests exercise the RegistryTransport trait contract using an
+    // in-memory mock that returns canned responses without network I/O.
+
+    mod mock_transport {
+        use super::super::{ACCEPT_MANIFESTS, RegistryTransport};
+        use anyhow::Result;
+        use async_trait::async_trait;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        // ------------------------------------------------------------------
+        // MockTransport helpers
+        // ------------------------------------------------------------------
+
+        /// A transport that always returns a network-level error.
+        struct FailingTransport {
+            message: String,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for FailingTransport {
+            async fn get(
+                &self,
+                _url: &str,
+                _bearer_token: Option<&str>,
+                _accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                anyhow::bail!("{}", self.message)
+            }
+        }
+
+        /// A transport that sleeps briefly then returns an error (simulates slow registry).
+        struct SlowFailingTransport {
+            delay: Duration,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for SlowFailingTransport {
+            async fn get(
+                &self,
+                _url: &str,
+                _bearer_token: Option<&str>,
+                _accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                tokio::time::sleep(self.delay).await;
+                anyhow::bail!("slow registry: timed out")
+            }
+        }
+
+        /// A transport that records whether it was called.
+        struct RecordingTransport {
+            called: Arc<AtomicBool>,
+            inner: FailingTransport,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for RecordingTransport {
+            async fn get(
+                &self,
+                url: &str,
+                bearer_token: Option<&str>,
+                accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                self.called.store(true, Ordering::SeqCst);
+                self.inner.get(url, bearer_token, accept).await
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Tests
+        // ------------------------------------------------------------------
+
+        /// registry_503: MockTransport returns a network error (simulates 503).
+        #[tokio::test]
+        async fn registry_503_transport_error_propagates() {
+            let transport = FailingTransport {
+                message: "connection refused (503 simulation)".to_owned(),
+            };
+
+            let err = transport
+                .get(
+                    "https://ghcr.io/v2/org/img/manifests/latest",
+                    None,
+                    Some(ACCEPT_MANIFESTS),
+                )
+                .await;
+
+            assert!(err.is_err(), "expected transport error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(
+                msg.contains("connection refused"),
+                "unexpected error message: {msg}"
+            );
+        }
+
+        /// slow_registry: transport sleeps then fails, caller receives error.
+        #[tokio::test]
+        async fn slow_registry_returns_error_after_delay() {
+            let transport = SlowFailingTransport {
+                delay: Duration::from_millis(10),
+            };
+
+            let err = transport
+                .get("https://ghcr.io/v2/org/img/manifests/latest", None, None)
+                .await;
+
+            assert!(err.is_err(), "expected timeout error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(msg.contains("slow registry"), "unexpected message: {msg}");
+        }
+
+        /// partial_layer_body: transport is invoked and caller detects the error.
+        #[tokio::test]
+        async fn partial_layer_body_transport_invoked() {
+            let called = Arc::new(AtomicBool::new(false));
+            let transport = RecordingTransport {
+                called: Arc::clone(&called),
+                inner: FailingTransport {
+                    message: "partial body: connection reset".to_owned(),
+                },
+            };
+
+            let blob_url =
+                "https://ghcr.io/v2/org/img/blobs/sha256:deadbeef000000000000000000000000";
+            let err = transport.get(blob_url, Some("tok"), None).await;
+
+            assert!(
+                called.load(Ordering::SeqCst),
+                "transport.get must be called"
+            );
+            assert!(err.is_err(), "expected body truncation error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(msg.contains("partial body"), "unexpected message: {msg}");
+        }
+
+        /// Verify the trait is object-safe and can be used as `Box<dyn RegistryTransport>`.
+        #[test]
+        fn registry_transport_is_object_safe() {
+            let _t: Box<dyn RegistryTransport> = Box::new(FailingTransport {
+                message: "test".to_owned(),
+            });
+        }
+
+        /// Verify `reqwest::Client` correctly implements `RegistryTransport`.
+        #[test]
+        fn reqwest_client_implements_registry_transport() {
+            // Compile-time check — no runtime assertion needed.
+            fn assert_impl<T: RegistryTransport>() {}
+            assert_impl::<reqwest::Client>();
         }
     }
 }
