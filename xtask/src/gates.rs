@@ -632,21 +632,43 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
             let content =
                 fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
 
-            // Find the line where #[cfg(test)] starts (if any) — skip everything after.
-            let test_start = content
-                .lines()
-                .enumerate()
-                .filter(|(_, line)| line.contains("#[cfg(test)]"))
-                .map(|(i, _)| i)
-                .last();
+            // Track top-level #[cfg(test)] modules by brace depth so we skip
+            // .unwrap() inside ANY test module, not just the last one.
+            // Nested #[cfg(test)] (e.g. proptest_tests inside tests) are
+            // handled by only entering/exiting at the outermost level.
+            let mut in_test_module = false;
+            let mut test_brace_depth: i32 = 0;
+            let mut saw_cfg_test = false;
 
             for (i, line) in content.lines().enumerate() {
-                if let Some(ts) = test_start
-                    && i >= ts
-                {
-                    break;
+                let trimmed = line.trim();
+
+                if !in_test_module && trimmed.contains("#[cfg(test)]") {
+                    saw_cfg_test = true;
+                    continue;
                 }
-                if line.contains(".unwrap()") && !line.contains("// allow:unwrap") {
+
+                if saw_cfg_test && !trimmed.is_empty() {
+                    if trimmed.starts_with("mod ") || trimmed.starts_with("pub mod ") {
+                        in_test_module = true;
+                        test_brace_depth = 0;
+                    }
+                    saw_cfg_test = false;
+                }
+
+                if in_test_module {
+                    test_brace_depth += trimmed.chars().filter(|&c| c == '{').count() as i32;
+                    test_brace_depth -= trimmed.chars().filter(|&c| c == '}').count() as i32;
+                    if test_brace_depth <= 0 {
+                        in_test_module = false;
+                    }
+                    continue;
+                }
+
+                if line.contains(".unwrap()")
+                    && !line.contains("// allow:unwrap")
+                    && !trimmed.starts_with("///")
+                {
                     hits.push(format!("{}:{}: {}", rel.display(), i + 1, line.trim()));
                 }
             }

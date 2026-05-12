@@ -27,7 +27,7 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     // on top of an already-layered Layered<EnvFilter, Registry>.
     let mut layers: Vec<Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>> = vec![
         tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("miniboxd=info".parse().unwrap())
+            .add_directive("miniboxd=info".parse().unwrap()) // allow:unwrap — static string
             .boxed(),
         tracing_subscriber::fmt::layer().boxed(),
     ];
