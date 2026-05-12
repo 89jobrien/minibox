@@ -226,6 +226,8 @@ impl ExecutionManifestMount {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::option;
+    use proptest::prelude::*;
 
     fn sample_manifest() -> ExecutionManifest {
         ExecutionManifest {
@@ -369,5 +371,158 @@ mod tests {
             hex: "abcdef".to_string(),
         };
         assert_eq!(d.to_string(), "sha256:abcdef");
+    }
+
+    // ── Proptest strategies ───────────────────────────────────────────────────
+
+    fn arb_env_var() -> impl Strategy<Value = ExecutionManifestEnvVar> {
+        (any::<String>(), any::<String>()).prop_map(|(name, value_digest)| {
+            ExecutionManifestEnvVar { name, value_digest }
+        })
+    }
+
+    fn arb_mount() -> impl Strategy<Value = ExecutionManifestMount> {
+        (any::<String>(), any::<String>(), any::<bool>()).prop_map(
+            |(host_path, container_path, read_only)| ExecutionManifestMount {
+                host_path,
+                container_path,
+                read_only,
+            },
+        )
+    }
+
+    fn arb_resource_limits() -> impl Strategy<Value = ExecutionManifestResourceLimits> {
+        (option::of(any::<u64>()), option::of(any::<u64>())).prop_map(
+            |(memory_limit_bytes, cpu_weight)| ExecutionManifestResourceLimits {
+                memory_limit_bytes,
+                cpu_weight,
+            },
+        )
+    }
+
+    fn arb_image() -> impl Strategy<Value = ExecutionManifestImage> {
+        (
+            option::of(any::<String>()),
+            option::of(any::<String>()),
+            proptest::collection::vec(any::<String>(), 0..4),
+        )
+            .prop_map(|(manifest_digest, config_digest, layer_digests)| {
+                ExecutionManifestImage {
+                    manifest_digest,
+                    config_digest,
+                    layer_digests,
+                }
+            })
+    }
+
+    fn arb_subject() -> impl Strategy<Value = ExecutionManifestSubject> {
+        (any::<String>(), arb_image())
+            .prop_map(|(image_ref, image)| ExecutionManifestSubject { image_ref, image })
+    }
+
+    fn arb_runtime() -> impl Strategy<Value = ExecutionManifestRuntime> {
+        (
+            proptest::collection::vec(any::<String>(), 0..6),
+            proptest::collection::vec(arb_env_var(), 0..4),
+            proptest::collection::vec(arb_mount(), 0..4),
+            option::of(arb_resource_limits()),
+            any::<String>(),
+            any::<bool>(),
+            option::of(any::<String>()),
+        )
+            .prop_map(
+                |(command, env, mounts, resource_limits, network_mode, privileged, platform)| {
+                    ExecutionManifestRuntime {
+                        command,
+                        env,
+                        mounts,
+                        resource_limits,
+                        network_mode,
+                        privileged,
+                        platform,
+                    }
+                },
+            )
+    }
+
+    fn arb_request() -> impl Strategy<Value = ExecutionManifestRequest> {
+        (option::of(any::<String>()), any::<bool>())
+            .prop_map(|(name, ephemeral)| ExecutionManifestRequest { name, ephemeral })
+    }
+
+    fn arb_manifest() -> impl Strategy<Value = ExecutionManifest> {
+        (
+            any::<u32>(),
+            any::<String>(),
+            any::<String>(),
+            option::of(any::<String>().prop_map(PathBuf::from)),
+            option::of(any::<String>()),
+            arb_subject(),
+            arb_runtime(),
+            arb_request(),
+        )
+            .prop_map(
+                |(
+                    schema_version,
+                    container_id,
+                    created_at,
+                    manifest_path,
+                    workload_digest,
+                    subject,
+                    runtime,
+                    request,
+                )| {
+                    ExecutionManifest {
+                        schema_version,
+                        container_id,
+                        created_at,
+                        manifest_path,
+                        workload_digest,
+                        subject,
+                        runtime,
+                        request,
+                    }
+                },
+            )
+    }
+
+    // ── Proptest roundtrip tests ──────────────────────────────────────────────
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            failure_persistence: None,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+
+        /// Any `ExecutionManifest` must survive a JSON serialize→deserialize roundtrip
+        /// without data loss.
+        #[test]
+        fn execution_manifest_json_roundtrip(m in arb_manifest()) {
+            let json = serde_json::to_string(&m)
+                .expect("ExecutionManifest must serialize to JSON");
+            let decoded: ExecutionManifest = serde_json::from_str(&json)
+                .expect("ExecutionManifest must deserialize from JSON");
+            proptest::prop_assert_eq!(m, decoded);
+        }
+
+        /// Any `ExecutionManifestRuntime` must survive JSON roundtrip.
+        #[test]
+        fn execution_manifest_runtime_json_roundtrip(r in arb_runtime()) {
+            let json = serde_json::to_string(&r)
+                .expect("ExecutionManifestRuntime must serialize");
+            let decoded: ExecutionManifestRuntime = serde_json::from_str(&json)
+                .expect("ExecutionManifestRuntime must deserialize");
+            proptest::prop_assert_eq!(r, decoded);
+        }
+
+        /// Any `ExecutionManifestSubject` must survive JSON roundtrip.
+        #[test]
+        fn execution_manifest_subject_json_roundtrip(s in arb_subject()) {
+            let json = serde_json::to_string(&s)
+                .expect("ExecutionManifestSubject must serialize");
+            let decoded: ExecutionManifestSubject = serde_json::from_str(&json)
+                .expect("ExecutionManifestSubject must deserialize");
+            proptest::prop_assert_eq!(s, decoded);
+        }
     }
 }
