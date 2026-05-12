@@ -1,5 +1,7 @@
 # Plan: crux-plugin integration test hardening
 
+Status: done
+
 ## Goal
 
 Eliminate flaky timing, reduce boilerplate, and close coverage gaps in
