@@ -753,7 +753,8 @@ mod tests {
             let size = layer_bytes.len();
 
             // Use a fake digest that does NOT match the layer bytes.
-            let fake_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000";
             let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
             mount_auth_with_manifest(&server, "org/bad", "latest", "bad_tok", manifest).await;
 
@@ -786,7 +787,8 @@ mod tests {
             let (layer_bytes, _real_digest) = make_test_layer();
             let size = layer_bytes.len();
 
-            let fake_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000";
             let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
             mount_auth_with_manifest(&server, "org/dirty", "latest", "dirty_tok", manifest).await;
 
@@ -803,7 +805,12 @@ mod tests {
             let _ = reg.pull_image(&image_ref).await;
 
             // No layer directory or tmp directory should remain after a failed pull.
-            let layers_dir = dir.path().join("images").join("ghcr.io_org_dirty").join("latest").join("layers");
+            let layers_dir = dir
+                .path()
+                .join("images")
+                .join("ghcr.io_org_dirty")
+                .join("latest")
+                .join("layers");
             if layers_dir.exists() {
                 let entries: Vec<_> = std::fs::read_dir(&layers_dir)
                     .expect("read layers dir")

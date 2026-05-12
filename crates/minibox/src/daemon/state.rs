@@ -230,8 +230,11 @@ pub struct DaemonState {
     pub image_store: Arc<ImageStore>,
     /// SECURITY: Semaphore limiting concurrent container spawn operations
     pub spawn_semaphore: Arc<Semaphore>,
-    /// Path to the state file on disk.
+    /// Path to the state file on disk (used when no repository is injected).
     state_file: PathBuf,
+    /// Injected persistence port.  When `Some`, all load/save operations
+    /// go through this port instead of the raw `state_file` path.
+    repository: Option<Arc<dyn StateRepository>>,
     /// IP addresses currently allocated by bridge network, keyed by container_id.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
     /// Pipeline trace persistence adapter.
@@ -260,6 +263,7 @@ impl DaemonState {
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: data_dir.join(STATE_FILENAME),
+            repository: None,
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
             trace_store,
         }
@@ -267,21 +271,16 @@ impl DaemonState {
 
     /// Create a `DaemonState` with an explicit [`StateRepository`] port.
     ///
-    /// This constructor is the preferred way to inject the persistence
-    /// dependency in tests and when the caller already holds a
-    /// `Arc<dyn StateRepository>`.  The repository path is not used for
-    /// the embedded `state_file` field — persistence goes entirely through
-    /// the provided port.
-    pub fn with_repository(image_store: ImageStore, _repository: Arc<dyn StateRepository>) -> Self {
-        // The repository port is accepted here to satisfy the trait bound and
-        // future wiring; the current internal save_to_disk/load_from_disk path
-        // still uses the state_file field.  Full extraction is tracked as a
-        // follow-on refactor.
+    /// All `load_from_disk` and `save_to_disk` operations are delegated to
+    /// `repository`.  The raw file-based path is not used when a repository
+    /// is injected.  This is the preferred constructor for tests.
+    pub fn with_repository(image_store: ImageStore, repository: Arc<dyn StateRepository>) -> Self {
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
             image_store: Arc::new(image_store),
             spawn_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_SPAWNS)),
             state_file: PathBuf::new(),
+            repository: Some(repository),
             allocated_ips: Arc::new(RwLock::new(HashMap::new())),
             trace_store: Arc::new(minibox_core::trace::NoopTraceStore),
         }
@@ -294,28 +293,38 @@ impl DaemonState {
     ///
     /// Returns silently if the state file does not exist or is unreadable.
     pub async fn load_from_disk(&self) {
-        let path = &self.state_file;
-        let data = match std::fs::read_to_string(path) {
-            Ok(d) => d,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                debug!("no state file at {}, starting fresh", path.display());
-                return;
+        let mut records: HashMap<String, ContainerRecord> = if let Some(repo) = &self.repository {
+            match repo.load_containers() {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(error = %e, "state: repository load failed, starting fresh");
+                    return;
+                }
             }
-            Err(e) => {
-                warn!("failed to read state file {}: {}", path.display(), e);
-                return;
-            }
-        };
+        } else {
+            let path = &self.state_file;
+            let data = match std::fs::read_to_string(path) {
+                Ok(d) => d,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    debug!("no state file at {}, starting fresh", path.display());
+                    return;
+                }
+                Err(e) => {
+                    warn!("failed to read state file {}: {}", path.display(), e);
+                    return;
+                }
+            };
 
-        let mut records: HashMap<String, ContainerRecord> = match serde_json::from_str(&data) {
-            Ok(r) => r,
-            Err(e) => {
-                warn!(
-                    "failed to parse state file {} (starting fresh): {}",
-                    path.display(),
-                    e
-                );
-                return;
+            match serde_json::from_str(&data) {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(
+                        "failed to parse state file {} (starting fresh): {}",
+                        path.display(),
+                        e
+                    );
+                    return;
+                }
             }
         };
 
@@ -393,13 +402,22 @@ impl DaemonState {
 
     /// Persist the current state to disk using an atomic write.
     ///
-    /// Serialises the container map to pretty-printed JSON, writes it to a
-    /// `.json.tmp` sibling file, then renames it over the target path.  The
-    /// rename is atomic on POSIX filesystems, so readers never see a partially
-    /// written file.  Failures are logged as warnings but do not propagate —
-    /// state writes are best-effort and must not crash the daemon.
+    /// When a [`StateRepository`] was injected via [`with_repository`], all
+    /// writes go through `save_containers` on that port.  Otherwise the
+    /// default file-based path is used: serialise to pretty-printed JSON,
+    /// write to a `.json.tmp` sibling, then atomically rename.  Failures are
+    /// logged as warnings but do not propagate — state writes are best-effort
+    /// and must not crash the daemon.
     async fn save_to_disk(&self) {
         let map = self.containers.read().await;
+
+        if let Some(repo) = &self.repository {
+            if let Err(e) = repo.save_containers(&map) {
+                warn!(error = %e, "state: repository save failed");
+            }
+            return;
+        }
+
         let json = match serde_json::to_string_pretty(&*map) {
             Ok(j) => j,
             Err(e) => {
@@ -974,6 +992,109 @@ mod tests {
             record.creation_params.is_none(),
             "missing creation_params must deserialize as None"
         );
+    }
+
+    // ── StateRepository injection — Issue #315 ───────────────────────────────
+
+    use std::sync::Mutex as StdMutex;
+
+    /// In-memory StateRepository double that tracks call counts.
+    struct SpyRepository {
+        data: StdMutex<HashMap<String, ContainerRecord>>,
+        save_count: StdMutex<u32>,
+        load_count: StdMutex<u32>,
+    }
+
+    impl SpyRepository {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                data: StdMutex::new(HashMap::new()),
+                save_count: StdMutex::new(0),
+                load_count: StdMutex::new(0),
+            })
+        }
+
+        fn save_count(&self) -> u32 {
+            *self.save_count.lock().unwrap()
+        }
+
+        fn load_count(&self) -> u32 {
+            *self.load_count.lock().unwrap()
+        }
+    }
+
+    impl StateRepository for SpyRepository {
+        fn load_containers(&self) -> anyhow::Result<HashMap<String, ContainerRecord>> {
+            *self.load_count.lock().unwrap() += 1;
+            Ok(self.data.lock().unwrap().clone())
+        }
+
+        fn save_containers(
+            &self,
+            containers: &HashMap<String, ContainerRecord>,
+        ) -> anyhow::Result<()> {
+            *self.save_count.lock().unwrap() += 1;
+            *self.data.lock().unwrap() = containers.clone();
+            Ok(())
+        }
+    }
+
+    fn make_state_with_spy(spy: Arc<SpyRepository>) -> DaemonState {
+        let image_store =
+            ImageStore::new(std::env::temp_dir().join("spy-images")).expect("ImageStore::new");
+        DaemonState::with_repository(image_store, spy as Arc<dyn StateRepository>)
+    }
+
+    /// Issue #315: injected repository save_containers is called on add_container.
+    #[tokio::test]
+    async fn with_repository_delegates_save_on_add_container() {
+        let spy = SpyRepository::new();
+        let state = make_state_with_spy(spy.clone());
+
+        state.add_container(make_test_record()).await;
+
+        assert_eq!(
+            spy.save_count(),
+            1,
+            "save_containers must be called once after add_container"
+        );
+    }
+
+    /// Issue #315: injected repository load_containers is called on load_from_disk.
+    #[tokio::test]
+    async fn with_repository_delegates_load_from_disk() {
+        let spy = SpyRepository::new();
+        let state = make_state_with_spy(spy.clone());
+
+        state.load_from_disk().await;
+
+        assert_eq!(
+            spy.load_count(),
+            1,
+            "load_containers must be called once during load_from_disk"
+        );
+    }
+
+    /// Issue #315: records saved through injected repository survive load_from_disk.
+    #[tokio::test]
+    async fn with_repository_roundtrips_container_records() {
+        let spy = SpyRepository::new();
+
+        {
+            let state = make_state_with_spy(spy.clone());
+            state.add_container(make_test_record()).await;
+        }
+
+        let state2 = make_state_with_spy(spy.clone());
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers.len(),
+            1,
+            "container record must be visible after round-trip through injected repository"
+        );
+        assert_eq!(containers[0].id, "test-container-id");
     }
 
     #[test]
