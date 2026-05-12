@@ -134,8 +134,9 @@ Thumbs.db
 *.pyo
 *.pyd
 __pycache__/
-*.venv/
-*.pytest_cache/
+.venv/
+.pytest_cache/
+.ruff_cache/
 .firecrawl/
 .ctx/
 !.ctx/HANDOFF.*.yaml
