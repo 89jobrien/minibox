@@ -31,6 +31,26 @@ const SURFACES: &[Surface] = &[
         name: "lifecycle-events",
         path: "crates/minibox-core/src/events.rs",
     },
+    Surface {
+        name: "execution-manifest",
+        path: "crates/minibox-core/src/domain/execution_manifest.rs",
+    },
+    Surface {
+        name: "execution-policy",
+        path: "crates/minibox-core/src/domain/execution_policy.rs",
+    },
+    Surface {
+        name: "error-types",
+        path: "crates/minibox-core/src/error.rs",
+    },
+    Surface {
+        name: "client-api",
+        path: "crates/minibox-core/src/client/mod.rs",
+    },
+    Surface {
+        name: "typestate",
+        path: "crates/minibox-core/src/typestate.rs",
+    },
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -402,6 +422,34 @@ mod tests {
     }
 
     #[test]
+    fn all_expected_surfaces_are_tracked() {
+        let expected = [
+            "wire-protocol",
+            "domain-ports",
+            "domain-networking",
+            "domain-extensions",
+            "lifecycle-events",
+            "execution-manifest",
+            "execution-policy",
+            "error-types",
+            "client-api",
+            "typestate",
+        ];
+        let tracked: Vec<&str> = SURFACES.iter().map(|s| s.name).collect();
+        for name in &expected {
+            assert!(
+                tracked.contains(name),
+                "expected surface '{name}' is not tracked"
+            );
+        }
+        assert_eq!(
+            tracked.len(),
+            expected.len(),
+            "surface count mismatch: tracked {tracked:?} vs expected {expected:?}"
+        );
+    }
+
+    #[test]
     fn identifies_tracked_surface_paths() {
         let root = Path::new("/repo");
 
@@ -412,6 +460,14 @@ mod tests {
         assert!(is_tracked_surface_path(
             root,
             Path::new("crates/minibox-core/src/domain/networking.rs")
+        ));
+        assert!(is_tracked_surface_path(
+            root,
+            Path::new("/repo/crates/minibox-core/src/domain/execution_manifest.rs")
+        ));
+        assert!(is_tracked_surface_path(
+            root,
+            Path::new("/repo/crates/minibox-core/src/typestate.rs")
         ));
         assert!(!is_tracked_surface_path(
             root,
