@@ -19,7 +19,7 @@ pub enum PolicyDecision {
 ///
 /// All fields use `Option` -- `None` means "no constraint" (allow any).
 /// When a field is `Some`, the manifest value must satisfy the constraint.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionPolicy {
     /// Allowed image reference patterns (glob-style). If set, the manifest's
     /// `subject.image_ref` must match at least one pattern.
@@ -342,8 +342,6 @@ mod tests {
         };
         let json = serde_json::to_string_pretty(&policy).expect("serialise policy");
         let restored: ExecutionPolicy = serde_json::from_str(&json).expect("deserialise policy");
-        // Compare via re-serialisation since Default doesn't impl PartialEq
-        let json2 = serde_json::to_string_pretty(&restored).expect("re-serialise policy");
-        assert_eq!(json, json2);
+        assert_eq!(policy, restored);
     }
 }

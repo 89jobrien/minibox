@@ -636,6 +636,10 @@ async fn handle_run_streaming(
 // ─── PreparedRun: shared setup extracted from run_inner / run_inner_capture ───
 
 /// All state produced by container preparation, before the process is spawned.
+///
+/// Some fields are only consumed by specific run paths (streaming vs
+/// fire-and-forget) or downstream handlers, so the struct carries
+/// `allow(dead_code)` to suppress false positives from partial usage.
 #[cfg(unix)]
 #[allow(dead_code)]
 struct PreparedRun {
@@ -877,7 +881,7 @@ async fn prepare_run(
                 config_digest: None,
                 layer_digests: layer_dirs
                     .iter()
-                    .map(|p| p.to_string_lossy().to_string())
+                    .filter_map(|p| p.file_name()?.to_str().map(|s| s.replacen('_', ":", 1)))
                     .collect(),
             },
         },
@@ -985,6 +989,14 @@ async fn run_inner_capture(
     )
     .await?;
 
+    state
+        .set_manifest_info(
+            &prepared.id,
+            prepared.manifest_path.clone(),
+            prepared.workload_digest.clone(),
+        )
+        .await;
+
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -1077,6 +1089,14 @@ async fn run_inner(
         Arc::clone(&deps),
     )
     .await?;
+
+    state
+        .set_manifest_info(
+            &prepared.id,
+            prepared.manifest_path.clone(),
+            prepared.workload_digest.clone(),
+        )
+        .await;
 
     let id = prepared.id.clone();
     let image_label = prepared.image_label.clone();
@@ -3135,13 +3155,28 @@ pub async fn handle_get_manifest(
         }
     };
 
-    let manifest_value: serde_json::Value = match serde_json::from_str(&content) {
-        Ok(v) => v,
+    // Deserialize as typed struct to validate schema integrity before
+    // returning to the client.
+    let manifest: minibox_core::domain::ExecutionManifest = match serde_json::from_str(&content) {
+        Ok(m) => m,
         Err(e) => {
             send_error(
                 &tx,
                 "handle_get_manifest",
                 format!("failed to parse manifest JSON: {e}"),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let manifest_value = match serde_json::to_value(&manifest) {
+        Ok(v) => v,
+        Err(e) => {
+            send_error(
+                &tx,
+                "handle_get_manifest",
+                format!("failed to re-serialize manifest: {e}"),
             )
             .await;
             return;

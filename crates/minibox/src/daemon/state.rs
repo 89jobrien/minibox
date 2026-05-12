@@ -562,6 +562,19 @@ impl DaemonState {
         Ok(())
     }
 
+    /// Update the manifest path and workload digest on a container record.
+    ///
+    /// Called after `prepare_run` persists the execution manifest to disk.
+    pub async fn set_manifest_info(&self, id: &str, path: PathBuf, digest: String) {
+        let mut map = self.containers.write().await;
+        if let Some(record) = map.get_mut(id) {
+            record.manifest_path = Some(path);
+            record.workload_digest = Some(digest);
+        }
+        drop(map);
+        self.save_to_disk().await;
+    }
+
     /// Record the host-namespace PID after the container process is successfully
     /// forked and advance the container state from `"Created"` to `"Running"`.
     ///

@@ -143,8 +143,12 @@ impl ExecutionManifest {
     /// `created_at`, `manifest_path`, and `workload_digest` itself.
     pub fn compute_workload_digest(&self) -> ExecutionManifestDigest {
         let projection = self.digest_projection();
+        // SAFETY: serialisation cannot fail — the projection contains only
+        // primitive types (u32, bool, String, Vec<String>, Option<T>) and
+        // structs composed of the same. No maps with non-string keys, no
+        // custom Serialize impls that can error.
         let json = serde_json::to_string(&projection)
-            .expect("digest projection serialisation cannot fail");
+            .expect("digest projection contains only infallible serialisable types");
         let hash = Sha256::digest(json.as_bytes());
         ExecutionManifestDigest {
             algorithm: "sha256".to_string(),
@@ -165,7 +169,6 @@ impl ExecutionManifest {
     fn digest_projection(&self) -> DigestProjection<'_> {
         DigestProjection {
             schema_version: self.schema_version,
-            container_id: &self.container_id,
             subject: &self.subject,
             runtime: &self.runtime,
             request: &self.request,
@@ -175,12 +178,12 @@ impl ExecutionManifest {
 
 /// The subset of [`ExecutionManifest`] fields included in the workload digest.
 ///
-/// Volatile fields (`created_at`, `manifest_path`, `workload_digest`) are
-/// intentionally excluded so that the digest depends only on semantic inputs.
+/// Volatile / instance-specific fields (`container_id`, `created_at`,
+/// `manifest_path`, `workload_digest`) are intentionally excluded so that
+/// the digest depends only on semantic inputs.
 #[derive(Serialize)]
 struct DigestProjection<'a> {
     schema_version: u32,
-    container_id: &'a str,
     subject: &'a ExecutionManifestSubject,
     runtime: &'a ExecutionManifestRuntime,
     request: &'a ExecutionManifestRequest,
@@ -269,6 +272,7 @@ mod tests {
     fn volatile_fields_do_not_affect_digest() {
         let m1 = sample_manifest();
         let mut m2 = sample_manifest();
+        m2.container_id = "different-id-999".to_string();
         m2.created_at = "2099-12-31T23:59:59Z".to_string();
         m2.manifest_path = Some(PathBuf::from("/other/path"));
         m2.workload_digest = Some("sha256:stale".to_string());

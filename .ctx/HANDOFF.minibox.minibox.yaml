@@ -2,305 +2,277 @@ project: minibox
 id: minibox
 updated: 2026-05-11
 items:
-- id: minibox-update-upgrade
-  doob_uuid: null
-  name: update-upgrade-commands
-  priority: P1
-  status: open
-  title: 'feat: mbx update + mbx upgrade — restart support stubbed (Wave 3)'
-  description: |
-    Wave 1 (protocol types + upgrade CLI) and Wave 2 (handle_update handler + mbx update CLI)
-    are fully landed on main (commits 9574520, d3459f4, e08a7dc, 277dbf2, 761fd26, 5a4aadf).
-    Remaining: restart support in handle_update is stubbed with a warn! log — Wave 3 would wire
-    actual container restart after image refresh. Also: bench dashboard (xtask bench rewrite)
-    and typestate lifecycle module (minibox-core::typestate) were added this session.
-  files:
-  - crates/minibox-core/src/protocol.rs
-  - crates/minibox/src/daemon/handler.rs
-  - crates/minibox/src/daemon/server.rs
-  - crates/mbx/src/commands/update.rs
-  - crates/mbx/src/commands/upgrade.rs
-  - crates/minibox-core/src/typestate.rs
-  - crates/xtask/src/bench.rs
-  completed: null
-  extra:
-  - date: 20260429:042914
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: 'Wave 2 complete: 9574520 (handle_update), d3459f4 (mbx update), e08a7dc (sentinel fixes), 277dbf2 (docs), 761fd26 (v0.22.0), 5a4aadf (CI e2e). Bench dashboard and typestate module also added this session.'
-- id: minibox-7
-  doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
-  name: vz-apple-bug-blocker
+- id: crux-plugin-2
+  name: add-mounts-field-wiring-to-minibox--container--run-handler
   priority: P2
   status: blocked
-  title: 'bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64'
-  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships a fix.'
-  files: []
-  completed: null
+  title: Add mounts field wiring to minibox::container::run handler
+  description: 'code review: 2 blocking issues (parse_mounts path traversal, .unwrap in main), 5 suggestions, 3 nitpicks — fix in crux-plugin-2-fixes first'
   extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 61
-    url: https://github.com/89jobrien/minibox/issues/61
-  - date: 2026-04-01
+  - date: 2026-05-11
     type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
-  - date: 2026-04-06
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: captured in doob — todo id 34l16mxn2y29do1562s9
-  - date: 2026-05-10
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: |
-      Blocker last confirmed 2026-04-01 (39 days ago). No upstream fix from Apple yet. Monitor apple/container#1254 before next VZ work.
-- id: minibox-33
-  doob_uuid: null
-  name: winbox-hyper-v-wsl2
+    note: 'code review: 2 blocking issues (parse_mounts path traversal, .unwrap in main), 5 suggestions, 3 nitpicks — fix in crux-plugin-2-fixes first'
+- id: uncommitted-work
+  name: uncommitted-work
   priority: P1
   status: open
-  title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
-  description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 45
-    url: https://github.com/89jobrien/minibox/issues/45
-- id: minibox-43
-  doob_uuid: null
-  name: vz-virtiofs-mounts
-  priority: P2
-  status: blocked
-  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
-  description: 'GH #66, #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 66
-    url: https://github.com/89jobrien/minibox/issues/66
-- id: minibox-46
-  doob_uuid: null
-  name: pty-stdio-plan
-  priority: P1
-  status: open
-  title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
-  description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md. Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full PTY fork/exec wiring deferred — requires Linux root.'
+  title: Uncommitted changes (6 files)
+  description: |-
+    Working tree has uncommitted changes:
+    .ctx/HANDOFF.md
+    .ctx/HANDOFF.minibox.minibox.yaml
+    crates/minibox-core/src/domain/execution_manifest.rs
+    crates/minibox-core/src/domain/execution_policy.rs
+    crates/minibox/src/daemon/handler.rs
+    crates/minibox/src/daemon/state.rs
   files:
-  - crates/minibox-core/src/domain.rs
-  - crates/minibox/src/container/process.rs
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 70
-    url: https://github.com/89jobrien/minibox/issues/70
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 83
-    url: https://github.com/89jobrien/minibox/issues/83
-- id: minibox-52
-  doob_uuid: null
-  name: vz-vm-provision
-  priority: P2
-  status: blocked
-  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
-  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 76
-    url: https://github.com/89jobrien/minibox/issues/76
-- id: minibox-53
-  doob_uuid: null
-  name: vz-minibox-agent
-  priority: P2
-  status: blocked
-  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
-  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 78
-    url: https://github.com/89jobrien/minibox/issues/78
-- id: minibox-54
-  doob_uuid: null
-  name: vz-vsock-bridge
-  priority: P2
-  status: blocked
-  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
-  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr forwarded as ContainerOutput protocol messages.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 81
-    url: https://github.com/89jobrien/minibox/issues/81
-- id: minibox-55
-  doob_uuid: null
-  name: vz-full-stack
-  priority: P1
-  status: open
-  title: 'feat: minibox owns the full container stack on every OS'
-  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 87
-    url: https://github.com/89jobrien/minibox/issues/87
-- id: minibox-crux-plugin
-  doob_uuid: null
-  name: minibox-crux-plugin
-  priority: P1
-  status: open
-  title: 'feat: minibox-crux-plugin binary — crux JSON-RPC plugin for minibox adapter'
-  description: |
-    Plan at docs/superpowers/plans/2026-04-30-crux-maestro-portability.md. minibox-agent crate
-    never existed — planned replacement is minibox-crux-plugin using cruxx-plugin protocol
-    (JSON-RPC over stdio: Declare/Invoke/Shutdown). cruxx-plugin + cruxx-types exist in
-    ~/dev/crux/crates/. Default adapter is now smolvm (krun fallback) per adapter_registry.rs.
-  files:
-  - crates/miniboxd/src/adapter_registry.rs
-  - docs/superpowers/plans/2026-04-30-crux-maestro-portability.md
-  completed: null
-  extra:
-  - date: 2026-05-10
-    type: discovery
-    field: null
-    value: null
-    reviewed: null
-    note: |
-      Cross-project dependency on crux (cruxx-plugin + cruxx-types at ~/dev/crux/crates/). crux has no open items — dependency is stable and available.
-- id: minibox-nightly-geiger
-  doob_uuid: null
-  name: nightly-geiger-nonblocking
-  priority: P1
-  status: done
-  title: 'fix(ci): make cargo-geiger non-blocking in nightly workflow'
-  description: |
-    cargo-geiger exits 1 on "Failed to match (ignoring source) package: valuable@0.1.1" —
-    a known geiger bug with certain crate graphs. This blocks tag-nightly from running.
-    Fix: add `continue-on-error: true` to the geiger job in nightly.yml so the nightly
-    tag always fires regardless of geiger result.
-  files:
-  - .github/workflows/nightly.yml
-  completed: 2026-05-09
-  extra: []
-- id: minibox-godmode-hook
-  doob_uuid: null
-  name: godmode-hook-plugin-root
-  priority: P1
-  status: done
-  title: 'fix: godmode pre-commit-gate hook CLAUDE_PLUGIN_ROOT not resolving'
-  description: |
-    When running from an atelier skill context, CLAUDE_PLUGIN_ROOT resolves to atelier's root,
-    not godmode's. Both hooks.json files patched to use absolute path
-    (/Users/joe/.claude/plugins/cache/local/godmode/0.6.0/hooks/scripts/pre-commit-gate.nu).
-    Requires Claude Code session restart to take effect. Until then, git commit from Claude
-    is blocked — use terminal directly.
-  files:
-  - /Users/joe/.claude/plugins/cache/local/godmode/0.6.0/hooks/hooks.json
-  - /Users/joe/.claude/plugins/cache/bazaar/godmode/0.6.0/hooks/hooks.json
-  completed: 2026-05-09
-  extra: []
-- id: minibox-prepush-skip
-  doob_uuid: null
-  name: prepush-skip-uncommitted
-  priority: P1
-  status: done
-  title: 'chore: commit staged prepush skip (gates.rs) — blocked by godmode hook'
-  description: |
-    xtask/src/gates.rs has staged changes adding pushed_rust_files() and skipping nextest
-    in pre-push when no Rust files are in the push range. Cannot commit from Claude due to
-    godmode hook CLAUDE_PLUGIN_ROOT issue. Commit from terminal:
-    git add xtask/src/gates.rs && git commit -m "perf(xtask): skip nextest in pre-push when no Rust files in push range" && git push
-  files:
-  - xtask/src/gates.rs
-  completed: 2026-05-09
-  extra: []
+  - .ctx/HANDOFF.md
+  - .ctx/HANDOFF.minibox.minibox.yaml
+  - crates/minibox-core/src/domain/execution_manifest.rs
+  - crates/minibox-core/src/domain/execution_policy.rs
+  - crates/minibox/src/daemon/handler.rs
+  - crates/minibox/src/daemon/state.rs
 log:
+- date: '20260511.235816'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.235816'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234919'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234919'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234848'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234546'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234546'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234542'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234542'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.234013'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233854'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233854'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233702'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233452'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233106'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233106'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
+- date: '20260511.233056'
+  summary: done=3 running=0 pending=20 blocked=1
+  commits:
+  - f4673b51e637dffee009596bfd107ed19398bde7
+  - c8417068f915857068dc7b4b244a2cdbec067ffe
+  - 23002e376dd70f3baec1c7565cd87eee70282c2a
+  - f8359b1e451e22b8cefc6d6f5851fc2703987712
+  - 03b221d2047328a895b431b72cd6665c8d45e7e6
+  - ae28db1d3a18f6a85c5dbd0d8cf9e4d56485d29b
+  - fb625f69f5ea9a1e74be5d78640a1d4ed29e63b6
+  - 6797004564e90a0c3643f90ea0994b225530f581
+  - b9a9650feae1890391f67378f3490c9752304d12
+  - a8ed9dc89a9cc0d94be0ab7a3888d40add12b2e0
 - date: '20260509.225051'
   summary: 'Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart)'
-  commits: []
   session: 43
 - date: '20260502.192909'
   summary: 'Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean'
-  commits: []
   session: 42
 - date: '20260502.000000'
   summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
-  commits: []
   session: 41
 - date: '20260502.000000'
   summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
-  commits: []
   session: 40
 - date: '20260430.143952'
   summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes; merged next->stable and tagged v0.23.0; synced xtask README; dropped stale minibox-agent-llm-api item.'
-  commits: []
   session: 39
 - date: 2026-05-11
   summary: 'handup triage: marked minibox-nightly-geiger, minibox-godmode-hook, minibox-prepush-skip as done (commits 3b9901a, 3650cad from 2026-05-09 already resolved them). HANDOFF was stale.'
-  commits: []
 - date: 2026-05-10
   summary: |
     handdown analysis pass — 2 item(s) annotated. minibox-crux-plugin cross-project dependency on crux noted; minibox-7 VZ blocker staleness flagged (39 days since last confirmation).
-  commits: []
 - date: 2026-05-09
   summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'
-  commits: []
