@@ -1,6 +1,8 @@
 //! Failure, policy, and error-path tests for daemon handler.
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
     self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
     LifecycleDeps,
@@ -728,7 +730,6 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
     // No panic = warn path exercised correctly.
 }
 
-
 /// Containers persisted with `state = "Running"` are NOT reattached after
 /// daemon restart — their PID is stale and the record is visible but no live
 /// process exists.
@@ -973,4 +974,42 @@ async fn test_policy_from_env_defaults() {
     let policy = ContainerPolicy::from_env();
     assert!(!policy.allow_bind_mounts, "default should deny bind mounts");
     assert!(!policy.allow_privileged, "default should deny privileged");
+}
+
+// ---------------------------------------------------------------------------
+// Error-path tests: handle_pause / handle_resume
+// ---------------------------------------------------------------------------
+
+/// handle_pause with an unknown container ID returns Error with "not found".
+#[tokio::test]
+async fn test_handle_pause_container_not_found() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&temp_dir);
+    let event_sink: Arc<dyn minibox_core::events::EventSink> =
+        Arc::new(minibox_core::events::NoopEventSink);
+
+    let resp =
+        handler::handle_pause("nonexistent-container-id".to_string(), state, event_sink).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+        "unknown container should produce Error with 'not found', got {resp:?}"
+    );
+}
+
+/// handle_resume with an unknown container ID returns Error with "not found".
+#[tokio::test]
+async fn test_handle_resume_container_not_found() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&temp_dir);
+    let event_sink: Arc<dyn minibox_core::events::EventSink> =
+        Arc::new(minibox_core::events::NoopEventSink);
+
+    let resp =
+        handler::handle_resume("nonexistent-container-id".to_string(), state, event_sink).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+        "unknown container should produce Error with 'not found', got {resp:?}"
+    );
 }

@@ -1,9 +1,11 @@
 //! Exec, PTY, send_input, and resize_pty tests.
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
-    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
-    LifecycleDeps, handle_resize_pty, handle_send_input,
+    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
+    handle_resize_pty, handle_send_input,
 };
 use minibox_core::domain::{DynImageRegistry, NetworkMode};
 use minibox_core::protocol::DaemonResponse;
@@ -12,7 +14,6 @@ use tempfile::TempDir;
 
 mod daemon_handler_common;
 use daemon_handler_common::*;
-
 
 // ---------------------------------------------------------------------------
 
@@ -44,7 +45,6 @@ async fn test_handle_exec_no_runtime_returns_error() {
 }
 
 // ---------------------------------------------------------------------------
-
 
 // handle_send_input happy path — channel registered, bytes delivered (#116/#129)
 // ---------------------------------------------------------------------------
@@ -116,7 +116,6 @@ async fn test_handle_send_input_invalid_base64_returns_error() {
 
 // ---------------------------------------------------------------------------
 // handle_resize_pty happy path — channel registered, resize delivered (#116/#129)
-
 
 // ---------------------------------------------------------------------------
 
@@ -210,7 +209,6 @@ async fn test_pty_session_registry_cleanup_removes_only_target_session() {
 /// terminal error response, the `if tx.send(...).await.is_err()` warn path
 /// must not panic.
 
-
 #[tokio::test]
 async fn test_handler_with_dropped_receiver_does_not_panic() {
     let tmp = TempDir::new().unwrap();
@@ -288,7 +286,6 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
 // ---------------------------------------------------------------------------
 
 /// handle_run with a filesystem that fails setup_rootfs → Error response (variant 2).
-
 
 // --- handle_resize_pty: unknown session ---
 
@@ -442,8 +439,6 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
 
 // --- handle_run: duplicate container name ---
 
-
-
 #[tokio::test]
 async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
     let temp_dir = TempDir::new().unwrap();
@@ -502,8 +497,6 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
 }
 
 // --- handle_run: network setup failure (bridge mode) ---
-
-
 
 #[tokio::test]
 async fn test_handle_run_network_setup_failure_bridge_mode() {
@@ -597,5 +590,3 @@ async fn test_handle_exec_failure_with_tty_cleans_up_pty_registry() {
         "PTY stdin registry should be empty after exec failure"
     );
 }
-
-

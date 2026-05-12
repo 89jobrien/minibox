@@ -1,6 +1,8 @@
 //! Image management tests: pull, push, build, commit, load, update, platform routing.
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
     self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
     LifecycleDeps,
@@ -722,7 +724,6 @@ async fn test_handle_rm_nonexistent_container() {
         _ => panic!("expected Error, got {resp:?}"),
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // handle_push Tests

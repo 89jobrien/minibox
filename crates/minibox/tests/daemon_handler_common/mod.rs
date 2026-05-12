@@ -3,7 +3,9 @@
 //! Import this module in each split test file via `mod daemon_handler_common`.
 #![allow(dead_code)]
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
     BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
 };
@@ -268,9 +270,8 @@ pub fn make_deps_with_policy(
     temp_dir: &TempDir,
     policy: minibox::daemon::handler::ContainerPolicy,
 ) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).unwrap(),
-    );
+    let image_store =
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).unwrap());
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
