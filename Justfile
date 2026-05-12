@@ -95,6 +95,7 @@ test-integration:
     sudo -E bash scripts/run-cgroup-tests.sh
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
+    cargo test -p minibox --test gke_adapter_isolation_tests -- --test-threads=1 --nocapture
 
 # Protocol e2e tests: any platform, no root, no cgroups
 test-e2e:
