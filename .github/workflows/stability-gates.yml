@@ -48,7 +48,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask check-no-unwrap
-        run: cargo xtask check-no-unwrap
+        run: cargo xtask check-no-unwrap --strict
 
   stability-compile:
     name: stability compile check
