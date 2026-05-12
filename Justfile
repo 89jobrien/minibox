@@ -258,6 +258,12 @@ diagnose *args:
 sync-check:
     cruxx run .crux/sync-check.crux
 
+# ── Setup ────────────────────────────────────────────────────────────────────
+
+# Install git hooks (pre-commit, pre-push, commit-msg) from scripts/install-hooks.sh
+install-hooks:
+    bash scripts/install-hooks.sh
+
 # ── Git ──────────────────────────────────────────────────────────────────────
 
 # Sync-check then push + clean non-critical artifacts

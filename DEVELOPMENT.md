@@ -32,6 +32,9 @@ core build/test pipeline.
 ## Quick Start
 
 ```bash
+# Install git hooks (pre-commit, pre-push, commit-msg) — run once after cloning
+just install-hooks
+
 # Build everything (release)
 cargo build --release
 
