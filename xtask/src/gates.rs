@@ -25,10 +25,10 @@ pub fn lint(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-commit gate: version bump → fmt → clippy --fix → lint check (macOS-safe, fast)
+/// Fix gate: version bump + fmt + clippy --fix + re-stage (macOS-safe, fast)
 ///
-/// Release build and conformance suite run at pre-push time, not here.
-pub fn pre_commit(sh: &Shell) -> Result<()> {
+/// This mutates files and the git index. Use `pre-commit` for validation-only checks.
+pub fn fix(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
@@ -49,6 +49,20 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         cmd!(sh, "git add -u -- . :!.worktrees")
             .run()
             .context("git add -u after clippy --fix failed")?;
+    }
+
+    eprintln!("fix gate passed");
+    Ok(())
+}
+
+/// Pre-commit gate: validation-only checks (macOS-safe, fast)
+///
+/// Never stages or edits files. Use `fix` for auto-formatting and clippy --fix.
+/// Release build and conformance suite run at pre-push time, not here.
+pub fn pre_commit(sh: &Shell) -> Result<()> {
+    let rust_staged = staged_rust_files(sh)?;
+
+    if rust_staged {
         cmd!(sh, "cargo fmt --all --check")
             .run()
             .context("fmt-check failed")?;
@@ -57,7 +71,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
             "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
         )
         .run()
-        .context("lint failed")?;
+        .context("clippy failed")?;
     }
 
     // Docs frontmatter lint (fast, no external tools).

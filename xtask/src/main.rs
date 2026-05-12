@@ -50,6 +50,7 @@ fn main() -> Result<()> {
         Some("doctor") => preflight::doctor(&preflight::ProcessProbe),
         Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
         Some("lint") => gates::lint(&sh),
+        Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
         Some("test-unit") => gates::test_unit(&sh),
@@ -152,7 +153,8 @@ fn main() -> Result<()> {
             );
             eprintln!("  available        verify cargo xtask is runnable (real capability check)");
             eprintln!("  lint             fmt-check + clippy + cargo check (CI lint gate)");
-            eprintln!("  pre-commit       fmt-check + lint + build-release");
+            eprintln!("  fix              fmt + clippy --fix + re-stage (mutates files)");
+            eprintln!("  pre-commit       validation-only: fmt-check + clippy (no file mutations)");
             eprintln!("  prepush          fast lib tests (debug, incremental)");
             eprintln!("  test-unit        all unit + conformance tests");
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
