@@ -20,6 +20,7 @@
 !docs/TEST_INFRASTRUCTURE.md
 !docs/CRATE_INVENTORY.md
 !docs/DOCS_AUDIT.md
+!docs/MUTATION_AUDIT.md
 !docs/ROADMAP.md
 !docs/PRERELEASE_CHANGELOG.md
 !docs/plans/*.md
