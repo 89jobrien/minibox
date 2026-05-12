@@ -41,12 +41,29 @@ use crate::domain::{BindMount, NetworkMode, SessionId};
 use serde::{Deserialize, Serialize};
 
 /// Serializable registry credentials for protocol transport.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Debug` is manually implemented to redact secrets.
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PushCredentials {
     Anonymous,
     Basic { username: String, password: String },
     Token { token: String },
+}
+
+impl std::fmt::Debug for PushCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Anonymous => write!(f, "PushCredentials::Anonymous"),
+            Self::Basic { username, .. } => {
+                write!(
+                    f,
+                    "PushCredentials::Basic {{ username: {username:?}, password: [REDACTED] }}"
+                )
+            }
+            Self::Token { .. } => write!(f, "PushCredentials::Token {{ token: [REDACTED] }}"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +394,40 @@ pub enum DaemonRequest {
         /// JSON-serialized `ExecutionPolicy` to evaluate against.
         policy_json: String,
     },
+}
+
+impl DaemonRequest {
+    /// Return the variant name without any field data — safe for logging.
+    pub fn type_tag(&self) -> &'static str {
+        match self {
+            Self::Run { .. } => "Run",
+            Self::Stop { .. } => "Stop",
+            Self::PauseContainer { .. } => "PauseContainer",
+            Self::ResumeContainer { .. } => "ResumeContainer",
+            Self::Remove { .. } => "Remove",
+            Self::List => "List",
+            Self::Pull { .. } => "Pull",
+            Self::LoadImage { .. } => "LoadImage",
+            Self::Exec { .. } => "Exec",
+            Self::SendInput { .. } => "SendInput",
+            Self::ResizePty { .. } => "ResizePty",
+            Self::Push { .. } => "Push",
+            Self::Commit { .. } => "Commit",
+            Self::Build { .. } => "Build",
+            Self::SubscribeEvents => "SubscribeEvents",
+            Self::Prune { .. } => "Prune",
+            Self::ListImages => "ListImages",
+            Self::RemoveImage { .. } => "RemoveImage",
+            Self::ContainerLogs { .. } => "ContainerLogs",
+            Self::RunPipeline { .. } => "RunPipeline",
+            Self::SaveSnapshot { .. } => "SaveSnapshot",
+            Self::RestoreSnapshot { .. } => "RestoreSnapshot",
+            Self::ListSnapshots { .. } => "ListSnapshots",
+            Self::Update { .. } => "Update",
+            Self::GetManifest { .. } => "GetManifest",
+            Self::VerifyManifest { .. } => "VerifyManifest",
+        }
+    }
 }
 
 fn default_max_depth() -> u32 {
@@ -1561,6 +1612,67 @@ mod tests {
         assert_eq!(
             json,
             r#"{"type":"Basic","username":"user","password":"s3cr3t"}"#
+        );
+    }
+
+    #[test]
+    fn push_credentials_debug_redacts_password() {
+        let creds = PushCredentials::Basic {
+            username: "user".to_string(),
+            password: "super-secret-pw".to_string(),
+        };
+        let dbg = format!("{creds:?}");
+        assert!(
+            dbg.contains("[REDACTED]"),
+            "password must be redacted: {dbg}"
+        );
+        assert!(
+            !dbg.contains("super-secret-pw"),
+            "raw password must not appear: {dbg}"
+        );
+        assert!(dbg.contains("user"), "username should be visible: {dbg}");
+    }
+
+    #[test]
+    fn push_credentials_debug_redacts_token() {
+        let creds = PushCredentials::Token {
+            token: "ghp_secret123".to_string(),
+        };
+        let dbg = format!("{creds:?}");
+        assert!(dbg.contains("[REDACTED]"), "token must be redacted: {dbg}");
+        assert!(
+            !dbg.contains("ghp_secret123"),
+            "raw token must not appear: {dbg}"
+        );
+    }
+
+    #[test]
+    fn request_type_tag_returns_variant_name() {
+        assert_eq!(DaemonRequest::List.type_tag(), "List");
+        assert_eq!(
+            DaemonRequest::Run {
+                image: "alpine".into(),
+                tag: None,
+                command: vec![],
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                ephemeral: false,
+                network: None,
+                env: vec!["SECRET=hunter2".into()],
+                mounts: vec![],
+                privileged: false,
+                name: None,
+                tty: false,
+                entrypoint: None,
+                user: None,
+                platform: None,
+                auto_remove: false,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+            }
+            .type_tag(),
+            "Run"
         );
     }
 

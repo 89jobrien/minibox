@@ -152,11 +152,29 @@ struct TokenResponse {
     token: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Registry authentication for push operations.
+///
+/// `Debug` is manually implemented to redact secrets.
+#[derive(Clone, PartialEq, Eq)]
 pub enum PushAuth {
     None,
     Basic { username: String, password: String },
     Bearer(String),
+}
+
+impl std::fmt::Debug for PushAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "PushAuth::None"),
+            Self::Basic { username, .. } => {
+                write!(
+                    f,
+                    "PushAuth::Basic {{ username: {username:?}, password: [REDACTED] }}"
+                )
+            }
+            Self::Bearer(_) => write!(f, "PushAuth::Bearer([REDACTED])"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

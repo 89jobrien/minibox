@@ -169,6 +169,56 @@ where
     Ok(())
 }
 
+/// Read a newline-delimited frame from `reader` into `buf`, rejecting frames
+/// that exceed `max_bytes` **before** they are fully buffered.
+///
+/// Returns the number of bytes read (0 = EOF). Returns an error if the frame
+/// exceeds the limit or contains invalid UTF-8.
+async fn bounded_read_line<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    buf: &mut String,
+    max_bytes: usize,
+) -> Result<usize> {
+    let mut total = 0usize;
+    loop {
+        let available = reader.fill_buf().await.context("reading from client")?;
+        if available.is_empty() {
+            return Ok(total);
+        }
+
+        let (chunk_len, found_newline) = match available.iter().position(|&b| b == b'\n') {
+            Some(pos) => (pos + 1, true),
+            None => (available.len(), false),
+        };
+
+        if total + chunk_len > max_bytes {
+            let oversize = total + chunk_len;
+            reader.consume(chunk_len);
+            // Drain until newline or EOF to resync the stream.
+            if !found_newline {
+                let mut drain = Vec::new();
+                let _ = reader.read_until(b'\n', &mut drain).await;
+            }
+            anyhow::bail!("request too large: at least {oversize} bytes (max {max_bytes})");
+        }
+
+        let chunk = &available[..chunk_len];
+        match std::str::from_utf8(chunk) {
+            Ok(s) => buf.push_str(s),
+            Err(e) => {
+                reader.consume(chunk_len);
+                anyhow::bail!("invalid UTF-8 in request: {e}");
+            }
+        }
+        total += chunk_len;
+        reader.consume(chunk_len);
+
+        if found_newline {
+            return Ok(total);
+        }
+    }
+}
+
 /// Handle a single client connection, generic over stream type.
 ///
 /// Reads newline-delimited JSON requests, dispatches to handlers, and
@@ -192,10 +242,28 @@ where
 
     loop {
         line.clear();
-        let bytes_read = reader
-            .read_line(&mut line)
-            .await
-            .context("reading from client")?;
+
+        // SECURITY: Read one newline-delimited frame, rejecting frames that
+        // exceed MAX_REQUEST_SIZE BEFORE they are fully buffered. This
+        // prevents a malicious client from forcing unbounded memory allocation.
+        let bytes_read = match bounded_read_line(&mut reader, &mut line, MAX_REQUEST_SIZE).await {
+            Ok(n) => n,
+            Err(e) => {
+                warn!(
+                    max = MAX_REQUEST_SIZE,
+                    error = %e,
+                    "rejecting oversized or malformed request"
+                );
+                let error_response = DaemonResponse::Error {
+                    message: format!("{e}"),
+                };
+                let mut error_json = serde_json::to_string(&error_response)?;
+                error_json.push('\n');
+                writer.write_all(error_json.as_bytes()).await?;
+                writer.flush().await?;
+                continue;
+            }
+        };
 
         if bytes_read == 0 {
             // Client closed the connection.
@@ -203,31 +271,20 @@ where
             break;
         }
 
-        // SECURITY: Reject requests exceeding size limit
-        if bytes_read > MAX_REQUEST_SIZE {
-            warn!("rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})");
-            let error_response = DaemonResponse::Error {
-                message: format!("request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"),
-            };
-            let mut error_json = serde_json::to_string(&error_response)?;
-            error_json.push('\n');
-            writer.write_all(error_json.as_bytes()).await?;
-            writer.flush().await?;
-            continue;
-        }
-
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        debug!("received request: {} bytes", trimmed.len());
+        debug!(bytes = trimmed.len(), "received request");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
 
         match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
-                info!("dispatching request: {request:?}");
+                // SECURITY: Log only the request type tag, never the full
+                // payload — it may contain credentials, env vars, or secrets.
+                info!(request_type = request.type_tag(), "dispatching request");
                 let state_c = Arc::clone(&state);
                 let deps_c = Arc::clone(&deps);
                 tokio::spawn(async move {
@@ -235,7 +292,13 @@ where
                 });
             }
             Err(e) => {
-                warn!("failed to parse request '{trimmed}': {e}");
+                // SECURITY: Log parse error and byte length only — never the
+                // raw request body, which may contain credentials or secrets.
+                warn!(
+                    bytes = trimmed.len(),
+                    error = %e,
+                    "failed to parse request"
+                );
                 send_terminal_response(
                     &tx,
                     "parse_error",
