@@ -6,7 +6,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-05-06
+Last updated: 2026-05-12
 
 ---
 
@@ -18,8 +18,8 @@ container rootfs (e.g. `../../../etc/cron.d/evil`).
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — `validate_tar_entry_path()` called for every entry
-  before `entry.unpack_in()`.
+- `crates/minibox-core/src/image/layer.rs` — `validate_tar_entry_path()` called for every
+  entry before `entry.unpack_in()`.
 - Rejects any path containing a `Component::ParentDir` (`..`) component.
 
 **Fixed in:** commit `8ea4f73`
@@ -40,8 +40,8 @@ Extracting them allows a container image to ship files that grant raw access to 
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — entry type check before `unpack_in`; `Block` and
-  `Char` entries return `ImageError::DeviceNodeRejected`.
+- `crates/minibox-core/src/image/layer.rs` — entry type check before `unpack_in`; `Block`
+  and `Char` entries return `ImageError::DeviceNodeRejected`.
 
 **Fixed in:** commit `8ea4f73`
 
@@ -62,8 +62,8 @@ the host filesystem. Targets that still contain `..` after relativisation (e.g.
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — `relative_path(entry_dir, abs_target)` rewrites the
-  target; `has_parent_dir_component()` on the rewritten target gates rejection.
+- `crates/minibox-core/src/image/layer.rs` — `relative_path(entry_dir, abs_target)` rewrites
+  the target; `has_parent_dir_component()` on the rewritten target gates rejection.
 - Safe busybox applet symlinks (e.g. `bin/echo -> /bin/busybox`) are rewritten to relative
   form (`busybox`) and accepted.
 
@@ -85,8 +85,8 @@ container image could allow privilege escalation to root once the container proc
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — `entry.header_mut().set_mode(mode & 0o777)` applied
-  before `entry.unpack_in()` for `Regular` and `Link` entries.
+- `crates/minibox-core/src/image/layer.rs` — `entry.header_mut().set_mode(mode & 0o777)`
+  applied before `entry.unpack_in()` for `Regular` and `Link` entries.
 
 **Fixed in:** commit `2fc7036`
 
@@ -185,7 +185,7 @@ component.
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — explicit check for `"."` and `"./"` before
+- `crates/minibox-core/src/image/layer.rs` — explicit check for `"."` and `"./"` before
   `validate_tar_entry_path`.
 
 **Regression test:**
@@ -203,8 +203,8 @@ complete without crashing.
 
 **Code path:**
 
-- `crates/minibox/src/image/layer.rs` — FIFO entries fall through to `unpack_in`; behaviour
-  is platform-dependent but must not panic.
+- `crates/minibox-core/src/image/layer.rs` — FIFO entries fall through to `unpack_in`;
+  behaviour is platform-dependent but must not panic.
 
 **Regression test:**
 | Test name | File |
@@ -213,7 +213,7 @@ complete without crashing.
 
 ---
 
-## Request Size Limit
+## 10. Request Size Limit
 
 **Invariant:** Daemon request reads are bounded to prevent memory exhaustion from malicious
 clients sending oversized JSON.
@@ -228,23 +228,36 @@ _(No dedicated regression test — enforced by the constant and the `read_line` 
 
 ---
 
-## Image Pull Resource Limits
+## 11. Image Pull Resource Limits
 
 **Invariant:** Image pull operations enforce per-resource limits to prevent DoS via
 oversized manifest or layer downloads.
 
 **Code path:**
 
-- `crates/minibox/src/image/registry.rs`:
-  - Max manifest size: 10 MB
-  - Max layer size: 1 GB per layer
-  - Total image size limit: 5 GB
+- `crates/minibox-core/src/image/registry.rs`:
+  - `MAX_MANIFEST_SIZE` = 10 MiB — checked against Content-Length and accumulated body size.
+  - `MAX_LAYER_SIZE` = 10 GiB per layer — checked against Content-Length and enforced via
+    `LimitedStream` during download.
+- `crates/minibox/src/adapters/ghcr.rs` mirrors the same constants for GHCR pulls.
 
-_(No dedicated regression test — enforced by constants checked during streaming reads.)_
+**Note:** There is no aggregate total-image-size limit. Each layer is independently bounded
+at 10 GiB. A future `MAX_TOTAL_IMAGE_SIZE` budget is tracked in issue #319.
+
+**Regression tests:**
+
+| Test name | File |
+|-----------|------|
+| `test_constants_manifest_size` | `crates/minibox-core/src/image/registry.rs` (unit) |
+| `test_constants_layer_size` | `crates/minibox-core/src/image/registry.rs` (unit) |
+| `get_manifest_errors_when_content_length_exceeds_limit` | `crates/minibox-core/src/image/registry.rs` (integration) |
+
+_(Layer size rejection is not feasible to integration-test due to 10 GiB body requirement;
+enforced by the `LimitedStream` wrapper and its own unit tests in the same file.)_
 
 ---
 
-## Newtype Wrappers for Validated Paths (Consideration)
+## Appendix: Newtype Wrappers for Validated Paths (Consideration)
 
 The acceptance criteria for issue #157 mention considering newtype wrappers for validated
 paths. The current implementation uses free functions (`validate_tar_entry_path`,
@@ -254,13 +267,13 @@ A `ValidatedPath` newtype would make it impossible to call `entry.unpack_in()` w
 unvalidated path at the type level. This is a worthwhile future hardening step but is not
 required for the current invariant regression suite.
 
-If implemented, the newtype should live in `crates/minibox/src/image/layer.rs` (for tar
-paths) and `crates/minibox/src/container/filesystem.rs` (for overlay paths), with
+If implemented, the newtype should live in `crates/minibox-core/src/image/layer.rs` (for
+tar paths) and `crates/minibox/src/container/filesystem.rs` (for overlay paths), with
 `TryFrom<&Path>` as the validated constructor.
 
 ---
 
-## 9. Execution Manifest Integrity
+## 12. Execution Manifest Integrity
 
 **Invariant:** Every container run persists an `execution-manifest.json`
 before the container process is spawned. The manifest captures all
@@ -268,9 +281,9 @@ measured inputs with a deterministic workload digest. Environment
 variable values are stored as SHA-256 digests, never plaintext.
 
 **Code path:**
-- `minibox-core/src/domain/execution_manifest.rs` — manifest types,
+- `crates/minibox-core/src/domain/execution_manifest.rs` — manifest types,
   digest computation, `seal()`.
-- `minibox/src/daemon/handler.rs` — `prepare_run()` builds and persists
+- `crates/minibox/src/daemon/handler.rs` — `prepare_run()` builds and persists
   the manifest before returning.
 
 **Regression tests:**
