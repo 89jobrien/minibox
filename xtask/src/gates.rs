@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::{env, fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{borrow_fixtures, bump, docs_lint};
+use crate::{bump, docs_lint};
 
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
@@ -483,35 +483,6 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
         .lines()
         .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
 }
-/// Format staged Markdown files before any version bump or Rust fixer mutates
-/// the index.
-fn format_staged_markdown(sh: &Shell) -> Result<()> {
-    let files = staged_markdown_files(sh)?;
-    if files.is_empty() {
-        return Ok(());
-    }
-
-    let prettier_files = files.clone();
-    cmd!(sh, "prettier --write --parser=markdown {prettier_files...}")
-        .run()
-        .context("markdown format failed")?;
-    cmd!(sh, "git add -- {files...}")
-        .run()
-        .context("git add markdown files after prettier failed")?;
-    Ok(())
-}
-
-fn staged_markdown_files(sh: &Shell) -> Result<Vec<String>> {
-    let staged = cmd!(sh, "git diff --cached --name-only --diff-filter=ACM")
-        .output()
-        .context("git diff --cached markdown files failed")?;
-    let staged = String::from_utf8_lossy(&staged.stdout);
-    Ok(staged
-        .lines()
-        .filter(|line| line.ends_with(".md"))
-        .map(ToOwned::to_owned)
-        .collect())
-}
 
 /// Auto-bump workspace version based on staged Rust changes.
 ///
@@ -542,6 +513,43 @@ fn auto_bump(sh: &Shell) -> Result<()> {
         .context("git add Cargo.toml after bump failed")?;
 
     Ok(())
+}
+
+fn workspace_version_already_staged(sh: &Shell) -> Result<bool> {
+    let head = match cmd!(sh, "git show HEAD:Cargo.toml").output() {
+        Ok(output) => output,
+        Err(_) => return Ok(false),
+    };
+    let index = match cmd!(sh, "git show :Cargo.toml").output() {
+        Ok(output) => output,
+        Err(_) => return Ok(false),
+    };
+
+    let head = String::from_utf8_lossy(&head.stdout);
+    let index = String::from_utf8_lossy(&index.stdout);
+    Ok(parse_workspace_version(&head) != parse_workspace_version(&index))
+}
+
+fn parse_workspace_version(content: &str) -> Option<&str> {
+    let mut in_workspace_package = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[workspace.package]" {
+            in_workspace_package = true;
+            continue;
+        }
+        if in_workspace_package {
+            if trimmed.starts_with('[') {
+                break;
+            }
+            if let Some(v) = trimmed.strip_prefix("version = \"")
+                && let Some(v) = v.strip_suffix('"')
+            {
+                return Some(v);
+            }
+        }
+    }
+    None
 }
 
 /// Check that every wired adapter has at least one integration test file.

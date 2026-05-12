@@ -50,6 +50,12 @@ fn main() -> Result<()> {
         }
         Some("doctor") => preflight::doctor(&preflight::ProcessProbe),
         Some("available") => preflight::check_xtask_available(&preflight::ProcessXtaskProbe),
+        Some("borrow-fixtures") => borrow_fixtures::run(root),
+        Some("borrow") => match env::args().nth(2).as_deref() {
+            Some("fixtures") => borrow_fixtures::run(root),
+            Some(other) => bail!("unknown borrow task: {other}. Available: fixtures"),
+            None => bail!("usage: cargo xtask borrow fixtures"),
+        },
         Some("lint") => gates::lint(&sh),
         Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
