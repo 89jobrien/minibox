@@ -93,4 +93,53 @@ mod security_regression {
             "u32::MAX UID must be rejected when require_root_auth=true"
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Exhaustive cross-product: (require_root: bool) x (uid: None, Some(...))
+    // -------------------------------------------------------------------------
+
+    /// Enumerate ALL valid inputs for `is_authorized` over the full cross product
+    /// of `require_root_auth` ∈ {false, true} and
+    /// `uid` ∈ {None, Some(0), Some(1), Some(500), Some(65534), Some(u32::MAX)}.
+    ///
+    /// Expected outcomes follow the truth table in the function's doc comment:
+    ///
+    /// | require_root | creds          | expected |
+    /// |--------------|----------------|----------|
+    /// | false        | any / None     | true     |
+    /// | true         | None           | false    |
+    /// | true         | Some(uid == 0) | true     |
+    /// | true         | Some(uid > 0)  | false    |
+    #[test]
+    fn exhaustive_is_authorized_cross_product() {
+        // (uid_opt, require_root, expected_result)
+        let cases: &[(Option<u32>, bool, bool)] = &[
+            // require_root = false: everything is allowed regardless of uid
+            (None, false, true),
+            (Some(0), false, true),
+            (Some(1), false, true),
+            (Some(500), false, true),
+            (Some(65534), false, true),
+            (Some(u32::MAX), false, true),
+            // require_root = true, no creds: denied (fail-closed)
+            (None, true, false),
+            // require_root = true, uid == 0: allowed
+            (Some(0), true, true),
+            // require_root = true, uid > 0: denied
+            (Some(1), true, false),
+            (Some(500), true, false),
+            (Some(65534), true, false),
+            (Some(u32::MAX), true, false),
+        ];
+
+        for &(uid_opt, require_root, expected) in cases {
+            let creds = uid_opt.map(|uid| PeerCreds { uid, pid: 1 });
+            let result = is_authorized(creds.as_ref(), require_root);
+            assert_eq!(
+                result, expected,
+                "is_authorized(uid={uid_opt:?}, require_root={require_root}) \
+                 expected {expected} but got {result}"
+            );
+        }
+    }
 }
