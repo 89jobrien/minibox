@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.29.4"
+version = "0.29.5"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -69,9 +69,9 @@ ipnet = "2"
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-core = { path = "crates/minibox-core", version = "0.29.4" }
+minibox-core = { path = "crates/minibox-core", version = "0.29.5" }
 minibox = { path = "crates/minibox" }
-minibox-macros = { path = "crates/minibox-macros", version = "0.29.4" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.29.5" }
 macbox = { path = "crates/macbox" }
 winbox = { path = "crates/winbox" }
 slashcrux = "0.1"
