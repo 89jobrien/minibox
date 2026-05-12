@@ -355,10 +355,12 @@ impl ImageRegistry for GhcrRegistry {
                 .await
                 .with_context(|| format!("ghcr: pull layer {digest}"))?;
 
-            // Stream the blob body directly into ImageStore without buffering.
+            // Stream the blob body through a size-limited reader, then into
+            // verified layer storage (HashingReader + tmp dir + digest check +
+            // atomic rename).
             let stream = resp.bytes_stream().map_err(io::Error::other);
             let async_reader = StreamReader::new(stream);
-            // Capture the runtime handle before entering spawn_blocking — inside
+            // Capture the runtime handle before entering spawn_blocking -- inside
             // a blocking thread there is no Tokio context to call Handle::current().
             let handle = Handle::current();
             let store = Arc::clone(&self.store);
@@ -368,7 +370,7 @@ impl ImageRegistry for GhcrRegistry {
             tokio::task::spawn_blocking(move || {
                 let sync_reader = SyncIoBridge::new_with_handle(async_reader, handle);
                 store
-                    .store_layer(&store_key2, &tag2, &digest2, sync_reader)
+                    .store_layer_verified(&store_key2, &tag2, &digest2, sync_reader)
                     .with_context(|| format!("ghcr: store layer {digest2}"))
             })
             .await
@@ -740,6 +742,78 @@ mod tests {
         // ------------------------------------------------------------------
         // Streaming layer storage
         // ------------------------------------------------------------------
+
+        #[tokio::test]
+        async fn pull_image_rejects_digest_mismatch() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, _real_digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            // Use a fake digest that does NOT match the layer bytes.
+            let fake_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/bad", "latest", "bad_tok", manifest).await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/bad/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref =
+                crate::image::reference::ImageRef::parse("ghcr.io/org/bad:latest").expect("ref");
+            let err = reg.pull_image(&image_ref).await;
+            assert!(err.is_err(), "expected digest mismatch error");
+            let err = err.unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("mismatch") || chain.contains("digest"),
+                "expected digest error, got: {chain}"
+            );
+        }
+
+        #[tokio::test]
+        async fn pull_image_cleans_tmp_on_digest_mismatch() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, _real_digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            let fake_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/dirty", "latest", "dirty_tok", manifest).await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/dirty/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref =
+                crate::image::reference::ImageRef::parse("ghcr.io/org/dirty:latest").expect("ref");
+            let _ = reg.pull_image(&image_ref).await;
+
+            // No layer directory or tmp directory should remain after a failed pull.
+            let layers_dir = dir.path().join("images").join("ghcr.io_org_dirty").join("latest").join("layers");
+            if layers_dir.exists() {
+                let entries: Vec<_> = std::fs::read_dir(&layers_dir)
+                    .expect("read layers dir")
+                    .collect();
+                assert!(
+                    entries.is_empty(),
+                    "layers dir should be empty after digest mismatch, found: {entries:?}"
+                );
+            }
+        }
 
         #[tokio::test]
         async fn pull_image_stores_layer_on_disk() {
