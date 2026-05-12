@@ -351,6 +351,18 @@ mod tests {
     }
 
     #[test]
+    fn different_container_id_produces_same_digest() {
+        let m1 = sample_manifest();
+        let mut m2 = sample_manifest();
+        m2.container_id = "completely-different-uuid-456".to_string();
+        assert_eq!(
+            m1.compute_workload_digest(),
+            m2.compute_workload_digest(),
+            "container_id is volatile and must not affect workload digest"
+        );
+    }
+
+    #[test]
     fn digest_display_format() {
         let d = ExecutionManifestDigest {
             algorithm: "sha256".to_string(),
