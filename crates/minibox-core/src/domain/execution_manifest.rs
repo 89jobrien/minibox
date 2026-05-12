@@ -376,9 +376,8 @@ mod tests {
     // ── Proptest strategies ───────────────────────────────────────────────────
 
     fn arb_env_var() -> impl Strategy<Value = ExecutionManifestEnvVar> {
-        (any::<String>(), any::<String>()).prop_map(|(name, value_digest)| {
-            ExecutionManifestEnvVar { name, value_digest }
-        })
+        (any::<String>(), any::<String>())
+            .prop_map(|(name, value_digest)| ExecutionManifestEnvVar { name, value_digest })
     }
 
     fn arb_mount() -> impl Strategy<Value = ExecutionManifestMount> {

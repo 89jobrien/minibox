@@ -6,7 +6,6 @@ use tempfile::TempDir;
 mod daemon_handler_common;
 use daemon_handler_common::*;
 
-
 /// add_container triggers save_to_disk; a new DaemonState loaded from the same
 /// directory via load_from_disk must contain the same container record.
 ///
@@ -113,7 +112,6 @@ async fn test_daemon_state_remove_persists_to_disk() {
 // ---------------------------------------------------------------------------
 // Name-resolution and additional error-path coverage (#158)
 
-
 // ---------------------------------------------------------------------------
 // restart-3: creation_params population
 // ---------------------------------------------------------------------------
@@ -154,5 +152,3 @@ async fn handle_run_stores_creation_params() {
         other => panic!("expected ContainerCreated, got {other:?}"),
     }
 }
-
-

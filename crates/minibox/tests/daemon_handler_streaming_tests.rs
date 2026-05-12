@@ -1,6 +1,8 @@
 //! Streaming, ephemeral run, and wait-for-exit tests.
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
 };
@@ -13,7 +15,6 @@ use tempfile::TempDir;
 
 mod daemon_handler_common;
 use daemon_handler_common::*;
-
 
 // ---------------------------------------------------------------------------
 // daemon_wait_for_exit coverage
@@ -456,7 +457,6 @@ async fn test_pull_registry_failure_with_tag() {
 
 // ---------------------------------------------------------------------------
 
-
 // Regression: minibox run streaming protocol order (2026-03-27)
 //
 // Root causes that were fixed:
@@ -815,8 +815,6 @@ async fn test_stop_unknown_container_returns_error() {
     }
 }
 
-
-
 ///
 /// After `handle_run` returns `ContainerCreated`, the background
 /// `daemon_wait_for_exit` task fires: `waitpid` on the mock PID returns an
@@ -854,4 +852,3 @@ async fn test_container_state_transitions_running_to_stopped_on_abnormal_exit() 
         "container must reach Stopped state after abnormal exit (no real PID)"
     );
 }
-

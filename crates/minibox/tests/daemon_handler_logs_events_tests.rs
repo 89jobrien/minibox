@@ -1,15 +1,12 @@
 //! Log streaming, event handling, pause/resume, and serde round-trip tests.
 
-use minibox::daemon::handler::{
-    self, handle_resize_pty, handle_send_input,
-};
+use minibox::daemon::handler::{self, handle_resize_pty, handle_send_input};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
 mod daemon_handler_common;
 use daemon_handler_common::*;
-
 
 // ---------------------------------------------------------------------------
 // handle_pause / handle_resume Tests
@@ -48,8 +45,6 @@ async fn test_resume_nonexistent_container_returns_error() {
         "got: {resp:?}"
     );
 }
-
-
 
 // ---------------------------------------------------------------------------
 // handle_logs Tests
@@ -144,8 +139,6 @@ async fn test_handle_logs_reads_log_files() {
 // PtySessionRegistry — SendInput / ResizePty handler tests
 // ---------------------------------------------------------------------------
 
-
-
 #[tokio::test]
 async fn send_input_unknown_session_returns_error() {
     use base64::Engine as _;
@@ -186,8 +179,6 @@ async fn resize_pty_unknown_session_returns_error() {
         "expected Error for unknown session, got {resp:?}"
     );
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Additional error-path tests for handle_pause / handle_resume (#116)
@@ -409,8 +400,6 @@ async fn test_resume_missing_cgroup_returns_error() {
     }
 }
 
-
-
 /// ContainerPaused and transitions state to Paused.
 #[tokio::test]
 async fn test_handle_pause_running_container_succeeds() {
@@ -540,7 +529,6 @@ async fn test_handle_resume_paused_container_succeeds() {
 // ---------------------------------------------------------------------------
 // PtySessionRegistry::cleanup unit test (#116/#129)
 
-
 /// All `DaemonResponse` variants round-trip through JSON serialisation.
 ///
 /// This ensures every variant is serialisable and deserialisable without data
@@ -661,4 +649,3 @@ fn test_daemon_response_serde_round_trip_all_variants() {
         assert_eq!(json, json2, "round-trip mismatch for variant: {variant:?}");
     }
 }
-

@@ -1,9 +1,10 @@
 //! Container lifecycle tests: run, stop, remove, list, networking.
 
-use minibox::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime};
+use minibox::adapters::mocks::{
+    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
+};
 use minibox::daemon::handler::{
-    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
-    LifecycleDeps,
+    self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
 };
 use minibox::daemon::state::{ContainerState, DaemonState};
 use minibox_core::adapters::HostnameRegistryRouter;
@@ -14,7 +15,6 @@ use tempfile::TempDir;
 
 mod daemon_handler_common;
 use daemon_handler_common::*;
-
 
 // ---------------------------------------------------------------------------
 // handle_run Tests
@@ -379,8 +379,6 @@ async fn test_handle_run_runtime_spawn_failure() {
     assert_eq!(containers[0].state, "Failed");
 }
 
-
-
 // ---------------------------------------------------------------------------
 // handle_remove Tests
 // ---------------------------------------------------------------------------
@@ -580,8 +578,6 @@ async fn test_full_container_lifecycle() {
     assert!(state.get_container(&container_id).await.is_none());
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Networking tests
 // ---------------------------------------------------------------------------
@@ -727,8 +723,6 @@ async fn test_handle_run_explicit_network_none() {
     );
     assert_eq!(mock_network.setup_count(), 1);
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Coverage expansion: run_inner orchestration paths
@@ -1122,8 +1116,6 @@ async fn test_list_after_run() {
     }
 }
 
-
-
 // ---------------------------------------------------------------------------
 // New coverage expansion tests
 // ---------------------------------------------------------------------------
@@ -1354,8 +1346,6 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
     );
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Coverage expansion: error paths not previously tested
 // ---------------------------------------------------------------------------
@@ -1562,8 +1552,6 @@ async fn test_handle_stop_dead_pid_succeeds() {
         "container state should be Stopped after handle_stop"
     );
 }
-
-
 
 // ---------------------------------------------------------------------------
 // handle_stop network cleanup
@@ -1998,8 +1986,6 @@ async fn test_handle_list_returns_all_containers() {
     }
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Error-path tests: handle_remove — running container
 // ---------------------------------------------------------------------------
@@ -2047,7 +2033,6 @@ async fn test_handle_remove_running_container_returns_error() {
 }
 
 // ---------------------------------------------------------------------------
-
 
 #[tokio::test]
 async fn test_handle_run_bridge_network_mode_calls_setup() {
@@ -2144,7 +2129,6 @@ async fn test_handle_exec_with_runtime_returning_error() {
 ///
 /// Guards the persistence contract documented in docs/STATE_MODEL.md.
 #[tokio::test]
-
 
 async fn test_daemon_state_persistence_survives_restart() {
     let tmp = TempDir::new().unwrap();
@@ -2246,7 +2230,6 @@ async fn test_daemon_state_remove_persists_to_disk() {
 
 // ---------------------------------------------------------------------------
 // Name-resolution and additional error-path coverage (#158)
-
 
 // ---------------------------------------------------------------------------
 
@@ -2513,4 +2496,3 @@ async fn test_handle_run_propagates_env_vars() {
 }
 
 // ===========================================================================
-

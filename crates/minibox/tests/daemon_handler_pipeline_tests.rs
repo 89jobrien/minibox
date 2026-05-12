@@ -11,7 +11,6 @@ use tempfile::TempDir;
 mod daemon_handler_common;
 use daemon_handler_common::*;
 
-
 // handle_pipeline Tests
 // ---------------------------------------------------------------------------
 
@@ -158,8 +157,6 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
 
 // ---------------------------------------------------------------------------
 
-
-
 /// Successful pipeline run with a trace file → PipelineComplete includes it.
 #[tokio::test]
 async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
@@ -262,5 +259,3 @@ async fn handle_run_stores_creation_params() {
         other => panic!("expected ContainerCreated, got {other:?}"),
     }
 }
-
-
