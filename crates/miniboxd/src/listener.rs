@@ -64,16 +64,18 @@ mod tests {
     /// Verify that accepting a connection returns peer credentials.
     #[tokio::test]
     async fn accept_returns_peer_creds() {
-        let dir = tempfile::TempDir::new().unwrap();
+        let dir = tempfile::TempDir::new().expect("create temp dir");
         let sock_path = dir.path().join("test.sock");
-        let raw = UnixListener::bind(&sock_path).unwrap();
+        let raw = UnixListener::bind(&sock_path).expect("bind unix listener");
         let listener = UnixServerListener(raw);
 
         // Connect from a std UnixStream (spawned in background).
         let path = sock_path.clone();
-        let _client = tokio::task::spawn_blocking(move || StdUnixStream::connect(path).unwrap());
+        let _client = tokio::task::spawn_blocking(move || {
+            StdUnixStream::connect(path).expect("connect to test socket")
+        });
 
-        let (stream, creds) = listener.accept().await.unwrap();
+        let (stream, creds) = listener.accept().await.expect("accept connection");
         drop(stream);
 
         // On both Linux and macOS, we should get Some creds for a local connection.

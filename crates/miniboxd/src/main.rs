@@ -922,7 +922,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn resolve_data_dir_non_root_uses_home() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
             std::env::set_var("HOME", "/home/testuser");
@@ -937,7 +937,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn resolve_data_dir_root_uses_var_lib() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
         }
@@ -948,7 +948,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn resolve_data_dir_env_override_takes_precedence() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
         unsafe {
             std::env::set_var("MINIBOX_DATA_DIR", "/custom/path");
         }
@@ -964,7 +964,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn resolve_paths_uses_env_overrides() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
         unsafe {
             std::env::set_var("MINIBOX_DATA_DIR", "/test/data");
             std::env::set_var("MINIBOX_RUN_DIR", "/test/run");
@@ -990,7 +990,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn resolve_paths_macos_defaults() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
             std::env::remove_var("MINIBOX_RUN_DIR");
@@ -1008,17 +1008,17 @@ mod tests {
     #[tokio::test]
     #[cfg(target_os = "linux")]
     async fn native_suite_wires_local_push_commit_and_build_adapters() {
-        let temp_dir = tempfile::TempDir::new().unwrap();
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
-        std::fs::create_dir_all(&images_dir).unwrap();
-        let image_store = ImageStore::new(&images_dir).unwrap();
+        std::fs::create_dir_all(&images_dir).expect("create images dir");
+        let image_store = ImageStore::new(&images_dir).expect("create ImageStore");
         let state = Arc::new(DaemonState::new(image_store, &data_dir));
 
         let lease_service = Arc::new(
             DiskLeaseService::new(data_dir.join("leases.json"))
                 .await
-                .unwrap(),
+                .expect("create DiskLeaseService"),
         );
         let image_gc: Arc<dyn ImageGarbageCollector> =
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
@@ -1038,7 +1038,7 @@ mod tests {
             image_gc,
             native_network,
         )
-        .unwrap();
+        .expect("build native handler dependencies");
 
         assert!(
             deps.build.image_pusher.is_some(),
@@ -1057,16 +1057,16 @@ mod tests {
     #[tokio::test]
     #[cfg(unix)]
     async fn krun_suite_wires_krun_adapters() {
-        let temp_dir = tempfile::TempDir::new().unwrap();
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
-        std::fs::create_dir_all(&images_dir).unwrap();
-        let image_store = ImageStore::new(&images_dir).unwrap();
+        std::fs::create_dir_all(&images_dir).expect("create images dir");
+        let image_store = ImageStore::new(&images_dir).expect("create ImageStore");
         let state = Arc::new(DaemonState::new(image_store, &data_dir));
         let lease_service = Arc::new(
             DiskLeaseService::new(data_dir.join("leases.json"))
                 .await
-                .unwrap(),
+                .expect("create DiskLeaseService"),
         );
         let image_gc: Arc<dyn ImageGarbageCollector> =
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
@@ -1082,7 +1082,7 @@ mod tests {
             event_broker,
             image_gc,
         )
-        .unwrap();
+        .expect("build krun handler dependencies");
 
         // Krun has no build adapters
         assert!(deps.build.image_pusher.is_none());
@@ -1093,16 +1093,16 @@ mod tests {
     #[tokio::test]
     #[cfg(unix)]
     async fn smolvm_suite_wires_smolvm_adapters() {
-        let temp_dir = tempfile::TempDir::new().unwrap();
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
-        std::fs::create_dir_all(&images_dir).unwrap();
-        let image_store = ImageStore::new(&images_dir).unwrap();
+        std::fs::create_dir_all(&images_dir).expect("create images dir");
+        let image_store = ImageStore::new(&images_dir).expect("create ImageStore");
         let state = Arc::new(DaemonState::new(image_store, &data_dir));
         let lease_service = Arc::new(
             DiskLeaseService::new(data_dir.join("leases.json"))
                 .await
-                .unwrap(),
+                .expect("create DiskLeaseService"),
         );
         let image_gc: Arc<dyn ImageGarbageCollector> =
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
@@ -1119,7 +1119,7 @@ mod tests {
             event_broker,
             image_gc,
         )
-        .unwrap();
+        .expect("build smolvm handler dependencies");
 
         assert!(deps.build.image_pusher.is_none());
     }
@@ -1127,16 +1127,16 @@ mod tests {
     #[tokio::test]
     #[cfg(target_os = "linux")]
     async fn gke_suite_wires_oci_image_pusher() {
-        let temp_dir = tempfile::TempDir::new().unwrap();
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
-        std::fs::create_dir_all(&images_dir).unwrap();
-        let image_store = ImageStore::new(&images_dir).unwrap();
+        std::fs::create_dir_all(&images_dir).expect("create images dir");
+        let image_store = ImageStore::new(&images_dir).expect("create ImageStore");
         let state = Arc::new(DaemonState::new(image_store, &data_dir));
         let lease_service = Arc::new(
             DiskLeaseService::new(data_dir.join("leases.json"))
                 .await
-                .unwrap(),
+                .expect("create DiskLeaseService"),
         );
         let image_gc: Arc<dyn ImageGarbageCollector> =
             Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
