@@ -17,7 +17,7 @@ use daemon_handler_common::*;
 /// Relative pipeline path → Error (not absolute).
 #[tokio::test]
 async fn test_handle_pipeline_rejects_relative_path() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
@@ -45,13 +45,13 @@ async fn test_handle_pipeline_rejects_relative_path() {
 /// Missing image pull → Error propagated from handle_run via inner channel.
 #[tokio::test]
 async fn test_handle_pipeline_pull_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     // Use a registry that always fails to pull.
     let failing_registry = Arc::new(MockRegistry::new().with_pull_failure());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             failing_registry as DynImageRegistry,
@@ -65,10 +65,10 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
 
     // Create a real pipeline file on disk so the absolute-path check passes.
     let pipeline_file = temp_dir.path().join("work.cruxx");
-    std::fs::write(&pipeline_file, b"steps: []").unwrap();
+    std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().unwrap().to_string(),
+        pipeline_file.to_str().expect("unwrap in test").to_string(),
         None,
         Some("cruxx-runtime:latest".to_string()),
         None,
@@ -89,7 +89,7 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
 /// Successful pipeline run with no trace file → PipelineComplete with empty trace.
 #[tokio::test]
 async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
@@ -97,10 +97,10 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
 
     // Pipeline file must exist and be absolute.
     let pipeline_file = temp_dir.path().join("work.cruxx");
-    std::fs::write(&pipeline_file, b"steps: []").unwrap();
+    std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().unwrap().to_string(),
+        pipeline_file.to_str().expect("unwrap in test").to_string(),
         None,
         None,
         None,
@@ -160,14 +160,14 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
 /// Successful pipeline run with a trace file → PipelineComplete includes it.
 #[tokio::test]
 async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
 
     let pipeline_file = temp_dir.path().join("work.cruxx");
-    std::fs::write(&pipeline_file, b"steps: []").unwrap();
+    std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     // Pre-seed the channel: we need to know the container ID before the run so
     // we can plant the trace file.  Instead, we intercept ContainerCreated from
@@ -182,7 +182,7 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
     // dir structure — if it does not, trace falls back to {"steps":[]}.
     // We assert either the planted trace OR the fallback are returned.
     handler::handle_pipeline(
-        pipeline_file.to_str().unwrap().to_string(),
+        pipeline_file.to_str().expect("unwrap in test").to_string(),
         Some(serde_json::json!({"prompt": "hello"})),
         None,
         None,

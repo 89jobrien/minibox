@@ -19,7 +19,7 @@ use daemon_handler_common::*;
 
 #[tokio::test]
 async fn test_policy_denies_bind_mount_by_default() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -64,7 +64,7 @@ async fn test_policy_denies_bind_mount_by_default() {
 /// Default policy denies privileged containers.
 #[tokio::test]
 async fn test_policy_denies_privileged_by_default() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -103,7 +103,7 @@ async fn test_policy_denies_privileged_by_default() {
 /// Default policy allows plain containers (no mounts, not privileged).
 #[tokio::test]
 async fn test_policy_allows_plain_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -128,7 +128,7 @@ async fn test_policy_allows_plain_container() {
 /// Policy configured with allow_bind_mounts=true permits bind mounts.
 #[tokio::test]
 async fn test_policy_can_be_configured_to_allow_mounts() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let policy = ContainerPolicy {
         allow_bind_mounts: true,
         allow_privileged: false,
@@ -172,7 +172,7 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
 /// Policy configured with allow_privileged=true permits privileged containers.
 #[tokio::test]
 async fn test_policy_can_be_configured_to_allow_privileged() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let policy = ContainerPolicy {
         allow_bind_mounts: false,
         allow_privileged: true,
@@ -264,7 +264,7 @@ fn test_validate_policy_denies_privileged() {
 /// handle_run rejects a second container that tries to claim an already-used name.
 #[tokio::test]
 async fn test_handle_run_duplicate_container_name_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -322,9 +322,9 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
 }
 #[tokio::test]
 async fn test_handle_run_filesystem_setup_failure_v2() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_fs")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_fs")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -388,9 +388,9 @@ async fn test_handle_run_filesystem_setup_failure_v2() {
 /// handle_run with a resource limiter that fails create → Error response.
 #[tokio::test]
 async fn test_handle_run_limiter_create_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_lc")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_lc")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -454,7 +454,7 @@ async fn test_handle_run_limiter_create_failure() {
 /// handle_run — bind-mount denied by default policy → Error response.
 #[tokio::test]
 async fn test_handle_run_bind_mount_denied_by_policy() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -464,7 +464,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("images_bm")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_bm")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -533,7 +533,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
 /// handle_run — privileged mode denied by default policy → Error response.
 #[tokio::test]
 async fn test_handle_run_privileged_denied_by_policy() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -543,7 +543,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("images_pr")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_pr")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -609,7 +609,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
 
 #[tokio::test]
 async fn test_handle_pause_stopped_container_returns_not_running() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
@@ -632,7 +632,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
         tx_run,
     )
     .await;
-    let container_id = match rx_run.recv().await.unwrap() {
+    let container_id = match rx_run.recv().await.expect("unwrap in test") {
         DaemonResponse::ContainerCreated { id } => id,
         other => panic!("expected ContainerCreated, got {other:?}"),
     };
@@ -660,7 +660,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
 #[tokio::test]
 #[cfg(unix)]
 async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
@@ -671,7 +671,7 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(tmp.path().join("img_disc")).unwrap(),
+                minibox_core::image::ImageStore::new(tmp.path().join("img_disc")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -741,12 +741,12 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
     use minibox::daemon::state::ContainerRecord;
     use minibox_core::protocol::ContainerInfo;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let container_id = "running-on-restart1".to_string();
 
     // Simulate first daemon: container was Running at shutdown.
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         state
             .add_container(ContainerRecord {
@@ -777,7 +777,7 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
     }
 
     // Simulate second daemon: load state from disk.
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

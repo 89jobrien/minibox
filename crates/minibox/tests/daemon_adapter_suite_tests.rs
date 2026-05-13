@@ -87,7 +87,7 @@ async fn handle_run_once(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store = ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 
@@ -99,7 +99,7 @@ fn make_deps_from_parts(
     network: impl minibox_core::domain::NetworkProvider + 'static,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store = Arc::new(ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(

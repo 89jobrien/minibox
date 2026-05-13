@@ -16,7 +16,7 @@ fn make_image_store(tmp: &TempDir) -> ImageStore {
 /// `JsonFileRepository::load_containers` on a missing file returns an empty map.
 #[test]
 fn json_file_repository_load_missing_returns_empty() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let repo = JsonFileRepository::new(tmp.path().join("state.json"));
     let containers = repo.load_containers().expect("load must succeed");
     assert!(containers.is_empty(), "empty file should yield empty map");
@@ -29,7 +29,7 @@ async fn json_file_repository_round_trips() {
     use minibox_core::protocol::ContainerInfo;
     use std::path::PathBuf;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let repo = JsonFileRepository::new(tmp.path().join("state.json"));
 
     let mut map = HashMap::new();
@@ -72,7 +72,7 @@ async fn json_file_repository_round_trips() {
 /// `DaemonState` can be constructed with an `Arc<dyn StateRepository>`.
 #[tokio::test]
 async fn daemon_state_accepts_repository_port() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let image_store = make_image_store(&tmp);
     let repo: Arc<dyn StateRepository> =
         Arc::new(JsonFileRepository::new(tmp.path().join("state.json")));

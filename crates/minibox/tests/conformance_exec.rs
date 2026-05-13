@@ -62,7 +62,7 @@ async fn exec_success_increments_call_count() {
     runtime
         .run_in_container(&cid, default_spec(), tx)
         .await
-        .unwrap();
+        .expect("unwrap in test");
     assert_eq!(runtime.call_count(), 1);
 }
 
@@ -76,13 +76,13 @@ async fn exec_successive_calls_produce_different_ids() {
     let h1 = runtime
         .run_in_container(&cid, default_spec(), tx1)
         .await
-        .unwrap();
+        .expect("unwrap in test");
 
     let (tx2, _) = mpsc::channel::<DaemonResponse>(8);
     let h2 = runtime
         .run_in_container(&cid, default_spec(), tx2)
         .await
-        .unwrap();
+        .expect("unwrap in test");
 
     assert_ne!(
         h1.id, h2.id,
@@ -107,7 +107,7 @@ async fn exec_captures_last_spec() {
     runtime
         .run_in_container(&cid, spec.clone(), tx)
         .await
-        .unwrap();
+        .expect("unwrap in test");
 
     let captured = runtime
         .last_spec()
@@ -127,7 +127,7 @@ async fn exec_captures_last_container_id() {
     runtime
         .run_in_container(&cid, default_spec(), tx)
         .await
-        .unwrap();
+        .expect("unwrap in test");
 
     assert_eq!(runtime.last_container_id().expect("must be Some"), cid);
 }

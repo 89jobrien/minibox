@@ -20,7 +20,7 @@ use daemon_handler_common::*;
 /// handle_exec with no exec_runtime wired → Error "not supported".
 #[tokio::test]
 async fn test_handle_exec_no_runtime_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir); // exec_runtime: None
     let state = create_test_state_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
@@ -57,7 +57,7 @@ async fn test_handle_exec_no_runtime_returns_error() {
 #[tokio::test]
 async fn test_handle_send_input_delivers_bytes_and_returns_success() {
     use base64::Engine as _;
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&tmp);
 
     let session_id = "test-session-send-01";
@@ -95,7 +95,7 @@ async fn test_handle_send_input_delivers_bytes_and_returns_success() {
 /// handle_send_input with invalid base64 returns Error.
 #[tokio::test]
 async fn test_handle_send_input_invalid_base64_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&tmp);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
 
@@ -123,7 +123,7 @@ async fn test_handle_send_input_invalid_base64_returns_error() {
 /// (cols, rows) and returns Success — both previously uncovered.
 #[tokio::test]
 async fn test_handle_resize_pty_delivers_size_and_returns_success() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&tmp);
 
     let session_id = "test-session-resize-01";
@@ -211,7 +211,7 @@ async fn test_pty_session_registry_cleanup_removes_only_target_session() {
 
 #[tokio::test]
 async fn test_handler_with_dropped_receiver_does_not_panic() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let deps_fail = Arc::new(HandlerDependencies {
@@ -223,7 +223,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(tmp.path().join("img_dr")).unwrap(),
+                minibox_core::image::ImageStore::new(tmp.path().join("img_dr")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -291,7 +291,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
 
 #[tokio::test]
 async fn test_handle_resize_pty_unknown_session_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
 
@@ -315,7 +315,7 @@ async fn test_handle_resize_pty_unknown_session_returns_error() {
 
 #[tokio::test]
 async fn test_handle_send_input_closed_channel_still_succeeds() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let d = (*create_test_deps_with_dir(&temp_dir)).clone();
     let (stdin_tx, stdin_rx_dropped) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
     drop(stdin_rx_dropped);
@@ -345,7 +345,7 @@ async fn test_handle_send_input_closed_channel_still_succeeds() {
 
 #[tokio::test]
 async fn test_handle_resize_pty_closed_channel_still_succeeds() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let d = (*create_test_deps_with_dir(&temp_dir)).clone();
     let (resize_tx, resize_rx_dropped) = tokio::sync::mpsc::channel::<(u16, u16)>(1);
     drop(resize_rx_dropped);
@@ -376,7 +376,7 @@ async fn test_handle_resize_pty_closed_channel_still_succeeds() {
 
 #[tokio::test]
 async fn test_handle_send_input_unknown_session_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
 
@@ -399,7 +399,7 @@ async fn test_handle_send_input_unknown_session_returns_error() {
 
 #[tokio::test]
 async fn test_handle_logs_missing_log_dir_sends_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
@@ -422,7 +422,7 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
         tx_run,
     )
     .await;
-    let container_id = match rx_run.recv().await.unwrap() {
+    let container_id = match rx_run.recv().await.expect("unwrap in test") {
         DaemonResponse::ContainerCreated { id } => id,
         other => panic!("expected ContainerCreated, got {other:?}"),
     };
@@ -441,7 +441,7 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
 
 #[tokio::test]
 async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
     let deps = create_test_deps_with_dir(&temp_dir);
 
@@ -464,7 +464,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         tx1,
     )
     .await;
-    let resp1 = rx1.recv().await.unwrap();
+    let resp1 = rx1.recv().await.expect("unwrap in test");
     assert!(
         matches!(resp1, DaemonResponse::ContainerCreated { .. }),
         "first run should succeed, got {resp1:?}"
@@ -489,7 +489,7 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
         tx2,
     )
     .await;
-    let resp2 = rx2.recv().await.unwrap();
+    let resp2 = rx2.recv().await.expect("unwrap in test");
     assert!(
         matches!(resp2, DaemonResponse::Error { ref message } if message.contains("already in use")),
         "duplicate name should return error, got {resp2:?}"
@@ -502,12 +502,12 @@ async fn test_handle_run_duplicate_name_second_attempt_returns_error() {
 async fn test_handle_run_network_setup_failure_bridge_mode() {
     use minibox::adapters::mocks::MockNetwork;
 
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let failing_network = Arc::new(MockNetwork::new().with_setup_failure());
     let deps = build_deps(
         Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(
@@ -551,7 +551,7 @@ async fn test_handle_run_network_setup_failure_bridge_mode() {
 
 #[tokio::test]
 async fn test_handle_exec_failure_with_tty_cleans_up_pty_registry() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_exec = minibox::testing::mocks::MockExecRuntime::new().with_failure();

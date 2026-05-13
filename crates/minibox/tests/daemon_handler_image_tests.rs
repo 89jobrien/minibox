@@ -22,10 +22,10 @@ use daemon_handler_common::*;
 
 #[tokio::test]
 async fn test_handle_pull_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             mock_registry.clone() as DynImageRegistry,
@@ -59,7 +59,7 @@ async fn test_handle_pull_success() {
 
 #[tokio::test]
 async fn test_handle_pull_with_library_prefix() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -76,7 +76,7 @@ async fn test_handle_pull_with_library_prefix() {
 
 #[tokio::test]
 async fn test_handle_pull_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -86,7 +86,7 @@ async fn test_handle_pull_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -152,7 +152,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -228,7 +228,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -303,7 +303,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -374,7 +374,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -433,7 +433,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
 
 #[tokio::test]
 async fn test_load_image_success() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     struct OkLoader;
     #[async_trait::async_trait]
@@ -465,7 +465,7 @@ async fn test_load_image_success() {
 
 #[tokio::test]
 async fn test_load_image_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     struct FailLoader;
     #[async_trait::async_trait]
@@ -502,9 +502,9 @@ async fn test_load_image_failure() {
 /// handle_run with a registry that fails pull → Error response.
 #[tokio::test]
 async fn test_handle_run_image_pull_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -565,9 +565,9 @@ async fn test_handle_run_image_pull_failure() {
 /// handle_run with an image that has no layers → Error response.
 #[tokio::test]
 async fn test_handle_run_empty_layers() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -628,9 +628,9 @@ async fn test_handle_run_empty_layers() {
 /// handle_pull for a non-existent image (pull failure) → Error response.
 #[tokio::test]
 async fn test_handle_pull_nonexistent_image() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -688,7 +688,7 @@ async fn test_handle_pull_nonexistent_image() {
 /// handle_stop with an unknown container ID → Error response.
 #[tokio::test]
 async fn test_handle_stop_nonexistent_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -708,7 +708,7 @@ async fn test_handle_stop_nonexistent_container() {
 /// handle_remove with an unknown container ID → Error response.
 #[tokio::test]
 async fn test_handle_rm_nonexistent_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = make_deps_with_policy(&temp_dir, ContainerPolicy::default());
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -732,7 +732,7 @@ async fn test_handle_rm_nonexistent_container() {
 /// handle_push with no image_pusher wired → Error "not supported".
 #[tokio::test]
 async fn test_handle_push_no_pusher_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
@@ -756,7 +756,7 @@ async fn test_handle_push_no_pusher_returns_error() {
 /// handle_push with an invalid image ref → Error.
 #[tokio::test]
 async fn test_handle_push_invalid_image_ref_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
@@ -787,7 +787,7 @@ async fn test_handle_push_invalid_image_ref_returns_error() {
 /// handle_push with a valid pusher and valid image ref → Success.
 #[tokio::test]
 async fn test_handle_push_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_pusher = Arc::new(minibox_core::adapters::mocks::MockImagePusher::new());
@@ -832,7 +832,7 @@ async fn test_handle_push_success() {
 /// handle_commit with no commit_adapter wired → Error "not supported".
 #[tokio::test]
 async fn test_handle_commit_no_adapter_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
@@ -860,7 +860,7 @@ async fn test_handle_commit_no_adapter_returns_error() {
 /// handle_commit with invalid container id → Error.
 #[tokio::test]
 async fn test_handle_commit_invalid_container_id_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
@@ -895,7 +895,7 @@ async fn test_handle_commit_invalid_container_id_returns_error() {
 /// handle_commit with valid adapter and valid container id → Success.
 #[tokio::test]
 async fn test_handle_commit_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_committer = Arc::new(minibox_core::adapters::mocks::MockContainerCommitter::new());
@@ -935,14 +935,14 @@ async fn test_handle_commit_success() {
 /// handle_build with no image_builder wired → Error "not supported".
 #[tokio::test]
 async fn test_handle_build_no_builder_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
 
     handler::handle_build(
         "FROM alpine\nRUN echo hi".to_string(),
-        temp_dir.path().to_str().unwrap().to_string(),
+        temp_dir.path().to_str().expect("unwrap in test").to_string(),
         "myimage:latest".to_string(),
         vec![],
         false,
@@ -962,7 +962,7 @@ async fn test_handle_build_no_builder_returns_error() {
 /// handle_build with a relative context_path → Error.
 #[tokio::test]
 async fn test_handle_build_relative_context_path_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
@@ -996,7 +996,7 @@ async fn test_handle_build_relative_context_path_returns_error() {
 /// handle_build with valid builder and absolute context path → BuildComplete.
 #[tokio::test]
 async fn test_handle_build_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
@@ -1010,7 +1010,7 @@ async fn test_handle_build_success() {
 
     handler::handle_build(
         "FROM alpine\nRUN echo hi".to_string(),
-        temp_dir.path().to_str().unwrap().to_string(),
+        temp_dir.path().to_str().expect("unwrap in test").to_string(),
         "myimage:latest".to_string(),
         vec![],
         false,
@@ -1048,7 +1048,7 @@ async fn test_handle_build_success() {
 /// handle_pull with an empty image string (invalid ref) → Error response (variant 2).
 #[tokio::test]
 async fn test_handle_pull_invalid_image_ref_returns_error_v2() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1083,7 +1083,7 @@ impl minibox_core::domain::ImageLoader for FailingImageLoader {
 /// handle_load_image with a loader that always fails → Error response.
 #[tokio::test]
 async fn test_handle_load_image_loader_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let deps = {
@@ -1122,7 +1122,7 @@ async fn test_handle_load_image_loader_failure() {
 
 #[tokio::test]
 async fn test_handle_push_adapter_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_pusher =
@@ -1155,7 +1155,7 @@ async fn test_handle_push_adapter_failure_returns_error() {
 
 #[tokio::test]
 async fn test_handle_commit_adapter_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_committer =
@@ -1192,7 +1192,7 @@ async fn test_handle_commit_adapter_failure_returns_error() {
 
 #[tokio::test]
 async fn test_handle_build_adapter_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_builder =
@@ -1207,7 +1207,7 @@ async fn test_handle_build_adapter_failure_returns_error() {
 
     handler::handle_build(
         "FROM alpine\nRUN true".to_string(),
-        temp_dir.path().to_str().unwrap().to_string(),
+        temp_dir.path().to_str().expect("unwrap in test").to_string(),
         "testimage:v1".to_string(),
         vec![],
         false,
@@ -1236,7 +1236,7 @@ async fn test_handle_build_adapter_failure_returns_error() {
 
 #[tokio::test]
 async fn test_handle_build_canonicalize_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
@@ -1274,7 +1274,7 @@ async fn test_handle_build_canonicalize_failure_returns_error() {
 /// error rather than silently ignoring it.
 #[tokio::test]
 async fn test_handle_run_invalid_platform_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -1425,10 +1425,10 @@ async fn test_handle_pull_platform_none_uses_default_router() {
 /// image and ends with a terminal `Success` response.
 #[tokio::test]
 async fn test_handle_update_explicit_images_sends_progress_then_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1481,10 +1481,10 @@ async fn test_handle_update_explicit_images_sends_progress_then_success() {
 /// `Success` with "0/0" (no images to refresh).
 #[tokio::test]
 async fn test_handle_update_all_empty_store_sends_zero_progress() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1517,10 +1517,10 @@ async fn test_handle_update_containers_collects_source_image_refs() {
     use minibox::daemon::state::ContainerRecord;
     use minibox_core::protocol::ContainerInfo;
 
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1586,10 +1586,10 @@ async fn test_handle_update_restart_stops_running_containers() {
     use minibox::daemon::state::ContainerRecord;
     use minibox_core::protocol::ContainerInfo;
 
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,

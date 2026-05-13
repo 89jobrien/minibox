@@ -217,7 +217,7 @@ fn protocol_empty_line_does_not_crash_daemon() {
     stream.write_all(b"\n").expect("write empty line");
 
     // Send valid list request on same connection
-    let req = serde_json::to_string(&DaemonRequest::List).unwrap() + "\n";
+    let req = serde_json::to_string(&DaemonRequest::List).expect("serialize List request") + "\n";
     stream
         .write_all(req.as_bytes())
         .expect("write list request");
@@ -245,7 +245,8 @@ fn protocol_multiple_requests_on_single_connection() {
 
     // Send two list requests sequentially
     for _ in 0..2 {
-        let req = serde_json::to_string(&DaemonRequest::List).unwrap() + "\n";
+        let req =
+            serde_json::to_string(&DaemonRequest::List).expect("serialize List request") + "\n";
         stream.write_all(req.as_bytes()).expect("write request");
     }
 
@@ -273,7 +274,7 @@ fn protocol_pull_nonexistent_image_returns_error() {
 
     // Should get an error (auth failure or not found)
     assert!(!responses.is_empty(), "should get at least one response");
-    let last = responses.last().unwrap();
+    let last = responses.last().expect("at least one response");
     match last {
         DaemonResponse::Error { .. } => {} // expected
         other => panic!("expected Error for nonexistent image pull, got: {other:?}"),
