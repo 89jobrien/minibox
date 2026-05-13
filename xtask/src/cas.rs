@@ -4,7 +4,7 @@
 //!   cas/<sha256>   — file content, named by sha256 of content
 //!   refs/<name>    — text file containing a sha256, maps name → CAS object
 
-#![allow(dead_code)] // TODO(#306): cas overlay used by vm_image pipeline; re-wire for smolvm
+#![allow(dead_code)] // TODO(#357): cas overlay used by vm_image pipeline; re-wire for smolvm
 
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};

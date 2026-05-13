@@ -62,7 +62,7 @@ mod tests {
     #[tokio::test]
     async fn noop_exec_runtime_returns_not_supported_error() {
         let exec = NoopExecRuntime::new("gke");
-        let id = ContainerId::new("testcontainerid".to_string()).unwrap();
+        let id = ContainerId::new("testcontainerid".to_string()).expect("valid container id");
         let spec = ExecSpec {
             cmd: vec!["/bin/sh".to_string()],
             env: vec![],
@@ -94,7 +94,7 @@ mod tests {
             let (tx, _rx) = tokio::sync::mpsc::channel(8);
             let result = exec
                 .run_in_container(
-                    &ContainerId::new("cid1234".to_string()).unwrap(),
+                    &ContainerId::new("cid1234".to_string()).expect("valid container id"),
                     ExecSpec {
                         cmd: vec!["ls".to_string()],
                         env: vec![],

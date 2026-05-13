@@ -182,8 +182,8 @@ mod tests {
 
     #[test]
     fn test_registry_creation() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
+        let temp_dir = TempDir::new().expect("tempdir");
+        let store = Arc::new(ImageStore::new(temp_dir.path()).expect("image store"));
 
         let registry = DockerHubRegistry::new(store.clone());
         assert!(registry.is_ok());
@@ -191,9 +191,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_has_image_for_nonexistent_image() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
-        let registry = DockerHubRegistry::new(store).unwrap();
+        let temp_dir = TempDir::new().expect("tempdir");
+        let store = Arc::new(ImageStore::new(temp_dir.path()).expect("image store"));
+        let registry = DockerHubRegistry::new(store).expect("registry");
 
         // Non-existent image should return false
         let exists = registry.has_image("library/nonexistent", "latest").await;
@@ -202,9 +202,9 @@ mod tests {
 
     #[test]
     fn test_get_image_layers_for_nonexistent_image() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Arc::new(ImageStore::new(temp_dir.path()).unwrap());
-        let registry = DockerHubRegistry::new(store).unwrap();
+        let temp_dir = TempDir::new().expect("tempdir");
+        let store = Arc::new(ImageStore::new(temp_dir.path()).expect("image store"));
+        let registry = DockerHubRegistry::new(store).expect("registry");
 
         // Non-existent image should return error
         let result = registry.get_image_layers("library/nonexistent", "latest");

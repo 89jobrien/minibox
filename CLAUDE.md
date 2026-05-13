@@ -90,3 +90,21 @@ Branches follow the stability pipeline:
 ## Hook Notes
 
 Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook runs `nu scripts/preflight.nu`; it should be fast, read-only, and non-fatal so startup is not blocked by normal local state like an uncommitted working tree.
+
+---
+
+## Quick Reference
+
+```
+No .unwrap() in production        → use .context("description")?
+No println!/eprintln! in daemon   → use tracing::info!/warn!
+No platform imports in core       → minibox-core has zero OS deps
+No fork/clone in async fn         → use tokio::task::spawn_blocking
+No unsafe without SAFETY comment  → document the invariant
+No direct path from user input    → call validate_layer_path() first
+No env::set_var in parallel tests → use static Mutex<()> guard
+No new protocol field without     → #[serde(default)]
+  backward compat
+New adapter? Update composition   → miniboxd/src/main.rs (all suites)
+New HandlerDependencies field?    → update all construction sites
+```

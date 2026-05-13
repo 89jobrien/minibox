@@ -1779,7 +1779,11 @@ mod tests {
                 rootfs_metadata: Some(meta),
                 source_image_ref: Some("alpine:latest".to_string()),
             };
-            let recovered_upper = layout.rootfs_metadata.as_ref().unwrap().overlay_upper_dir();
+            let recovered_upper = layout
+                .rootfs_metadata
+                .as_ref()
+                .expect("metadata present")
+                .overlay_upper_dir();
             assert_eq!(recovered_upper, &upper);
         }
 

@@ -5,9 +5,9 @@
 //!   InitramfsBuilder — assemble gzip cpio initramfs from a rootfs directory
 //!   VmRunner         — boot VM, stream serial, detect sentinel
 //!
-//! TODO (#306): wire real adapters for smolvm once the QEMU/VZ path is removed.
+//! TODO (#357): wire real adapters for smolvm once the QEMU/VZ path is removed.
 
-#![allow(dead_code)] // TODO(#306): wire smolvm real adapters
+#![allow(dead_code)] // TODO(#357): wire smolvm real adapters
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
