@@ -97,7 +97,7 @@ fn write_state_json(dir: &TempDir, id: &str, state: &str, pid: Option<u32>) {
 /// when the process is no longer alive.
 #[tokio::test]
 async fn test_load_from_disk_marks_stale_running_as_stopped() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     write_state_json(&tmp, "run-abc", "Running", Some(12345));
 
     let state = make_state(&tmp);
@@ -118,7 +118,7 @@ async fn test_load_from_disk_marks_stale_running_as_stopped() {
 /// A container persisted as "Created" must also be loaded as "Stopped" with no pid.
 #[tokio::test]
 async fn test_load_from_disk_marks_stale_created_as_stopped() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     write_state_json(&tmp, "cre-xyz", "Created", None);
 
     let state = make_state(&tmp);
@@ -138,7 +138,7 @@ async fn test_load_from_disk_marks_stale_created_as_stopped() {
 /// A container persisted as "Stopped" must be loaded unchanged.
 #[tokio::test]
 async fn test_load_from_disk_preserves_already_stopped() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     write_state_json(&tmp, "stop-zzz", "Stopped", None);
 
     let state = make_state(&tmp);
@@ -159,7 +159,7 @@ async fn test_load_from_disk_preserves_already_stopped() {
 /// already-Stopped containers are unchanged.
 #[tokio::test]
 async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     // Build a JSON with three containers.
     let json = r#"{
@@ -179,7 +179,7 @@ async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
     "pid": null, "rootfs_path": "/mock", "cgroup_path": "/mock", "post_exit_hooks": []
   }
 }"#;
-    std::fs::write(tmp.path().join("state.json"), json).unwrap();
+    std::fs::write(tmp.path().join("state.json"), json).expect("unwrap in test");
 
     let state = make_state(&tmp);
     state.load_from_disk().await;
@@ -221,7 +221,7 @@ async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
 async fn test_save_to_disk_write_failure_does_not_panic() {
     // Use a path that will never exist so the write fails.
     let nonexistent = PathBuf::from("/tmp/minibox-test-nonexistent-dir-98765");
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let image_store = make_image_store(&tmp);
     let state = DaemonState::new(image_store, &nonexistent);
 
@@ -241,18 +241,18 @@ async fn test_save_to_disk_write_failure_does_not_panic() {
 async fn test_save_to_disk_rename_failure_does_not_panic() {
     use std::os::unix::fs::PermissionsExt;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     // Create state.json so the target exists (the write path itself will succeed
     // for the .tmp file, but we make the directory read-only so rename fails).
-    std::fs::write(tmp.path().join("state.json"), b"{}").unwrap();
+    std::fs::write(tmp.path().join("state.json"), b"{}").expect("unwrap in test");
 
     let state = make_state(&tmp);
 
     // Make the directory read-only — the .tmp write and subsequent rename will
     // fail with EACCES.
     let perms = std::fs::Permissions::from_mode(0o555);
-    std::fs::set_permissions(tmp.path(), perms).unwrap();
+    std::fs::set_permissions(tmp.path(), perms).expect("unwrap in test");
 
     // Must not panic — both failures are best-effort warn! logs.
     let record = make_record("rename-fail-1", "Created", None);
@@ -260,7 +260,7 @@ async fn test_save_to_disk_rename_failure_does_not_panic() {
 
     // Restore permissions so TempDir can clean up.
     let perms = std::fs::Permissions::from_mode(0o755);
-    std::fs::set_permissions(tmp.path(), perms).unwrap();
+    std::fs::set_permissions(tmp.path(), perms).expect("unwrap in test");
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ async fn test_save_to_disk_rename_failure_does_not_panic() {
 /// Calling update_container_state on a nonexistent ID must be a silent no-op.
 #[tokio::test]
 async fn test_update_container_state_nonexistent_is_noop() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     // No containers have been added — this must not panic.
@@ -290,7 +290,7 @@ async fn test_update_container_state_nonexistent_is_noop() {
 /// must leave existing containers untouched.
 #[tokio::test]
 async fn test_update_container_state_nonexistent_does_not_affect_others() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -324,7 +324,7 @@ async fn test_update_container_state_nonexistent_does_not_affect_others() {
 /// Transitioning a container to "Stopped" must clear both pid fields.
 #[tokio::test]
 async fn test_update_container_state_stopped_clears_pid() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let id = "pid-clear-test";
@@ -357,7 +357,7 @@ async fn test_update_container_state_stopped_clears_pid() {
 /// Transitioning to a non-"Stopped" state must NOT clear the pid fields.
 #[tokio::test]
 async fn test_update_container_state_non_stopped_preserves_pid() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let id = "pid-preserve-test";
@@ -397,7 +397,7 @@ async fn test_update_container_state_non_stopped_preserves_pid() {
 async fn test_concurrent_add_remove_is_consistent() {
     use std::sync::Arc;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = Arc::new(make_state(&tmp));
 
     let n = 20usize;
@@ -442,7 +442,7 @@ async fn test_concurrent_add_remove_is_consistent() {
 async fn test_concurrent_read_during_writes_does_not_panic() {
     use std::sync::Arc;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = Arc::new(make_state(&tmp));
 
     // Pre-seed a container so readers have something to find.
@@ -492,7 +492,7 @@ async fn test_concurrent_read_during_writes_does_not_panic() {
 async fn test_container_state_is_domain_type() {
     use minibox_core::domain::ContainerState as DomainState;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let id = "paused-type-check";

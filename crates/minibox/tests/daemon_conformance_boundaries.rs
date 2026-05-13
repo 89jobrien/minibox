@@ -207,7 +207,7 @@ async fn conformance_daemon_state_add_remove_persists() {
         "remove_container must return the removed record"
     );
     assert_eq!(
-        removed.unwrap().info.id,
+        removed.expect("unwrap in test").info.id,
         "test-id",
         "removed record must have correct id"
     );
@@ -265,7 +265,7 @@ async fn conformance_daemon_state_valid_transitions() {
         .update_container_state("test", ContainerState::Running)
         .await;
     assert!(res.is_ok(), "Created → Running must be valid");
-    let record = state.get_container("test").await.unwrap();
+    let record = state.get_container("test").await.expect("unwrap in test");
     assert_eq!(record.info.state, "Running", "state must be Running");
 
     // Running → Paused
@@ -273,7 +273,7 @@ async fn conformance_daemon_state_valid_transitions() {
         .update_container_state("test", ContainerState::Paused)
         .await;
     assert!(res.is_ok(), "Running → Paused must be valid");
-    let record = state.get_container("test").await.unwrap();
+    let record = state.get_container("test").await.expect("unwrap in test");
     assert_eq!(record.info.state, "Paused", "state must be Paused");
 
     // Paused → Running
@@ -281,7 +281,7 @@ async fn conformance_daemon_state_valid_transitions() {
         .update_container_state("test", ContainerState::Running)
         .await;
     assert!(res.is_ok(), "Paused → Running must be valid");
-    let record = state.get_container("test").await.unwrap();
+    let record = state.get_container("test").await.expect("unwrap in test");
     assert_eq!(record.info.state, "Running", "state must be Running");
 
     // Running → Stopped
@@ -289,7 +289,7 @@ async fn conformance_daemon_state_valid_transitions() {
         .update_container_state("test", ContainerState::Stopped)
         .await;
     assert!(res.is_ok(), "Running → Stopped must be valid");
-    let record = state.get_container("test").await.unwrap();
+    let record = state.get_container("test").await.expect("unwrap in test");
     assert_eq!(record.info.state, "Stopped", "state must be Stopped");
     assert_eq!(record.info.pid, None, "pid must be cleared on Stopped");
     assert_eq!(record.pid, None, "record.pid must be cleared on Stopped");

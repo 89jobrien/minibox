@@ -158,7 +158,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -245,7 +245,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -314,7 +314,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
 /// When registry has no layers for an image, handle_run produces an Error.
 #[tokio::test]
 async fn test_run_empty_image_no_layers() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new().with_empty_layers());
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
@@ -325,7 +325,7 @@ async fn test_run_empty_image_no_layers() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -389,7 +389,7 @@ async fn test_run_empty_image_no_layers() {
 /// Pulling an image that fails at the registry produces an Error.
 #[tokio::test]
 async fn test_pull_registry_failure_with_tag() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new().with_pull_failure());
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
@@ -400,7 +400,7 @@ async fn test_pull_registry_failure_with_tag() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -548,7 +548,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -826,7 +826,7 @@ async fn test_stop_unknown_container_returns_error() {
 #[tokio::test]
 #[cfg(unix)]
 async fn test_container_state_transitions_running_to_stopped_on_abnormal_exit() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
     let deps = create_test_deps_with_dir(&tmp);
 

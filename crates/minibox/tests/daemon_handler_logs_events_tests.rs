@@ -14,7 +14,7 @@ use daemon_handler_common::*;
 
 #[tokio::test]
 async fn test_pause_nonexistent_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let resp = handler::handle_pause(
@@ -31,7 +31,7 @@ async fn test_pause_nonexistent_container_returns_error() {
 
 #[tokio::test]
 async fn test_resume_nonexistent_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let resp = handler::handle_resume(
@@ -53,7 +53,7 @@ async fn test_resume_nonexistent_container_returns_error() {
 /// handle_logs for unknown container_id → Error response.
 #[tokio::test]
 async fn test_handle_logs_unknown_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -75,7 +75,7 @@ async fn test_handle_logs_unknown_container() {
 /// handle_logs for known container with log files → LogLine + Success.
 #[tokio::test]
 async fn test_handle_logs_reads_log_files() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -109,9 +109,9 @@ async fn test_handle_logs_reads_log_files() {
 
     // Write log files to the expected path.
     let container_dir = temp_dir.path().join("containers").join(container_id);
-    std::fs::create_dir_all(&container_dir).unwrap();
-    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n").unwrap();
-    std::fs::write(container_dir.join("stderr.log"), "err line\n").unwrap();
+    std::fs::create_dir_all(&container_dir).expect("unwrap in test");
+    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n").expect("unwrap in test");
+    std::fs::write(container_dir.join("stderr.log"), "err line\n").expect("unwrap in test");
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
     handler::handle_logs(container_id.to_string(), false, state, deps, tx).await;
@@ -142,7 +142,7 @@ async fn test_handle_logs_reads_log_files() {
 #[tokio::test]
 async fn send_input_unknown_session_returns_error() {
     use base64::Engine as _;
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&tmp);
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
     let data = base64::engine::general_purpose::STANDARD.encode(b"hello");
@@ -153,7 +153,7 @@ async fn send_input_unknown_session_returns_error() {
         tx,
     )
     .await;
-    let resp = rx.recv().await.unwrap();
+    let resp = rx.recv().await.expect("unwrap in test");
     assert!(
         matches!(resp, DaemonResponse::Error { .. }),
         "expected Error for unknown session, got {resp:?}"
@@ -162,7 +162,7 @@ async fn send_input_unknown_session_returns_error() {
 
 #[tokio::test]
 async fn resize_pty_unknown_session_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&tmp);
     let (tx, mut rx) = tokio::sync::mpsc::channel(8);
     handle_resize_pty(
@@ -173,7 +173,7 @@ async fn resize_pty_unknown_session_returns_error() {
         tx,
     )
     .await;
-    let resp = rx.recv().await.unwrap();
+    let resp = rx.recv().await.expect("unwrap in test");
     assert!(
         matches!(resp, DaemonResponse::Error { .. }),
         "expected Error for unknown session, got {resp:?}"
@@ -187,7 +187,7 @@ async fn resize_pty_unknown_session_returns_error() {
 /// Pausing a stopped container returns an Error — the container must be Running.
 #[tokio::test]
 async fn test_pause_stopped_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let container_id = "pausetest001abc01";
@@ -240,7 +240,7 @@ async fn test_pause_stopped_container_returns_error() {
 /// Only containers in state `Paused` can be resumed.
 #[tokio::test]
 async fn test_resume_running_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let container_id = "resumetest001abc0";
@@ -294,7 +294,7 @@ async fn test_resume_running_container_returns_error() {
 /// dir is absent the write must fail gracefully rather than panic.
 #[tokio::test]
 async fn test_pause_missing_cgroup_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     // Point cgroup_path at a directory that does not exist.
@@ -350,7 +350,7 @@ async fn test_pause_missing_cgroup_returns_error() {
 /// Mirrors `test_pause_missing_cgroup_returns_error` for the resume path.
 #[tokio::test]
 async fn test_resume_missing_cgroup_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let nonexistent_cgroup = tmp.path().join("no-such-cgroup-resume");
@@ -406,11 +406,11 @@ async fn test_handle_pause_running_container_succeeds() {
     use minibox::daemon::state::ContainerRecord;
     use minibox_core::protocol::ContainerInfo;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let cgroup_dir = tmp.path().join("fake-cgroup-pause");
-    std::fs::create_dir_all(&cgroup_dir).unwrap();
+    std::fs::create_dir_all(&cgroup_dir).expect("unwrap in test");
 
     let container_id = "pausesuccesstest01";
     state
@@ -469,12 +469,12 @@ async fn test_handle_resume_paused_container_succeeds() {
     use minibox::daemon::state::ContainerRecord;
     use minibox_core::protocol::ContainerInfo;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&tmp);
 
     let cgroup_dir = tmp.path().join("fake-cgroup-resume");
-    std::fs::create_dir_all(&cgroup_dir).unwrap();
-    std::fs::write(cgroup_dir.join("cgroup.freeze"), "1\n").unwrap();
+    std::fs::create_dir_all(&cgroup_dir).expect("unwrap in test");
+    std::fs::write(cgroup_dir.join("cgroup.freeze"), "1\n").expect("unwrap in test");
 
     let container_id = "resumesuccesstest1";
     state

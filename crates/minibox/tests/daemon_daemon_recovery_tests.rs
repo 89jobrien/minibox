@@ -18,7 +18,7 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -45,7 +45,7 @@ fn make_deps(temp_dir: &TempDir) -> Arc<minibox::daemon::handler::HandlerDepende
     use minibox_core::domain::DynImageRegistry;
 
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -122,7 +122,7 @@ fn make_record(id: &str) -> ContainerRecord {
 /// Concurrent add/remove operations must not corrupt state or panic.
 #[tokio::test]
 async fn test_concurrent_add_remove_no_corruption() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let mut handles = vec![];
@@ -155,7 +155,7 @@ async fn test_concurrent_add_remove_no_corruption() {
 /// `remove_container` on a non-existent ID returns `None` without panicking.
 #[tokio::test]
 async fn test_remove_nonexistent_returns_none() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let result = state.remove_container("nonexistent-id").await;
@@ -168,7 +168,7 @@ async fn test_remove_nonexistent_returns_none() {
 /// Removing the same container twice: first returns `Some`, second returns `None`.
 #[tokio::test]
 async fn test_double_remove_second_is_none() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let id = "double-remove-test";
@@ -188,7 +188,7 @@ async fn test_double_remove_second_is_none() {
 /// containers that were actually added and not removed.
 #[tokio::test]
 async fn test_list_consistent_after_partial_removes() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let ids = ["keep-1", "keep-2", "remove-1", "remove-2"];
@@ -219,7 +219,7 @@ async fn test_list_consistent_after_partial_removes() {
 /// `load_from_disk` with no state file present succeeds and yields empty state.
 #[tokio::test]
 async fn test_load_from_disk_missing_file_is_empty() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     // No state.json exists — load_from_disk must not panic or error.
@@ -235,9 +235,9 @@ async fn test_load_from_disk_missing_file_is_empty() {
 /// `load_from_disk` with a corrupt/empty JSON file succeeds and yields empty state.
 #[tokio::test]
 async fn test_load_from_disk_corrupt_file_is_empty() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     // Write garbage into the state file before creating DaemonState.
-    std::fs::write(temp_dir.path().join("state.json"), b"not valid json at all").unwrap();
+    std::fs::write(temp_dir.path().join("state.json"), b"not valid json at all").expect("unwrap in test");
 
     let state = make_state(&temp_dir);
     state.load_from_disk().await;
@@ -256,7 +256,7 @@ async fn test_load_from_disk_corrupt_file_is_empty() {
 /// `handle_stop` with an empty string ID returns an Error response.
 #[tokio::test]
 async fn test_handle_stop_empty_id_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let deps = make_deps(&temp_dir);
@@ -271,7 +271,7 @@ async fn test_handle_stop_empty_id_returns_error() {
 /// `handle_remove` with an empty string ID returns an Error response.
 #[tokio::test]
 async fn test_handle_remove_empty_id_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
     let deps = make_deps(&temp_dir);
 
@@ -286,7 +286,7 @@ async fn test_handle_remove_empty_id_returns_error() {
 /// `handle_list` on a fresh DaemonState returns an empty ContainerList.
 #[tokio::test]
 async fn test_handle_list_fresh_state_is_empty() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let response = handler::handle_list(state).await;
@@ -305,7 +305,7 @@ async fn test_handle_list_fresh_state_is_empty() {
 /// `handle_list` is idempotent: consecutive calls return the same contents.
 #[tokio::test]
 async fn test_handle_list_idempotent() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     // Seed some containers directly.

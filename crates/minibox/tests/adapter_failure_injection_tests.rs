@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 async fn test_registry_pull_failure_returns_descriptive_error() {
     let registry = MockRegistry::new().with_pull_failure();
     let result = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").expect("unwrap in test"))
         .await;
     assert!(result.is_err());
     assert!(
@@ -92,7 +92,7 @@ fn test_limiter_failure_after_successful_setup_requires_cleanup() {
     let limiter = MockLimiter::new().with_create_failure();
 
     // Filesystem setup succeeds
-    let rootfs = fs.setup_rootfs(&[], Path::new("/container")).unwrap();
+    let rootfs = fs.setup_rootfs(&[], Path::new("/container")).expect("unwrap in test");
     assert!(
         rootfs.merged_dir.ends_with("merged"),
         "rootfs path must end with 'merged'"
@@ -120,10 +120,10 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
     let limiter = MockLimiter::new();
     let runtime = MockRuntime::new().with_spawn_failure();
 
-    let rootfs = fs.setup_rootfs(&[], Path::new("/container")).unwrap();
+    let rootfs = fs.setup_rootfs(&[], Path::new("/container")).expect("unwrap in test");
     let cgroup_path = limiter
         .create("test-container", &ResourceConfig::default())
-        .unwrap();
+        .expect("unwrap in test");
 
     let config = ContainerSpawnConfig {
         rootfs: rootfs.merged_dir,
@@ -214,7 +214,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // First pull succeeds
     assert!(
         registry
-            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").expect("unwrap in test"))
             .await
             .is_ok()
     );
@@ -229,7 +229,7 @@ async fn test_registry_tracks_all_pull_attempts() {
     // Second pull also succeeds (re-pull)
     assert!(
         registry
-            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+            .pull_image(&minibox::image::reference::ImageRef::parse("alpine").expect("unwrap in test"))
             .await
             .is_ok()
     );

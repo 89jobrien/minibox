@@ -12,11 +12,11 @@ use daemon_handler_common::*;
 /// Guards the persistence contract documented in docs/STATE_MODEL.md.
 #[tokio::test]
 async fn test_daemon_state_persistence_survives_restart() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     let container_id = "persist-test-00001a";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -45,7 +45,7 @@ async fn test_daemon_state_persistence_survives_restart() {
         state.add_container(record).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 
@@ -55,7 +55,7 @@ async fn test_daemon_state_persistence_survives_restart() {
         "container record must survive daemon restart"
     );
     assert_eq!(
-        container.unwrap().info.id,
+        container.expect("unwrap in test").info.id,
         container_id,
         "restored container must have the same id"
     );
@@ -65,11 +65,11 @@ async fn test_daemon_state_persistence_survives_restart() {
 /// same directory must not contain the removed record.
 #[tokio::test]
 async fn test_daemon_state_remove_persists_to_disk() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     let container_id = "remove-persist-0001";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -99,7 +99,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
         state.remove_container(container_id).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

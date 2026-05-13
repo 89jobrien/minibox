@@ -22,10 +22,10 @@ use daemon_handler_common::*;
 
 #[tokio::test]
 async fn test_handle_run_with_cached_image() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -99,10 +99,10 @@ async fn test_handle_run_with_cached_image() {
 
 #[tokio::test]
 async fn test_handle_run_pulls_uncached_image() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -170,7 +170,7 @@ async fn test_handle_run_pulls_uncached_image() {
 
 #[tokio::test]
 async fn test_handle_run_filesystem_setup_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -181,7 +181,7 @@ async fn test_handle_run_filesystem_setup_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -238,7 +238,7 @@ async fn test_handle_run_filesystem_setup_failure() {
 
 #[tokio::test]
 async fn test_handle_run_resource_limiter_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -249,7 +249,7 @@ async fn test_handle_run_resource_limiter_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -306,7 +306,7 @@ async fn test_handle_run_resource_limiter_failure() {
 
 #[tokio::test]
 async fn test_handle_run_runtime_spawn_failure() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -317,7 +317,7 @@ async fn test_handle_run_runtime_spawn_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -385,7 +385,7 @@ async fn test_handle_run_runtime_spawn_failure() {
 
 #[tokio::test]
 async fn test_handle_remove_success() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -437,7 +437,7 @@ async fn test_handle_remove_success() {
         .filesystem
         .as_any()
         .downcast_ref::<MockFilesystem>()
-        .unwrap();
+        .expect("unwrap in test");
     assert_eq!(filesystem.cleanup_count(), 1);
 
     let limiter = deps
@@ -445,13 +445,13 @@ async fn test_handle_remove_success() {
         .resource_limiter
         .as_any()
         .downcast_ref::<MockLimiter>()
-        .unwrap();
+        .expect("unwrap in test");
     assert_eq!(limiter.cleanup_count(), 1);
 }
 
 #[tokio::test]
 async fn test_handle_remove_nonexistent_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -467,7 +467,7 @@ async fn test_handle_remove_nonexistent_container() {
 
 #[tokio::test]
 async fn test_handle_remove_running_container() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -515,7 +515,7 @@ async fn test_handle_remove_running_container() {
 
 #[tokio::test]
 async fn test_full_container_lifecycle() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -589,7 +589,7 @@ fn create_test_deps_with_network(
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -636,7 +636,7 @@ fn create_test_deps_with_network(
 /// `handle_run` invocation.
 #[tokio::test]
 async fn test_network_setup_called_on_run() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_network = Arc::new(MockNetwork::new());
     let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
     let state = create_test_state_with_dir(&temp_dir);
@@ -663,7 +663,7 @@ async fn test_network_setup_called_on_run() {
 /// A network setup failure propagates back as a `DaemonResponse::Error`.
 #[tokio::test]
 async fn test_network_setup_failure_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_network = Arc::new(MockNetwork::new().with_setup_failure());
     let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
     let state = create_test_state_with_dir(&temp_dir);
@@ -691,7 +691,7 @@ async fn test_network_setup_failure_returns_error() {
 /// of mode; it simply returns an empty netns path.
 #[tokio::test]
 async fn test_handle_run_explicit_network_none() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_network = Arc::new(MockNetwork::new());
     let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
     let state = create_test_state_with_dir(&temp_dir);
@@ -976,7 +976,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1139,7 +1139,7 @@ async fn test_handle_run_empty_image_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1272,7 +1272,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1425,7 +1425,7 @@ async fn test_handle_run_pull_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1798,7 +1798,7 @@ async fn test_handle_remove_failed_container_succeeds() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1887,7 +1887,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap(),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1993,7 +1993,7 @@ async fn test_handle_list_returns_all_containers() {
 /// handle_remove on a Running container → Error (AlreadyRunning).
 #[tokio::test]
 async fn test_handle_remove_running_container_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let deps = create_test_deps_with_dir(&temp_dir);
     let state = create_test_state_with_dir(&temp_dir);
 
@@ -2036,7 +2036,7 @@ async fn test_handle_remove_running_container_returns_error() {
 
 #[tokio::test]
 async fn test_handle_run_bridge_network_mode_calls_setup() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_network = Arc::new(MockNetwork::new());
     let deps = create_test_deps_with_network(&temp_dir, mock_network.clone());
     let state = create_test_state_with_dir(&temp_dir);
@@ -2095,7 +2095,7 @@ impl minibox_core::domain::AsAny for FailingExecRuntime {
 /// Covers the Err arm of exec_rt.run_in_container() in handle_exec.
 #[tokio::test]
 async fn test_handle_exec_with_runtime_returning_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = create_test_state_with_dir(&temp_dir);
 
     let deps = {
@@ -2131,11 +2131,11 @@ async fn test_handle_exec_with_runtime_returning_error() {
 #[tokio::test]
 
 async fn test_daemon_state_persistence_survives_restart() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     let container_id = "persist-test-00001a";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -2164,7 +2164,7 @@ async fn test_daemon_state_persistence_survives_restart() {
         state.add_container(record).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 
@@ -2174,7 +2174,7 @@ async fn test_daemon_state_persistence_survives_restart() {
         "container record must survive daemon restart"
     );
     assert_eq!(
-        container.unwrap().info.id,
+        container.expect("unwrap in test").info.id,
         container_id,
         "restored container must have the same id"
     );
@@ -2184,11 +2184,11 @@ async fn test_daemon_state_persistence_survives_restart() {
 /// same directory must not contain the removed record.
 #[tokio::test]
 async fn test_daemon_state_remove_persists_to_disk() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     let container_id = "remove-persist-0001";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).unwrap();
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -2218,7 +2218,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
         state.remove_container(container_id).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap();
+    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

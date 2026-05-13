@@ -65,7 +65,7 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -113,7 +113,7 @@ fn mock_deps_with_network(
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
     let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -158,7 +158,7 @@ fn mock_deps_with_network(
 }
 
 fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -191,7 +191,7 @@ mod conformance {
     async fn registry_must_handle_pull_failures_gracefully() {
         let registry = MockRegistry::new().with_pull_failure();
 
-        let image_ref = minibox::ImageRef::parse("alpine").unwrap();
+        let image_ref = minibox::ImageRef::parse("alpine").expect("unwrap in test");
         let result = registry.pull_image(&image_ref).await;
         assert!(
             result.is_err(),
@@ -209,7 +209,7 @@ mod conformance {
             "Registry must return layer paths for cached images"
         );
 
-        let layer_paths = layers.unwrap();
+        let layer_paths = layers.expect("unwrap in test");
         assert!(
             !layer_paths.is_empty(),
             "Registry must return non-empty layer paths"
@@ -229,7 +229,7 @@ mod conformance {
         let result = fs.setup_rootfs(&layers, &container_dir);
         assert!(result.is_ok(), "Filesystem must successfully setup rootfs");
 
-        let merged = result.unwrap();
+        let merged = result.expect("unwrap in test");
         assert!(
             merged.merged_dir.to_string_lossy().contains("merged"),
             "Filesystem must return merged directory path"
@@ -262,7 +262,7 @@ mod conformance {
         let result = limiter.create("container-123", &config);
         assert!(result.is_ok(), "Limiter must create cgroup successfully");
 
-        let path = result.unwrap();
+        let path = result.expect("unwrap in test");
         assert!(
             !path.is_empty(),
             "Limiter must return non-empty cgroup path"
@@ -274,7 +274,7 @@ mod conformance {
         let limiter = MockLimiter::new();
         let config = ResourceConfig::default();
 
-        limiter.create("container-123", &config).unwrap();
+        limiter.create("container-123", &config).expect("unwrap in test");
         let result = limiter.add_process("container-123", 12345);
 
         assert!(
@@ -288,7 +288,7 @@ mod conformance {
         let limiter = MockLimiter::new();
         let config = ResourceConfig::default();
 
-        limiter.create("container-123", &config).unwrap();
+        limiter.create("container-123", &config).expect("unwrap in test");
         let result = limiter.cleanup("container-123");
 
         assert!(result.is_ok(), "Limiter must cleanup cgroup without error");
@@ -319,7 +319,7 @@ mod conformance {
         let result = runtime.spawn_process(&config).await;
         assert!(result.is_ok(), "Runtime must spawn process successfully");
 
-        let pid = result.unwrap().pid;
+        let pid = result.expect("unwrap in test").pid;
         assert!(pid > 0, "Runtime must return valid PID (> 0)");
     }
 
@@ -341,8 +341,8 @@ mod conformance {
             image_ref: None,
         };
 
-        let pid1 = runtime.spawn_process(&config).await.unwrap().pid;
-        let pid2 = runtime.spawn_process(&config).await.unwrap().pid;
+        let pid1 = runtime.spawn_process(&config).await.expect("unwrap in test").pid;
+        let pid2 = runtime.spawn_process(&config).await.expect("unwrap in test").pid;
 
         assert_ne!(pid1, pid2, "Runtime must return unique PIDs");
         assert!(pid2 > pid1, "Runtime PIDs should increment");
@@ -354,7 +354,7 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_pull_must_work_with_any_registry_adapter() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = mock_deps(&temp_dir);
         let state = mock_state(&temp_dir);
 
@@ -375,7 +375,7 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_run_must_work_with_any_adapter_set() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = mock_deps_with_registry(
             MockRegistry::new().with_cached_image("library/alpine", "latest"),
             &temp_dir,
@@ -481,7 +481,7 @@ mod conformance {
 
     #[tokio::test]
     async fn handler_remove_must_work_with_any_filesystem_adapter() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = mock_deps_with_registry(
             MockRegistry::new().with_cached_image("library/alpine", "latest"),
             &temp_dir,
@@ -671,8 +671,8 @@ mod commit_conformance {
         if !descriptor.capabilities.supports(BackendCapability::Commit) {
             return;
         }
-        let committer = descriptor.make_committer.as_ref().unwrap()();
-        let container_id = ContainerId::new("testcontainer01".to_string()).unwrap();
+        let committer = descriptor.make_committer.as_ref().expect("unwrap in test")();
+        let container_id = ContainerId::new("testcontainer01".to_string()).expect("unwrap in test");
         let config = CommitConfig {
             author: Some("conformance-test".to_string()),
             message: Some("commit test".to_string()),
@@ -708,9 +708,9 @@ mod commit_conformance {
             return;
         }
 
-        let committer_a = descriptor_a.make_committer.as_ref().unwrap()();
-        let committer_b = descriptor_b.make_committer.as_ref().unwrap()();
-        let container_id = ContainerId::new("testcontainer02".to_string()).unwrap();
+        let committer_a = descriptor_a.make_committer.as_ref().expect("unwrap in test")();
+        let committer_b = descriptor_b.make_committer.as_ref().expect("unwrap in test")();
+        let container_id = ContainerId::new("testcontainer02".to_string()).expect("unwrap in test");
         let config = CommitConfig {
             author: None,
             message: None,
@@ -795,11 +795,11 @@ mod build_conformance {
         }
 
         let ctx_fixture = BuildContextFixture::new().expect("build context fixture");
-        let builder = descriptor.make_builder.as_ref().unwrap()();
+        let builder = descriptor.make_builder.as_ref().expect("unwrap in test")();
 
         let context = BuildContext {
             directory: ctx_fixture.context_dir.clone(),
-            dockerfile: ctx_fixture.dockerfile.file_name().unwrap().into(),
+            dockerfile: ctx_fixture.dockerfile.file_name().expect("unwrap in test").into(),
         };
         let config = BuildConfig {
             tag: "conformance-build:latest".to_string(),
@@ -829,11 +829,11 @@ mod build_conformance {
         }
 
         let ctx_fixture = BuildContextFixture::new().expect("build context fixture");
-        let builder = descriptor.make_builder.as_ref().unwrap()();
+        let builder = descriptor.make_builder.as_ref().expect("unwrap in test")();
 
         let context = BuildContext {
             directory: ctx_fixture.context_dir.clone(),
-            dockerfile: ctx_fixture.dockerfile.file_name().unwrap().into(),
+            dockerfile: ctx_fixture.dockerfile.file_name().expect("unwrap in test").into(),
         };
         let config = BuildConfig {
             tag: "myapp:v2".to_string(),
@@ -872,7 +872,7 @@ mod lifecycle_conformance {
 
     #[tokio::test]
     async fn test_stop_already_stopped_container_returns_error() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
@@ -912,7 +912,7 @@ mod lifecycle_conformance {
 
     #[tokio::test]
     async fn test_remove_running_container_returns_error() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
@@ -947,7 +947,7 @@ mod lifecycle_conformance {
 
     #[tokio::test]
     async fn test_list_empty_state_returns_empty_list() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let state = mock_state(&temp_dir);
 
         let response = handler::handle_list(state).await;
@@ -964,7 +964,7 @@ mod lifecycle_conformance {
 
     #[tokio::test]
     async fn test_pull_then_list_shows_no_containers() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
@@ -995,7 +995,7 @@ mod lifecycle_conformance {
 
     #[tokio::test]
     async fn test_duplicate_pull_is_idempotent() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("unwrap in test");
         let deps = deps_with_alpine(&temp_dir);
         let state = mock_state(&temp_dir);
 
@@ -1082,7 +1082,7 @@ mod push_conformance {
 
         let fixture = LocalPushTargetFixture::new("conformance/push-test");
         let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
-        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+        let pusher = descriptor.make_pusher.as_ref().expect("unwrap in test")();
 
         let result = pusher
             .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
@@ -1112,7 +1112,7 @@ mod push_conformance {
 
         let fixture = LocalPushTargetFixture::new("conformance/push-digest");
         let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
-        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+        let pusher = descriptor.make_pusher.as_ref().expect("unwrap in test")();
 
         let result = pusher
             .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
@@ -1141,7 +1141,7 @@ mod push_conformance {
 
         let fixture = LocalPushTargetFixture::new("conformance/tag-visibility");
         let image_ref = ImageRef::parse(&fixture.image_ref).expect("valid image ref");
-        let pusher = descriptor.make_pusher.as_ref().unwrap()();
+        let pusher = descriptor.make_pusher.as_ref().expect("unwrap in test")();
 
         pusher
             .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
@@ -1182,9 +1182,9 @@ mod runtime_conformance {
             image_ref: None,
         };
 
-        let r1 = runtime.spawn_process(&config).await.unwrap();
-        let r2 = runtime.spawn_process(&config).await.unwrap();
-        let r3 = runtime.spawn_process(&config).await.unwrap();
+        let r1 = runtime.spawn_process(&config).await.expect("unwrap in test");
+        let r2 = runtime.spawn_process(&config).await.expect("unwrap in test");
+        let r3 = runtime.spawn_process(&config).await.expect("unwrap in test");
 
         // Check PIDs are unique
         assert_ne!(r1.pid, r2.pid, "PIDs must be unique");
@@ -1324,7 +1324,7 @@ mod gc_conformance {
         let gc = NoopImageGc::new();
         let result = gc.prune(false, &[]).await;
         assert!(result.is_ok(), "prune must not error: {result:?}");
-        let report = result.unwrap();
+        let report = result.expect("unwrap in test");
         assert_eq!(report.freed_bytes, 0, "noop GC must report 0 bytes freed");
         assert!(
             report.removed.is_empty(),
@@ -1339,7 +1339,7 @@ mod gc_conformance {
         for _ in 0..3 {
             let r = gc.prune(false, &[]).await;
             assert!(r.is_ok(), "repeated prune must not error: {r:?}");
-            let report = r.unwrap();
+            let report = r.expect("unwrap in test");
             assert_eq!(report.freed_bytes, 0, "must always report 0 freed");
             assert!(report.removed.is_empty(), "must not remove anything");
         }
@@ -1360,7 +1360,7 @@ mod gc_conformance {
             "unsupported GcCapability must produce a skip reason"
         );
         assert!(
-            skip.unwrap().contains("ImageGarbageCollection"),
+            skip.expect("unwrap in test").contains("ImageGarbageCollection"),
             "skip message must mention capability name"
         );
     }
@@ -1371,11 +1371,11 @@ mod gc_conformance {
         let gc = NoopImageGc::new();
 
         // Test with dry_run=true
-        let dry_report = gc.prune(true, &[]).await.unwrap();
+        let dry_report = gc.prune(true, &[]).await.expect("unwrap in test");
         assert!(dry_report.dry_run, "must set dry_run=true in report");
 
         // Test with dry_run=false
-        let live_report = gc.prune(false, &[]).await.unwrap();
+        let live_report = gc.prune(false, &[]).await.expect("unwrap in test");
         assert!(!live_report.dry_run, "must set dry_run=false in report");
     }
 }
@@ -1476,7 +1476,7 @@ mod error_path_conformance {
     async fn run_with_spawn_failure_returns_error_response() {
         let temp_dir = TempDir::new().expect("tempdir");
         let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
         let failing_runtime = Arc::new(MockRuntime::new().with_spawn_failure());
         let deps = Arc::new(HandlerDependencies {
             image: minibox::daemon::handler::ImageDeps {
@@ -2535,7 +2535,7 @@ mod policy_conformance {
         temp_dir: &TempDir,
     ) -> Arc<HandlerDependencies> {
         let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).unwrap());
+            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
         Arc::new(HandlerDependencies {
             image: minibox::daemon::handler::ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(

@@ -67,7 +67,7 @@ fn oci_manifest_json(schema_version: u32, config_digest: &str, layer_digests: &[
         },
         "layers": layers
     }))
-    .unwrap()
+    .expect("unwrap in test")
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ proptest! {
         let real_hex = sha256_hex(&data);
         // Flip the last nibble of wrong_suffix to guarantee mismatch.
         let mut wrong = wrong_suffix.clone();
-        let last = wrong.pop().unwrap();
+        let last = wrong.pop().expect("unwrap in test");
         let flipped = if last == 'f' { '0' } else { 'f' };
         if wrong == real_hex[..63] {
             // The prefix matched — append the flipped char to guarantee divergence.
@@ -207,7 +207,7 @@ proptest! {
         );
 
         prop_assert!(result.is_ok(), "parse failed: {:?}", result.err());
-        match result.unwrap() {
+        match result.expect("unwrap in test") {
             ManifestResponse::Single(m) => {
                 prop_assert_eq!(m.schema_version, schema_version);
                 prop_assert_eq!(m.config.digest, config_digest);
@@ -276,7 +276,7 @@ proptest! {
 
         let found = list.find_linux_amd64();
         prop_assert!(found.is_some(), "expected to find linux/amd64 entry");
-        prop_assert_eq!(&found.unwrap().digest, &amd64_digest);
+        prop_assert_eq!(&found.expect("unwrap in test").digest, &amd64_digest);
     }
 
     /// find_linux_amd64 returns None when no linux/amd64 entry is present.
@@ -366,7 +366,7 @@ proptest! {
         let target = TargetPlatform::linux_amd64();
         let found = list.find_platform(&target);
         prop_assert!(found.is_some(), "expected to find linux/amd64 via find_platform");
-        prop_assert_eq!(&found.unwrap().digest, &amd64_digest);
+        prop_assert_eq!(&found.expect("unwrap in test").digest, &amd64_digest);
     }
 
     /// find_platform returns None when searching for amd64 but only arm64 entries exist.
@@ -450,7 +450,7 @@ fn oci_manifest_serde_roundtrip() {
         )],
     };
 
-    let json = serde_json::to_vec(&manifest).unwrap();
+    let json = serde_json::to_vec(&manifest).expect("unwrap in test");
     let parsed = ManifestResponse::parse(&json, "application/vnd.oci.image.manifest.v1+json")
         .expect("roundtrip parse failed");
 
