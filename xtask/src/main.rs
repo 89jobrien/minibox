@@ -23,6 +23,7 @@ mod daily_orchestration;
 mod docs_lint;
 mod gates;
 mod preflight;
+mod promote;
 mod protocol_drift;
 mod protocol_sites;
 mod stale_names;
@@ -150,6 +151,19 @@ fn main() -> Result<()> {
             }
             daily_orchestration::run(dry_run, ci)
         }
+        Some("promote") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            let from = args
+                .windows(2)
+                .find(|w| w[0] == "--from")
+                .and_then(|w| promote::Tier::from_str(&w[1]));
+            let to = args
+                .windows(2)
+                .find(|w| w[0] == "--to")
+                .and_then(|w| promote::Tier::from_str(&w[1]));
+            promote::run(root, from, to, dry_run)
+        }
         Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-drift") => {
             let args: Vec<String> = env::args().skip(2).collect();
@@ -228,6 +242,9 @@ fn main() -> Result<()> {
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
+            );
+            eprintln!(
+                "  promote [--from <tier>] [--to <tier>] [--dry-run]  run local promotion pipeline"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(

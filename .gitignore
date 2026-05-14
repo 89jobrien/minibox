@@ -102,6 +102,9 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
+# Promotion pipeline state
+.minibox-promote-state
+
 # Local development
 .env
 .env.local
