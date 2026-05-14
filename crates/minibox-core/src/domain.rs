@@ -2581,6 +2581,46 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
     state.insert(alias.to_string(), output);
 }
 
+/// Returns all steps that precede `alias` in declaration order.
+///
+/// Returns `Err` if `alias` is not found in `steps`.
+pub fn steps_before<'a>(
+    alias: &str,
+    steps: &'a [WorkflowStep],
+) -> anyhow::Result<Vec<&'a WorkflowStep>> {
+    let idx = steps
+        .iter()
+        .position(|s| s.alias == alias)
+        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow steps", alias))?;
+    Ok(steps[..idx].iter().collect())
+}
+
+/// Prepares resumption from `resume_alias`.
+///
+/// Returns:
+/// - the number of steps to skip (all steps before the resume point)
+/// - a [`WorkflowState`] pre-populated with prior step outputs
+///
+/// The caller is responsible for loading `prior_outputs` from the trace store.
+/// Steps with no entry in `prior_outputs` are omitted from the returned state.
+pub fn resume_workflow(
+    resume_alias: &str,
+    steps: &[WorkflowStep],
+    prior_outputs: &WorkflowState,
+) -> anyhow::Result<(usize, WorkflowState)> {
+    let preceding = steps_before(resume_alias, steps)?;
+    let skip_count = preceding.len();
+
+    let mut state = WorkflowState::new();
+    for step in &preceding {
+        if let Some(output) = prior_outputs.get(&step.alias) {
+            propagate_output(&step.alias, output.clone(), &mut state);
+        }
+    }
+
+    Ok((skip_count, state))
+}
+
 /// Resolves a single expression string.
 ///
 /// Replaces every `${{ outputs['alias'].field }}` token with the
@@ -2741,5 +2781,73 @@ mod alias_state_tests {
             let resolved = resolve_step_vars(&step, &state).unwrap();
             prop_assert_eq!(resolved.vars.get(&key).unwrap(), &val);
         }
+    }
+}
+
+#[cfg(test)]
+mod start_from_step_tests {
+    use super::*;
+
+    fn make_step(alias: &str) -> WorkflowStep {
+        WorkflowStep {
+            kind: "exec".to_string(),
+            alias: alias.to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn steps_before_returns_steps_preceding_alias() {
+        let steps = vec![
+            make_step("build"),
+            make_step("test"),
+            make_step("deploy"),
+        ];
+        let preceding = steps_before("test", &steps).unwrap();
+        assert_eq!(preceding.len(), 1);
+        assert_eq!(preceding[0].alias, "build");
+    }
+
+    #[test]
+    fn steps_before_first_step_returns_empty() {
+        let steps = vec![make_step("build"), make_step("test")];
+        let preceding = steps_before("build", &steps).unwrap();
+        assert!(preceding.is_empty());
+    }
+
+    #[test]
+    fn steps_before_unknown_alias_returns_err() {
+        let steps = vec![make_step("build")];
+        assert!(steps_before("nonexistent", &steps).is_err());
+    }
+
+    #[test]
+    fn resume_workflow_injects_prior_outputs_into_state() {
+        let steps = vec![
+            make_step("build"),
+            make_step("test"),
+            make_step("deploy"),
+        ];
+        let mut prior_outputs = WorkflowState::new();
+        prior_outputs.insert(
+            "build".to_string(),
+            serde_json::json!({"exit_code": 0}),
+        );
+
+        let (skip_count, state) =
+            resume_workflow("test", &steps, &prior_outputs).unwrap();
+        assert_eq!(skip_count, 1);
+        assert_eq!(state["build"]["exit_code"], 0);
+    }
+
+    #[test]
+    fn resume_workflow_unknown_alias_returns_err() {
+        let steps = vec![make_step("build")];
+        let prior = WorkflowState::new();
+        assert!(resume_workflow("nonexistent", &steps, &prior).is_err());
     }
 }
