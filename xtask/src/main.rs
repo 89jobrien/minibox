@@ -105,7 +105,35 @@ fn main() -> Result<()> {
             let strict = env::args().any(|a| a == "--strict");
             gates::check_no_unwrap(&sh, strict)
         }
-        Some("test-linux") => bail!("test-linux is not yet implemented for smolvm; see #306"),
+        Some("test-linux") => {
+            let target_base = std::env::var("CARGO_TARGET_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| root.join("target"));
+            let vm_dir = dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                .join(".minibox")
+                .join("vm");
+            let kernel = vm_dir.join("boot").join("vmlinuz-virt");
+
+            let compiler = test_linux::ZigbuildCompiler::new(
+                vec!["miniboxd".to_string(), "mbx".to_string()],
+                vec!["miniboxd".to_string()],
+            );
+            let initramfs_builder = test_linux::CpioInitramfsBuilder;
+            let vm_runner = test_linux::SmolvmRunner {
+                image_name: "minibox-tester:latest".to_string(),
+            };
+
+            test_linux::run_pipeline(
+                &compiler,
+                &initramfs_builder,
+                &vm_runner,
+                "aarch64-unknown-linux-musl",
+                &vm_dir,
+                &target_base,
+                &kernel,
+            )
+        }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
         Some("bench") => bench::bench(&sh, root),

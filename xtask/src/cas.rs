@@ -4,8 +4,6 @@
 //!   cas/<sha256>   — file content, named by sha256 of content
 //!   refs/<name>    — text file containing a sha256, maps name → CAS object
 
-#![allow(dead_code)] // TODO(#357): cas overlay used by vm_image pipeline; re-wire for smolvm
-
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::{
@@ -120,63 +118,6 @@ pub fn cas_check(overlay_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Read `overlay_dir/refs/` and return a vec of `(name, sha256)` pairs, sorted by name.
-/// Returns empty vec if refs dir is absent or empty.
-pub fn read_refs(overlay_dir: &Path) -> Result<Vec<(String, String)>> {
-    let refs_dir = overlay_dir.join("refs");
-    if !refs_dir.exists() {
-        return Ok(vec![]);
-    }
-
-    let mut refs = Vec::new();
-    for entry in
-        std::fs::read_dir(&refs_dir).with_context(|| format!("reading {}", refs_dir.display()))?
-    {
-        let entry = entry.with_context(|| format!("reading entry in {}", refs_dir.display()))?;
-        if !entry
-            .file_type()
-            .with_context(|| format!("file_type for {}", entry.path().display()))?
-            .is_file()
-        {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let hash = std::fs::read_to_string(entry.path())
-            .with_context(|| format!("reading ref {}", entry.path().display()))?
-            .trim()
-            .to_string();
-        refs.push((name, hash));
-    }
-    refs.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(refs)
-}
-
-/// Write `/etc/minibox-cas-refs` into `rootfs_dir` from `overlay_dir/refs/`.
-/// Format: one line per ref, tab-separated: `<name>\t<sha256>`.
-/// Skips silently if refs dir is absent or empty.
-pub fn write_cas_refs(rootfs_dir: &Path, overlay_dir: &Path) -> Result<()> {
-    let refs = read_refs(overlay_dir)?;
-    if refs.is_empty() {
-        return Ok(());
-    }
-
-    let etc = rootfs_dir.join("etc");
-    std::fs::create_dir_all(&etc).with_context(|| format!("creating {}", etc.display()))?;
-
-    let mut content = String::new();
-    for (name, hash) in &refs {
-        content.push_str(name);
-        content.push('\t');
-        content.push_str(hash);
-        content.push('\n');
-    }
-
-    let dest = etc.join("minibox-cas-refs");
-    std::fs::write(&dest, &content).with_context(|| format!("writing {}", dest.display()))?;
-    println!("  cas-refs {} ref(s) → {}", refs.len(), dest.display());
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,59 +208,5 @@ mod tests {
         std::fs::create_dir_all(&overlay).unwrap();
         // No refs dir — should return Ok silently.
         assert!(cas_check(&overlay).is_ok());
-    }
-
-    #[test]
-    fn write_cas_refs_produces_tab_separated_file() {
-        let tmp = tempdir().unwrap();
-        let overlay = tmp.path().join("overlay");
-        let rootfs = tmp.path().join("rootfs");
-        std::fs::create_dir_all(&rootfs).unwrap();
-
-        // Add two refs
-        let src = tmp.path().join("f");
-        std::fs::write(&src, b"aaa").unwrap();
-        let hash_a = cas_add(&overlay, &src, Some("alpha")).unwrap();
-        std::fs::write(&src, b"bbb").unwrap();
-        let hash_b = cas_add(&overlay, &src, Some("beta")).unwrap();
-
-        write_cas_refs(&rootfs, &overlay).unwrap();
-
-        let content = std::fs::read_to_string(rootfs.join("etc").join("minibox-cas-refs")).unwrap();
-        // Sorted by name: alpha, beta
-        let lines: Vec<&str> = content.lines().collect();
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0], format!("alpha\t{}", hash_a));
-        assert_eq!(lines[1], format!("beta\t{}", hash_b));
-    }
-
-    #[test]
-    fn write_cas_refs_skips_when_no_refs() {
-        let tmp = tempdir().unwrap();
-        let overlay = tmp.path().join("overlay");
-        let rootfs = tmp.path().join("rootfs");
-        std::fs::create_dir_all(&rootfs).unwrap();
-        std::fs::create_dir_all(&overlay).unwrap();
-
-        write_cas_refs(&rootfs, &overlay).unwrap();
-
-        // File should not exist
-        assert!(!rootfs.join("etc").join("minibox-cas-refs").exists());
-    }
-
-    #[test]
-    fn read_refs_returns_sorted_pairs() {
-        let tmp = tempdir().unwrap();
-        let overlay = tmp.path().join("overlay");
-        let src = tmp.path().join("f");
-
-        std::fs::write(&src, b"x").unwrap();
-        cas_add(&overlay, &src, Some("zebra")).unwrap();
-        std::fs::write(&src, b"y").unwrap();
-        cas_add(&overlay, &src, Some("apple")).unwrap();
-
-        let refs = read_refs(&overlay).unwrap();
-        assert_eq!(refs[0].0, "apple");
-        assert_eq!(refs[1].0, "zebra");
     }
 }
