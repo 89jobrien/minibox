@@ -11,7 +11,7 @@ jobs:
     name: doc-sync (FEATURE_MATRIX staleness)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: FEATURE_MATRIX must be updated within 90 days
@@ -34,7 +34,7 @@ jobs:
     name: adapter integration test coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask check-adapter-coverage
@@ -44,7 +44,7 @@ jobs:
     name: no .unwrap() in production code
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask check-no-unwrap
@@ -54,7 +54,7 @@ jobs:
     name: stability compile check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo check workspace (stability gate)

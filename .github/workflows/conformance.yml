@@ -13,7 +13,7 @@ jobs:
       - name: trust workspace dir
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: cargo xtask test-conformance
         run: ~/.local/bin/mise exec -- cargo xtask test-conformance
