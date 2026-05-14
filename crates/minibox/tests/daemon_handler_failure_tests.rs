@@ -323,8 +323,10 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
 #[tokio::test]
 async fn test_handle_run_filesystem_setup_failure_v2() {
     let temp_dir = TempDir::new().expect("unwrap in test");
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_fs")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_fs"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -389,8 +391,10 @@ async fn test_handle_run_filesystem_setup_failure_v2() {
 #[tokio::test]
 async fn test_handle_run_limiter_create_failure() {
     let temp_dir = TempDir::new().expect("unwrap in test");
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_lc")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_lc"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -464,7 +468,8 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("images_bm")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_bm"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -543,7 +548,8 @@ async fn test_handle_run_privileged_denied_by_policy() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("images_pr")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("images_pr"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -671,7 +677,8 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(tmp.path().join("img_disc")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(tmp.path().join("img_disc"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -746,7 +753,8 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
 
     // Simulate first daemon: container was Running at shutdown.
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images"))
+            .expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         state
             .add_container(ContainerRecord {
@@ -777,7 +785,8 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
     }
 
     // Simulate second daemon: load state from disk.
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

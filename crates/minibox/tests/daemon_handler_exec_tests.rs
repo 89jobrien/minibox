@@ -223,7 +223,8 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(tmp.path().join("img_dr")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(tmp.path().join("img_dr"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -506,8 +507,10 @@ async fn test_handle_run_network_setup_failure_bridge_mode() {
     let state = create_test_state_with_dir(&temp_dir);
 
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let failing_network = Arc::new(MockNetwork::new().with_setup_failure());
     let deps = build_deps(
         Arc::new(minibox_core::adapters::HostnameRegistryRouter::new(

@@ -81,8 +81,9 @@ fn make_deps(
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -126,7 +127,8 @@ fn make_deps(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+    let image_store =
+        minibox::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 
@@ -143,8 +145,9 @@ async fn test_run_with_all_success_adapters() {
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
 
     // Rebuild deps with the Arc we're holding so pull_count is observable.
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     let deps = {
         use minibox::daemon::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
         use minibox_core::adapters::HostnameRegistryRouter;
@@ -413,8 +416,10 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         use minibox_core::adapters::HostnameRegistryRouter;
         use minibox_core::domain::DynImageRegistry;
 
-        let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images2"))
+                .expect("unwrap in test"),
+        );
         Arc::new(minibox::daemon::handler::HandlerDependencies {
             image: ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(

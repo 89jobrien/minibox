@@ -16,7 +16,8 @@ async fn test_daemon_state_persistence_survives_restart() {
 
     let container_id = "persist-test-00001a";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images"))
+            .expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -45,7 +46,8 @@ async fn test_daemon_state_persistence_survives_restart() {
         state.add_container(record).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 
@@ -69,7 +71,8 @@ async fn test_daemon_state_remove_persists_to_disk() {
 
     let container_id = "remove-persist-0001";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images"))
+            .expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -99,7 +102,8 @@ async fn test_daemon_state_remove_persists_to_disk() {
         state.remove_container(container_id).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

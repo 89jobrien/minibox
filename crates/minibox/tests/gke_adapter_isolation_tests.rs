@@ -19,7 +19,9 @@ use tempfile::TempDir;
 fn noop_limiter_create_returns_sentinel_path() {
     let limiter = NoopLimiter::new();
     let config = ResourceConfig::default();
-    let path = limiter.create("test-container", &config).expect("unwrap in test");
+    let path = limiter
+        .create("test-container", &config)
+        .expect("unwrap in test");
     assert_eq!(
         path, "noop:test-container",
         "create should return sentinel path format"
@@ -106,7 +108,8 @@ fn copy_filesystem_merges_single_layer() {
         merged.merged_dir.join("bin/sh").exists(),
         "merged should contain bin/sh from layer"
     );
-    let content = std::fs::read_to_string(merged.merged_dir.join("bin/sh")).expect("unwrap in test");
+    let content =
+        std::fs::read_to_string(merged.merged_dir.join("bin/sh")).expect("unwrap in test");
     assert_eq!(content, "#!/bin/sh\n");
 }
 
@@ -126,10 +129,13 @@ fn copy_filesystem_later_layer_overwrites_earlier() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs.setup_rootfs(&[layer0, layer1], &container_dir).expect("unwrap in test");
+    let merged = fs
+        .setup_rootfs(&[layer0, layer1], &container_dir)
+        .expect("unwrap in test");
 
     // layer1 (later) should overwrite layer0 (earlier)
-    let content = std::fs::read_to_string(merged.merged_dir.join("etc/os-release")).expect("unwrap in test");
+    let content =
+        std::fs::read_to_string(merged.merged_dir.join("etc/os-release")).expect("unwrap in test");
     assert_eq!(
         content, "layer1-content",
         "later layer should overwrite earlier layer"
@@ -142,7 +148,9 @@ fn copy_filesystem_empty_layers_creates_empty_merged() {
     let container_dir = dir.path().join("container");
 
     let fs = CopyFilesystem::new();
-    let merged = fs.setup_rootfs(&[], &container_dir).expect("unwrap in test");
+    let merged = fs
+        .setup_rootfs(&[], &container_dir)
+        .expect("unwrap in test");
 
     assert!(
         merged.merged_dir.exists(),
@@ -200,7 +208,9 @@ fn copy_filesystem_preserves_symlinks() {
 
     let container_dir = dir.path().join("container");
     let fs = CopyFilesystem::new();
-    let merged = fs.setup_rootfs(&[layer], &container_dir).expect("unwrap in test");
+    let merged = fs
+        .setup_rootfs(&[layer], &container_dir)
+        .expect("unwrap in test");
 
     // Verify symlink was copied and preserved
     let link_target = std::fs::read_link(merged.merged_dir.join("bin/sh")).expect("unwrap in test");
@@ -223,11 +233,14 @@ fn copy_filesystem_handles_directory_permissions() {
         let layer = dir.path().join("layer");
         let app_dir = layer.join("app");
         std::fs::create_dir_all(&app_dir).expect("unwrap in test");
-        std::fs::set_permissions(&app_dir, std::fs::Permissions::from_mode(0o755)).expect("unwrap in test");
+        std::fs::set_permissions(&app_dir, std::fs::Permissions::from_mode(0o755))
+            .expect("unwrap in test");
 
         let container_dir = dir.path().join("container");
         let fs = CopyFilesystem::new();
-        let merged = fs.setup_rootfs(&[layer], &container_dir).expect("unwrap in test");
+        let merged = fs
+            .setup_rootfs(&[layer], &container_dir)
+            .expect("unwrap in test");
 
         let mode = std::fs::metadata(merged.merged_dir.join("app"))
             .expect("unwrap in test")
@@ -246,7 +259,9 @@ fn copy_filesystem_handles_directory_permissions() {
 
         let container_dir = dir.path().join("container");
         let fs = CopyFilesystem::new();
-        let merged = fs.setup_rootfs(&[layer], &container_dir).expect("unwrap in test");
+        let merged = fs
+            .setup_rootfs(&[layer], &container_dir)
+            .expect("unwrap in test");
 
         assert!(merged.merged_dir.join("app").is_dir());
     }
@@ -381,8 +396,12 @@ fn copy_filesystem_multiple_instances_independent() {
     let c1 = dir.path().join("container1");
     let c2 = dir.path().join("container2");
 
-    let m1 = fs1.setup_rootfs(std::slice::from_ref(&layer), &c1).expect("unwrap in test");
-    let m2 = fs2.setup_rootfs(std::slice::from_ref(&layer), &c2).expect("unwrap in test");
+    let m1 = fs1
+        .setup_rootfs(std::slice::from_ref(&layer), &c1)
+        .expect("unwrap in test");
+    let m2 = fs2
+        .setup_rootfs(std::slice::from_ref(&layer), &c2)
+        .expect("unwrap in test");
 
     assert!(m1.merged_dir.exists());
     assert!(m2.merged_dir.exists());

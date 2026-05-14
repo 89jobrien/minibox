@@ -69,7 +69,10 @@ async fn state_add_then_get_round_trips() {
 
     let retrieved = state.get_container("aabbccdd11223344").await;
     assert!(retrieved.is_some(), "get must return the added container");
-    assert_eq!(retrieved.expect("unwrap in test").info.image, "alpine:latest");
+    assert_eq!(
+        retrieved.expect("unwrap in test").info.image,
+        "alpine:latest"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +167,10 @@ async fn state_save_load_round_trips() {
 
         let c2 = state.get_container("persist02abcdef1").await;
         assert!(c2.is_some(), "container 2 must survive save/load");
-        assert_eq!(c2.expect("unwrap in test").info.name.as_deref(), Some("web"));
+        assert_eq!(
+            c2.expect("unwrap in test").info.name.as_deref(),
+            Some("web")
+        );
     }
 }
 
@@ -186,7 +192,10 @@ async fn state_update_status() {
         .await
         .expect("update must succeed for existing container");
 
-    let record = state.get_container("update01abcdef12").await.expect("unwrap in test");
+    let record = state
+        .get_container("update01abcdef12")
+        .await
+        .expect("unwrap in test");
     assert_eq!(record.info.state, "Running");
 }
 

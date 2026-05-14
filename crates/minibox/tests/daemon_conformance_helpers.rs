@@ -140,8 +140,9 @@ pub fn make_mock_deps_with_registry(
     registry: MockRegistry,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(

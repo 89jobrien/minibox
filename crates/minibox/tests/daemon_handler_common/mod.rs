@@ -161,8 +161,10 @@ pub fn build_deps_with_registry(
 
 /// Helper to create test dependencies with mocks.
 pub fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -207,7 +209,8 @@ pub fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies>
 
 /// Helper to create daemon state with a test image store.
 pub fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
+    let image_store =
+        minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -217,8 +220,10 @@ pub fn create_test_deps_with_network(
     temp_dir: &TempDir,
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images3"))
+            .expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -270,8 +275,10 @@ pub fn make_deps_with_policy(
     temp_dir: &TempDir,
     policy: minibox::daemon::handler::ContainerPolicy,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_pol"))
+            .expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(

@@ -148,14 +148,18 @@ fn overlay_cleanup_unmounts_merged() {
     fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter.setup_rootfs(&[layer], &container_dir).expect("unwrap in test");
+    let merged = fs_adapter
+        .setup_rootfs(&[layer], &container_dir)
+        .expect("unwrap in test");
     assert!(merged.merged_dir.exists());
 
     fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 
     // After unmount the dir may still exist but must be empty (not mounted).
     if merged.merged_dir.exists() {
-        let entries: Vec<_> = fs::read_dir(&merged.merged_dir).expect("unwrap in test").collect();
+        let entries: Vec<_> = fs::read_dir(&merged.merged_dir)
+            .expect("unwrap in test")
+            .collect();
         assert!(entries.is_empty(), "merged must be empty after unmount");
     }
 }
@@ -302,7 +306,9 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
     let id = format!("test-isolation-addpid-{}", std::process::id());
     let limiter = CgroupV2Limiter::new();
 
-    let path_str = limiter.create(&id, &ResourceConfig::default()).expect("unwrap in test");
+    let path_str = limiter
+        .create(&id, &ResourceConfig::default())
+        .expect("unwrap in test");
     let path = std::path::PathBuf::from(&path_str);
 
     let my_pid = std::process::id();

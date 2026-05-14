@@ -50,8 +50,10 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
 
     // Use a registry that always fails to pull.
     let failing_registry = Arc::new(MockRegistry::new().with_pull_failure());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             failing_registry as DynImageRegistry,

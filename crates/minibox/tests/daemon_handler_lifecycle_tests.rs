@@ -24,8 +24,10 @@ use daemon_handler_common::*;
 async fn test_handle_run_with_cached_image() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -101,8 +103,10 @@ async fn test_handle_run_with_cached_image() {
 async fn test_handle_run_pulls_uncached_image() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -181,7 +185,8 @@ async fn test_handle_run_filesystem_setup_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -249,7 +254,8 @@ async fn test_handle_run_resource_limiter_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -317,7 +323,8 @@ async fn test_handle_run_runtime_spawn_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -588,8 +595,10 @@ fn create_test_deps_with_network(
     temp_dir: &TempDir,
     network: Arc<MockNetwork>,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images3")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images3"))
+            .expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -976,7 +985,8 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1139,7 +1149,8 @@ async fn test_handle_run_empty_image_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1272,7 +1283,8 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1425,7 +1437,8 @@ async fn test_handle_run_pull_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1798,7 +1811,8 @@ async fn test_handle_remove_failed_container_succeeds() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -1887,7 +1901,8 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -2135,7 +2150,8 @@ async fn test_daemon_state_persistence_survives_restart() {
 
     let container_id = "persist-test-00001a";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images"))
+            .expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -2164,7 +2180,8 @@ async fn test_daemon_state_persistence_survives_restart() {
         state.add_container(record).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 
@@ -2188,7 +2205,8 @@ async fn test_daemon_state_remove_persists_to_disk() {
 
     let container_id = "remove-persist-0001";
     {
-        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
+        let image_store = minibox_core::image::ImageStore::new(tmp.path().join("images"))
+            .expect("unwrap in test");
         let state = DaemonState::new(image_store, tmp.path());
         let record = minibox::daemon::state::ContainerRecord {
             info: minibox_core::protocol::ContainerInfo {
@@ -2218,7 +2236,8 @@ async fn test_daemon_state_remove_persists_to_disk() {
         state.remove_container(container_id).await;
     }
 
-    let image_store2 = minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
+    let image_store2 =
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test");
     let state2 = DaemonState::new(image_store2, tmp.path());
     state2.load_from_disk().await;
 

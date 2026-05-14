@@ -24,8 +24,10 @@ use daemon_handler_common::*;
 async fn test_handle_pull_success() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             mock_registry.clone() as DynImageRegistry,
@@ -86,7 +88,8 @@ async fn test_handle_pull_failure() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -152,7 +155,8 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -228,7 +232,8 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -303,7 +308,8 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -374,7 +380,8 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -503,8 +510,10 @@ async fn test_load_image_failure() {
 #[tokio::test]
 async fn test_handle_run_image_pull_failure() {
     let temp_dir = TempDir::new().expect("unwrap in test");
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_pf"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -566,8 +575,10 @@ async fn test_handle_run_image_pull_failure() {
 #[tokio::test]
 async fn test_handle_run_empty_layers() {
     let temp_dir = TempDir::new().expect("unwrap in test");
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_el")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_el"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -629,8 +640,10 @@ async fn test_handle_run_empty_layers() {
 #[tokio::test]
 async fn test_handle_pull_nonexistent_image() {
     let temp_dir = TempDir::new().expect("unwrap in test");
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_ni"))
+            .expect("unwrap in test"),
+    );
     let deps = Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -942,7 +955,11 @@ async fn test_handle_build_no_builder_returns_error() {
 
     handler::handle_build(
         "FROM alpine\nRUN echo hi".to_string(),
-        temp_dir.path().to_str().expect("unwrap in test").to_string(),
+        temp_dir
+            .path()
+            .to_str()
+            .expect("unwrap in test")
+            .to_string(),
         "myimage:latest".to_string(),
         vec![],
         false,
@@ -1010,7 +1027,11 @@ async fn test_handle_build_success() {
 
     handler::handle_build(
         "FROM alpine\nRUN echo hi".to_string(),
-        temp_dir.path().to_str().expect("unwrap in test").to_string(),
+        temp_dir
+            .path()
+            .to_str()
+            .expect("unwrap in test")
+            .to_string(),
         "myimage:latest".to_string(),
         vec![],
         false,
@@ -1207,7 +1228,11 @@ async fn test_handle_build_adapter_failure_returns_error() {
 
     handler::handle_build(
         "FROM alpine\nRUN true".to_string(),
-        temp_dir.path().to_str().expect("unwrap in test").to_string(),
+        temp_dir
+            .path()
+            .to_str()
+            .expect("unwrap in test")
+            .to_string(),
         "testimage:v1".to_string(),
         vec![],
         false,
@@ -1427,8 +1452,10 @@ async fn test_handle_pull_platform_none_uses_default_router() {
 async fn test_handle_update_explicit_images_sends_progress_then_success() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1483,8 +1510,10 @@ async fn test_handle_update_explicit_images_sends_progress_then_success() {
 async fn test_handle_update_all_empty_store_sends_zero_progress() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1519,8 +1548,10 @@ async fn test_handle_update_containers_collects_source_image_refs() {
 
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,
@@ -1588,8 +1619,10 @@ async fn test_handle_update_restart_stops_running_containers() {
 
     let temp_dir = TempDir::new().expect("unwrap in test");
     let mock_registry = Arc::new(MockRegistry::new());
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     let deps = build_deps_with_registry(
         Arc::new(HostnameRegistryRouter::new(
             Arc::clone(&mock_registry) as DynImageRegistry,

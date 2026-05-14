@@ -64,8 +64,9 @@ fn mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 }
 
 fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -112,8 +113,9 @@ fn mock_deps_with_network(
     network: std::sync::Arc<MockNetwork>,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -158,7 +160,8 @@ fn mock_deps_with_network(
 }
 
 fn mock_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
+    let image_store =
+        minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -274,7 +277,9 @@ mod conformance {
         let limiter = MockLimiter::new();
         let config = ResourceConfig::default();
 
-        limiter.create("container-123", &config).expect("unwrap in test");
+        limiter
+            .create("container-123", &config)
+            .expect("unwrap in test");
         let result = limiter.add_process("container-123", 12345);
 
         assert!(
@@ -288,7 +293,9 @@ mod conformance {
         let limiter = MockLimiter::new();
         let config = ResourceConfig::default();
 
-        limiter.create("container-123", &config).expect("unwrap in test");
+        limiter
+            .create("container-123", &config)
+            .expect("unwrap in test");
         let result = limiter.cleanup("container-123");
 
         assert!(result.is_ok(), "Limiter must cleanup cgroup without error");
@@ -341,8 +348,16 @@ mod conformance {
             image_ref: None,
         };
 
-        let pid1 = runtime.spawn_process(&config).await.expect("unwrap in test").pid;
-        let pid2 = runtime.spawn_process(&config).await.expect("unwrap in test").pid;
+        let pid1 = runtime
+            .spawn_process(&config)
+            .await
+            .expect("unwrap in test")
+            .pid;
+        let pid2 = runtime
+            .spawn_process(&config)
+            .await
+            .expect("unwrap in test")
+            .pid;
 
         assert_ne!(pid1, pid2, "Runtime must return unique PIDs");
         assert!(pid2 > pid1, "Runtime PIDs should increment");
@@ -708,8 +723,14 @@ mod commit_conformance {
             return;
         }
 
-        let committer_a = descriptor_a.make_committer.as_ref().expect("unwrap in test")();
-        let committer_b = descriptor_b.make_committer.as_ref().expect("unwrap in test")();
+        let committer_a = descriptor_a
+            .make_committer
+            .as_ref()
+            .expect("unwrap in test")();
+        let committer_b = descriptor_b
+            .make_committer
+            .as_ref()
+            .expect("unwrap in test")();
         let container_id = ContainerId::new("testcontainer02".to_string()).expect("unwrap in test");
         let config = CommitConfig {
             author: None,
@@ -799,7 +820,11 @@ mod build_conformance {
 
         let context = BuildContext {
             directory: ctx_fixture.context_dir.clone(),
-            dockerfile: ctx_fixture.dockerfile.file_name().expect("unwrap in test").into(),
+            dockerfile: ctx_fixture
+                .dockerfile
+                .file_name()
+                .expect("unwrap in test")
+                .into(),
         };
         let config = BuildConfig {
             tag: "conformance-build:latest".to_string(),
@@ -833,7 +858,11 @@ mod build_conformance {
 
         let context = BuildContext {
             directory: ctx_fixture.context_dir.clone(),
-            dockerfile: ctx_fixture.dockerfile.file_name().expect("unwrap in test").into(),
+            dockerfile: ctx_fixture
+                .dockerfile
+                .file_name()
+                .expect("unwrap in test")
+                .into(),
         };
         let config = BuildConfig {
             tag: "myapp:v2".to_string(),
@@ -1182,9 +1211,18 @@ mod runtime_conformance {
             image_ref: None,
         };
 
-        let r1 = runtime.spawn_process(&config).await.expect("unwrap in test");
-        let r2 = runtime.spawn_process(&config).await.expect("unwrap in test");
-        let r3 = runtime.spawn_process(&config).await.expect("unwrap in test");
+        let r1 = runtime
+            .spawn_process(&config)
+            .await
+            .expect("unwrap in test");
+        let r2 = runtime
+            .spawn_process(&config)
+            .await
+            .expect("unwrap in test");
+        let r3 = runtime
+            .spawn_process(&config)
+            .await
+            .expect("unwrap in test");
 
         // Check PIDs are unique
         assert_ne!(r1.pid, r2.pid, "PIDs must be unique");
@@ -1360,7 +1398,8 @@ mod gc_conformance {
             "unsupported GcCapability must produce a skip reason"
         );
         assert!(
-            skip.expect("unwrap in test").contains("ImageGarbageCollection"),
+            skip.expect("unwrap in test")
+                .contains("ImageGarbageCollection"),
             "skip message must mention capability name"
         );
     }
@@ -1475,8 +1514,10 @@ mod error_path_conformance {
     #[tokio::test]
     async fn run_with_spawn_failure_returns_error_response() {
         let temp_dir = TempDir::new().expect("tempdir");
-        let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                .expect("unwrap in test"),
+        );
         let failing_runtime = Arc::new(MockRuntime::new().with_spawn_failure());
         let deps = Arc::new(HandlerDependencies {
             image: minibox::daemon::handler::ImageDeps {
@@ -2534,8 +2575,10 @@ mod policy_conformance {
         allow_privileged: bool,
         temp_dir: &TempDir,
     ) -> Arc<HandlerDependencies> {
-        let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"));
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                .expect("unwrap in test"),
+        );
         Arc::new(HandlerDependencies {
             image: minibox::daemon::handler::ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(

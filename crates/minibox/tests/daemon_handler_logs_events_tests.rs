@@ -110,7 +110,8 @@ async fn test_handle_logs_reads_log_files() {
     // Write log files to the expected path.
     let container_dir = temp_dir.path().join("containers").join(container_id);
     std::fs::create_dir_all(&container_dir).expect("unwrap in test");
-    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n").expect("unwrap in test");
+    std::fs::write(container_dir.join("stdout.log"), "line one\nline two\n")
+        .expect("unwrap in test");
     std::fs::write(container_dir.join("stderr.log"), "err line\n").expect("unwrap in test");
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);

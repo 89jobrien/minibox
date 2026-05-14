@@ -43,7 +43,10 @@ fn tar_gz_regular_file(name: &str, content: &[u8], mode: u32) -> Vec<u8> {
     h.set_mode(mode);
     h.set_cksum();
     ar.append(&h, content).expect("unwrap in test");
-    ar.into_inner().expect("unwrap in test").finish().expect("unwrap in test")
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a device node entry.
@@ -57,7 +60,10 @@ fn tar_gz_device_node(name: &str, kind: EntryType) -> Vec<u8> {
     h.set_mode(0o644);
     h.set_cksum();
     ar.append(&h, &[][..]).expect("unwrap in test");
-    ar.into_inner().expect("unwrap in test").finish().expect("unwrap in test")
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a symlink entry.
@@ -72,7 +78,10 @@ fn tar_gz_symlink(name: &str, target: &str) -> Vec<u8> {
     h.set_mode(0o777);
     h.set_cksum();
     ar.append(&h, &[][..]).expect("unwrap in test");
-    ar.into_inner().expect("unwrap in test").finish().expect("unwrap in test")
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a raw tar.gz with a manually crafted header so we can embed filenames

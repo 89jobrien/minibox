@@ -18,7 +18,8 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
+    let image_store =
+        minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -44,8 +45,10 @@ fn make_deps(temp_dir: &TempDir) -> Arc<minibox::daemon::handler::HandlerDepende
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -237,7 +240,8 @@ async fn test_load_from_disk_missing_file_is_empty() {
 async fn test_load_from_disk_corrupt_file_is_empty() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     // Write garbage into the state file before creating DaemonState.
-    std::fs::write(temp_dir.path().join("state.json"), b"not valid json at all").expect("unwrap in test");
+    std::fs::write(temp_dir.path().join("state.json"), b"not valid json at all")
+        .expect("unwrap in test");
 
     let state = make_state(&temp_dir);
     state.load_from_disk().await;

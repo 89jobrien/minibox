@@ -158,7 +158,8 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -245,7 +246,8 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -325,7 +327,8 @@ async fn test_run_empty_image_no_layers() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -400,7 +403,8 @@ async fn test_pull_registry_failure_with_tag() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {
@@ -548,7 +552,8 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
             image_gc: Arc::new(NoopImageGc),
             image_store: Arc::new(
-                minibox_core::image::ImageStore::new(temp_dir.path().join("img2")).expect("unwrap in test"),
+                minibox_core::image::ImageStore::new(temp_dir.path().join("img2"))
+                    .expect("unwrap in test"),
             ),
         },
         lifecycle: LifecycleDeps {

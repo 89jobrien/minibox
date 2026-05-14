@@ -99,7 +99,8 @@ fn make_deps_from_parts(
     network: impl minibox_core::domain::NetworkProvider + 'static,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
+    let image_store =
+        Arc::new(ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(

@@ -20,7 +20,8 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
+    let image_store =
+        minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -51,8 +52,10 @@ fn make_deps(
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).expect("unwrap in test"));
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -173,7 +176,8 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
     let registry = Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
 
     let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter")).expect("unwrap in test"),
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter"))
+            .expect("unwrap in test"),
     );
     let deps = Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {

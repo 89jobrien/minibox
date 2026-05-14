@@ -194,7 +194,10 @@ async fn conformance_mock_registry_as_any_downcast() {
 
     // Verify the downcast result is usable
     assert!(
-        downcast.expect("unwrap in test").has_image("library/test", "latest").await,
+        downcast
+            .expect("unwrap in test")
+            .has_image("library/test", "latest")
+            .await,
         "downcast result must be usable and cached image must return true"
     );
 }

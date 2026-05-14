@@ -361,7 +361,10 @@ fn test_e2e_nonroot_rejected() {
         .args([
             "-u",
             "nobody",
-            fixture.cli_bin.to_str().expect("cli_bin path is valid UTF-8"),
+            fixture
+                .cli_bin
+                .to_str()
+                .expect("cli_bin path is valid UTF-8"),
             "ps",
         ])
         .env("MINIBOX_SOCKET_PATH", &fixture.socket_path)

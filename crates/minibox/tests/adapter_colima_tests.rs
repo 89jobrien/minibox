@@ -389,7 +389,8 @@ async fn runtime_spawn_script_embeds_args() {
     let cap = captured_script.clone();
 
     let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
-        *captured_argv_ref.lock().expect("unwrap in test") = args.iter().map(|arg| arg.to_string()).collect();
+        *captured_argv_ref.lock().expect("unwrap in test") =
+            args.iter().map(|arg| arg.to_string()).collect();
         if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc")
             && let Some(script) = args.get(pos + 1)
         {
@@ -413,7 +414,10 @@ async fn runtime_spawn_script_embeds_args() {
         image_ref: None,
     };
 
-    let result = runtime.spawn_process(&config).await.expect("unwrap in test");
+    let result = runtime
+        .spawn_process(&config)
+        .await
+        .expect("unwrap in test");
     assert_eq!(result.pid, 99);
 
     let argv = captured_argv.lock().expect("unwrap in test").clone();
