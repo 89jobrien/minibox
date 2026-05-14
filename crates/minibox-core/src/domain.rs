@@ -2802,11 +2802,7 @@ mod start_from_step_tests {
 
     #[test]
     fn steps_before_returns_steps_preceding_alias() {
-        let steps = vec![
-            make_step("build"),
-            make_step("test"),
-            make_step("deploy"),
-        ];
+        let steps = vec![make_step("build"), make_step("test"), make_step("deploy")];
         let preceding = steps_before("test", &steps).unwrap();
         assert_eq!(preceding.len(), 1);
         assert_eq!(preceding[0].alias, "build");
@@ -2827,19 +2823,11 @@ mod start_from_step_tests {
 
     #[test]
     fn resume_workflow_injects_prior_outputs_into_state() {
-        let steps = vec![
-            make_step("build"),
-            make_step("test"),
-            make_step("deploy"),
-        ];
+        let steps = vec![make_step("build"), make_step("test"), make_step("deploy")];
         let mut prior_outputs = WorkflowState::new();
-        prior_outputs.insert(
-            "build".to_string(),
-            serde_json::json!({"exit_code": 0}),
-        );
+        prior_outputs.insert("build".to_string(), serde_json::json!({"exit_code": 0}));
 
-        let (skip_count, state) =
-            resume_workflow("test", &steps, &prior_outputs).unwrap();
+        let (skip_count, state) = resume_workflow("test", &steps, &prior_outputs).unwrap();
         assert_eq!(skip_count, 1);
         assert_eq!(state["build"]["exit_code"], 0);
     }

@@ -1,70 +1,63 @@
 project: minibox
 id: minibox
-updated: 2026-05-13
+updated: 2026-05-14
 items:
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (27 files)
+  title: Uncommitted changes (4 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    crates/minibox/tests/adapter_colima_tests.rs
-    crates/minibox/tests/adapter_failure_injection_tests.rs
-    crates/minibox/tests/conformance_adapters.rs
-    crates/minibox/tests/conformance_state.rs
-    crates/minibox/tests/daemon_adapter_suite_tests.rs
-    crates/minibox/tests/daemon_conformance_helpers.rs
-    crates/minibox/tests/daemon_conformance_tests.rs
-    crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
-    crates/minibox/tests/daemon_daemon_recovery_tests.rs
-    crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
-    crates/minibox/tests/daemon_handler_common/mod.rs
-    crates/minibox/tests/daemon_handler_exec_tests.rs
-    crates/minibox/tests/daemon_handler_failure_tests.rs
-    crates/minibox/tests/daemon_handler_image_tests.rs
-    crates/minibox/tests/daemon_handler_lifecycle_tests.rs
-    crates/minibox/tests/daemon_handler_logs_events_tests.rs
-    crates/minibox/tests/daemon_handler_pipeline_tests.rs
-    crates/minibox/tests/daemon_handler_state_tests.rs
-    crates/minibox/tests/daemon_handler_streaming_tests.rs
-    crates/minibox/tests/daemon_isp_handler_deps_tests.rs
-    crates/minibox/tests/daemon_proptest_suite.rs
-    crates/minibox/tests/gke_adapter_isolation_tests.rs
-    crates/minibox/tests/native_adapter_isolation_tests.rs
-    crates/minibox/tests/security_regression.rs
-    crates/miniboxd/tests/system_tests.rs
+    GODMODE.tasks.yaml
+    docs/plans/2026-05-14-promotion-engine.md
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - crates/minibox/tests/adapter_colima_tests.rs
-  - crates/minibox/tests/adapter_failure_injection_tests.rs
-  - crates/minibox/tests/conformance_adapters.rs
-  - crates/minibox/tests/conformance_state.rs
-  - crates/minibox/tests/daemon_adapter_suite_tests.rs
-  - crates/minibox/tests/daemon_conformance_helpers.rs
-  - crates/minibox/tests/daemon_conformance_tests.rs
-  - crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
-  - crates/minibox/tests/daemon_daemon_recovery_tests.rs
-  - crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
-  - crates/minibox/tests/daemon_handler_common/mod.rs
-  - crates/minibox/tests/daemon_handler_exec_tests.rs
-  - crates/minibox/tests/daemon_handler_failure_tests.rs
-  - crates/minibox/tests/daemon_handler_image_tests.rs
-  - crates/minibox/tests/daemon_handler_lifecycle_tests.rs
-  - crates/minibox/tests/daemon_handler_logs_events_tests.rs
-  - crates/minibox/tests/daemon_handler_pipeline_tests.rs
-  - crates/minibox/tests/daemon_handler_state_tests.rs
-  - crates/minibox/tests/daemon_handler_streaming_tests.rs
-  - crates/minibox/tests/daemon_isp_handler_deps_tests.rs
-  - crates/minibox/tests/daemon_proptest_suite.rs
-  - crates/minibox/tests/gke_adapter_isolation_tests.rs
-  - crates/minibox/tests/native_adapter_isolation_tests.rs
-  - crates/minibox/tests/security_regression.rs
-  - crates/miniboxd/tests/system_tests.rs
+  - GODMODE.tasks.yaml
+  - docs/plans/2026-05-14-promotion-engine.md
 log:
+- date: '20260514.160821'
+  summary: done=23 running=0 pending=11 blocked=0
+  commits:
+  - 662cbcbdae7c45a0c69135f7fcbe8aa001515c24
+  - 03144c61188a6368dc62861ad29479a517ebce1e
+  - d02fab442bb311d9a39fb9db25fe51d799a90726
+  - 3def20947e5962380ad2eb090639b7d933ad03a9
+  - 6101d089d570d06039a1227601b84a5615125da4
+  - a35c3e49c5a3a0602b8f05a4a9f576b0e959d632
+  - 3baf31888b2ed60a12070adc7404ecafddc71897
+  - 3ef0819d9205553ee1e9c5705fbfe4213ff8b605
+  - 23e1cc0593ea2da625ffc84fe21c304918394824
+  - 0f56fd33ed523c19392cf314be737c395e212756
+- date: '20260514.160721'
+  summary: done=23 running=0 pending=11 blocked=0
+  commits:
+  - 662cbcbdae7c45a0c69135f7fcbe8aa001515c24
+  - 03144c61188a6368dc62861ad29479a517ebce1e
+  - d02fab442bb311d9a39fb9db25fe51d799a90726
+  - 3def20947e5962380ad2eb090639b7d933ad03a9
+  - 6101d089d570d06039a1227601b84a5615125da4
+  - a35c3e49c5a3a0602b8f05a4a9f576b0e959d632
+  - 3baf31888b2ed60a12070adc7404ecafddc71897
+  - 3ef0819d9205553ee1e9c5705fbfe4213ff8b605
+  - 23e1cc0593ea2da625ffc84fe21c304918394824
+  - 0f56fd33ed523c19392cf314be737c395e212756
+- date: '20260514.160721'
+  summary: done=23 running=0 pending=11 blocked=0
+  commits:
+  - 662cbcbdae7c45a0c69135f7fcbe8aa001515c24
+  - 03144c61188a6368dc62861ad29479a517ebce1e
+  - d02fab442bb311d9a39fb9db25fe51d799a90726
+  - 3def20947e5962380ad2eb090639b7d933ad03a9
+  - 6101d089d570d06039a1227601b84a5615125da4
+  - a35c3e49c5a3a0602b8f05a4a9f576b0e959d632
+  - 3baf31888b2ed60a12070adc7404ecafddc71897
+  - 3ef0819d9205553ee1e9c5705fbfe4213ff8b605
+  - 23e1cc0593ea2da625ffc84fe21c304918394824
+  - 0f56fd33ed523c19392cf314be737c395e212756
 - date: '20260513.223432'
   summary: done=23 running=0 pending=1 blocked=0
   commits:
