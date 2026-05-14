@@ -168,6 +168,188 @@ pub enum StepStatus {
     Errored,
 }
 
+// ── StepRunner port ──────────────────────────────────────────────────────────
+
+/// Capability tokens injected into a [`StepRunner`] at execution time.
+///
+/// Each runner declares which capabilities it requires; the engine injects only
+/// those, following the principle of least privilege.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepCapability {
+    /// Access to the container runtime (create, exec, inspect).
+    AccessRegistry,
+    /// Access to an image registry (pull, push, inspect).
+    AccessRuntime,
+    /// Read/write access to the overlay filesystem layer store.
+    AccessFilesystem,
+    /// Propagate step output values to downstream steps via context.
+    OutputPropagation,
+}
+
+/// Execution context passed to a [`StepRunner::run`] call.
+pub struct StepContext {
+    /// Human-readable alias for the step, used in tracing and error messages.
+    pub alias: String,
+    /// Step-specific configuration extracted from the workflow definition.
+    pub config: serde_json::Value,
+}
+
+/// Result value produced by a [`StepRunner`].
+pub struct StepOutput {
+    /// Structured output value, forwarded to downstream steps when
+    /// [`StepCapability::OutputPropagation`] is declared.
+    pub value: serde_json::Value,
+    /// Terminal status reported back to the workflow engine.
+    pub status: StepStatus,
+}
+
+/// Port: a pluggable executor for a single workflow step kind.
+///
+/// Implementations live in `minibox/src/adapters/` or may be provided by
+/// external plugins.  The domain layer only depends on this trait.
+pub trait StepRunner: Send + Sync {
+    /// Unique identifier for the step kind (e.g. `"container-run"`).
+    fn kind(&self) -> &'static str;
+    /// Capability tokens required by this runner.
+    fn required_capabilities(&self) -> &[StepCapability];
+    /// Execute one step with the given context.
+    fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput>;
+}
+
+/// Registry of [`StepRunner`] implementations, keyed by [`StepRunner::kind`].
+///
+/// `StepRunnerRegistry::new()` creates an empty registry.  Call
+/// [`StepRunnerRegistry::register_builtin_runners`] explicitly to populate the
+/// four built-in runners; this keeps construction lightweight for tests that
+/// only need a subset.
+pub struct StepRunnerRegistry {
+    runners: std::collections::HashMap<String, Box<dyn StepRunner>>,
+}
+
+impl StepRunnerRegistry {
+    /// Create an empty registry.  No built-in runners are registered.
+    pub fn new() -> Self {
+        Self {
+            runners: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Register a single runner, replacing any existing runner with the same kind.
+    pub fn register(&mut self, runner: Box<dyn StepRunner>) {
+        self.runners.insert(runner.kind().to_string(), runner);
+    }
+
+    /// Look up a runner by kind string.  Returns `None` if not registered.
+    pub fn get(&self, kind: &str) -> Option<&dyn StepRunner> {
+        self.runners.get(kind).map(|r| r.as_ref())
+    }
+
+    /// List all registered (kind, capabilities) pairs.
+    pub fn list(&self) -> Vec<(&str, &[StepCapability])> {
+        self.runners
+            .iter()
+            .map(|(k, r)| (k.as_str(), r.required_capabilities()))
+            .collect()
+    }
+
+    /// Register the four built-in runners: `container-run`, `image-pull`,
+    /// `exec`, and `overlay-snapshot`.
+    pub fn register_builtin_runners(&mut self) {
+        self.register(Box::new(ContainerRunStepRunner));
+        self.register(Box::new(ImagePullStepRunner));
+        self.register(Box::new(ExecStepRunner));
+        self.register(Box::new(OverlaySnapshotStepRunner));
+    }
+}
+
+impl Default for StepRunnerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Built-in runner stubs ────────────────────────────────────────────────────
+
+/// Built-in runner for the `container-run` step kind.
+pub struct ContainerRunStepRunner;
+
+impl StepRunner for ContainerRunStepRunner {
+    fn kind(&self) -> &'static str {
+        "container-run"
+    }
+
+    fn required_capabilities(&self) -> &[StepCapability] {
+        &[StepCapability::AccessRuntime]
+    }
+
+    fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+        Ok(StepOutput {
+            value: serde_json::Value::Null,
+            status: StepStatus::Succeeded,
+        })
+    }
+}
+
+/// Built-in runner for the `image-pull` step kind.
+pub struct ImagePullStepRunner;
+
+impl StepRunner for ImagePullStepRunner {
+    fn kind(&self) -> &'static str {
+        "image-pull"
+    }
+
+    fn required_capabilities(&self) -> &[StepCapability] {
+        &[StepCapability::AccessRegistry, StepCapability::AccessFilesystem]
+    }
+
+    fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+        Ok(StepOutput {
+            value: serde_json::Value::Null,
+            status: StepStatus::Succeeded,
+        })
+    }
+}
+
+/// Built-in runner for the `exec` step kind.
+pub struct ExecStepRunner;
+
+impl StepRunner for ExecStepRunner {
+    fn kind(&self) -> &'static str {
+        "exec"
+    }
+
+    fn required_capabilities(&self) -> &[StepCapability] {
+        &[StepCapability::AccessRuntime]
+    }
+
+    fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+        Ok(StepOutput {
+            value: serde_json::Value::Null,
+            status: StepStatus::Succeeded,
+        })
+    }
+}
+
+/// Built-in runner for the `overlay-snapshot` step kind.
+pub struct OverlaySnapshotStepRunner;
+
+impl StepRunner for OverlaySnapshotStepRunner {
+    fn kind(&self) -> &'static str {
+        "overlay-snapshot"
+    }
+
+    fn required_capabilities(&self) -> &[StepCapability] {
+        &[StepCapability::AccessFilesystem]
+    }
+
+    fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+        Ok(StepOutput {
+            value: serde_json::Value::Null,
+            status: StepStatus::Succeeded,
+        })
+    }
+}
+
 /// A host-path bind mount to inject into a container at startup.
 ///
 /// `host_path` is canonicalized and validated before the mount is applied.
@@ -2088,5 +2270,63 @@ mod tests {
                 prop_assert_eq!(worst, PhaseOutcome::Errored);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod step_runner_tests {
+    use super::*;
+
+    #[test]
+    fn registry_get_unknown_kind_returns_none() {
+        let registry = StepRunnerRegistry::new();
+        assert!(registry.get("unknown-kind").is_none());
+    }
+
+    #[test]
+    fn registry_list_returns_all_registered_kinds() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register_builtin_runners();
+        let kinds: Vec<&str> = registry.list().iter().map(|(k, _)| *k).collect();
+        assert!(kinds.contains(&"container-run"));
+        assert!(kinds.contains(&"image-pull"));
+        assert!(kinds.contains(&"exec"));
+        assert!(kinds.contains(&"overlay-snapshot"));
+    }
+
+    #[test]
+    fn step_dependencies_only_injects_declared_caps() {
+        let runner = ContainerRunStepRunner;
+        let caps = runner.required_capabilities();
+        assert!(caps.contains(&StepCapability::AccessRuntime));
+        assert!(!caps.contains(&StepCapability::AccessRegistry));
+    }
+
+    pub fn assert_step_runner_contract(runner: &dyn StepRunner) {
+        assert!(!runner.kind().is_empty(), "runner kind must not be empty");
+        let _caps = runner.required_capabilities();
+        // run with minimal context — must not panic
+        let ctx = StepContext {
+            alias: "test".to_string(),
+            config: serde_json::Value::Null,
+        };
+        let _ = runner.run(ctx); // result not checked — contract is no-panic, not success
+    }
+
+    #[test]
+    fn container_run_satisfies_contract() {
+        assert_step_runner_contract(&ContainerRunStepRunner);
+    }
+    #[test]
+    fn image_pull_satisfies_contract() {
+        assert_step_runner_contract(&ImagePullStepRunner);
+    }
+    #[test]
+    fn exec_satisfies_contract() {
+        assert_step_runner_contract(&ExecStepRunner);
+    }
+    #[test]
+    fn overlay_snapshot_satisfies_contract() {
+        assert_step_runner_contract(&OverlaySnapshotStepRunner);
     }
 }
