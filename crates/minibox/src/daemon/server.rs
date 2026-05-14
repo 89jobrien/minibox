@@ -372,6 +372,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::ImageList { .. }
             | DaemonResponse::Manifest { .. }
             | DaemonResponse::VerifyResult { .. }
+            | DaemonResponse::WorkflowStepComplete { .. }
+            | DaemonResponse::WorkflowComplete { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -994,6 +996,8 @@ mod tests {
                 DaemonResponse::ImageList { .. } => true,
                 DaemonResponse::Manifest { .. } => true,
                 DaemonResponse::VerifyResult { .. } => true,
+                DaemonResponse::WorkflowStepComplete { .. } => true,
+                DaemonResponse::WorkflowComplete { .. } => true,
             };
         }
     }

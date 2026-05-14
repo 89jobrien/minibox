@@ -135,7 +135,9 @@ pub struct WorkflowDef {
 ///
 /// The ordering (`Succeeded < Skipped < Aborted < Failed < Errored`) is used to
 /// compute the worst-case outcome across all steps via `Iterator::max`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum PhaseOutcome {
     /// All steps completed successfully.
     Succeeded,
