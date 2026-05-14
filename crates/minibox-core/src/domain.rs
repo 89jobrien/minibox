@@ -135,7 +135,9 @@ pub struct WorkflowDef {
 ///
 /// The ordering (`Succeeded < Skipped < Aborted < Failed < Errored`) is used to
 /// compute the worst-case outcome across all steps via `Iterator::max`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum PhaseOutcome {
     /// All steps completed successfully.
     Succeeded,
@@ -297,7 +299,10 @@ impl StepRunner for ImagePullStepRunner {
     }
 
     fn required_capabilities(&self) -> &[StepCapability] {
-        &[StepCapability::AccessRegistry, StepCapability::AccessFilesystem]
+        &[
+            StepCapability::AccessRegistry,
+            StepCapability::AccessFilesystem,
+        ]
     }
 
     fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
@@ -2271,6 +2276,67 @@ mod tests {
     }
 }
 
+// ── Step completion ───────────────────────────────────────────────────────────
+
+/// Outcome of evaluating a single step attempt against its retry policy.
+///
+/// Callers drive the retry loop; this type is the decision produced by
+/// [`determine_step_completion`] for each attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepCompletion {
+    /// Step produced a successful [`StepOutput`].
+    Succeeded,
+    /// Step failed and should not be retried.
+    ///
+    /// `terminal` is `true` when the error is inherently unrecoverable
+    /// (e.g. image not found), and `false` when the retry policy is
+    /// exhausted or timed out.
+    Failed { terminal: bool },
+    /// Step encountered an unexpected runtime error (reserved for future use).
+    Errored,
+    /// Step failed transiently and should be retried by the caller.
+    Running,
+}
+
+/// Pure function — no I/O, no side effects.
+///
+/// Decides whether a step attempt should be considered done, retried, or
+/// permanently failed based on:
+/// - the attempt result,
+/// - the optional retry policy,
+/// - how long the step has been running (`elapsed`),
+/// - how many consecutive errors have occurred (`error_count`), and
+/// - whether the error is terminal (unrecoverable regardless of policy).
+pub fn determine_step_completion(
+    result: &anyhow::Result<StepOutput>,
+    retry_cfg: Option<&StepRetry>,
+    elapsed: std::time::Duration,
+    error_count: u32,
+    is_terminal: bool,
+) -> StepCompletion {
+    match result {
+        Ok(_) => StepCompletion::Succeeded,
+        Err(_) => {
+            if is_terminal {
+                return StepCompletion::Failed { terminal: true };
+            }
+            if let Some(retry) = retry_cfg {
+                if let Some(timeout_secs) = retry.timeout_secs {
+                    if elapsed.as_secs() > timeout_secs {
+                        return StepCompletion::Failed { terminal: false };
+                    }
+                }
+                if error_count >= retry.error_threshold {
+                    return StepCompletion::Failed { terminal: false };
+                }
+                StepCompletion::Running
+            } else {
+                StepCompletion::Failed { terminal: false }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod step_runner_tests {
     use super::*;
@@ -2326,5 +2392,126 @@ mod step_runner_tests {
     #[test]
     fn overlay_snapshot_satisfies_contract() {
         assert_step_runner_contract(&OverlaySnapshotStepRunner);
+    }
+}
+
+#[cfg(test)]
+mod step_retry_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn terminal_error_returns_failed_terminal() {
+        let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("image not found"));
+        let completion = determine_step_completion(
+            &result,
+            None,
+            Duration::from_secs(1),
+            0,
+            true, // is_terminal
+        );
+        assert!(matches!(
+            completion,
+            StepCompletion::Failed { terminal: true }
+        ));
+    }
+
+    #[test]
+    fn non_terminal_under_threshold_returns_running() {
+        let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("network timeout"));
+        let retry = StepRetry {
+            error_threshold: 3,
+            timeout_secs: None,
+        };
+        let completion = determine_step_completion(
+            &result,
+            Some(&retry),
+            Duration::from_secs(1),
+            1, // error_count = 1, threshold = 3
+            false,
+        );
+        assert!(matches!(completion, StepCompletion::Running));
+    }
+
+    #[test]
+    fn non_terminal_at_threshold_returns_failed() {
+        let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("network timeout"));
+        let retry = StepRetry {
+            error_threshold: 3,
+            timeout_secs: None,
+        };
+        let completion = determine_step_completion(
+            &result,
+            Some(&retry),
+            Duration::from_secs(1),
+            3, // error_count == threshold
+            false,
+        );
+        assert!(matches!(
+            completion,
+            StepCompletion::Failed { terminal: false }
+        ));
+    }
+
+    #[test]
+    fn elapsed_over_timeout_returns_failed() {
+        let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("still running"));
+        let retry = StepRetry {
+            error_threshold: 10,
+            timeout_secs: Some(30),
+        };
+        let completion = determine_step_completion(
+            &result,
+            Some(&retry),
+            Duration::from_secs(31), // elapsed > timeout
+            0,
+            false,
+        );
+        assert!(matches!(
+            completion,
+            StepCompletion::Failed { terminal: false }
+        ));
+    }
+
+    #[test]
+    fn success_returns_succeeded() {
+        let result: anyhow::Result<StepOutput> = Ok(StepOutput {
+            value: serde_json::Value::Null,
+            status: StepStatus::Succeeded,
+        });
+        let completion = determine_step_completion(&result, None, Duration::from_secs(1), 0, false);
+        assert!(matches!(completion, StepCompletion::Succeeded));
+    }
+
+    use proptest::prelude::*;
+    proptest! {
+        #[test]
+        fn error_count_gte_threshold_always_fails(threshold in 1u32..20, extra in 0u32..5) {
+            let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("err"));
+            let retry = StepRetry { error_threshold: threshold, timeout_secs: None };
+            let completion = determine_step_completion(
+                &result,
+                Some(&retry),
+                Duration::from_secs(1),
+                threshold + extra,
+                false,
+            );
+            let is_failed = matches!(completion, StepCompletion::Failed { .. });
+            prop_assert!(is_failed);
+        }
+
+        #[test]
+        fn terminal_error_never_returns_running(error_count in 0u32..100) {
+            let result: anyhow::Result<StepOutput> = Err(anyhow::anyhow!("fatal"));
+            let retry = StepRetry { error_threshold: 999, timeout_secs: None };
+            let completion = determine_step_completion(
+                &result,
+                Some(&retry),
+                Duration::from_millis(1),
+                error_count,
+                true,
+            );
+            prop_assert!(!matches!(completion, StepCompletion::Running));
+        }
     }
 }
