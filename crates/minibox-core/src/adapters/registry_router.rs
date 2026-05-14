@@ -79,14 +79,14 @@ mod tests {
             &self,
             _image_ref: &ImageRef,
         ) -> anyhow::Result<crate::domain::ImageMetadata> {
-            unimplemented!()
+            Err(anyhow::anyhow!("not supported by this registry backend"))
         }
         fn get_image_layers(
             &self,
             _name: &str,
             _tag: &str,
         ) -> anyhow::Result<Vec<std::path::PathBuf>> {
-            unimplemented!()
+            Err(anyhow::anyhow!("not supported by this registry backend"))
         }
     }
 
