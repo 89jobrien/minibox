@@ -2515,3 +2515,274 @@ mod step_retry_tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Workflow types — alias-based state passing (#360)
+// ---------------------------------------------------------------------------
+
+/// A single variable binding in a workflow step, with an optional expression
+/// that may reference prior step outputs via `${{ outputs['alias'].field }}`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ExprVar {
+    /// Variable name used inside the step.
+    pub name: String,
+    /// Literal value or `${{ outputs['alias'].field }}` expression.
+    pub value: String,
+}
+
+/// Retry configuration for a workflow step.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct StepRetry {
+    /// Maximum number of retry attempts (not counting the initial attempt).
+    pub max_attempts: u32,
+    /// Delay in milliseconds between retries.
+    pub delay_ms: u64,
+}
+
+/// A single step inside a workflow definition.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct WorkflowStep {
+    /// Step kind — matches a registered step runner kind string.
+    pub kind: String,
+    /// Unique alias used to reference this step's output in later steps.
+    pub alias: String,
+    /// Optional boolean guard expression evaluated before the step runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub if_expr: Option<String>,
+    /// If `true`, workflow execution continues even when this step fails.
+    #[serde(default)]
+    pub continue_on_error: bool,
+    /// Optional retry policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<StepRetry>,
+    /// Input variable bindings for this step.
+    #[serde(default)]
+    pub vars: Vec<ExprVar>,
+    /// Step-kind-specific configuration (arbitrary JSON).
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+/// Shared mutable state threaded through all steps of a workflow run.
+///
+/// Keyed by step alias; each value is the JSON output produced by that step.
+pub type WorkflowState = std::collections::HashMap<String, serde_json::Value>;
+
+/// A [`WorkflowStep`] with all `${{ ... }}` expressions fully resolved to
+/// concrete string values.
+#[derive(Debug, Clone)]
+pub struct ResolvedStep {
+    /// Step kind — matches a registered step runner kind string.
+    pub kind: String,
+    /// Unique alias used to reference this step's output in later steps.
+    pub alias: String,
+    /// Resolved variable bindings: name → concrete string value.
+    pub vars: std::collections::HashMap<String, String>,
+    /// Step-kind-specific configuration (arbitrary JSON).
+    pub config: serde_json::Value,
+    /// If `true`, workflow execution continues even when this step fails.
+    pub continue_on_error: bool,
+    /// Optional retry policy.
+    pub retry: Option<StepRetry>,
+}
+
+/// Resolves `${{ outputs['alias'].field }}` tokens in `step.vars` against `state`.
+///
+/// Returns `Err` if any token references a missing alias or field, or if a
+/// token is syntactically malformed (e.g. unclosed `${{`).
+pub fn resolve_step_vars(
+    step: &WorkflowStep,
+    state: &WorkflowState,
+) -> anyhow::Result<ResolvedStep> {
+    use anyhow::Context as _;
+    let mut resolved_vars = std::collections::HashMap::new();
+
+    for expr_var in &step.vars {
+        let resolved_value = resolve_expr(&expr_var.value, state).with_context(|| {
+            format!(
+                "failed to resolve var '{}' in step '{}'",
+                expr_var.name, step.alias
+            )
+        })?;
+        resolved_vars.insert(expr_var.name.clone(), resolved_value);
+    }
+
+    Ok(ResolvedStep {
+        kind: step.kind.clone(),
+        alias: step.alias.clone(),
+        vars: resolved_vars,
+        config: step.config.clone(),
+        continue_on_error: step.continue_on_error,
+        retry: step.retry.clone(),
+    })
+}
+
+/// Writes step output into shared workflow state under the step's alias.
+///
+/// Overwrites any prior value stored under the same alias.
+pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
+    state.insert(alias.to_string(), output);
+}
+
+/// Resolves a single expression string.
+///
+/// Replaces every `${{ outputs['alias'].field }}` token with the
+/// string-serialised value from `state`. Returns the original string
+/// unchanged when no template tokens are present.
+fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+    use anyhow::Context as _;
+
+    if !expr.contains("${{") {
+        return Ok(expr.to_string());
+    }
+
+    let mut result = expr.to_string();
+    while let Some(start) = result.find("${{") {
+        let end = result[start..]
+            .find("}}")
+            .map(|i| start + i + 2)
+            .ok_or_else(|| anyhow::anyhow!("unclosed '${{' in expression: {}", expr))?;
+        let token = result[start..end].to_string();
+        let inner = token
+            .trim_start_matches("${{")
+            .trim_end_matches("}}")
+            .trim();
+
+        let value = resolve_output_ref(inner, state)
+            .with_context(|| format!("failed to resolve expression: {}", inner))?;
+        result = result.replacen(&token, &value, 1);
+    }
+    Ok(result)
+}
+
+/// Resolves `outputs['alias'].field.subfield` against `state`.
+///
+/// Supports dot-separated field paths of arbitrary depth. The field path
+/// may be empty, in which case the full alias value is serialised.
+fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+    let expr = expr.trim();
+    let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
+        anyhow::anyhow!(
+            "unsupported expression form (expected outputs['alias']...): {}",
+            expr
+        )
+    })?;
+    let (alias, rest) = rest
+        .split_once("']")
+        .ok_or_else(|| anyhow::anyhow!("malformed alias in expression: {}", expr))?;
+    let field_path = rest.trim_start_matches('.');
+
+    let alias_val = state
+        .get(alias)
+        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow state", alias))?;
+
+    let field_val = if field_path.is_empty() {
+        alias_val.clone()
+    } else {
+        let mut cur = alias_val;
+        for segment in field_path.split('.') {
+            cur = cur.get(segment).ok_or_else(|| {
+                anyhow::anyhow!("field '{}' not found in alias '{}' output", segment, alias)
+            })?;
+        }
+        cur.clone()
+    };
+
+    Ok(match &field_val {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    })
+}
+
+#[cfg(test)]
+mod alias_state_tests {
+    use super::*;
+
+    #[test]
+    fn resolve_step_vars_substitutes_prior_output() {
+        let mut state = WorkflowState::new();
+        state.insert("build".to_string(), serde_json::json!({"exit_code": 0}));
+
+        let step = WorkflowStep {
+            kind: "exec".to_string(),
+            alias: "check".to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![ExprVar {
+                name: "code".to_string(),
+                value: "${{ outputs['build'].exit_code }}".to_string(),
+            }],
+            config: serde_json::Value::Null,
+        };
+
+        let resolved = resolve_step_vars(&step, &state).unwrap();
+        assert_eq!(resolved.vars.get("code").unwrap(), "0");
+    }
+
+    #[test]
+    fn resolve_step_vars_missing_alias_returns_err() {
+        let state = WorkflowState::new();
+        let step = WorkflowStep {
+            kind: "exec".to_string(),
+            alias: "check".to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![ExprVar {
+                name: "x".to_string(),
+                value: "${{ outputs['missing'].field }}".to_string(),
+            }],
+            config: serde_json::Value::Null,
+        };
+        assert!(resolve_step_vars(&step, &state).is_err());
+    }
+
+    #[test]
+    fn resolve_step_vars_no_tokens_is_idempotent() {
+        let state = WorkflowState::new();
+        let step = WorkflowStep {
+            kind: "exec".to_string(),
+            alias: "plain".to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![ExprVar {
+                name: "k".to_string(),
+                value: "literal_value".to_string(),
+            }],
+            config: serde_json::Value::Null,
+        };
+        let resolved = resolve_step_vars(&step, &state).unwrap();
+        assert_eq!(resolved.vars.get("k").unwrap(), "literal_value");
+    }
+
+    #[test]
+    fn propagate_output_writes_under_alias() {
+        let mut state = WorkflowState::new();
+        propagate_output("my-step", serde_json::json!({"result": "ok"}), &mut state);
+        assert_eq!(state["my-step"]["result"], "ok");
+    }
+
+    use proptest::prelude::*;
+    proptest! {
+        #[test]
+        fn resolve_no_token_vars_always_idempotent(
+            key in "[a-z]{3,8}",
+            val in "[a-zA-Z0-9_]{1,20}"
+        ) {
+            let state = WorkflowState::new();
+            let step = WorkflowStep {
+                kind: "exec".to_string(),
+                alias: "s".to_string(),
+                if_expr: None,
+                continue_on_error: false,
+                retry: None,
+                vars: vec![ExprVar { name: key.clone(), value: val.clone() }],
+                config: serde_json::Value::Null,
+            };
+            let resolved = resolve_step_vars(&step, &state).unwrap();
+            prop_assert_eq!(resolved.vars.get(&key).unwrap(), &val);
+        }
+    }
+}
