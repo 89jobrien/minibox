@@ -72,6 +72,100 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+// ---------------------------------------------------------------------------
+// Workflow types
+// ---------------------------------------------------------------------------
+
+/// Retry policy for a single workflow step.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StepRetry {
+    /// Number of consecutive errors before the step is considered permanently failed.
+    pub error_threshold: u32,
+    /// Optional per-attempt timeout in seconds.
+    pub timeout_secs: Option<u64>,
+}
+
+/// A name/value variable binding for workflow expression evaluation.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExprVar {
+    /// Variable name.
+    pub name: String,
+    /// Variable value (string form).
+    pub value: String,
+}
+
+/// A single step in a [`WorkflowDef`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowStep {
+    /// Step kind discriminant (e.g. `"container-run"`, `"shell"`).
+    pub kind: String,
+    /// Human-readable alias used to reference this step in outputs and `start_from_step`.
+    pub alias: String,
+    /// Optional conditional expression — step is skipped when this evaluates to false.
+    #[serde(default)]
+    pub if_expr: Option<String>,
+    /// When `true`, workflow execution continues even if this step fails.
+    #[serde(default)]
+    pub continue_on_error: bool,
+    /// Optional retry policy for this step.
+    #[serde(default)]
+    pub retry: Option<StepRetry>,
+    /// Variable bindings in scope for this step.
+    #[serde(default)]
+    pub vars: Vec<ExprVar>,
+    /// Step-kind-specific configuration payload.
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+/// A sequential multi-container workflow definition.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkflowDef {
+    /// Ordered list of steps to execute.
+    pub steps: Vec<WorkflowStep>,
+    /// Shared state passed between steps as JSON values.
+    #[serde(default)]
+    pub state: std::collections::HashMap<String, serde_json::Value>,
+    /// When set, execution begins at the named step alias rather than the first step.
+    #[serde(default)]
+    pub start_from_step: Option<String>,
+}
+
+/// Aggregate outcome for a workflow phase (set of steps).
+///
+/// The ordering (`Succeeded < Skipped < Aborted < Failed < Errored`) is used to
+/// compute the worst-case outcome across all steps via `Iterator::max`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub enum PhaseOutcome {
+    /// All steps completed successfully.
+    Succeeded,
+    /// At least one step was skipped; none failed.
+    Skipped,
+    /// Workflow was aborted mid-run.
+    Aborted,
+    /// At least one step failed (non-zero exit / business logic failure).
+    Failed,
+    /// At least one step encountered an unexpected runtime error.
+    Errored,
+}
+
+/// Per-step execution status reported in [`DaemonResponse::WorkflowStepComplete`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum StepStatus {
+    /// Step has not started yet.
+    Pending,
+    /// Step is currently executing.
+    Running,
+    /// Step completed with a zero exit code.
+    Succeeded,
+    /// Step completed with a non-zero exit code or business-logic failure.
+    Failed,
+    /// Step was skipped due to an `if_expr` condition.
+    Skipped,
+    /// Step encountered an unexpected runtime error.
+    Errored,
+}
+
 /// A host-path bind mount to inject into a container at startup.
 ///
 /// `host_path` is canonicalized and validated before the mount is applied.
@@ -1945,6 +2039,52 @@ mod tests {
         fn child_init_can_be_used_without_rootfs_setup() {
             let init = OnlyChildInit;
             assert!(init.pivot_root(Path::new("/tmp/new_root")).is_ok());
+        }
+    }
+
+    mod workflow_tests {
+        use super::*;
+
+        #[test]
+        fn workflow_step_defaults_continue_on_error_false() {
+            let json = r#"{"kind":"container-run","alias":"build"}"#;
+            let step: WorkflowStep = serde_json::from_str(json).unwrap();
+            assert!(!step.continue_on_error);
+            assert!(step.retry.is_none());
+        }
+
+        #[test]
+        fn phase_outcome_errored_beats_failed() {
+            assert!(PhaseOutcome::Errored > PhaseOutcome::Failed);
+        }
+
+        #[test]
+        fn phase_outcome_failed_beats_aborted() {
+            assert!(PhaseOutcome::Failed > PhaseOutcome::Aborted);
+        }
+
+        #[test]
+        fn phase_outcome_aborted_beats_skipped() {
+            assert!(PhaseOutcome::Aborted > PhaseOutcome::Skipped);
+        }
+
+        #[test]
+        fn phase_outcome_skipped_beats_succeeded() {
+            assert!(PhaseOutcome::Skipped > PhaseOutcome::Succeeded);
+        }
+
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn worst_case_phase_with_any_errored_is_errored(count in 1usize..10) {
+                let steps: Vec<PhaseOutcome> = (0..count)
+                    .map(|_| PhaseOutcome::Succeeded)
+                    .chain(std::iter::once(PhaseOutcome::Errored))
+                    .collect();
+                let worst = steps.iter().copied().max().unwrap();
+                prop_assert_eq!(worst, PhaseOutcome::Errored);
+            }
         }
     }
 }

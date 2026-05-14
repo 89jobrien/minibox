@@ -342,6 +342,10 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
 
         // Manifest inspection — terminal (single response per request).
         DaemonResponse::Manifest { .. } | DaemonResponse::VerifyResult { .. } => true,
+
+        // Workflow — step updates are non-terminal; final summary is terminal.
+        DaemonResponse::WorkflowStepComplete { .. } => false,
+        DaemonResponse::WorkflowComplete { .. } => true,
     }
 }
 
