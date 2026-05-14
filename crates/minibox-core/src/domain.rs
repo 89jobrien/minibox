@@ -77,7 +77,7 @@ use std::sync::Arc;
 // ---------------------------------------------------------------------------
 
 /// Retry policy for a single workflow step.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct StepRetry {
     /// Number of consecutive errors before the step is considered permanently failed.
     pub error_threshold: u32,
@@ -86,7 +86,7 @@ pub struct StepRetry {
 }
 
 /// A name/value variable binding for workflow expression evaluation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ExprVar {
     /// Variable name.
     pub name: String,
@@ -95,7 +95,7 @@ pub struct ExprVar {
 }
 
 /// A single step in a [`WorkflowDef`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct WorkflowStep {
     /// Step kind discriminant (e.g. `"container-run"`, `"shell"`).
     pub kind: String,
@@ -2519,49 +2519,6 @@ mod step_retry_tests {
 // ---------------------------------------------------------------------------
 // Workflow types — alias-based state passing (#360)
 // ---------------------------------------------------------------------------
-
-/// A single variable binding in a workflow step, with an optional expression
-/// that may reference prior step outputs via `${{ outputs['alias'].field }}`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct ExprVar {
-    /// Variable name used inside the step.
-    pub name: String,
-    /// Literal value or `${{ outputs['alias'].field }}` expression.
-    pub value: String,
-}
-
-/// Retry configuration for a workflow step.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct StepRetry {
-    /// Maximum number of retry attempts (not counting the initial attempt).
-    pub max_attempts: u32,
-    /// Delay in milliseconds between retries.
-    pub delay_ms: u64,
-}
-
-/// A single step inside a workflow definition.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct WorkflowStep {
-    /// Step kind — matches a registered step runner kind string.
-    pub kind: String,
-    /// Unique alias used to reference this step's output in later steps.
-    pub alias: String,
-    /// Optional boolean guard expression evaluated before the step runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub if_expr: Option<String>,
-    /// If `true`, workflow execution continues even when this step fails.
-    #[serde(default)]
-    pub continue_on_error: bool,
-    /// Optional retry policy.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retry: Option<StepRetry>,
-    /// Input variable bindings for this step.
-    #[serde(default)]
-    pub vars: Vec<ExprVar>,
-    /// Step-kind-specific configuration (arbitrary JSON).
-    #[serde(default)]
-    pub config: serde_json::Value,
-}
 
 /// Shared mutable state threaded through all steps of a workflow run.
 ///
