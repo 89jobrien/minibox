@@ -72,7 +72,7 @@ code, verify that a test exists which fails if that line is deleted or inverted.
 | `image/registry.rs` | `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, Content-Length check |
 | `adapters/ghcr.rs` | Manifest/layer size mirrors |
 
-**Deliverable:** A markdown checklist committed to `docs/MUTATION_AUDIT.md` with
+**Deliverable:** A markdown checklist committed to `docs/MUTATION_AUDIT.mbx.md` with
 pass/fail per guard. Failing entries become test backlog items.
 
 **Exit criteria:** Every guard in the six modules has a corresponding negative

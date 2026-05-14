@@ -148,7 +148,7 @@ Near-term work is concentrated in a few areas:
 - push commit/build/push parity further across `linux-native` and `colima`
 - let CI agents create and tear down their own minibox-managed test environments
 
-See `docs/ROADMAP.md` for the active roadmap.
+See `docs/ROADMAP.mbx.md` for the active roadmap.
 
 ## VM Image CAS Overlay
 

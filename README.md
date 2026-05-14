@@ -78,7 +78,7 @@ sudo ./target/release/mbx rm <id>
 | macOS (Intel)         | Experimental   | `colima`       | exec/logs limited                         |
 | Windows               | Planned        | `winbox` stub  | Returns error unconditionally             |
 
-See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-adapter capability
+See [`docs/FEATURE_MATRIX.mbx.md`](docs/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
 
 ---
@@ -114,7 +114,7 @@ in `spawn_blocking` to avoid blocking the runtime.
 **Protocol.** JSON-over-newline on a Unix socket. 24 request variants, 22 response variants.
 Canonical source: `minibox-core/src/protocol.rs`.
 
-Full architecture reference: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Full architecture reference: [`docs/ARCHITECTURE.mbx.md`](docs/ARCHITECTURE.mbx.md).
 
 ---
 
@@ -156,7 +156,7 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/TEST_INFRASTRUCTURE.md`](docs/TEST_INFRASTRUCTURE.md).
+macOS without root. See [`docs/TEST_INFRASTRUCTURE.mbx.md`](docs/TEST_INFRASTRUCTURE.mbx.md).
 
 ---
 
@@ -200,7 +200,7 @@ Issues and PRs are welcome. A few things to know before contributing:
 | Windows (WSL2)        | Planned      |
 | MCP control surface   | Planned      |
 
-Full details: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Full details: [`docs/ROADMAP.mbx.md`](docs/ROADMAP.mbx.md).
 
 ---
 

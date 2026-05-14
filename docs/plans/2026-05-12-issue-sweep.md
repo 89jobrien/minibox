@@ -145,7 +145,7 @@ manifest size sum check in `pull_image` (around line 328).
 
 #### 1e. Update security docs
 
-**File**: `docs/SECURITY_INVARIANTS.md`
+**File**: `docs/SECURITY_INVARIANTS.mbx.md`
 
 Add entry documenting `MAX_TOTAL_IMAGE_SIZE`, the enforcing functions
 (`RegistryClient::pull_image`, `GhcrRegistry::pull_image`), and the

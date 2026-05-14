@@ -67,7 +67,7 @@ The design aligns with current supply-chain and container standards:
 - `crates/minibox/src/daemon/handler.rs`
 - `crates/minibox/src/daemon/state.rs`
 - `crates/minibox/tests/daemon_handler_tests.rs`
-- `docs/SECURITY_INVARIANTS.md`
+- `docs/SECURITY_INVARIANTS.mbx.md`
 
 - [ ] **Step 1:** Build an `ExecutionManifest` in the shared run preparation helper after image/rootfs/resource/network inputs are known and before `spawn_process`.
 - [ ] **Step 2:** Persist the manifest to `{containers_base}/{id}/execution-manifest.json` with owner-only permissions on Unix.
@@ -122,8 +122,8 @@ The design aligns with current supply-chain and container standards:
 
 **Files:**
 
-- `docs/ARCHITECTURE.md`
-- `docs/SECURITY_INVARIANTS.md`
+- `docs/ARCHITECTURE.mbx.md`
+- `docs/SECURITY_INVARIANTS.mbx.md`
 - `docs/superpowers/plans/2026-05-11-externally-verifiable-execution.md`
 - `README.md`
 
