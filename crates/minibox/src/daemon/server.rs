@@ -650,6 +650,16 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::RunWorkflow(_) => {
+            send_terminal_response(
+                &tx,
+                "RunWorkflow",
+                DaemonResponse::Error {
+                    message: "RunWorkflow not yet implemented".to_string(),
+                },
+            )
+            .await;
+        }
     }
 }
 

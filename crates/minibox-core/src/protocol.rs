@@ -37,7 +37,7 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::{BindMount, NetworkMode, SessionId};
+use crate::domain::{BindMount, NetworkMode, PhaseOutcome, SessionId, StepStatus, WorkflowDef};
 use serde::{Deserialize, Serialize};
 
 /// Serializable registry credentials for protocol transport.
@@ -394,6 +394,9 @@ pub enum DaemonRequest {
         /// JSON-serialized `ExecutionPolicy` to evaluate against.
         policy_json: String,
     },
+
+    /// Execute a sequential multi-container workflow.
+    RunWorkflow(WorkflowDef),
 }
 
 impl DaemonRequest {
@@ -426,6 +429,7 @@ impl DaemonRequest {
             Self::Update { .. } => "Update",
             Self::GetManifest { .. } => "GetManifest",
             Self::VerifyManifest { .. } => "VerifyManifest",
+            Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
 }
@@ -654,6 +658,22 @@ pub enum DaemonResponse {
         allowed: bool,
         /// Human-readable reason (populated on deny).
         reason: Option<String>,
+    },
+
+    /// Non-terminal: emitted after each workflow step completes.
+    WorkflowStepComplete {
+        /// The step alias that just finished.
+        alias: String,
+        /// Step output payload as a JSON value.
+        output: serde_json::Value,
+        /// Final status of the completed step.
+        status: StepStatus,
+    },
+
+    /// Terminal: emitted once when all workflow steps have been processed.
+    WorkflowComplete {
+        /// Worst-case outcome across all executed steps.
+        final_phase: PhaseOutcome,
     },
 }
 
