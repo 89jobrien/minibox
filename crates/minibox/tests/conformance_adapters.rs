@@ -171,7 +171,7 @@ fn conformance_noop_limiter_as_any_downcast() {
 }
 
 // ---------------------------------------------------------------------------
-// MockRegistry AsAny downcasting (from minibox_testers)
+// MockRegistry AsAny downcasting (from minibox::testing)
 // ---------------------------------------------------------------------------
 
 /// `MockRegistry` from minibox::testing can be cast to `Arc<dyn ImageRegistry>`
@@ -203,7 +203,7 @@ async fn conformance_mock_registry_as_any_downcast() {
 }
 
 // ---------------------------------------------------------------------------
-// MockRuntime AsAny downcasting (from minibox_testers)
+// MockRuntime AsAny downcasting (from minibox::testing)
 // ---------------------------------------------------------------------------
 
 /// `MockRuntime` from minibox::testing can be cast to `Arc<dyn ContainerRuntime>`

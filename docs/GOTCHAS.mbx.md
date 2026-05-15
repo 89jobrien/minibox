@@ -71,8 +71,8 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
 
 ## macbox
 
-- **Stale crate name** — the lib crate was briefly `linuxbox` (2026-04-21 to 2026-04-26). Any
-  `linuxbox::` reference is stale; use `minibox::`.
+- **Stale crate name** — the lib crate was briefly named `mbx` (2026-04-21 to 2026-04-26). Any
+  
 - **App Sandbox blocks fork** — see "macOS Notarization / App Sandbox Constraints" in CLAUDE.md
   for the full SBPL allowlist.
 

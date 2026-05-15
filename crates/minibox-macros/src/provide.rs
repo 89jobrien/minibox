@@ -2,7 +2,7 @@
 //!
 //! Intended for use inside LLM provider modules. References
 //! `crate::ProviderConfig` at the call site, so it expands against
-//! `minibox_llm`, not `minibox_macros`.
+//! `minibox-macros` call sites, not from within `minibox_macros` itself.
 //!
 //! # Examples
 //!

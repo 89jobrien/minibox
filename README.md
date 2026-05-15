@@ -212,4 +212,4 @@ Full details: [`docs/ROADMAP.mbx.md`](docs/ROADMAP.mbx.md).
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
 
-<sup>Previously named `linuxbox` and `mbx` during early development.</sup>
+<sup>Previously named `mbx` during early development.</sup>

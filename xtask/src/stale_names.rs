@@ -39,6 +39,11 @@ const SCANNED_EXTENSIONS: &[&str] = &["rs", "toml", "yml", "yaml", "sh", "nu", "
 const EXEMPT_PREFIXES: &[&str] = &[
     "CHANGELOG",
     "docs/superpowers",
+    "docs/DOCS_AUDIT",
+    "docs/CRATE_TIERS",
+    "docs/plans",
+    ".claude/commands",
+    "xtask/src/stale_names.rs",
     "docs/archive",
     "archive",
     ".git",
