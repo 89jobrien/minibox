@@ -238,7 +238,7 @@ Local validation should match CI. The commands that matter:
 3. **Before every push:** `cargo xtask prepush`
 
 GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
-`cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `stable` branches.
+`cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `staging` branches.
 
 ## Environment Variables
 

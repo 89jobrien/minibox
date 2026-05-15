@@ -80,10 +80,11 @@ Use `just` or `cargo xtask` for repeatable gates.
 
 Branches follow the stability pipeline:
 
-`main` -> `next` -> `stable` -> `v*` tag
+`develop` -> `next` -> `staging` -> `main` -> `v*` tag
 
-- Target feature, hotfix, and chore work at `main`.
-- Do not promote `next` to `stable` without confirming `next` CI is green.
+- Target feature, hotfix, and chore work at `develop`.
+- Do not promote `next` to `staging` without confirming `next` CI is green.
+- Do not promote `staging` to `main` without confirming `staging` CI is green.
 - Do not commit unless explicitly asked.
 - `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
 
