@@ -1,5 +1,7 @@
 # Plan: Issue Sweep (2026-05-12)
 
+Status: done
+
 ## Goal
 
 Close already-resolved issues and implement the remaining open fixes across

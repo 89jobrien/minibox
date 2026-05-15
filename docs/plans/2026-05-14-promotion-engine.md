@@ -1,5 +1,7 @@
 # Plan: Promotion Engine
 
+Status: done
+
 ## Goal
 
 Implement a multi-step workflow execution engine across minibox and crux, with an xtask promote

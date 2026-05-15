@@ -1,5 +1,7 @@
 # Lightweight Externally Verifiable Execution
 
+Status: done
+
 > **For agentic workers:** Run `/godmode:tackle-issues` to dispatch parallel subagents per task group. Use `/godmode:test-driven-development` for each implementation step. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add manifest-first externally verifiable execution to minibox by persisting deterministic run manifests and workload digests before adding policy enforcement and CLI verification.

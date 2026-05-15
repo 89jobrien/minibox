@@ -1,6 +1,6 @@
 # Plan: Advanced Testing Surfaces
 
-Status: draft
+Status: done
 Created: 2026-05-12
 Issues: #341 #342 #343 #344 #345 #346 #347 #348 #349 #350 #351
 

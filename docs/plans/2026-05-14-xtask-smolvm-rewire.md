@@ -1,5 +1,7 @@
 # Plan: xtask smolvm re-wire — cas overlay + test_linux adapters
 
+Status: done
+
 ## Goal
 
 Remove stale `#![allow(dead_code)]` suppressions from `xtask/src/cas.rs` and
