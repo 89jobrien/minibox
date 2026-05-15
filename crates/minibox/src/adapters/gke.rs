@@ -361,6 +361,11 @@ impl ContainerRuntime for ProotRuntime {
             output_reader,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // PRoot manages process lifecycle; the reaper thread handles cleanup.
+        Ok(0)
+    }
 }
 
 // ============================================================================

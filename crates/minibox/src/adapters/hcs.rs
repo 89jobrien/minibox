@@ -59,6 +59,10 @@ impl ContainerRuntime for HcsRuntime {
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         anyhow::bail!("HcsRuntime: not yet implemented (Phase 2)")
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        anyhow::bail!("HcsRuntime: not yet implemented (Phase 2)")
+    }
 }
 
 // ── HcsFilesystem ────────────────────────────────────────────────────────────

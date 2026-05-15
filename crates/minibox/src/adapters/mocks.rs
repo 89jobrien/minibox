@@ -507,6 +507,10 @@ impl ContainerRuntime for MockRuntime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        Ok(0)
+    }
 }
 
 // ---------------------------------------------------------------------------

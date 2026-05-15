@@ -240,6 +240,11 @@ impl ContainerRuntime for Wsl2Runtime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // WSL2 manages process lifecycle inside the Linux VM.
+        Ok(0)
+    }
 }
 
 /// WSL2-based implementation of [`FilesystemProvider`].

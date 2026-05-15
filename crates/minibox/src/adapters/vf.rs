@@ -60,6 +60,10 @@ impl ContainerRuntime for VfRuntime {
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         anyhow::bail!("VfRuntime: not yet implemented (Phase 2)")
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        anyhow::bail!("VfRuntime: not yet implemented (Phase 2)")
+    }
 }
 
 // ── VfFilesystem ─────────────────────────────────────────────────────────────

@@ -294,6 +294,11 @@ impl ContainerRuntime for SmolVmRuntime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // SmolVM manages its own process lifecycle inside the VM.
+        Ok(0)
+    }
 }
 
 // ============================================================================
