@@ -164,6 +164,65 @@ impl ReportGenerator {
         Ok(())
     }
 
+    /// Markdown summary report for artifact storage and PR comments.
+    pub fn markdown<W: Write>(w: &mut W, summary: &TestSummary) -> std::io::Result<()> {
+        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        let status = if summary.is_success() {
+            "PASSED"
+        } else {
+            "FAILED"
+        };
+
+        writeln!(w, "# Conformance Report")?;
+        writeln!(w)?;
+        writeln!(w, "**Date:** {now}  ")?;
+        writeln!(w, "**Result:** {status}  ")?;
+        writeln!(
+            w,
+            "**Summary:** {}/{} tests passed ({} failed, {} skipped) in {}ms",
+            summary.passed, summary.total, summary.failed, summary.skipped, summary.duration_ms
+        )?;
+        writeln!(w)?;
+
+        writeln!(w, "## Results by Module")?;
+        writeln!(w)?;
+        writeln!(w, "| Module | Pass | Fail | Skip | Duration (ms) |")?;
+        writeln!(w, "|--------|------|------|------|---------------|")?;
+
+        let mut adapter_names: Vec<&str> = summary.by_adapter().keys().copied().collect();
+        adapter_names.sort();
+
+        for adapter in &adapter_names {
+            let entries = &summary.by_adapter()[*adapter];
+            let pass = entries.iter().filter(|r| r.result.is_pass()).count();
+            let fail = entries.iter().filter(|r| r.result.is_fail()).count();
+            let skip = entries.iter().filter(|r| r.result.is_skipped()).count();
+            let ms: u64 = entries.iter().map(|r| r.duration_ms).sum();
+            writeln!(w, "| {adapter} | {pass} | {fail} | {skip} | {ms} |")?;
+        }
+
+        writeln!(w)?;
+
+        // Failure details section — only emitted when there are failures.
+        if summary.failed > 0 {
+            writeln!(w, "## Failures")?;
+            writeln!(w)?;
+            for adapter in &adapter_names {
+                let entries = &summary.by_adapter()[*adapter];
+                for r in entries.iter() {
+                    if let TestResult::Fail { reason } = &r.result {
+                        writeln!(w, "- **{}::{}** — {reason}", r.adapter, r.name)?;
+                    }
+                }
+            }
+            writeln!(w)?;
+        }
+
+        writeln!(w, "---")?;
+        writeln!(w, "*Status: {status}*")?;
+        Ok(())
+    }
+
     /// GitHub Actions annotation format — errors inline in PR diffs.
     pub fn github_actions<W: Write>(w: &mut W, summary: &TestSummary) -> std::io::Result<()> {
         for r in &summary.results {
