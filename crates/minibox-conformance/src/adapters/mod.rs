@@ -3,6 +3,7 @@
 //! Each module exposes an `all()` function returning `Vec<Box<dyn ConformanceTest>>`.
 //! The `run-conformance` binary collects all adapters and feeds them to `TestRunner`.
 
+pub mod container_id;
 pub mod limiter;
 pub mod registry;
 pub mod runtime;
@@ -17,5 +18,6 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     tests.extend(runtime::all());
     tests.extend(limiter::all());
     tests.extend(state::all());
+    tests.extend(container_id::all());
     tests
 }
