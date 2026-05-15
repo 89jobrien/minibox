@@ -3,6 +3,24 @@
 Canonical developer workflow for minibox. See `CLAUDE.md` for architecture
 details and `TESTING.md` for the full test strategy.
 
+## Quick Start for New Contributors
+
+Three commands cover 95% of daily development:
+
+```bash
+cargo xtask pre-commit   # before every commit: fmt-check + clippy + release build
+cargo xtask test-unit    # run all unit + conformance tests (any platform)
+cargo xtask prepush      # before every push: nextest suite + coverage
+```
+
+Install git hooks once after cloning:
+
+```bash
+just install-hooks
+```
+
+See the [Command Reference](#command-reference) table below for the full list.
+
 ## Prerequisites
 
 - Rust stable (edition 2024)
@@ -197,6 +215,91 @@ just clean-test              # remove test binaries
 just clean-stale [days]      # remove files older than N days (default: 7)
 cargo xtask nuke-test-state  # kill orphans, unmount overlays, clean cgroups
 ```
+
+## Command Reference
+
+All commands listed here exist in either `cargo xtask` or `just`. Commands
+marked _(Linux/root)_ require a Linux host with root privileges.
+
+### Quality Gates
+
+| Task                                  | Command                            | When to use                              |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| Before every commit                   | `cargo xtask pre-commit`           | fmt-check + clippy + release build       |
+| Before every push                     | `cargo xtask prepush`              | nextest suite + coverage check           |
+| Read-only local verification          | `cargo xtask verify`               | fmt + clippy + borrow fixtures + docs    |
+| Auto-fix formatting/clippy            | `cargo xtask fix`                  | mutates files; review diff after         |
+| Lint only (no build)                  | `cargo xtask lint`                 | fmt-check + clippy (CI lint gate)        |
+
+### Testing
+
+| Task                                  | Command                            | When to use                              |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| Unit + conformance tests              | `cargo xtask test-unit`            | Any platform; no root required           |
+| Property-based tests                  | `cargo xtask test-property`        | Any platform; proptest suite             |
+| Borrow-reasoning fixtures             | `cargo xtask borrow-fixtures`      | Standalone rustc must-pass/must-fail     |
+| Protocol e2e tests                    | `cargo xtask test-e2e`             | Any platform; no root required           |
+| Cgroup integration tests              | `just test-integration`            | Linux + root; cgroup v2                  |
+| Full-stack system tests               | `cargo xtask test-system-suite`    | Linux + root; daemon + CLI               |
+| Sandbox contract tests                | `cargo xtask test-sandbox`         | Linux + root; requires Docker Hub        |
+| Adapter isolation tests               | `just test-adapters`               | Any platform                             |
+| CLI subprocess tests                  | `just test-cli-subprocess`         | Any platform; builds mbx first           |
+| Linux dogfood (build + run in VM)     | `cargo xtask test-linux`           | macOS + smolvm; runs suite in container  |
+| Full pipeline                         | `just test-all`                    | Linux + root; nuke → all tests → nuke   |
+| Remote VPS e2e                        | `just test-e2e-vps`                | Runs test-system-suite on VPS over SSH   |
+| HTML coverage report                  | `just coverage`                    | Any platform; opens target/llvm-cov/     |
+
+### Codebase Integrity Checks
+
+| Task                                  | Command                                    | When to use                          |
+| ------------------------------------- | ------------------------------------------ | ------------------------------------ |
+| Detect stale crate/binary names       | `cargo xtask check-stale-names`            | After renames; CI gate               |
+| Verify protocol contract hashes       | `cargo xtask check-protocol-drift`         | After protocol.rs changes            |
+| Update protocol hash baseline         | `cargo xtask check-protocol-drift --update`| After intentional protocol changes   |
+| Verify HandlerDependencies site count | `cargo xtask check-protocol-sites`         | After adding/removing handler sites  |
+| Scan for `.unwrap()` in production    | `cargo xtask check-no-unwrap`              | Advisory; use `--strict` to fail     |
+| Verify adapter test coverage          | `cargo xtask check-adapter-coverage`       | After adding a new adapter           |
+| Check for tracked generated artifacts | `cargo xtask check-repo-clean`             | Before PRs                           |
+| Lint docs frontmatter                 | `cargo xtask lint-docs`                    | After editing docs/superpowers/      |
+
+### Build
+
+| Task                                  | Command                            | When to use                              |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| Debug build (all crates)              | `cargo build`                      | Fast iteration                           |
+| Release build (all crates)            | `cargo build --release`            | Pre-deployment check                     |
+| Optimised macOS-safe build            | `just build-release`               | macOS dev                                |
+| Static musl Linux binary              | `just build-linux`                 | Cross-compile for VPS deployment         |
+| Build + load test image               | `cargo xtask build-test-image`     | Required before `test-linux`             |
+
+### Cleanup
+
+| Task                                  | Command                            | When to use                              |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| Remove non-critical build outputs     | `cargo xtask clean-artifacts`      | After a release build                    |
+| Kill orphans, unmount overlays        | `cargo xtask nuke-test-state`      | After failed tests leave state behind    |
+| Full cargo clean                      | `just clean`                       | Nuclear option                           |
+| Remove stale build artifacts          | `just clean-stale [days]`          | Reclaim disk (default: 7 days)           |
+
+### Repo Context & Orchestration
+
+| Task                                  | Command                                      | When to use                        |
+| ------------------------------------- | -------------------------------------------- | ---------------------------------- |
+| Machine-readable repo snapshot (JSON) | `cargo xtask context`                        | Feed to agents or CI dashboards    |
+| Daily orchestration workflow          | `cargo xtask daily-orchestration`            | CI-driven; use `--dry-run` locally |
+| Host capability report                | `just doctor`                                | Verify cgroup/overlay/kernel state |
+| Preflight tool check                  | `cargo xtask preflight`                      | Verify cargo, nextest, gh on PATH  |
+
+### Benchmarks
+
+| Task                                  | Command                            | When to use                              |
+| ------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| Run criterion benchmarks              | `cargo xtask bench`                | Save results to bench/results/           |
+| Sync VPS bench results locally        | `just bench-sync`                  | Pull jsonl from remote                   |
+| Profile with samply/flamegraph        | `just flamegraph [suite]`          | macOS: samply; Linux: cargo-flamegraph   |
+| AI bench analysis                     | `just bench-agent report`          | Summarise bench/results/ with AI         |
+
+---
 
 ## scripts/ Directory
 
