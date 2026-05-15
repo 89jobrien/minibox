@@ -252,3 +252,15 @@ MockRegistry; Location B has public state structs).
 `DaemonState` persists container records to disk (atomic rename) on every
 add/remove. Records survive daemon restart; running processes do not reattach.
 State machine: Created -> Running -> Paused -> Stopped (+ Failed, Orphaned).
+
+---
+
+## Reference Documents
+
+| Document                                                    | Purpose                                              |
+| ----------------------------------------------------------- | ---------------------------------------------------- |
+| [`docs/FEATURE_MATRIX.mbx.md`](FEATURE_MATRIX.mbx.md)      | Per-adapter capability matrix (authoritative)        |
+| [`docs/GOTCHAS.mbx.md`](GOTCHAS.mbx.md)                    | Non-obvious Rust/container/protocol pitfalls         |
+| [`docs/TEST_INFRASTRUCTURE.mbx.md`](TEST_INFRASTRUCTURE.mbx.md) | Test categories, CI coverage, xtask commands    |
+| [`docs/STATE_MODEL.mbx.md`](STATE_MODEL.mbx.md)            | Daemon persistence model and state machine           |
+| [`docs/SECURITY_INVARIANTS.mbx.md`](SECURITY_INVARIANTS.mbx.md) | Security rules to preserve across changes       |

@@ -198,6 +198,12 @@ just clean-stale [days]      # remove files older than N days (default: 7)
 cargo xtask nuke-test-state  # kill orphans, unmount overlays, clean cgroups
 ```
 
+## Platform and Adapter Capabilities
+
+Full per-adapter feature status (exec, logs, networking, push, build, checkpoint, …) is
+documented in [`docs/FEATURE_MATRIX.mbx.md`](docs/FEATURE_MATRIX.mbx.md). Check there before
+assuming a capability is available on a given adapter.
+
 ## scripts/ Directory
 
 The `scripts/` directory contains AI agent tooling (council analysis,
