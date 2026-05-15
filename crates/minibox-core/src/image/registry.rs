@@ -1604,10 +1604,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2001,9 +1998,7 @@ mod tests {
         fn make_test_layer() -> (Vec<u8>, String) {
             let data = b"minibox parallel pull test layer";
             let mut header = tar::Header::new_gnu();
-            header
-                .set_path("layer.txt")
-                .expect("set tar entry path");
+            header.set_path("layer.txt").expect("set tar entry path");
             header.set_size(data.len() as u64);
             header.set_mode(0o644);
             header.set_cksum();
@@ -2037,8 +2032,7 @@ mod tests {
         async fn pull_image_second_layer_fails_first_cached() {
             let server = MockServer::start().await;
             let tmp = TempDir::new().expect("create tempdir");
-            let store = ImageStore::new(tmp.path().join("images"))
-                .expect("create image store");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
 
             let (layer1_bytes, layer1_digest) = make_test_layer();
             let layer2_digest =
@@ -2057,9 +2051,7 @@ mod tests {
             // Token
             Mock::given(method("GET"))
                 .and(path("/token"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
                 .mount(&server)
                 .await;
 
@@ -2068,10 +2060,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2131,15 +2120,12 @@ mod tests {
         async fn pull_image_all_layers_fail() {
             let server = MockServer::start().await;
             let tmp = TempDir::new().expect("create tempdir");
-            let store = ImageStore::new(tmp.path().join("images"))
-                .expect("create image store");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
             let (layer_bytes, layer_digest) = make_test_layer();
 
             Mock::given(method("GET"))
                 .and(path("/token"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
                 .mount(&server)
                 .await;
 
@@ -2147,10 +2133,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2196,15 +2179,12 @@ mod tests {
         async fn pull_image_manifest_not_stored_on_layer_failure() {
             let server = MockServer::start().await;
             let tmp = TempDir::new().expect("create tempdir");
-            let store = ImageStore::new(tmp.path().join("images"))
-                .expect("create image store");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
             let (layer_bytes, layer_digest) = make_test_layer();
 
             Mock::given(method("GET"))
                 .and(path("/token"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
                 .mount(&server)
                 .await;
 
@@ -2212,10 +2192,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2270,15 +2247,12 @@ mod tests {
         async fn pull_image_skips_cached_layers_on_repull() {
             let server = MockServer::start().await;
             let tmp = TempDir::new().expect("create tempdir");
-            let store = ImageStore::new(tmp.path().join("images"))
-                .expect("create image store");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
             let (layer_bytes, layer_digest) = make_test_layer();
 
             Mock::given(method("GET"))
                 .and(path("/token"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
                 .mount(&server)
                 .await;
 
@@ -2286,10 +2260,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2344,15 +2315,12 @@ mod tests {
         async fn pull_image_stale_tmp_dir_removed_on_repull() {
             let server = MockServer::start().await;
             let tmp = TempDir::new().expect("create tempdir");
-            let store = ImageStore::new(tmp.path().join("images"))
-                .expect("create image store");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
             let (layer_bytes, layer_digest) = make_test_layer();
 
             Mock::given(method("GET"))
                 .and(path("/token"))
-                .respond_with(
-                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
-                )
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
                 .mount(&server)
                 .await;
 
@@ -2360,10 +2328,7 @@ mod tests {
                 .and(path("/v2/library/alpine/manifests/latest"))
                 .respond_with(
                     ResponseTemplate::new(200)
-                        .insert_header(
-                            "content-type",
-                            "application/vnd.oci.image.manifest.v1+json",
-                        )
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
                         .set_body_json(json!({
                             "schemaVersion": 2,
                             "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -2400,11 +2365,9 @@ mod tests {
                 .join("latest")
                 .join("layers")
                 .join(format!("{digest_key}.tmp"));
-            std::fs::create_dir_all(&stale_tmp)
-                .expect("create stale tmp dir");
+            std::fs::create_dir_all(&stale_tmp).expect("create stale tmp dir");
             // Add a sentinel file so we can verify it was replaced.
-            std::fs::write(stale_tmp.join("stale_marker"), b"old")
-                .expect("write stale marker");
+            std::fs::write(stale_tmp.join("stale_marker"), b"old").expect("write stale marker");
 
             test_client(&server)
                 .pull_image("library/alpine", "latest", &store)
