@@ -36,11 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: |
-      needs.detect-changes.outputs.core == 'true' ||
-      needs.detect-changes.outputs.daemon == 'true' ||
-      needs.detect-changes.outputs.cli == 'true' ||
-      needs.detect-changes.outputs.runtime == 'true' ||
-      needs.detect-changes.outputs.xtask == 'true'
+      contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true' ||
+        needs.detect-changes.outputs.runtime == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true'
+      )
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -53,11 +55,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: |
-      needs.detect-changes.outputs.core == 'true' ||
-      needs.detect-changes.outputs.daemon == 'true' ||
-      needs.detect-changes.outputs.cli == 'true' ||
-      needs.detect-changes.outputs.runtime == 'true' ||
-      needs.detect-changes.outputs.xtask == 'true'
+      contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true' ||
+        needs.detect-changes.outputs.runtime == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true'
+      )
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
