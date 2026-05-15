@@ -18,6 +18,7 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+mod ci_watch;
 mod cleanup;
 mod collect_metrics;
 mod context;
@@ -207,6 +208,15 @@ fn main() -> Result<()> {
             let base_ref = env::args().nth(2).unwrap_or_else(|| "HEAD^".to_string());
             detect_changes::run(root, &base_ref)
         }
+        Some("ci-watch") => {
+            let branch = {
+                let args: Vec<String> = env::args().collect();
+                args.windows(2)
+                    .find(|w| w[0] == "--branch")
+                    .map(|w| w[1].clone())
+            };
+            ci_watch::ci_watch(&sh, branch.as_deref())
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -282,6 +292,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  detect-changes [<base-ref>]  classify changed paths; emit GHA outputs (default base: HEAD^)"
             );
+            eprintln!("  ci-watch [--branch <branch>]  watch latest GHA run with job-level detail");
             Ok(())
         }
     }
