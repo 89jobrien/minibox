@@ -26,11 +26,11 @@ def main [
         error make { msg: $"--from ($from) must be earlier in pipeline than --to ($to)" }
     }
 
-    let tiers = $pipeline | range $from_idx..$to_idx
+    let tiers = $pipeline | slice $from_idx..$to_idx
 
     # pairs: (source, dest) for each merge step
     let steps = $tiers | window 2 | each { |w| { src: $w.0, dst: $w.1 } }
-    let targets = $tiers | range 1.. # branches that will be pushed
+    let targets = $tiers | slice 1.. # branches that will be pushed
 
     print $"Promote: ($tiers | str join ' → ')"
 
