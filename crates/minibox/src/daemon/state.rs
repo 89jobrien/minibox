@@ -380,7 +380,23 @@ impl DaemonState {
                 }
             };
 
-            if !checker.is_alive(pid) {
+            if checker.is_alive(pid) {
+                // PID is still alive but the daemon has no reaper for it —
+                // the process will run to completion unmonitored.  Mark
+                // Orphaned so the operator sees an honest state rather than a
+                // phantom "Running" entry with no lifecycle tracking.
+                warn!(
+                    container_id = %record.info.id,
+                    pid = pid,
+                    "reconcile: container PID alive but unmonitored after restart — marking Orphaned"
+                );
+                record.info.state = "Orphaned".to_string();
+                // Preserve the PID in the record so operators can inspect the
+                // live process externally; clear the authoritative daemon PID
+                // field since the daemon no longer tracks it.
+                record.pid = None;
+                orphaned_count += 1;
+            } else {
                 warn!(
                     container_id = %record.info.id,
                     stale_pid = pid,
@@ -884,17 +900,21 @@ mod tests {
         );
     }
 
-    /// Issue #160: reconcile leaves actually-running containers alone.
+    /// Issue #160: reconcile marks Running containers with a live PID as Orphaned.
+    ///
+    /// A PID that is alive after restart means the process is running without a
+    /// daemon reaper.  The daemon cannot detect its eventual exit, so the honest
+    /// state is Orphaned — not Running.
     #[tokio::test]
-    async fn reconcile_leaves_live_containers_running() {
+    async fn reconcile_marks_live_pid_as_orphaned() {
         let tmp = TempDir::new().expect("tempdir");
 
         {
             let state = make_state_in(&tmp);
             let mut record = make_test_record();
             record.info.state = "Running".to_string();
-            record.info.pid = Some(1);
-            record.pid = Some(1);
+            record.info.pid = Some(std::process::id());
+            record.pid = Some(std::process::id());
             state.add_container(record).await;
         }
 
@@ -903,7 +923,35 @@ mod tests {
         state2.reconcile_on_startup(&AlwaysAliveChecker).await;
 
         let containers = state2.list_containers().await;
-        assert_eq!(containers[0].state, "Running");
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Running containers with live-but-unmonitored PIDs must become Orphaned after reconcile"
+        );
+    }
+
+    /// Issue #160: reconcile marks Running containers with a dead PID as Orphaned.
+    #[tokio::test]
+    async fn reconcile_marks_dead_pid_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Running".to_string();
+            record.info.pid = Some(99999999);
+            record.pid = Some(99999999);
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2.reconcile_on_startup(&NeverAliveChecker).await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Running containers with dead PIDs must become Orphaned after reconcile"
+        );
     }
 
     /// Issue #160: orphaned containers appear in `list_containers` (surfaced by `mbx ps`).
