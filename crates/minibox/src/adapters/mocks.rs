@@ -241,6 +241,14 @@ impl MockFilesystem {
         self
     }
 
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort filesystem cleanup path in `remove_inner`.
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state.lock().unwrap().cleanup_should_succeed = false;
+        self
+    }
+
     /// Return the number of times `setup_rootfs` has been called.
     pub fn setup_count(&self) -> usize {
         self.state.lock().unwrap().setup_count

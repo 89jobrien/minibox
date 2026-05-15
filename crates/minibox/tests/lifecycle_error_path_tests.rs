@@ -15,7 +15,7 @@ use minibox::adapters::mocks::{
     MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
 };
 use minibox::daemon::handler;
-use minibox::daemon::state::{ContainerRecord, ContainerState, DaemonState};
+use minibox::daemon::state::{ContainerRecord, DaemonState};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
@@ -183,12 +183,10 @@ async fn test_handle_resume_running_container_returns_not_paused_error() {
 
     let cgroup_path = temp_dir.path().join("cgroup-running");
     let id = "resume-running-001";
+    // Insert directly as "Running" — no transition needed.
+    // handle_resume checks state == "Paused", so this exercises the wrong-state branch.
     let record = make_record_with_state(id, "Running", cgroup_path);
     state.add_container(record).await;
-    state
-        .update_container_state(id, ContainerState::Running)
-        .await
-        .expect("mark running");
 
     let resp = handler::handle_resume(id.to_string(), state, noop_event_sink()).await;
 
@@ -210,17 +208,9 @@ async fn test_handle_resume_cgroup_write_fails_returns_error() {
     // Bad cgroup path — the directory does not exist.
     let bad_cgroup = temp_dir.path().join("nonexistent-cgroup2").join("minibox");
     let id = "resume-cgroup-fail-001";
-    let record = make_record_with_state(id, "Running", bad_cgroup);
+    // Insert directly as "Paused" so handle_resume's state check passes.
+    let record = make_record_with_state(id, "Paused", bad_cgroup);
     state.add_container(record).await;
-    // Transition Running -> Paused so handle_resume's state check passes.
-    state
-        .update_container_state(id, ContainerState::Running)
-        .await
-        .expect("mark running");
-    state
-        .update_container_state(id, ContainerState::Paused)
-        .await
-        .expect("mark paused");
 
     let resp = handler::handle_resume(id.to_string(), state, noop_event_sink()).await;
 
@@ -246,12 +236,9 @@ async fn test_handle_remove_running_container_returns_error() {
 
     let id = "remove-running-001";
     let cgroup_path = temp_dir.path().join("cgroup-remove-running");
+    // Insert directly as "Running" — remove_inner checks state == "Running" and rejects.
     let record = make_record_with_state(id, "Running", cgroup_path);
     state.add_container(record).await;
-    state
-        .update_container_state(id, ContainerState::Running)
-        .await
-        .expect("mark running");
 
     let runtime = Arc::new(MockRuntime::new());
     let filesystem = Arc::new(MockFilesystem::new());

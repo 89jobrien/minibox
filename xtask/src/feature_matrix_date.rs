@@ -7,18 +7,15 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 const FEATURE_MATRIX: &str = "docs/FEATURE_MATRIX.mbx.md";
 
 /// Rewrite the `Last updated:` line in FEATURE_MATRIX.mbx.md to today's UTC date.
 pub fn update_feature_matrix_date(root: &Path) -> Result<()> {
     let path = root.join(FEATURE_MATRIX);
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
 
     let today = Utc::now().format("%Y-%m-%d").to_string();
     let updated = rewrite_date(&content, &today);

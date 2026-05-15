@@ -119,8 +119,7 @@ pub fn collect_metrics(root: &Path, save: bool) -> Result<()> {
 
     let mut source_lines = 0usize;
     let mut test_count = 0usize;
-    scan_rs_files(root, &mut source_lines, &mut test_count)
-        .context("scan source files")?;
+    scan_rs_files(root, &mut source_lines, &mut test_count).context("scan source files")?;
 
     let snapshot = MetricsSnapshot {
         collected_at,
@@ -136,8 +135,7 @@ pub fn collect_metrics(root: &Path, save: bool) -> Result<()> {
         let dir = root.join("metrics");
         std::fs::create_dir_all(&dir).context("create metrics/")?;
         let dest = dir.join("latest.json");
-        std::fs::write(&dest, &json)
-            .with_context(|| format!("write {}", dest.display()))?;
+        std::fs::write(&dest, &json).with_context(|| format!("write {}", dest.display()))?;
         eprintln!("Metrics saved to {}", dest.display());
     } else {
         println!("{json}");
@@ -155,10 +153,7 @@ mod tests {
     use std::io::Write;
 
     fn make_tmp() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "collect_metrics_test_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("collect_metrics_test_{}", std::process::id()));
         fs::create_dir_all(&dir).expect("create tmp dir");
         dir
     }
