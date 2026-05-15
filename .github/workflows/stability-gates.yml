@@ -2,7 +2,7 @@ name: Stability Gates
 
 on:
   push:
-    branches: [main, next, staging, stable, "feature/*", "hotfix/*", "chore/*", "feat/*"]
+    branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*", "feat/*"]
   pull_request:
     branches: [main, next]
 

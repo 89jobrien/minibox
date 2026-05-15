@@ -2,7 +2,7 @@ name: macOS
 
 on:
   push:
-    branches: [main, next, staging, stable, "feature/*", "hotfix/*", "chore/*"]
+    branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*"]
   pull_request:
     branches: [main, next]
 
