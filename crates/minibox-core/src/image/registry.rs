@@ -1803,6 +1803,72 @@ mod tests {
             );
             assert!(s.next().await.is_none(), "stream must be exhausted");
         }
+
+        // --- Tests added for #152 ---
+
+        /// A limit of zero must reject the very first non-empty chunk.
+        #[tokio::test]
+        async fn zero_limit_rejects_first_byte() {
+            let data: Vec<Vec<u8>> = vec![b"x".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 0);
+            let result = s
+                .next()
+                .await
+                .expect("stream should yield an item even when limit is zero");
+            assert!(result.is_err(), "zero-limit stream must reject first byte");
+            assert_eq!(
+                result.unwrap_err().kind(),
+                std::io::ErrorKind::InvalidData,
+                "error kind must be InvalidData for zero-limit violation"
+            );
+        }
+
+        /// A chunk that straddles the boundary (contains bytes both before and
+        /// after the limit) must be rejected in its entirety — no partial
+        /// forwarding of the permitted prefix.
+        #[tokio::test]
+        async fn chunk_straddles_boundary_rejected_whole() {
+            // Limit is 3; first chunk has 2 bytes (ok), second has 3 bytes
+            // which pushes consumed to 5 — one past the limit.
+            let data: Vec<Vec<u8>> = vec![b"ab".to_vec(), b"cde".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 4);
+            // First chunk (2 bytes, total 2) must pass.
+            assert!(
+                s.next().await.unwrap().is_ok(),
+                "first chunk must pass (well under limit)"
+            );
+            // Second chunk (3 bytes, total 5 > 4) must be rejected wholesale.
+            let result = s
+                .next()
+                .await
+                .expect("stream must yield an item for the boundary-straddling chunk");
+            assert!(
+                result.is_err(),
+                "chunk straddling the boundary must be rejected entirely"
+            );
+            assert_eq!(
+                result.unwrap_err().kind(),
+                std::io::ErrorKind::InvalidData,
+                "error kind must be InvalidData"
+            );
+        }
+
+        /// `consumed()` must include the bytes from the chunk that triggered
+        /// the error — the rejected chunk is still counted.
+        #[tokio::test]
+        async fn consumed_reflects_rejected_chunk() {
+            // Limit 3; single chunk of 5 bytes → error on first poll.
+            let data: Vec<Vec<u8>> = vec![b"hello".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 3);
+            let result = s.next().await.expect("stream must yield an item");
+            assert!(result.is_err(), "limit must be exceeded");
+            // consumed() must reflect the 5 bytes from the rejected chunk.
+            assert_eq!(
+                s.consumed(),
+                5,
+                "consumed() must include bytes from the rejected chunk"
+            );
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1838,6 +1904,463 @@ mod tests {
             assert!(
                 !msg.contains("(unknown)"),
                 "error message must not fall back to '(unknown)'; got: {msg}"
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Parallel pull failure model tests (#152)
+    // -------------------------------------------------------------------------
+
+    mod parallel_pull {
+        use super::super::*;
+        use crate::image::ImageStore;
+        use flate2::{Compression, write::GzEncoder};
+        use serde_json::json;
+        use sha2::{Digest as ShaDigest, Sha256};
+        use std::io::Write;
+        use tempfile::TempDir;
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn test_client(server: &MockServer) -> RegistryClient {
+            let mut client = RegistryClient::for_test(
+                &format!("{}/token", server.uri()),
+                &format!("{}/v2", server.uri()),
+            )
+            .expect("create test client");
+            client.platform = crate::image::manifest::TargetPlatform::linux_amd64();
+            client
+        }
+
+        fn make_test_layer() -> (Vec<u8>, String) {
+            let data = b"minibox parallel pull test layer";
+            let mut header = tar::Header::new_gnu();
+            header
+                .set_path("layer.txt")
+                .expect("set tar entry path");
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+
+            let mut tar_buf = Vec::new();
+            {
+                let mut builder = tar::Builder::new(&mut tar_buf);
+                builder
+                    .append(&header, data.as_ref())
+                    .expect("append tar entry");
+                builder.finish().expect("finish tar archive");
+            }
+
+            let mut gz = GzEncoder::new(Vec::new(), Compression::fast());
+            gz.write_all(&tar_buf).expect("gz write");
+            let bytes = gz.finish().expect("gz finish");
+            let digest = format!("sha256:{}", hex::encode(Sha256::digest(&bytes)));
+            (bytes, digest)
+        }
+
+        // ------------------------------------------------------------------
+        // §3.1 / §1.4 — layers that completed before the first error persist
+        // ------------------------------------------------------------------
+
+        /// First layer is pre-cached on disk; second layer returns HTTP 500.
+        /// After pull_image returns Err, the first layer directory must still
+        /// exist (§1.4, §3.1).  Pre-caching layer 1 makes the test
+        /// deterministic: the cached-layer early-exit fires before any network
+        /// request, guaranteeing it is present when the second layer fails.
+        #[tokio::test]
+        async fn pull_image_second_layer_fails_first_cached() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images"))
+                .expect("create image store");
+
+            let (layer1_bytes, layer1_digest) = make_test_layer();
+            let layer2_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000002";
+
+            // Pre-create the layer1 directory so it is treated as cached.
+            let layer1_key = layer1_digest.replace(':', "_");
+            let layer1_dir = store
+                .base_dir
+                .join("library_alpine")
+                .join("latest")
+                .join("layers")
+                .join(&layer1_key);
+            std::fs::create_dir_all(&layer1_dir).expect("pre-create layer1 dir");
+
+            // Token
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
+                )
+                .mount(&server)
+                .await;
+
+            // Manifest with two layers
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": layer1_bytes.len() as u64,
+                                    "digest": layer1_digest
+                                },
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": 999,
+                                    "digest": layer2_digest
+                                }
+                            ]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            // Only layer 2 needs a network endpoint (layer 1 is cached).
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("internal error"))
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("HTTP 500") || chain.contains("layer"),
+                "unexpected error chain: {chain}"
+            );
+
+            // Layer 1 directory must still exist after the failure (§3.1).
+            assert!(
+                layer1_dir.exists(),
+                "layer 1 dir must persist after second-layer failure: {layer1_dir:?}"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §1.3 / §3.4 — all layers fail, no manifest stored
+        // ------------------------------------------------------------------
+
+        /// When all blobs return HTTP 500, pull_image returns an error and
+        /// no manifest file is written (§1.3, §3.4).
+        #[tokio::test]
+        async fn pull_image_all_layers_fail() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images"))
+                .expect("create image store");
+            let (layer_bytes, layer_digest) = make_test_layer();
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": layer_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("internal error"))
+                .mount(&server)
+                .await;
+
+            test_client(&server)
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .unwrap_err();
+
+            assert!(
+                !store.has_image("library/alpine", "latest"),
+                "manifest must not be stored when all layers fail"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §3.4 / §1.1 — manifest not stored on layer failure
+        // ------------------------------------------------------------------
+
+        /// A single-layer pull that fails must leave `has_image` returning
+        /// false — the manifest is written only after all layers succeed (§3.4).
+        #[tokio::test]
+        async fn pull_image_manifest_not_stored_on_layer_failure() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images"))
+                .expect("create image store");
+            let (layer_bytes, layer_digest) = make_test_layer();
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": layer_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("internal error"))
+                .mount(&server)
+                .await;
+
+            let _ = test_client(&server)
+                .pull_image("library/alpine", "latest", &store)
+                .await;
+
+            assert!(
+                !store.has_image("library/alpine", "latest"),
+                "has_image must return false when layer pull failed"
+            );
+            // Verify the manifest file itself is absent
+            let manifest_path = store
+                .base_dir
+                .join("library_alpine")
+                .join("latest")
+                .join("manifest.json");
+            assert!(
+                !manifest_path.exists(),
+                "manifest.json must not exist after failed pull: {manifest_path:?}"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §4.3 — cached layers are skipped on re-pull
+        // ------------------------------------------------------------------
+
+        /// Running pull_image twice should only fetch each blob once; the
+        /// second pull finds the layer directory already present and skips it.
+        #[tokio::test]
+        async fn pull_image_skips_cached_layers_on_repull() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images"))
+                .expect("create image store");
+            let (layer_bytes, layer_digest) = make_test_layer();
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": layer_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            // Blob endpoint — expect exactly ONE call across both pull_image invocations.
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer_bytes),
+                )
+                .expect(1) // second pull must hit the cache, not the network
+                .mount(&server)
+                .await;
+
+            let client = test_client(&server);
+            client
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .expect("first pull must succeed");
+            client
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .expect("second pull must succeed (from cache)");
+
+            // wiremock will assert the `.expect(1)` on drop
+        }
+
+        // ------------------------------------------------------------------
+        // §4.3 — stale tmp dir is removed before extraction
+        // ------------------------------------------------------------------
+
+        /// If a `*.tmp` directory from a previous failed pull is present on
+        /// disk when pull_image runs, it must be removed before the new
+        /// extraction begins (§4.3).
+        #[tokio::test]
+        async fn pull_image_stale_tmp_dir_removed_on_repull() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images"))
+                .expect("create image store");
+            let (layer_bytes, layer_digest) = make_test_layer();
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": layer_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            // Manually create a stale tmp directory where pull_image expects it.
+            let digest_key = layer_digest.replace(':', "_");
+            let stale_tmp = store
+                .base_dir
+                .join("library_alpine")
+                .join("latest")
+                .join("layers")
+                .join(format!("{digest_key}.tmp"));
+            std::fs::create_dir_all(&stale_tmp)
+                .expect("create stale tmp dir");
+            // Add a sentinel file so we can verify it was replaced.
+            std::fs::write(stale_tmp.join("stale_marker"), b"old")
+                .expect("write stale marker");
+
+            test_client(&server)
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .expect("pull must succeed despite stale tmp dir");
+
+            // The layer dir (not tmp) must now exist with the fresh content.
+            let layer_dir = store
+                .base_dir
+                .join("library_alpine")
+                .join("latest")
+                .join("layers")
+                .join(&digest_key);
+            assert!(
+                layer_dir.exists(),
+                "layer dir must exist after successful pull: {layer_dir:?}"
+            );
+            // The stale marker file must be gone (tmp was removed and recreated).
+            assert!(
+                !layer_dir.join("stale_marker").exists(),
+                "stale marker file must not appear in the final layer dir"
             );
         }
     }
