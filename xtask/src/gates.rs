@@ -349,22 +349,19 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
 /// Coverage-check gate: run llvm-cov on minibox, parse handler.rs function coverage,
 /// and exit non-zero when it falls below the 80% threshold.
 ///
-/// The function scrapes the per-file summary line emitted by `cargo llvm-cov` in its
-/// default text output, which looks like:
-///
-/// ```text
-/// handler.rs          |  80.00 |  ...  |  82.35 |  ...
-/// ```
-///
-/// Column order (0-based): Filename | Line% | Lines | Fns% | Fns | ...
-/// We look for the function-coverage column (index 3) on the `handler.rs` row.
+/// Uses `--json --summary-only` which emits a JSON document to stdout containing
+/// per-file function coverage summaries. We find the entry for `handler.rs` and
+/// read `summary.functions.percent`.
 pub fn coverage_check(sh: &Shell) -> Result<()> {
     const THRESHOLD: f64 = 80.0;
 
-    // Run llvm-cov with text output so we can parse per-file function coverage.
-    let output = cmd!(sh, "cargo llvm-cov nextest --package minibox --text")
-        .output()
-        .context("cargo llvm-cov nextest failed")?;
+    // --json --summary-only emits the coverage JSON to stdout.
+    let output = cmd!(
+        sh,
+        "cargo llvm-cov nextest --package minibox --json --summary-only"
+    )
+    .output()
+    .context("cargo llvm-cov nextest failed")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -444,27 +441,90 @@ pub fn check_repo_cleanliness(sh: &Shell) {
     }
 }
 
-/// Parse the function-coverage percentage for `handler.rs` from `cargo llvm-cov --text` output.
+/// Parse the function-coverage percentage for `handler.rs` from
+/// `cargo llvm-cov nextest --json --summary-only` stdout.
 ///
-/// The text table has pipe-delimited columns. We look for a row whose first column contains
-/// `handler.rs` and return the value from the "Fns%" column (column index 3, 1-based: 4th).
+/// The JSON schema (llvm.coverage.json.export v3) looks like:
+/// ```json
+/// {"data":[{"files":[
+///   {"filename":"…/daemon/handler.rs",
+///    "summary":{"functions":{"count":205,"covered":84,"percent":40.97}}}
+/// ]}]}
+/// ```
+///
+/// We walk the JSON text with a simple substring search to avoid a JSON
+/// dependency in xtask: find the first `"filename"` field whose value ends
+/// with `handler.rs`, then find the `"functions"` summary block immediately
+/// after and extract `"percent"`.
 fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
-    for line in output.lines() {
-        // Only process lines that mention the target file.
-        if !line.contains("handler.rs") {
-            continue;
-        }
-        // Columns are pipe-separated; trim whitespace around each segment.
-        let cols: Vec<&str> = line.split('|').map(str::trim).collect();
-        // Expected layout: Filename | Line% | Lines | Fns% | Fns | ...
-        // Index:              0         1       2       3      4
-        if cols.len() >= 4
-            && let Ok(pct) = cols[3].trim_end_matches('%').parse::<f64>()
-        {
-            return Some(pct);
-        }
+    // Find the segment of the JSON that belongs to handler.rs.
+    let handler_pos = output.find("handler.rs\"")?;
+
+    // The functions summary appears after the filename, e.g.:
+    //   "summary":{"branches":{...},"functions":{"count":205,"covered":84,"percent":40.97},...}
+    // Scan forward from handler_pos to find `"functions":`.
+    let fns_key = "\"functions\":";
+    let fns_pos = output[handler_pos..].find(fns_key)?;
+    let after_fns = &output[handler_pos + fns_pos + fns_key.len()..];
+
+    // Extract the percent value from the functions object.
+    let pct_key = "\"percent\":";
+    let pct_pos = after_fns.find(pct_key)?;
+    let after_pct = &after_fns[pct_pos + pct_key.len()..];
+
+    // Read digits (and optional decimal point) up to the next comma or `}`.
+    let end = after_pct.find(|c: char| !c.is_ascii_digit() && c != '.')?;
+    after_pct[..end].parse::<f64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_handler_fn_coverage;
+
+    /// The parser must extract the function percent from a realistic JSON snippet.
+    #[test]
+    fn parse_handler_fn_coverage_extracts_pct_from_json() {
+        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"branches":{"count":0,"covered":0,"notcovered":0,"percent":0.0},"functions":{"count":205,"covered":84,"percent":40.97560975609756},"lines":{"count":3748,"covered":1532,"percent":40.88}}}]}]}"#;
+        let result =
+            parse_handler_fn_coverage(sample).expect("should find function percent in JSON output");
+        assert!(
+            (result - 40.97).abs() < 0.01,
+            "expected ~40.97, got {result}"
+        );
     }
-    None
+
+    /// A JSON snippet with handler.rs at exactly 80% should be recognised.
+    #[test]
+    fn parse_handler_fn_coverage_recognises_80_percent() {
+        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"functions":{"count":10,"covered":8,"percent":80.0}}}]}]}"#;
+        let result = parse_handler_fn_coverage(sample).expect("should find 80.0 percent");
+        assert!((result - 80.0).abs() < 0.001, "expected 80.0, got {result}");
+    }
+
+    /// JSON without handler.rs returns None.
+    #[test]
+    fn parse_handler_fn_coverage_ignores_unrelated_files() {
+        let sample = r#"{"data":[{"files":[{"filename":"/path/to/mocks.rs","summary":{"functions":{"count":71,"covered":66,"percent":92.96}}}]}]}"#;
+        assert!(parse_handler_fn_coverage(sample).is_none());
+    }
+
+    /// Returns None on empty input.
+    #[test]
+    fn parse_handler_fn_coverage_returns_none_on_empty_input() {
+        assert!(parse_handler_fn_coverage("").is_none());
+    }
+
+    /// The 80% threshold is the documented contract.
+    #[test]
+    fn coverage_threshold_is_80_percent() {
+        const THRESHOLD: f64 = 80.0;
+        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"functions":{"count":10,"covered":8,"percent":80.0}}}]}]}"#;
+        let pct = parse_handler_fn_coverage(sample).expect("should parse 80.0%");
+        assert!(
+            pct >= THRESHOLD,
+            "80.0% must satisfy the 80% threshold; got {pct}"
+        );
+    }
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) differ between
