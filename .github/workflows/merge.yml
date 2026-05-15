@@ -75,6 +75,7 @@ jobs:
   build-test-archive:
     name: build test archive
     runs-on: ubuntu-latest
+    needs: [lint]
     if: contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
