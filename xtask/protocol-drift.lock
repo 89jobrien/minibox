@@ -5,12 +5,12 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "95f4ef8661c9f36dab695b561d2bfcac72b5e9d0e890f4c804a974659d1496a3"
+      "hash": "31bacfd0ae5283dbba38ea4a03083b212ffbcb3a6880c72839c2f6b3f9f58353"
     },
     {
       "name": "domain-ports",
       "path": "crates/minibox-core/src/domain.rs",
-      "hash": "51340bb673dcfd6c373c6aaf50ccc8084c9784c7f6303fd1c388d3749870c47c"
+      "hash": "dbb33d1db2ac86692760e3d002e48ea1bd1f9f4824d7f063ab3e9cd7be4fa797"
     },
     {
       "name": "domain-networking",
