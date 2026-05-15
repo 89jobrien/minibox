@@ -34,10 +34,8 @@ def "main regress" [
     --threshold: float = 10.0  # Regression threshold % (default: 10)
     --max-turns: int = 15      # Max agent turns
 ] {
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py")
-        --max-turns ($max_turns | into string)
-        regress
-        --threshold ($threshold | into string)
+    let args = ["--max-turns" ($max_turns | into string) "regress" "--threshold" ($threshold | into string)]
+    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") ...$args
 }
 
 # Clean up stale result files
