@@ -177,6 +177,10 @@ Local validation should match CI. The commands that matter:
 GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
 `cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `stable` branches.
 
+For the full list of mandatory gates (fmt, clippy, nextest, coverage >= 80%,
+`check-protocol-drift`, `check-stale-names`, `check-protocol-sites`) and advisory items,
+see [`docs/STABILITY_CHECKLIST.mbx.md`](docs/STABILITY_CHECKLIST.mbx.md).
+
 ## Environment Variables
 
 | Variable               | Purpose                                          | Default                             |
