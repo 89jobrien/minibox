@@ -199,7 +199,7 @@ fn main() -> Result<()> {
                 .windows(2)
                 .find(|w| w[0] == "--expected")
                 .and_then(|w| w[1].parse().ok())
-                .unwrap_or(3);
+                .unwrap_or(4);
             let warn_only = env::args().any(|a| a == "--warn-only");
             protocol_sites::check_protocol_sites(&file, expected, warn_only)
         }

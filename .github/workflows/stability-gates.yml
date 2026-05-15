@@ -101,7 +101,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask check-protocol-sites
-        run: cargo xtask check-protocol-sites miniboxd/src/main.rs --expected 3
+        run: cargo xtask check-protocol-sites miniboxd/src/main.rs --expected 4
 
   cancel-on-failure:
     name: cancel on failure

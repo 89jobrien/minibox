@@ -3,8 +3,8 @@ use std::{fs, path::Path};
 
 /// CI guard: verify HandlerDependencies construction site count in miniboxd/src/main.rs.
 ///
-/// When a field is added to `HandlerDependencies`, all three adapter suites (native, gke,
-/// colima) must be updated together. This check fails if the count deviates from `expected`.
+/// When a field is added to `HandlerDependencies`, all four adapter suites (native, gke,
+/// colima, krun) must be updated together. This check fails if the count deviates from `expected`.
 pub fn check_protocol_sites(file: &Path, expected: usize, warn_only: bool) -> Result<()> {
     let content = fs::read_to_string(file)
         .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", file.display()))?;
