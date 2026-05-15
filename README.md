@@ -102,7 +102,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 24 request variants, 22 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 26 request variants, 24 response variants.
 Canonical source: `minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`docs/ARCHITECTURE.mbx.md`](docs/ARCHITECTURE.mbx.md).
@@ -146,7 +146,7 @@ just test-integration        # cgroup tests (Linux + root)
 just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
 
-The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
+The conformance suite runs 29 backend-agnostic tests against every adapter. Unit tests run on
 macOS without root. See [`docs/TEST_INFRASTRUCTURE.mbx.md`](docs/TEST_INFRASTRUCTURE.mbx.md).
 
 ---

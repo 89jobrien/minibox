@@ -94,7 +94,7 @@ Last updated: 2026-05-14
   when the binary is absent. Lightweight Linux VMs with subsecond boot.
 - **`krun` adapter** uses libkrun to run containers in lightweight VMs.
   All four adapter ports (runtime, registry, filesystem, limiter) are wired
-  into the daemon and pass 31 conformance tests. Acts as the fallback when
+  into the daemon and pass 29 conformance tests. Acts as the fallback when
   `smolvm` is unavailable.
 - **`docker_desktop` adapter** (`DockerDesktopRuntime`/`Filesystem`/`Limiter`)
   exists in `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
