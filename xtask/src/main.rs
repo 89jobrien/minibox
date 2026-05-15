@@ -19,6 +19,7 @@ mod bump;
 mod cas;
 mod cgroup_tests;
 mod cleanup;
+mod collect_metrics;
 mod context;
 mod daily_orchestration;
 mod docs_lint;
@@ -145,6 +146,10 @@ fn main() -> Result<()> {
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
         Some("bench") => bench::bench(&sh, root),
+        Some("collect-metrics") => {
+            let save = env::args().any(|a| a == "--save");
+            collect_metrics::collect_metrics(root, save)
+        }
         Some("context") => {
             let save = env::args().any(|a| a == "--save");
             context::context(&sh, root, save)
@@ -244,6 +249,9 @@ fn main() -> Result<()> {
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(
                 "  check-protocol-drift [--update] [--warn-only] [--hook]  verify core contract hashes"
+            );
+            eprintln!(
+                "  collect-metrics [--save]  aggregate crate count, test count, source lines, feature matrix date (JSON)"
             );
             eprintln!("  context [--save]  dump machine-readable repo context snapshot (JSON)");
             eprintln!(
