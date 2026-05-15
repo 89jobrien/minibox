@@ -8,9 +8,39 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      core:        ${{ steps.dc.outputs.core }}
+      daemon:      ${{ steps.dc.outputs.daemon }}
+      cli:         ${{ steps.dc.outputs.cli }}
+      runtime:     ${{ steps.dc.outputs.runtime }}
+      conformance: ${{ steps.dc.outputs.conformance }}
+      xtask:       ${{ steps.dc.outputs.xtask }}
+      docs:        ${{ steps.dc.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: detect changes
+        id: dc
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: cargo xtask detect-changes "$BASE_REF"
+
   lint:
     name: lint + fmt
     runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.daemon == 'true' ||
+      needs.detect-changes.outputs.cli == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.xtask == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -21,7 +51,12 @@ jobs:
   test-unit:
     name: unit tests
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect-changes, lint]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.daemon == 'true' ||
+      needs.detect-changes.outputs.cli == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable

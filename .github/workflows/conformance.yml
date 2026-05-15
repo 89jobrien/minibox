@@ -15,9 +15,42 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      core:        ${{ steps.dc.outputs.core }}
+      runtime:     ${{ steps.dc.outputs.runtime }}
+      conformance: ${{ steps.dc.outputs.conformance }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: detect changes
+        id: dc
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="$BASE_REF"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BASE="origin/main"
+          else
+            BASE="HEAD^"
+          fi
+          cargo xtask detect-changes "$BASE"
+
   conformance:
     name: conformance suite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.conformance == 'true'
     strategy:
       fail-fast: false
       matrix:
