@@ -2,6 +2,9 @@
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
+> **Status**: Stabilization freeze active — see [CONTRIBUTING.md](CONTRIBUTING.md) and
+> [docs/STABILITY_CHECKLIST.mbx.md](docs/STABILITY_CHECKLIST.mbx.md).
+
 A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
