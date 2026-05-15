@@ -50,7 +50,7 @@ the domain traits from `minibox-core` for its target platform.
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macbox` | `crates/macbox` | macOS adapter suite: krun (libkrun micro-VMs) and VZ backends. Colima and smolvm adapters live in `minibox` but are wired via macbox's daemon entry point. |
+| `macbox` | `crates/macbox` | macOS adapter suite: krun (libkrun micro-VMs) backend. Colima and smolvm adapters live in `minibox` but are wired via macbox's daemon entry point. |
 | `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
 
 Note: `dockerbox` and `tailbox` were extracted to the separate `minibox-plugins`
