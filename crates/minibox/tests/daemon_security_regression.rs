@@ -12,8 +12,10 @@ mod security_regression {
 
     // -------------------------------------------------------------------------
     // Socket auth — SO_PEERCRED UID gate
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     // -------------------------------------------------------------------------
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn root_uid_accepted_when_root_required() {
         let creds = PeerCreds { uid: 0, pid: 1234 };
@@ -23,6 +25,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn non_root_uid_rejected_when_root_required() {
         let creds = PeerCreds {
@@ -35,6 +38,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn uid_1_rejected_when_root_required() {
         // UID 1 (daemon user) must not bypass the root gate.
@@ -45,6 +49,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn any_uid_accepted_when_root_not_required() {
         let non_root = PeerCreds { uid: 1000, pid: 42 };
@@ -60,6 +65,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn missing_creds_accepted_when_root_not_required() {
         // Platforms without SO_PEERCRED (e.g. Windows named pipes) pass None.
@@ -70,6 +76,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn missing_creds_rejected_when_root_required() {
         // When creds are unavailable (None) and root auth is required, the
@@ -81,6 +88,7 @@ mod security_regression {
         );
     }
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     #[test]
     fn max_uid_rejected_when_root_required() {
         // Boundary check: u32::MAX must not be treated as root.
@@ -98,6 +106,7 @@ mod security_regression {
     // Exhaustive cross-product: (require_root: bool) x (uid: None, Some(...))
     // -------------------------------------------------------------------------
 
+    // Invariant: 7 — SO_PEERCRED Unix Socket Authentication
     /// Enumerate ALL valid inputs for `is_authorized` over the full cross product
     /// of `require_root_auth` ∈ {false, true} and
     /// `uid` ∈ {None, Some(0), Some(1), Some(500), Some(65534), Some(u32::MAX)}.

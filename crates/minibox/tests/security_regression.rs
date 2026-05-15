@@ -127,6 +127,7 @@ fn raw_tar_gz_with_traversal_filename(filename: &str) -> Vec<u8> {
 /// tar archive hoping to write a file outside the container rootfs.
 ///
 /// Guards: commit `8ea4f73` — `validate_tar_entry_path` rejects `..` components.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
 #[test]
 fn regression_zip_slip_dotdot_prefix_is_rejected() {
     let dest = TempDir::new().expect("unwrap in test");
@@ -153,6 +154,7 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
 /// Example: `foo/../../etc/cron.d/evil` — looks like a sub-path but resolves above dest.
 ///
 /// Guards: commit `8ea4f73`.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
 #[test]
 fn regression_zip_slip_dotdot_in_middle_is_rejected() {
     let dest = TempDir::new().expect("unwrap in test");
@@ -179,6 +181,7 @@ fn regression_zip_slip_dotdot_in_middle_is_rejected() {
 ///
 /// Guards: commit `8ea4f73` — `EntryType::Block` / `EntryType::Char` are
 /// rejected before `unpack_in` is called.
+// Invariant: 2 — Device Node Extraction Rejection
 #[test]
 fn regression_block_device_node_is_rejected() {
     let dest = TempDir::new().expect("unwrap in test");
@@ -204,6 +207,7 @@ fn regression_block_device_node_is_rejected() {
 /// access serial devices.
 ///
 /// Guards: commit `8ea4f73`.
+// Invariant: 2 — Device Node Extraction Rejection
 #[test]
 fn regression_char_device_node_is_rejected() {
     let dest = TempDir::new().expect("unwrap in test");
@@ -231,6 +235,7 @@ fn regression_char_device_node_is_rejected() {
 ///
 /// Guards: commit `2fc7036` — `has_parent_dir_component` check on the
 /// relativised target rejects these before the symlink is created.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
 #[cfg(unix)]
 #[test]
 fn regression_absolute_symlink_with_traversal_is_rejected() {
@@ -259,6 +264,7 @@ fn regression_absolute_symlink_with_traversal_is_rejected() {
 ///
 /// Guards: commit `2fc7036` — `relative_path()` computes the correct relative
 /// target so the symlink works after `pivot_root`.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
 #[cfg(unix)]
 #[test]
 fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
@@ -298,6 +304,7 @@ fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
 /// production code calls `entry.header_mut().set_mode(safe_mode)` before
 /// `unpack_in`. This test verifies the end-to-end behaviour: a file shipped
 /// with mode `04755` (setuid + rwxr-xr-x) must land with mode `0755`.
+// Invariant: 4 — Setuid / Setgid Bit Stripping
 #[cfg(unix)]
 #[test]
 fn regression_setuid_bits_stripped_on_extraction() {
@@ -345,6 +352,7 @@ fn regression_setuid_bits_stripped_on_extraction() {
 ///
 /// The actual FD closure is Linux-only (requires `/proc/self/fd` or
 /// `close_range` syscall) so we test the contract via source inspection.
+// Invariant: 5 — FD-Leak Prevention in Child Init
 #[test]
 fn regression_close_extra_fds_uses_close_range_syscall() {
     let source = include_str!("../src/container/process.rs");
@@ -386,6 +394,7 @@ fn regression_close_extra_fds_uses_close_range_syscall() {
 ///
 /// This is a critical security invariant: if someone changes the exec call
 /// to `execvp`, this test must fail.
+// Invariant: 6 — Environment Isolation (execve not execvp)
 #[test]
 fn regression_child_init_uses_execve_not_execvp() {
     let source = include_str!("../src/container/process.rs");
@@ -418,6 +427,7 @@ fn regression_child_init_uses_execve_not_execvp() {
 
 /// Verify that the envp vector in child_init is built from `config.env`,
 /// not from `std::env::vars()` or any other host-environment source.
+// Invariant: 6 — Environment Isolation (execve not execvp)
 #[test]
 fn regression_envp_built_from_config_env_only() {
     let source = include_str!("../src/container/process.rs");
@@ -445,6 +455,7 @@ fn regression_envp_built_from_config_env_only() {
 /// by blocking reads during extraction. While the current implementation
 /// allows FIFOs through `unpack_in`, this test documents the behaviour
 /// and ensures no regression if FIFO rejection is added later.
+// Invariant: 9 — FIFO / Named Pipe Non-Crash Guarantee
 #[test]
 fn regression_fifo_entry_does_not_crash() {
     let dest = TempDir::new().expect("failed to create temp dir");
@@ -475,6 +486,7 @@ fn regression_fifo_entry_does_not_crash() {
 /// directory. Without the skip, `validate_tar_entry_path` would reject
 /// them because `Path::join("./")` normalises away the CurDir component,
 /// causing a confusing false-positive path-escape error.
+// Invariant: 8 — Tar Root Entry Skip
 #[test]
 fn regression_root_dot_entries_are_silently_skipped() {
     let dest = TempDir::new().expect("failed to create temp dir");
