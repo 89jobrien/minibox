@@ -89,3 +89,20 @@ The freeze lifts when all **[GATE]** items above are verified green on the `next
 
 Gate 2 (handler coverage) is the primary remaining blocker. See
 [GH #158](https://github.com/89jobrien/minibox/issues/158) for tracking.
+---
+
+## CI Enforcement
+
+The following xtask gates are enforced in GitHub Actions (
+and ):
+
+| Gate                       | CI Job                        | Workflow                |
+| -------------------------- | ----------------------------- | ----------------------- |
+| coverage-check             | handler coverage gate (>=80%) | stability-gates.yml     |
+| check-protocol-drift       | core contract hash check      | protocol-drift.yml      |
+| check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
+| check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
+
+Gates 1-6 in the table above are enforced via pre-commit () locally and
+the jobs listed here in CI. All four xtask-based gates (#133) were added in
+.
