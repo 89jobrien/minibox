@@ -10,7 +10,7 @@
 //!
 //! A cgroup cannot simultaneously hold processes **and** child cgroups. Tests
 //! that need to write to cgroup limit files must therefore run in a dedicated
-//! leaf cgroup (e.g. via `scripts/run-cgroup-tests.sh`) rather than directly
+//! leaf cgroup (e.g. via `cargo xtask run-cgroup-tests`) rather than directly
 //! in the service's own cgroup.
 
 use crate::error::CgroupError;

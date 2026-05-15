@@ -104,4 +104,4 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
 - PID 0 is silently accepted by kernel 6.8 but is never valid — validate before writing to
   `cgroup.procs`.
 - A cgroup cannot have both processes AND children (v2 "no internal process" rule). Tests run
-  inside `minibox-test-slice/runner-leaf` via `scripts/run-cgroup-tests.sh`.
+  inside `minibox-test-slice/runner-leaf` via `cargo xtask run-cgroup-tests`.
