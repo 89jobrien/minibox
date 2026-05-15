@@ -13,6 +13,7 @@
 !docs/handoff-*.md
 !docs/conformance.md
 !docs/plans/*.md
+!docs/specs/*.md
 !docs/superpowers/**/*.md
 !docs/parallel-layer-pulls-design.md
 !docs/dagu-integration.md
