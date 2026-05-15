@@ -1,7 +1,8 @@
 # Development Guide
 
 Canonical developer workflow for minibox. See `CLAUDE.md` for architecture
-details and `TESTING.md` for the full test strategy.
+details, `TESTING.md` for the full test strategy, and `docs/SUPPORT_TIERS.mbx.md` for crate and
+adapter support-tier definitions.
 
 ## Prerequisites
 
