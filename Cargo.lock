@@ -1538,21 +1538,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minibox-conformance"
-version = "0.29.10"
-dependencies = [
- "anyhow",
- "chrono",
- "minibox",
- "minibox-core",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "minibox-core"
 version = "0.29.10"
 dependencies = [
@@ -1601,6 +1586,21 @@ dependencies = [
 [[package]]
 name = "minibox-macros"
 version = "0.29.10"
+
+[[package]]
+name = "minibox-testsuite"
+version = "0.29.10"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "minibox",
+ "minibox-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
 
 [[package]]
 name = "miniboxd"

@@ -1,9 +1,9 @@
-//! `minibox-conformance` — conformance test harness for minibox adapter contracts.
+//! `minibox-testsuite` — conformance test harness for minibox adapter contracts.
 //!
 //! # Structure
 //!
 //! ```text
-//! minibox-conformance/
+//! minibox-testsuite/
 //!   src/
 //!     harness/          ← ConformanceTest trait, TestContext, TestRunner, ReportGenerator
 //!     adapters/         ← per-adapter test modules (registry, runtime, limiter, state)
@@ -17,13 +17,13 @@
 //! Run the full suite:
 //!
 //! ```bash
-//! cargo run -p minibox-conformance --bin run-conformance
+//! cargo run -p minibox-testsuite --bin run-conformance
 //! ```
 //!
 //! Generate machine-readable reports:
 //!
 //! ```bash
-//! cargo run -p minibox-conformance --bin generate-report
+//! cargo run -p minibox-testsuite --bin generate-report
 //! ```
 //!
 //! Both binaries exit `0` on success, `1` on any test failure.

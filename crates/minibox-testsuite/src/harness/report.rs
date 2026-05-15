@@ -112,7 +112,7 @@ impl ReportGenerator {
         writeln!(w, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
         writeln!(
             w,
-            r#"<testsuites name="minibox_conformance" tests="{}" failures="{}" skipped="{}" time="{:.3}">"#,
+            r#"<testsuites name="minibox_testsuite" tests="{}" failures="{}" skipped="{}" time="{:.3}">"#,
             summary.total,
             summary.failed,
             summary.skipped,

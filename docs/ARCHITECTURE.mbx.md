@@ -26,7 +26,7 @@ miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI 
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
-minibox-conformance     (bin, internal) — conformance test harness for adapter trait contracts
+minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
 
@@ -42,7 +42,7 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | miniboxd            | minibox, minibox-core (unix), macbox (unix), winbox (windows) |
 | mbx                 | minibox-core                                                  |
 | minibox-crux-plugin | minibox-core                                                  |
-| minibox-conformance | minibox, minibox-core                                         |
+| minibox-testsuite   | minibox, minibox-core                                         |
 | xtask               | (standalone)                                                  |
 
 ---
