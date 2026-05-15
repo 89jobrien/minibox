@@ -30,6 +30,7 @@ Last updated: 2026-05-15
 | rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | pause/resume            | Yes    | No   | No      | No     | No   | No     |
+| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | exec (-it)              | Yes    | No   | Limited | No     | No   | No     |
 | logs                    | Yes    | No   | Limited | No     | No   | No     |
 | events                  | Yes    | Yes  | No      | No     | No   | No     |
@@ -61,6 +62,13 @@ Last updated: 2026-05-15
 | Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
 | Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
 | Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| **Execution integrity** |        |      |         |        |      |        |
+| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | **State persistence**   |        |      |         |        |      |        |
 | Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | PID reconciliation      | Yes    | No   | No      | No     | No   | No     |
@@ -99,9 +107,14 @@ Last updated: 2026-05-15
   exists in `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
   exported, but is not registered in `AdapterSuite` or wired into the daemon.
   Not included in the matrix above.
+  <!--joe:note::docker_desktop adapter logic lives in minibox-plugins/dockerbox-->
 - **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
   server, HCS/WSL2 wiring) has not started.
+- **Execution integrity** is implemented at the daemon handler layer (`handler.rs`), not inside
+  individual adapters. All adapters that support `run` inherit manifest persist, `mbx manifest`,
+  `mbx verify`, and admission-policy gating. Environment variable values are stored as SHA-256
+  digests — never plaintext — in `execution-manifest.json`.
 - **Observability env vars** (daemon startup):
-  - `MINIBOX_OTLP_ENDPOINT` — OTLP trace export endpoint (`otel` feature required).
-  - `MINIBOX_METRICS_ADDR` — Prometheus metrics bind address (e.g. `0.0.0.0:9090`);
-    `metrics` feature required.
+    - `MINIBOX_OTLP_ENDPOINT` — OTLP trace export endpoint (`otel` feature required).
+    - `MINIBOX_METRICS_ADDR` — Prometheus metrics bind address (e.g. `0.0.0.0:9090`);
+      `metrics` feature required.
