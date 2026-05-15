@@ -9,7 +9,7 @@
 //! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
 //! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
 use anyhow::{Result, bail};
-use std::{env, path::Path};
+use std::env;
 use xshell::Shell;
 
 mod bench;
@@ -34,12 +34,17 @@ mod utils;
 fn main() -> Result<()> {
     let task = env::args().nth(1);
 
-    // Set process CWD to workspace root before Shell::new() so xshell does not
-    // inherit a stale/missing directory (e.g. a deleted git worktree).
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    env::set_current_dir(root)?;
-
     let sh = Shell::new()?;
+    // Resolve workspace root from the process CWD (set by git/cargo at invocation
+    // time) rather than the compile-time CARGO_MANIFEST_DIR, which breaks when
+    // the binary was built from a git worktree that has since been removed.
+    let root = sh.current_dir();
+    let root = root
+        .ancestors()
+        .find(|p| p.join("Cargo.lock").exists())
+        .unwrap_or(&root)
+        .to_path_buf();
+    let root = root.as_path();
     sh.change_dir(root);
 
     match task.as_deref() {
