@@ -1,5 +1,15 @@
 #!/usr/bin/env nu
-# preflight.nu — minibox environment validation
+# preflight.nu — minibox environment validation (SessionStart hook)
+#
+# CANONICAL PREFLIGHT COMMAND: `cargo xtask doctor`
+#   - Checks all required tools (cargo, just, rustup, cargo-nextest, gh, op)
+#   - Reports CARGO_TARGET_DIR status
+#   - On Linux: checks cgroups v2, overlay FS, and kernel version
+#
+# This script is a lightweight SessionStart hook that surfaces obvious
+# missing dependencies at shell startup. For a full diagnostic run:
+#   cargo xtask doctor          # tool + env checks
+#   mbx doctor                  # adapter selection + tool + env checks
 
 def check [label: string, pass: bool, detail: string = ""] {
     if $pass {

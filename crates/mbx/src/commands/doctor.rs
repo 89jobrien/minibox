@@ -71,8 +71,40 @@ pub fn selected_adapter() -> String {
     }
 }
 
+/// Run `cargo xtask doctor` and stream its output to stdout.
+///
+/// This surfaces tool / environment preflight results before the adapter
+/// section so that `mbx doctor` is the single entry point for both concerns.
+/// Failure is advisory — a non-zero exit from xtask is printed but does not
+/// prevent the adapter section from running.
+fn run_xtask_doctor() {
+    println!("=== environment preflight (cargo xtask doctor) ===");
+    println!("(canonical command: `cargo xtask doctor`)");
+    println!();
+    let result = std::process::Command::new("cargo")
+        .args(["xtask", "doctor"])
+        .status();
+    match result {
+        Ok(status) if !status.success() => {
+            println!();
+            println!(
+                "[warn] `cargo xtask doctor` exited with {} — see output above",
+                status.code().unwrap_or(-1)
+            );
+        }
+        Err(e) => {
+            println!("[warn] could not run `cargo xtask doctor`: {e}");
+            println!("       Install cargo and build the workspace to enable full preflight.");
+        }
+        Ok(_) => {}
+    }
+    println!();
+}
+
 /// Run the `doctor` subcommand.
 pub fn execute() -> anyhow::Result<()> {
+    run_xtask_doctor();
+
     println!("minibox adapter diagnostics");
     println!("{}", "=".repeat(40));
     println!();
