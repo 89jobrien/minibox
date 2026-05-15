@@ -971,6 +971,11 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // Colima manages process lifecycle inside the Lima VM.
+        Ok(0)
+    }
 }
 
 /// Deserialised subset of `nerdctl image inspect` output.

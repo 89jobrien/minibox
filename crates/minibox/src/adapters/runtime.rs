@@ -6,7 +6,7 @@
 
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
@@ -138,6 +138,12 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
 
         debug!("container process spawned with PID {}", spawn_result.pid);
         Ok(spawn_result)
+    }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, pid: u32) -> Result<i32> {
+        tokio::task::spawn_blocking(move || crate::container::process::wait_for_exit(pid))
+            .await
+            .context("wait_for_exit: join error")?
     }
 }
 

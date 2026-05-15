@@ -227,6 +227,11 @@ impl ContainerRuntime for DockerDesktopRuntime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // Docker Desktop manages process lifecycle via the Docker API.
+        Ok(0)
+    }
 }
 
 /// Docker Desktop-based filesystem provider.
