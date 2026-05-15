@@ -11,7 +11,7 @@ the codebase — follow them when adding or modifying code.
 2. [Module Documentation](#2-module-documentation)
 3. [Error Handling](#3-error-handling)
 4. [Tracing](#4-tracing)
-5. [Architecture — Hexagonal Ports and Adapters](#5-architecture--hexagonal-ports-and-adapters)
+5. [Architecture](#5-architecture)
 6. [Platform Gating](#6-platform-gating)
 7. [Unsafe Code](#7-unsafe-code)
 8. [Async / Sync Boundary](#8-async--sync-boundary)
@@ -44,10 +44,9 @@ xtask/              # Cargo xtask: pre-commit, verify, prepush, cleanup gates
 ```
 
 Key conventions:
-- `minibox-core` has **zero infrastructure dependencies** — only `std`, `serde`, `tokio`, `anyhow`,
-  `thiserror`, and `tracing`. Never add OS-specific imports here.
-- `minibox` re-exports everything from `minibox-core` that adapters or macros need. Do not remove
-  these re-exports; macro expansion depends on them.
+
+- `minibox-core` has **zero infrastructure dependencies** — only `std`, `serde`, `tokio`, `anyhow`, `thiserror`, and `tracing`. Never add OS-specific imports here.
+- `minibox` re-exports everything from `minibox-core` that adapters or macros need. Do not remove these re-exports; macro expansion depends on them.
 - Platform-specific crates (`macbox`, `winbox`) implement domain traits from `minibox-core`.
 
 ---
@@ -120,6 +119,7 @@ pub enum ImageError {
 ```
 
 Rules:
+
 - Use named fields (`{ path: String }`) not tuple variants for anything beyond a bare wrapper.
 - Always include `#[source]` on the field that is a wrapped lower-level error.
 - Include `Other(String)` as a catch-all last variant for un-enumerated cases.
@@ -211,16 +211,16 @@ No sentence case. No trailing period.
 
 ### Severity levels
 
-| Level    | Use                                                                              |
-| -------- | -------------------------------------------------------------------------------- |
-| `error!` | Unrecoverable: crash, fatal exec error, daemon cannot continue                   |
-| `warn!`  | Security rejections, degraded behaviour, best-effort cleanup failures            |
-| `info!`  | Lifecycle milestones: container start/stop, image pull phases, overlay mount     |
-| `debug!` | Syscall arguments, byte counts, internal state transitions                       |
+| Level    | Use                                                                          |
+| -------- | ---------------------------------------------------------------------------- |
+| `error!` | Unrecoverable: crash, fatal exec error, daemon cannot continue               |
+| `warn!`  | Security rejections, degraded behaviour, best-effort cleanup failures        |
+| `info!`  | Lifecycle milestones: container start/stop, image pull phases, overlay mount |
+| `debug!` | Syscall arguments, byte counts, internal state transitions                   |
 
 ---
 
-## 5. Architecture — Hexagonal Ports and Adapters
+## 5. Architecture
 
 Minibox follows the **hexagonal (ports and adapters)** pattern:
 
@@ -239,6 +239,7 @@ Composition Root (miniboxd/src/main.rs)
 ```
 
 Rules:
+
 - Domain traits live exclusively in `minibox-core/src/domain.rs`. Never add a trait there that
   imports from `nix`, `libc`, or any platform crate.
 - New adapter suites are added to `minibox/src/adapters/` and exported from the module root.
@@ -289,10 +290,10 @@ The same applies to non-error terminal responses — log at `warn!` when the rec
 
 Test doubles live in two locations:
 
-| Location | Scope | Contents |
-| -------- | ----- | -------- |
-| `minibox-core/src/adapters/mocks.rs` | cross-platform | `MockRegistry`, `MockRuntime`, `MockFilesystem`, `MockLimiter` |
-| `minibox/src/testing/` | minibox crate only | `mocks/`, `fixtures/`, `helpers/`, `backend/`, `capability.rs` |
+| Location                             | Scope              | Contents                                                       |
+| ------------------------------------ | ------------------ | -------------------------------------------------------------- |
+| `minibox-core/src/adapters/mocks.rs` | cross-platform     | `MockRegistry`, `MockRuntime`, `MockFilesystem`, `MockLimiter` |
+| `minibox/src/testing/`               | minibox crate only | `mocks/`, `fixtures/`, `helpers/`, `backend/`, `capability.rs` |
 
 Use `minibox::testing::mocks::*` for handler-level tests that need the full adapter suite.
 Use `minibox_core`'s mocks when writing conformance tests for domain traits directly.
@@ -407,15 +408,15 @@ owned file descriptors in the parent before the fork to prevent double-close.
 
 These must never be weakened. Any PR that touches them requires explicit justification.
 
-| Invariant | Location | Rule |
-| --------- | -------- | ---- |
-| Path traversal | `container/filesystem.rs` | `validate_layer_path()` must be called before any fs op on external paths. Rejects `..` components (fast pre-check) and symlink escapes (canonicalization). |
-| Device nodes | `image/layer.rs` | Block and char device tar entries are rejected outright (`ImageError::DeviceNodeRejected`). |
-| Absolute symlinks | `image/layer.rs` | Absolute symlink targets are rewritten to relative paths. Targets still containing `..` after rewrite are rejected. |
-| Setuid/setgid stripping | `image/layer.rs` | Special permission bits (04000, 02000) are stripped before extraction. |
-| Unix socket auth | `miniboxd/src/listener.rs` | `SO_PEERCRED` UID==0 check must run before any request processing. Never bypass. |
-| execve environment | `container/process.rs` | Container init uses `execve` with an explicit, minimal env — not `execvp`. |
-| Image pull size | `image/registry.rs` | Size limits are enforced during streaming layer download. |
+| Invariant               | Location                   | Rule                                                                                                                                                        |
+| ----------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Path traversal          | `container/filesystem.rs`  | `validate_layer_path()` must be called before any fs op on external paths. Rejects `..` components (fast pre-check) and symlink escapes (canonicalization). |
+| Device nodes            | `image/layer.rs`           | Block and char device tar entries are rejected outright (`ImageError::DeviceNodeRejected`).                                                                 |
+| Absolute symlinks       | `image/layer.rs`           | Absolute symlink targets are rewritten to relative paths. Targets still containing `..` after rewrite are rejected.                                         |
+| Setuid/setgid stripping | `image/layer.rs`           | Special permission bits (04000, 02000) are stripped before extraction.                                                                                      |
+| Unix socket auth        | `miniboxd/src/listener.rs` | `SO_PEERCRED` UID==0 check must run before any request processing. Never bypass.                                                                            |
+| execve environment      | `container/process.rs`     | Container init uses `execve` with an explicit, minimal env — not `execvp`.                                                                                  |
+| Image pull size         | `image/registry.rs`        | Size limits are enforced during streaming layer download.                                                                                                   |
 
 ---
 
@@ -423,13 +424,13 @@ These must never be weakened. Any PR that touches them requires explicit justifi
 
 ### Types and items
 
-| Kind | Convention | Example |
-| ---- | ---------- | ------- |
-| Structs, enums, traits | `UpperCamelCase` | `ContainerState`, `ImageRegistry` |
-| Functions, methods | `snake_case` | `spawn_container_process`, `validate_layer_path` |
-| Constants | `UPPER_SNAKE_CASE` | `DAEMON_SOCKET_PATH`, `DEFAULT_ADAPTER_SUITE` |
-| Type aliases | `UpperCamelCase` | `DynImageRegistry`, `TraceId` |
-| Lifetimes | short lowercase | `'a`, `'buf` |
+| Kind                   | Convention         | Example                                          |
+| ---------------------- | ------------------ | ------------------------------------------------ |
+| Structs, enums, traits | `UpperCamelCase`   | `ContainerState`, `ImageRegistry`                |
+| Functions, methods     | `snake_case`       | `spawn_container_process`, `validate_layer_path` |
+| Constants              | `UPPER_SNAKE_CASE` | `DAEMON_SOCKET_PATH`, `DEFAULT_ADAPTER_SUITE`    |
+| Type aliases           | `UpperCamelCase`   | `DynImageRegistry`, `TraceId`                    |
+| Lifetimes              | short lowercase    | `'a`, `'buf`                                     |
 
 ### Naming patterns by role
 
@@ -595,13 +596,13 @@ mod tests {
 
 ### Test categories
 
-| Category | Location | Requirements |
-| -------- | -------- | ------------ |
-| Unit | inline `mod tests` | None. In-memory only. |
-| Conformance | `crates/*/tests/conformance_*.rs` | None. Uses mock adapters. |
-| Property | `tests/proptest_suite.rs` | None. `proptest` crate. |
-| Integration | `tests/integration_tests.rs` | Linux + root + network. |
-| E2E | `tests/system_tests.rs` | Linux + root + running daemon. |
+| Category    | Location                          | Requirements                   |
+| ----------- | --------------------------------- | ------------------------------ |
+| Unit        | inline `mod tests`                | None. In-memory only.          |
+| Conformance | `crates/*/tests/conformance_*.rs` | None. Uses mock adapters.      |
+| Property    | `tests/proptest_suite.rs`         | None. `proptest` crate.        |
+| Integration | `tests/integration_tests.rs`      | Linux + root + network.        |
+| E2E         | `tests/system_tests.rs`           | Linux + root + running daemon. |
 
 Run with: `cargo xtask test-unit` (cross-platform), `just test-integration` (Linux+root).
 
@@ -641,14 +642,14 @@ adapter_from_env().expect("default adapter should parse on any unix platform");
 
 Macros live in `minibox-macros/` and are declared with `macro_rules!`. Key macros:
 
-| Macro | Purpose |
-| ----- | ------- |
-| `as_any!` | Implement `AsAny` (downcast support) for one or more types |
-| `default_new!` | Implement `Default` via `Self::new()` |
-| `adapt!` | Implement both `AsAny` and `Default` |
+| Macro                 | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `as_any!`             | Implement `AsAny` (downcast support) for one or more types            |
+| `default_new!`        | Implement `Default` via `Self::new()`                                 |
+| `adapt!`              | Implement both `AsAny` and `Default`                                  |
 | `require_capability!` | Skip a test when a host capability is absent (cgroups, overlay, etc.) |
-| `normalize!` | Replace `/` and `:` with `_` for filesystem path components |
-| `test_run!` | Construct a default `DaemonRequest::Run` for tests |
+| `normalize!`          | Replace `/` and `:` with `_` for filesystem path components           |
+| `test_run!`           | Construct a default `DaemonRequest::Run` for tests                    |
 
 **`crate` vs `$crate` gotcha:** `as_any!` references `crate::domain::AsAny`. In `macro_rules!`,
 `crate` resolves at the call site, not the defining crate. Do not change it to `$crate` — that
