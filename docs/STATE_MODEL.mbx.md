@@ -2,7 +2,7 @@
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-05-06
+Last updated: 2026-05-14
 
 ---
 
@@ -31,9 +31,11 @@ readers never see a partial write.
 ## State File Location
 
 - Default: `$MINIBOX_DATA_DIR/state.json`
-    - Root: `/var/lib/minibox/state.json`
-    - Non-root: `~/.minibox/cache/state.json`
-- Override: set `MINIBOX_DATA_DIR` explicitly
+    - Linux root: `/var/lib/minibox/state.json`
+    - Linux non-root: `~/.minibox/cache/state.json`
+    - macOS: `~/Library/Application Support/minibox/state.json`
+      (falls back to `/tmp/minibox/state.json` in sandboxed/CI environments)
+- Override: set `MINIBOX_DATA_DIR` explicitly (takes precedence on all platforms)
 
 ## Atomic Write Protocol
 
@@ -95,8 +97,10 @@ pub trait StateRepository: Send + Sync + 'static {
 - **Test adapter**: in-memory doubles or `TempDir`-backed `DaemonState`.
 
 `DaemonState::with_repository()` accepts an `Arc<dyn StateRepository>` for
-dependency injection. The internal `save_to_disk`/`load_from_disk` path is
-being migrated to use this port exclusively (tracked as a follow-on refactor).
+dependency injection. This is the preferred constructor for tests. The production
+daemon uses `DaemonState::new()`, which operates directly on the raw `state_file`
+path without a repository; both paths coexist by design (not an in-progress
+migration).
 
 ## What Is NOT Persisted
 
