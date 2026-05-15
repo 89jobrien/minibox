@@ -1,0 +1,91 @@
+project: minibox
+id: minibox
+updated: '20260515.131514'
+items:
+- id: fixture-consolidation
+  name: fixture-consolidation
+  priority: P2
+  status: blocked
+  title: "Consolidate duplicate test_fixtures.rs (#355)"
+  description: |-
+    minibox/src/adapters/test_fixtures.rs is a copy-paste of
+    minibox-core/src/adapters/test_fixtures.rs. Simple re-export fails
+    because minibox-core's test_fixtures is #[cfg(test)] and not visible
+    as a dependency. Two viable approaches:
+    A) Gate via #[cfg(any(test, feature = "test-utils"))] in minibox-core + dev-dep feature
+    B) Close as won't-fix — boundary is intentional
+    Awaiting decision from user.
+  files:
+  - crates/minibox/src/adapters/test_fixtures.rs
+  - crates/minibox/src/adapters/mod.rs
+  - crates/minibox-core/src/adapters/test_fixtures.rs
+  extra:
+  - type: blocker
+    note: "User decision required: option A (feature flag) or B (won't fix)"
+
+- id: handler-split
+  name: handler-split
+  priority: P1
+  status: open
+  title: "Split handler.rs into feature-cluster modules (#356)"
+  description: |-
+    handler.rs is 4264 lines with 27 handle_* functions.
+    Plan: docs/plans/2026-05-15-refactoring.md Tasks 6-13.
+    Approach A approved: flat module siblings under daemon/handlers/,
+    thin mod.rs re-exports, zero import-path churn.
+    #354 domain nix cleanup (prerequisite) is done and merged.
+  files:
+  - crates/minibox/src/daemon/handler.rs
+  - crates/minibox/src/daemon/handlers/
+
+- id: a-series-testing
+  name: a-series-testing
+  priority: P1
+  status: open
+  title: "Implement A-series testing surfaces A1-A5 (#368-#372)"
+  description: |-
+    Plan: docs/plans/2026-05-15-a-series-testing.md
+    A1 (#368): mutation audit checklist for security guards
+    A2 (#369): exhaustive small-domain tests
+    A3 (#370): stream trait boundary mocks
+    A4 (#371): barrier-based DaemonState race tests
+    A5 (#372): roundtrip property tests
+    Note: BackendDescriptor not serializable, ContainerInfo substituted for A5.
+  files:
+  - crates/minibox-core/tests/
+  - crates/minibox/tests/
+
+log:
+- date: '20260515.131514'
+  session: 2
+  summary: >-
+    Completed stable->staging migration, implemented CI change detection
+    (cargo xtask detect-changes), merged domain nix cleanup (#354),
+    created GitHub issues #364-#372, wrote refactoring and A-series testing plans
+  commits:
+  - sha: fbd5cb5
+    branch: develop
+  - sha: dd590b5
+    branch: develop
+  - sha: f7dcbf7
+    branch: develop
+  - sha: 30e2148
+    branch: develop
+  - sha: a4c33eb
+    branch: develop
+  - sha: 8407b6b
+    branch: develop
+- date: '20260515.171405'
+  session: 1
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - sha: dd590b5dfe4f723f6abd7bd78b7cb1336a4a2fc3
+    branch: develop
+  - sha: f7dcbf7be8fb777dc99035118903b5cf426c9071
+    branch: develop
+  - sha: 30e2148df137c143958cb1a2b8ed2357f78afea7
+    branch: develop
+  - sha: a4c33ebc54f8baec8a0e715fc3c123376da21c9c
+    branch: develop
+  - sha: 8407b6bbce0c893c6bbbd2a126a861b4336d9f8a
+    branch: develop
