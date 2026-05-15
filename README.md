@@ -23,20 +23,11 @@ structured tracing, property testing.
 
 ## What Works Today
 
-### Linux (production)
-
-- Container lifecycle — pull, run, stop, rm, ps, pause/resume
-- OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
-- Image management — `prune` / `rmi` with lease-based GC
-- Bind mounts and privileged mode — `-v`/`--mount`, `--privileged`
-- Log capture — `minibox logs <id>` for stored stdout/stderr
-- Container events — `minibox events` streams lifecycle events
-
-### Experimental-ish
-
-- **Container exec** — `setns`-based exec with PTY support (`-it`)
-- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`)
-- **macOS adapters** — run/stop/ps via Colima, smolvm, or krun; exec/logs limited
+Linux is production-ready: full container lifecycle (pull, run, stop, rm, ps, pause/resume),
+OCI image management with parallel layer pulls, bind mounts, privileged mode, log capture, and
+container events. macOS runs containers via smolvm/krun (VM-backed) with exec/logs limited.
+See [`docs/FEATURE_MATRIX.mbx.md`](docs/FEATURE_MATRIX.mbx.md) for the full per-adapter
+capability matrix.
 
 ---
 
@@ -189,18 +180,10 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature               | Status       |
-| --------------------- | ------------ |
-| Bridge networking     | Experimental |
-| OCI push/commit/build | Experimental |
-| macOS VZ.framework    | Blocked (Apple bug on ARM64 macOS 26) |
-| Seccomp / capabilities| Planned      |
-| Rootless support      | Planned      |
-| Port forwarding / DNS | Planned      |
-| Windows (WSL2)        | Planned      |
-| MCP control surface   | Planned      |
-
-Full details: [`docs/ROADMAP.mbx.md`](docs/ROADMAP.mbx.md).
+Planned and in-progress work includes seccomp/capabilities, rootless support, port
+forwarding/DNS, Windows WSL2, and an MCP control surface. OCI push/commit/build and bridge
+networking are experimental. Full details: [`docs/ROADMAP.mbx.md`](docs/ROADMAP.mbx.md).
+Feature status by adapter: [`docs/FEATURE_MATRIX.mbx.md`](docs/FEATURE_MATRIX.mbx.md).
 
 ---
 

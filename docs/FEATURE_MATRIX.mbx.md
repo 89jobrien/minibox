@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-08
+Last updated: 2026-05-14
 
 ---
 
@@ -15,7 +15,8 @@ Last updated: 2026-05-08
 | `colima` | macOS/Linux (Colima) | Experimental | minibox | --                          |
 | `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (falls back to `krun`)  |
 | `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback when smolvm absent |
-| `winbox` | Windows              | Stub         | winbox  | --                          |
+| `winbox`         | Windows              | Stub         | winbox  | --                          |
+| `docker_desktop` | macOS/Linux          | Stub         | minibox | Not wired into daemon       |
 
 ---
 
