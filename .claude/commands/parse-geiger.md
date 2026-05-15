@@ -4,26 +4,23 @@ description: >
   Parse a cargo-geiger report into structured Nu records. Filter by unsafe
   status, sort by expression count, or export to JSON.
 argument-hint: "<report-file>"
+allowed-tools: [Read]
 ---
 
-# parse-geiger
+Parse a cargo-geiger report into a structured table.
 
-Parses a `cargo geiger` text report into structured records.
+Usage: `/parse-geiger <report-file>`
 
-```nu
-nu scripts/parse-geiger.nu geiger-report.txt
-nu scripts/parse-geiger.nu geiger-report.txt | to json
-nu scripts/parse-geiger.nu geiger-report.txt | where status == "unsafe" | sort-by expressions_used -r
-nu scripts/parse-geiger.nu geiger-report.txt | where status == "unsafe" | select name version expressions_used
-```
+The report file is the first argument in `$ARGUMENTS`. Error if not provided or not found.
 
-Generate a report with:
-```sh
-cargo geiger 2>/dev/null > geiger-report.txt
-```
+Data lines match: `<fn> <expr> <impl> <traits> <methods> <status> <dep-tree>`
+where each metric is `used/total`, status is `!` (unsafe), `:)` (forbids_unsafe), or `?` (no_forbid).
 
-Output columns: `name`, `version`, `status`, `functions_used/total`,
-`expressions_used/total`, `impls_used/total`, `traits_used/total`,
-`methods_used/total`.
+For each data line:
+1. Strip ANSI codes
+2. Parse the 5 `used/total` ratios and the status symbol
+3. Extract crate name and version from the dep-tree column (last token = version, rest = name)
+4. Output a row: name | version | status | fn_used | expr_used | expr_total
 
-Status values: `unsafe`, `forbids_unsafe`, `no_forbid`.
+Display as a table. Suggest follow-on filters:
+- `where status == "unsafe" | sort-by expr_used desc` for highest-risk crates

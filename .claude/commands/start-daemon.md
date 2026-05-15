@@ -4,20 +4,16 @@ description: >
   Start miniboxd from the release binary with --restart. Optionally select
   the adapter suite via --adapter. Use for local dev and smoke testing.
 argument-hint: "[--adapter <colima|smolvm|krun|native|gke>]"
+allowed-tools: [Bash]
 ---
 
-# start-daemon
+Start miniboxd with `--restart`. Parse `$ARGUMENTS` for: `--adapter <value>`.
 
-Starts the locally built `miniboxd` with `--restart`.
+1. Resolve binary: `~/.minibox/cache/target/release/miniboxd`
+2. If binary does not exist: error with
+   `miniboxd not found — run: cargo build --release -p miniboxd`
+3. If `--adapter <value>` provided: set `MINIBOX_ADAPTER=<value>` in env
+4. Print: `Starting miniboxd (MINIBOX_ADAPTER=<adapter|auto>) with --restart...`
+5. Run: `<binary-path> --restart` (with MINIBOX_ADAPTER in env if set)
 
-```nu
-nu scripts/start-daemon.nu                    # auto-select adapter
-nu scripts/start-daemon.nu --adapter smolvm   # explicit adapter
-nu scripts/start-daemon.nu --adapter colima
-nu scripts/start-daemon.nu --adapter native   # Linux only
-```
-
-Requires a release build at `~/.minibox/cache/target/release/miniboxd`.
-Build with: `cargo build --release -p miniboxd`
-
-The `MINIBOX_ADAPTER` env var has the same effect as `--adapter`.
+Adapter choices: colima, smolvm, krun, native, gke. Default: auto (smolvm, falls back to krun).

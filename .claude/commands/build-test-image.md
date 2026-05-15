@@ -5,23 +5,37 @@ description: >
   minibox-tester Docker image inside Colima. Use to run Linux integration
   tests on macOS via Colima.
 argument-hint: "[--target <triple>]"
+allowed-tools: [Bash]
 ---
 
-# build-test-image
+Cross-compile test binaries for Linux musl and build `minibox-tester:latest` in Colima.
+Parse `$ARGUMENTS` for: `--target <triple>` (default: `aarch64-unknown-linux-musl`).
 
-Cross-compiles test binaries and builds `minibox-tester:latest` inside Colima.
+1. **Cross-compile** with env vars `CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc`
+   and `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc`:
+   ```
+   cargo build --target <target> -p miniboxd
+   cargo build --target <target> -p minibox-cli
+   cargo test --no-run --target <target> -p miniboxd --test cgroup_tests
+   cargo test --no-run --target <target> -p miniboxd --test system_tests
+   cargo test --no-run --target <target> -p miniboxd --test integration_tests
+   cargo test --no-run --target <target> -p miniboxd --test sandbox_tests
+   ```
 
-```nu
-nu scripts/build-test-image.nu                                           # default: aarch64-unknown-linux-musl
-nu scripts/build-test-image.nu --target x86_64-unknown-linux-musl
-```
+2. **Gather binaries** from `~/.minibox/cache/target/<target>/debug/`:
+   - `miniboxd`, `minibox` (in bin dir)
+   - Test binaries: find `<name>-<hex>` in `deps/` by prefix, take newest
 
-Steps:
-1. Cross-compile `miniboxd`, `minibox-cli`, and all test binaries for the target
-2. Assemble a Docker build context with binaries and a run-tests.sh entrypoint
-3. Pipe the context to `colima ssh -- docker build`
+3. **Assemble build context** in `mktemp -d`:
+   - Copy binaries to `usr/local/bin/`
+   - Write `run-tests.sh` (runs each test suite with `MINIBOX_TEST_BIN_DIR=/usr/local/bin`)
+   - Write `Dockerfile`: `FROM alpine:3.21`, COPY usr, COPY run-tests.sh, RUN chmod
 
-After building, run with:
-```sh
-colima ssh -- docker run --rm --privileged minibox-tester:latest /run-tests.sh
-```
+4. **Build in Colima**:
+   ```
+   COPYFILE_DISABLE=1 tar --no-xattrs -c -C <ctx> . | colima ssh -- docker build -t minibox-tester:latest -
+   ```
+
+5. Clean up temp dir. Print: `minibox-tester:latest ready in Colima`
+
+Run with: `colima ssh -- docker run --rm --privileged minibox-tester:latest /run-tests.sh`

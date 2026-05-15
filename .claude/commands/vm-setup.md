@@ -4,24 +4,27 @@ description: >
   Bootstrap a Linux VM for minibox development. Installs Rust, just,
   cargo-deny, cargo-audit, and build dependencies. Checks cgroups v2.
 argument-hint: ""
+allowed-tools: [Bash]
 ---
 
-# vm-setup
+Bootstrap a Linux VM (Debian/Ubuntu) for minibox development.
 
-Sets up a fresh Linux VM (Debian/Ubuntu) for minibox development.
+1. **Rust**: if `rustup` absent, install via:
+   `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y`
+   If present: `rustup update stable`
 
-```nu
-nu scripts/vm-setup.nu
-```
+2. **just**: if `just` absent, `cargo install just`
 
-Installs:
-- Rust (via rustup) or runs `rustup update stable` if already present
-- `just`
-- `cargo-deny`
-- `cargo-audit`
-- `pkg-config`, `libssl-dev` (via apt-get if available)
+3. **cargo-deny**: if `~/.cargo/bin/cargo-deny` absent, `cargo install cargo-deny`
 
-Also verifies that cgroups v2 is mounted and kernel-supported. Exits with a
-warning (not error) if cgroups v2 is absent.
+4. **cargo-audit**: if `~/.cargo/bin/cargo-audit` absent, `cargo install cargo-audit`
 
-Intended for use on the minibox VPS or a fresh CI runner — not macOS.
+5. **Build deps** (if `apt-get` available):
+   `sudo apt-get install -y pkg-config libssl-dev`
+
+6. **cgroups v2 check**:
+   - Run `mount | grep cgroup2` → print ✓ or ✗
+   - Check `cat /proc/filesystems | grep cgroup2` → print ✓ or ✗
+   - Print warning (not error) if cgroups v2 absent
+
+Print `setup complete` when done.
