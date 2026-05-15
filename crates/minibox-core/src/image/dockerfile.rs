@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn parse_from_with_tag() {
-        let instrs = parse("FROM alpine:3.18\n").unwrap();
+        let instrs = parse("FROM alpine:3.18\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[0],
             Instruction::From { image, tag, .. } if image == "alpine" && tag == "3.18"
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn parse_from_no_tag_defaults_latest() {
-        let instrs = parse("FROM alpine\n").unwrap();
+        let instrs = parse("FROM alpine\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[0],
             Instruction::From { tag, .. } if tag == "latest"
@@ -282,13 +282,13 @@ mod tests {
 
     #[test]
     fn parse_run_shell_form() {
-        let instrs = parse("FROM alpine\nRUN echo hello\n").unwrap();
+        let instrs = parse("FROM alpine\nRUN echo hello\n").expect("valid dockerfile");
         assert!(matches!(&instrs[1], Instruction::Run(ShellOrExec::Shell(s)) if s == "echo hello"));
     }
 
     #[test]
     fn parse_run_exec_form() {
-        let instrs = parse("FROM alpine\nRUN [\"echo\", \"hello\"]\n").unwrap();
+        let instrs = parse("FROM alpine\nRUN [\"echo\", \"hello\"]\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[1],
             Instruction::Run(ShellOrExec::Exec(args)) if args[0] == "echo"
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn parse_copy() {
-        let instrs = parse("FROM alpine\nCOPY src/ /app/\n").unwrap();
+        let instrs = parse("FROM alpine\nCOPY src/ /app/\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Copy { dest, .. } if dest.to_string_lossy() == "/app/")
         );
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn parse_env_equals_form() {
-        let instrs = parse("FROM alpine\nENV FOO=bar BAZ=qux\n").unwrap();
+        let instrs = parse("FROM alpine\nENV FOO=bar BAZ=qux\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Env(pairs) if pairs[0] == ("FOO".to_string(), "bar".to_string()))
         );
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn parse_comment_skipped_but_from_present() {
-        let instrs = parse("# comment\nFROM alpine\n").unwrap();
+        let instrs = parse("# comment\nFROM alpine\n").expect("valid dockerfile");
         assert!(instrs.iter().any(|i| matches!(i, Instruction::From { .. })));
     }
 
@@ -325,13 +325,13 @@ mod tests {
 
     #[test]
     fn parse_workdir() {
-        let instrs = parse("FROM alpine\nWORKDIR /app\n").unwrap();
+        let instrs = parse("FROM alpine\nWORKDIR /app\n").expect("valid dockerfile");
         assert!(matches!(&instrs[1], Instruction::Workdir(p) if p.to_string_lossy() == "/app"));
     }
 
     #[test]
     fn parse_arg_with_default() {
-        let instrs = parse("FROM alpine\nARG VERSION=1.0\n").unwrap();
+        let instrs = parse("FROM alpine\nARG VERSION=1.0\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Arg { name, default } if name == "VERSION" && default.as_deref() == Some("1.0"))
         );

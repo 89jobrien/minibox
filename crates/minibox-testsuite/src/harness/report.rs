@@ -103,7 +103,7 @@ impl ReportGenerator {
             },
             "results": summary.results,
         });
-        writeln!(w, "{}", serde_json::to_string_pretty(&report).unwrap())?;
+        writeln!(w, "{}", serde_json::to_string_pretty(&report).unwrap())?; // allow:unwrap — serde_json::Value always serializes
         Ok(())
     }
 

@@ -527,7 +527,7 @@ mod tests {
         assert!(f.work_dir.exists());
         let sentinel = f.upper_dir.join(f.sentinel_filename);
         assert!(sentinel.exists(), "sentinel file must exist in upperdir");
-        let content = std::fs::read(&sentinel).unwrap();
+        let content = std::fs::read(&sentinel).expect("read sentinel");
         assert_eq!(content, b"1");
     }
 
@@ -537,7 +537,7 @@ mod tests {
     fn build_context_fixture_creates_dockerfile() {
         let f = BuildContextFixture::new().expect("fixture creation");
         assert!(f.dockerfile.exists(), "Dockerfile must exist");
-        let content = std::fs::read_to_string(&f.dockerfile).unwrap();
+        let content = std::fs::read_to_string(&f.dockerfile).expect("read dockerfile");
         assert!(content.contains("FROM scratch"));
         let hello = f.context_dir.join("hello.txt");
         assert!(hello.exists(), "hello.txt must exist in context");

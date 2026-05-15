@@ -50,6 +50,8 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 
@@ -59,7 +61,7 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
 
 #[tokio::test]
 async fn state_add_then_get_round_trips() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let record = make_record("aabbccdd11223344", None, "alpine:latest");
@@ -67,7 +69,10 @@ async fn state_add_then_get_round_trips() {
 
     let retrieved = state.get_container("aabbccdd11223344").await;
     assert!(retrieved.is_some(), "get must return the added container");
-    assert_eq!(retrieved.unwrap().info.image, "alpine:latest");
+    assert_eq!(
+        retrieved.expect("unwrap in test").info.image,
+        "alpine:latest"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +81,7 @@ async fn state_add_then_get_round_trips() {
 
 #[tokio::test]
 async fn state_remove_returns_record() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -85,7 +90,7 @@ async fn state_remove_returns_record() {
 
     let removed = state.remove_container("remove01abcdef12").await;
     assert!(removed.is_some(), "remove must return the record");
-    assert_eq!(removed.unwrap().info.image, "nginx");
+    assert_eq!(removed.expect("unwrap in test").info.image, "nginx");
 
     let gone = state.get_container("remove01abcdef12").await;
     assert!(gone.is_none(), "container must be gone after remove");
@@ -93,7 +98,7 @@ async fn state_remove_returns_record() {
 
 #[tokio::test]
 async fn state_remove_nonexistent_returns_none() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let result = state.remove_container("doesnotexist1234").await;
@@ -106,7 +111,7 @@ async fn state_remove_nonexistent_returns_none() {
 
 #[tokio::test]
 async fn state_list_returns_all_containers() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -125,7 +130,7 @@ async fn state_list_returns_all_containers() {
 
 #[tokio::test]
 async fn state_list_empty_returns_empty() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let list = state.list_containers().await;
@@ -138,7 +143,7 @@ async fn state_list_empty_returns_empty() {
 
 #[tokio::test]
 async fn state_save_load_round_trips() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     // Create state, add containers, state auto-saves on add.
     {
@@ -158,11 +163,14 @@ async fn state_save_load_round_trips() {
 
         let c1 = state.get_container("persist01abcdef1").await;
         assert!(c1.is_some(), "container 1 must survive save/load");
-        assert_eq!(c1.unwrap().info.image, "alpine");
+        assert_eq!(c1.expect("unwrap in test").info.image, "alpine");
 
         let c2 = state.get_container("persist02abcdef1").await;
         assert!(c2.is_some(), "container 2 must survive save/load");
-        assert_eq!(c2.unwrap().info.name.as_deref(), Some("web"));
+        assert_eq!(
+            c2.expect("unwrap in test").info.name.as_deref(),
+            Some("web")
+        );
     }
 }
 
@@ -172,7 +180,7 @@ async fn state_save_load_round_trips() {
 
 #[tokio::test]
 async fn state_update_status() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -184,13 +192,16 @@ async fn state_update_status() {
         .await
         .expect("update must succeed for existing container");
 
-    let record = state.get_container("update01abcdef12").await.unwrap();
+    let record = state
+        .get_container("update01abcdef12")
+        .await
+        .expect("unwrap in test");
     assert_eq!(record.info.state, "Running");
 }
 
 #[tokio::test]
 async fn state_update_nonexistent_does_not_panic() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     // Must return Err for nonexistent container.
@@ -206,7 +217,7 @@ async fn state_update_nonexistent_does_not_panic() {
 
 #[tokio::test]
 async fn state_resolve_full_id() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -219,7 +230,7 @@ async fn state_resolve_full_id() {
 
 #[tokio::test]
 async fn state_resolve_by_name() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state
@@ -232,7 +243,7 @@ async fn state_resolve_by_name() {
 
 #[tokio::test]
 async fn state_resolve_unknown_returns_none() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let resolved = state.resolve_id("nope").await;
@@ -245,7 +256,7 @@ async fn state_resolve_unknown_returns_none() {
 
 #[tokio::test]
 async fn state_name_in_use_detects_collision() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     state

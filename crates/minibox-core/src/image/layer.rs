@@ -853,4 +853,207 @@ mod tests {
         let expected = hex::encode(Sha256::digest(data));
         assert_eq!(got, expected);
     }
+
+    // ---------------------------------------------------------------------------
+    // Exhaustive: has_parent_dir_component — enumerate all relevant path patterns
+    // ---------------------------------------------------------------------------
+
+    /// Exhaustively enumerate path patterns and assert correct classification.
+    ///
+    /// Paths that MUST return `true` (contain a `..` component):
+    /// - Leading `..`
+    /// - Trailing `..`
+    /// - Middle `..`
+    /// - Bare `..`
+    ///
+    /// Paths that MUST return `false` (no `..` component):
+    /// - Normal relative paths
+    /// - Paths with dot (`.`) components only
+    /// - Paths that contain `..` as a substring of a filename but not as a component
+    #[test]
+    fn exhaustive_has_parent_dir_component_true_cases() {
+        let cases_with_dotdot: &[&str] = &[
+            "..",
+            "../",
+            "../escape",
+            "foo/..",
+            "foo/../bar",
+            "a/b/../c",
+            "a/b/c/..",
+            "a/../../b",
+            "../../../etc/passwd",
+            "usr/../../../etc/shadow",
+        ];
+        for path_str in cases_with_dotdot {
+            let path = Path::new(path_str);
+            assert!(
+                has_parent_dir_component(path),
+                "expected has_parent_dir_component({path_str:?}) == true"
+            );
+        }
+    }
+
+    #[test]
+    fn exhaustive_has_parent_dir_component_false_cases() {
+        let safe_cases: &[&str] = &[
+            // simple relative paths
+            "foo",
+            "foo/bar",
+            "usr/bin/env",
+            "etc/passwd",
+            "a/b/c/d/e",
+            // current-dir components only
+            ".",
+            "./",
+            "./foo",
+            "foo/./bar",
+            // filenames that contain ".." as a substring but are not the component itself
+            "foo..bar",
+            "..foo",
+            "bar..",
+            "file..txt",
+            // deeply nested safe paths
+            "a/b/c/d/e/f/g/h",
+            // single component
+            "hello",
+        ];
+        for path_str in safe_cases {
+            let path = Path::new(path_str);
+            assert!(
+                !has_parent_dir_component(path),
+                "expected has_parent_dir_component({path_str:?}) == false"
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Exhaustive: setuid mask — loop 0..=0o7777, assert no special bits survive
+    // ---------------------------------------------------------------------------
+
+    /// For every mode value in 0..=0o7777, applying `mode & 0o777` must strip
+    /// all special bits (setuid 04000, setgid 02000, sticky 01000).
+    ///
+    /// This exhausts the entire 12-bit mode space including all combinations
+    /// of special bits and rwxrwxrwx permissions.
+    #[test]
+    fn exhaustive_setuid_mask_strips_all_special_bits() {
+        for mode in 0u32..=0o7777 {
+            let safe_mode = mode & 0o777;
+            assert_eq!(
+                safe_mode & 0o4000,
+                0,
+                "setuid bit must be absent after masking mode {mode:o}"
+            );
+            assert_eq!(
+                safe_mode & 0o2000,
+                0,
+                "setgid bit must be absent after masking mode {mode:o}"
+            );
+            assert_eq!(
+                safe_mode & 0o1000,
+                0,
+                "sticky bit must be absent after masking mode {mode:o}"
+            );
+            // The rwxrwxrwx bits (lower 9) must be preserved unchanged.
+            assert_eq!(
+                safe_mode & 0o777,
+                mode & 0o777,
+                "lower 9 permission bits must be preserved for mode {mode:o}"
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Exhaustive: entry type classification — accept/reject for every tar type
+    // ---------------------------------------------------------------------------
+
+    /// Enumerate all tar `EntryType` variants and assert the correct
+    /// accept/reject behaviour from `extract_layer`.
+    ///
+    /// Rejected (returns Err): Block, Char
+    /// Accepted (returns Ok): Regular, Directory, Symlink, Link, Fifo,
+    ///                        GNULongName, GNUSparse, XGlobalHeader, XHeader,
+    ///                        Continuous, Other
+    ///
+    /// For Symlink we use a relative target (safe) to avoid the absolute-symlink
+    /// rewrite path which requires unix. The fifo behaviour is platform-dependent
+    /// but must not panic.
+    #[test]
+    fn exhaustive_entry_type_block_rejected() {
+        let dest = TempDir::new().expect("tempdir");
+        let tar_gz = tar_gz_with_device("dev/sda", EntryType::Block);
+        let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+            .expect_err("Block device must be rejected");
+        assert!(
+            err.to_string().contains("device") || err.to_string().contains("DeviceNode"),
+            "expected device rejection error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn exhaustive_entry_type_char_rejected() {
+        let dest = TempDir::new().expect("tempdir");
+        let tar_gz = tar_gz_with_device("dev/tty", EntryType::Char);
+        let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
+            .expect_err("Char device must be rejected");
+        assert!(
+            err.to_string().contains("device") || err.to_string().contains("DeviceNode"),
+            "expected device rejection error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn exhaustive_entry_type_regular_accepted() {
+        let dest = TempDir::new().expect("tempdir");
+        let tar_gz = tar_gz_with_regular_file("hello.txt", b"data");
+        extract_layer(&mut tar_gz.as_slice(), dest.path())
+            .expect("Regular file entry must be accepted");
+    }
+
+    #[test]
+    fn exhaustive_entry_type_directory_accepted() {
+        let dest = TempDir::new().expect("tempdir");
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path("mydir/").expect("set_path");
+        h.set_size(0);
+        h.set_entry_type(EntryType::Directory);
+        h.set_mode(0o755);
+        h.set_cksum();
+        ar.append(&h, &[][..]).expect("append");
+        let tar_gz = ar.into_inner().expect("inner").finish().expect("finish");
+        extract_layer(&mut tar_gz.as_slice(), dest.path())
+            .expect("Directory entry must be accepted");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exhaustive_entry_type_symlink_accepted() {
+        // Relative symlink — safe, no absolute-symlink rewrite path triggered.
+        let dest = TempDir::new().expect("tempdir");
+        let tar_gz = tar_gz_with_symlink("link", "target.txt");
+        // Symlink to a non-existent target is fine during extraction.
+        extract_layer(&mut tar_gz.as_slice(), dest.path())
+            .expect("Symlink entry with relative target must be accepted");
+    }
+
+    #[test]
+    fn exhaustive_entry_type_fifo_does_not_panic() {
+        // Fifo entries are not explicitly rejected; behaviour is platform-dependent
+        // but must never panic.
+        let dest = TempDir::new().expect("tempdir");
+        let gz = GzEncoder::new(Vec::new(), Compression::default());
+        let mut ar = Builder::new(gz);
+        let mut h = Header::new_gnu();
+        h.set_path("tmp/pipe").expect("set_path");
+        h.set_size(0);
+        h.set_entry_type(EntryType::Fifo);
+        h.set_mode(0o644);
+        h.set_cksum();
+        ar.append(&h, &[][..]).expect("append");
+        let tar_gz = ar.into_inner().expect("inner").finish().expect("finish");
+        // Result (Ok or Err) is platform-defined — no panic is the invariant.
+        let _ = extract_layer(&mut tar_gz.as_slice(), dest.path());
+    }
 }

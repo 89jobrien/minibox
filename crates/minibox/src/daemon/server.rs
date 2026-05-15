@@ -20,6 +20,20 @@ use super::state::DaemonState;
 // SECURITY: Maximum request size to prevent memory exhaustion
 const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
 
+/// A bidirectional async byte stream that can be used as a daemon connection.
+///
+/// This trait is a named alias for the `AsyncRead + AsyncWrite + Unpin + Send`
+/// bound required by [`handle_connection`].  It is implemented for:
+///
+/// - [`tokio::net::UnixStream`] — production Unix socket connections
+/// - [`tokio::io::DuplexStream`] — in-memory test doubles
+///
+/// Any type implementing all four super-traits satisfies this bound
+/// automatically via the blanket impl below.
+pub trait AsyncStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> AsyncStream for T {}
+
 /// Peer credentials from an accepted connection.
 #[derive(Debug, Clone)]
 pub struct PeerCreds {
@@ -169,6 +183,56 @@ where
     Ok(())
 }
 
+/// Read a newline-delimited frame from `reader` into `buf`, rejecting frames
+/// that exceed `max_bytes` **before** they are fully buffered.
+///
+/// Returns the number of bytes read (0 = EOF). Returns an error if the frame
+/// exceeds the limit or contains invalid UTF-8.
+async fn bounded_read_line<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    buf: &mut String,
+    max_bytes: usize,
+) -> Result<usize> {
+    let mut total = 0usize;
+    loop {
+        let available = reader.fill_buf().await.context("reading from client")?;
+        if available.is_empty() {
+            return Ok(total);
+        }
+
+        let (chunk_len, found_newline) = match available.iter().position(|&b| b == b'\n') {
+            Some(pos) => (pos + 1, true),
+            None => (available.len(), false),
+        };
+
+        if total + chunk_len > max_bytes {
+            let oversize = total + chunk_len;
+            reader.consume(chunk_len);
+            // Drain until newline or EOF to resync the stream.
+            if !found_newline {
+                let mut drain = Vec::new();
+                let _ = reader.read_until(b'\n', &mut drain).await;
+            }
+            anyhow::bail!("request too large: at least {oversize} bytes (max {max_bytes})");
+        }
+
+        let chunk = &available[..chunk_len];
+        match std::str::from_utf8(chunk) {
+            Ok(s) => buf.push_str(s),
+            Err(e) => {
+                reader.consume(chunk_len);
+                anyhow::bail!("invalid UTF-8 in request: {e}");
+            }
+        }
+        total += chunk_len;
+        reader.consume(chunk_len);
+
+        if found_newline {
+            return Ok(total);
+        }
+    }
+}
+
 /// Handle a single client connection, generic over stream type.
 ///
 /// Reads newline-delimited JSON requests, dispatches to handlers, and
@@ -192,10 +256,28 @@ where
 
     loop {
         line.clear();
-        let bytes_read = reader
-            .read_line(&mut line)
-            .await
-            .context("reading from client")?;
+
+        // SECURITY: Read one newline-delimited frame, rejecting frames that
+        // exceed MAX_REQUEST_SIZE BEFORE they are fully buffered. This
+        // prevents a malicious client from forcing unbounded memory allocation.
+        let bytes_read = match bounded_read_line(&mut reader, &mut line, MAX_REQUEST_SIZE).await {
+            Ok(n) => n,
+            Err(e) => {
+                warn!(
+                    max = MAX_REQUEST_SIZE,
+                    error = %e,
+                    "rejecting oversized or malformed request"
+                );
+                let error_response = DaemonResponse::Error {
+                    message: format!("{e}"),
+                };
+                let mut error_json = serde_json::to_string(&error_response)?;
+                error_json.push('\n');
+                writer.write_all(error_json.as_bytes()).await?;
+                writer.flush().await?;
+                continue;
+            }
+        };
 
         if bytes_read == 0 {
             // Client closed the connection.
@@ -203,31 +285,20 @@ where
             break;
         }
 
-        // SECURITY: Reject requests exceeding size limit
-        if bytes_read > MAX_REQUEST_SIZE {
-            warn!("rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})");
-            let error_response = DaemonResponse::Error {
-                message: format!("request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"),
-            };
-            let mut error_json = serde_json::to_string(&error_response)?;
-            error_json.push('\n');
-            writer.write_all(error_json.as_bytes()).await?;
-            writer.flush().await?;
-            continue;
-        }
-
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        debug!("received request: {} bytes", trimmed.len());
+        debug!(bytes = trimmed.len(), "received request");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
 
         match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
-                info!("dispatching request: {request:?}");
+                // SECURITY: Log only the request type tag, never the full
+                // payload — it may contain credentials, env vars, or secrets.
+                info!(request_type = request.type_tag(), "dispatching request");
                 let state_c = Arc::clone(&state);
                 let deps_c = Arc::clone(&deps);
                 tokio::spawn(async move {
@@ -235,7 +306,13 @@ where
                 });
             }
             Err(e) => {
-                warn!("failed to parse request '{trimmed}': {e}");
+                // SECURITY: Log parse error and byte length only — never the
+                // raw request body, which may contain credentials or secrets.
+                warn!(
+                    bytes = trimmed.len(),
+                    error = %e,
+                    "failed to parse request"
+                );
                 send_terminal_response(
                     &tx,
                     "parse_error",
@@ -293,6 +370,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::SnapshotRestored { .. }
             | DaemonResponse::SnapshotList { .. }
             | DaemonResponse::ImageList { .. }
+            | DaemonResponse::Manifest { .. }
+            | DaemonResponse::VerifyResult { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -549,6 +628,23 @@ async fn dispatch(
                 all,
                 containers,
                 restart,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::GetManifest { id } => {
+            tokio::spawn(handler::handle_get_manifest(
+                id,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::VerifyManifest { id, policy_json } => {
+            tokio::spawn(handler::handle_verify_manifest(
+                id,
+                policy_json,
                 Arc::clone(&state),
                 Arc::clone(&deps),
                 tx,
@@ -836,6 +932,19 @@ mod tests {
                 },
                 true, // terminal: complete list returned in one response
             ),
+            (
+                DaemonResponse::Manifest {
+                    manifest: serde_json::json!({}),
+                },
+                true, // terminal: single manifest returned
+            ),
+            (
+                DaemonResponse::VerifyResult {
+                    allowed: true,
+                    reason: None,
+                },
+                true, // terminal: single verify result returned
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -873,6 +982,8 @@ mod tests {
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
                 DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::Manifest { .. } => true,
+                DaemonResponse::VerifyResult { .. } => true,
             };
         }
     }
@@ -1389,5 +1500,102 @@ mod tests {
             matches!(received, DaemonResponse::Success { ref message } if message == "delivered"),
             "unexpected response: {received:?}"
         );
+    }
+
+    // ─── MockStream failure tests ────────────────────────────────────────────
+    //
+    // These tests exercise `handle_connection` via `tokio::io::duplex` streams
+    // (the in-memory `AsyncStream` double) to verify protocol-level failure
+    // modes without a real Unix socket.
+
+    /// half_frame_request: `MockStream` read_buf contains truncated JSON (no
+    /// newline terminator).  `handle_connection` must not panic — it should
+    /// exit either cleanly (`Ok`) or with an I/O error (broken pipe / write
+    /// on closed) when trying to send a parse-error response back to a
+    /// client that has already closed its read end.
+    #[tokio::test]
+    async fn mock_stream_half_frame_request_exits_cleanly() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (mut client, server) = tokio::io::duplex(4096);
+        let join = tokio::spawn(async move { handle_connection(server, state, deps).await });
+
+        // Write a truncated JSON line — no trailing newline, so `bounded_read_line`
+        // returns the partial content as-is at EOF.
+        client
+            .write_all(b"{\"List\":")
+            .await
+            .expect("write half-frame");
+
+        // Drop the entire client — signals EOF on the server's read side.
+        // The server will attempt to parse the incomplete JSON, produce a parse
+        // error response, and fail to write it (broken pipe).  Both outcomes
+        // (Ok and Err(broken pipe)) are acceptable — the key invariant is no
+        // panic/task failure.
+        drop(client);
+
+        let task_result = tokio::time::timeout(std::time::Duration::from_secs(2), join)
+            .await
+            .expect("server task should not time out")
+            .expect("task did not panic");
+
+        // Accept Ok(()) or an I/O error from writing the error response back.
+        // A panic would be caught above; reaching here means the server handled
+        // the truncated frame gracefully.
+        match &task_result {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = format!("{e:#}");
+                assert!(
+                    msg.contains("broken pipe")
+                        || msg.contains("flushing")
+                        || msg.contains("writing"),
+                    "unexpected error from half-frame handling: {msg}"
+                );
+            }
+        }
+    }
+
+    /// oversized_request_via_mock_stream: send a 2 MB payload through a duplex
+    /// stream.  The server must respond with an `Error` containing
+    /// "request too large" rather than buffering the entire payload.
+    ///
+    /// This is a duplicate of `test_handle_connection_oversized_request` but
+    /// explicitly documents the `MockStream` (duplex) path.
+    #[tokio::test]
+    async fn mock_stream_oversized_request_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        // Buffer must be large enough to hold the oversized write.
+        let (client, server) = tokio::io::duplex(3 * 1024 * 1024);
+        let state_c = Arc::clone(&state);
+        let deps_c = Arc::clone(&deps);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // 2 MB payload — exceeds MAX_REQUEST_SIZE (1 MB).
+        let big_value = "y".repeat(2 * 1024 * 1024);
+        let oversized = format!("{{\"__pad\":\"{big_value}\"}}\n");
+        write_half
+            .write_all(oversized.as_bytes())
+            .await
+            .expect("write oversized payload");
+
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("request too large"),
+                    "expected 'request too large', got: {message}"
+                );
+            }
+            other => panic!("expected Error for 2 MB payload, got {other:?}"),
+        }
     }
 }

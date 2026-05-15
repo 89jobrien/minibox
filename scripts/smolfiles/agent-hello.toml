@@ -1,0 +1,13 @@
+# Smolfile for the minibox hello-world agent demo VM.
+#
+# Used by scripts/agent_hello_world.py — each agent spawns an ephemeral
+# bare Alpine smolvm machine and runs a hello-world command inside it.
+# No image pull required — bare VM mode uses the bundled Alpine rootfs.
+#
+# Usage:
+#   smolvm machine run --smolfile scripts/smolfiles/agent-hello.toml -- echo "hello"
+
+cpus   = 1
+memory = 512     # MiB — tiny, it's just echo
+net    = false   # no outbound needed for hello world
+env    = ["MINIBOX_AGENT=hello-world"]

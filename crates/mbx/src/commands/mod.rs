@@ -10,6 +10,7 @@ pub mod events;
 pub mod exec;
 pub mod load;
 pub mod logs;
+pub mod manifest;
 pub mod pause;
 pub mod prune;
 pub mod ps;

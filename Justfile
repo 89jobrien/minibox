@@ -84,17 +84,6 @@ coverage:
     cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p miniboxd --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
-# VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
-# Builds the test binary, codesigns it with the virtualization entitlement,
-# then runs it directly (bypasses cargo test runner to preserve dispatch_main harness).
-test-vz-isolation:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build -p macbox --features vz --test vz_isolation_tests
-    BIN=$(ls -t "$HOME/.minibox/cache/target/debug/deps/vz_isolation_tests-"* | head -1)
-    codesign --force --sign - --entitlements entitlements/vz-test.entitlements "$BIN"
-    "$BIN"
-
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
     cargo build -p mbx
@@ -106,6 +95,7 @@ test-integration:
     sudo -E bash scripts/run-cgroup-tests.sh
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
+    cargo test -p minibox --test gke_adapter_isolation_tests -- --test-threads=1 --nocapture
 
 # Protocol e2e tests: any platform, no root, no cgroups
 test-e2e:
@@ -126,14 +116,6 @@ test-sandbox:
 # Linux dogfood: build test image + load + run all tests inside container
 test-linux:
     cargo xtask test-linux
-
-# Boot Alpine VM with interactive shell under QEMU HVF (Ctrl-A X to exit)
-run-vm:
-    cargo xtask run-vm
-
-# Cross-compile test binaries for aarch64-musl + run inside QEMU VM
-test-vm:
-    cargo xtask test-vm
 
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
@@ -275,6 +257,12 @@ diagnose *args:
 # Fetch, check sync vs origin/main — safe to push check
 sync-check:
     cruxx run .crux/sync-check.crux
+
+# ── Setup ────────────────────────────────────────────────────────────────────
+
+# Install git hooks (pre-commit, pre-push, commit-msg) from scripts/install-hooks.sh
+install-hooks:
+    bash scripts/install-hooks.sh
 
 # ── Git ──────────────────────────────────────────────────────────────────────
 

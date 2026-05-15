@@ -140,8 +140,9 @@ pub fn make_mock_deps_with_registry(
     registry: MockRegistry,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -184,6 +185,6 @@ pub fn make_mock_deps_with_registry(
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(base.join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, base))
 }

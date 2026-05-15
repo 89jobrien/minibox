@@ -23,7 +23,6 @@ otel    = ["minibox/otel"]
 # tailnet feature is declared for cfg(feature = "tailnet") gating in main.rs;
 # the tailbox crate was moved to minibox-plugins — enable separately when available.
 tailnet = []
-vz = ["macbox/vz"]
 
 [dependencies]
 # minibox is Unix-centric (uses nix) but must stay in [dependencies] (not a

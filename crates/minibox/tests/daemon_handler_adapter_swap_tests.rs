@@ -81,8 +81,9 @@ fn make_deps(
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -126,7 +127,8 @@ fn make_deps(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store =
+        minibox::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 
@@ -138,13 +140,14 @@ fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
 async fn test_run_with_all_success_adapters() {
     use minibox_core::domain::DynImageRegistry;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // Keep an Arc to the mock registry so we can inspect pull_count() after the run.
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
 
     // Rebuild deps with the Arc we're holding so pull_count is observable.
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     let deps = {
         use minibox::daemon::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
         use minibox_core::adapters::HostnameRegistryRouter;
@@ -225,7 +228,7 @@ async fn test_run_with_all_success_adapters() {
 
 #[tokio::test]
 async fn test_run_with_registry_pull_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // Registry has no cached image AND will fail on pull — handler must propagate the error.
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_pull_failure()),
@@ -265,7 +268,7 @@ async fn test_run_with_registry_pull_failure() {
 
 #[tokio::test]
 async fn test_run_with_filesystem_setup_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new().with_setup_failure(),
@@ -304,7 +307,7 @@ async fn test_run_with_filesystem_setup_failure() {
 
 #[tokio::test]
 async fn test_run_with_limiter_create_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new(),
@@ -343,7 +346,7 @@ async fn test_run_with_limiter_create_failure() {
 
 #[tokio::test]
 async fn test_list_works_with_failing_adapters() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // All adapters configured to fail — list should still return an empty list
     // because it only touches DaemonState, not any infrastructure adapter.
     let _deps = make_deps(
@@ -371,7 +374,7 @@ async fn test_list_works_with_failing_adapters() {
 
 #[tokio::test]
 async fn test_stop_unknown_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let deps = make_deps(
@@ -403,7 +406,7 @@ async fn test_stop_unknown_container_returns_error() {
 
 #[tokio::test]
 async fn test_pull_success_then_pull_failure_different_deps() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     // First request: registry succeeds (image not cached, pulled on demand).
     // Hold an Arc to the registry so we can inspect pull_count() after the run.
@@ -413,8 +416,10 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         use minibox_core::adapters::HostnameRegistryRouter;
         use minibox_core::domain::DynImageRegistry;
 
-        let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images2"))
+                .expect("unwrap in test"),
+        );
         Arc::new(minibox::daemon::handler::HandlerDependencies {
             image: ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -482,7 +487,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     );
 
     // Second request: registry fails on pull — completely separate deps.
-    let tmp2 = TempDir::new().unwrap();
+    let tmp2 = TempDir::new().expect("unwrap in test");
     let deps_fail = make_deps(
         Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),

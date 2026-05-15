@@ -11,6 +11,10 @@ details and `TESTING.md` for the full test strategy.
 - [uv](https://docs.astral.sh/uv/) for Python script dependencies
 - Linux + root for integration/e2e tests (unit tests run on macOS)
 
+## Good to have
+
+- [Nushell](https://www.nushell.sh/) is my default terminal shell and most scripts are written in `nu` then translated to `bash` shellscripts
+
 ## Runner Hierarchy
 
 Minibox has two task runners. They are complementary, not competing:
@@ -28,6 +32,9 @@ core build/test pipeline.
 ## Quick Start
 
 ```bash
+# Install git hooks (pre-commit, pre-push, commit-msg) — run once after cloning
+just install-hooks
+
 # Build everything (release)
 cargo build --release
 
@@ -36,6 +43,11 @@ cargo fmt --all
 
 # Lint (all workspace crates, deny warnings)
 cargo clippy --workspace -- -D warnings
+# Read-only local verification gate
+cargo xtask verify
+
+# Borrow-reasoning fixtures only
+cargo xtask borrow-fixtures
 
 # Unit tests (any platform)
 cargo xtask test-unit
@@ -69,8 +81,6 @@ Set `RUST_LOG=debug` for verbose tracing output.
 cargo build --release                # all crates
 just build-release                   # optimised (macOS-safe)
 just build-linux                     # static musl binary (auto-detects arch)
-cargo xtask build-vm-image           # Alpine VM image for macOS VZ tests
-cargo xtask build-vm-image --force   # force re-download + recompile
 ```
 
 ## Testing
@@ -81,6 +91,20 @@ cargo xtask build-vm-image --force   # force re-download + recompile
 cargo xtask test-unit        # canonical
 just test-unit               # equivalent shorthand
 ```
+
+### Borrow-reasoning fixtures (any platform)
+
+```bash
+cargo xtask borrow-fixtures  # standalone must-pass/must-fail Rust borrow examples
+cargo xtask borrow fixtures  # equivalent alias
+```
+
+The fixture suite checks standalone Rust examples directly with `rustc`:
+fixtures under `xtask/fixtures/borrow/pass` are `must-pass`, while fixtures under
+`xtask/fixtures/borrow/fail` are `must-fail` with their declared `// expect: ...`
+diagnostic snippets. The examples cover moves, shared and unique borrows,
+disjoint field borrows, reborrowing, NLL last-use behavior, and conservative
+branch joins.
 
 ### Integration tests (Linux + root)
 
@@ -107,14 +131,11 @@ cargo xtask test-property
 ```bash
 just test-adapters           # Colima + handler adapter swap tests
 just test-cli-subprocess     # CLI subprocess integration tests
-just test-vz-isolation       # macOS VZ isolation (requires VM image)
 ```
 
 ### VM tests
 
 ```bash
-just run-vm                  # boot Alpine VM with interactive shell (QEMU HVF)
-just test-vm                 # cross-compile + run tests inside QEMU VM
 just test-linux              # dogfood: build image + run tests in container
 ```
 
@@ -139,35 +160,34 @@ just test-all                # nuke state -> doctor -> unit + integration + e2e 
 ## Benchmarks
 
 ```bash
-cargo xtask bench                          # run locally, save to bench/results/
-cargo xtask bench-vps                      # run on VPS, fetch results
-cargo xtask bench-vps --commit --push      # ... and commit + push
-just bench-sync                            # sync VPS results to local jsonl
-just flamegraph [suite]                    # profile with samply/flamegraph
-just bench-agent report                    # AI bench analysis
+cargo xtask bench            # run locally, save to bench/results/
+just bench-sync              # sync VPS results to local jsonl
+just flamegraph [suite]      # profile with samply/flamegraph
+just bench-agent report      # AI bench analysis
 ```
 
 ## CI Gates
 
-Local validation should match CI. The two commands that matter:
+Local validation should match CI. The commands that matter:
 
-1. **Before every commit:** `cargo xtask pre-commit`
-2. **Before every push:** `cargo xtask prepush`
+1. **Read-only local gate:** `cargo xtask verify`
+2. **Before every commit:** `cargo xtask pre-commit`
+3. **Before every push:** `cargo xtask prepush`
 
-GitHub Actions (`.github/workflows/ci.yml`) runs the same xtask commands plus
-`cargo deny` and `cargo audit` on the `next` and `stable` branches.
+GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
+`cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `stable` branches.
 
 ## Environment Variables
 
-| Variable               | Purpose                                    | Default                          |
-| ---------------------- | ------------------------------------------ | -------------------------------- |
-| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, vz     | `native`                         |
-| `MINIBOX_DATA_DIR`     | Image/container storage                    | `/var/lib/minibox` (root)        |
-| `MINIBOX_RUN_DIR`      | Socket/runtime directory                   | `/run/minibox`                   |
-| `MINIBOX_SOCKET_PATH`  | Unix socket path                           | `$MINIBOX_RUN_DIR/miniboxd.sock` |
-| `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                 | systemd slice path               |
-| `MINIBOX_NETWORK_MODE` | Network mode: none, bridge                 | `none`                           |
-| `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc) | unset                            |
+| Variable               | Purpose                                          | Default                             |
+| ---------------------- | ------------------------------------------------ | ----------------------------------- |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun | `smolvm` (macOS) / `native` (Linux) |
+| `MINIBOX_DATA_DIR`     | Image/container storage                          | `/var/lib/minibox` (root)           |
+| `MINIBOX_RUN_DIR`      | Socket/runtime directory                         | `/run/minibox`                      |
+| `MINIBOX_SOCKET_PATH`  | Unix socket path                                 | `$MINIBOX_RUN_DIR/miniboxd.sock`    |
+| `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                       | systemd slice path                  |
+| `MINIBOX_NETWORK_MODE` | Network mode: none, bridge                       | `none`                              |
+| `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc)       | unset                               |
 
 ## Cleanup
 

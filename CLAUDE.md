@@ -12,13 +12,13 @@ Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` 
 
 - `README.md` — user-facing overview and quickstart.
 - `DEVELOPMENT.md` — canonical developer workflow and command selection.
-- `docs/ARCHITECTURE.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
-- `docs/GOTCHAS.md` — non-obvious Rust/container/protocol pitfalls.
-- `docs/TEST_INFRASTRUCTURE.md` — test categories, CI coverage, xtask commands.
-- `docs/CRATE_INVENTORY.md` — crate/module inventory and current counts.
-- `docs/FEATURE_MATRIX.md` — platform and adapter capability matrix.
-- `docs/STATE_MODEL.md` — daemon persistence model.
-- `docs/SECURITY_INVARIANTS.md` — security rules to preserve.
+- `docs/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
+- `docs/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
+- `docs/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
+- `docs/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
+- `docs/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
+- `docs/STATE_MODEL.mbx.md` — daemon persistence model.
+- `docs/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
 
 If changing container code, protocol types, adapters, or tests, read the relevant reference above instead of relying on this compact file.
 
@@ -36,6 +36,8 @@ If changing container code, protocol types, adapters, or tests, read the relevan
 Use `just` or `cargo xtask` for repeatable gates.
 
 - `cargo check --workspace` — compile/check workspace.
+- `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
+- `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
 - `cargo xtask prepush` — broader Linux-oriented gate: nextest and coverage.
 - `cargo xtask test-unit` — cross-platform unit and conformance subset.
@@ -88,3 +90,21 @@ Branches follow the stability pipeline:
 ## Hook Notes
 
 Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook runs `nu scripts/preflight.nu`; it should be fast, read-only, and non-fatal so startup is not blocked by normal local state like an uncommitted working tree.
+
+---
+
+## Quick Reference
+
+```
+No .unwrap() in production        → use .context("description")?
+No println!/eprintln! in daemon   → use tracing::info!/warn!
+No platform imports in core       → minibox-core has zero OS deps
+No fork/clone in async fn         → use tokio::task::spawn_blocking
+No unsafe without SAFETY comment  → document the invariant
+No direct path from user input    → call validate_layer_path() first
+No env::set_var in parallel tests → use static Mutex<()> guard
+No new protocol field without     → #[serde(default)]
+  backward compat
+New adapter? Update composition   → miniboxd/src/main.rs (all suites)
+New HandlerDependencies field?    → update all construction sites
+```

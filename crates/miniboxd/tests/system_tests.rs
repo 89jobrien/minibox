@@ -358,7 +358,15 @@ fn test_e2e_nonroot_rejected() {
     let fixture = DaemonFixture::start();
 
     let output = Command::new("sudo")
-        .args(["-u", "nobody", fixture.cli_bin.to_str().unwrap(), "ps"])
+        .args([
+            "-u",
+            "nobody",
+            fixture
+                .cli_bin
+                .to_str()
+                .expect("cli_bin path is valid UTF-8"),
+            "ps",
+        ])
         .env("MINIBOX_SOCKET_PATH", &fixture.socket_path)
         .output();
 

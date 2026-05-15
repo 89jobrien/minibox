@@ -3,7 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+      - "nightly/*"
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,9 +13,10 @@ jobs:
   publish-crates:
     name: Publish crates to crates.io
     runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'v')
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -22,9 +24,9 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish -p minibox-macros
+          cargo publish -p minibox-macros || echo "minibox-macros already published"
           sleep 30
-          cargo publish -p minibox-core
+          cargo publish -p minibox-core || echo "minibox-core already published"
           sleep 30
 
   build:
@@ -37,7 +39,7 @@ jobs:
           - aarch64-unknown-linux-musl
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -62,12 +64,11 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME}
           TARGET=${{ matrix.target }}
-          ARCHIVE="minibox-${VERSION}-${TARGET}.tar.gz"
+          ARCHIVE="minibox-${VERSION//\//-}-${TARGET}.tar.gz"
           mkdir -p dist
           cp target/${{ matrix.target }}/release/miniboxd dist/
           cp target/${{ matrix.target }}/release/mbx dist/
           tar -czf "${ARCHIVE}" -C dist miniboxd mbx
-          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -84,7 +85,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -98,4 +99,4 @@ jobs:
           files: artifacts/*.tar.gz
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ startsWith(github.ref_name, 'nightly/') }}

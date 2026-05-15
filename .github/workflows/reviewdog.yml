@@ -10,9 +10,14 @@ env:
 jobs:
   reviewdog:
     name: reviewdog
-    runs-on: [self-hosted, minibox-mac]
+    runs-on: macos-latest
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       - name: install reviewdog
         uses: reviewdog/action-setup@v1

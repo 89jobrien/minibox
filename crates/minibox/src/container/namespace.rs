@@ -157,6 +157,12 @@ where
         .context("failed to clone container process");
     }
 
+    // SAFETY: clone succeeded without CLONE_VM, so the child has its own
+    // copy of the address space and will free its copy of child_arg in the
+    // trampoline. The parent's allocation at child_arg still exists and must
+    // be freed here to avoid a memory leak.
+    let _ = unsafe { Box::from_raw(child_arg as *mut Box<dyn FnOnce() -> isize + Send>) };
+
     // Keep the stack alive until after clone returns (parent path).
     // The child has its own copy of the address space so it does not share
     // this Vec.

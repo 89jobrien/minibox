@@ -58,7 +58,7 @@ async fn registry_pull_image_propagates_executor_error() {
     }));
 
     let result = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").expect("unwrap in test"))
         .await;
     assert!(
         result.is_err(),
@@ -87,7 +87,7 @@ async fn registry_pull_image_parses_inspect_output() {
     }));
 
     let metadata = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").unwrap())
+        .pull_image(&minibox::image::reference::ImageRef::parse("alpine").expect("unwrap in test"))
         .await
         .expect("pull_image should succeed with valid executor output");
 
@@ -389,11 +389,12 @@ async fn runtime_spawn_script_embeds_args() {
     let cap = captured_script.clone();
 
     let runtime = ColimaRuntime::new().with_executor(Arc::new(move |args: &[&str]| {
-        *captured_argv_ref.lock().unwrap() = args.iter().map(|arg| arg.to_string()).collect();
+        *captured_argv_ref.lock().expect("unwrap in test") =
+            args.iter().map(|arg| arg.to_string()).collect();
         if let Some(pos) = args.iter().position(|&a| a == "-c" || a == "-lc")
             && let Some(script) = args.get(pos + 1)
         {
-            *cap.lock().unwrap() = script.to_string();
+            *cap.lock().expect("unwrap in test") = script.to_string();
         }
         Ok("99\n".to_string())
     }));
@@ -413,11 +414,14 @@ async fn runtime_spawn_script_embeds_args() {
         image_ref: None,
     };
 
-    let result = runtime.spawn_process(&config).await.unwrap();
+    let result = runtime
+        .spawn_process(&config)
+        .await
+        .expect("unwrap in test");
     assert_eq!(result.pid, 99);
 
-    let argv = captured_argv.lock().unwrap().clone();
-    let script = captured_script.lock().unwrap().clone();
+    let argv = captured_argv.lock().expect("unwrap in test").clone();
+    let script = captured_script.lock().expect("unwrap in test").clone();
     assert_eq!(argv.first().map(String::as_str), Some("bash"));
     assert_eq!(argv.get(1).map(String::as_str), Some("-lc"));
     assert!(
@@ -451,7 +455,7 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
     let fs = ColimaFilesystem::new().with_executor(Arc::new(move |args: &[&str]| {
         recorded
             .lock()
-            .unwrap()
+            .expect("unwrap in test")
             .push(args.iter().map(|arg| arg.to_string()).collect());
         Ok(String::new())
     }));
@@ -468,7 +472,7 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
         PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
     );
 
-    let calls = calls.lock().unwrap();
+    let calls = calls.lock().expect("unwrap in test");
     let mount_call = calls
         .iter()
         .find(|call| {
@@ -508,7 +512,7 @@ fn filesystem_cleanup_uses_sudo_umount() {
     let fs = ColimaFilesystem::new().with_executor(Arc::new(move |args: &[&str]| {
         recorded
             .lock()
-            .unwrap()
+            .expect("unwrap in test")
             .push(args.iter().map(|arg| arg.to_string()).collect());
         Ok(String::new())
     }));
@@ -516,7 +520,7 @@ fn filesystem_cleanup_uses_sudo_umount() {
     fs.cleanup(&PathBuf::from("/tmp/container-test"))
         .expect("cleanup should succeed with injected executor");
 
-    let calls = calls.lock().unwrap();
+    let calls = calls.lock().expect("unwrap in test");
     assert_eq!(
         calls[0],
         vec![
@@ -546,7 +550,7 @@ fn limiter_create_uses_sudo_for_cgroup_operations() {
     let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
         recorded
             .lock()
-            .unwrap()
+            .expect("unwrap in test")
             .push(args.iter().map(|arg| arg.to_string()).collect());
         Ok(String::new())
     }));
@@ -562,7 +566,7 @@ fn limiter_create_uses_sudo_for_cgroup_operations() {
 
     assert_eq!(path, "/sys/fs/cgroup/minibox/test-container-id");
 
-    let calls = calls.lock().unwrap();
+    let calls = calls.lock().expect("unwrap in test");
     assert_eq!(
         calls[1],
         vec![
@@ -619,7 +623,7 @@ fn limiter_add_process_uses_sudo() {
     let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
         recorded
             .lock()
-            .unwrap()
+            .expect("unwrap in test")
             .push(args.iter().map(|arg| arg.to_string()).collect());
         Ok(String::new())
     }));
@@ -628,7 +632,7 @@ fn limiter_add_process_uses_sudo() {
         .add_process("test-container-id", 1234)
         .expect("add_process should succeed with injected executor");
 
-    let calls = calls.lock().unwrap();
+    let calls = calls.lock().expect("unwrap in test");
     assert!(calls.iter().any(|call| {
         call == &vec![
             "sudo".to_string(),
@@ -649,7 +653,7 @@ fn limiter_cleanup_uses_sudo_rmdir() {
     let limiter = ColimaLimiter::new().with_executor(Arc::new(move |args: &[&str]| {
         recorded
             .lock()
-            .unwrap()
+            .expect("unwrap in test")
             .push(args.iter().map(|arg| arg.to_string()).collect());
         Ok(String::new())
     }));
@@ -658,7 +662,7 @@ fn limiter_cleanup_uses_sudo_rmdir() {
         .cleanup("test-container-id")
         .expect("cleanup should succeed with injected executor");
 
-    let calls = calls.lock().unwrap();
+    let calls = calls.lock().expect("unwrap in test");
     assert!(calls.iter().any(|call| {
         call == &vec![
             "sudo".to_string(),

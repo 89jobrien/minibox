@@ -339,6 +339,9 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::Event { .. }
         | DaemonResponse::LogLine { .. }
         | DaemonResponse::UpdateProgress { .. } => false,
+
+        // Manifest inspection — terminal (single response per request).
+        DaemonResponse::Manifest { .. } | DaemonResponse::VerifyResult { .. } => true,
     }
 }
 

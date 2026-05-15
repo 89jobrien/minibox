@@ -4,47 +4,35 @@ on:
   push:
     branches: [main, next, stable, "feature/*", "hotfix/*"]
     paths:
-      - 'crates/minibox-core/src/protocol.rs'
-      - 'crates/minibox/src/daemon/handler.rs'
-      - 'crates/minibox/src/daemon/server.rs'
+      - "crates/minibox-core/src/protocol.rs"
+      - "crates/minibox-core/src/domain.rs"
+      - "crates/minibox-core/src/domain/networking.rs"
+      - "crates/minibox-core/src/domain/extensions.rs"
+      - "crates/minibox-core/src/events.rs"
+      - "xtask/protocol-drift.lock"
+      - "xtask/src/protocol_drift.rs"
   pull_request:
     branches: [main, next]
     paths:
-      - 'crates/minibox-core/src/protocol.rs'
-      - 'crates/minibox/src/daemon/handler.rs'
-      - 'crates/minibox/src/daemon/server.rs'
+      - "crates/minibox-core/src/protocol.rs"
+      - "crates/minibox-core/src/domain.rs"
+      - "crates/minibox-core/src/domain/networking.rs"
+      - "crates/minibox-core/src/domain/extensions.rs"
+      - "crates/minibox-core/src/events.rs"
+      - "xtask/protocol-drift.lock"
+      - "xtask/src/protocol_drift.rs"
+
+permissions:
+  contents: read
 
 jobs:
   protocol-drift:
-    name: protocol drift check
+    name: core contract hash check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-      - name: check DaemonRequest/DaemonResponse variants stay in sync
-        run: |
-          REQ_VARIANTS=$(grep -cE '^\s+(Run|Pull|Stop|Remove|List|Exec|Pause|Resume|Build|Push|Commit|Prune|RemoveImage|Events|PtyResize)\b' \
-            crates/minibox-core/src/protocol.rs || true)
-          RESP_VARIANTS=$(grep -cE '^\s+(ContainerCreated|Success|Error|ContainerList|ContainerStopped|ContainerOutput|ImageBuildProgress)\b' \
-            crates/minibox-core/src/protocol.rs || true)
-          echo "DaemonRequest variants: $REQ_VARIANTS"
-          echo "DaemonResponse variants: $RESP_VARIANTS"
-          if [ "$REQ_VARIANTS" -eq 0 ] || [ "$RESP_VARIANTS" -eq 0 ]; then
-            echo "ERROR: could not find protocol variants -- parser may need updating"
-            exit 1
-          fi
-          echo "OK: protocol variants detected"
-
-      - name: check handler covers all request variants
-        run: |
-          UNHANDLED=$(grep -oP 'DaemonRequest::\K\w+' crates/minibox-core/src/protocol.rs | sort -u | while read V; do
-            if ! grep -q "DaemonRequest::${V}" crates/minibox/src/daemon/handler.rs crates/minibox/src/daemon/server.rs 2>/dev/null; then
-              echo "$V"
-            fi
-          done)
-          if [ -n "$UNHANDLED" ]; then
-            echo "ERROR: DaemonRequest variants not handled in handler/server:"
-            echo "$UNHANDLED"
-            exit 1
-          fi
-          echo "OK: all request variants handled"
+      - name: verify core contract hashes
+        run: cargo xtask check-protocol-drift

@@ -42,7 +42,7 @@ impl PrometheusMetricsRecorder {
 
     /// Encode all registered metrics as Prometheus text exposition format.
     pub fn encode_metrics(&self) -> String {
-        let registry = self.registry.lock().unwrap();
+        let registry = self.registry.lock().unwrap(); // allow:unwrap — poisoned mutex is unrecoverable
         let mut buffer = String::new();
         encode(&mut buffer, &registry).unwrap_or_default();
         buffer
@@ -63,7 +63,7 @@ impl PrometheusMetricsRecorder {
                 let family = Family::<Labels, Counter>::default();
                 self.registry
                     .lock()
-                    .unwrap()
+                    .unwrap() // allow:unwrap — poisoned mutex is unrecoverable
                     .register(name, name, family.clone());
                 family
             })
@@ -79,7 +79,7 @@ impl PrometheusMetricsRecorder {
                 });
                 self.registry
                     .lock()
-                    .unwrap()
+                    .unwrap() // allow:unwrap — poisoned mutex is unrecoverable
                     .register(name, name, family.clone());
                 family
             })
@@ -93,7 +93,7 @@ impl PrometheusMetricsRecorder {
                 let family = Family::<Labels, Gauge>::default();
                 self.registry
                     .lock()
-                    .unwrap()
+                    .unwrap() // allow:unwrap — poisoned mutex is unrecoverable
                     .register(name, name, family.clone());
                 family
             })
