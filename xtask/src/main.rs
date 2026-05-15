@@ -23,6 +23,7 @@ mod collect_metrics;
 mod context;
 mod daily_orchestration;
 mod demo;
+mod detect_changes;
 mod docs_lint;
 mod feature_matrix_date;
 mod gates;
@@ -202,6 +203,10 @@ fn main() -> Result<()> {
             let warn_only = env::args().any(|a| a == "--warn-only");
             protocol_sites::check_protocol_sites(&file, expected, warn_only)
         }
+        Some("detect-changes") => {
+            let base_ref = env::args().nth(2).unwrap_or_else(|| "HEAD^".to_string());
+            detect_changes::run(root, &base_ref)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -273,6 +278,9 @@ fn main() -> Result<()> {
             eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(
                 "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"
+            );
+            eprintln!(
+                "  detect-changes [<base-ref>]  classify changed paths; emit GHA outputs (default base: HEAD^)"
             );
             Ok(())
         }
