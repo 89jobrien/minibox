@@ -201,8 +201,6 @@ installed files match their expected hashes.
 ```bash
 cargo xtask bench                        # run locally, save to bench/results/
 cargo xtask bench-vps                    # run on VPS, fetch results
-./target/release/minibox-bench --suite codec    # protocol benchmarks
-./target/release/minibox-bench --suite adapter  # adapter overhead benchmarks
 ```
 
 > Results are written to `bench/results/bench.jsonl` (append-only history) and `bench/results/latest.json`.
