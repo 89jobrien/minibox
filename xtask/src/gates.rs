@@ -77,6 +77,9 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
+    crate::feature_matrix_date::update_feature_matrix_date(&root)
+        .context("update-feature-matrix-date failed")?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");

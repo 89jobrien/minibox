@@ -4,10 +4,11 @@
 //! module and wiring it into the `match` below; do NOT grow existing modules
 //! beyond their stated scope.
 //!
-//! | Module      | Responsibility                                              |
-//! |-------------|-------------------------------------------------------------|
-//! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
-//! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
+//! | Module               | Responsibility                                              |
+//! |----------------------|-------------------------------------------------------------|
+//! | `gates`              | Quality gates: fmt-check, clippy, nextest, coverage         |
+//! | `cleanup`            | State cleanup: kill orphans, unmount overlays, rm artifacts |
+//! | `feature_matrix_date`| Rewrite Last-updated stamp in FEATURE_MATRIX.mbx.md        |
 use anyhow::{Result, bail};
 use std::env;
 use xshell::Shell;
@@ -21,9 +22,9 @@ mod cleanup;
 mod context;
 mod daily_orchestration;
 mod docs_lint;
+mod feature_matrix_date;
 mod gates;
 mod preflight;
-mod promote;
 mod protocol_drift;
 mod protocol_sites;
 mod stale_names;
@@ -157,19 +158,7 @@ fn main() -> Result<()> {
             }
             daily_orchestration::run(dry_run, ci)
         }
-        Some("promote") => {
-            let args: Vec<String> = env::args().skip(2).collect();
-            let dry_run = args.iter().any(|a| a == "--dry-run");
-            let from = args
-                .windows(2)
-                .find(|w| w[0] == "--from")
-                .and_then(|w| promote::Tier::from_str(&w[1]));
-            let to = args
-                .windows(2)
-                .find(|w| w[0] == "--to")
-                .and_then(|w| promote::Tier::from_str(&w[1]));
-            promote::run(root, from, to, dry_run)
-        }
+        Some("update-feature-matrix-date") => feature_matrix_date::update_feature_matrix_date(root),
         Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-drift") => {
             let args: Vec<String> = env::args().skip(2).collect();
@@ -194,7 +183,7 @@ fn main() -> Result<()> {
                 .windows(2)
                 .find(|w| w[0] == "--expected")
                 .and_then(|w| w[1].parse().ok())
-                .unwrap_or(4);
+                .unwrap_or(3);
             let warn_only = env::args().any(|a| a == "--warn-only");
             protocol_sites::check_protocol_sites(&file, expected, warn_only)
         }
@@ -250,7 +239,7 @@ fn main() -> Result<()> {
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
             eprintln!(
-                "  promote [--from <tier>] [--to <tier>] [--dry-run]  run local promotion pipeline"
+                "  update-feature-matrix-date  rewrite Last-updated stamp in docs/FEATURE_MATRIX.mbx.md to today"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(
