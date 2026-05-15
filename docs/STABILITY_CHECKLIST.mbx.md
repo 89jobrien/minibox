@@ -1,7 +1,8 @@
 # Stability Checklist
 
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
-crate. See `docs/CRATE_TIERS.md` for the full stabilization policy.
+crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
+criteria.
 
 Last updated: 2026-05-06
 
