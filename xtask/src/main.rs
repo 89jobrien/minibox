@@ -15,6 +15,7 @@ use xshell::Shell;
 
 mod bench;
 mod borrow_fixtures;
+mod demo;
 mod bump;
 mod cas;
 mod cgroup_tests;
@@ -145,6 +146,15 @@ fn main() -> Result<()> {
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
+        Some("demo") => {
+            let args: Vec<String> = env::args().collect();
+            let adapter = args
+                .windows(2)
+                .find(|w| w[0] == "--adapter")
+                .map(|w| w[1].clone())
+                .unwrap_or_else(|| "smolvm".to_string());
+            demo::demo(&sh, root, &adapter)
+        }
         Some("bench") => bench::bench(&sh, root),
         Some("collect-metrics") => {
             let save = env::args().any(|a| a == "--save");
@@ -237,6 +247,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  lint-docs        validate frontmatter + status values in docs/superpowers/"
+            );
+            eprintln!(
+                "  demo [--adapter <name>]  pull alpine:latest + run echo via mbx (default adapter: smolvm)"
             );
             eprintln!("  bench            run criterion benchmarks, save to bench/results/");
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
