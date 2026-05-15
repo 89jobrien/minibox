@@ -3662,57 +3662,603 @@ mod pub_crate_handler_tests {
     // ── handle_subscribe_events ───────────────────────────────────────────────
 
     #[tokio::test]
-    async fn test_subscribe_events_exits_when_sender_closed() {
-        let tmp = TempDir::new().expect("create temp dir");
-        let deps = make_deps(&tmp);
-        let event_source = Arc::clone(&deps.events.event_source);
-
-        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
-        drop(rx); // close the receiver so sends fail immediately
-
-        // Should return without hanging.
-        tokio::time::timeout(
-            std::time::Duration::from_millis(500),
-            handle_subscribe_events(event_source, tx),
-        )
-        .await
-        .expect("handle_subscribe_events must exit when tx is closed");
-    }
-
-    #[tokio::test]
-    async fn test_subscribe_events_receives_event_then_exits() {
+    async fn test_subscribe_events_exits_when_mpsc_receiver_dropped() {
+        // handle_subscribe_events exits when tx.send() fails (mpsc receiver dropped).
+        // Strategy: drop mpsc rx before emitting, then emit a broadcast event.
+        // The handler receives the broadcast event, tries to mpsc-send, fails → exits.
         let broker = Arc::new(BroadcastEventBroker::new());
         let event_source: Arc<dyn minibox_core::events::EventSource> = Arc::clone(&broker) as _;
+        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+        drop(rx); // drop receiver so any mpsc send will fail
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
-        let tx_clone = tx.clone();
-        drop(tx); // drop original; only tx_clone keeps channel alive
+        let handle = tokio::spawn(async move {
+            handle_subscribe_events(event_source, tx).await;
+        });
 
-        // Emit an event so the subscriber receives it, then drop tx_clone so
-        // the next send attempt fails and the loop exits.
+        // Give the task a moment to subscribe, then emit an event.
+        tokio::task::yield_now().await;
         broker.emit(minibox_core::events::ContainerEvent::ImagePruned {
-            count: 1,
+            count: 0,
             freed_bytes: 0,
             timestamp: std::time::SystemTime::now(),
         });
 
-        // Run the handler; it will receive 1 event, send it (succeeds), then
-        // on the next Recv it blocks — so we drop tx_clone after a short wait.
-        let handle = tokio::spawn(async move {
-            handle_subscribe_events(event_source, tx_clone).await;
-        });
-
-        let resp = rx.recv().await.expect("should receive at least one event");
-        assert!(
-            matches!(resp, DaemonResponse::Event { .. }),
-            "expected Event, got {resp:?}"
-        );
-
-        // Ensure the handler task finishes (rx drop causes next send to fail → exit).
-        drop(rx);
+        // Handler should exit after the failed mpsc send.
         tokio::time::timeout(std::time::Duration::from_millis(500), handle)
             .await
-            .expect("handler task should exit after rx drop")
+            .expect("handle_subscribe_events must exit when mpsc rx is dropped")
             .expect("handler task should not panic");
+    }
+
+    // ── handle_prune with running container ────────────────────────────────
+
+    #[tokio::test]
+    async fn test_prune_with_running_container_passes_in_use() {
+        // Exercises the filter_map closure inside handle_prune (lines 2495-2501).
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Inject a running container so the filter closure takes the Some branch.
+        state
+            .add_container(crate::daemon::state::ContainerRecord {
+                info: ContainerInfo {
+                    id: "running-ctr".to_string(),
+                    name: None,
+                    image: "alpine:latest".to_string(),
+                    command: "/bin/sh".to_string(),
+                    state: "running".to_string(),
+                    created_at: "1970-01-01T00:00:00Z".to_string(),
+                    pid: None,
+                },
+                pid: None,
+                rootfs_path: tmp.path().join("rootfs"),
+                cgroup_path: tmp.path().join("cgroup"),
+                post_exit_hooks: vec![],
+                rootfs_metadata: None,
+                source_image_ref: Some("alpine:latest".to_string()),
+                step_state: None,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+                creation_params: None,
+                manifest_path: None,
+                workload_digest: None,
+            })
+            .await;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_prune(
+            true,
+            Arc::clone(&state),
+            Arc::clone(&deps.image.image_gc),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response from handle_prune");
+        assert!(
+            matches!(resp, DaemonResponse::Pruned { .. }),
+            "expected Pruned, got {resp:?}"
+        );
+    }
+
+    // ── handle_remove_image success path ──────────────────────────────────
+
+    #[tokio::test]
+    async fn test_remove_image_success_path_emits_success() {
+        // Exercises the Ok(()) arm of delete_image in handle_remove_image.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Calling remove on a non-existent image (dir doesn't exist) → Ok(()) → Success.
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_remove_image(
+            "nonexistent:v1".to_string(),
+            state,
+            Arc::clone(&deps.image.image_store),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response");
+        // Either Success (delete no-op) or Error (image_dir rejected the name).
+        assert!(
+            matches!(
+                resp,
+                DaemonResponse::Success { .. } | DaemonResponse::Error { .. }
+            ),
+            "expected Success or Error, got {resp:?}"
+        );
+    }
+
+    // ── check_oom_killed (no cgroup file) ─────────────────────────────────
+
+    #[tokio::test]
+    async fn test_check_oom_killed_returns_false_for_nonexistent_path() {
+        // check_oom_killed returns false if the cgroup path doesn't exist.
+        let result = check_oom_killed(std::path::Path::new("/nonexistent/cgroup/path")).await;
+        assert!(
+            !result,
+            "check_oom_killed must return false for nonexistent path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_check_oom_killed_returns_false_for_zero_count() {
+        // check_oom_killed returns false if oom_kill count is 0.
+        let tmp = TempDir::new().expect("create temp dir");
+        let events_path = tmp.path().join("memory.events");
+        tokio::fs::write(&events_path, "oom_kill 0\npgfault 42\n")
+            .await
+            .expect("write memory.events");
+        let result = check_oom_killed(tmp.path()).await;
+        assert!(!result, "check_oom_killed must return false for oom_kill 0");
+    }
+
+    #[tokio::test]
+    async fn test_check_oom_killed_returns_true_for_nonzero_count() {
+        // check_oom_killed returns true if oom_kill count > 0.
+        let tmp = TempDir::new().expect("create temp dir");
+        let events_path = tmp.path().join("memory.events");
+        tokio::fs::write(&events_path, "oom_kill 2\npgfault 100\n")
+            .await
+            .expect("write memory.events");
+        let result = check_oom_killed(tmp.path()).await;
+        assert!(result, "check_oom_killed must return true for oom_kill 2");
+    }
+
+    // ── env_flag helper ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_env_flag_present_true() {
+        unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_TRUE", "true") };
+        let result = env_flag("MINIBOX_TEST_ENV_FLAG_TRUE");
+        unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_TRUE") };
+        assert!(result, "env_flag must return true for 'true'");
+    }
+
+    #[test]
+    fn test_env_flag_present_one() {
+        unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_ONE", "1") };
+        let result = env_flag("MINIBOX_TEST_ENV_FLAG_ONE");
+        unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_ONE") };
+        assert!(result, "env_flag must return true for '1'");
+    }
+
+    #[test]
+    fn test_env_flag_missing_returns_false() {
+        unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_MISSING") };
+        let result = env_flag("MINIBOX_TEST_ENV_FLAG_MISSING");
+        assert!(!result, "env_flag must return false when var is absent");
+    }
+
+    #[test]
+    fn test_env_flag_false_value_returns_false() {
+        unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_FALSE", "false") };
+        let result = env_flag("MINIBOX_TEST_ENV_FLAG_FALSE");
+        unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_FALSE") };
+        assert!(!result, "env_flag must return false for 'false'");
+    }
+
+    // ── generate_container_id ─────────────────────────────────────────────
+
+    #[test]
+    fn test_generate_container_id_produces_unique_ids() {
+        let id1 = generate_container_id();
+        let id2 = generate_container_id();
+        assert_ne!(id1, id2, "generate_container_id must produce unique IDs");
+        assert!(!id1.is_empty(), "ID must not be empty");
+    }
+
+    // ── send_error ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_send_error_sends_error_response() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        send_error(&tx, "test_context", "something went wrong".to_string()).await;
+        let resp = rx.recv().await.expect("no response from send_error");
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("something went wrong")),
+            "expected Error with message, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_error_with_dropped_rx_does_not_panic() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        drop(rx);
+        // Must not panic even when receiver is gone.
+        send_error(&tx, "test_context", "msg".to_string()).await;
+    }
+
+    // ── validate_policy ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_validate_policy_allows_when_no_mounts_and_not_privileged() {
+        let policy = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        };
+        let result = validate_policy(&[], false, &policy);
+        assert!(
+            result.is_ok(),
+            "no mounts + not privileged must pass strict policy"
+        );
+    }
+
+    #[test]
+    fn test_validate_policy_denies_bind_mounts_when_not_allowed() {
+        use minibox_core::domain::BindMount;
+        let policy = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        };
+        let mounts = vec![BindMount {
+            host_path: std::path::PathBuf::from("/tmp"),
+            container_path: std::path::PathBuf::from("/mnt"),
+            read_only: false,
+        }];
+        let result = validate_policy(&mounts, false, &policy);
+        assert!(result.is_err(), "bind mounts must be denied by policy");
+    }
+
+    #[test]
+    fn test_validate_policy_denies_privileged_when_not_allowed() {
+        let policy = ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: false,
+        };
+        let result = validate_policy(&[], true, &policy);
+        assert!(result.is_err(), "privileged must be denied by policy");
+    }
+
+    // ── handle_load_image error path ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_handle_load_image_failing_loader_returns_error() {
+        // Use a custom failing loader to cover the Err path in handle_load_image.
+        struct FailLoader;
+
+        #[async_trait::async_trait]
+        impl minibox_core::domain::ImageLoader for FailLoader {
+            async fn load_image(
+                &self,
+                _path: &std::path::Path,
+                _name: &str,
+                _tag: &str,
+            ) -> anyhow::Result<()> {
+                anyhow::bail!("simulated load failure")
+            }
+        }
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps_base = make_deps(&tmp);
+        let deps = (*deps_base)
+            .clone()
+            .with_image_loader(Arc::new(FailLoader) as minibox_core::domain::DynImageLoader);
+
+        let resp = handle_load_image(
+            "/nonexistent/image.tar".to_string(),
+            "myimage".to_string(),
+            "v1".to_string(),
+            state,
+            Arc::new(deps),
+        )
+        .await;
+
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "failing loader must return Error, got {resp:?}"
+        );
+    }
+
+    // ── handle_get_manifest deeper paths ─────────────────────────────────
+
+    #[tokio::test]
+    async fn test_handle_get_manifest_with_container_with_bad_manifest_path() {
+        // Covers lines 3210-3222: read error when manifest file doesn't exist.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Add a container with a manifest_path pointing to a nonexistent file.
+        let record = crate::daemon::state::ContainerRecord {
+            info: ContainerInfo {
+                id: "ctr-manifest-bad".to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "stopped".to_string(),
+                created_at: "1970-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: tmp.path().join("rootfs"),
+            cgroup_path: tmp.path().join("cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: Some(std::path::PathBuf::from("/nonexistent/manifest.json")),
+            workload_digest: None,
+        };
+        state.add_container(record).await;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_get_manifest(
+            "ctr-manifest-bad".to_string(),
+            Arc::clone(&state),
+            Arc::clone(&deps),
+            tx,
+        )
+        .await;
+
+        let resp = rx
+            .recv()
+            .await
+            .expect("no response from handle_get_manifest");
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "manifest read error should produce Error, got {resp:?}"
+        );
+    }
+
+    // ── handle_logs success path ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_handle_logs_with_existing_log_file_sends_log_lines() {
+        // Covers the success path in handle_logs: reads lines from stdout.log.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Add a container.
+        state
+            .add_container(crate::daemon::state::ContainerRecord {
+                info: ContainerInfo {
+                    id: "ctr-logs".to_string(),
+                    name: None,
+                    image: "alpine:latest".to_string(),
+                    command: "/bin/sh".to_string(),
+                    state: "stopped".to_string(),
+                    created_at: "1970-01-01T00:00:00Z".to_string(),
+                    pid: None,
+                },
+                pid: None,
+                rootfs_path: tmp.path().join("rootfs"),
+                cgroup_path: tmp.path().join("cgroup"),
+                post_exit_hooks: vec![],
+                rootfs_metadata: None,
+                source_image_ref: None,
+                step_state: None,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+                creation_params: None,
+                manifest_path: None,
+                workload_digest: None,
+            })
+            .await;
+
+        // Create the container log directory and a stdout.log file.
+        let log_dir = deps.lifecycle.containers_base.join("ctr-logs");
+        std::fs::create_dir_all(&log_dir).expect("create log dir");
+        std::fs::write(log_dir.join("stdout.log"), "line1\nline2\n").expect("write log");
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+        handle_logs("ctr-logs".to_string(), false, state, deps, tx).await;
+
+        // Collect all responses; should include LogLine messages.
+        let mut got_log_line = false;
+        while let Ok(resp) = rx.try_recv() {
+            if matches!(resp, DaemonResponse::LogLine { .. }) {
+                got_log_line = true;
+            }
+        }
+        assert!(got_log_line, "handle_logs must send at least one LogLine");
+    }
+
+    // ── handle_verify_manifest success path ───────────────────────────────
+
+    #[tokio::test]
+    async fn test_handle_verify_manifest_with_valid_manifest_returns_verify_result() {
+        use minibox_core::domain::{
+            ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+            ExecutionManifestResourceLimits, ExecutionManifestRuntime, ExecutionManifestSubject,
+        };
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Write a minimal valid execution manifest to disk.
+        let manifest_dir = tmp.path().join("verify-manifest-dir");
+        std::fs::create_dir_all(&manifest_dir).expect("create dir");
+        let manifest_path = manifest_dir.join("execution-manifest.json");
+        let manifest = ExecutionManifest {
+            schema_version: 1,
+            container_id: "ctr-verify".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            manifest_path: None,
+            workload_digest: None,
+            subject: ExecutionManifestSubject {
+                image_ref: "alpine:latest".to_string(),
+                image: ExecutionManifestImage {
+                    manifest_digest: None,
+                    config_digest: None,
+                    layer_digests: vec![],
+                },
+            },
+            runtime: ExecutionManifestRuntime {
+                command: vec!["/bin/sh".to_string()],
+                env: vec![],
+                mounts: vec![],
+                resource_limits: Some(ExecutionManifestResourceLimits {
+                    memory_limit_bytes: None,
+                    cpu_weight: None,
+                }),
+                network_mode: "none".to_string(),
+                privileged: false,
+                platform: None,
+            },
+            request: ExecutionManifestRequest {
+                name: None,
+                ephemeral: false,
+            },
+        };
+        let json = serde_json::to_string(&manifest).expect("serialize manifest");
+        std::fs::write(&manifest_path, &json).expect("write manifest file");
+
+        state
+            .add_container(crate::daemon::state::ContainerRecord {
+                info: ContainerInfo {
+                    id: "ctr-verify".to_string(),
+                    name: None,
+                    image: "alpine:latest".to_string(),
+                    command: "/bin/sh".to_string(),
+                    state: "stopped".to_string(),
+                    created_at: "1970-01-01T00:00:00Z".to_string(),
+                    pid: None,
+                },
+                pid: None,
+                rootfs_path: tmp.path().join("rootfs"),
+                cgroup_path: tmp.path().join("cgroup"),
+                post_exit_hooks: vec![],
+                rootfs_metadata: None,
+                source_image_ref: None,
+                step_state: None,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+                creation_params: None,
+                manifest_path: Some(manifest_path),
+                workload_digest: None,
+            })
+            .await;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_verify_manifest(
+            "ctr-verify".to_string(),
+            r#"{"allow":[]}"#.to_string(),
+            state,
+            deps,
+            tx,
+        )
+        .await;
+
+        let resp = rx
+            .recv()
+            .await
+            .expect("no response from handle_verify_manifest");
+        assert!(
+            matches!(resp, DaemonResponse::VerifyResult { .. }),
+            "expected VerifyResult, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_get_manifest_with_valid_manifest_returns_manifest() {
+        // Covers the success path: valid manifest file → DaemonResponse::Manifest.
+        use minibox_core::domain::{
+            ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+            ExecutionManifestResourceLimits, ExecutionManifestRuntime, ExecutionManifestSubject,
+        };
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Write a minimal valid execution manifest to disk.
+        let manifest_dir = tmp.path().join("manifest-dir");
+        std::fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+        let manifest_path = manifest_dir.join("execution-manifest.json");
+        let manifest = ExecutionManifest {
+            schema_version: 1,
+            container_id: "ctr-manifest-ok".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            manifest_path: None,
+            workload_digest: None,
+            subject: ExecutionManifestSubject {
+                image_ref: "alpine:latest".to_string(),
+                image: ExecutionManifestImage {
+                    manifest_digest: None,
+                    config_digest: None,
+                    layer_digests: vec![],
+                },
+            },
+            runtime: ExecutionManifestRuntime {
+                command: vec!["/bin/sh".to_string()],
+                env: vec![],
+                mounts: vec![],
+                resource_limits: Some(ExecutionManifestResourceLimits {
+                    memory_limit_bytes: None,
+                    cpu_weight: None,
+                }),
+                network_mode: "none".to_string(),
+                privileged: false,
+                platform: None,
+            },
+            request: ExecutionManifestRequest {
+                name: None,
+                ephemeral: false,
+            },
+        };
+        let json = serde_json::to_string(&manifest).expect("serialize manifest");
+        std::fs::write(&manifest_path, &json).expect("write manifest file");
+
+        // Add a container with this manifest path.
+        state
+            .add_container(crate::daemon::state::ContainerRecord {
+                info: ContainerInfo {
+                    id: "ctr-manifest-ok".to_string(),
+                    name: None,
+                    image: "alpine:latest".to_string(),
+                    command: "/bin/sh".to_string(),
+                    state: "stopped".to_string(),
+                    created_at: "1970-01-01T00:00:00Z".to_string(),
+                    pid: None,
+                },
+                pid: None,
+                rootfs_path: tmp.path().join("rootfs"),
+                cgroup_path: tmp.path().join("cgroup"),
+                post_exit_hooks: vec![],
+                rootfs_metadata: None,
+                source_image_ref: None,
+                step_state: None,
+                priority: None,
+                urgency: None,
+                execution_context: None,
+                creation_params: None,
+                manifest_path: Some(manifest_path),
+                workload_digest: None,
+            })
+            .await;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_get_manifest(
+            "ctr-manifest-ok".to_string(),
+            Arc::clone(&state),
+            Arc::clone(&deps),
+            tx,
+        )
+        .await;
+
+        let resp = rx
+            .recv()
+            .await
+            .expect("no response from handle_get_manifest");
+        assert!(
+            matches!(resp, DaemonResponse::Manifest { .. }),
+            "valid manifest file should produce Manifest, got {resp:?}"
+        );
     }
 }

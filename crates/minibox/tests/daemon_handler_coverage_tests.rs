@@ -5,11 +5,7 @@
 //! private function by exercising the function's happy path, error path, or
 //! both.
 
-use minibox::daemon::handler::{
-    self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
-    LifecycleDeps, PtySessionRegistry,
-};
-use minibox::daemon::state::DaemonState;
+use minibox::daemon::handler::{self, ContainerPolicy, PtySessionRegistry};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::domain::SessionId;
@@ -781,5 +777,65 @@ async fn test_handle_pipeline_nonexistent_file_returns_error() {
     assert!(
         matches!(resp, DaemonResponse::Error { .. }),
         "nonexistent pipeline file should produce Error, got {resp:?}"
+    );
+}
+
+// ---- ephemeral run (streaming path) -----------------------------------------
+
+/// handle_run with ephemeral=true exercises handle_run_streaming and run_inner_capture.
+///
+/// Requires MockRuntime::with_output_pipe() which creates a real OS pipe so that
+/// run_inner_capture can obtain an OwnedFd output_reader.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_run_ephemeral_exercises_streaming_path() {
+    use minibox::adapters::mocks::MockRuntime;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    // Build deps with a MockRuntime configured to return an output pipe.
+    let runtime: minibox_core::domain::DynContainerRuntime =
+        Arc::new(MockRuntime::new().with_output_pipe());
+    let deps = create_test_deps_with_dir_and_runtime(&tmp, runtime);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
+    handler::handle_run(
+        "alpine".to_string(),
+        None,
+        vec!["/bin/true".to_string()],
+        None,
+        None,
+        true, // ephemeral = true → streaming path
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+        None,
+        Arc::clone(&state),
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain all responses; expect ContainerStopped as the terminal message.
+    let mut got_stopped = false;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        match rx.try_recv() {
+            Ok(DaemonResponse::ContainerStopped { .. }) => {
+                got_stopped = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(_) => {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }
+    }
+    assert!(
+        got_stopped,
+        "ephemeral run must produce ContainerStopped terminal response"
     );
 }

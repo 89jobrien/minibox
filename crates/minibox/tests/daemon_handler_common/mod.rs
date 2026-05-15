@@ -207,6 +207,61 @@ pub fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies>
     })
 }
 
+/// Helper to create test dependencies with a custom runtime.
+///
+/// Identical to [`create_test_deps_with_dir`] except the `runtime` field is
+/// supplied by the caller.  Use this to inject a [`MockRuntime`] configured
+/// with [`MockRuntime::with_output_pipe`] when testing streaming/ephemeral paths.
+pub fn create_test_deps_with_dir_and_runtime(
+    temp_dir: &TempDir,
+    runtime: minibox_core::domain::DynContainerRuntime,
+) -> Arc<HandlerDependencies> {
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images-rt"))
+            .expect("unwrap in test"),
+    );
+    Arc::new(HandlerDependencies {
+        image: ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                Arc::new(MockRegistry::new()) as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: LifecycleDeps {
+            filesystem: Arc::new(MockFilesystem::new()),
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime,
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base: temp_dir.path().join("containers-rt"),
+            run_containers_base: temp_dir.path().join("run-rt"),
+        },
+        exec: ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                minibox::daemon::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: minibox::daemon::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
+    })
+}
+
 /// Helper to create daemon state with a test image store.
 pub fn create_test_state_with_dir(temp_dir: &TempDir) -> Arc<DaemonState> {
     let image_store =

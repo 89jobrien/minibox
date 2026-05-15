@@ -15,12 +15,12 @@ use xshell::Shell;
 /// workspace debug build so the demo works straight after `cargo build`.
 fn find_mbx(root: &Path) -> Option<std::path::PathBuf> {
     // Check PATH first.
-    if let Ok(out) = Command::new("which").arg("mbx").output() {
-        if out.status.success() {
-            let p = std::path::PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
-            if p.exists() {
-                return Some(p);
-            }
+    if let Ok(out) = Command::new("which").arg("mbx").output()
+        && out.status.success()
+    {
+        let p = std::path::PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+        if p.exists() {
+            return Some(p);
         }
     }
     // Fall back to workspace debug build.
