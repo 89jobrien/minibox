@@ -63,7 +63,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: run conformance suite
-        run: cargo run -p minibox-conformance --bin run-conformance
+        run: cargo run -p minibox-testsuite --bin run-conformance
 
       - name: upload conformance report
         if: always()

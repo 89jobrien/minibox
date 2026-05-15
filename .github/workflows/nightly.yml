@@ -28,6 +28,11 @@ jobs:
             crates/minibox/Cargo.toml \
             crates/minibox-macros/Cargo.toml \
             crates/mbx/Cargo.toml \
+            crates/minibox-core/Cargo.toml \
+            crates/macbox/Cargo.toml \
+            crates/winbox/Cargo.toml \
+            crates/minibox-crux-plugin/Cargo.toml \
+            crates/minibox-testsuite/Cargo.toml \
             crates/miniboxd/Cargo.toml
           do
             printf '\n## %s\n' "$manifest" | tee -a geiger-report.txt

@@ -10,7 +10,7 @@ env:
 jobs:
   reviewdog:
     name: reviewdog
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       contents: read
