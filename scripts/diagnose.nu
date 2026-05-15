@@ -13,5 +13,5 @@ def main [
         $args
     }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "diagnose.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "diagnose.py") ...$args
 }

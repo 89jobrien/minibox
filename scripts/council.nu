@@ -14,5 +14,5 @@ def main [
     let args = ["--base" $base "--mode" $mode]
     let args = if $no_synthesis { $args | append "--no-synthesis" } else { $args }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "council.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "council.py") ...$args
 }

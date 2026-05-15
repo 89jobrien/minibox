@@ -17,7 +17,7 @@ def main [] {
 def "main report" [
     --max-turns: int = 15   # Max agent turns
 ] {
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") --max-turns ($max_turns | into string) report
+    ^uv run ($env.FILE_PWD | path join "bench-agent.py") --max-turns ($max_turns | into string) report
 }
 
 # Compare bench runs
@@ -26,7 +26,7 @@ def "main compare" [
     --max-turns: int = 15   # Max agent turns
 ] {
     let args = ["--max-turns" ($max_turns | into string) "compare"] ++ $sha
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "bench-agent.py") ...$args
 }
 
 # Detect and explain regressions
@@ -35,7 +35,7 @@ def "main regress" [
     --max-turns: int = 15      # Max agent turns
 ] {
     let args = ["--max-turns" ($max_turns | into string) "regress" "--threshold" ($threshold | into string)]
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "bench-agent.py") ...$args
 }
 
 # Clean up stale result files
@@ -45,7 +45,7 @@ def "main cleanup" [
 ] {
     let args = ["--max-turns" ($max_turns | into string) "cleanup"]
     let args = if $dry_run { $args | append "--dry-run" } else { $args }
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "bench-agent.py") ...$args
 }
 
 # Run benchmarks and analyse
@@ -57,5 +57,5 @@ def "main trigger" [
     let args = ["--max-turns" ($max_turns | into string) "trigger"]
     let args = if ($suite | is-not-empty) { $args | append ["--suite" $suite] } else { $args }
     let args = if $vps { $args | append "--vps" } else { $args }
-    ^uv run ($env.FILE_PWD | path join "scripts" "bench-agent.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "bench-agent.py") ...$args
 }
