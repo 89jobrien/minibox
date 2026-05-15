@@ -195,11 +195,24 @@ just test-linux              # dogfood: build image + run tests in container
 just coverage                # HTML report at target/llvm-cov/html/
 ```
 
-### Host capability check
+### Preflight / Doctor (canonical entry points)
 
 ```bash
-just doctor                  # reports kernel features, cgroups, overlay support
+cargo xtask doctor           # CANONICAL: tool checks + env + Linux system caps
+mbx doctor                   # adapter diagnostics + delegates to cargo xtask doctor
 ```
+
+`cargo xtask doctor` is the authoritative preflight command. It checks:
+- Required tools on PATH: `cargo`, `just`, `rustup`, `cargo-nextest`
+- Advisory tools: `gh`, `op` (warn, not fail)
+- `CARGO_TARGET_DIR` env var (advisory)
+- Linux-only: cgroups v2 unified hierarchy, overlay FS, kernel >= 5.0
+
+`mbx doctor` runs `cargo xtask doctor` first, then shows adapter suite diagnostics
+(which adapter is compiled in and which would be selected by the current environment).
+
+`scripts/preflight.nu` is a lightweight SessionStart hook — it runs at shell startup
+to surface obvious missing deps. It is not a substitute for `cargo xtask doctor`.
 
 ### Full pipeline
 
