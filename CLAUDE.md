@@ -46,6 +46,8 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `just test-e2e` — Linux+root daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
 - `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
+- `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
+  to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
 - `cargo bench -p minibox` — local criterion benches.
 
 `scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.

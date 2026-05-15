@@ -334,6 +334,8 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 | Daily orchestration workflow          | `cargo xtask daily-orchestration`            | CI-driven; use `--dry-run` locally |
 | Host capability report                | `just doctor`                                | Verify cgroup/overlay/kernel state |
 | Preflight tool check                  | `cargo xtask preflight`                      | Verify cargo, nextest, gh on PATH  |
+| Watch latest CI run (current branch)  | `cargo xtask ci-watch`                       | Job-level detail + live tail       |
+| Watch CI run on a specific branch     | `cargo xtask ci-watch --branch <name>`       | Monitor another branch             |
 
 ### Benchmarks
 
@@ -348,8 +350,30 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ## scripts/ Directory
 
-The `scripts/` directory contains AI agent tooling (council analysis,
-AI-assisted code review, test generation) and operational helpers (VM setup,
-daemon start, cgroup test harness). These are **not** part of the core
-build/test pipeline. All Python scripts use `uv run` with PEP 723 inline
-deps. See `just --list` for recipes that wrap them.
+The `scripts/` directory contains AI agent tooling and operational helpers.
+These are **not** part of the core build/test pipeline. All Python scripts
+use `uv run` with PEP 723 inline deps. See `just --list` for recipes that wrap them.
+
+| Script                    | Purpose                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `ci-watch.nu`             | Watch latest GHA run with job-level detail (wraps xtask)   |
+| `preflight.nu`            | SessionStart hook — lightweight tool/env check             |
+| `promote.nu`              | Cascade-merge through develop → next → staging → main      |
+| `sync-check.nu`           | Fetch + rebase check before push                           |
+| `ai-review.nu`            | AI-assisted code review of staged diff                     |
+| `council.nu`              | Multi-model council analysis                               |
+| `standup.nu`              | Generate standup summary from recent commits               |
+| `diagnose.nu`             | Container/daemon diagnostics                               |
+| `start-daemon.nu`         | Start miniboxd with adapter selection                      |
+| `build-test-image.nu`     | Build test OCI image for VM tests                          |
+| `vm-setup.nu`             | Provision VM environment                                   |
+| `dashboard.nu`            | Render local metrics dashboard                             |
+| `collect-metrics.nu`      | Aggregate crate/test/line counts (JSON)                    |
+| `gen-tests.nu`            | AI-assisted test scaffolding                               |
+| `bench-agent.nu`          | AI bench result analysis                                   |
+| `meta-agent.nu`           | Orchestration meta-agent                                   |
+| `commit-msg.nu`           | Commit message hook helper                                 |
+| `install-hooks.nu`        | Install git hooks (pre-commit, pre-push, commit-msg)       |
+| `check-protocol-sites.nu` | Protocol site audit (wraps xtask)                          |
+| `trace-lima.nu`           | Trace Lima VM activity                                     |
+| `parse-geiger.nu`         | Parse cargo-geiger unsafe usage output                     |
