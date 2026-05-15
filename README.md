@@ -34,9 +34,10 @@ structured tracing, property testing.
 
 ### Experimental-ish
 
-- **Container exec** — `setns`-based exec with PTY support (`-it`)
-- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`)
-- **macOS adapters** — run/stop/ps via Colima, smolvm, or krun; exec/logs limited
+- **Container exec** — `setns`-based exec with PTY support (`-it`); Linux (`native`) only
+- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
+- **macOS adapters** — run/stop/ps via smolvm or krun (VM-backed); exec/logs not supported;
+  Colima available as an alternative via Lima VM
 
 ---
 
