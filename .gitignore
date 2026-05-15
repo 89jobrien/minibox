@@ -9,6 +9,7 @@
 !AGENTS.md
 !USAGE.md
 !docs/*.mbx.md
+!docs/specs/*.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
 !docs/conformance.md
