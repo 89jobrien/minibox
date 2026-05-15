@@ -1582,6 +1582,71 @@ mod tests {
             assert!(chain.contains("HTTP 500"), "unexpected error: {chain}");
         }
 
+        /// When a layer pull task fails, the layer's digest must appear in the
+        /// error chain so callers can log or retry with the correct digest.
+        /// Regression test for issue #151.
+        #[tokio::test]
+        async fn pull_failure_includes_digest() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("tmp dir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("image store");
+            let (layer_bytes, layer_digest) = make_test_layer();
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "testtoken"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header(
+                            "content-type",
+                            "application/vnd.oci.image.manifest.v1+json",
+                        )
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:config"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": layer_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            // Blob endpoint returns 500 — simulates a transient pull failure.
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(500).set_body_string("server error"))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "latest", &store)
+                .await
+                .expect_err("pull_image should fail when blob fetch returns 500");
+
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains(&layer_digest),
+                "error chain must contain the layer digest ({layer_digest}) so callers can \
+                 log/retry; got: {chain}"
+            );
+        }
+
         #[tokio::test]
         async fn pull_image_errors_on_digest_mismatch() {
             let server = MockServer::start().await;
