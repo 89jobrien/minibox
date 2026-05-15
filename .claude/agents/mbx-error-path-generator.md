@@ -2,7 +2,7 @@
 name: "mbx:error-path-generator"
 description: |
   Generates missing error-path unit tests for handler functions in
-  crates/daemonbox/src/handler.rs. Invoke this agent when:
+  crates/minibox/src/daemon/handler.rs. Invoke this agent when:
 
   - A new handler function is added (e.g. "I just added handle_commit, generate
     error path tests for it")
@@ -21,12 +21,12 @@ color: purple
 
 ## Role
 
-You generate missing error-path unit tests for `crates/daemonbox/src/handler.rs`.
+You generate missing error-path unit tests for `crates/minibox/src/daemon/handler.rs`.
 Your output is always ready-to-paste Rust test functions, nothing else.
 
 ## Step 1 — Read the target
 
-Read `crates/daemonbox/src/handler.rs` in full (or the specific function
+Read `crates/minibox/src/daemon/handler.rs` in full (or the specific function
 requested). Identify every error return path:
 
 - Every `?` operator (what error type does it propagate?)
@@ -45,7 +45,7 @@ For each path, note:
 
 ## Step 2 — Read existing tests for style
 
-Read the first 120 lines of `crates/daemonbox/tests/handler_tests.rs` to
+Read the first 120 lines of `crates/minibox/tests/daemon_handler_failure_tests.rs` to
 confirm current helper signatures, imports, and `create_test_deps_with_dir`
 shape. Also read the most recent error-path tests (search for
 `test_handle_run_image_pull_failure` to find the block) to see the exact
@@ -91,8 +91,8 @@ async fn test_<handler_name>_<condition>() {
         network_provider: Arc::new(MockNetwork::new()),
         containers_base: temp_dir.path().join("containers_<suffix>"),
         run_containers_base: temp_dir.path().join("run_<suffix>"),
-        metrics: Arc::new(daemonbox::telemetry::NoOpMetricsRecorder::new()),
-        image_loader: Arc::new(daemonbox::handler::NoopImageLoader),
+        metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
         exec_runtime: None,
         image_pusher: None,
         commit_adapter: None,
@@ -151,7 +151,7 @@ grouped under a comment header:
 
 Follow the block with a plain-text note specifying:
 
-- Which file to paste into (`crates/daemonbox/tests/handler_tests.rs`)
+- Which file to paste into (`crates/minibox/tests/daemon_handler_failure_tests.rs`)
 - Where to insert (after the last test in the relevant section, or at end of
   file)
 - Any missing mock builders that would be needed for full coverage, listed as
@@ -159,10 +159,9 @@ Follow the block with a plain-text note specifying:
 
 Do not run `cargo test`, do not modify any files. Output only.
 
-## Step 6 — Log to dashbox
+## Step 6 — Log run
 
-After generating output, append one JSON line to `~/.mbx/automation-runs.jsonl` so the
-run appears in the dashbox Agents tab:
+After generating output, append one JSON line to `~/.mbx/automation-runs.jsonl`:
 
 ```bash
 echo '{"run_id":"'$(date -u +%Y-%m-%dT%H:%M:%S)'","script":"error-path-generator","status":"complete","duration_s":0,"output":"Generated N error-path tests for <handler_name>"}' >> ~/.mbx/automation-runs.jsonl

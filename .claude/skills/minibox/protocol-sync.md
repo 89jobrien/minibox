@@ -36,10 +36,10 @@ discrepancy immediately — this is the most critical gap.
 
 ## Step 2 — Check server.rs dispatch match
 
-The dispatch match in `crates/daemonbox/src/server.rs` must have an arm for every
+The dispatch match in `crates/minibox/src/daemon/server.rs` must have an arm for every
 `DaemonRequest` variant.
 
-Grep `crates/daemonbox/src/server.rs` for `DaemonRequest::` to list all handled
+Grep `crates/minibox/src/daemon/server.rs` for `DaemonRequest::` to list all handled
 variants. Compare against the variant list from Step 1. Report any variant that
 appears in protocol.rs but is absent from the match.
 
@@ -51,9 +51,9 @@ in the same file if the new variant is non-terminal (like `ContainerOutput`).
 ## Step 3 — Check handler.rs functions
 
 Each `DaemonRequest` variant should have a corresponding handler function in
-`crates/daemonbox/src/handler.rs`. The naming convention is `handle_<snake_case>`.
+`crates/minibox/src/daemon/handler.rs`. The naming convention is `handle_<snake_case>`.
 
-Grep `crates/daemonbox/src/handler.rs` for `fn handle_` to list all handler
+Grep `crates/minibox/src/daemon/handler.rs` for `fn handle_` to list all handler
 functions. For each variant from Step 1, check whether a corresponding `handle_`
 function exists. Report missing handlers.
 
@@ -82,7 +82,7 @@ rather than "MISSING" unless context suggests otherwise).
 
 ## Step 5 — Check test construction sites
 
-Grep `crates/daemonbox/tests/handler_tests.rs` for `DaemonRequest::` to list all
+Grep `crates/minibox/tests/daemon_handler_failure_tests.rs` for `DaemonRequest::` to list all
 variant construction sites in tests. For each variant from Step 1, count how many
 test cases construct it. A count of 0 is a coverage gap — flag it.
 
@@ -137,7 +137,7 @@ file under `crates/minibox-cli/src/commands/`. Wire it to construct the
 `DaemonRequest` variant and send via `DaemonClient`.
 
 **Missing tests**: Add at least one happy-path and one error-path test in
-`crates/daemonbox/tests/handler_tests.rs`. Use `create_test_deps_with_dir` and
+`crates/minibox/tests/daemon_handler_failure_tests.rs`. Use `create_test_deps_with_dir` and
 `handle_run_once()` helpers already defined in that file.
 
 ---
@@ -151,14 +151,14 @@ instead of the full audit:
    field.
 2. Confirm the new field has `#[serde(default)]`.
 3. Grep handler_tests.rs for all construction sites of that variant — confirm they
-   compile (run `cargo check -p daemonbox` to verify).
+   compile (run `cargo check -p minibox` to verify).
 4. Grep CLI source for construction sites of that variant — confirm they set the
    new field or rely on `Default`.
 
 ## Dashbox Logging
 
 After completing the audit, append to `~/.mbx/automation-runs.jsonl` so this run appears
-in the dashbox Agents tab:
+in the automation-runs log:
 
 ```bash
 echo '{"run_id":"'$(date -u +%Y-%m-%dT%H:%M:%S)'","script":"protocol-sync","status":"complete","duration_s":0,"output":"Audited N variants: M gaps found"}' >> ~/.mbx/automation-runs.jsonl

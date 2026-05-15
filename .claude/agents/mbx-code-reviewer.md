@@ -15,9 +15,9 @@ Prevent bugs, security vulnerabilities, and correctness failures before they rea
 
 ```
 miniboxd (async daemon, tokio)
-  → daemonbox/server.rs   (Unix socket, SO_PEERCRED auth)
-  → daemonbox/handler.rs  (request routing, spawn_blocking)
-  → daemonbox/state.rs    (in-memory container HashMap)
+  → minibox/src/daemon/server.rs   (Unix socket, SO_PEERCRED auth)
+  → minibox/src/daemon/handler.rs  (request routing, spawn_blocking)
+  → minibox/src/daemon/state.rs    (in-memory container HashMap)
 
 mbx (core primitives)
   → domain.rs             (trait ports: ResourceLimiter, FilesystemProvider,

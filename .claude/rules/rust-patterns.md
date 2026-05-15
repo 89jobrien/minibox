@@ -9,7 +9,7 @@ These override general Rust conventions:
 1. **No `.unwrap()` in production** — Use `.context("description")?`. Tests: use `expect("reason")`.
 2. **Path validation on all user input** — Every path derived from user input or external data (tar entries, image refs, CLI args) must go through `validate_layer_path()` or equivalent canonicalize+prefix-check before touching the filesystem.
 3. **`spawn_blocking` for fork/clone/exec** — Container creation operations must not run inline in `async fn`. Always wrap in `tokio::task::spawn_blocking`.
-4. **`SO_PEERCRED` auth is mandatory** — The UID==0 check in `daemonbox/server.rs` must run before any request processing. Never bypass or weaken it.
+4. **`SO_PEERCRED` auth is mandatory** — The UID==0 check in `minibox/src/daemon/server.rs` must run before any request processing. Never bypass or weaken it.
 5. **Tracing structured fields** — Use `key = value` syntax in `tracing::info!/warn!/error!/debug!` macros. Never embed structured values in the message string.
 6. **`unsafe` blocks require documented invariants** — Every `unsafe {}` must have a comment explaining what invariant the caller upholds and why it cannot be expressed in the type system.
 

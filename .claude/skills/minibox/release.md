@@ -18,7 +18,7 @@ Systematic release workflow for minibox: pre-release quality gates, version bump
 
 ```bash
 cargo fmt --all --check
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p mbx -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -117,7 +117,7 @@ cargo build --release
 
 # Re-run quality gates after the bump
 cargo fmt --all --check
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p mbx -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -231,7 +231,7 @@ cargo audit
 Run the exact command locally to reproduce:
 
 ```bash
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p mbx -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
 ```
 
 Fix all warnings, then re-tag.

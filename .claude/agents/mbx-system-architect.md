@@ -41,15 +41,13 @@ Workspace crates:
 │   ├── container/       ← Linux primitives (namespace, cgroups, filesystem, process)
 │   └── image/           ← OCI: reference, registry, manifest, layer
 ├── minibox-macros       ← Proc-macro: derive macros for mbx
-├── daemonbox            ← Extracted daemon logic (server, handler, state)
-│   ├── server.rs        ← Unix socket listener, SO_PEERCRED auth, streaming dispatch
-│   ├── handler.rs       ← Request routing, spawn_blocking for container ops
-│   └── state.rs         ← In-memory container HashMap (not persisted)
+├── minibox              ← Core: domain traits, adapters, daemon logic (server, handler, state)
+│   ├── daemon/server.rs ← Unix socket listener, SO_PEERCRED auth, streaming dispatch
+│   ├── daemon/handler.rs← Request routing, spawn_blocking for container ops
+│   └── daemon/state.rs  ← In-memory container HashMap (not persisted)
 ├── miniboxd             ← Async daemon entry: dispatches to macbox/winbox/native
 ├── macbox               ← macOS adapter suite (Colima)
-├── minibox-cli          ← CLI client (sends JSON to socket)
-├── minibox-llm          ← Multi-provider LLM with fallback chains
-├── minibox-bench        ← Benchmark harness (codec, adapter overhead)
+├── mbx                  ← CLI client (sends JSON to socket)
 └── xtask                ← Dev tooling (not shipped)
 
 Adapter selection: MINIBOX_ADAPTER env var → native | gke | colima
@@ -131,8 +129,8 @@ pub enum Response {
 Protocol change process:
 
 1. Update `protocol.rs` types first (mbx)
-2. Add handler arm in `handler.rs` (daemonbox)
-3. Add CLI subcommand in `minibox-cli`
+2. Add handler arm in `crates/minibox/src/daemon/handler.rs`
+3. Add CLI subcommand in `crates/mbx/`
 4. Update protocol conformance tests in `mbx/tests/`
 
 ### Pattern 3: Cross-Cutting Feature (State Persistence Example)
@@ -148,7 +146,7 @@ Adapter layer (mbx/adapters/):
   → Which adapters need updating? All four? Subset?
   → Add default no-op impl if feature is optional
 
-Daemon layer (daemonbox/state.rs, handler.rs):
+Daemon layer (minibox/src/daemon/state.rs, handler.rs):
   → What state transitions does this affect?
   → If async: does it need spawn_blocking?
 
@@ -156,7 +154,7 @@ Protocol layer (mbx/protocol.rs):
   → New message types? New fields on existing types?
   → Backward compat: CLI and daemon may be different versions
 
-CLI layer (minibox-cli/):
+CLI layer (mbx/):
   → New subcommand? New flags on existing command?
   → Exit code semantics
 ```
@@ -210,21 +208,20 @@ NEVER:
 
 **Crate Boundaries:**
 
-- `mbx`: domain types and traits + adapter implementations (including Linux primitives)
-- `daemonbox`: daemon server/handler/state — no Linux-specific syscalls (macOS-safe)
+- `minibox`: domain types, traits, adapter implementations, and daemon server/handler/state
 - `miniboxd`: entry point only — wires adapters, starts tokio runtime
 - `macbox`: macOS-specific orchestration via Colima
-- `minibox-cli`: protocol client only — no business logic
+- `mbx`: protocol client only — no business logic
 
 **Security Perimeter:**
 
-- `SO_PEERCRED` check lives in `daemonbox/server.rs` — must not move or weaken
+- `SO_PEERCRED` check lives in `minibox/src/daemon/server.rs` — must not move or weaken
 - Path validation lives in `mbx/src/container/filesystem.rs` — all callers must use it
 - Tar security validation lives in `mbx/src/image/layer.rs` — non-negotiable
 
 **Scalability:**
 
-- Adding a new adapter suite should not require changes to `daemonbox` or `minibox-cli`
+- Adding a new adapter suite should not require changes to `minibox/src/daemon/` or `mbx`
 - New domain trait methods should have default implementations where possible
 - Protocol additions are backward-compatible by design (tagged enum)
 
