@@ -1,0 +1,30 @@
+name: Protocol Sites
+
+on:
+  push:
+    branches: [main, next, stable, "feature/*", "hotfix/*"]
+    paths:
+      - "crates/miniboxd/src/main.rs"
+      - "xtask/src/protocol_sites.rs"
+      - "xtask/src/main.rs"
+  pull_request:
+    branches: [main, next]
+    paths:
+      - "crates/miniboxd/src/main.rs"
+      - "xtask/src/protocol_sites.rs"
+      - "xtask/src/main.rs"
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-sites:
+    name: HandlerDependencies construction site count
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: verify HandlerDependencies site count
+        run: cargo xtask check-protocol-sites
