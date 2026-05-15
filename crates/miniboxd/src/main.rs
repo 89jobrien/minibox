@@ -248,6 +248,10 @@ async fn run_daemon() -> Result<()> {
     info!("miniboxd starting");
 
     // ── Adapter suite ────────────────────────────────────────────────────
+    // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
+    // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
+    // Do not set MINIBOX_ADAPTER externally to override — pass it through the
+    // environment before launching miniboxd, or use `scripts/start-daemon.*`.
     let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
     let available = adapter_registry::available_adapter_names();
     info!(
