@@ -4,7 +4,7 @@
 //! The `run-conformance` binary collects all adapters and feeds them to `TestRunner`.
 
 pub mod limiter;
-pub mod pause_resume;
+pub mod list;
 pub mod registry;
 pub mod runtime;
 pub mod state;
@@ -18,6 +18,6 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     tests.extend(runtime::all());
     tests.extend(limiter::all());
     tests.extend(state::all());
-    tests.extend(pause_resume::all());
+    tests.extend(list::all());
     tests
 }
