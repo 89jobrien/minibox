@@ -15,7 +15,6 @@ use xshell::Shell;
 
 mod bench;
 mod borrow_fixtures;
-mod demo;
 mod bump;
 mod cas;
 mod cgroup_tests;
@@ -23,6 +22,7 @@ mod cleanup;
 mod collect_metrics;
 mod context;
 mod daily_orchestration;
+mod demo;
 mod docs_lint;
 mod feature_matrix_date;
 mod gates;

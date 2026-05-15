@@ -3421,3 +3421,298 @@ mod registry_router_tests {
         assert_eq!(selected, docker_ptr);
     }
 }
+
+#[cfg(test)]
+mod pub_crate_handler_tests {
+    //! Unit tests for `pub(crate)` handler functions that are inaccessible
+    //! from integration tests.  Live here so they share the crate's visibility.
+
+    use super::*;
+    use crate::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
+    use crate::daemon::state::DaemonState;
+    use crate::image::ImageStore;
+    use crate::testing::helpers::gc::NoopImageGc;
+    use minibox_core::adapters::HostnameRegistryRouter;
+    use minibox_core::domain::DynImageRegistry;
+    use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
+    use minibox_core::protocol::ContainerInfo;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
+        let store = ImageStore::new(tmp.path().join("images-state")).unwrap();
+        Arc::new(DaemonState::new(store, tmp.path()))
+    }
+
+    fn make_deps(tmp: &TempDir) -> Arc<HandlerDependencies> {
+        let image_store = Arc::new(ImageStore::new(tmp.path().join("images")).unwrap());
+        Arc::new(HandlerDependencies {
+            image: ImageDeps {
+                registry_router: Arc::new(HostnameRegistryRouter::new(
+                    Arc::new(crate::adapters::mocks::MockRegistry::new()) as DynImageRegistry,
+                    [(
+                        "ghcr.io",
+                        Arc::new(crate::adapters::mocks::MockRegistry::new()) as DynImageRegistry,
+                    )],
+                )),
+                image_loader: Arc::new(NoopImageLoader),
+                image_gc: Arc::new(NoopImageGc::new()),
+                image_store,
+            },
+            lifecycle: LifecycleDeps {
+                filesystem: Arc::new(MockFilesystem::new()),
+                resource_limiter: Arc::new(MockLimiter::new()),
+                runtime: Arc::new(MockRuntime::new()),
+                network_provider: Arc::new(MockNetwork::new()),
+                containers_base: tmp.path().join("containers"),
+                run_containers_base: tmp.path().join("run"),
+            },
+            exec: ExecDeps {
+                exec_runtime: None,
+                pty_sessions: Arc::new(tokio::sync::Mutex::new(PtySessionRegistry::default())),
+            },
+            build: BuildDeps {
+                image_pusher: None,
+                commit_adapter: None,
+                image_builder: None,
+            },
+            events: EventDeps {
+                event_sink: Arc::new(NoopEventSink),
+                event_source: Arc::new(BroadcastEventBroker::new()),
+                metrics: Arc::new(crate::daemon::telemetry::NoOpMetricsRecorder::new()),
+            },
+            policy: ContainerPolicy {
+                allow_bind_mounts: true,
+                allow_privileged: true,
+            },
+            checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
+        })
+    }
+
+    // ── handle_list_images ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_list_images_empty_store() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let deps = make_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_list_images(Arc::clone(&deps.image.image_store), tx).await;
+
+        let resp = rx
+            .recv()
+            .await
+            .expect("no response from handle_list_images");
+        assert!(
+            matches!(resp, DaemonResponse::ImageList { ref images } if images.is_empty()),
+            "expected empty ImageList, got {resp:?}"
+        );
+    }
+
+    // ── handle_prune ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_prune_dry_run_returns_pruned() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_prune(
+            true,
+            Arc::clone(&state),
+            Arc::clone(&deps.image.image_gc),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response from handle_prune");
+        assert!(
+            matches!(resp, DaemonResponse::Pruned { dry_run: true, .. }),
+            "expected Pruned with dry_run=true, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prune_non_dry_run_returns_pruned() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_prune(
+            false,
+            state,
+            Arc::clone(&deps.image.image_gc),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response from handle_prune");
+        assert!(
+            matches!(resp, DaemonResponse::Pruned { dry_run: false, .. }),
+            "expected Pruned with dry_run=false, got {resp:?}"
+        );
+    }
+
+    // ── handle_remove_image ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_remove_image_invalid_ref_no_colon_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_remove_image(
+            "nocolon".to_string(),
+            state,
+            Arc::clone(&deps.image.image_store),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response");
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("invalid image ref")),
+            "expected invalid image ref error, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remove_image_nonexistent_image() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_remove_image(
+            "alpine:latest".to_string(),
+            state,
+            Arc::clone(&deps.image.image_store),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response");
+        // Non-existent image: either Success (no-op) or Error.
+        assert!(
+            matches!(
+                resp,
+                DaemonResponse::Success { .. } | DaemonResponse::Error { .. }
+            ),
+            "expected Success or Error, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remove_image_in_use_by_running_container_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Inject a running container whose image matches.
+        let record = crate::daemon::state::ContainerRecord {
+            info: ContainerInfo {
+                id: "in-use-ctr".to_string(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "running".to_string(),
+                created_at: "1970-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: tmp.path().join("rootfs"),
+            cgroup_path: tmp.path().join("cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: Some("alpine:latest".to_string()),
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
+        };
+        state.add_container(record).await;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        handle_remove_image(
+            "alpine:latest".to_string(),
+            state,
+            Arc::clone(&deps.image.image_store),
+            Arc::clone(&deps.events.event_sink),
+            tx,
+        )
+        .await;
+
+        let resp = rx.recv().await.expect("no response");
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("in use")),
+            "expected 'in use' error, got {resp:?}"
+        );
+    }
+
+    // ── handle_subscribe_events ───────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_subscribe_events_exits_when_sender_closed() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let deps = make_deps(&tmp);
+        let event_source = Arc::clone(&deps.events.event_source);
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        drop(rx); // close the receiver so sends fail immediately
+
+        // Should return without hanging.
+        tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            handle_subscribe_events(event_source, tx),
+        )
+        .await
+        .expect("handle_subscribe_events must exit when tx is closed");
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_events_receives_event_then_exits() {
+        let broker = Arc::new(BroadcastEventBroker::new());
+        let event_source: Arc<dyn minibox_core::events::EventSource> = Arc::clone(&broker) as _;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+        let tx_clone = tx.clone();
+        drop(tx); // drop original; only tx_clone keeps channel alive
+
+        // Emit an event so the subscriber receives it, then drop tx_clone so
+        // the next send attempt fails and the loop exits.
+        broker.emit(minibox_core::events::ContainerEvent::ImagePruned {
+            count: 1,
+            freed_bytes: 0,
+            timestamp: std::time::SystemTime::now(),
+        });
+
+        // Run the handler; it will receive 1 event, send it (succeeds), then
+        // on the next Recv it blocks — so we drop tx_clone after a short wait.
+        let handle = tokio::spawn(async move {
+            handle_subscribe_events(event_source, tx_clone).await;
+        });
+
+        let resp = rx.recv().await.expect("should receive at least one event");
+        assert!(
+            matches!(resp, DaemonResponse::Event { .. }),
+            "expected Event, got {resp:?}"
+        );
+
+        // Ensure the handler task finishes (rx drop causes next send to fail → exit).
+        drop(rx);
+        tokio::time::timeout(std::time::Duration::from_millis(500), handle)
+            .await
+            .expect("handler task should exit after rx drop")
+            .expect("handler task should not panic");
+    }
+}
