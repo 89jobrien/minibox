@@ -2,7 +2,7 @@ name: Merge
 
 on:
   push:
-    branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*"]
+    branches: [develop, main, next, staging, "feature/*", "hotfix/*", "chore/*"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
   build-test-archive:
     name: build test archive
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -108,7 +108,7 @@ jobs:
   test-all-features:
     name: test with all features
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref)
     needs: build-test-archive
     steps:
       - uses: actions/checkout@v5
