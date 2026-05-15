@@ -6,23 +6,84 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (6 files)
+  title: Uncommitted changes (4 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    crates/minibox/src/daemon/handler.rs
-    crates/minibox/tests/daemon_handler_coverage_tests.rs
     .claude/worktrees/
     xtask/src/detect_changes.rs
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - crates/minibox/src/daemon/handler.rs
-  - crates/minibox/tests/daemon_handler_coverage_tests.rs
   - .claude/worktrees/
   - xtask/src/detect_changes.rs
 log:
+- date: '20260515.035425'
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - 208cfe2fe72d24e12ab8d270470553a9e600b2ea
+  - d7048cbe47045c6c5fb7df0290b798f02aaa9926
+  - 941b2282d0e6e93d2db0a7766e6054eec761b0be
+  - 245ff36cc1bb9449a0bf57783f0f65d9ba33eb93
+  - f793aee0e65743488913c8cae74c374776872e5f
+  - ce54f84c25c1185f2ded2f2630f3188b1fc793cc
+  - 7d5db973e7134b772e4048a303549c1f33a7fc43
+  - 213f8701fefe4468d97629087f430b0b8ba352de
+  - dbab202f262f89f814e8bb1632b224b6e4e18a37
+  - cd5b336f0870029818a8f30d20ce7c95c8b3a2f9
+- date: '20260515.035425'
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - 208cfe2fe72d24e12ab8d270470553a9e600b2ea
+  - d7048cbe47045c6c5fb7df0290b798f02aaa9926
+  - 941b2282d0e6e93d2db0a7766e6054eec761b0be
+  - 245ff36cc1bb9449a0bf57783f0f65d9ba33eb93
+  - f793aee0e65743488913c8cae74c374776872e5f
+  - ce54f84c25c1185f2ded2f2630f3188b1fc793cc
+  - 7d5db973e7134b772e4048a303549c1f33a7fc43
+  - 213f8701fefe4468d97629087f430b0b8ba352de
+  - dbab202f262f89f814e8bb1632b224b6e4e18a37
+  - cd5b336f0870029818a8f30d20ce7c95c8b3a2f9
+- date: '20260515.035345'
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - d7048cbe47045c6c5fb7df0290b798f02aaa9926
+  - 941b2282d0e6e93d2db0a7766e6054eec761b0be
+  - f793aee0e65743488913c8cae74c374776872e5f
+  - ce54f84c25c1185f2ded2f2630f3188b1fc793cc
+  - 7d5db973e7134b772e4048a303549c1f33a7fc43
+  - 213f8701fefe4468d97629087f430b0b8ba352de
+  - dbab202f262f89f814e8bb1632b224b6e4e18a37
+  - cd5b336f0870029818a8f30d20ce7c95c8b3a2f9
+  - a8f633ce818066a44b524b6cd0262e51526eed78
+  - 721ecd5e396d5a5b4ca66e821a86cc0b05850bf7
+- date: '20260515.035345'
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - d7048cbe47045c6c5fb7df0290b798f02aaa9926
+  - 941b2282d0e6e93d2db0a7766e6054eec761b0be
+  - f793aee0e65743488913c8cae74c374776872e5f
+  - ce54f84c25c1185f2ded2f2630f3188b1fc793cc
+  - 7d5db973e7134b772e4048a303549c1f33a7fc43
+  - 213f8701fefe4468d97629087f430b0b8ba352de
+  - dbab202f262f89f814e8bb1632b224b6e4e18a37
+  - cd5b336f0870029818a8f30d20ce7c95c8b3a2f9
+  - a8f633ce818066a44b524b6cd0262e51526eed78
+  - 721ecd5e396d5a5b4ca66e821a86cc0b05850bf7
+- date: '20260515.035323'
+  summary: done=23 running=0 pending=47 blocked=0
+  commits:
+  - f793aee0e65743488913c8cae74c374776872e5f
+  - ce54f84c25c1185f2ded2f2630f3188b1fc793cc
+  - 7d5db973e7134b772e4048a303549c1f33a7fc43
+  - 213f8701fefe4468d97629087f430b0b8ba352de
+  - dbab202f262f89f814e8bb1632b224b6e4e18a37
+  - cd5b336f0870029818a8f30d20ce7c95c8b3a2f9
+  - a8f633ce818066a44b524b6cd0262e51526eed78
+  - 721ecd5e396d5a5b4ca66e821a86cc0b05850bf7
+  - 27a0f641c5e3b6928f312f1a18469b2cdacc17e9
+  - 1f302515954efdd44d32ab98807e77e828e945fc
 - date: '20260515.035219'
   summary: done=23 running=0 pending=47 blocked=0
   commits:
