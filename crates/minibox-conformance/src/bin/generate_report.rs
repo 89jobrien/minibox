@@ -49,6 +49,12 @@ fn main() {
     ReportGenerator::junit_xml(&mut f, &summary).expect("write junit");
     println!("conformance:junit={}", junit_path.display());
 
+    // Markdown report.
+    let md_path = artifact_dir.join("conformance.md");
+    let mut f = fs::File::create(&md_path).expect("create markdown report");
+    ReportGenerator::markdown(&mut f, &summary).expect("write markdown");
+    println!("conformance:markdown={}", md_path.display());
+
     println!(
         "conformance:summary {}/{} passed, {} failed, {} skipped in {}ms",
         summary.passed, summary.total, summary.failed, summary.skipped, summary.duration_ms
