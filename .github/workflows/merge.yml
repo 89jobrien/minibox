@@ -2,7 +2,7 @@ name: Merge
 
 on:
   push:
-    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
+    branches: [main, next, staging, stable, "feature/*", "hotfix/*", "chore/*"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,7 +39,7 @@ jobs:
   build-test-archive:
     name: build test archive
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -76,7 +76,7 @@ jobs:
   test-all-features:
     name: test with all features
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     needs: build-test-archive
     steps:
       - uses: actions/checkout@v5
@@ -93,7 +93,7 @@ jobs:
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
@@ -104,7 +104,7 @@ jobs:
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -112,7 +112,7 @@ jobs:
   machete:
     name: cargo machete
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
@@ -123,7 +123,7 @@ jobs:
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - name: cargo xtask test-e2e-suite
@@ -134,7 +134,7 @@ jobs:
   test-integration:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - name: cargo xtask test-integration
@@ -145,7 +145,7 @@ jobs:
   test-protocol-e2e-linux:
     name: protocol e2e (Linux)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - name: cargo xtask test-e2e
@@ -196,7 +196,7 @@ jobs:
   cleanup-linux:
     name: cleanup (Linux)
     runs-on: [self-hosted, minibox]
-    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/staging","refs/heads/stable"]'), github.ref)
     needs: [test-e2e, test-integration, test-protocol-e2e-linux]
     steps:
       - uses: actions/checkout@v5

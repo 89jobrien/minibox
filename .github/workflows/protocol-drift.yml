@@ -2,7 +2,7 @@ name: Protocol Drift
 
 on:
   push:
-    branches: [main, next, stable, "feature/*", "hotfix/*"]
+    branches: [main, next, staging, stable, "feature/*", "hotfix/*"]
     paths:
       - "crates/minibox-core/src/protocol.rs"
       - "crates/minibox-core/src/domain.rs"

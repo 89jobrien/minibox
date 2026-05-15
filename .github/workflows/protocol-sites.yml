@@ -2,7 +2,7 @@ name: Protocol Sites
 
 on:
   push:
-    branches: [main, next, stable, "feature/*", "hotfix/*"]
+    branches: [main, next, staging, stable, "feature/*", "hotfix/*"]
     paths:
       - "crates/miniboxd/src/main.rs"
       - "xtask/src/protocol_sites.rs"
