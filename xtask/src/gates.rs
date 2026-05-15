@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
-use std::{env, fs, path::Path};
+use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{bump, docs_lint};
+use crate::{bump, docs_lint, utils::cargo_target_dir};
 
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
@@ -288,10 +288,14 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
     .run()
     .context("failed to build system test binary")?;
 
-    let binary = find_test_binary("target/release/deps", "system_tests")
-        .context("could not locate system test binary in target/release/deps")?;
+    let target = cargo_target_dir();
+    let binary = find_test_binary(
+        &target.join("release/deps").to_string_lossy(),
+        "system_tests",
+    )
+    .context("could not locate system test binary in target/release/deps")?;
 
-    let bin_dir = env::current_dir()?.join("target/release");
+    let bin_dir = target.join("release");
     cmd!(
         sh,
         "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --nocapture"
@@ -322,10 +326,14 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
     .run()
     .context("failed to build sandbox test binary")?;
 
-    let binary = find_test_binary("target/release/deps", "sandbox_tests")
-        .context("could not locate sandbox test binary in target/release/deps")?;
+    let target = cargo_target_dir();
+    let binary = find_test_binary(
+        &target.join("release/deps").to_string_lossy(),
+        "sandbox_tests",
+    )
+    .context("could not locate sandbox test binary in target/release/deps")?;
 
-    let bin_dir = env::current_dir()?.join("target/release");
+    let bin_dir = target.join("release");
     cmd!(
         sh,
         "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {binary} --test-threads=1 --ignored --nocapture"

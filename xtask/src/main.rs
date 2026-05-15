@@ -29,6 +29,7 @@ mod protocol_sites;
 mod stale_names;
 mod test_image;
 mod test_linux;
+mod utils;
 
 fn main() -> Result<()> {
     let task = env::args().nth(1);
