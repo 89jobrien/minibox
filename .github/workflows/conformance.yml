@@ -2,27 +2,41 @@ name: Conformance
 
 on:
   push:
-    branches: [next, stable]
+    branches: [develop, next, stable]
+  pull_request:
+    branches: [develop, next, stable]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
 
 jobs:
   conformance:
-    name: conformance suite
-    runs-on: [self-hosted, minibox]
+    name: conformance suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
-      - name: trust workspace dir
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
       - uses: actions/checkout@v5
 
-      - name: cargo xtask test-conformance
-        run: ~/.local/bin/mise exec -- cargo xtask test-conformance
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run conformance suite
+        run: cargo run -p minibox-conformance --bin run-conformance
 
       - name: upload conformance report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: conformance-report
+          name: conformance-report-${{ matrix.os }}
           path: artifacts/conformance/
           retention-days: 30
 
@@ -31,6 +45,6 @@ jobs:
         run: |
           REPORT=artifacts/conformance/report.md
           if [ -f "$REPORT" ]; then
-            echo "## Conformance Report" >> "$GITHUB_STEP_SUMMARY"
-            python3 -c "import sys; sys.stdout.write(open('$REPORT').read())" >> "$GITHUB_STEP_SUMMARY"
+            echo "## Conformance Report (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           fi
