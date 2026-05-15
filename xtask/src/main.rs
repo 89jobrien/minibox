@@ -4,10 +4,11 @@
 //! module and wiring it into the `match` below; do NOT grow existing modules
 //! beyond their stated scope.
 //!
-//! | Module      | Responsibility                                              |
-//! |-------------|-------------------------------------------------------------|
-//! | `gates`     | Quality gates: fmt-check, clippy, nextest, coverage         |
-//! | `cleanup`   | State cleanup: kill orphans, unmount overlays, rm artifacts |
+//! | Module               | Responsibility                                              |
+//! |----------------------|-------------------------------------------------------------|
+//! | `gates`              | Quality gates: fmt-check, clippy, nextest, coverage         |
+//! | `cleanup`            | State cleanup: kill orphans, unmount overlays, rm artifacts |
+//! | `feature_matrix_date`| Rewrite Last-updated stamp in FEATURE_MATRIX.mbx.md        |
 use anyhow::{Result, bail};
 use std::{env, path::Path};
 use xshell::Shell;
@@ -21,6 +22,7 @@ mod cleanup;
 mod context;
 mod daily_orchestration;
 mod docs_lint;
+mod feature_matrix_date;
 mod gates;
 mod preflight;
 mod protocol_drift;
@@ -150,6 +152,9 @@ fn main() -> Result<()> {
             }
             daily_orchestration::run(dry_run, ci)
         }
+        Some("update-feature-matrix-date") => {
+            feature_matrix_date::update_feature_matrix_date(root)
+        }
         Some("check-stale-names") => stale_names::check_stale_names(root),
         Some("check-protocol-drift") => {
             let args: Vec<String> = env::args().skip(2).collect();
@@ -228,6 +233,9 @@ fn main() -> Result<()> {
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
+            );
+            eprintln!(
+                "  update-feature-matrix-date  rewrite Last-updated stamp in docs/FEATURE_MATRIX.mbx.md to today"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(
