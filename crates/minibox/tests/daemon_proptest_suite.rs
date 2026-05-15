@@ -72,7 +72,9 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store = Arc::new(minibox_core::image::ImageStore::new(tmp.join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.join("images2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -144,6 +146,9 @@ fn make_record(id: &str) -> ContainerRecord {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 
@@ -167,7 +172,7 @@ proptest! {
         let found = runtime().block_on(state.get_container(&id));
 
         prop_assert!(found.is_some(), "get after add returned None for id={id}");
-        prop_assert_eq!(found.unwrap().info.id, id);
+        prop_assert_eq!(found.expect("unwrap in test").info.id, id);
     }
 }
 

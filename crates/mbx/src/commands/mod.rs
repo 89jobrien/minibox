@@ -4,10 +4,13 @@
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
 
+pub mod diagnose;
+pub mod doctor;
 pub mod events;
 pub mod exec;
 pub mod load;
 pub mod logs;
+pub mod manifest;
 pub mod pause;
 pub mod prune;
 pub mod ps;

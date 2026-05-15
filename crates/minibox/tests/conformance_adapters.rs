@@ -30,7 +30,7 @@ async fn conformance_noop_network_setup_returns_empty_string() {
 
     assert!(result.is_ok(), "setup must succeed on NoopNetwork");
     assert_eq!(
-        result.unwrap(),
+        result.expect("unwrap in test"),
         "",
         "setup must return empty string (no netns created)"
     );
@@ -62,7 +62,7 @@ async fn conformance_noop_network_stats_returns_zero() {
 
     assert!(result.is_ok(), "stats must succeed on NoopNetwork");
 
-    let stats = result.unwrap();
+    let stats = result.expect("unwrap in test");
     assert_eq!(stats.rx_bytes, 0, "rx_bytes must be 0");
     assert_eq!(stats.rx_packets, 0, "rx_packets must be 0");
     assert_eq!(stats.rx_errors, 0, "rx_errors must be 0");
@@ -95,7 +95,7 @@ async fn conformance_noop_network_as_any_downcast() {
     );
     assert!(
         downcast
-            .unwrap()
+            .expect("unwrap in test")
             .setup("test-1", &NetworkConfig::default())
             .await
             .is_ok(),
@@ -123,7 +123,7 @@ fn conformance_noop_limiter_create_returns_path() {
     let result = limiter.create("noop-container-1", &config);
     assert!(result.is_ok(), "create must succeed on NoopLimiter");
 
-    let path = result.unwrap();
+    let path = result.expect("unwrap in test");
     assert!(
         path.contains("noop-container-1"),
         "returned path must reference the container_id, got: {path}"
@@ -194,7 +194,10 @@ async fn conformance_mock_registry_as_any_downcast() {
 
     // Verify the downcast result is usable
     assert!(
-        downcast.unwrap().has_image("library/test", "latest").await,
+        downcast
+            .expect("unwrap in test")
+            .has_image("library/test", "latest")
+            .await,
         "downcast result must be usable and cached image must return true"
     );
 }
@@ -223,7 +226,7 @@ async fn conformance_mock_runtime_as_any_downcast() {
 
     // Verify the downcast result is usable (spawn_count accessor)
     assert_eq!(
-        downcast.unwrap().spawn_count(),
+        downcast.expect("unwrap in test").spawn_count(),
         0,
         "downcast result must be usable (spawn_count returns a u32)"
     );

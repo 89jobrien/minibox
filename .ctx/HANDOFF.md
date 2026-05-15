@@ -1,32 +1,42 @@
-# Handoff — minibox (2026-04-29)
+# Handoff — minibox (2026-05-13)
 
-**Branch:** next | **Build:** clean | **Tests:** 9/9 typestate pass; cargo check clean
-Wave 2 of update/upgrade fully landed on main. Bench dashboard rewritten with
-Chart.js history tracking. Typestate lifecycle module added to minibox-core
-(compile-time container state machine, 9 tests). Ready for next->stable promotion
-once CI is green on main.
-
+**Branch:** main | **Build:** cargo check passed | **Tests:** cargo test passed
+EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
+3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
+3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
+f9229da perf(xtask): skip cargo compilation in pre-commit when no Rust files staged
+0b93001 fix(ci): use absolute paths for cargo-geiger manifest-path
+7516e53 feat(ci): add daily nightly/YYYYMMDD tagged releases
+659f1c2 fix: apply sentinel suggestion-level fixes
+1429d80 fix(ci): pre-trust workspace dir on self-hosted runner before checkout
+df5dca0 refactor: move pre-commit bump logic into cargo xtask pre-commit
+edbb22e feat(xtask): rate-limit minor version bumps to once per calendar day
+c7fd3d3 fix: close clone closure and pipe fds on spawn paths
+366af49 fix: update socket-auth regression expectations
+8446efa fix(ci): add missing daily_orchestration.rs and fix version bump for workspace deps
+8debe13 fix(ci): harden release, reviewdog, and issue triage workflows
+10e4a6c fix(ci): ignore pty_exec_echo_roundtrip in unprivileged CI
+5a3568b ci: retrigger merge workflow after stuck run
+60bb538 ci: retrigger merge workflow
+269947e refactor: move xtask crate to workspace root
+5681a39 fix(ci): replace cancel-on-failure with ci-ok sentinel job
+d4fb4b7 ci: trigger workflow
+89d071a ci(merge): add lint + unit test jobs on ubuntu-latest for all pushes
+9dfbf82 ci: migrate macOS CI from self-hosted to GitHub runners
+327b559 drop(vm): remove QEMU vm_image and vm_run xtask commands
+00ee442 drop(vz): remove VZ adapter and all associated code
+30bfa14 Fix typo in README.md regarding software structure. Validation: cargo check passed; cargo test passed.
 
 ## Items
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| minibox-33 | P1 | open | feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel |
-| minibox-46 | P1 | open | feat: PTY/stdio piping for interactive containers (#19) — plan written |
-| minibox-55 | P1 | open | feat: minibox owns the full container stack on every OS |
-| minibox-77 | P1 | open | chore: promote to stable and cut v0.22.0 release tag |
-| minibox-update-upgrade | P1 | open | feat: mbx update + mbx upgrade — restart support stubbed (Wave 3) |
-| minibox-agent-llm-api | P1 | blocked | Extend minibox-llm with infer() API, then re-land minibox-agent |
-| minibox-43 | P2 | blocked | feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75) |
-| minibox-52 | P2 | blocked | feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84) |
-| minibox-53 | P2 | blocked | feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88) |
-| minibox-54 | P2 | blocked | feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93) |
-| minibox-7 | P2 | blocked | bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64 |
+| uncommitted-work | P1 | open | Uncommitted changes (28 files) |
 
 ## Log
 
-- 20260429:042914: Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified). [9574520, d3459f4, e08a7dc, 277dbf2, 761fd26, 5a4aadf]
-- 20260428:124518: Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI). [54df5d0, 1bc83c5]
-- 20260428:121625: Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests. [c669ca8, f423e19, 49fc9a1, 73703f8, 93b4814, ade65b9, eb6bef2]
-- 20260428:062906: Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree. [b8720ac, 4e4bdba]
-- 20260428:080155: Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions. [5b4c4d8]
+- 20260513.223308: done=23 running=0 pending=1 blocked=0 [1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13, 2849e2f4b8efd12a3dd60b801706bc583617e85d, 031d8e6b75ade22bb653799dd985b0ebc8a60266, 0ae6a8d8f60902378c8014d708389983a2439c64, 30251c645b2845e3fdaecb874cf4758b7fe57476, 31da360a61aa7d1c5579dba30488b150330b516d, 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9, 3ea1fa5919bedca098ef2c96dfcbefae099d33c5, e315c8b4032f91cd90e0479fe2a1211808d366a9, 44f46c1772005afc91d4b226128aa1fd4098885d]
+- 20260513.095714: done=23 running=0 pending=1 blocked=0 [1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13, 2849e2f4b8efd12a3dd60b801706bc583617e85d, 031d8e6b75ade22bb653799dd985b0ebc8a60266, 0ae6a8d8f60902378c8014d708389983a2439c64, 30251c645b2845e3fdaecb874cf4758b7fe57476, 31da360a61aa7d1c5579dba30488b150330b516d, 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9, 3ea1fa5919bedca098ef2c96dfcbefae099d33c5, e315c8b4032f91cd90e0479fe2a1211808d366a9, 44f46c1772005afc91d4b226128aa1fd4098885d]
+- 20260513.093854: done=23 running=0 pending=1 blocked=0 [1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13, 2849e2f4b8efd12a3dd60b801706bc583617e85d, 031d8e6b75ade22bb653799dd985b0ebc8a60266, 0ae6a8d8f60902378c8014d708389983a2439c64, 30251c645b2845e3fdaecb874cf4758b7fe57476, 31da360a61aa7d1c5579dba30488b150330b516d, 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9, 3ea1fa5919bedca098ef2c96dfcbefae099d33c5, e315c8b4032f91cd90e0479fe2a1211808d366a9, 44f46c1772005afc91d4b226128aa1fd4098885d]
+- 20260513.093854: done=23 running=0 pending=1 blocked=0 [1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13, 2849e2f4b8efd12a3dd60b801706bc583617e85d, 031d8e6b75ade22bb653799dd985b0ebc8a60266, 0ae6a8d8f60902378c8014d708389983a2439c64, 30251c645b2845e3fdaecb874cf4758b7fe57476, 31da360a61aa7d1c5579dba30488b150330b516d, 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9, 3ea1fa5919bedca098ef2c96dfcbefae099d33c5, e315c8b4032f91cd90e0479fe2a1211808d366a9, 44f46c1772005afc91d4b226128aa1fd4098885d]
+- 20260513.093731: done=23 running=0 pending=1 blocked=0 [1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13, 2849e2f4b8efd12a3dd60b801706bc583617e85d, 031d8e6b75ade22bb653799dd985b0ebc8a60266, 0ae6a8d8f60902378c8014d708389983a2439c64, 30251c645b2845e3fdaecb874cf4758b7fe57476, 31da360a61aa7d1c5579dba30488b150330b516d, 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9, 3ea1fa5919bedca098ef2c96dfcbefae099d33c5, e315c8b4032f91cd90e0479fe2a1211808d366a9, 44f46c1772005afc91d4b226128aa1fd4098885d]

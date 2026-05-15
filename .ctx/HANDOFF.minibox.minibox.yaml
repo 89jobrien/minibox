@@ -1,297 +1,585 @@
 project: minibox
 id: minibox
-updated: 2026-04-29
+updated: 2026-05-13
 items:
-- id: minibox-update-upgrade
-  doob_uuid: null
-  name: update-upgrade-commands
+- id: uncommitted-work
+  name: uncommitted-work
   priority: P1
   status: open
-  title: 'feat: mbx update + mbx upgrade — restart support stubbed (Wave 3)'
-  description: |
-    Wave 1 (protocol types + upgrade CLI) and Wave 2 (handle_update handler + mbx update CLI)
-    are fully landed on main (commits 9574520, d3459f4, e08a7dc, 277dbf2, 761fd26, 5a4aadf).
-    Remaining: restart support in handle_update is stubbed with a warn! log — Wave 3 would wire
-    actual container restart after image refresh. Also: bench dashboard (xtask bench rewrite)
-    and typestate lifecycle module (minibox-core::typestate) were added this session.
+  title: Uncommitted changes (27 files)
+  description: |-
+    Working tree has uncommitted changes:
+    .ctx/HANDOFF.md
+    .ctx/HANDOFF.minibox.minibox.yaml
+    crates/minibox/tests/adapter_colima_tests.rs
+    crates/minibox/tests/adapter_failure_injection_tests.rs
+    crates/minibox/tests/conformance_adapters.rs
+    crates/minibox/tests/conformance_state.rs
+    crates/minibox/tests/daemon_adapter_suite_tests.rs
+    crates/minibox/tests/daemon_conformance_helpers.rs
+    crates/minibox/tests/daemon_conformance_tests.rs
+    crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
+    crates/minibox/tests/daemon_daemon_recovery_tests.rs
+    crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
+    crates/minibox/tests/daemon_handler_common/mod.rs
+    crates/minibox/tests/daemon_handler_exec_tests.rs
+    crates/minibox/tests/daemon_handler_failure_tests.rs
+    crates/minibox/tests/daemon_handler_image_tests.rs
+    crates/minibox/tests/daemon_handler_lifecycle_tests.rs
+    crates/minibox/tests/daemon_handler_logs_events_tests.rs
+    crates/minibox/tests/daemon_handler_pipeline_tests.rs
+    crates/minibox/tests/daemon_handler_state_tests.rs
+    crates/minibox/tests/daemon_handler_streaming_tests.rs
+    crates/minibox/tests/daemon_isp_handler_deps_tests.rs
+    crates/minibox/tests/daemon_proptest_suite.rs
+    crates/minibox/tests/gke_adapter_isolation_tests.rs
+    crates/minibox/tests/native_adapter_isolation_tests.rs
+    crates/minibox/tests/security_regression.rs
+    crates/miniboxd/tests/system_tests.rs
   files:
-  - crates/minibox-core/src/protocol.rs
-  - crates/minibox/src/daemon/handler.rs
-  - crates/minibox/src/daemon/server.rs
-  - crates/mbx/src/commands/update.rs
-  - crates/mbx/src/commands/upgrade.rs
-  - crates/minibox-core/src/typestate.rs
-  - crates/xtask/src/bench.rs
-  completed: null
-  extra:
-  - date: 20260429:042914
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: 'Wave 2 complete: 9574520 (handle_update), d3459f4 (mbx update), e08a7dc (sentinel fixes), 277dbf2 (docs), 761fd26 (v0.22.0), 5a4aadf (CI e2e). Bench dashboard and typestate module also added this session.'
-- id: minibox-7
-  doob_uuid: b7876856-30c1-4c2b-967f-cc3f7ad2aff4
-  name: vz-apple-bug-blocker
-  priority: P2
-  status: blocked
-  title: 'bug(vz): VZ.framework VZErrorInternal(code=1) on macOS 26 ARM64'
-  description: 'GH #61: Confirmed Apple OS bug. test-vz-isolation harness is complete and correct. No user-space workaround. Monitor apple/container#1254. just test-vz-isolation should pass as-is once Apple ships a fix.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 61
-    url: https://github.com/89jobrien/minibox/issues/61
-  - date: 2026-04-01
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: VZErrorInternal(code=1) on startWithCompletionHandler on macOS 26 ARM64. Affects Podman and apple/container as well. Tracking https://github.com/apple/container/issues/1254
-  - date: 2026-04-06
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: captured in doob — todo id 34l16mxn2y29do1562s9
-- id: minibox-33
-  doob_uuid: null
-  name: winbox-hyper-v-wsl2
-  priority: P1
-  status: open
-  title: 'feat(winbox): minibox-owned Linux VM on Windows via Hyper-V / WSL2 kernel'
-  description: 'GH #45: Implement Windows container support via Hyper-V for Windows Pro or WSL2 for Home. Parallel to macOS VZ adapter.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 45
-    url: https://github.com/89jobrien/minibox/issues/45
-- id: minibox-43
-  doob_uuid: null
-  name: vz-virtiofs-mounts
-  priority: P2
-  status: blocked
-  title: 'feat(vz): virtiofs host-path mounts — OCI layers and bind mounts (#43) / (#66, #75)'
-  description: 'GH #66, #75: Blocked by VZ VM provisioning. Mount host paths into VM via virtiofs for efficient layer access.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 66
-    url: https://github.com/89jobrien/minibox/issues/66
-- id: minibox-46
-  doob_uuid: null
-  name: pty-stdio-plan
-  priority: P1
-  status: open
-  title: 'feat: PTY/stdio piping for interactive containers (#19) — plan written'
-  description: 'GH #70: Plan written: docs/superpowers/plans/2026-04-09-pty-stdio-piping.md. Domain types (PtyConfig, PtyAllocator port) added this session (64fe60e). Full PTY fork/exec wiring deferred — requires Linux root.'
-  files:
-  - crates/minibox-core/src/domain.rs
-  - crates/minibox/src/container/process.rs
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 70
-    url: https://github.com/89jobrien/minibox/issues/70
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 83
-    url: https://github.com/89jobrien/minibox/issues/83
-- id: minibox-52
-  doob_uuid: null
-  name: vz-vm-provision
-  priority: P2
-  status: blocked
-  title: 'feat(vz): provision and start minibox-managed Linux VM via Apple VF (#40) / (#76, #84)'
-  description: 'GH #76, #84: Blocked by VZErrorInternal Apple bug. Implement VM lifecycle (create disk image, configure VZ VM, start/stop) inside macbox.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 76
-    url: https://github.com/89jobrien/minibox/issues/76
-- id: minibox-53
-  doob_uuid: null
-  name: vz-minibox-agent
-  priority: P2
-  status: blocked
-  title: 'feat(vz): minibox-agent — in-VM daemon over vsock (#41) / (#78, #88)'
-  description: 'GH #78, #88: In-VM Rust daemon (minibox-agent) listening on AF_VSOCK, forwards requests to local minibox primitives. Depends on VZ VM provisioning.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 78
-    url: https://github.com/89jobrien/minibox/issues/78
-- id: minibox-54
-  doob_uuid: null
-  name: vz-vsock-bridge
-  priority: P2
-  status: blocked
-  title: 'feat(vz): vsock I/O bridge — stream container stdout/stderr from VM (#42) / (#81, #93)'
-  description: 'GH #81, #93: Host miniboxd connects to in-VM minibox-agent over AF_VSOCK. Container stdout/stderr forwarded as ContainerOutput protocol messages.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 81
-    url: https://github.com/89jobrien/minibox/issues/81
-- id: minibox-55
-  doob_uuid: null
-  name: vz-full-stack
-  priority: P1
-  status: open
-  title: 'feat: minibox owns the full container stack on every OS'
-  description: 'GH #87, #44: Tracking issue: Linux native done. macOS via VF+vsock planned (blocked by #61). Windows via Hyper-V/WSL2 kernel TBD.'
-  files: []
-  completed: null
-  extra:
-  - date: null
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 87
-    url: https://github.com/89jobrien/minibox/issues/87
-- id: minibox-agent-llm-api
-  doob_uuid: null
-  name: minibox-agent-llm-api
-  priority: P1
-  status: blocked
-  title: Extend minibox-llm with infer() API, then re-land minibox-agent
-  description: |
-    feat/minibox-agent-error was reverted (incompatible LLM API). Design captured in docs/minibox-agent-design.md. To re-land: add infer(&InferenceRequest)->InferenceResponse to LlmProvider trait (Option A — alongside complete()), add Message/ContentBlock/Role/ToolDefinition types to minibox-llm/src/types.rs. Then port agent.rs+conversation.rs. AgentError in error.rs is already correct (only 2 variants: Llm, Step).
-    NOTE: minibox-llm is being dropped in crate consolidation Phase 0 (GH #153). Re-evaluate
-    whether LLM support moves into minibox-core or a separate plugin before implementing.
-  files:
-  - crates/minibox-llm/src/provider.rs
-  - crates/minibox-llm/src/types.rs
-  - crates/minibox-agent/src/agent.rs
-  - crates/minibox-agent/src/conversation.rs
-  completed: null
-  extra:
-  - date: null
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: Branch feat/minibox-agent-error preserved. Design doc at docs/minibox-agent-design.md.
-  - date: 20260426:051901
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: minibox-llm being dropped in crate consolidation Phase 0 (GH
-- id: minibox-77
-  doob_uuid: null
-  name: publish-core-crates
-  priority: P1
-  status: open
-  title: 'chore: promote to stable and cut v0.22.0 release tag'
-  description: |
-    GH #153: Full 7-phase consolidation plan at docs/superpowers/plans/2026-04-26-crate-consolidation.md.
-    Phases 0-6 complete (13->8 crates, slashcrux path dep fixed, dry-run passes). Remaining:
-    promote main→next (wait for CI green), then promote next→stable and cut v0.22.0 release tag.
-    GitHub Actions release.yml will publish minibox-core and minibox-macros to crates.io automatically.
-  files:
-  - docs/superpowers/plans/2026-04-26-crate-consolidation.md
-  - Cargo.toml
-  - crates/minibox-core/Cargo.toml
-  completed: null
-  extra:
-  - date: 20260426:051901
-    type: github-issue
-    field: null
-    value: null
-    reviewed: null
-    note: null
-    number: 153
-    url: https://github.com/89jobrien/minibox/issues/153
-  - date: 20260429:042914
-    type: note
-    field: null
-    value: null
-    reviewed: null
-    note: 'Session 38: v0.22.0 bumped this session (761fd26). CI e2e job added (5a4aadf). Ready for next→stable promotion once CI is green.'
+  - .ctx/HANDOFF.md
+  - .ctx/HANDOFF.minibox.minibox.yaml
+  - crates/minibox/tests/adapter_colima_tests.rs
+  - crates/minibox/tests/adapter_failure_injection_tests.rs
+  - crates/minibox/tests/conformance_adapters.rs
+  - crates/minibox/tests/conformance_state.rs
+  - crates/minibox/tests/daemon_adapter_suite_tests.rs
+  - crates/minibox/tests/daemon_conformance_helpers.rs
+  - crates/minibox/tests/daemon_conformance_tests.rs
+  - crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
+  - crates/minibox/tests/daemon_daemon_recovery_tests.rs
+  - crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
+  - crates/minibox/tests/daemon_handler_common/mod.rs
+  - crates/minibox/tests/daemon_handler_exec_tests.rs
+  - crates/minibox/tests/daemon_handler_failure_tests.rs
+  - crates/minibox/tests/daemon_handler_image_tests.rs
+  - crates/minibox/tests/daemon_handler_lifecycle_tests.rs
+  - crates/minibox/tests/daemon_handler_logs_events_tests.rs
+  - crates/minibox/tests/daemon_handler_pipeline_tests.rs
+  - crates/minibox/tests/daemon_handler_state_tests.rs
+  - crates/minibox/tests/daemon_handler_streaming_tests.rs
+  - crates/minibox/tests/daemon_isp_handler_deps_tests.rs
+  - crates/minibox/tests/daemon_proptest_suite.rs
+  - crates/minibox/tests/gke_adapter_isolation_tests.rs
+  - crates/minibox/tests/native_adapter_isolation_tests.rs
+  - crates/minibox/tests/security_regression.rs
+  - crates/miniboxd/tests/system_tests.rs
 log:
-- date: 20260429:042914
-  summary: 'Session 38: landed Wave 2 of update/upgrade (handle_update handler, mbx update CLI, sentinel fixes, CI e2e tests, v0.22.0 bump); added rich bench dashboard (xtask bench rewrite + Chart.js HTML); added compile-time typestate lifecycle module (minibox-core::typestate, 9 tests); explored container ecosystem comparison (tini/conmon/containerd/ctop gaps identified).'
+- date: '20260513.223432'
+  summary: done=23 running=0 pending=1 blocked=0
   commits:
-  - '9574520'
-  - d3459f4
-  - e08a7dc
-  - 277dbf2
-  - 761fd26
-  - 5a4aadf
-  session: 38
-- date: 20260428:124518
-  summary: 'Session 37: added mbx update (image refresh) + mbx upgrade (self-update) commands — Wave 1 landed (protocol types, upgrade CLI); Wave 2 agents dispatched (handle_update handler, update CLI).'
+  - b5d8ca71c59b09b9312fab28aa984bc42f34d8bd
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+- date: '20260513.223432'
+  summary: done=23 running=0 pending=1 blocked=0
   commits:
-  - 54df5d0
-  - 1bc83c5
-  session: 37
-- date: 20260428:121625
-  summary: 'Session 36: resolved all 6 council recommendations for multi-platform image pull — fixed registry routing bypass (c669ca8), hardened TargetPlatform::parse, fixed proot stderr capture, wired run --platform end-to-end, restored 3 CI jobs, added platform-aware pull handler tests.'
+  - b5d8ca71c59b09b9312fab28aa984bc42f34d8bd
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+- date: '20260513.223308'
+  summary: done=23 running=0 pending=1 blocked=0
   commits:
-  - c669ca8
-  - f423e19
-  - 49fc9a1
-  - 73703f8
-  - 93b4814
-  - ade65b9
-  - eb6bef2
-  session: 36
-- date: 20260428:062906
-  summary: 'Session 35: orca-strait multi-platform image pull — TargetPlatform type, find_platform(), NoPlatformManifest error, RegistryClient::with_platform(), protocol platform field, --platform CLI flag, GHCR adapter update. 2 commits landed, mbx in working tree.'
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.095714'
+  summary: done=23 running=0 pending=1 blocked=0
   commits:
-  - b8720ac
-  - 4e4bdba
-  session: 35
-- date: 20260428:080155
-  summary: 'Session 34: implemented minibox-memory crate in minibox-plugins — hexagonal MemoryStore+Embedder ports, InMemoryStore+TursoStore adapters, InfraMemory service (L0/L1/L2), MemorySearcher RRF hybrid search. 26 tests passing. Fixed obfsck pre-commit exclusions.'
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093854'
+  summary: done=23 running=0 pending=1 blocked=0
   commits:
-  - 5b4c4d8
-  session: 34
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093854'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093731'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093625'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093625'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093048'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093030'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.093020'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 1fcb7a3bdc8bba8e249d57c0962ea8f42a0ada13
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+- date: '20260513.090924'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+- date: '20260513.090259'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+- date: '20260513.085204'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 2849e2f4b8efd12a3dd60b801706bc583617e85d
+  - 031d8e6b75ade22bb653799dd985b0ebc8a60266
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+- date: '20260513.084845'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+- date: '20260513.084824'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+- date: '20260513.084824'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 0ae6a8d8f60902378c8014d708389983a2439c64
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+- date: '20260513.084642'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.084642'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.041104'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.041104'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.041021'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.041021'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.040937'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260513.040937'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202656'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202656'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202438'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202406'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202319'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.202131'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.201845'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 30251c645b2845e3fdaecb874cf4758b7fe57476
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+- date: '20260512.195508'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+  - 5a69cf494fbc7d658afee17a414822e8c2d208b0
+- date: '20260512.195508'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+  - 5a69cf494fbc7d658afee17a414822e8c2d208b0
+- date: '20260512.195506'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+  - 5a69cf494fbc7d658afee17a414822e8c2d208b0
+- date: '20260512.195506'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+  - 44f46c1772005afc91d4b226128aa1fd4098885d
+  - 847596f164c78e2a4095aac9be0ef2cc7ef6781e
+  - c4846690ab738a4134a367320ff09f148605a407
+  - 6f3d45c2ced3ab4fde42be8630166485ec49b87f
+  - 36eaf1d5adc9e28000a91c2f93159d0e7aa07f45
+  - 5a69cf494fbc7d658afee17a414822e8c2d208b0
+- date: '20260512.184331'
+  summary: done=23 running=0 pending=1 blocked=0
+  commits:
+  - 31da360a61aa7d1c5579dba30488b150330b516d
+  - 67fb3d05594ef2d6c55f6f98b1cf274924ef5bc9
+  - 3ea1fa5919bedca098ef2c96dfcbefae099d33c5
+  - e315c8b4032f91cd90e0479fe2a1211808d366a9
+- date: '20260512.131803'
+  summary: done=23 running=0 pending=1 blocked=0
+- date: '20260512.025516'
+  summary: done=16 running=0 pending=8 blocked=0
+- date: '20260512.025037'
+  summary: done=14 running=0 pending=10 blocked=0
+- date: '20260512.024742'
+  summary: done=3 running=0 pending=20 blocked=1
+- date: '20260509.225051'
+  summary: 'Session 43: sentinel autofixer (protocol-drift lock file + NOTE comments); daily nightly/YYYYMMDD release pipeline (nightly.yml tag job, release.yml nightly/* trigger); fixed geiger absolute paths in nightly.yml; skip cargo compilation in pre-commit/pre-push when no Rust files staged; Node.js 24 repo variable; created GH #322 #323 (dead code/unused imports); godmode hook CLAUDE_PLUGIN_ROOT patched in both cache copies (needs session restart)'
+  session: 43
+- date: '20260502.192909'
+  summary: 'Session 42: triage-only; confirmed Wave 3 restart (handle_update stop-on-update) and crux-plugin scaffold (9 handlers, 21 tests) are complete; noted pre-existing colima bind mount test failure (169/170 pass, 1 ignored); cargo check clean'
+  session: 42
+- date: '20260502.000000'
+  summary: 'Session 41: added minibox-crux-plugin integration test suite (10 tests via subprocess + mock daemon socket); committed open session-40 changes (crux-plugin scaffold, handler fmt, HANDOFF); morning triage — labeled 14 GitHub issues (p1/p2/p3), wrote daily note'
+  session: 41
+- date: '20260502.000000'
+  summary: 'Session 40: implemented Wave 3 restart in handle_update (stop containers on image update); scaffolded minibox-crux-plugin binary (9 handlers, 11 tests, cruxx protocol stdin/stdout loop)'
+  session: 40
+- date: '20260430.143952'
+  summary: 'Session 39: added conformance tests for macbox/mbx/minibox-macros/winbox; split ci.yml into pr.yml+merge.yml; defaulted adapter to smolvm (krun fallback); documented crux integration state; pruned 8 stale stashes; merged next->stable and tagged v0.23.0; synced xtask README; dropped stale minibox-agent-llm-api item.'
+  session: 39
+- date: 2026-05-11
+  summary: 'handup triage: marked minibox-nightly-geiger, minibox-godmode-hook, minibox-prepush-skip as done (commits 3b9901a, 3650cad from 2026-05-09 already resolved them). HANDOFF was stale.'
+- date: 2026-05-10
+  summary: |
+    handdown analysis pass — 2 item(s) annotated. minibox-crux-plugin cross-project dependency on crux noted; minibox-7 VZ blocker staleness flagged (39 days since last confirmation).
+- date: 2026-05-09
+  summary: 'Session 44: add continue-on-error to geiger job in nightly.yml (minibox-nightly-geiger done); patch godmode hook bazaar cache to absolute path (minibox-godmode-hook done); cargo check clean'

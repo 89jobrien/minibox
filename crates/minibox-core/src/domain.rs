@@ -51,10 +51,14 @@
 //! - **Future-proofing**: Add new backends without changing business logic
 
 // Core domain traits
+pub mod execution_manifest;
+pub mod execution_policy;
 mod extensions;
 mod networking;
 
 // Re-exports for public API
+pub use execution_manifest::*;
+pub use execution_policy::*;
 pub use extensions::*;
 pub use networking::*;
 
@@ -733,6 +737,14 @@ pub struct ContainerSpawnConfig {
     /// If `true`, the container process is granted a full Linux capability set
     /// via `capset(2)` before `execvp`. Required for DinD.
     pub privileged: bool,
+    /// OCI image reference that produced this container's rootfs
+    /// (e.g. `"alpine:latest"`, `"ghcr.io/org/img:v1"`).
+    ///
+    /// VM-based backends (krun/smolvm) use this to pass `--image` to the
+    /// hypervisor instead of re-deriving the ref from the rootfs path.
+    /// `None` for Linux-native backends that operate on the extracted rootfs
+    /// directly.
+    pub image_ref: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1767,7 +1779,11 @@ mod tests {
                 rootfs_metadata: Some(meta),
                 source_image_ref: Some("alpine:latest".to_string()),
             };
-            let recovered_upper = layout.rootfs_metadata.as_ref().unwrap().overlay_upper_dir();
+            let recovered_upper = layout
+                .rootfs_metadata
+                .as_ref()
+                .expect("metadata present")
+                .overlay_upper_dir();
             assert_eq!(recovered_upper, &upper);
         }
 

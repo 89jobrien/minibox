@@ -37,13 +37,16 @@ fn tar_gz_regular_file(name: &str, content: &[u8], mode: u32) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(content.len() as u64);
     h.set_entry_type(EntryType::Regular);
     h.set_mode(mode);
     h.set_cksum();
-    ar.append(&h, content).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, content).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a device node entry.
@@ -51,13 +54,16 @@ fn tar_gz_device_node(name: &str, kind: EntryType) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(0);
     h.set_entry_type(kind);
     h.set_mode(0o644);
     h.set_cksum();
-    ar.append(&h, &[][..]).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, &[][..]).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a symlink entry.
@@ -65,14 +71,17 @@ fn tar_gz_symlink(name: &str, target: &str) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(0);
     h.set_entry_type(EntryType::Symlink);
-    h.set_link_name(target).unwrap();
+    h.set_link_name(target).expect("unwrap in test");
     h.set_mode(0o777);
     h.set_cksum();
-    ar.append(&h, &[][..]).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, &[][..]).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a raw tar.gz with a manually crafted header so we can embed filenames
@@ -104,8 +113,8 @@ fn raw_tar_gz_with_traversal_filename(filename: &str) -> Vec<u8> {
     tar_bytes.extend_from_slice(&[0u8; 1024]); // two end-of-archive zero blocks
 
     let mut gz = GzEncoder::new(Vec::new(), Compression::default());
-    gz.write_all(&tar_bytes).unwrap();
-    gz.finish().unwrap()
+    gz.write_all(&tar_bytes).expect("unwrap in test");
+    gz.finish().expect("unwrap in test")
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +129,7 @@ fn raw_tar_gz_with_traversal_filename(filename: &str) -> Vec<u8> {
 /// Guards: commit `8ea4f73` — `validate_tar_entry_path` rejects `..` components.
 #[test]
 fn regression_zip_slip_dotdot_prefix_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = raw_tar_gz_with_traversal_filename("../escape.txt");
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -132,7 +141,7 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
     );
 
     // Confirm nothing escaped the destination directory.
-    let parent = dest.path().parent().unwrap();
+    let parent = dest.path().parent().expect("unwrap in test");
     assert!(
         !parent.join("escape.txt").exists(),
         "file must not have been written outside the container rootfs"
@@ -146,7 +155,7 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
 /// Guards: commit `8ea4f73`.
 #[test]
 fn regression_zip_slip_dotdot_in_middle_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // Use the raw builder because the tar crate sanitises paths before our check.
     let tar_gz = raw_tar_gz_with_traversal_filename("foo/../../etc/passwd");
 
@@ -172,7 +181,7 @@ fn regression_zip_slip_dotdot_in_middle_is_rejected() {
 /// rejected before `unpack_in` is called.
 #[test]
 fn regression_block_device_node_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_device_node("dev/sda", EntryType::Block);
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -197,7 +206,7 @@ fn regression_block_device_node_is_rejected() {
 /// Guards: commit `8ea4f73`.
 #[test]
 fn regression_char_device_node_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_device_node("dev/null", EntryType::Char);
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -225,7 +234,7 @@ fn regression_char_device_node_is_rejected() {
 #[cfg(unix)]
 #[test]
 fn regression_absolute_symlink_with_traversal_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // Target `/../../../etc/shadow` strips to `../../etc/shadow` — still has `..`.
     let tar_gz = tar_gz_symlink("evil_link", "/../../etc/shadow");
 
@@ -253,7 +262,7 @@ fn regression_absolute_symlink_with_traversal_is_rejected() {
 #[cfg(unix)]
 #[test]
 fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_symlink("bin/echo", "/bin/busybox");
 
     extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -294,7 +303,7 @@ fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
 fn regression_setuid_bits_stripped_on_extraction() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // 04755 = setuid + rwxr-xr-x
     let tar_gz = tar_gz_regular_file("usr/bin/setuid_binary", b"#!/bin/sh", 0o4755);
 

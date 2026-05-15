@@ -10,9 +10,12 @@ pub mod adapter_registry;
 #[cfg(unix)]
 pub mod listener;
 
+#[cfg(unix)]
 #[doc(hidden)]
 pub use minibox::daemon::handler;
+#[cfg(unix)]
 #[doc(hidden)]
 pub use minibox::daemon::server;
+#[cfg(unix)]
 #[doc(hidden)]
 pub use minibox::daemon::state;

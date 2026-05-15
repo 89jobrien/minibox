@@ -1,0 +1,27 @@
+[package]
+name = "minibox-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Conformance test harness for minibox adapter trait contracts"
+publish = false
+
+[[bin]]
+name = "run-conformance"
+path = "src/bin/run_conformance.rs"
+
+[[bin]]
+name = "generate-report"
+path = "src/bin/generate_report.rs"
+
+[dependencies]
+minibox = { workspace = true }
+minibox-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+tempfile = { workspace = true }

@@ -26,8 +26,8 @@ use tempfile::TempDir;
 
 /// Populate `dir` with a minimal fake image layer (`bin/sh` empty file).
 fn fake_layer(dir: &std::path::Path) {
-    fs::create_dir_all(dir.join("bin")).unwrap();
-    fs::write(dir.join("bin").join("sh"), b"").unwrap();
+    fs::create_dir_all(dir.join("bin")).expect("unwrap in test");
+    fs::write(dir.join("bin").join("sh"), b"").expect("unwrap in test");
 }
 
 // ---------------------------------------------------------------------------
@@ -40,12 +40,12 @@ fn overlay_setup_creates_merged_upper_work_dirs() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let layer = tmp.path().join("layer0");
     fake_layer(&layer);
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter
@@ -67,19 +67,19 @@ fn overlay_write_goes_to_upper_not_lower() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let layer = tmp.path().join("layer0");
     fake_layer(&layer);
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter
         .setup_rootfs(&[layer.clone()], &container_dir)
-        .unwrap();
+        .expect("unwrap in test");
 
-    fs::write(merged.merged_dir.join("newfile"), b"hello").unwrap();
+    fs::write(merged.merged_dir.join("newfile"), b"hello").expect("unwrap in test");
 
     assert!(
         container_dir.join("upper").join("newfile").exists(),
@@ -90,7 +90,7 @@ fn overlay_write_goes_to_upper_not_lower() {
         "lower layer must be unmodified"
     );
 
-    fs_adapter.cleanup(&container_dir).unwrap();
+    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
 #[test]
@@ -99,23 +99,23 @@ fn overlay_multiple_layers_all_visible_in_merged() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     let layer0 = tmp.path().join("layer0");
-    fs::create_dir_all(layer0.join("etc")).unwrap();
-    fs::write(layer0.join("etc").join("os-release"), b"ID=test").unwrap();
+    fs::create_dir_all(layer0.join("etc")).expect("unwrap in test");
+    fs::write(layer0.join("etc").join("os-release"), b"ID=test").expect("unwrap in test");
 
     let layer1 = tmp.path().join("layer1");
-    fs::create_dir_all(layer1.join("usr").join("bin")).unwrap();
-    fs::write(layer1.join("usr").join("bin").join("env"), b"").unwrap();
+    fs::create_dir_all(layer1.join("usr").join("bin")).expect("unwrap in test");
+    fs::write(layer1.join("usr").join("bin").join("env"), b"").expect("unwrap in test");
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter
         .setup_rootfs(&[layer0, layer1], &container_dir)
-        .unwrap();
+        .expect("unwrap in test");
 
     assert!(
         merged.merged_dir.join("etc").join("os-release").exists(),
@@ -131,7 +131,7 @@ fn overlay_multiple_layers_all_visible_in_merged() {
         "layer1 content must be visible"
     );
 
-    fs_adapter.cleanup(&container_dir).unwrap();
+    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
 #[test]
@@ -140,22 +140,26 @@ fn overlay_cleanup_unmounts_merged() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let layer = tmp.path().join("layer0");
     fake_layer(&layer);
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter.setup_rootfs(&[layer], &container_dir).unwrap();
+    let merged = fs_adapter
+        .setup_rootfs(&[layer], &container_dir)
+        .expect("unwrap in test");
     assert!(merged.merged_dir.exists());
 
-    fs_adapter.cleanup(&container_dir).unwrap();
+    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 
     // After unmount the dir may still exist but must be empty (not mounted).
     if merged.merged_dir.exists() {
-        let entries: Vec<_> = fs::read_dir(&merged.merged_dir).unwrap().collect();
+        let entries: Vec<_> = fs::read_dir(&merged.merged_dir)
+            .expect("unwrap in test")
+            .collect();
         assert!(entries.is_empty(), "merged must be empty after unmount");
     }
 }
@@ -166,9 +170,9 @@ fn overlay_empty_layers_returns_error() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     assert!(
@@ -201,7 +205,7 @@ fn cgroup_create_and_cleanup_lifecycle() {
         "cgroup.procs must exist"
     );
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
     assert!(!path.exists(), "cgroup dir must be removed after cleanup");
 }
 
@@ -223,16 +227,16 @@ fn cgroup_memory_limit_written_correctly() {
                 ..ResourceConfig::default()
             },
         )
-        .unwrap();
+        .expect("unwrap in test");
     let path = std::path::PathBuf::from(path_str);
 
     let mem_max = path.join("memory.max");
     if mem_max.exists() {
-        let content = fs::read_to_string(&mem_max).unwrap();
+        let content = fs::read_to_string(&mem_max).expect("unwrap in test");
         assert_eq!(content.trim(), limit.to_string(), "memory.max mismatch");
     }
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 #[test]
@@ -252,16 +256,16 @@ fn cgroup_cpu_weight_written_correctly() {
                 ..ResourceConfig::default()
             },
         )
-        .unwrap();
+        .expect("unwrap in test");
     let path = std::path::PathBuf::from(path_str);
 
     let cpu_weight = path.join("cpu.weight");
     if cpu_weight.exists() {
-        let content = fs::read_to_string(&cpu_weight).unwrap();
+        let content = fs::read_to_string(&cpu_weight).expect("unwrap in test");
         assert_eq!(content.trim(), "500", "cpu.weight mismatch");
     }
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 #[test]
@@ -281,16 +285,16 @@ fn cgroup_pids_max_written_correctly() {
                 ..ResourceConfig::default()
             },
         )
-        .unwrap();
+        .expect("unwrap in test");
     let path = std::path::PathBuf::from(path_str);
 
     let pids_max = path.join("pids.max");
     if pids_max.exists() {
-        let content = fs::read_to_string(&pids_max).unwrap();
+        let content = fs::read_to_string(&pids_max).expect("unwrap in test");
         assert_eq!(content.trim(), "32", "pids.max mismatch");
     }
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 #[test]
@@ -302,13 +306,15 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
     let id = format!("test-isolation-addpid-{}", std::process::id());
     let limiter = CgroupV2Limiter::new();
 
-    let path_str = limiter.create(&id, &ResourceConfig::default()).unwrap();
+    let path_str = limiter
+        .create(&id, &ResourceConfig::default())
+        .expect("unwrap in test");
     let path = std::path::PathBuf::from(&path_str);
 
     let my_pid = std::process::id();
-    limiter.add_process(&id, my_pid).unwrap();
+    limiter.add_process(&id, my_pid).expect("unwrap in test");
 
-    let procs = fs::read_to_string(path.join("cgroup.procs")).unwrap();
+    let procs = fs::read_to_string(path.join("cgroup.procs")).expect("unwrap in test");
     assert!(
         procs.lines().any(|l| l.trim() == my_pid.to_string()),
         "cgroup.procs must contain PID {my_pid}"
@@ -324,7 +330,7 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
         let _ = fs::write(&parent, my_pid.to_string());
     }
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 // ---------------------------------------------------------------------------
@@ -337,12 +343,12 @@ fn overlay_path_traversal_attempt_is_rejected() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let layer = tmp.path().join("layer0");
     fake_layer(&layer);
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter
@@ -371,7 +377,7 @@ fn overlay_path_traversal_attempt_is_rejected() {
         );
     }
 
-    fs_adapter.cleanup(&container_dir).unwrap();
+    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
 #[test]
@@ -380,9 +386,9 @@ fn overlay_symlink_outside_upper_does_not_escape() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let layer = tmp.path().join("layer0");
-    fs::create_dir_all(layer.join("tmp")).unwrap();
+    fs::create_dir_all(layer.join("tmp")).expect("unwrap in test");
 
     // Create a symlink that attempts absolute traversal: /tmp/symlink -> /etc
     #[cfg(unix)]
@@ -390,7 +396,7 @@ fn overlay_symlink_outside_upper_does_not_escape() {
         .expect("create symlink in layer");
 
     let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).unwrap();
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
 
     let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
     let merged = fs_adapter
@@ -424,7 +430,7 @@ fn overlay_symlink_outside_upper_does_not_escape() {
         }
     }
 
-    fs_adapter.cleanup(&container_dir).unwrap();
+    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
 #[test]
@@ -448,7 +454,7 @@ fn cgroup_pid_zero_is_rejected() {
         "add_process with PID 0 must return Err, not silently accept"
     );
 
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 #[test]
@@ -491,7 +497,7 @@ fn cgroup_cleanup_removes_all_state() {
     }
 
     // Cleanup: must remove the entire cgroup directory.
-    limiter.cleanup(&id).unwrap();
+    limiter.cleanup(&id).expect("unwrap in test");
 
     assert!(
         !path.exists(),

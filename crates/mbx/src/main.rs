@@ -296,6 +296,36 @@ enum Commands {
         version: Option<String>,
     },
 
+    /// Diagnose a container: gather state, process info, and cgroup context.
+    ///
+    /// Queries the daemon for container metadata and inspects host-visible
+    /// state (cgroup path, /proc/<pid>/status on Linux) for the given ID.
+    Diagnose {
+        /// Container ID or unambiguous prefix.
+        container_id: String,
+    },
+
+    /// Show adapter suite diagnostics (no daemon connection required).
+    ///
+    /// Prints which adapter suites are compiled into this build, which would
+    /// be selected given the current environment, and basic platform info.
+    Doctor,
+
+    /// Show the execution manifest for a container.
+    Manifest {
+        /// Container ID or name.
+        id: String,
+    },
+
+    /// Verify a container's execution manifest against a policy file.
+    Verify {
+        /// Container ID or name.
+        id: String,
+        /// Path to the JSON policy file.
+        #[arg(long)]
+        policy: String,
+    },
+
     /// Load an image from a local OCI tar archive
     Load {
         /// Path to the OCI image tar archive
@@ -393,6 +423,10 @@ async fn main() -> Result<()> {
 
         Commands::Ps => commands::ps::execute(socket_path).await,
 
+        Commands::Diagnose { container_id } => {
+            commands::diagnose::execute(&container_id, socket_path).await
+        }
+
         Commands::Exec {
             container_id,
             cmd,
@@ -457,6 +491,14 @@ async fn main() -> Result<()> {
                 commands::snapshot::execute_list(id, socket_path).await
             }
         },
+
+        Commands::Doctor => commands::doctor::execute(),
+
+        Commands::Manifest { id } => commands::manifest::execute(id, socket_path).await,
+
+        Commands::Verify { id, policy } => {
+            commands::manifest::verify(id, policy, socket_path).await
+        }
 
         Commands::Upgrade { dry_run, version } => {
             commands::upgrade::execute(dry_run, version).await
@@ -794,3 +836,4 @@ mod tests {
         }
     }
 }
+// wave-b test

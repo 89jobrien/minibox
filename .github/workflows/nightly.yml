@@ -12,8 +12,9 @@ jobs:
   geiger:
     name: unsafe audit (geiger)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: install cargo-geiger
@@ -21,12 +22,26 @@ jobs:
       - name: cargo geiger
         id: geiger
         run: |
-          cargo geiger -p minibox -p minibox-macros -p mbx -p miniboxd 2>&1 | tee geiger-report.txt
-          # Extract unsafe counts and write to job summary
+          geiger_status=0
+          : > geiger-report.txt
+          for manifest in \
+            crates/minibox/Cargo.toml \
+            crates/minibox-macros/Cargo.toml \
+            crates/mbx/Cargo.toml \
+            crates/miniboxd/Cargo.toml
+          do
+            printf '\n## %s\n' "$manifest" | tee -a geiger-report.txt
+            cargo geiger --manifest-path "$GITHUB_WORKSPACE/$manifest" 2>&1 | tee -a geiger-report.txt
+            status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then
+              geiger_status="$status"
+            fi
+          done
           echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit "$geiger_status"
       - name: upload geiger report
         if: always()
         uses: actions/upload-artifact@v4
@@ -34,3 +49,17 @@ jobs:
           name: geiger-report
           path: geiger-report.txt
           retention-days: 30
+
+  tag-nightly:
+    name: tag nightly release
+    runs-on: ubuntu-latest
+    needs: geiger
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: push nightly tag
+        run: |
+          TAG="nightly/$(date -u +%Y%m%d)"
+          git tag "$TAG"
+          git push origin "$TAG"

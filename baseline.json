@@ -1,0 +1,78 @@
+{
+  "version": 2,
+  "quality_score": 0.25403356206728156,
+  "iosp_score": 0.9944512946979038,
+  "violations": 9,
+  "total": 2527,
+  "complexity_warnings": 19,
+  "magic_number_warnings": 253,
+  "nesting_depth_warnings": 5,
+  "function_length_warnings": 92,
+  "unsafe_warnings": 47,
+  "error_handling_warnings": 409,
+  "duplicate_groups": 41,
+  "dead_code_warnings": 459,
+  "fragment_groups": 336,
+  "boilerplate_warnings": 27,
+  "srp_struct_warnings": 7,
+  "srp_module_warnings": 60,
+  "wildcard_import_warnings": 3,
+  "sdp_violations": 0,
+  "coupling_warnings": 0,
+  "coupling_cycles": 0,
+  "tq_no_assertion_warnings": 10,
+  "tq_no_sut_warnings": 79,
+  "tq_untested_warnings": 101,
+  "tq_uncovered_warnings": 0,
+  "tq_untested_logic_warnings": 0,
+  "structural_srp_warnings": 6,
+  "structural_coupling_warnings": 16,
+  "total_findings": 2004,
+  "violation_details": [
+    {
+      "name": "BridgeNetwork::setup",
+      "file": "crates/minibox/src/adapters/network/bridge.rs",
+      "line": 250
+    },
+    {
+      "name": "BridgeNetwork::attach",
+      "file": "crates/minibox/src/adapters/network/bridge.rs",
+      "line": 331
+    },
+    {
+      "name": "BridgeNetwork::cleanup",
+      "file": "crates/minibox/src/adapters/network/bridge.rs",
+      "line": 413
+    },
+    {
+      "name": "BridgeNetwork::stats",
+      "file": "crates/minibox/src/adapters/network/bridge.rs",
+      "line": 485
+    },
+    {
+      "name": "ProotRuntime::from_env",
+      "file": "crates/minibox/src/adapters/gke.rs",
+      "line": 239
+    },
+    {
+      "name": "RegistryClient::get_manifest_inner",
+      "file": "crates/minibox-core/src/image/registry.rs",
+      "line": 318
+    },
+    {
+      "name": "TargetPlatform::parse",
+      "file": "crates/minibox-core/src/image/manifest.rs",
+      "line": 213
+    },
+    {
+      "name": "ImageStore::store_layer_verified",
+      "file": "crates/minibox-core/src/image/mod.rs",
+      "line": 236
+    },
+    {
+      "name": "SandboxClient::ensure_image",
+      "file": "crates/miniboxd/tests/helpers/mod.rs",
+      "line": 429
+    }
+  ]
+}

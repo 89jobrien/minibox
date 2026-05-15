@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "algorithm": "sha256-normalized-core-contract-v1",
+  "surfaces": [
+    {
+      "name": "wire-protocol",
+      "path": "crates/minibox-core/src/protocol.rs",
+      "hash": "95f4ef8661c9f36dab695b561d2bfcac72b5e9d0e890f4c804a974659d1496a3"
+    },
+    {
+      "name": "domain-ports",
+      "path": "crates/minibox-core/src/domain.rs",
+      "hash": "51340bb673dcfd6c373c6aaf50ccc8084c9784c7f6303fd1c388d3749870c47c"
+    },
+    {
+      "name": "domain-networking",
+      "path": "crates/minibox-core/src/domain/networking.rs",
+      "hash": "71e2fd83d8b18e086cc13589a1bbfade36d848c415294cb6540a57d0ccab30e4"
+    },
+    {
+      "name": "domain-extensions",
+      "path": "crates/minibox-core/src/domain/extensions.rs",
+      "hash": "e956b9d635eced32dbcd8deacea490245ecd5cfa6287fcd78a4dd0d92a00fad9"
+    },
+    {
+      "name": "lifecycle-events",
+      "path": "crates/minibox-core/src/events.rs",
+      "hash": "b5847f7a6bb123ef698845eeb294c875d7ece0d8f99f2ee08115a349ba379b97"
+    },
+    {
+      "name": "execution-manifest",
+      "path": "crates/minibox-core/src/domain/execution_manifest.rs",
+      "hash": "21ab533c0dadb999eb515a0f6b6fc1a78089a181da18c5a65ab8651005a8236e"
+    },
+    {
+      "name": "execution-policy",
+      "path": "crates/minibox-core/src/domain/execution_policy.rs",
+      "hash": "69cb6be5a0590097fcd4a3f9bd1a4f4af71635be9634a5a2c6286bb42979eecb"
+    },
+    {
+      "name": "error-types",
+      "path": "crates/minibox-core/src/error.rs",
+      "hash": "439a6b9403d44e42e3d5a44ed570e8899539b8bef8ad111d131c69a865ae17b4"
+    },
+    {
+      "name": "client-api",
+      "path": "crates/minibox-core/src/client/mod.rs",
+      "hash": "cc59406929bc0618484447d9220f6fce357e440849f5f228a6c0a991d5f662d1"
+    },
+    {
+      "name": "typestate",
+      "path": "crates/minibox-core/src/typestate.rs",
+      "hash": "2ecc7f8568587faee0c3778b6a0ebe74a6ca1829ced7f71143fa740e2a7dd717"
+    }
+  ]
+}

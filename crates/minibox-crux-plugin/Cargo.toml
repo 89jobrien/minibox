@@ -1,0 +1,24 @@
+[package]
+name = "minibox-crux-plugin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Crux plugin binary exposing minibox container operations via JSON-RPC stdio"
+
+[[bin]]
+name = "minibox-crux-plugin"
+path = "src/main.rs"
+
+[dependencies]
+minibox-core = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+cruxx-plugin = { git = "https://github.com/89jobrien/crux", rev = "c456d5308e966b3e4527eabf1915fcef9173044d" }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }
+serde_json = { workspace = true }

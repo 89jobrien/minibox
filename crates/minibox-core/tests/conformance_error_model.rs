@@ -15,7 +15,7 @@
 //! - `RegistryError::BlobFetch` Display includes digest and message.
 //! - `RegistryError::NoPlatformManifest` Display includes platform string.
 //! - `RegistryError::ManifestNestingTooDeep` Display has known message.
-//! - `RegistryError::LayerTask` wraps JoinError.
+//! - `RegistryError::LayerTask` carries the layer digest and wraps JoinError.
 //! - `RegistryError::Other` wraps arbitrary message.
 //! - All error types implement Debug and Error traits correctly.
 //!

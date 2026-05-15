@@ -84,17 +84,6 @@ coverage:
     cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p miniboxd --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
-# VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
-# Builds the test binary, codesigns it with the virtualization entitlement,
-# then runs it directly (bypasses cargo test runner to preserve dispatch_main harness).
-test-vz-isolation:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build -p macbox --features vz --test vz_isolation_tests
-    BIN=$(ls -t "$HOME/.minibox/cache/target/debug/deps/vz_isolation_tests-"* | head -1)
-    codesign --force --sign - --entitlements entitlements/vz-test.entitlements "$BIN"
-    "$BIN"
-
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
     cargo build -p mbx
@@ -106,14 +95,19 @@ test-integration:
     sudo -E bash scripts/run-cgroup-tests.sh
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
+    cargo test -p minibox --test gke_adapter_isolation_tests -- --test-threads=1 --nocapture
 
-# Lifecycle e2e (Linux, root, Docker Hub)
+# Protocol e2e tests: any platform, no root, no cgroups
 test-e2e:
-    sudo -E cargo test -p miniboxd --test integration_tests -- --ignored test_complete_container_lifecycle
+    cargo xtask test-e2e
 
-# Daemon+CLI e2e tests (Linux, root)
+# System tests: full-stack daemon+CLI (Linux, root, cgroups v2 required)
+test-system:
+    cargo xtask test-system-suite
+
+# Daemon+CLI system tests (Linux, root) — alias for test-system
 test-e2e-suite:
-    cargo xtask test-e2e-suite
+    cargo xtask test-system-suite
 
 # Sandbox contract tests (Linux, root, Docker Hub)
 test-sandbox:
@@ -123,26 +117,17 @@ test-sandbox:
 test-linux:
     cargo xtask test-linux
 
-# Boot Alpine VM with interactive shell under QEMU HVF (Ctrl-A X to exit)
-run-vm:
-    cargo xtask run-vm
-
-# Cross-compile test binaries for aarch64-musl + run inside QEMU VM
-test-vm:
-    cargo xtask test-vm
-
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
-    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-e2e-suite'
+    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
 
 # Full pipeline: clean state → doctor → all tests → clean state
-test-all: nuke-test-state doctor test-unit test-integration test-e2e nuke-test-state
+test-all: nuke-test-state doctor test-unit test-integration test-system nuke-test-state
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
-# Launch TUI dashboard (removed — dashbox was extracted)
-# dash:
-#     cargo run -p dashbox --release
+# TUI dashboard (dashbox) was removed in the crate consolidation (v0.23.0).
+# Use `mbx ps` and `mbx events` for container status and event streaming.
 
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
@@ -272,6 +257,12 @@ diagnose *args:
 # Fetch, check sync vs origin/main — safe to push check
 sync-check:
     cruxx run .crux/sync-check.crux
+
+# ── Setup ────────────────────────────────────────────────────────────────────
+
+# Install git hooks (pre-commit, pre-push, commit-msg) from scripts/install-hooks.sh
+install-hooks:
+    bash scripts/install-hooks.sh
 
 # ── Git ──────────────────────────────────────────────────────────────────────
 

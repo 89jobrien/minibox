@@ -125,6 +125,9 @@ pub fn make_stub_record(id: impl Into<String>) -> crate::daemon::state::Containe
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 

@@ -61,11 +61,33 @@ const MAX_CONCURRENT_LAYERS: usize = 4;
 // ---------------------------------------------------------------------------
 
 pin_project! {
-    /// Async stream wrapper that returns an [`io::Error`] of kind
-    /// [`io::ErrorKind::InvalidData`] if cumulative bytes exceed `limit`.
+    /// Async stream wrapper that enforces a hard byte ceiling on the wrapped stream.
     ///
-    /// Used on the async side of the byte pipeline (before [`SyncIoBridge`])
-    /// so the size cap is enforced without blocking the executor.
+    /// # Contract
+    ///
+    /// - **What is counted**: raw bytes on the wire (compressed), not decompressed tar
+    ///   contents. For gzip-compressed OCI layers this means the HTTP response body bytes,
+    ///   *before* decompression by `GzDecoder`. The limit applies to compressed layer size.
+    ///
+    /// - **Content-Length**: `LimitedStream` does not inspect `Content-Length`; that check
+    ///   is the caller's responsibility (see [`RegistryClient::pull_layer_response`]).
+    ///   Content-Length mismatches should be rejected *before* wrapping in `LimitedStream`.
+    ///   This streaming limit acts as a second, independent cap.
+    ///
+    /// - **Boundary**: exactly `limit` bytes is **allowed**; `limit + 1` bytes triggers the
+    ///   error. Formally: `consumed > limit` → error.
+    ///
+    /// - **Error kind**: when the limit is exceeded the poll returns
+    ///   `Poll::Ready(Some(Err(io::Error::new(io::ErrorKind::InvalidData, …))))`.
+    ///   The caller should drop the stream after receiving this error.
+    ///
+    /// - **Error precedence**: an `Err` yielded by the inner stream is forwarded as-is
+    ///   (via `e.into()`) without checking whether the byte count was also exceeded.
+    ///
+    /// - **Premature EOF**: if the underlying stream ends before all expected bytes are
+    ///   consumed, `LimitedStream` returns `Poll::Ready(None)`. Upper layers
+    ///   (`StreamReader` / `SyncIoBridge`) surface that as an unexpected-EOF `io::Error`
+    ///   during decompression or digest verification.
     pub struct LimitedStream<S> {
         #[pin]
         inner: S,
@@ -130,11 +152,29 @@ struct TokenResponse {
     token: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Registry authentication for push operations.
+///
+/// `Debug` is manually implemented to redact secrets.
+#[derive(Clone, PartialEq, Eq)]
 pub enum PushAuth {
     None,
     Basic { username: String, password: String },
     Bearer(String),
+}
+
+impl std::fmt::Debug for PushAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "PushAuth::None"),
+            Self::Basic { username, .. } => {
+                write!(
+                    f,
+                    "PushAuth::Basic {{ username: {username:?}, password: [REDACTED] }}"
+                )
+            }
+            Self::Bearer(_) => write!(f, "PushAuth::Bearer([REDACTED])"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -505,8 +545,13 @@ impl RegistryClient {
         );
 
         // 3. Download all layers in parallel, up to MAX_CONCURRENT_LAYERS at once.
+        //
+        // Each task returns (digest, result) so that JoinErrors at the drain
+        // site can include the layer digest rather than the unhelpful "(unknown)"
+        // placeholder. The digest is captured from `layer_desc` at spawn time
+        // and echoed back regardless of success or failure.
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_LAYERS));
-        let mut join_set: JoinSet<anyhow::Result<()>> = JoinSet::new();
+        let mut join_set: JoinSet<(String, anyhow::Result<()>)> = JoinSet::new();
         let total_layers = manifest.layers.len();
 
         for (idx, layer_desc) in manifest.layers.iter().cloned().enumerate() {
@@ -516,156 +561,177 @@ impl RegistryClient {
             let name = name.to_owned();
             let tag = tag.to_owned();
             let token = token.clone();
+            // Capture digest at spawn time so JoinErrors at the drain site
+            // can identify which layer's task panicked or was cancelled.
+            let task_digest = layer_desc.digest.clone();
 
             join_set.spawn(async move {
-                let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                // Run all layer logic in an inner async block so `?` can be
+                // used throughout; the digest is always paired with the result
+                // so JoinErrors at the drain site carry an actionable digest.
+                let result: anyhow::Result<()> = async {
+                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
 
-                let digest = &layer_desc.digest;
-                let digest_key = digest.replace(':', "_");
-                let layer_dir = store
-                    .base_dir
-                    .join(name.replace('/', "_"))
-                    .join(&tag)
-                    .join("layers")
-                    .join(&digest_key);
+                    let digest = &layer_desc.digest;
+                    let digest_key = digest.replace(':', "_");
+                    let layer_dir = store
+                        .base_dir
+                        .join(name.replace('/', "_"))
+                        .join(&tag)
+                        .join("layers")
+                        .join(&digest_key);
 
-                let digest_short = digest.get(..19).unwrap_or(digest);
+                    let digest_short = digest.get(..19).unwrap_or(digest);
 
-                // Early exit if the layer is already cached.
-                if layer_dir.exists() {
+                    // Early exit if the layer is already cached.
+                    if layer_dir.exists() {
+                        info!(
+                            "layer {}/{}: {} (cached)",
+                            idx + 1,
+                            total_layers,
+                            digest_short
+                        );
+                        return Ok(());
+                    }
+
+                    let layer_start = std::time::Instant::now();
+
+                    // HTTP GET the blob.
+                    let response = client
+                        .pull_layer_response(&name, digest, &token)
+                        .await
+                        .with_context(|| format!("pull_layer_response for {digest}"))?;
+
+                    // Wrap the byte stream with a size cap.
+                    let limited = LimitedStream::new(
+                        response.bytes_stream().map(|r| r.map_err(io::Error::other)),
+                        MAX_LAYER_SIZE,
+                    );
+
+                    let handle = tokio::runtime::Handle::current();
+                    let digest_owned = digest.to_owned();
+                    // Clone for the JoinError mapping below; the original is
+                    // moved into the spawn_blocking closure.
+                    let digest_for_err = digest_owned.clone();
+
+                    // Bridge async → sync for tar/gz extraction.
+                    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                        let sync_reader =
+                            SyncIoBridge::new_with_handle(StreamReader::new(limited), handle);
+
+                        // Byte flow:
+                        // HTTP → LimitedStream → StreamReader → SyncIoBridge
+                        //      → HashingReader → GzDecoder → tar::Archive
+                        let mut hashing_reader = HashingReader::new(sync_reader);
+
+                        // Prepare tmp dir adjacent to the final dest.
+                        let tmp_dir = {
+                            let mut p = layer_dir.clone();
+                            let stem = p
+                                .file_name()
+                                .map(|s| s.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| "layer".to_owned());
+                            p.set_file_name(format!("{stem}.tmp"));
+                            p
+                        };
+
+                        if tmp_dir.exists() {
+                            std::fs::remove_dir_all(&tmp_dir)
+                                .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
+                        }
+                        std::fs::create_dir_all(&tmp_dir)
+                            .with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
+
+                        // Extract into tmp dir.
+                        let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
+
+                        // Drain any remaining bytes so HashingReader covers the full
+                        // compressed stream — needed for digest verification even when
+                        // extraction fails partway through (e.g. bad gzip header).
+                        if extract_result.is_err() {
+                            let _ = std::io::copy(&mut hashing_reader, &mut std::io::sink());
+                        }
+
+                        // Verify digest before committing or surfacing extract error.
+                        // A digest mismatch is the root cause — prefer it over gz errors.
+                        let actual_hex = hashing_reader.finalize();
+                        let expected_hex =
+                            digest_owned.strip_prefix("sha256:").ok_or_else(|| {
+                                anyhow::anyhow!("digest missing sha256: prefix: {digest_owned}")
+                            })?;
+
+                        let digest_ok = actual_hex == expected_hex;
+
+                        if !digest_ok {
+                            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
+                                warn!(
+                                    digest = %digest_owned,
+                                    error = %ce,
+                                    "layer: failed to clean up tmp dir after digest mismatch"
+                                );
+                            }
+                            return Err(crate::error::ImageError::DigestMismatch {
+                                digest: digest_owned.clone(),
+                                expected: expected_hex.to_owned(),
+                                actual: actual_hex,
+                            }
+                            .into());
+                        }
+
+                        // Digest matched — surface any extraction error now.
+                        if let Err(e) = extract_result {
+                            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
+                                warn!(
+                                    digest = %digest_owned,
+                                    error = %ce,
+                                    "layer: failed to clean up tmp dir after extract error"
+                                );
+                            }
+                            return Err(e).with_context(|| format!("extract layer {digest_owned}"));
+                        }
+
+                        // Atomic rename: tmp → final dest.
+                        if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
+                            // Another concurrent task may have won the race.
+                            if layer_dir.exists() {
+                                let _ = std::fs::remove_dir_all(&tmp_dir);
+                                return Ok(());
+                            }
+                            let _ = std::fs::remove_dir_all(&tmp_dir);
+                            return Err(e)
+                                .with_context(|| format!("rename {tmp_dir:?} → {layer_dir:?}"));
+                        }
+
+                        Ok(())
+                    })
+                    .await
+                    .map_err(|e| RegistryError::LayerTask {
+                        digest: digest_for_err,
+                        source: e,
+                    })??;
+
                     info!(
-                        "layer {}/{}: {} (cached)",
+                        "layer {}/{} ({}) done in {:.2?}",
                         idx + 1,
                         total_layers,
-                        digest_short
+                        digest_short,
+                        layer_start.elapsed(),
                     );
-                    return Ok(());
-                }
-
-                let layer_start = std::time::Instant::now();
-
-                // HTTP GET the blob.
-                let response = client
-                    .pull_layer_response(&name, digest, &token)
-                    .await
-                    .with_context(|| format!("pull_layer_response for {digest}"))?;
-
-                // Wrap the byte stream with a size cap.
-                let limited = LimitedStream::new(
-                    response.bytes_stream().map(|r| r.map_err(io::Error::other)),
-                    MAX_LAYER_SIZE,
-                );
-
-                let handle = tokio::runtime::Handle::current();
-                let digest_owned = digest.to_owned();
-
-                // Bridge async → sync for tar/gz extraction.
-                tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-                    let sync_reader =
-                        SyncIoBridge::new_with_handle(StreamReader::new(limited), handle);
-
-                    // Byte flow:
-                    // HTTP → LimitedStream → StreamReader → SyncIoBridge
-                    //      → HashingReader → GzDecoder → tar::Archive
-                    let mut hashing_reader = HashingReader::new(sync_reader);
-
-                    // Prepare tmp dir adjacent to the final dest.
-                    let tmp_dir = {
-                        let mut p = layer_dir.clone();
-                        let stem = p
-                            .file_name()
-                            .map(|s| s.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| "layer".to_owned());
-                        p.set_file_name(format!("{stem}.tmp"));
-                        p
-                    };
-
-                    if tmp_dir.exists() {
-                        std::fs::remove_dir_all(&tmp_dir)
-                            .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
-                    }
-                    std::fs::create_dir_all(&tmp_dir)
-                        .with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
-
-                    // Extract into tmp dir.
-                    let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
-
-                    // Drain any remaining bytes so HashingReader covers the full
-                    // compressed stream — needed for digest verification even when
-                    // extraction fails partway through (e.g. bad gzip header).
-                    if extract_result.is_err() {
-                        let _ = std::io::copy(&mut hashing_reader, &mut std::io::sink());
-                    }
-
-                    // Verify digest before committing or surfacing extract error.
-                    // A digest mismatch is the root cause — prefer it over gz errors.
-                    let actual_hex = hashing_reader.finalize();
-                    let expected_hex = digest_owned.strip_prefix("sha256:").ok_or_else(|| {
-                        anyhow::anyhow!("digest missing sha256: prefix: {digest_owned}")
-                    })?;
-
-                    let digest_ok = actual_hex == expected_hex;
-
-                    if !digest_ok {
-                        if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                            warn!(
-                                digest = %digest_owned,
-                                error = %ce,
-                                "layer: failed to clean up tmp dir after digest mismatch"
-                            );
-                        }
-                        return Err(crate::error::ImageError::DigestMismatch {
-                            digest: digest_owned.clone(),
-                            expected: expected_hex.to_owned(),
-                            actual: actual_hex,
-                        }
-                        .into());
-                    }
-
-                    // Digest matched — surface any extraction error now.
-                    if let Err(e) = extract_result {
-                        if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                            warn!(
-                                digest = %digest_owned,
-                                error = %ce,
-                                "layer: failed to clean up tmp dir after extract error"
-                            );
-                        }
-                        return Err(e).with_context(|| format!("extract layer {digest_owned}"));
-                    }
-
-                    // Atomic rename: tmp → final dest.
-                    if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
-                        // Another concurrent task may have won the race.
-                        if layer_dir.exists() {
-                            let _ = std::fs::remove_dir_all(&tmp_dir);
-                            return Ok(());
-                        }
-                        let _ = std::fs::remove_dir_all(&tmp_dir);
-                        return Err(e)
-                            .with_context(|| format!("rename {tmp_dir:?} → {layer_dir:?}"));
-                    }
 
                     Ok(())
-                })
-                .await
-                .map_err(RegistryError::LayerTask)??;
-
-                info!(
-                    "layer {}/{} ({}) done in {:.2?}",
-                    idx + 1,
-                    total_layers,
-                    digest_short,
-                    layer_start.elapsed(),
-                );
-
-                Ok(())
+                }
+                .await;
+                (task_digest, result)
             });
         }
 
         // Drain: all tasks must succeed.
-        while let Some(result) = join_set.join_next().await {
-            result.map_err(RegistryError::LayerTask)??;
+        while let Some(join_result) = join_set.join_next().await {
+            let (digest, result) = join_result.map_err(|e| RegistryError::LayerTask {
+                digest: "(outer task panicked or was cancelled)".to_owned(),
+                source: e,
+            })?;
+            result.with_context(|| format!("layer digest {digest}"))?;
         }
 
         // 4. Persist manifest.
@@ -1671,6 +1737,108 @@ mod tests {
             assert_eq!(s.consumed(), 3);
             let _ = s.next().await;
             assert_eq!(s.consumed(), 5);
+        }
+
+        // --- Boundary tests for #150 ---
+
+        /// Exactly `limit` bytes must be allowed (consumed == limit is not an error).
+        #[tokio::test]
+        async fn exactly_limit_bytes_allowed() {
+            // Single chunk of exactly 5 bytes; limit is also 5.
+            let data: Vec<Vec<u8>> = vec![b"hello".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 5);
+            let result = s.next().await.expect("stream should yield a chunk");
+            assert!(
+                result.is_ok(),
+                "exactly limit bytes should succeed, got: {result:?}"
+            );
+            // Stream should be exhausted after the single chunk.
+            assert!(s.next().await.is_none(), "stream should be exhausted");
+        }
+
+        /// `limit + 1` bytes must trigger an InvalidData error.
+        #[tokio::test]
+        async fn one_over_limit_errors() {
+            // Single chunk of 6 bytes; limit is 5.
+            let data: Vec<Vec<u8>> = vec![b"hello!".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 5);
+            let result = s.next().await.expect("stream should yield an item");
+            assert!(result.is_err(), "limit+1 bytes should return an error");
+            assert_eq!(
+                result.unwrap_err().kind(),
+                std::io::ErrorKind::InvalidData,
+                "error kind must be InvalidData"
+            );
+        }
+
+        /// An error from the inner stream must be forwarded without a limit check.
+        #[tokio::test]
+        async fn inner_error_forwarded_before_limit_check() {
+            use futures::stream;
+            // stream::iter yields Unpin items; wrap an Err directly.
+            let io_err = std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "simulated network reset",
+            );
+            let inner = stream::iter(vec![Err::<bytes::Bytes, std::io::Error>(io_err)]);
+            let mut s = LimitedStream::new(inner, 1_000_000);
+            let result = s.next().await.expect("should yield an error item");
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                std::io::ErrorKind::ConnectionReset
+            );
+        }
+
+        /// Two chunks totalling exactly `limit` bytes across chunk boundaries.
+        #[tokio::test]
+        async fn boundary_split_across_chunks() {
+            // Two 5-byte chunks; limit is 10.
+            let data: Vec<Vec<u8>> = vec![b"hello".to_vec(), b"world".to_vec()];
+            let mut s = LimitedStream::new(bytes_stream(data), 10);
+            assert!(s.next().await.unwrap().is_ok(), "first chunk must pass");
+            assert!(
+                s.next().await.unwrap().is_ok(),
+                "second chunk must pass (total == limit)"
+            );
+            assert!(s.next().await.is_none(), "stream must be exhausted");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // RegistryError::LayerTask digest propagation tests (#151)
+    // -------------------------------------------------------------------------
+
+    mod layer_task_digest {
+        use crate::error::RegistryError;
+
+        /// LayerTask error message must contain the digest, not "(unknown)".
+        #[tokio::test]
+        async fn layer_task_join_error_contains_digest() {
+            let expected_digest = "sha256:deadbeefdeadbeef".to_owned();
+
+            // Spawn a task that panics, then map the JoinError using the
+            // captured digest — mirroring what pull_image does.
+            let captured = expected_digest.clone();
+            let join_result = tokio::spawn(async move {
+                let _: () = panic!("simulated layer task panic");
+            })
+            .await;
+
+            let err = RegistryError::LayerTask {
+                digest: captured,
+                source: join_result.unwrap_err(),
+            };
+
+            let msg = err.to_string();
+            assert!(
+                msg.contains("sha256:deadbeefdeadbeef"),
+                "error message must contain the layer digest; got: {msg}"
+            );
+            assert!(
+                !msg.contains("(unknown)"),
+                "error message must not fall back to '(unknown)'; got: {msg}"
+            );
         }
     }
 

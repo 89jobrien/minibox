@@ -26,9 +26,9 @@ proptest! {
     /// `handle_list` must always return `ContainerList`, never panic.
     #[test]
     fn handle_list_always_returns_container_list(_unused in Just(())) {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("build tokio runtime");
         rt.block_on(async {
-            let tmp = TempDir::new().unwrap();
+            let tmp = TempDir::new().expect("create temp dir");
             let state = make_mock_state(tmp.path());
             let response = miniboxd::handler::handle_list(state).await;
             prop_assert!(
@@ -42,9 +42,9 @@ proptest! {
     /// `handle_stop` with any arbitrary ID on empty state must return `Error`.
     #[test]
     fn handle_stop_arbitrary_id_returns_error(id in "[a-z0-9]{1,64}") {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("build tokio runtime");
         rt.block_on(async {
-            let tmp = TempDir::new().unwrap();
+            let tmp = TempDir::new().expect("create temp dir");
             let state = make_mock_state(tmp.path());
             let deps = make_mock_deps(&tmp);
             let response = miniboxd::handler::handle_stop(id.clone(), state, deps).await;
@@ -59,9 +59,9 @@ proptest! {
     /// `handle_remove` with any arbitrary ID on empty state must return `Error`.
     #[test]
     fn handle_remove_arbitrary_id_returns_error(id in "[a-z0-9]{1,64}") {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("build tokio runtime");
         rt.block_on(async {
-            let tmp = TempDir::new().unwrap();
+            let tmp = TempDir::new().expect("create temp dir");
             let state = make_mock_state(tmp.path());
             let deps = make_mock_deps(&tmp);
             let response = miniboxd::handler::handle_remove(id.clone(), state, deps).await;
@@ -80,9 +80,9 @@ proptest! {
         image in "[a-z][a-z0-9_/-]{0,30}",
         tag   in "[a-z0-9._-]{1,20}",
     ) {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("build tokio runtime");
         rt.block_on(async {
-            let tmp = TempDir::new().unwrap();
+            let tmp = TempDir::new().expect("create temp dir");
             let state = make_mock_state(tmp.path());
             let deps = minibox::testing::helpers::make_mock_deps_with_registry(
                 MockRegistry::new().with_pull_failure(),
@@ -101,9 +101,9 @@ proptest! {
     /// `list_containers` count equals the number of records added.
     #[test]
     fn list_count_matches_records_added(n in 0usize..=16usize) {
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new().expect("create temp dir");
         let state = make_mock_state_with_n_containers(tmp.path(), n);
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("build tokio runtime");
         let count = rt.block_on(async { state.list_containers().await.len() });
         prop_assert_eq!(count, n, "list count {} != expected {}", count, n);
     }

@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
-# Bump workspace version when Rust sources are staged.
-# patch — modifications to existing files
-# minor — new files added (new crate, new module)
-# major — manual only (cargo xtask bump major)
+# Thin wrapper — all logic lives in `cargo xtask pre-commit`.
 
-RUST_STAGED=$(git diff --cached --name-only \
-  | grep -E '\.(rs|toml)$' \
-  | grep -v '^Cargo\.lock$' || true)
-
-if [ -n "$RUST_STAGED" ]; then
-  NEW_FILES=$(git diff --cached --name-only --diff-filter=A \
-    | grep -E '\.(rs|toml)$' || true)
-  if [ -n "$NEW_FILES" ]; then
-    cargo xtask bump minor
-  else
-    cargo xtask bump patch
-  fi
-  git add Cargo.toml
+# Re-entry guard: the global hook calls back into this file; exit immediately
+# if we are already executing (prevents infinite mutual recursion).
+if [ -n "${MINIBOX_PRE_COMMIT_RUNNING:-}" ]; then
+  exit 0
 fi
+export MINIBOX_PRE_COMMIT_RUNNING=1
 
-# Quality gate — self-contained, works without global hook
 cargo xtask pre-commit || exit 1
 
 # Delegate to global pre-commit hook (obfsck, additional checks)

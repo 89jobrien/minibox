@@ -20,7 +20,8 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 fn make_state(temp_dir: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(temp_dir.path().join("images")).unwrap();
+    let image_store =
+        minibox::image::ImageStore::new(temp_dir.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, temp_dir.path()))
 }
 
@@ -51,8 +52,10 @@ fn make_deps(
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images2"))
+            .expect("unwrap in test"),
+    );
     Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -116,6 +119,9 @@ fn make_record(id: &str) -> ContainerRecord {
         priority: None,
         urgency: None,
         execution_context: None,
+        creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 
@@ -161,7 +167,7 @@ async fn handle_run_once(
 /// This happens synchronously before spawn, making it reliably testable across platforms.
 #[tokio::test]
 async fn test_handle_run_limiter_failure_returns_error_response() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     // Use a pre-cached image so pull succeeds; limiter failure happens early.
@@ -170,7 +176,8 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
     let registry = Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
 
     let image_store = Arc::new(
-        minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter")).unwrap(),
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_limiter"))
+            .expect("unwrap in test"),
     );
     let deps = Arc::new(minibox::daemon::handler::HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
@@ -239,7 +246,7 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
 /// When MockFilesystem is configured to fail setup_rootfs, handle_run returns Error response.
 #[tokio::test]
 async fn test_handle_run_filesystem_failure_returns_error_response() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let runtime = Arc::new(MockRuntime::new());
@@ -271,7 +278,7 @@ async fn test_handle_run_filesystem_failure_returns_error_response() {
 /// When MockRegistry is configured to fail pull_image, handle_run returns Error response.
 #[tokio::test]
 async fn test_handle_run_registry_pull_failure_returns_error_response() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let runtime = Arc::new(MockRuntime::new());
@@ -307,7 +314,7 @@ async fn test_handle_run_registry_pull_failure_returns_error_response() {
 /// handle_stop on a non-existent container returns Error response.
 #[tokio::test]
 async fn test_handle_stop_nonexistent_container_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let runtime = Arc::new(MockRuntime::new());
@@ -333,7 +340,7 @@ async fn test_handle_stop_nonexistent_container_returns_error() {
 /// handle_remove on a non-existent container returns Error response.
 #[tokio::test]
 async fn test_handle_remove_nonexistent_container_returns_error() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let runtime = Arc::new(MockRuntime::new());
@@ -367,7 +374,7 @@ async fn test_handle_remove_nonexistent_container_returns_error() {
 /// state or panic, and final state is empty.
 #[tokio::test]
 async fn test_daemon_state_concurrent_add_and_remove_is_safe() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     let mut handles = vec![];
@@ -404,7 +411,7 @@ async fn test_daemon_state_concurrent_add_and_remove_is_safe() {
 /// Only the first should succeed; later attempts should return "not found".
 #[tokio::test]
 async fn test_concurrent_stop_calls_are_safe() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
     // Add a single container.

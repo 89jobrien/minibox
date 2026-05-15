@@ -71,6 +71,9 @@ resolve_range() {
 
 main() {
   resolve_range
+
+  # Quality gate — mirrors .git/hooks/pre-push
+  cargo xtask prepush || exit 1
 }
 
 main "$@"

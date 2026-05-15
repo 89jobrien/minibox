@@ -24,6 +24,18 @@ pub fn find_binary(name: &str) -> PathBuf {
         }
     }
 
+    // Try CARGO_TARGET_DIR if set (e.g. ~/.minibox/cache/target/)
+    let cargo_target_dir = std::env::var("CARGO_TARGET_DIR").ok().map(PathBuf::from);
+
+    if let Some(ref target_dir) = cargo_target_dir {
+        for profile in ["release", "debug"] {
+            let p = target_dir.join(profile).join(name);
+            if p.exists() {
+                return p;
+            }
+        }
+    }
+
     // Try relative to workspace root (CARGO_MANIFEST_DIR points to miniboxd crate)
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir

@@ -221,6 +221,119 @@ impl ImageStore {
         Ok(dest)
     }
 
+    /// Extract a gzip-compressed tar layer blob with digest verification and
+    /// atomic commit.
+    ///
+    /// Unlike [`store_layer`](Self::store_layer), this method:
+    /// 1. Wraps `data_reader` in a [`HashingReader`](layer::HashingReader) to
+    ///    compute the SHA-256 of the compressed stream.
+    /// 2. Extracts into a temporary sibling directory (`{digest_key}.tmp`).
+    /// 3. Verifies the computed digest matches `expected_digest`.
+    /// 4. Atomically renames the tmp dir to the final location on success.
+    /// 5. Cleans up the tmp dir on any failure (extraction or digest mismatch).
+    ///
+    /// Returns the final layer directory path.
+    pub fn store_layer_verified<R: Read>(
+        &self,
+        name: &str,
+        tag: &str,
+        expected_digest: &str,
+        data_reader: R,
+    ) -> anyhow::Result<PathBuf> {
+        use crate::image::layer::HashingReader;
+
+        let digest_key = expected_digest.replace(':', "_");
+        let layers_base = self.layers_dir(name, tag)?;
+        let layer_dir = layers_base.join(&digest_key);
+
+        // Early exit if already cached.
+        if layer_dir.exists() {
+            debug!(
+                digest = %expected_digest,
+                path = %layer_dir.display(),
+                "layer: already cached, skipping"
+            );
+            return Ok(layer_dir);
+        }
+
+        let tmp_dir = layers_base.join(format!("{digest_key}.tmp"));
+
+        // Clean up any stale tmp dir from a previous failed attempt.
+        if tmp_dir.exists() {
+            std::fs::remove_dir_all(&tmp_dir)
+                .with_context(|| format!("remove stale tmp {}", tmp_dir.display()))?;
+        }
+
+        std::fs::create_dir_all(&tmp_dir).map_err(|source| ImageError::StoreWrite {
+            path: tmp_dir.display().to_string(),
+            source,
+        })?;
+
+        let mut hashing_reader = HashingReader::new(data_reader);
+
+        // Extract into tmp dir.
+        let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
+
+        // Drain remaining bytes so the hash covers the full compressed stream.
+        if extract_result.is_err() {
+            let _ = std::io::copy(&mut hashing_reader, &mut std::io::sink());
+        }
+
+        // Verify digest before committing.
+        let actual_hex = hashing_reader.finalize();
+        let expected_hex = expected_digest
+            .strip_prefix("sha256:")
+            .ok_or_else(|| anyhow::anyhow!("digest missing sha256: prefix: {expected_digest}"))?;
+
+        if actual_hex != expected_hex {
+            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
+                tracing::warn!(
+                    digest = %expected_digest,
+                    error = %ce,
+                    "layer: failed to clean up tmp dir after digest mismatch"
+                );
+            }
+            return Err(ImageError::DigestMismatch {
+                digest: expected_digest.to_owned(),
+                expected: expected_hex.to_owned(),
+                actual: actual_hex,
+            }
+            .into());
+        }
+
+        // Digest matched -- surface any extraction error now.
+        if let Err(e) = extract_result {
+            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
+                tracing::warn!(
+                    digest = %expected_digest,
+                    error = %ce,
+                    "layer: failed to clean up tmp dir after extract error"
+                );
+            }
+            return Err(e).with_context(|| format!("extracting layer {expected_digest}"));
+        }
+
+        // Atomic rename: tmp -> final dest.
+        if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
+            // Another concurrent caller may have won the race.
+            if layer_dir.exists() {
+                let _ = std::fs::remove_dir_all(&tmp_dir);
+                return Ok(layer_dir);
+            }
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Err(e).with_context(|| {
+                format!("rename {} -> {}", tmp_dir.display(), layer_dir.display())
+            });
+        }
+
+        info!(
+            digest = %expected_digest,
+            path = %layer_dir.display(),
+            "layer: stored with verified digest"
+        );
+        Ok(layer_dir)
+    }
+
     // -----------------------------------------------------------------------
     // Public helpers for push adapter
     // -----------------------------------------------------------------------

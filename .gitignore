@@ -1,19 +1,19 @@
 # Markdown files (except core documentation)
 *.md
+!.claude/**/*.md
 !README.md
 !CLAUDE.md
 !HANDOFF.md
 !CHANGELOG.md
 !DEVELOPMENT.md
-!docs/STATE_MODEL.md
+!AGENTS.md
+!USAGE.md
+!docs/*.mbx.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
 !docs/conformance.md
-!docs/FEATURE_MATRIX.md
-!docs/STABILITY_CHECKLIST.md
 !docs/plans/*.md
 !docs/superpowers/**/*.md
-!docs/minibox-agent-design.md
 !docs/parallel-layer-pulls-design.md
 !docs/dagu-integration.md
 !docs/diagrams/
@@ -23,16 +23,23 @@
 fuzz/*
 !fuzz/fuzz_targets/
 
-# Claude Code local configuration
-.claude/
+# Claude Code — track everything except local settings and ephemeral state
+.claude/settings.local.json
+.claude/.DS_Store
+.claude/*/local/
+.claude/*/*/local/
 .worktrees/
 .superpowers/
 .remember/
+.smart-build/
 .cargo-ai/*
 !.cargo-ai/*.json
 
 # Go build artifacts (agentbox)
 agentbox/bin/
+
+# Version bump state
+.minibox-bump-state
 
 # Rust build artifacts
 /target/
@@ -100,6 +107,7 @@ Thumbs.db
 .env.local
 *.log
 *.pid
+.env.nu
 
 
 # Documentation build
@@ -115,18 +123,31 @@ Thumbs.db
 *.pyo
 *.pyd
 __pycache__/
-*.venv/
-*.pytest_cache/
+.venv/
+.pytest_cache/
+.ruff_cache/
 .firecrawl/
 .ctx/
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.*.*.yaml
 !.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.state.yaml
+.ctx/HANDOFF.*.state.yaml
 .ctx/HANDOFF.md
 .ctx/HANDOVER.md
 .tmp-dogfood/
+.smart-build/
 
 # cargo-ai
 minibox-assistant
 docs/archive/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.json
+!.ctx/handoff.*.config.toml.example
+.ctx/HANDOFF.*.*.state.json
+.ctx/HANDOFF.hj.hj.state.json
+.ctx/.initialized
+# handoff-end

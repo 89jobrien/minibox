@@ -11,16 +11,21 @@
 //!
 //! # What this tests
 //!
-//! `MiniboxImageBuilder` is an MVP implementation: RUN steps are no-ops but ENV/CMD
-//! metadata is captured and the final image is committed to the store.  The conformance
-//! suite verifies the observable contract — result present, metadata preserved — without
-//! asserting on RUN side-effects.
+//! `MiniboxImageBuilder` wires real RUN execution via injected adapters. The
+//! conformance suite uses mock adapters for filesystem, runtime, and registry
+//! so tests remain unit-level and platform-independent. RUN side-effects are
+//! not observable at this level — the suite verifies the structural contract:
+//! result present, metadata preserved, store updated.
 
 use anyhow::Result;
 use minibox::adapters::MiniboxImageBuilder;
 use minibox::testing::backend::BackendDescriptor;
 use minibox::testing::fixtures::BuildContextFixture;
-use minibox_core::domain::{BackendCapability, BuildConfig, BuildContext, DynImageBuilder};
+use minibox::testing::mocks::{MockFilesystem, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{
+    BackendCapability, BuildConfig, BuildContext, DynImageBuilder, DynImageRegistry,
+};
 use minibox_core::image::ImageStore;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -33,8 +38,19 @@ fn minibox_build_backend(
     image_store: Arc<ImageStore>,
     data_dir: std::path::PathBuf,
 ) -> (BackendDescriptor, DynImageBuilder) {
-    let builder: DynImageBuilder =
-        Arc::new(MiniboxImageBuilder::new(Arc::clone(&image_store), data_dir));
+    let filesystem = Arc::new(MockFilesystem::new());
+    let runtime = Arc::new(MockRuntime::new());
+    let registry_router = Arc::new(HostnameRegistryRouter::new(
+        Arc::new(MockRegistry::new()) as DynImageRegistry,
+        std::iter::empty::<(&str, DynImageRegistry)>(),
+    ));
+    let builder: DynImageBuilder = Arc::new(MiniboxImageBuilder::new(
+        Arc::clone(&image_store),
+        data_dir,
+        filesystem as minibox_core::domain::DynFilesystemProvider,
+        runtime as minibox_core::domain::DynContainerRuntime,
+        registry_router as minibox_core::domain::DynRegistryRouter,
+    ));
     let builder_for_descriptor = Arc::clone(&builder);
     let descriptor = BackendDescriptor::new("minibox-native-build")
         .with_builder(move || Arc::clone(&builder_for_descriptor));
