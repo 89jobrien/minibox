@@ -95,6 +95,120 @@ indicate the capability is provided by the underlying VM, not by minibox namespa
 
 ---
 
+## Code Citations
+
+Each row in the capability matrix that claims Yes or Limited maps to one primary entry point
+below. Citations use repo-relative paths. Line numbers are approximate and may drift as code
+evolves — use the function name to anchor your search.
+
+### Container lifecycle
+
+| Feature      | Entry point                                                                    |
+| ------------ | ------------------------------------------------------------------------------ |
+| pull         | `crates/minibox/src/daemon/handler.rs:1793` — `handle_pull`                   |
+| run          | `crates/minibox/src/daemon/handler.rs:340` — `handle_run`                     |
+| stop         | `crates/minibox/src/daemon/handler.rs:1335` — `handle_stop`                   |
+| rm           | `crates/minibox/src/daemon/handler.rs:1562` — `handle_remove`                 |
+| ps           | `crates/minibox/src/daemon/handler.rs:1653` — `handle_list`                   |
+| pause/resume | `crates/minibox/src/daemon/handler.rs:1471` — `handle_pause` (cgroup.freeze); |
+|              | `crates/minibox/src/container/cgroups.rs:67` — `CgroupManager` implementation |
+| exec (-it)   | `crates/minibox/src/daemon/handler.rs:1935` — `handle_exec`;                  |
+|              | `crates/minibox/src/adapters/exec.rs:127` — `build_nsenter_command`           |
+| logs         | `crates/minibox/src/daemon/handler.rs:1667` — `handle_logs`                   |
+| events       | `crates/minibox/src/daemon/handler.rs:2455` — `handle_subscribe_events`;      |
+|              | `crates/minibox-core/src/events.rs:76` — `BroadcastEventBroker`               |
+
+### Image management
+
+| Feature             | Entry point                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| Docker Hub v2       | `crates/minibox-core/src/adapters/registry_router.rs:26` — `HostnameRegistryRouter`     |
+|                     | (routes non-GHCR refs to the Docker Hub registry by default)                            |
+| ghcr.io             | `crates/minibox/src/adapters/ghcr.rs:384` — `pull_image` on `GhcrRegistry`              |
+| Parallel layer pull | `crates/minibox-core/src/image/registry.rs:516` — `pull_image`                          |
+|                     | (see comment at line 509: "Download all layers in parallel")                             |
+| prune / rmi         | `crates/minibox-core/src/image/gc.rs:45` — `ImageGc::prune`;                            |
+|                     | `crates/minibox/src/daemon/handler.rs:1793` — wired via `handle_pull` / prune path      |
+| push (exp)          | `crates/minibox/src/adapters/push.rs:50` — `push_image`;                                |
+|                     | `crates/minibox/src/daemon/handler.rs:2134` — `handle_push`                             |
+| commit (exp)        | `crates/minibox/src/adapters/commit.rs:58` — `commit_upper_dir_to_image`;               |
+|                     | `crates/minibox/src/daemon/handler.rs:2232` — `handle_commit`                           |
+| build (exp)         | `crates/minibox/src/adapters/builder.rs:86` — `build_image`;                            |
+|                     | `crates/minibox/src/daemon/handler.rs:2326` — `handle_build`                            |
+
+### Isolation (native adapter)
+
+All five Linux namespace types are configured through a single struct and applied via a single
+`clone(2)` call. The GKE adapter uses proot instead (`crates/minibox/src/adapters/gke.rs:260`
+— `ProotRuntime`).
+
+| Feature         | Entry point                                                                       |
+| --------------- | --------------------------------------------------------------------------------- |
+| PID namespace   | `crates/minibox/src/container/namespace.rs:26` — `NamespaceConfig::pid` field;   |
+|                 | `crates/minibox/src/container/namespace.rs:52` — `to_clone_flags` sets           |
+|                 | `CLONE_NEWPID`                                                                    |
+| Mount namespace | Same `to_clone_flags` (line 58) — sets `CLONE_NEWNS`;                            |
+|                 | `crates/minibox/src/container/filesystem.rs:103` — `setup_overlay` mounts        |
+|                 | overlayfs inside the new mount namespace                                          |
+| Network ns.     | Same `to_clone_flags` (line 67) — sets `CLONE_NEWNET`                            |
+| UTS namespace   | Same `to_clone_flags` (line 61) — sets `CLONE_NEWUTS`                            |
+| IPC namespace   | Same `to_clone_flags` (line 64) — sets `CLONE_NEWIPC`                            |
+| cgroups v2      | `crates/minibox/src/container/cgroups.rs:44` — `CgroupManager`                   |
+| Overlay FS      | `crates/minibox/src/container/filesystem.rs:103` — `setup_overlay`               |
+
+### Networking
+
+| Feature     | Entry point                                                                             |
+| ----------- | --------------------------------------------------------------------------------------- |
+| Bridge      | `crates/minibox/src/adapters/network/bridge.rs:80` — `BridgeNetwork`;                  |
+|             | `crates/minibox/src/adapters/network/bridge.rs:12` — `IpAllocator` (DNAT/IP tracking) |
+| Port fwd.   | Not implemented — no port-forwarding code present                                       |
+| DNS         | Not implemented — no container DNS resolver present                                     |
+
+### Mounts and privileges
+
+| Feature         | Entry point                                                                         |
+| --------------- | ----------------------------------------------------------------------------------- |
+| Bind mounts     | `crates/minibox/src/container/filesystem.rs:327` — `apply_bind_mounts`;            |
+|                 | `crates/minibox/src/daemon/handler.rs:298` — `validate_policy` enforces            |
+|                 | `allow_bind_mounts` gate before the handler proceeds                                |
+| Privileged mode | `crates/minibox/src/daemon/handler.rs:252` — `HandlerDependencies::allow_privileged`; |
+|                 | `crates/minibox/src/daemon/handler.rs:298` — `validate_policy` enforces the gate   |
+
+### Security
+
+All four security controls are adapter-agnostic and applied before any container operation.
+
+| Feature               | Entry point                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| SO_PEERCRED auth      | `crates/minibox/src/daemon/server.rs:75` — `is_authorized` (UID == 0 check)         |
+| Tar path validation   | `crates/minibox-core/src/image/layer.rs:321` — `validate_layer_path`;               |
+|                       | symlink/device rejection at lines 181 and 214                                        |
+| Setuid stripping      | `crates/minibox-core/src/image/layer.rs:269` — strips setuid/setgid/sticky bits     |
+|                       | (mask removes 04000, 02000, 01000) during tar extraction                             |
+| Device node rejection | `crates/minibox-core/src/image/layer.rs:181` — rejects block/char devices in        |
+|                       | tar entries before any filesystem write                                              |
+
+### State persistence
+
+| Feature               | Entry point                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| Records survive restart | `crates/minibox/src/daemon/state.rs:295` — `DaemonState::load_from_disk`;        |
+|                         | `crates/minibox/src/daemon/state.rs:411` — `DaemonState::save_to_disk`           |
+| PID reconciliation    | `crates/minibox/src/daemon/state.rs:359` — `DaemonState::reconcile_on_startup`;   |
+|                       | marks stale Running containers Orphaned if the PID is gone                          |
+
+### Observability
+
+| Feature            | Entry point                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| Structured tracing | All handlers use `tracing::info!/warn!/error!` with key=value fields — see              |
+|                    | `crates/minibox/src/daemon/handler.rs` throughout                                      |
+| OTLP export        | `crates/minibox/src/daemon/telemetry/traces.rs:23` — `init_tracing(otlp_endpoint)`;   |
+|                    | configures an optional OTLP span exporter when `MINIBOX_OTLP_ENDPOINT` is set          |
+
+---
+
 ## Notes
 
 - **`native` adapter** runs directly on Linux using kernel namespaces, cgroups v2, and
