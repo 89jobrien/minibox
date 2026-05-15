@@ -49,7 +49,7 @@ check now rather than waiting for `cargo check`.
 When adding a new `DaemonResponse` variant, update `is_terminal_response()` in `server.rs`:
 
 ```bash
-rg "is_terminal_response" crates/daemonbox/src/server.rs
+rg "is_terminal_response" crates/minibox/src/daemon/server.rs
 ```
 
 Non-terminal variants (like `ContainerOutput`) must be explicitly listed. All others default
