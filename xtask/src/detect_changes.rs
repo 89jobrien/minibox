@@ -73,7 +73,7 @@ pub fn classify_path(path: &str) -> Option<Area> {
         Some(Area::Macbox)
     } else if path.starts_with("crates/winbox/") {
         Some(Area::Winbox)
-    } else if path.starts_with("crates/minibox-conformance/")
+    } else if path.starts_with("crates/minibox-testsuite/")
         || path.starts_with("crates/minibox-crux-plugin/")
     {
         Some(Area::Conformance)
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn classify_conformance() {
         assert_eq!(
-            classify_path("crates/minibox-conformance/src/lib.rs"),
+            classify_path("crates/minibox-testsuite/src/lib.rs"),
             Some(Area::Conformance)
         );
     }
