@@ -2,9 +2,9 @@ name: Conformance
 
 on:
   push:
-    branches: [develop, next, stable]
+    branches: [develop, next, staging, stable]
   pull_request:
-    branches: [develop, next, stable]
+    branches: [develop, next, staging, stable]
   workflow_dispatch:
 
 concurrency:
