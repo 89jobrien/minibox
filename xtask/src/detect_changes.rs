@@ -20,6 +20,9 @@ pub enum Area {
     Xtask,
     Docs,
     Workflows,
+    /// Workspace-level config: Cargo.toml, Cargo.lock, rust-toolchain.toml,
+    /// deny.toml, Justfile, and other root config files that affect all crates.
+    Workspace,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -34,6 +37,7 @@ pub struct ChangeSet {
     pub xtask: bool,
     pub docs: bool,
     pub workflows: bool,
+    pub workspace: bool,
 }
 
 impl ChangeSet {
@@ -49,6 +53,7 @@ impl ChangeSet {
             Area::Xtask => self.xtask = true,
             Area::Docs => self.docs = true,
             Area::Workflows => self.workflows = true,
+            Area::Workspace => self.workspace = true,
         }
     }
 }
@@ -77,12 +82,26 @@ pub fn classify_path(path: &str) -> Option<Area> {
         || path.starts_with("crates/minibox-crux-plugin/")
     {
         Some(Area::Conformance)
-    } else if path.starts_with("xtask/") {
+    } else if path.starts_with("xtask/") || path.starts_with("scripts/") {
         Some(Area::Xtask)
     } else if path.starts_with("docs/") || (path.ends_with(".md") && !path.contains('/')) {
         Some(Area::Docs)
     } else if path.starts_with(".github/") {
         Some(Area::Workflows)
+    } else if matches!(
+        path,
+        "Cargo.toml"
+            | "Cargo.lock"
+            | "rust-toolchain.toml"
+            | "deny.toml"
+            | "Justfile"
+            | "clippy.toml"
+            | ".rustfmt.toml"
+            | "mise.toml"
+            | "Dockerfile"
+    ) || (path.ends_with(".toml") && !path.contains('/'))
+    {
+        Some(Area::Workspace)
     } else {
         None
     }
@@ -126,6 +145,7 @@ pub fn changeset_to_output_lines(cs: &ChangeSet) -> Vec<String> {
         format!("xtask={}", cs.xtask),
         format!("docs={}", cs.docs),
         format!("workflows={}", cs.workflows),
+        format!("workspace={}", cs.workspace),
     ]
 }
 
@@ -251,10 +271,26 @@ mod tests {
     }
 
     #[test]
+    fn classify_scripts() {
+        assert_eq!(classify_path("scripts/preflight.nu"), Some(Area::Xtask));
+        assert_eq!(classify_path("scripts/ci-watch.nu"), Some(Area::Xtask));
+    }
+
+    #[test]
+    fn classify_workspace_root_files() {
+        assert_eq!(classify_path("Cargo.toml"), Some(Area::Workspace));
+        assert_eq!(classify_path("Cargo.lock"), Some(Area::Workspace));
+        assert_eq!(classify_path("rust-toolchain.toml"), Some(Area::Workspace));
+        assert_eq!(classify_path("deny.toml"), Some(Area::Workspace));
+        assert_eq!(classify_path("Justfile"), Some(Area::Workspace));
+        assert_eq!(classify_path("Dockerfile"), Some(Area::Workspace));
+        assert_eq!(classify_path("clippy.toml"), Some(Area::Workspace));
+    }
+
+    #[test]
     fn classify_unknown_returns_none() {
         assert_eq!(classify_path("fuzz/corpus/something"), None);
-        assert_eq!(classify_path("Cargo.lock"), None);
-        assert_eq!(classify_path("scripts/preflight.nu"), None);
+        assert_eq!(classify_path("assets/logo.png"), None);
     }
 
     #[test]
@@ -290,6 +326,7 @@ mod tests {
             xtask: false,
             docs: false,
             workflows: false,
+            workspace: false,
         };
         let lines = changeset_to_output_lines(&cs);
         assert!(lines.contains(&"core=true".to_string()));

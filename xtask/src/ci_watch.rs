@@ -64,18 +64,21 @@ fn status_icon(conclusion: Option<&str>, status: &str) -> &'static str {
     }
 }
 
-fn elapsed(started: &str, completed: &str) -> String {
+fn elapsed(started: &str, completed: &str) -> Option<String> {
     let Ok(s) = DateTime::parse_from_rfc3339(started) else {
-        return String::new();
+        return None;
     };
     let Ok(e) = DateTime::parse_from_rfc3339(completed) else {
-        return String::new();
+        return None;
     };
     let secs = (e - s).num_seconds();
+    if secs <= 0 {
+        return None;
+    }
     if secs < 60 {
-        format!("{secs}s")
+        Some(format!("{secs}s"))
     } else {
-        format!("{}m{}s", secs / 60, secs % 60)
+        Some(format!("{}m{}s", secs / 60, secs % 60))
     }
 }
 
@@ -83,10 +86,12 @@ fn print_jobs(jobs: &[Job]) {
     println!();
     for j in jobs {
         let icon = status_icon(j.conclusion.as_deref(), &j.status);
+        // Only show timing when the job has actually completed (both timestamps present and valid).
+        // GitHub returns zero-time for completedAt on queued/in-progress jobs, which produces
+        // massive negative durations — skip those entirely and fall back to status text.
         let timing = match (&j.started_at, &j.completed_at) {
-            (Some(s), Some(e)) => {
-                let d = elapsed(s, e);
-                if d.is_empty() { j.status.clone() } else { d }
+            (Some(s), Some(e)) if j.conclusion.is_some() => {
+                elapsed(s, e).unwrap_or_else(|| j.status.clone())
             }
             _ => j.status.clone(),
         };
