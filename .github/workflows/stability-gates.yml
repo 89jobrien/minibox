@@ -101,7 +101,7 @@ jobs:
     if: failure()
     steps:
       - name: cancel workflow run
-        run: gh run cancel $RUN_ID --repo $REPO
+        run: gh run cancel "$RUN_ID" --repo "$REPO"
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}

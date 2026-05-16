@@ -42,10 +42,12 @@ jobs:
               geiger_status="$status"
             fi
           done
-          echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## cargo geiger report"
+            echo '```'
+            tail -30 geiger-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$geiger_status"
       - name: upload geiger report
         if: always()
