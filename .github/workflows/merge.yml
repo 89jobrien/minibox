@@ -16,11 +16,12 @@ jobs:
     name: detect changes
     runs-on: ubuntu-latest
     outputs:
-      core:    ${{ steps.dc.outputs.core }}
-      daemon:  ${{ steps.dc.outputs.daemon }}
-      cli:     ${{ steps.dc.outputs.cli }}
-      runtime: ${{ steps.dc.outputs.runtime }}
-      xtask:   ${{ steps.dc.outputs.xtask }}
+      core:      ${{ steps.dc.outputs.core }}
+      daemon:    ${{ steps.dc.outputs.daemon }}
+      cli:       ${{ steps.dc.outputs.cli }}
+      runtime:   ${{ steps.dc.outputs.runtime }}
+      xtask:     ${{ steps.dc.outputs.xtask }}
+      workflows: ${{ steps.dc.outputs.workflows }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -157,6 +158,18 @@ jobs:
           tool: cargo-machete
       - run: cargo machete
 
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.4
+          sudo mv actionlint /usr/local/bin/
+      - name: run actionlint
+        run: actionlint -config-file .github/actionlint.yaml .github/workflows/ .github/actions/
+
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
@@ -166,6 +179,7 @@ jobs:
       - name: cargo xtask test-e2e-suite
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask test-e2e-suite
 
   test-integration:
@@ -177,6 +191,7 @@ jobs:
       - name: cargo xtask test-integration
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask test-integration
 
   test-protocol-e2e-linux:
@@ -188,6 +203,7 @@ jobs:
       - name: cargo xtask test-e2e
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask test-e2e
 
   ci-ok:
@@ -204,6 +220,7 @@ jobs:
       - audit
       - deny
       - machete
+      - actionlint
       - test-e2e
       - test-integration
       - test-protocol-e2e-linux
@@ -219,6 +236,7 @@ jobs:
             "${{ needs.audit.result }}"
             "${{ needs.deny.result }}"
             "${{ needs.machete.result }}"
+            "${{ needs.actionlint.result }}"
             "${{ needs.test-e2e.result }}"
             "${{ needs.test-integration.result }}"
             "${{ needs.test-protocol-e2e-linux.result }}"
@@ -241,5 +259,6 @@ jobs:
       - name: clean build artifacts and test state
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask clean-artifacts
           cargo xtask nuke-test-state
