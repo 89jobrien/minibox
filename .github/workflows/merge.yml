@@ -249,6 +249,29 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
+  promote-staging:
+    name: promote next → staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/next'
+    needs: [ci-ok]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: merge next into staging
+        run: |
+          git fetch origin staging
+          git checkout staging
+          git merge --ff-only origin/next || git merge origin/next -m "Merge branch 'next' into staging"
+          git push origin staging
+
   cleanup-linux:
     name: cleanup (Linux)
     runs-on: [self-hosted, minibox]
