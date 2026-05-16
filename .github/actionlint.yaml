@@ -1,3 +1,9 @@
 self-hosted-runner:
   labels:
     - minibox
+
+ignore:
+  # models: read is a valid GHA permission added after actionlint 1.7.4
+  - '"models" is unknown permission scope'
+  # SC2129: style suggestion for grouping redirects — not a correctness issue
+  - 'SC2129'
