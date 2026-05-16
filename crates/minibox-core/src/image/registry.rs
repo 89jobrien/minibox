@@ -570,7 +570,10 @@ impl RegistryClient {
                 // used throughout; the digest is always paired with the result
                 // so JoinErrors at the drain site carry an actionable digest.
                 let result: anyhow::Result<()> = async {
-                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                    let _permit = sem
+                        .acquire_owned()
+                        .await
+                        .map_err(|_| anyhow::anyhow!("layer semaphore closed unexpectedly"))?;
 
                     let digest = &layer_desc.digest;
                     let digest_key = digest.replace(':', "_");

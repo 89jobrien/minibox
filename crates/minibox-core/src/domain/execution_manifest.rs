@@ -13,6 +13,7 @@
 //! and the digest field itself). Equal semantic inputs always produce equal
 //! digests regardless of serialisation order.
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -141,25 +142,22 @@ impl ExecutionManifest {
     ///
     /// The digest covers a stable JSON projection that excludes volatile fields:
     /// `created_at`, `manifest_path`, and `workload_digest` itself.
-    pub fn compute_workload_digest(&self) -> ExecutionManifestDigest {
+    pub fn compute_workload_digest(&self) -> anyhow::Result<ExecutionManifestDigest> {
         let projection = self.digest_projection();
-        // SAFETY: serialisation cannot fail — the projection contains only
-        // primitive types (u32, bool, String, Vec<String>, Option<T>) and
-        // structs composed of the same. No maps with non-string keys, no
-        // custom Serialize impls that can error.
-        let json = serde_json::to_string(&projection)
-            .expect("digest projection contains only infallible serialisable types");
+        let json =
+            serde_json::to_string(&projection).context("failed to serialize digest projection")?;
         let hash = Sha256::digest(json.as_bytes());
-        ExecutionManifestDigest {
+        Ok(ExecutionManifestDigest {
             algorithm: "sha256".to_string(),
             hex: hex::encode(hash),
-        }
+        })
     }
 
     /// Compute and set `self.workload_digest`.
-    pub fn seal(&mut self) {
-        let digest = self.compute_workload_digest();
+    pub fn seal(&mut self) -> anyhow::Result<()> {
+        let digest = self.compute_workload_digest()?;
         self.workload_digest = Some(digest.to_string());
+        Ok(())
     }
 
     /// Build the stable projection used for digest computation.
@@ -267,7 +265,10 @@ mod tests {
     fn equal_inputs_produce_equal_digest() {
         let m1 = sample_manifest();
         let m2 = sample_manifest();
-        assert_eq!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_eq!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -278,7 +279,10 @@ mod tests {
         m2.created_at = "2099-12-31T23:59:59Z".to_string();
         m2.manifest_path = Some(PathBuf::from("/other/path"));
         m2.workload_digest = Some("sha256:stale".to_string());
-        assert_eq!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_eq!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -286,7 +290,10 @@ mod tests {
         let m1 = sample_manifest();
         let mut m2 = sample_manifest();
         m2.runtime.command = vec!["ls".to_string(), "-la".to_string()];
-        assert_ne!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_ne!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -294,7 +301,10 @@ mod tests {
         let m1 = sample_manifest();
         let mut m2 = sample_manifest();
         m2.runtime.env = vec![ExecutionManifestEnvVar::new("FOO", "different")];
-        assert_ne!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_ne!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -306,7 +316,10 @@ mod tests {
             container_path: "/mnt".to_string(),
             read_only: true,
         }];
-        assert_ne!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_ne!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -314,7 +327,10 @@ mod tests {
         let m1 = sample_manifest();
         let mut m2 = sample_manifest();
         m2.runtime.network_mode = "host".to_string();
-        assert_ne!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_ne!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
@@ -322,14 +338,17 @@ mod tests {
         let m1 = sample_manifest();
         let mut m2 = sample_manifest();
         m2.subject.image.manifest_digest = Some("sha256:changed".to_string());
-        assert_ne!(m1.compute_workload_digest(), m2.compute_workload_digest());
+        assert_ne!(
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest")
+        );
     }
 
     #[test]
     fn seal_sets_workload_digest() {
         let mut m = sample_manifest();
         assert!(m.workload_digest.is_none());
-        m.seal();
+        m.seal().expect("seal");
         assert!(m.workload_digest.is_some());
         let digest = m.workload_digest.as_ref().expect("sealed");
         assert!(digest.starts_with("sha256:"));
@@ -346,7 +365,7 @@ mod tests {
     #[test]
     fn manifest_roundtrips_through_json() {
         let mut m = sample_manifest();
-        m.seal();
+        m.seal().expect("seal");
         let json = serde_json::to_string_pretty(&m).expect("serialise");
         let m2: ExecutionManifest = serde_json::from_str(&json).expect("deserialise");
         assert_eq!(m, m2);
@@ -358,8 +377,8 @@ mod tests {
         let mut m2 = sample_manifest();
         m2.container_id = "completely-different-uuid-456".to_string();
         assert_eq!(
-            m1.compute_workload_digest(),
-            m2.compute_workload_digest(),
+            m1.compute_workload_digest().expect("digest"),
+            m2.compute_workload_digest().expect("digest"),
             "container_id is volatile and must not affect workload digest"
         );
     }

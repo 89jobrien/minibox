@@ -911,7 +911,9 @@ async fn prepare_run(
             ephemeral: capture_output,
         },
     };
-    manifest.seal();
+    manifest
+        .seal()
+        .context("failed to compute execution manifest digest")?;
 
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
