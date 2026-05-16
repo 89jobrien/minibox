@@ -29,6 +29,7 @@ mod docs_lint;
 mod feature_matrix_date;
 mod gates;
 mod preflight;
+mod promote;
 mod protocol_drift;
 mod protocol_sites;
 mod stale_names;
