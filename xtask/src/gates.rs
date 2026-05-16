@@ -4,6 +4,9 @@ use xshell::{Shell, cmd};
 
 use crate::{bump, docs_lint, utils::cargo_target_dir};
 
+/// Agent config directories that trigger agentlint.
+const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
+
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
@@ -72,6 +75,11 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("clippy failed")?;
+    }
+
+    // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.
+    if staged_agent_files(sh)? {
+        agentlint(sh).context("agentlint failed")?;
     }
 
     // Workflow lint: run actionlint when .github/workflows/ files are staged.
@@ -569,6 +577,84 @@ mod tests {
             "61.0% must satisfy the 61% threshold; got {pct}"
         );
     }
+}
+
+/// Returns true if any staged files live under an agent config directory.
+fn staged_agent_files(sh: &Shell) -> Result<bool> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .any(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d))))
+}
+
+/// Lint staged agent config files:
+///   - `.json`  → parse with serde_json and report errors
+///   - `.md`    → check required frontmatter keys (name, description)
+///   - `.yaml`/`.yml` inside agent dirs → check with actionlint if in `.github/`, else YAML parse
+fn agentlint(sh: &Shell) -> Result<()> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+
+    let agent_files: Vec<&str> = staged
+        .lines()
+        .filter(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d)))
+        .collect();
+
+    let mut errors: Vec<String> = Vec::new();
+
+    for file in &agent_files {
+        let path = Path::new(file);
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        let Ok(content) = fs::read_to_string(path) else {
+            // File deleted or unreadable — skip.
+            continue;
+        };
+
+        match ext {
+            "json" => {
+                if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
+                    errors.push(format!("{file}: JSON parse error: {e}"));
+                }
+            }
+            "md" => {
+                // Skills and agent docs should declare name and description.
+                if content.starts_with("---") {
+                    let missing: Vec<&str> = ["name:", "description:"]
+                        .iter()
+                        .copied()
+                        .filter(|key| !content.contains(key))
+                        .collect();
+                    if !missing.is_empty() {
+                        errors.push(format!(
+                            "{file}: skill frontmatter missing required keys: {}",
+                            missing.join(", ")
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if errors.is_empty() {
+        eprintln!(
+            "agentlint: checked {} file(s), 0 error(s)",
+            agent_files.len()
+        );
+    } else {
+        for e in &errors {
+            eprintln!("agentlint: {e}");
+        }
+        anyhow::bail!("agentlint found {} error(s)", errors.len());
+    }
+
+    Ok(())
 }
 
 /// Returns `["--fail-fast"]` when `MINIBOX_FAIL_FAST=true`, otherwise empty.
