@@ -366,19 +366,11 @@ enum SnapshotCommands {
     },
 }
 
-/// Entry point.  Parses arguments, dispatches to the appropriate command
-/// module, and propagates any errors as a non-zero exit code.
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
-    let cli = Cli::parse();
-
-    let socket_path = minibox_core::client::default_socket_path();
-    let socket_path: &Path = &socket_path;
-
+/// Dispatch a parsed CLI command to the appropriate handler.
+///
+/// Separated from `main` so dispatch logic is testable without tracing setup
+/// and so `main` contains only I/O setup (IOSP).
+async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
     match cli.command {
         Commands::Run {
             image,
@@ -538,6 +530,19 @@ async fn main() -> Result<()> {
             .await
         }
     }
+}
+
+/// Entry point. Initialises tracing, parses arguments, then delegates to
+/// [`run`] which owns all dispatch logic.
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let cli = Cli::parse();
+    let socket_path = minibox_core::client::default_socket_path();
+    run(cli, &socket_path).await
 }
 
 /// Test-only helpers that expose parser internals for unit tests in submodules.

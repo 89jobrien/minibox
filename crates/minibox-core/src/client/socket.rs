@@ -9,10 +9,10 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
+    pub fn new() -> Self {
+        Self {
             socket_path: super::default_socket_path(),
-        })
+        }
     }
 
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
@@ -110,7 +110,7 @@ impl DaemonWriter {
 
 impl Default for DaemonClient {
     fn default() -> Self {
-        Self::new().expect("failed to create default client")
+        Self::new()
     }
 }
 
@@ -120,8 +120,7 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = DaemonClient::new();
-        assert!(client.is_ok());
+        let _client = DaemonClient::new();
     }
 
     #[test]

@@ -4,6 +4,46 @@
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
 
+use anyhow::Context as _;
+use minibox_core::client::DaemonClient;
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
+
+/// Send a single request to the daemon and handle the standard
+/// `Success / Error / unexpected / no-response` response pattern.
+///
+/// Used by simple one-shot commands (stop, rm, pause, resume, rmi) that
+/// differ only in which [`DaemonRequest`] variant they send.
+pub(crate) async fn send_request(
+    request: DaemonRequest,
+    socket_path: &std::path::Path,
+) -> anyhow::Result<()> {
+    let client = DaemonClient::with_socket(socket_path);
+    let mut stream = client
+        .call(request)
+        .await
+        .context("failed to call daemon")?;
+
+    if let Some(response) = stream.next().await.context("stream error")? {
+        match response {
+            DaemonResponse::Success { message } => {
+                println!("{message}");
+                Ok(())
+            }
+            DaemonResponse::Error { message } => {
+                eprintln!("error: {message}");
+                std::process::exit(1);
+            }
+            other => {
+                eprintln!("unexpected response: {other:?}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        eprintln!("no response from daemon");
+        std::process::exit(1);
+    }
+}
+
 pub mod diagnose;
 pub mod doctor;
 pub mod events;

@@ -181,6 +181,48 @@ impl std::fmt::Debug for PushAuth {
 // RegistryClient
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Manifest action (pure — no I/O)
+// ---------------------------------------------------------------------------
+
+/// Decision returned by [`resolve_manifest_action`] after parsing a registry
+/// manifest response body.
+enum ManifestAction {
+    /// The response was a single-arch manifest; return it directly.
+    Return(OciManifest),
+    /// The response was a manifest list; recurse with the resolved digest.
+    Recurse { digest: String },
+}
+
+/// Pure function: given a parsed [`ManifestResponse`] and target platform,
+/// decide whether to return the manifest directly or recurse into the list.
+///
+/// Contains no I/O — all async work (HTTP fetch, body streaming) lives in
+/// [`RegistryClient::get_manifest_inner`].
+fn resolve_manifest_action(
+    response: ManifestResponse,
+    platform: &crate::image::manifest::TargetPlatform,
+) -> anyhow::Result<ManifestAction> {
+    match response {
+        ManifestResponse::Single(m) => Ok(ManifestAction::Return(m)),
+        ManifestResponse::List(list) => {
+            let entry = list
+                .find_platform(platform)
+                .ok_or(RegistryError::NoPlatformManifest {
+                    platform: platform.to_string(),
+                })?;
+            info!(
+                platform = %platform,
+                digest = %entry.digest,
+                "manifest list resolved to platform-specific digest"
+            );
+            Ok(ManifestAction::Recurse {
+                digest: entry.digest.clone(),
+            })
+        }
+    }
+}
+
 /// A Docker Hub registry client.
 ///
 /// Internally wraps a [`reqwest::Client`] with redirect following enabled
@@ -399,21 +441,10 @@ impl RegistryClient {
             body.len()
         );
 
-        match ManifestResponse::parse(&body, &content_type)? {
-            ManifestResponse::Single(m) => Ok(m),
-            ManifestResponse::List(list) => {
-                // Find linux/amd64 and fetch that manifest.
-                let amd64 = list.find_platform(&self.platform).ok_or(
-                    RegistryError::NoPlatformManifest {
-                        platform: self.platform.to_string(),
-                    },
-                )?;
-                info!(
-                    platform = %self.platform,
-                    digest = %amd64.digest,
-                    "manifest list resolved to platform-specific digest"
-                );
-                let digest = amd64.digest.clone();
+        let parsed = ManifestResponse::parse(&body, &content_type)?;
+        match resolve_manifest_action(parsed, &self.platform)? {
+            ManifestAction::Return(m) => Ok(m),
+            ManifestAction::Recurse { digest } => {
                 // Recurse with the digest as the "tag", incrementing depth to
                 // guard against malformed or adversarial chained manifest lists.
                 Box::pin(self.get_manifest_inner(name, &digest, token, depth + 1)).await
@@ -570,7 +601,10 @@ impl RegistryClient {
                 // used throughout; the digest is always paired with the result
                 // so JoinErrors at the drain site carry an actionable digest.
                 let result: anyhow::Result<()> = async {
-                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
+                    let _permit = sem
+                        .acquire_owned()
+                        .await
+                        .map_err(|_| anyhow::anyhow!("layer semaphore closed unexpectedly"))?;
 
                     let digest = &layer_desc.digest;
                     let digest_key = digest.replace(':', "_");
