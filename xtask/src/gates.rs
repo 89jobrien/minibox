@@ -269,19 +269,60 @@ pub fn test_property(sh: &Shell) -> Result<()> {
 }
 
 /// Cgroup + integration tests (Linux, root required)
+///
+/// Builds release binaries first, then runs each test suite under `sudo -E`
+/// so the tests have the kernel privileges they need (cgroups v2, namespaces).
+/// `MINIBOX_TEST_BIN_DIR` is forwarded so helpers can locate `miniboxd`/`mbx`.
 pub fn test_integration(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo build --release -p miniboxd -p mbx")
+        .run()
+        .context("release build failed")?;
+
+    // Build cgroup test binary without running.
     cmd!(
         sh,
-        "cargo test --release -p miniboxd --test cgroup_tests -- --test-threads=1 --nocapture"
+        "cargo test --release -p miniboxd --test cgroup_tests --no-run"
+    )
+    .run()
+    .context("failed to build cgroup_tests binary")?;
+
+    // Build integration test binary without running.
+    cmd!(
+        sh,
+        "cargo test --release -p miniboxd --test integration_tests --no-run"
+    )
+    .run()
+    .context("failed to build integration_tests binary")?;
+
+    let target = cargo_target_dir();
+    let bin_dir = target.join("release");
+
+    let cgroup_bin = find_test_binary(
+        &target.join("release/deps").to_string_lossy(),
+        "cgroup_tests",
+    )
+    .context("could not locate cgroup_tests binary")?;
+
+    let integration_bin = find_test_binary(
+        &target.join("release/deps").to_string_lossy(),
+        "integration_tests",
+    )
+    .context("could not locate integration_tests binary")?;
+
+    cmd!(
+        sh,
+        "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {cgroup_bin} --test-threads=1 --nocapture"
     )
     .run()
     .context("cgroup tests failed")?;
+
     cmd!(
         sh,
-        "cargo test --release -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture"
+        "sudo -E env MINIBOX_TEST_BIN_DIR={bin_dir} {integration_bin} --test-threads=1 --nocapture --ignored"
     )
     .run()
     .context("integration tests failed")?;
+
     Ok(())
 }
 

@@ -93,7 +93,7 @@ impl DaemonFixture {
         let cgroup_root = PathBuf::from("/sys/fs/cgroup").join(&test_name);
 
         let daemon_bin = find_binary("miniboxd");
-        let cli_bin = find_binary("minibox");
+        let cli_bin = find_binary("mbx");
 
         // Create cgroup root and enable the controllers containers need.
         std::fs::create_dir_all(&cgroup_root).ok();

@@ -504,7 +504,7 @@ fn test_e2e_dind_pull_and_run() {
     let inner_cgroup_path = format!("/sys/fs/cgroup/{inner_cgroup_name}");
 
     let miniboxd_bin = find_binary("miniboxd");
-    let minibox_bin = find_binary("minibox");
+    let minibox_bin = find_binary("mbx");
 
     // Volume spec strings — must outlive the run_args slice borrow.
     let v_miniboxd = format!("{}:/usr/local/bin/miniboxd:ro", miniboxd_bin.display());
