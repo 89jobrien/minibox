@@ -218,6 +218,19 @@ fn main() -> Result<()> {
             };
             ci_watch::ci_watch(&sh, branch.as_deref())
         }
+        Some("promote") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let dry_run = args.iter().any(|a| a == "--dry-run");
+            let from = args
+                .windows(2)
+                .find(|w| w[0] == "--from")
+                .and_then(|w| promote::Tier::from_str(&w[1]));
+            let to = args
+                .windows(2)
+                .find(|w| w[0] == "--to")
+                .and_then(|w| promote::Tier::from_str(&w[1]));
+            promote::run(root, from, to, dry_run)
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -294,6 +307,9 @@ fn main() -> Result<()> {
                 "  detect-changes [<base-ref>]  classify changed paths; emit GHA outputs (default base: HEAD^)"
             );
             eprintln!("  ci-watch [--branch <branch>]  watch latest GHA run with job-level detail");
+            eprintln!(
+                "  promote [--from <tier>] [--to <tier>] [--dry-run]  run quality gates for tier promotion"
+            );
             Ok(())
         }
     }
