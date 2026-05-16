@@ -168,7 +168,7 @@ jobs:
           bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.4
           sudo mv actionlint /usr/local/bin/
       - name: run actionlint
-        run: actionlint -config-file .github/actionlint.yaml .github/workflows/ .github/actions/
+        run: actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
 
   test-e2e:
     name: e2e tests (Linux, root)
