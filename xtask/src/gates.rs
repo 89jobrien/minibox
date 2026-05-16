@@ -120,9 +120,10 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("release build failed")?;
+    let fail_fast = fail_fast_flag();
     cmd!(
         sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib"
+        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
     )
     .run()
     .context("nextest failed")?;
@@ -135,15 +136,21 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 /// Runs `--lib` tests only (no integration test files that require Linux root
 /// or a running daemon). On Linux, excludes macbox (macOS-only crate) to match
 /// CI behavior. Integration and e2e tests have dedicated gates.
+///
+/// Set `MINIBOX_FAIL_FAST=true` to stop on the first test failure.
 pub fn test_unit(sh: &Shell) -> Result<()> {
+    let fail_fast = fail_fast_flag();
     if cfg!(target_os = "macos") {
-        cmd!(sh, "cargo nextest run --workspace --lib")
+        cmd!(sh, "cargo nextest run --workspace --lib {fail_fast...}")
             .run()
             .context("nextest workspace --lib tests failed")?;
     } else {
-        cmd!(sh, "cargo nextest run --workspace --exclude macbox --lib")
-            .run()
-            .context("nextest workspace --lib tests failed")?;
+        cmd!(
+            sh,
+            "cargo nextest run --workspace --exclude macbox --lib {fail_fast...}"
+        )
+        .run()
+        .context("nextest workspace --lib tests failed")?;
     }
     Ok(())
 }
@@ -561,6 +568,15 @@ mod tests {
             pct >= THRESHOLD,
             "61.0% must satisfy the 61% threshold; got {pct}"
         );
+    }
+}
+
+/// Returns `["--fail-fast"]` when `MINIBOX_FAIL_FAST=true`, otherwise empty.
+fn fail_fast_flag() -> Vec<&'static str> {
+    if std::env::var("MINIBOX_FAIL_FAST").as_deref() == Ok("true") {
+        vec!["--fail-fast"]
+    } else {
+        vec![]
     }
 }
 
