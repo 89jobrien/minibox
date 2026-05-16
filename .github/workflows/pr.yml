@@ -19,6 +19,7 @@ jobs:
       conformance: ${{ steps.dc.outputs.conformance }}
       xtask:       ${{ steps.dc.outputs.xtask }}
       docs:        ${{ steps.dc.outputs.docs }}
+      workflows:   ${{ steps.dc.outputs.workflows }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -67,6 +68,18 @@ jobs:
       - name: cargo xtask test-unit
         run: cargo xtask test-unit
 
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.4
+          sudo mv actionlint /usr/local/bin/
+      - name: run actionlint
+        run: actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+
   cancel-on-failure:
     name: cancel on failure
     runs-on: ubuntu-latest
@@ -74,7 +87,7 @@ jobs:
     if: failure()
     steps:
       - name: cancel workflow run
-        run: gh run cancel $RUN_ID --repo $REPO
+        run: gh run cancel "$RUN_ID" --repo "$REPO"
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
