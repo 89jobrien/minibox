@@ -74,6 +74,25 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         .context("clippy failed")?;
     }
 
+    // Workflow lint: run actionlint when .github/workflows/ files are staged.
+    if staged_workflow_files(sh)? {
+        let config = ".github/actionlint.yaml";
+        // actionlint does not accept a bare directory path; collect .yml files explicitly.
+        let wf_files: Vec<_> = fs::read_dir(".github/workflows")
+            .context("read .github/workflows")?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|ext| ext == "yml" || ext == "yaml")
+            })
+            .map(|e| e.path().to_string_lossy().into_owned())
+            .collect();
+        cmd!(sh, "actionlint -config-file {config} {wf_files...}")
+            .run()
+            .context("actionlint failed — fix workflow errors before committing")?;
+    }
+
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root).context("docs-lint failed")?;
@@ -560,6 +579,17 @@ fn pushed_rust_files(sh: &Shell) -> Result<bool> {
                 .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
         }
     }
+}
+
+/// Returns true if any `.github/workflows/` files are staged.
+fn staged_workflow_files(sh: &Shell) -> Result<bool> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .any(|l| l.starts_with(".github/workflows/") || l == ".github/actionlint.yaml"))
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
