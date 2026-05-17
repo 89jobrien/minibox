@@ -30,7 +30,12 @@ impl SmolvmProcess {
         env: &[(String, String)],
     ) -> Result<Self> {
         let mut cmd = Command::new(bin);
-        cmd.arg("machine").arg("run").arg("--image").arg(image);
+        // --net enables VM networking; required for image pulls from registries.
+        cmd.arg("machine")
+            .arg("run")
+            .arg("--net")
+            .arg("--image")
+            .arg(image);
 
         for (k, v) in env {
             cmd.arg("--env").arg(format!("{k}={v}"));
@@ -165,12 +170,13 @@ mod tests {
                     .collect_stdout()
                     .await
                     .expect("collect_stdout should work");
-                // echo prints: machine run --image test-image --env KEY=VAL -- cmd1 cmd2
+                // echo prints: machine run --net --image test-image --env KEY=VAL -- cmd1 cmd2
                 assert!(
                     output.contains("machine"),
                     "should contain 'machine': {output}"
                 );
                 assert!(output.contains("run"), "should contain 'run': {output}");
+                assert!(output.contains("--net"), "should contain '--net': {output}");
                 assert!(
                     output.contains("--image"),
                     "should contain '--image': {output}"

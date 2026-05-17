@@ -24,7 +24,7 @@ of bugs remain structurally invisible:
 This plan is split into two phases:
 
 - **Phase A (Methodology Extraction)** -- zero new dependencies. Applies the
-  *ideas* from mutation testing, simulation, adversarial scheduling,
+  _ideas_ from mutation testing, simulation, adversarial scheduling,
   property-based testing, and exhaustive verification using patterns already
   available in the codebase.
 - **Phase B (Tooling Adoption)** -- introduces external crates and cargo
@@ -45,6 +45,7 @@ demonstrates value and identifies the highest-leverage gaps.
 code, verify that a test exists which fails if that line is deleted or inverted.
 
 **Process:**
+
 1. For each module in the target list, enumerate every `if` guard, `?` return,
    and sanitization step (setuid strip, path rewrite, size check).
 2. For each, confirm a test in `security_regression.rs` or
@@ -63,14 +64,14 @@ code, verify that a test exists which fails if that line is deleted or inverted.
 
 **Target modules:**
 
-| Module | Key guards to audit |
-|--------|--------------------|
-| `image/layer.rs` | `validate_tar_entry_path`, `has_parent_dir_component`, setuid mask, device node reject, FIFO handling, root entry skip |
-| `daemon/server.rs` | `is_authorized`, `MAX_REQUEST_SIZE` check, socket mode |
-| `execution_manifest.rs` | `seal()` digest computation, env value hashing |
-| `container/process.rs` | `close_extra_fds`, `execve` (not `execvp`) |
-| `image/registry.rs` | `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, Content-Length check |
-| `adapters/ghcr.rs` | Manifest/layer size mirrors |
+| Module                  | Key guards to audit                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `image/layer.rs`        | `validate_tar_entry_path`, `has_parent_dir_component`, setuid mask, device node reject, FIFO handling, root entry skip |
+| `daemon/server.rs`      | `is_authorized`, `MAX_REQUEST_SIZE` check, socket mode                                                                 |
+| `execution_manifest.rs` | `seal()` digest computation, env value hashing                                                                         |
+| `container/process.rs`  | `close_extra_fds`, `execve` (not `execvp`)                                                                             |
+| `image/registry.rs`     | `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, Content-Length check                                                            |
+| `adapters/ghcr.rs`      | Manifest/layer size mirrors                                                                                            |
 
 **Deliverable:** A markdown checklist committed to `docs/MUTATION_AUDIT.mbx.md` with
 pass/fail per guard. Failing entries become test backlog items.
@@ -142,7 +143,7 @@ setuid stripping, `has_parent_dir_component`, and entry type classification.
 ## A3. Stream Trait Boundary (from turmoil)
 
 **Methodology:** Make I/O a trait parameter so tests can swap real sockets for
-deterministic fakes. This is the *prerequisite* for turmoil (Phase B) but
+deterministic fakes. This is the _prerequisite_ for turmoil (Phase B) but
 delivers value independently by enabling mock-stream tests.
 
 **Current state:** `daemon/server.rs` hardcodes `tokio::net::UnixStream`.
@@ -180,12 +181,12 @@ struct MockTransport { responses: Vec<(String, Result<Vec<u8>>)> }
 
 **Test scenarios enabled (no turmoil needed):**
 
-| Scenario | MockStream/MockTransport behaviour |
-|----------|------------------------------------|
-| Half-frame request | `read_buf` contains truncated JSON |
-| Oversized request | `read_buf` contains 2 MB of data |
-| Registry 503 | `MockTransport::get` returns `Err` |
-| Slow registry | `MockTransport::get` sleeps then returns |
+| Scenario           | MockStream/MockTransport behaviour                           |
+| ------------------ | ------------------------------------------------------------ |
+| Half-frame request | `read_buf` contains truncated JSON                           |
+| Oversized request  | `read_buf` contains 2 MB of data                             |
+| Registry 503       | `MockTransport::get` returns `Err`                           |
+| Slow registry      | `MockTransport::get` sleeps then returns                     |
 | Partial layer body | `MockTransport::get` returns fewer bytes than Content-Length |
 
 **Deliverable:** Trait definitions in `server.rs` and `ghcr.rs`, plus 5 mock
@@ -237,12 +238,12 @@ fn create_destroy_race_is_consistent() {
 
 **Target interleavings:**
 
-| Race | Threads | Invariant |
-|------|---------|-----------|
-| Create vs destroy (same ID) | 2 | State is valid, no panic |
-| Event subscribe vs broadcast | 2 | No dropped events after subscribe completes |
-| Pause vs container exit | 2 | No cgroup write to exited container |
-| GC sweep vs active pull | 2 | GC skips in-progress images |
+| Race                         | Threads | Invariant                                   |
+| ---------------------------- | ------- | ------------------------------------------- |
+| Create vs destroy (same ID)  | 2       | State is valid, no panic                    |
+| Event subscribe vs broadcast | 2       | No dropped events after subscribe completes |
+| Pause vs container exit      | 2       | No cgroup write to exited container         |
+| GC sweep vs active pull      | 2       | GC skips in-progress images                 |
 
 **Exit criteria:** Four barrier-based race tests, each run 100 times in a loop
 to increase scheduling diversity.
@@ -256,14 +257,14 @@ a roundtrip property test using proptest (already in tree).
 
 **Audit:** Check which protocol and domain types lack roundtrip coverage:
 
-| Type | Has roundtrip test? | Action |
-|------|--------------------:|--------|
-| `DaemonRequest` | check | add if missing |
-| `DaemonResponse` | check | add if missing |
-| `ImageReference` | check | add if missing |
-| `ContainerConfig` | check | add if missing |
-| `ExecutionManifest` | check | add if missing |
-| `BackendDescriptor` | check | add if missing |
+| Type                | Has roundtrip test? | Action         |
+| ------------------- | ------------------: | -------------- |
+| `DaemonRequest`     |               check | add if missing |
+| `DaemonResponse`    |               check | add if missing |
+| `ImageReference`    |               check | add if missing |
+| `ContainerConfig`   |               check | add if missing |
+| `ExecutionManifest` |               check | add if missing |
+| `BackendDescriptor` |               check | add if missing |
 
 **Pattern (using existing proptest):**
 
@@ -305,12 +306,14 @@ return value -- not just the ones a human thought to check. Catches subtle
 survivors like `>=` vs `>` in size limit checks.
 
 **Setup:**
+
 ```
 cargo install --locked cargo-mutants
 cargo mutants -f crates/minibox-core/src/image/layer.rs
 ```
 
 **Integration:**
+
 - `just mutants-security` recipe for the six target modules.
 - Weekly nightly.yml job, informational (non-blocking).
 
@@ -332,14 +335,14 @@ strategies are verbose.
 
 **New property tests:**
 
-| Property | Assertion |
-|----------|-----------|
-| Path traversal completeness | `validate_tar_entry_path` rejects iff path escapes root |
-| Image ref roundtrip | `parse(ref.to_string()) == ref` |
-| Protocol codec roundtrip | `deserialize(serialize(msg)) == msg` |
-| Cgroup limit arithmetic | No overflow, no zero-division |
-| IP allocator no-double-assign | `allocate()` never returns an in-use IP |
-| Overlay mount-option string | Output is valid mount(2) option syntax |
+| Property                      | Assertion                                               |
+| ----------------------------- | ------------------------------------------------------- |
+| Path traversal completeness   | `validate_tar_entry_path` rejects iff path escapes root |
+| Image ref roundtrip           | `parse(ref.to_string()) == ref`                         |
+| Protocol codec roundtrip      | `deserialize(serialize(msg)) == msg`                    |
+| Cgroup limit arithmetic       | No overflow, no zero-division                           |
+| IP allocator no-double-assign | `allocate()` never returns an in-use IP                 |
+| Overlay mount-option string   | Output is valid mount(2) option syntax                  |
 
 **New dependency:** `quickcheck` (dev-only) in minibox-core and minibox.
 
@@ -461,38 +464,38 @@ atomic CAS, or a custom ring buffer is added.
 
 ## Dependency Overview
 
-| Item | Phase | New deps? | Crates affected |
-|------|-------|-----------|-----------------|
-| Mutation audit checklist | A1 | No | -- |
-| Exhaustive small-domain tests | A2 | No | minibox-core, minibox |
-| Stream trait boundary | A3 | No | minibox, miniboxd |
-| Barrier-based race tests | A4 | No | minibox |
-| Roundtrip property rule | A5 | No | minibox-core, minibox |
-| cargo-mutants | B1 | No (tool) | -- |
-| quickcheck | B2 | Yes (dev) | minibox-core, minibox |
-| Kani | B3 | Yes (dev, cfg-gated) | minibox-core |
-| turmoil | B4 | Yes (dev) | minibox, miniboxd |
-| shuttle | B5 | Yes (dev) | minibox |
-| loom | B6 | Yes (dev) | deferred |
+| Item                          | Phase | New deps?            | Crates affected       |
+| ----------------------------- | ----- | -------------------- | --------------------- |
+| Mutation audit checklist      | A1    | No                   | --                    |
+| Exhaustive small-domain tests | A2    | No                   | minibox-core, minibox |
+| Stream trait boundary         | A3    | No                   | minibox, miniboxd     |
+| Barrier-based race tests      | A4    | No                   | minibox               |
+| Roundtrip property rule       | A5    | No                   | minibox-core, minibox |
+| cargo-mutants                 | B1    | No (tool)            | --                    |
+| quickcheck                    | B2    | Yes (dev)            | minibox-core, minibox |
+| Kani                          | B3    | Yes (dev, cfg-gated) | minibox-core          |
+| turmoil                       | B4    | Yes (dev)            | minibox, miniboxd     |
+| shuttle                       | B5    | Yes (dev)            | minibox               |
+| loom                          | B6    | Yes (dev)            | deferred              |
 
 ## CI Integration
 
-| Gate | Workflow | Trigger | Blocking? |
-|------|----------|---------|-----------|
-| Exhaustive + barrier + roundtrip (A2/A4/A5) | merge.yml | push to main/next | yes |
-| cargo-mutants security scan (B1) | nightly.yml | daily cron | no |
-| quickcheck properties (B2) | merge.yml | push to main/next | yes |
-| Kani proofs (B3) | nightly.yml | daily cron | no |
-| turmoil scenarios (B4) | merge.yml | push to main/next | yes |
-| shuttle scenarios (B5) | merge.yml | push to main/next | yes |
+| Gate                                        | Workflow    | Trigger           | Blocking? |
+| ------------------------------------------- | ----------- | ----------------- | --------- |
+| Exhaustive + barrier + roundtrip (A2/A4/A5) | merge.yml   | push to main/next | yes       |
+| cargo-mutants security scan (B1)            | nightly.yml | daily cron        | no        |
+| quickcheck properties (B2)                  | merge.yml   | push to main/next | yes       |
+| Kani proofs (B3)                            | nightly.yml | daily cron        | no        |
+| turmoil scenarios (B4)                      | merge.yml   | push to main/next | yes       |
+| shuttle scenarios (B5)                      | merge.yml   | push to main/next | yes       |
 
 ## Success Metrics
 
-| Metric | Baseline | After Phase A | After Phase B |
-|--------|----------|---------------|---------------|
-| Mutation audit coverage (security modules) | unknown | 100% manual | 100% automated |
-| Exhaustive small-domain tests | 1 (is_authorized) | 4 | 4 |
-| Stream/transport trait coverage | 0 mock-stream tests | 5 | 5 + turmoil |
-| Barrier-based race tests | 0 | 4 | 4 + shuttle |
-| Roundtrip property tests | partial | 6 types | 6 + quickcheck |
-| Formal proofs | 0 | 0 | 5 (kani) |
+| Metric                                     | Baseline            | After Phase A | After Phase B  |
+| ------------------------------------------ | ------------------- | ------------- | -------------- |
+| Mutation audit coverage (security modules) | unknown             | 100% manual   | 100% automated |
+| Exhaustive small-domain tests              | 1 (is_authorized)   | 4             | 4              |
+| Stream/transport trait coverage            | 0 mock-stream tests | 5             | 5 + turmoil    |
+| Barrier-based race tests                   | 0                   | 4             | 4 + shuttle    |
+| Roundtrip property tests                   | partial             | 6 types       | 6 + quickcheck |
+| Formal proofs                              | 0                   | 0             | 5 (kani)       |

@@ -71,6 +71,19 @@ impl DockerHubRegistry {
         Ok(Self { client, store })
     }
 
+    /// Create a registry adapter that selects a specific platform when resolving
+    /// multi-arch manifest lists.
+    ///
+    /// Use this when the runtime always executes images for a fixed platform
+    /// regardless of the host OS (e.g. krun runs Linux VMs on macOS).
+    pub fn with_platform(
+        store: Arc<ImageStore>,
+        platform: crate::image::manifest::TargetPlatform,
+    ) -> Result<Self> {
+        let client = RegistryClient::with_platform(platform)?;
+        Ok(Self { client, store })
+    }
+
     /// Return a reference to the underlying image store.
     ///
     /// Useful for callers that need direct store access (e.g. checking disk
