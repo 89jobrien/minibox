@@ -3,8 +3,8 @@
 //! Exits 0 on success, 1 on any failure.
 //!
 //! Optional env vars:
-//!   `CONFORMANCE_ADAPTER`  — run only the named adapter (e.g. `registry`)
-//!   `CONFORMANCE_VERBOSE`  — set to `1` to print every test result, not just failures
+//!   `CONFORMANCE_ADAPTER` — run only the named adapter (e.g. `registry`)
+//!   `CONFORMANCE_VERBOSE` — set to `1` to print every test result, not just failures
 
 use minibox_testsuite::adapters;
 use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
