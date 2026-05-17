@@ -119,7 +119,7 @@ jobs:
         # minibox-crux-plugin integration tests spawn the plugin binary which is
         # not included in the nextest archive; run those tests in the full build
         # jobs instead.
-        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap . --exclude minibox-crux-plugin
+        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap . -E 'not package(minibox-crux-plugin)'
 
   test-all-features:
     name: test with all features
