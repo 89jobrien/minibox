@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-05-16)
+# Handoff — minibox (2026-05-17)
 
-**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** next | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
@@ -31,12 +31,11 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (12 files) |
+| a-series-testing | P1 | open | Implement A-series testing surfaces A1-A5 (#368-#372) |
+| handler-split | P1 | open | Split handler.rs into feature-cluster modules (#356) |
+| fixture-consolidation | P2 | blocked | Consolidate duplicate test_fixtures.rs (#355) |
 
 ## Log
 
-- 20260515.223104: done=23 running=0 pending=47 blocked=0
-- 20260515.220741: done=23 running=0 pending=47 blocked=0
-- 20260515.220454: done=23 running=0 pending=47 blocked=0
-- 20260515.220200: done=23 running=0 pending=47 blocked=0
-- 20260515.215623: done=23 running=0 pending=47 blocked=0
+- 20260515.171405: done=23 running=0 pending=47 blocked=0
+- 20260515.131514: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues #364-#372, wrote refactoring and A-series testing plans
