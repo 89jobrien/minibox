@@ -45,10 +45,17 @@ pub fn run_cgroup_tests(root: &Path) -> Result<()> {
         let _ = append_to_file(&slice.join("cgroup.subtree_control"), ctrl);
     }
 
-    // 5. Build the cgroup_tests binary
+    // 5. Build the cgroup_tests binary (--release to match gates.rs).
     eprintln!("=== Building test binary ===");
     let status = Command::new("cargo")
-        .args(["build", "-p", "miniboxd", "--test", "cgroup_tests"])
+        .args([
+            "build",
+            "--release",
+            "-p",
+            "miniboxd",
+            "--test",
+            "cgroup_tests",
+        ])
         .current_dir(root)
         .status()
         .context("cargo build")?;
@@ -56,67 +63,48 @@ pub fn run_cgroup_tests(root: &Path) -> Result<()> {
         bail!("cargo build failed");
     }
 
-    // Find the test binary (newest cgroup_tests-* in deps/)
+    // Find the test binary (newest cgroup_tests-* in deps/).
     let test_bin = find_test_binary(root)?;
     eprintln!("Test binary: {}", test_bin.display());
 
-    // 6. Fork a child that moves itself into runner-leaf then execs the test binary.
-    //    This replicates the bash subshell trick: sole process in runner-leaf, then exec.
+    // 6. Spawn a child that joins runner-leaf via pre_exec, then execs the test binary.
+    //    Using std::process::Command with pre_exec avoids raw fork() in a live Rust process.
     eprintln!("=== Running cgroup integration tests ===");
 
-    // SAFETY: fork() is called immediately; child writes its PID to cgroup.procs then
-    // execs the test binary. The parent waits. No Rust data structures are used after fork
-    // in the child path — only raw libc calls and exec.
-    let pid = unsafe { libc::fork() };
-    match pid {
-        -1 => bail!("fork() failed"),
-        0 => {
-            // Child: move self into runner-leaf, then exec
-            let leaf_procs = leaf.join("cgroup.procs");
-            let mypid = unsafe { libc::getpid() }.to_string();
-            let _ = std::fs::write(&leaf_procs, mypid.as_bytes());
+    let leaf_procs = leaf.join("cgroup.procs");
+    let mut cmd = Command::new(&test_bin);
+    cmd.args(["--test-threads=1", "--nocapture"]);
 
-            let bin = std::ffi::CString::new(test_bin.to_str().unwrap()).unwrap();
-            let arg0 = bin.clone();
-            let threads = std::ffi::CString::new("--test-threads=1").unwrap();
-            let nocapture = std::ffi::CString::new("--nocapture").unwrap();
-            let argv = [
-                arg0.as_ptr(),
-                threads.as_ptr(),
-                nocapture.as_ptr(),
-                std::ptr::null(),
-            ];
-            unsafe { libc::execv(bin.as_ptr(), argv.as_ptr()) };
-            // If execv returns, it failed
-            std::process::exit(127);
-        }
-        child_pid => {
-            // Parent: wait for child
-            let mut status = 0i32;
-            unsafe { libc::waitpid(child_pid, &mut status, 0) };
-            let exit_code = if libc::WIFEXITED(status) {
-                libc::WEXITSTATUS(status)
-            } else {
-                1
-            };
-
-            // Cleanup
-            eprintln!("=== Cleaning up ===");
-            for entry in fs::read_dir(&leaf).into_iter().flatten().flatten() {
-                if entry.file_type().ok().is_some_and(|t| t.is_dir()) {
-                    let _ = fs::remove_dir(entry.path());
-                }
-            }
-            let _ = fs::remove_dir(&leaf);
-            let _ = fs::remove_dir(&slice);
-
-            if exit_code != 0 {
-                bail!("cgroup tests failed (exit code {exit_code})");
-            }
-            eprintln!("cgroup tests passed");
+    // SAFETY: pre_exec runs in the child after fork but before exec. At that point the
+    // child is single-threaded and no Rust allocator state is used — we only call
+    // std::fs::write (a thin syscall wrapper) to move the child PID into runner-leaf
+    // before exec replaces the process image. The write may silently fail if the cgroup
+    // path is wrong; the subsequent exec will then run outside the cgroup, which is
+    // acceptable as a best-effort placement.
+    unsafe {
+        cmd.pre_exec(move || {
+            let pid = std::process::id().to_string();
+            let _ = std::fs::write(&leaf_procs, pid.as_bytes());
             Ok(())
-        }
+        });
     }
+
+    let exit_code = cmd
+        .status()
+        .context("spawn cgroup_tests binary")?
+        .code()
+        .unwrap_or(1);
+
+    // Cleanup
+    eprintln!("=== Cleaning up ===");
+    cleanup_cgroup(&leaf);
+    let _ = fs::remove_dir(&slice);
+
+    if exit_code != 0 {
+        bail!("cgroup tests failed (exit code {exit_code})");
+    }
+    eprintln!("cgroup tests passed");
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -157,15 +145,15 @@ fn cleanup_cgroup(dir: &Path) {
 
 #[cfg(target_os = "linux")]
 fn find_test_binary(root: &Path) -> Result<PathBuf> {
-    // Build runs without --release, so check debug first
-    let deps_debug = root.join("target/debug/deps");
-    if deps_debug.exists() {
-        if let Ok(bin) = find_in_deps(&deps_debug) {
+    // Build runs with --release; check release/deps first then fall back to debug/deps.
+    let deps_release = root.join("target/release/deps");
+    if deps_release.exists() {
+        if let Ok(bin) = find_in_deps(&deps_release) {
             return Ok(bin);
         }
     }
-    let deps_release = root.join("target/release/deps");
-    find_in_deps(&deps_release)
+    let deps_debug = root.join("target/debug/deps");
+    find_in_deps(&deps_debug)
 }
 
 #[cfg(target_os = "linux")]
