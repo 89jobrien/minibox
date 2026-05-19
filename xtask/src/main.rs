@@ -27,6 +27,7 @@ mod demo;
 mod detect_changes;
 mod docs_lint;
 mod feature_matrix_date;
+mod fuzz;
 mod gates;
 mod preflight;
 mod promote;
@@ -166,6 +167,7 @@ fn main() -> Result<()> {
             demo::demo(&sh, root, &adapter)
         }
         Some("bench") => bench::bench(&sh, root),
+        Some("fuzz") => fuzz::fuzz(&sh, root),
         Some("collect-metrics") => {
             let save = env::args().any(|a| a == "--save");
             collect_metrics::collect_metrics(root, save)
@@ -290,6 +292,9 @@ fn main() -> Result<()> {
                 "  demo [--adapter <name>]  pull alpine:latest + run echo via mbx (default adapter: smolvm)"
             );
             eprintln!("  bench            run criterion benchmarks, save to bench/results/");
+            eprintln!(
+                "  fuzz [--target <name>] [--time <secs>]  run libFuzzer protocol targets (nightly)"
+            );
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"

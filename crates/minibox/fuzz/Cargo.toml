@@ -1,0 +1,30 @@
+[package]
+name = "minibox-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.minibox-core]
+path = "../../minibox-core"
+
+[[bin]]
+name = "fuzz_decode_request"
+path = "fuzz_targets/fuzz_decode_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_decode_response"
+path = "fuzz_targets/fuzz_decode_response.rs"
+test = false
+doc = false
+bench = false
