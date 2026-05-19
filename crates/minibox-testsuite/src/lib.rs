@@ -30,6 +30,7 @@
 
 pub mod adapters;
 pub mod harness;
+pub mod spoke;
 
 /// Convenience re-export of the full harness prelude.
 pub mod prelude {

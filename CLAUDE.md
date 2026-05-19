@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+@.claude.local.md
+
 Guidance for Claude Code when working in this repository.
 
 ## Project Snapshot
@@ -30,6 +32,18 @@ If changing container code, protocol types, adapters, or tests, read the relevan
 - Prefer editing existing files over creating new ones.
 - Remove unused code completely; do not comment it out.
 - Never commit secrets, credentials, or API keys.
+- Fuzz seeds, corpus, and artifacts are gitignored via `**/fuzz/seeds/`,
+  `**/fuzz/corpus/`, `**/fuzz/artifacts/`. Do not commit generated fuzz data.
+
+## Test Daemon Gotchas
+
+- Never use `Stdio::piped()` for daemon stdout/stderr in tests unless you drain
+  the pipes in a background thread. Debug logging during slow operations (pull,
+  run) can exceed the 64KB OS pipe buffer and deadlock the daemon. Use
+  `Stdio::null()` or reduce log level to `warn`/`info`.
+- `cargo fmt --all --check` (run by pre-commit) formats ALL workspace files
+  including untracked ones. Run `cargo fmt --all` before committing if untracked
+  `.rs` files exist.
 
 ## Core Commands
 

@@ -116,10 +116,17 @@ jobs:
         with:
           tool: cargo-nextest
       - name: run tests from archive
-        # minibox-crux-plugin integration tests spawn the plugin binary which is
-        # not included in the nextest archive; run those tests in the full build
-        # jobs instead.
-        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap . -E 'not package(minibox-crux-plugin)'
+        # Excluded from archive runs:
+        # - minibox-crux-plugin: spawns the plugin binary (not in archive)
+        # - cli_e2e_tests: requires mbx + miniboxd binaries at runtime
+        # - smolvm_e2e_tests: requires smolvm CLI on PATH
+        run: >-
+          cargo nextest run
+          --archive-file nextest-archive.tar.zst
+          --workspace-remap .
+          -E 'not package(minibox-crux-plugin)
+          and not binary_id(miniboxd::cli_e2e_tests)
+          and not binary_id(miniboxd::smolvm_e2e_tests)'
 
   test-all-features:
     name: test with all features

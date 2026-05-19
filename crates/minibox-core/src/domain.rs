@@ -1585,6 +1585,22 @@ pub enum BackendCapability {
     /// Backend can save/restore VM state checkpoints via
     /// [`VmCheckpoint::save_snapshot`] / [`VmCheckpoint::restore_snapshot`].
     Checkpoint,
+    /// Backend provides [`RootfsSetup`] + [`ChildInit`] (filesystem operations).
+    Filesystem,
+    /// Backend provides [`ExecRuntime`] (exec into running containers).
+    Exec,
+    /// Backend provides [`NetworkProvider`] (bridge/host/tailnet networking).
+    Network,
+    /// Backend provides [`TtyProvider`] (pseudo-terminal allocation).
+    Tty,
+    /// Backend provides [`PtyAllocator`] (low-level PTY pair allocation).
+    Pty,
+    /// Backend provides [`MetricsRecorder`] (counter/histogram/gauge).
+    Metrics,
+    /// Backend provides [`RegistryRouter`] (multi-registry routing).
+    RegistryRouter,
+    /// Backend provides [`ImageLoader`] (local OCI tarball loading).
+    ImageLoader,
 }
 
 /// The full set of [`BackendCapability`] flags declared by one backend.

@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail};
 #[cfg(target_os = "linux")]
 use std::{
     fs,
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::Command,
 };

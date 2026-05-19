@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-17
+updated: 2026-05-19
 items:
 - id: fixture-consolidation
   doob_uuid: null

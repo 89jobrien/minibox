@@ -1,4 +1,10 @@
+#![allow(dead_code, unused_imports)]
 //! Shared test helpers for miniboxd integration and e2e tests.
+//!
+//! Each test file compiles as its own binary, so not all helpers are used
+//! by every test. Dead-code warnings are suppressed at module level.
+
+pub mod smolvm;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
