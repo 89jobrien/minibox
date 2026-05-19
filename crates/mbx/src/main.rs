@@ -33,7 +33,8 @@ use std::path::Path;
     name = "mbx",
     about = "A container runtime in Rust",
     version,
-    propagate_version = true
+    propagate_version = true,
+    term_width = 80
 )]
 struct Cli {
     #[command(subcommand)]
