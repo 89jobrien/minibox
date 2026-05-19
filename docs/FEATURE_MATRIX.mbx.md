@@ -107,7 +107,7 @@ Last updated: 2026-05-19
   exists in `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
   exported, but is not registered in `AdapterSuite` or wired into the daemon.
   Not included in the matrix above.
-  <!--joe:note::docker_desktop adapter logic lives in minibox-plugins/dockerbox-->
+  <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
 - **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
   server, HCS/WSL2 wiring) has not started.
 - **Execution integrity** is implemented at the daemon handler layer (`handler.rs`), not inside
