@@ -11,9 +11,11 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+tempfile = "3"
 
 [dependencies.minibox-core]
 path = "../../minibox-core"
+features = ["fuzzing"]
 
 [[bin]]
 name = "fuzz_decode_request"
@@ -25,6 +27,20 @@ bench = false
 [[bin]]
 name = "fuzz_decode_response"
 path = "fuzz_targets/fuzz_decode_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_extract_layer"
+path = "fuzz_targets/fuzz_extract_layer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_tar_path"
+path = "fuzz_targets/fuzz_validate_tar_path.rs"
 test = false
 doc = false
 bench = false

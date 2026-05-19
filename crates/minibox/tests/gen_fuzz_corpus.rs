@@ -7,15 +7,17 @@
 //! These seed inputs let the fuzzer start from valid wire frames and mutate
 //! outward, reaching deeper parser paths faster than starting from random bytes.
 
+use flate2::{Compression, write::GzEncoder};
 use minibox::protocol::{
     DaemonRequest, DaemonResponse, OutputStreamKind, encode_request, encode_response,
 };
+use std::io::Write as _;
 use std::path::Path;
 
 fn corpus_dir(target: &str) -> std::path::PathBuf {
     // Walk up from the test binary's cwd to find the workspace root,
     // then construct the corpus path.
-    let mut dir = std::env::current_dir().expect("cwd");
+    let dir = std::env::current_dir().expect("cwd");
     // In nextest the cwd is the workspace root; in plain `cargo test` it may
     // be the crate root. Handle both.
     if dir.join("Cargo.lock").exists() {
@@ -281,4 +283,145 @@ fn generate_response_corpus() {
     }
 
     println!("wrote 18 response seeds to {}", dir.display());
+}
+
+// ---------------------------------------------------------------------------
+// Layer extraction seeds
+// ---------------------------------------------------------------------------
+
+/// Build a minimal valid gzip-compressed tar with a single regular file.
+fn tar_gz_regular(name: &str, content: &[u8]) -> Vec<u8> {
+    let gz = GzEncoder::new(Vec::new(), Compression::default());
+    let mut ar = tar::Builder::new(gz);
+    let mut h = tar::Header::new_gnu();
+    h.set_path(name).expect("set_path");
+    h.set_size(content.len() as u64);
+    h.set_entry_type(tar::EntryType::Regular);
+    h.set_mode(0o644);
+    h.set_cksum();
+    ar.append(&h, content).expect("append");
+    ar.into_inner().expect("inner").finish().expect("finish gz")
+}
+
+/// Build a gzip-compressed tar with a symlink entry.
+fn tar_gz_symlink(name: &str, target: &str) -> Vec<u8> {
+    let gz = GzEncoder::new(Vec::new(), Compression::default());
+    let mut ar = tar::Builder::new(gz);
+    let mut h = tar::Header::new_gnu();
+    h.set_path(name).expect("set_path");
+    h.set_size(0);
+    h.set_entry_type(tar::EntryType::Symlink);
+    h.set_link_name(target).expect("set_link_name");
+    h.set_mode(0o777);
+    h.set_cksum();
+    ar.append(&h, &[][..]).expect("append");
+    ar.into_inner().expect("inner").finish().expect("finish gz")
+}
+
+/// Build a raw tar.gz with a manually crafted header so we can embed filenames
+/// that the `tar` crate's builder would reject (e.g. `../`).
+fn raw_tar_gz(filename: &str) -> Vec<u8> {
+    let mut header = [0u8; 512];
+    let name = filename.as_bytes();
+    let len = name.len().min(100);
+    header[..len].copy_from_slice(&name[..len]);
+    header[100..108].copy_from_slice(b"0000644\0");
+    header[108..116].copy_from_slice(b"0000000\0");
+    header[116..124].copy_from_slice(b"0000000\0");
+    header[124..136].copy_from_slice(b"00000000000\0");
+    header[136..148].copy_from_slice(b"00000000000\0");
+    header[156] = b'0';
+    header[257..263].copy_from_slice(b"ustar ");
+    header[263..265].copy_from_slice(b" \0");
+    header[148..156].fill(b' ');
+    let sum: u32 = header.iter().map(|&b| b as u32).sum();
+    let cksum = format!("{sum:06o}\0 ");
+    header[148..156].copy_from_slice(cksum.as_bytes());
+
+    let mut tar_bytes = Vec::new();
+    tar_bytes.extend_from_slice(&header);
+    tar_bytes.extend_from_slice(&[0u8; 1024]); // two EOA blocks
+
+    let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+    gz.write_all(&tar_bytes).expect("write gz");
+    gz.finish().expect("finish gz")
+}
+
+/// Write a seed for fuzz_validate_tar_path: raw path bytes (not tar).
+fn path_seed(s: &str) -> Vec<u8> {
+    s.as_bytes().to_vec()
+}
+
+#[test]
+fn generate_layer_corpus() {
+    // --- fuzz_extract_layer seeds ---
+    let dir = corpus_dir("fuzz_extract_layer");
+
+    let layer_seeds: Vec<(&str, Vec<u8>)> = vec![
+        // valid inputs — teach fuzzer the gzip+tar format
+        ("valid_regular", tar_gz_regular("hello.txt", b"hello world")),
+        (
+            "valid_nested",
+            tar_gz_regular("usr/bin/tool", b"binary content"),
+        ),
+        ("valid_empty_file", tar_gz_regular("empty", b"")),
+        // relative symlink — accepted
+        ("valid_symlink_relative", tar_gz_symlink("link", "target")),
+        // absolute symlink — rewrites and accepts
+        (
+            "valid_symlink_absolute",
+            tar_gz_symlink("bin/sh", "/bin/bash"),
+        ),
+        // adversarial inputs — must be rejected cleanly (no panic)
+        ("dotdot_escape", raw_tar_gz("../escape.txt")),
+        ("dotdot_deep", raw_tar_gz("a/b/../../etc/passwd")),
+        ("absolute_path", raw_tar_gz("/etc/passwd")),
+        // empty / garbage bytes
+        ("empty_input", vec![]),
+        ("garbage", b"this is not gzip data at all".to_vec()),
+        ("partial_gzip_header", vec![0x1f, 0x8b]),
+    ];
+
+    for (name, bytes) in &layer_seeds {
+        write_seed(&dir, name, bytes.clone());
+    }
+
+    println!(
+        "wrote {} fuzz_extract_layer seeds to {}",
+        layer_seeds.len(),
+        dir.display()
+    );
+
+    // --- fuzz_validate_tar_path seeds ---
+    let path_dir = corpus_dir("fuzz_validate_tar_path");
+
+    let path_seeds: Vec<(&str, Vec<u8>)> = vec![
+        // accepted
+        ("simple", path_seed("hello.txt")),
+        ("nested", path_seed("usr/bin/env")),
+        ("dot_component", path_seed("./foo")),
+        ("deep", path_seed("a/b/c/d/e/f")),
+        // rejected — .. traversal
+        ("dotdot_prefix", path_seed("../escape")),
+        ("dotdot_middle", path_seed("foo/../../etc/passwd")),
+        ("bare_dotdot", path_seed("..")),
+        // rejected — absolute
+        ("absolute", path_seed("/etc/passwd")),
+        ("absolute_nested", path_seed("/usr/bin/env")),
+        // edge cases
+        ("empty", path_seed("")),
+        ("null_byte", b"foo\x00bar".to_vec()),
+        ("dot", path_seed(".")),
+        ("dotdot_as_filename", path_seed("foo..bar")),
+    ];
+
+    for (name, bytes) in &path_seeds {
+        write_seed(&path_dir, name, bytes.clone());
+    }
+
+    println!(
+        "wrote {} fuzz_validate_tar_path seeds to {}",
+        path_seeds.len(),
+        path_dir.display()
+    );
 }

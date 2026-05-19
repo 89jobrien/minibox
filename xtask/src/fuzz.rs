@@ -13,7 +13,12 @@ use std::path::Path;
 use xshell::{Shell, cmd};
 
 const FUZZ_MANIFEST: &str = "crates/minibox/fuzz/Cargo.toml";
-const DEFAULT_TARGETS: &[&str] = &["fuzz_decode_request", "fuzz_decode_response"];
+const DEFAULT_TARGETS: &[&str] = &[
+    "fuzz_decode_request",
+    "fuzz_decode_response",
+    "fuzz_extract_layer",
+    "fuzz_validate_tar_path",
+];
 const DEFAULT_TIME_SECS: u64 = 60;
 
 pub fn fuzz(sh: &Shell, root: &Path) -> Result<()> {
