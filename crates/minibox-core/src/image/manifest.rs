@@ -190,7 +190,8 @@ pub struct TargetPlatform {
 impl Default for TargetPlatform {
     /// Auto-detect the host platform, mapping Rust arch names to OCI conventions.
     fn default() -> Self {
-        let os = std::env::consts::OS.to_string();
+        // OCI containers are always Linux — use "linux" regardless of host OS.
+        let os = "linux".to_string();
         let architecture = match std::env::consts::ARCH {
             "aarch64" => "arm64".to_string(),
             "x86_64" => "amd64".to_string(),
@@ -505,7 +506,7 @@ mod tests {
             !tp.architecture.is_empty(),
             "architecture should be non-empty"
         );
-        assert_eq!(tp.os, std::env::consts::OS);
+        assert_eq!(tp.os, "linux");
     }
 
     #[test]

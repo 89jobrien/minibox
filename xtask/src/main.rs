@@ -27,6 +27,7 @@ mod demo;
 mod detect_changes;
 mod docs_lint;
 mod feature_matrix_date;
+mod fuzz;
 mod gates;
 mod preflight;
 mod promote;
@@ -112,6 +113,13 @@ fn main() -> Result<()> {
             gates::check_repo_cleanliness(&sh);
             Ok(())
         }
+        Some("coverage") => {
+            let args: Vec<String> = env::args().collect();
+            let open = args.iter().any(|a| a == "--open");
+            let lcov_only = args.iter().any(|a| a == "--lcov-only");
+            let html_only = args.iter().any(|a| a == "--html-only");
+            gates::coverage(&sh, open, lcov_only, html_only)
+        }
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("check-adapter-coverage") => gates::check_adapter_coverage(&sh),
         Some("check-no-unwrap") => {
@@ -159,6 +167,7 @@ fn main() -> Result<()> {
             demo::demo(&sh, root, &adapter)
         }
         Some("bench") => bench::bench(&sh, root),
+        Some("fuzz") => fuzz::fuzz(&sh, root),
         Some("collect-metrics") => {
             let save = env::args().any(|a| a == "--save");
             collect_metrics::collect_metrics(root, save)
@@ -267,6 +276,8 @@ fn main() -> Result<()> {
             eprintln!(
                 "  check-repo-clean warn if generated artifacts (target/, traces/, *.profraw) are tracked"
             );
+            eprintln!("  coverage [--open] [--lcov-only] [--html-only]");
+            eprintln!("                   HTML + lcov coverage report (target/coverage/)");
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!(
                 "  check-adapter-coverage  verify each wired adapter has integration test files"
@@ -281,6 +292,9 @@ fn main() -> Result<()> {
                 "  demo [--adapter <name>]  pull alpine:latest + run echo via mbx (default adapter: smolvm)"
             );
             eprintln!("  bench            run criterion benchmarks, save to bench/results/");
+            eprintln!(
+                "  fuzz [--target <name>] [--time <secs>]  run libFuzzer protocol targets (nightly)"
+            );
             eprintln!("  cas-check        verify all overlay refs match their CAS objects");
             eprintln!(
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"

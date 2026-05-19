@@ -421,62 +421,131 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Coverage-check gate: run llvm-cov on minibox, parse handler.rs function coverage,
-/// and exit non-zero when it falls below the threshold.
+/// Full HTML + lcov coverage report for local inspection and CI upload.
 ///
-/// Uses `--json --summary-only` which emits a JSON document to stdout containing
-/// per-file function coverage summaries. We find the entry for `handler.rs` and
-/// read `summary.functions.percent`.
+/// Runs `cargo llvm-cov nextest` on the two main crates and writes:
+/// - `target/coverage/html/` — browseable HTML (open `index.html`)
+/// - `target/coverage/lcov.info` — lcov format for codecov/CI badge upload
+///
+/// Pass `--open` to open the HTML report on macOS after generation.
+/// Pass `--lcov-only` to skip HTML (faster, for CI).
+/// Pass `--html-only` to skip lcov (default for local dev).
+pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Result<()> {
+    let cov_dir = sh.current_dir().join("target/coverage");
+    std::fs::create_dir_all(&cov_dir).context("create target/coverage dir")?;
+
+    if !lcov_only {
+        let html_dir = cov_dir.join("html");
+        cmd!(
+            sh,
+            "cargo llvm-cov nextest -p minibox -p minibox-core --html --output-dir {html_dir}"
+        )
+        .run()
+        .context("cargo llvm-cov nextest --html failed (is cargo-llvm-cov installed?)")?;
+
+        eprintln!(
+            "coverage: HTML report → file://{}/index.html",
+            html_dir.display()
+        );
+
+        if open && cfg!(target_os = "macos") {
+            let index = html_dir.join("index.html");
+            cmd!(sh, "open {index}").run().ok();
+        }
+    }
+
+    if !html_only {
+        let lcov_path = cov_dir.join("lcov.info");
+        cmd!(
+            sh,
+            "cargo llvm-cov nextest -p minibox -p minibox-core --lcov --output-path {lcov_path}"
+        )
+        .run()
+        .context("cargo llvm-cov nextest --lcov failed")?;
+
+        eprintln!("coverage: lcov         → {}", lcov_path.display());
+    }
+
+    Ok(())
+}
+
+/// Coverage-check gate: run llvm-cov on the handler module and fail when
+/// function coverage drops below the threshold.
+///
+/// Uses `--json --summary-only` which emits a JSON document to stdout
+/// containing per-file function coverage summaries. We aggregate all files
+/// under `daemon/handler/` (the module was split from a single `handler.rs`
+/// into `handler/mod.rs` + submodules) and compute a combined function
+/// coverage percentage.
 ///
 /// # Threshold rationale
 ///
 /// LLVM's function-coverage counter treats every await-point state-machine
-/// closure in an `async fn` as a separate function symbol.  A typical
+/// closure in an `async fn` as a separate function symbol. A typical
 /// `async fn` with N `.await` points generates N+1 coverage symbols even
-/// though they map to a single logical function.  For `handler.rs`, which
-/// is almost entirely `async fn`, this inflates the denominator to ~255
-/// symbols while only ~156 are reachable without spawning a real Linux
-/// namespace runtime.  The practical ceiling is ≈65 %.
+/// though they map to a single logical function. For the handler module,
+/// which is almost entirely `async fn`, this inflates the denominator.
+/// The practical ceiling is ~65%.
 ///
-/// We set the threshold at 62 % — comfortably above the measured 61.18 %
-/// baseline — to gate regressions while acknowledging the async-closure
-/// counting artefact.  Line coverage (≈54 %) and the comprehensive test
-/// suite (750 + passing tests) provide the real quality signal.
-///
-/// Threshold is set at 61 % — just below the measured 61.18 % baseline —
-/// to catch regressions while remaining achievable on macOS CI.
+/// Threshold is set at 61% — just below the measured baseline — to catch
+/// regressions while remaining achievable on macOS CI.
 pub fn coverage_check(sh: &Shell) -> Result<()> {
     const THRESHOLD: f64 = 61.0;
 
-    // --json --summary-only emits the coverage JSON to stdout.
     let output = cmd!(
         sh,
         "cargo llvm-cov nextest --package minibox --json --summary-only"
     )
     .output()
-    .context("cargo llvm-cov nextest failed")?;
+    .context("failed to spawn cargo llvm-cov nextest")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("cargo llvm-cov nextest failed:\n{stderr}");
+        anyhow::bail!(
+            "cargo llvm-cov nextest exited with {}: {}",
+            output.status,
+            stderr.trim()
+        );
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let coverage = parse_handler_fn_coverage(&stdout)
-        .context("could not find handler.rs function coverage in llvm-cov output")?;
+    let result = parse_handler_fn_coverage(&stdout).with_context(|| {
+        // Include a snippet of the JSON to aid debugging when the schema changes.
+        let preview: String = stdout.chars().take(500).collect();
+        format!(
+            "could not extract handler module coverage from llvm-cov output \
+             (no files matching `daemon/handler/`). JSON preview:\n{preview}"
+        )
+    })?;
 
-    let status = if coverage >= THRESHOLD {
+    let status = if result.percent >= THRESHOLD {
         "PASS"
     } else {
         "FAIL"
     };
+
+    // Per-file breakdown for visibility.
+    for (name, count, covered) in &result.per_file {
+        let pct = if *count > 0 {
+            *covered as f64 / *count as f64 * 100.0
+        } else {
+            0.0
+        };
+        eprintln!("  {name}: {covered}/{count} fns ({pct:.1}%)");
+    }
     eprintln!(
-        "handler.rs function coverage: {coverage:.2}% (threshold: {THRESHOLD:.2}%) [{status}]"
+        "handler module function coverage: {:.2}% ({}/{} fns) \
+         [threshold: {THRESHOLD:.2}%] [{status}]",
+        result.percent, result.covered, result.count,
     );
 
-    if coverage < THRESHOLD {
+    if result.percent < THRESHOLD {
         anyhow::bail!(
-            "handler.rs function coverage {coverage:.2}% is below the {THRESHOLD:.2}% threshold"
+            "handler module function coverage {:.2}% ({}/{} fns) \
+             is below the {THRESHOLD:.2}% threshold",
+            result.percent,
+            result.covered,
+            result.count,
         );
     }
 
@@ -534,88 +603,165 @@ pub fn check_repo_cleanliness(sh: &Shell) {
     }
 }
 
-/// Parse the function-coverage percentage for `handler.rs` from
+/// Aggregated handler module coverage result.
+struct HandlerCoverage {
+    /// Total function symbols across all handler files.
+    count: u64,
+    /// Covered function symbols across all handler files.
+    covered: u64,
+    /// Combined percentage (covered / count * 100).
+    percent: f64,
+    /// Per-file breakdown: (short filename, count, covered).
+    per_file: Vec<(String, u64, u64)>,
+}
+
+/// Parse function coverage for the `daemon/handler/` module from
 /// `cargo llvm-cov nextest --json --summary-only` stdout.
 ///
 /// The JSON schema (llvm.coverage.json.export v3) looks like:
 /// ```json
 /// {"data":[{"files":[
-///   {"filename":"…/daemon/handler.rs",
-///    "summary":{"functions":{"count":205,"covered":84,"percent":40.97}}}
+///   {"filename":"…/daemon/handler/mod.rs",
+///    "summary":{"functions":{"count":80,"covered":50,"percent":62.5}}},
+///   {"filename":"…/daemon/handler/run.rs",
+///    "summary":{"functions":{"count":30,"covered":20,"percent":66.7}}}
 /// ]}]}
 /// ```
 ///
-/// We walk the JSON text with a simple substring search to avoid a JSON
-/// dependency in xtask: find the first `"filename"` field whose value ends
-/// with `handler.rs`, then find the `"functions"` summary block immediately
-/// after and extract `"percent"`.
-fn parse_handler_fn_coverage(output: &str) -> Option<f64> {
-    // Find the segment of the JSON that belongs to handler.rs.
-    let handler_pos = output.find("handler.rs\"")?;
+/// We aggregate `functions.count` and `functions.covered` across every
+/// file whose path contains `daemon/handler/`, then compute a combined
+/// percentage.
+fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
+    let root: serde_json::Value = serde_json::from_str(output).ok()?;
 
-    // The functions summary appears after the filename, e.g.:
-    //   "summary":{"branches":{...},"functions":{"count":205,"covered":84,"percent":40.97},...}
-    // Scan forward from handler_pos to find `"functions":`.
-    let fns_key = "\"functions\":";
-    let fns_pos = output[handler_pos..].find(fns_key)?;
-    let after_fns = &output[handler_pos + fns_pos + fns_key.len()..];
+    let files = root
+        .get("data")?
+        .as_array()?
+        .first()?
+        .get("files")?
+        .as_array()?;
 
-    // Extract the percent value from the functions object.
-    let pct_key = "\"percent\":";
-    let pct_pos = after_fns.find(pct_key)?;
-    let after_pct = &after_fns[pct_pos + pct_key.len()..];
+    let mut total_count: u64 = 0;
+    let mut total_covered: u64 = 0;
+    let mut per_file: Vec<(String, u64, u64)> = Vec::new();
 
-    // Read digits (and optional decimal point) up to the next comma or `}`.
-    let end = after_pct.find(|c: char| !c.is_ascii_digit() && c != '.')?;
-    after_pct[..end].parse::<f64>().ok()
+    for file in files {
+        let filename = file.get("filename")?.as_str()?;
+        if !filename.contains("daemon/handler/") {
+            continue;
+        }
+
+        let fns = file.get("summary")?.get("functions")?;
+        let count = fns.get("count")?.as_u64()?;
+        let covered = fns.get("covered")?.as_u64()?;
+
+        // Short name: everything after the last `daemon/`.
+        let short = filename
+            .rfind("daemon/")
+            .map(|i| &filename[i..])
+            .unwrap_or(filename);
+
+        total_count += count;
+        total_covered += covered;
+        per_file.push((short.to_string(), count, covered));
+    }
+
+    if total_count == 0 {
+        return None;
+    }
+
+    let percent = total_covered as f64 / total_count as f64 * 100.0;
+
+    Some(HandlerCoverage {
+        count: total_count,
+        covered: total_covered,
+        percent,
+        per_file,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::parse_handler_fn_coverage;
 
-    /// The parser must extract the function percent from a realistic JSON snippet.
+    /// Multi-file handler module: aggregates counts across submodules.
     #[test]
-    fn parse_handler_fn_coverage_extracts_pct_from_json() {
-        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"branches":{"count":0,"covered":0,"notcovered":0,"percent":0.0},"functions":{"count":205,"covered":84,"percent":40.97560975609756},"lines":{"count":3748,"covered":1532,"percent":40.88}}}]}]}"#;
+    fn aggregates_across_handler_submodules() {
+        let sample = r#"{"data":[{"files":[
+            {"filename":"/src/daemon/handler/mod.rs","summary":{"functions":{"count":80,"covered":50,"percent":62.5}}},
+            {"filename":"/src/daemon/handler/run.rs","summary":{"functions":{"count":20,"covered":14,"percent":70.0}}},
+            {"filename":"/src/daemon/handler/exec.rs","summary":{"functions":{"count":100,"covered":60,"percent":60.0}}},
+            {"filename":"/src/daemon/state.rs","summary":{"functions":{"count":50,"covered":50,"percent":100.0}}}
+        ]}]}"#;
         let result =
-            parse_handler_fn_coverage(sample).expect("should find function percent in JSON output");
+            parse_handler_fn_coverage(sample).expect("should aggregate handler/ submodules");
+        // 80+20+100 = 200 total, 50+14+60 = 124 covered → 62.0%
+        assert_eq!(result.count, 200);
+        assert_eq!(result.covered, 124);
         assert!(
-            (result - 40.97).abs() < 0.01,
-            "expected ~40.97, got {result}"
+            (result.percent - 62.0).abs() < 0.01,
+            "expected 62.0%, got {:.2}%",
+            result.percent
+        );
+        assert_eq!(result.per_file.len(), 3, "state.rs should be excluded");
+    }
+
+    /// Single handler/mod.rs file (legacy-compatible path).
+    #[test]
+    fn single_handler_mod_file() {
+        let sample = r#"{"data":[{"files":[
+            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"branches":{"count":0,"covered":0,"notcovered":0,"percent":0.0},"functions":{"count":205,"covered":84,"percent":40.97},"lines":{"count":3748,"covered":1532,"percent":40.88}}}
+        ]}]}"#;
+        let result = parse_handler_fn_coverage(sample).expect("should parse single handler/mod.rs");
+        assert!(
+            (result.percent - 40.97).abs() < 0.02,
+            "expected ~40.97%, got {:.2}%",
+            result.percent
         );
     }
 
-    /// A JSON snippet with handler.rs at exactly 61% should be recognised.
+    /// Exactly 61% should satisfy the threshold.
     #[test]
-    fn parse_handler_fn_coverage_recognises_61_percent() {
-        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}]}]}"#;
-        let result = parse_handler_fn_coverage(sample).expect("should find 61.0 percent");
-        assert!((result - 61.0).abs() < 0.001, "expected 61.0, got {result}");
+    fn recognises_61_percent() {
+        let sample = r#"{"data":[{"files":[
+            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}
+        ]}]}"#;
+        let result = parse_handler_fn_coverage(sample).expect("should find 61.0%");
+        assert!(
+            (result.percent - 61.0).abs() < 0.001,
+            "expected 61.0%, got {:.2}%",
+            result.percent
+        );
     }
 
-    /// JSON without handler.rs returns None.
+    /// JSON without any handler/ files returns None.
     #[test]
-    fn parse_handler_fn_coverage_ignores_unrelated_files() {
-        let sample = r#"{"data":[{"files":[{"filename":"/path/to/mocks.rs","summary":{"functions":{"count":71,"covered":66,"percent":92.96}}}]}]}"#;
+    fn ignores_unrelated_files() {
+        let sample = r#"{"data":[{"files":[
+            {"filename":"/path/to/mocks.rs","summary":{"functions":{"count":71,"covered":66,"percent":92.96}}}
+        ]}]}"#;
         assert!(parse_handler_fn_coverage(sample).is_none());
     }
 
-    /// Returns None on empty input.
+    /// Empty or invalid input returns None.
     #[test]
-    fn parse_handler_fn_coverage_returns_none_on_empty_input() {
+    fn returns_none_on_empty_input() {
         assert!(parse_handler_fn_coverage("").is_none());
+        assert!(parse_handler_fn_coverage("not json").is_none());
     }
 
-    /// The 61% threshold is the documented contract (see coverage_check doc comment).
+    /// The 61% threshold contract from the doc comment.
     #[test]
     fn coverage_threshold_is_61_percent() {
         const THRESHOLD: f64 = 61.0;
-        let sample = r#"{"data":[{"files":[{"filename":"/path/to/daemon/handler.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}]}]}"#;
-        let pct = parse_handler_fn_coverage(sample).expect("should parse 61.0%");
+        let sample = r#"{"data":[{"files":[
+            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}
+        ]}]}"#;
+        let result = parse_handler_fn_coverage(sample).expect("should parse 61.0%");
         assert!(
-            pct >= THRESHOLD,
-            "61.0% must satisfy the 61% threshold; got {pct}"
+            result.percent >= THRESHOLD,
+            "61.0% must satisfy the {THRESHOLD}% threshold; got {:.2}%",
+            result.percent
         );
     }
 }

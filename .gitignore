@@ -25,6 +25,9 @@
 *.csv
 fuzz/*
 !fuzz/fuzz_targets/
+**/fuzz/seeds/
+**/fuzz/corpus/
+**/fuzz/artifacts/
 
 # Claude Code — track everything except local settings and ephemeral state
 .claude/settings.local.json

@@ -94,7 +94,7 @@ use macbox::krun::{
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
 use minibox::adapters::{
-    GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime,
+    DockerHubRegistry, GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRuntime,
 };
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
@@ -756,7 +756,10 @@ fn build_smolvm_handler_dependencies(
             .context("creating GHCR registry adapter for smolvm")?,
     ) as minibox_core::domain::DynImageRegistry;
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(SmolVmRegistry::new()) as minibox_core::domain::DynImageRegistry,
+        Arc::new(
+            DockerHubRegistry::new(Arc::clone(&state.image_store))
+                .context("creating Docker Hub registry adapter for smolvm")?,
+        ) as minibox_core::domain::DynImageRegistry,
         [("ghcr.io", ghcr)],
     ));
     let filesystem = Arc::new(SmolVmFilesystem::new());

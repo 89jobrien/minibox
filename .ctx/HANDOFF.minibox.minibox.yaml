@@ -1,475 +1,75 @@
 project: minibox
 id: minibox
-updated: 2026-05-16
+updated: 2026-05-17
 items:
-- id: uncommitted-work
+- id: fixture-consolidation
   doob_uuid: null
-  name: uncommitted-work
+  name: fixture-consolidation
+  priority: P2
+  status: blocked
+  title: Consolidate duplicate test_fixtures.rs (#355)
+  description: |-
+    minibox/src/adapters/test_fixtures.rs is a copy-paste of
+    minibox-core/src/adapters/test_fixtures.rs. Simple re-export fails
+    because minibox-core's test_fixtures is #[cfg(test)] and not visible
+    as a dependency. Two viable approaches:
+    A) Gate via #[cfg(any(test, feature = "test-utils"))] in minibox-core + dev-dep feature
+    B) Close as won't-fix — boundary is intentional
+    Awaiting decision from user.
+  files:
+  - crates/minibox/src/adapters/test_fixtures.rs
+  - crates/minibox/src/adapters/mod.rs
+  - crates/minibox-core/src/adapters/test_fixtures.rs
+  completed: null
+  extra:
+  - date: null
+    type: blocker
+    field: null
+    value: null
+    reviewed: null
+    note: 'User decision required: option A (feature flag) or B (won''t fix)'
+- id: handler-split
+  doob_uuid: null
+  name: handler-split
   priority: P1
   status: open
-  title: Uncommitted changes (12 files)
+  title: Split handler.rs into feature-cluster modules (#356)
   description: |-
-    Working tree has uncommitted changes:
-    .claude/settings.json
-    .ctx/HANDOFF.md
-    .ctx/HANDOFF.minibox.minibox.yaml
-    .github/workflows/macos.yml
-    .github/workflows/merge.yml
-    .github/workflows/nightly.yml
-    .github/workflows/pr.yml
-    .github/workflows/stability-gates.yml
-    Cargo.lock
-    xtask/src/ci_watch.rs
-    xtask/src/gates.rs
-    .github/actionlint.yaml
+    handler.rs is 4264 lines with 27 handle_* functions.
+    Plan: docs/plans/2026-05-15-refactoring.md Tasks 6-13.
+    Approach A approved: flat module siblings under daemon/handlers/,
+    thin mod.rs re-exports, zero import-path churn.
+    #354 domain nix cleanup (prerequisite) is done and merged.
   files:
-  - .claude/settings.json
-  - .ctx/HANDOFF.md
-  - .ctx/HANDOFF.minibox.minibox.yaml
-  - .github/workflows/macos.yml
-  - .github/workflows/merge.yml
-  - .github/workflows/nightly.yml
-  - .github/workflows/pr.yml
-  - .github/workflows/stability-gates.yml
-  - Cargo.lock
-  - xtask/src/ci_watch.rs
-  - xtask/src/gates.rs
-  - .github/actionlint.yaml
+  - crates/minibox/src/daemon/handler.rs
+  - crates/minibox/src/daemon/handlers/
+  completed: null
+  extra: []
+- id: a-series-testing
+  doob_uuid: null
+  name: a-series-testing
+  priority: P1
+  status: open
+  title: Implement A-series testing surfaces A1-A5 (#368-#372)
+  description: |-
+    Plan: docs/plans/2026-05-15-a-series-testing.md
+    A1 (#368): mutation audit checklist for security guards
+    A2 (#369): exhaustive small-domain tests
+    A3 (#370): stream trait boundary mocks
+    A4 (#371): barrier-based DaemonState race tests
+    A5 (#372): roundtrip property tests
+    Note: BackendDescriptor not serializable, ContainerInfo substituted for A5.
+  files:
+  - crates/minibox-core/tests/
+  - crates/minibox/tests/
   completed: null
   extra: []
 log:
-- date: '20260515.223104'
+- date: '20260515.171405'
   summary: done=23 running=0 pending=47 blocked=0
   commits: []
-- date: '20260515.220741'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.220454'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.220200'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.215623'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214816'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214656'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214651'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214527'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214450'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.214414'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.213011'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.212854'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.212727'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.212446'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.212151'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.212052'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211933'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211847'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211749'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211554'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211521'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211512'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211403'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211340'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211323'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211259'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211243'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211238'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211211'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211123'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.211030'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210948'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210923'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210851'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210821'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210750'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210639'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210532'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210438'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210343'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210231'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210216'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210139'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210117'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210025'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.210002'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205727'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205651'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205622'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205608'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205514'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205406'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205400'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205250'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.205121'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.204653'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.204253'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.204214'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.204051'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203946'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203930'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203836'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203828'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203701'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203646'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.203141'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.195532'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.195409'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.194245'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.193221'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.193046'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.193020'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.192942'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.192923'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.192554'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.192100'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.191651'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.190757'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.190237'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.190107'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.190013'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185853'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185540'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185514'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185425'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185317'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185226'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185105'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.185029'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.184901'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.184818'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.184050'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.183822'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.183717'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.183342'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.182723'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.182314'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.182057'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181616'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181349'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181303'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181151'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181102'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.181036'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.180952'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.180709'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.180642'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.180616'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.180458'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175939'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175522'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175505'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175447'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175328'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175215'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175112'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.175014'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174952'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174803'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174746'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174719'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174520'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174306'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174158'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174104'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.174001'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173754'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173647'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173633'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173554'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173509'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173443'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173411'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173202'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173041'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.173014'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.172725'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.172141'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.172044'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.171909'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.171756'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.171712'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.171612'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-- date: '20260515.171606'
-  summary: done=23 running=0 pending=47 blocked=0
+  session: 1
+- date: '20260515.131514'
+  summary: 'Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues #364-#372, wrote refactoring and A-series testing plans'
   commits: []
+  session: 2
