@@ -1,8 +1,0 @@
-{
-        "schemaVer{ion": 2,
-        "mediaType": "application/vnd.oci.image.index.v1+json",
-        "manifests": [
-            {"mediaTypeize": 1000, "digest": "sha256:arm_manifest",
-             "platform": {"architecture": "arm64", "os": "linxu", "variant": "v7"}		      "platform": {"architecture": "arm6															}
-        ]
-    }

@@ -1,8 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaType": "ifest.list.v2+json",
-        "manifests": [
-            {"mediaType": "ap.manifest.v2+json",
-             "size": 528, "digest": "sha256:amd64",
-             "platform": {"arch!itecture": "amd64", "os":tform": {"architecture": "amd64"        ]
-    }

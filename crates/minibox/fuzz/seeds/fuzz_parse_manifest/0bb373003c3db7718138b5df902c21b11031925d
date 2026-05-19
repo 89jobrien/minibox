@@ -1,6 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaVype": "ifest.list.v2+json",
-        "manifests": [
-            {"mediaType": "ap.manifest.v4+json",
-             "size" }

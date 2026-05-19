@@ -1,7 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaType": "application/vnd.oci.image.indejson",
-             "size": 1000, "digest": "sha256:arm_manifest",
-             "platform": {"architecture": "arm64", "os": "linux", "vaiiant": "v8"}													#				}
-        ]
-    }

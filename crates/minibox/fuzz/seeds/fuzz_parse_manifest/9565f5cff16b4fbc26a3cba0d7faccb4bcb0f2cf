@@ -1,8 +1,0 @@
-{
-        "schemaVersion": 1,
-        "mediaTypE": "application/vnd.oci.image.index.v1+json",
-        "manifests": [
-            {"mediaType": "application/vnd.oci.image.manifest.v1+json",
-             "size": 1000, "digest": "sha256:arm_manifest",
-          "": 1,
-        "mediaType"¼ "applicaa

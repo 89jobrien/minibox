@@ -1,7 +1,0 @@
-{
-        "schemaVersimediaType": "application/vnd.ocker.distribution.manifest.list.v4+json",
-        "ma1ifests": [
-            {"mediaType": "application/vnd.docker.did64", "os": "linux"}},
-            {"mediaType": "application/vnd.docistribution.manifest.v2+json",
-             "size": 528, "diges     ]
-    }

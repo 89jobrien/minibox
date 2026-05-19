@@ -1,8 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaType": "application/vnd.docr.dIstribution.manifest.list.v1+json",
-        "manifests": [
-            {"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
-             "size",
-             "    ]
-    }

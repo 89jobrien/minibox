@@ -1,6 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaType": "application/vnd.oci.image.index.v1+json",
-        "manifests": [
-            {"mediaType": "application/vnd.oci.image.manifst",
-             "platform": {"architecture": ""arm64", "os": "linux"

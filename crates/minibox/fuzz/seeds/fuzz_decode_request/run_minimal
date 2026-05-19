@@ -1,1 +1,0 @@
-{"type":"Run","image":"alpine","tag":null,"command":["/bin/sh"],"memory_limit_bytes":null,"cpu_weight":null,"ephemeral":false,"network":null,"env":[],"mounts":[],"privileged":false,"name":null,"tty":false,"entrypoint":null,"user":null,"auto_remove":false,"priority":null,"urgency":null,"execution_context":null}

@@ -1,8 +1,0 @@
-{
-        "schemaVersion": 2,
-        "mediaType": "ap2pliczation/vnd.docker.distribution.mani]est.list.v2+json",
-        "ma1ifests": [
-            {"mediaType": "application/vnd.dock]est.lisÿÿÿÿÿÿÿÿ.manifesþÿÿÿÿÿÿÿn",
-    : 100, "digest"ÃßÝŒhpëatform": {"architecture": "arm64", "os": "linux", "variant": "v8"}}
-        ]
-    }

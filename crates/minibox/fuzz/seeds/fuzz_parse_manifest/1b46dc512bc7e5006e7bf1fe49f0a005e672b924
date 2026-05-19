@@ -1,9 +1,0 @@
-{
-        "schemaVersion": 3,
-        "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
-        "manifests": [
-            {"mediaTyp": "application/vnd.docker.distribution .manifest.v2+json",
-             "size": 528, "digest": "sha25z:amd64",
-             "tlatform": {"architecture": "ant": "v8"}}
-        ]
-    }
