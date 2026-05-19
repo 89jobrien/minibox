@@ -301,6 +301,14 @@ fn arb_response() -> impl Strategy<Value = DaemonResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// Supplementary strategies
+// ---------------------------------------------------------------------------
+
+fn arb_env_entry() -> impl Strategy<Value = String> {
+    ("[A-Z_]{1,8}", any::<String>()).prop_map(|(k, v)| format!("{k}={v}"))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -321,6 +329,55 @@ proptest! {
         let encoded = encode_response(&resp).expect("encode must succeed");
         let decoded = decode_response(&encoded).expect("decode must succeed");
         let re_encoded = encode_response(&decoded).expect("re-encode must succeed");
+        prop_assert_eq!(encoded, re_encoded);
+    }
+
+    /// DaemonRequest::Run with all optional fields populated must roundtrip.
+    ///
+    /// The base arb_request() leaves env, name, platform, tty, and auto_remove
+    /// at their defaults. This property exercises the full field matrix so that
+    /// adding a new field without a serde default is caught immediately.
+    #[test]
+    fn run_request_full_fields_roundtrip(
+        image in any::<String>(),
+        tag in option::of(any::<String>()),
+        command in proptest::collection::vec(any::<String>(), 0..8),
+        memory_limit_bytes in option::of(any::<u64>()),
+        cpu_weight in option::of(1u64..=10_000u64),
+        ephemeral in any::<bool>(),
+        env in proptest::collection::vec(arb_env_entry(), 0..6),
+        name in option::of("[a-zA-Z0-9_-]{1,20}"),
+        platform in option::of(prop_oneof![
+            Just("linux/amd64".to_string()),
+            Just("linux/arm64".to_string()),
+        ]),
+        tty in any::<bool>(),
+        auto_remove in any::<bool>(),
+    ) {
+        let req = DaemonRequest::Run {
+            image,
+            tag,
+            command,
+            memory_limit_bytes,
+            cpu_weight,
+            ephemeral,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env,
+            name,
+            tty,
+            entrypoint: None,
+            user: None,
+            auto_remove,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            platform,
+        };
+        let encoded = encode_request(&req).expect("encode must succeed");
+        let decoded = decode_request(&encoded).expect("decode must succeed");
+        let re_encoded = encode_request(&decoded).expect("re-encode must succeed");
         prop_assert_eq!(encoded, re_encoded);
     }
 }

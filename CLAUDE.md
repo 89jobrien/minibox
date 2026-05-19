@@ -112,11 +112,16 @@ New adapter? Update composition   → miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 ```
 
+
+
+
+
+
 <!-- cloude-code-toolbox:mcp-skills-awareness-begin -->
 
 ### MCP & Skills awareness (Cloude Code ToolBox)
 
-_Last synced: 2026-05-17T08:24:27.166814Z._
+_Last synced: 2026-05-18T16:21:06.033093Z._
 
 - **Full report:** `.claude/cloude-code-toolbox-mcp-skills-awareness.md`
 
@@ -135,7 +140,6 @@ _Last synced: 2026-05-17T08:24:27.166814Z._
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
 <!-- cloude-code-memory-bank:begin -->
-
 # Plan / Act workflow (Cursor-style)
 
 Unless the user clearly opts out (e.g. **"skip plan, implement now"** or **"just fix it"** with no ambiguity), use **two modes**. This matches Cursor’s PLAN → approve → ACT flow.
@@ -144,9 +148,9 @@ Unless the user clearly opts out (e.g. **"skip plan, implement now"** or **"just
 
 - **First line of every Plan-mode response MUST be exactly:** `# Mode: PLAN`
 - **Do not modify the repository in any way**, including:
-    - No creating, editing, or deleting files (source, config, docs, **including `./memory-bank/**` memory-bank files\*\*).
-    - No applying multi-file edits, quick fixes, or patch-style changes.
-    - No terminal commands that change the workspace (installs, builds that write outputs you were asked to apply, `git` writes, etc.).
+  - No creating, editing, or deleting files (source, config, docs, **including `./memory-bank/**` memory-bank files**).
+  - No applying multi-file edits, quick fixes, or patch-style changes.
+  - No terminal commands that change the workspace (installs, builds that write outputs you were asked to apply, `git` writes, etc.).
 - **Allowed in Plan mode:** Read/search files to understand the codebase, answer questions, list steps, identify risks, and produce a **written plan** (markdown).
 - **End Plan-mode responses** by telling the user how to proceed, e.g. **Type `ACT` when you approve this plan** (or ask them to refine the plan first).
 
@@ -172,12 +176,12 @@ Context layers (read deeper files after foundations): **projectbrief** → **pro
 ## What Claude should do
 
 1. **Before substantive work**, read **all** of the following under `./memory-bank/` when the task depends on project state (not optional for non-trivial work). In **Plan mode**, reading for the plan is allowed; **do not edit** these files until **Act mode** unless the user only asked for a documentation/memory update with no code change.
-    - `projectbrief.md` — scope and goals
-    - `productContext.md` — product intent and UX
-    - `systemPatterns.md` — architecture and conventions
-    - `techContext.md` — stack and constraints
-    - `progress.md` — done / pending / known issues
-    - `activeContext.md` — current task and decisions
+   - `projectbrief.md` — scope and goals
+   - `productContext.md` — product intent and UX
+   - `systemPatterns.md` — architecture and conventions
+   - `techContext.md` — stack and constraints
+   - `progress.md` — done / pending / known issues
+   - `activeContext.md` — current task and decisions
 
 2. **During Act-mode work**, keep `activeContext.md` aligned with the current task (update when focus shifts).
 
@@ -188,5 +192,4 @@ Context layers (read deeper files after foundations): **projectbrief** → **pro
 5. Prefer **short, factual updates** over long prose. Reference files, symbols, and tickets instead of duplicating code.
 
 Do not delete these files; evolve them as the project changes.
-
 <!-- cloude-code-memory-bank:end -->

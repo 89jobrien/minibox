@@ -119,7 +119,12 @@ fn make_container_info(i: usize) -> ContainerInfo {
         name: None,
         image: format!("library/image-{}", i),
         command: format!("echo hello {}", i),
-        state: if i % 2 == 0 { "running" } else { "stopped" }.to_string(),
+        state: if i.is_multiple_of(2) {
+            "running"
+        } else {
+            "stopped"
+        }
+        .to_string(),
         created_at: format!("2026-03-16T12:{:02}:00Z", i % 60),
         pid: Some(1000 + i as u32),
     }

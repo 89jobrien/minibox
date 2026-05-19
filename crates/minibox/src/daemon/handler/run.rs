@@ -1042,11 +1042,62 @@ async fn daemon_wait_for_exit(
 
 #[cfg(test)]
 mod run_inner_tests {
+    use super::generate_container_id;
+
     #[test]
     fn run_inner_capture_signature_accepts_mounts_and_privileged() {
         // Compile-time check: the BindMount type is accessible in this crate.
         use minibox_core::domain::BindMount;
         let _: Vec<BindMount> = vec![];
         let _: bool = false;
+    }
+
+    // ── generate_container_id properties ─────────────────────────────────────
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig {
+            failure_persistence: None,
+            cases: 256,
+            ..proptest::prelude::ProptestConfig::default()
+        })]
+
+        /// Generated IDs must always be exactly 16 characters long.
+        #[test]
+        fn generated_id_is_always_16_chars(_dummy in proptest::prelude::Just(())) {
+            let id = generate_container_id();
+            prop_assert_eq!(
+                id.len(),
+                16,
+                "expected 16-char id, got {:?} (len={})",
+                id,
+                id.len()
+            );
+        }
+
+        /// Generated IDs must contain only lowercase hex characters (0-9, a-f).
+        #[test]
+        fn generated_id_is_lowercase_hex(_dummy in proptest::prelude::Just(())) {
+            let id = generate_container_id();
+            prop_assert!(
+                id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()),
+                "id contains non-lowercase-hex chars: {:?}",
+                id
+            );
+        }
+    }
+
+    /// Two consecutive calls must produce distinct IDs (birthday-paradox:
+    /// collision probability per pair is ~2^-64, negligible in testing).
+    #[test]
+    fn generated_ids_are_distinct_across_calls() {
+        let ids: std::collections::HashSet<String> =
+            (0..256).map(|_| generate_container_id()).collect();
+        assert_eq!(
+            ids.len(),
+            256,
+            "collision detected among 256 generated container IDs"
+        );
     }
 }

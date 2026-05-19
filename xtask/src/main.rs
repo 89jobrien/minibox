@@ -112,6 +112,13 @@ fn main() -> Result<()> {
             gates::check_repo_cleanliness(&sh);
             Ok(())
         }
+        Some("coverage") => {
+            let args: Vec<String> = env::args().collect();
+            let open = args.iter().any(|a| a == "--open");
+            let lcov_only = args.iter().any(|a| a == "--lcov-only");
+            let html_only = args.iter().any(|a| a == "--html-only");
+            gates::coverage(&sh, open, lcov_only, html_only)
+        }
         Some("coverage-check") => gates::coverage_check(&sh),
         Some("check-adapter-coverage") => gates::check_adapter_coverage(&sh),
         Some("check-no-unwrap") => {
@@ -267,6 +274,8 @@ fn main() -> Result<()> {
             eprintln!(
                 "  check-repo-clean warn if generated artifacts (target/, traces/, *.profraw) are tracked"
             );
+            eprintln!("  coverage [--open] [--lcov-only] [--html-only]");
+            eprintln!("                   HTML + lcov coverage report (target/coverage/)");
             eprintln!("  coverage-check   llvm-cov minibox; fail if handler.rs fns < 80%");
             eprintln!(
                 "  check-adapter-coverage  verify each wired adapter has integration test files"

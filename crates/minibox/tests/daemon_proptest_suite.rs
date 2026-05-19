@@ -291,3 +291,39 @@ proptest! {
         );
     }
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_pause_unknown_id_is_error(id in arb_container_id()) {
+        let state = make_state(shared_tmp());
+        let event_sink: std::sync::Arc<dyn minibox_core::events::EventSink> =
+            std::sync::Arc::new(minibox_core::events::NoopEventSink);
+        let resp = runtime().block_on(
+            minibox::daemon::handler::handle_pause(id.clone(), state, event_sink)
+        );
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
+        );
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_resume_unknown_id_is_error(id in arb_container_id()) {
+        let state = make_state(shared_tmp());
+        let event_sink: std::sync::Arc<dyn minibox_core::events::EventSink> =
+            std::sync::Arc::new(minibox_core::events::NoopEventSink);
+        let resp = runtime().block_on(
+            minibox::daemon::handler::handle_resume(id.clone(), state, event_sink)
+        );
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
+        );
+    }
+}
