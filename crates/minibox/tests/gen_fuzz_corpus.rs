@@ -425,3 +425,161 @@ fn generate_layer_corpus() {
         path_dir.display()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Manifest / platform / image-ref parsing seeds (tier 3)
+// ---------------------------------------------------------------------------
+
+/// Build a fuzz_parse_manifest seed: first byte = selector (0=single,1=list),
+/// remaining bytes = JSON body.
+fn manifest_seed(selector: u8, json: &str) -> Vec<u8> {
+    let mut v = vec![selector];
+    v.extend_from_slice(json.as_bytes());
+    v
+}
+
+#[test]
+fn generate_manifest_corpus() {
+    // --- fuzz_parse_manifest seeds ---
+    let dir = corpus_dir("fuzz_parse_manifest");
+
+    let oci_single = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {"mediaType": "application/vnd.oci.image.config.v1+json",
+                   "size": 1234, "digest": "sha256:abc123"},
+        "layers": [
+            {"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+             "size": 5678, "digest": "sha256:def456"}
+        ]
+    }"#;
+
+    let docker_single = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+        "config": {"mediaType": "application/vnd.docker.container.image.v1+json",
+                   "size": 100, "digest": "sha256:cfg001"},
+        "layers": []
+    }"#;
+
+    let manifest_list = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+        "manifests": [
+            {"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "sha256:amd64",
+             "platform": {"architecture": "amd64", "os": "linux"}},
+            {"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "sha256:arm64",
+             "platform": {"architecture": "arm64", "os": "linux", "variant": "v8"}}
+        ]
+    }"#;
+
+    let oci_index = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {"mediaType": "application/vnd.oci.image.manifest.v1+json",
+             "size": 1000, "digest": "sha256:arm_manifest",
+             "platform": {"architecture": "arm64", "os": "linux", "variant": "v8"}}
+        ]
+    }"#;
+
+    let manifest_seeds: Vec<(&str, Vec<u8>)> = vec![
+        // selector byte 0x00 = single, 0x01 = list
+        ("oci_single", manifest_seed(0x00, oci_single)),
+        ("docker_single", manifest_seed(0x00, docker_single)),
+        (
+            "empty_layers",
+            manifest_seed(
+                0x00,
+                r#"{"schemaVersion":2,"mediaType":"","config":{"mediaType":"","size":0,"digest":"sha256:0"},"layers":[]}"#,
+            ),
+        ),
+        ("manifest_list", manifest_seed(0x01, manifest_list)),
+        ("oci_index", manifest_seed(0x01, oci_index)),
+        (
+            "empty_manifests",
+            manifest_seed(0x01, r#"{"schemaVersion":2,"mediaType":"","manifests":[]}"#),
+        ),
+        // adversarial
+        ("garbage_single", manifest_seed(0x00, "not json at all")),
+        ("garbage_list", manifest_seed(0x01, "{broken")),
+        ("empty_body", manifest_seed(0x00, "")),
+        (
+            "huge_array",
+            manifest_seed(
+                0x01,
+                r#"{"schemaVersion":2,"mediaType":"","manifests":[{"mediaType":"","size":0,"digest":"sha256:x"},{"mediaType":"","size":0,"digest":"sha256:y"}]}"#,
+            ),
+        ),
+    ];
+
+    for (name, bytes) in &manifest_seeds {
+        write_seed(&dir, name, bytes.clone());
+    }
+    println!(
+        "wrote {} fuzz_parse_manifest seeds to {}",
+        manifest_seeds.len(),
+        dir.display()
+    );
+
+    // --- fuzz_parse_platform seeds ---
+    let plat_dir = corpus_dir("fuzz_parse_platform");
+
+    let platform_seeds: &[(&str, &str)] = &[
+        ("linux_amd64", "linux/amd64"),
+        ("linux_arm64", "linux/arm64"),
+        ("linux_arm64_v8", "linux/arm64/v8"),
+        ("linux_arm_v7", "linux/arm/v7"),
+        ("windows_amd64", "windows/amd64"),
+        ("normalized_x86_64", "linux/x86_64"),
+        ("normalized_aarch64", "linux/aarch64"),
+        ("empty", ""),
+        ("only_os", "linux"),
+        ("empty_os", "/amd64"),
+        ("empty_arch", "linux/"),
+        ("empty_variant", "linux/amd64/"),
+        ("too_many_parts", "linux/amd64/v8/extra"),
+    ];
+
+    for (name, s) in platform_seeds {
+        write_seed(&plat_dir, name, s.as_bytes().to_vec());
+    }
+    println!(
+        "wrote {} fuzz_parse_platform seeds to {}",
+        platform_seeds.len(),
+        plat_dir.display()
+    );
+
+    // --- fuzz_parse_image_ref seeds ---
+    let ref_dir = corpus_dir("fuzz_parse_image_ref");
+
+    let image_ref_seeds: &[(&str, &str)] = &[
+        ("alpine", "alpine"),
+        ("alpine_latest", "alpine:latest"),
+        ("alpine_3_19", "alpine:3.19"),
+        ("org_image", "myorg/myimage"),
+        ("org_image_tag", "myorg/myimage:v2"),
+        ("ghcr_full", "ghcr.io/org/minibox-rust-ci:stable"),
+        ("localhost", "localhost/myns/myimage:latest"),
+        ("docker_io_explicit", "docker.io/library/alpine:latest"),
+        // adversarial
+        ("empty", ""),
+        ("only_colon", ":"),
+        ("only_slash", "/"),
+        ("double_colon", "alpine::latest"),
+        ("null_byte", "alp\x00ine"),
+        ("just_tag", ":latest"),
+        ("ghcr_no_namespace", "ghcr.io/image:tag"),
+    ];
+
+    for (name, s) in image_ref_seeds {
+        write_seed(&ref_dir, name, s.as_bytes().to_vec());
+    }
+    println!(
+        "wrote {} fuzz_parse_image_ref seeds to {}",
+        image_ref_seeds.len(),
+        ref_dir.display()
+    );
+}

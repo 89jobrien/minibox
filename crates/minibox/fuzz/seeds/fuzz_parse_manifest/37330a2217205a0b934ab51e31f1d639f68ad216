@@ -1,0 +1,5 @@
+{
+       "schemaVersion": 1,
+        "mediaType": "application/vnd.docker.distribution.manifest.list.v4+json",
+        "manifests": [
+            {"mediaType": "application/vnd.docker.distribution.manif

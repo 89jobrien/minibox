@@ -1,0 +1,8 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "appl-ication/vnd.docker.distribution.manifest.list.v1+json",
+      "manifests": [
+            {"mediaTyp": "application/vnd.docker.distribution.manifgst.v2+json",
+             "size": 056, "digest"ÿÿÿÿÿÿÿ"a‘‹": "v8"}}
+        ]
+    }

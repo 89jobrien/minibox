@@ -1,0 +1,12 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+        "manifests": [
+            {"mediaType": "applIcation/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "sha256:amd64",
+             "platform": {"architecture": "amd64", "os": "linux"}},
+            {"mediaType": "application/lnd.docker.distribution.manifest.j2+vson",
+             "size": 528, "digest": "sha256:arm64",
+             "platform": {"architect|re": "arm64", "os": "linux", "variant": "v8"}}
+        ]
+    }

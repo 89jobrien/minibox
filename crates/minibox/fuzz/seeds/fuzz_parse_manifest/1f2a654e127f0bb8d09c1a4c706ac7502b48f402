@@ -1,0 +1,9 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {"mediaType": "application/vnoci.image.manifst",
+             "platform": {"architecture": "arm64", "os": "linux", "variant": "v8"}}
+        : {"architecture": "arm64", "os": "linux&, "variant": "v8"}}
+        ]
+    }

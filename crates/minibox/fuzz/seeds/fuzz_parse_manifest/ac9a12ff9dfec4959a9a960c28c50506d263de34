@@ -1,0 +1,11 @@
+{
+        "schemaVersion": 2,
+        "@ediaType": "application/vnd.docker.distlist.v2+json",
+        "manifests": [
+            {"mediaType": "application/vnd.doution.manifest.+nojsv1",
+             "size": 528, "digest": "sha256:amd64",
+             "platform": {"architecture": "amd64", "os": "linux"}},
+sha256:amd64",
+           "application/vnd.docker.distribution.m      "mediaTypearm64", "os": "linuxq, "variant": "v8"}}
+        ]
+    }

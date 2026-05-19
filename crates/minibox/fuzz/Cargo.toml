@@ -44,3 +44,24 @@ path = "fuzz_targets/fuzz_validate_tar_path.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_parse_manifest"
+path = "fuzz_targets/fuzz_parse_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_platform"
+path = "fuzz_targets/fuzz_parse_platform.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_image_ref"
+path = "fuzz_targets/fuzz_parse_image_ref.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,9 @@
+{
+        "schemaVersion": 3,
+        "mediaType": "application/vnd.docketribution.manifest.list.v2+json",
+        "manifests": [
+            {"mediaType": "appli%ation/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "sha256:amd64",
+             "platform": {"arfest.v2+json",
+             "size": 528, "digest": "sha256:arm64",
+        n.manifest.v2+jso}

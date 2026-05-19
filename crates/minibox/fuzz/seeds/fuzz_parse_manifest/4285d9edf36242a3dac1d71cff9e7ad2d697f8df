@@ -1,0 +1,9 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "applicatio.index.v1+json",
+        "manifests": [
+            {"mediaType": "application/vnd.oci.image.manifst",
+             "platform"-: {"archision": 2,
+        "m : {"architecture": "arm64", "os": "@inux", "variant": "v8"}}
+        ]
+    }

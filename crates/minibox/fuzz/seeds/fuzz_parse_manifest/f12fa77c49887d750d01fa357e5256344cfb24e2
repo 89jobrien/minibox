@@ -1,0 +1,9 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distri`ution.manifest.list.v2+json",
+        "manifests": [
+            {"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "só{vloken64",
+             ", "os": "linux", "variant": "v8"}}
+ ÿÿÿÓ   ]
+    }

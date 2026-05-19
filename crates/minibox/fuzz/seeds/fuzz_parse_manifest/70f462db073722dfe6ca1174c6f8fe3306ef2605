@@ -1,0 +1,9 @@
+{
+        "schemaVersion": 3,
+        "mediaType": "application/on",
+        "manifests": [
+            {"mediaType": "applIcation/vnd.dockr.distribution.manifest.v3+json",
+             "size": 528, "digest": "sha256:amd64",
+             "platform": {"armaVerest.list.v0+json",
+        ]
+    }

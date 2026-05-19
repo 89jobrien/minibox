@@ -14,10 +14,16 @@ use xshell::{Shell, cmd};
 
 const FUZZ_MANIFEST: &str = "crates/minibox/fuzz/Cargo.toml";
 const DEFAULT_TARGETS: &[&str] = &[
+    // Tier 1: protocol codec
     "fuzz_decode_request",
     "fuzz_decode_response",
+    // Tier 2: layer extraction and path validation
     "fuzz_extract_layer",
     "fuzz_validate_tar_path",
+    // Tier 3: manifest / image-ref parsing
+    "fuzz_parse_manifest",
+    "fuzz_parse_platform",
+    "fuzz_parse_image_ref",
 ];
 const DEFAULT_TIME_SECS: u64 = 60;
 

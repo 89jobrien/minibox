@@ -1,0 +1,10 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+        "manifests": [
+            {"mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+             "size": 528, "digest": "sha256:amd64",
+             "platformst": "sha256:amd64",
+             "platform": {"arcinux", "variant": "v8"}}
+        ]
+    }

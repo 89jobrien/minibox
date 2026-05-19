@@ -1,0 +1,6 @@
+{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifess": [
+            {"mediaType": "application/vnd.oci.image.manifst",
+             "platf orm": {"architectur -e": "arm64", "os": "linux", "va
