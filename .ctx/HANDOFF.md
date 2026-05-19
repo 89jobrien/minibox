@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-05-17)
+# Handoff — minibox (2026-05-19)
 
-**Branch:** next | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
