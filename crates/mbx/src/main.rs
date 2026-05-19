@@ -367,6 +367,16 @@ enum SnapshotCommands {
     },
 }
 
+/// Split an embedded tag from an image reference (e.g. `alpine:3.18` -> `("alpine", "3.18")`).
+/// If no colon is present, returns the image unchanged with the provided default tag.
+fn split_image_tag(image: String, default_tag: String) -> (String, String) {
+    if let Some((name, tag)) = image.rsplit_once(':') {
+        (name.to_string(), tag.to_string())
+    } else {
+        (image, default_tag)
+    }
+}
+
 /// Dispatch a parsed CLI command to the appropriate handler.
 ///
 /// Separated from `main` so dispatch logic is testable without tracing setup
@@ -392,6 +402,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             rm,
             platform,
         } => {
+            let (image, tag) = split_image_tag(image, tag);
             commands::run::execute(
                 image,
                 tag,
@@ -458,7 +469,10 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             image,
             tag,
             platform,
-        } => commands::pull::execute(image, tag, platform, socket_path).await,
+        } => {
+            let (image, tag) = split_image_tag(image, tag);
+            commands::pull::execute(image, tag, platform, socket_path).await
+        }
 
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
