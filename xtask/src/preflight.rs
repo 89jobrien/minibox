@@ -228,7 +228,7 @@ fn check_linux_capabilities(failures: &mut Vec<String>) {
             .take(2)
             .filter_map(|p| p.parse().ok())
             .collect();
-        if parts.len() >= 2 && (parts[0] > 5 || (parts[0] == 5 && parts[1] >= 0)) {
+        if parts.len() >= 2 && parts[0] >= 5 {
             println!("[ok]   kernel version {version_str} (>= 5.0)");
         } else {
             println!(

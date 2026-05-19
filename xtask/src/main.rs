@@ -240,6 +240,39 @@ fn main() -> Result<()> {
                 .and_then(|w| promote::Tier::from_str(&w[1]));
             promote::run(root, from, to, dry_run)
         }
+        Some("run") => {
+            let script_name = env::args()
+                .nth(2)
+                .ok_or_else(|| anyhow::anyhow!("usage: cargo xtask run <script> [args...]\n\nRun a Nu script from scripts/<script>.nu with forwarded arguments."))?;
+            let script_path = root.join("scripts").join(format!("{script_name}.nu"));
+            if !script_path.exists() {
+                // List available scripts on error
+                let mut available: Vec<String> = std::fs::read_dir(root.join("scripts"))?
+                    .filter_map(|e| e.ok())
+                    .filter_map(|e| {
+                        let name = e.file_name().to_string_lossy().to_string();
+                        name.strip_suffix(".nu").map(|s| s.to_string())
+                    })
+                    .collect();
+                available.sort();
+                bail!(
+                    "script not found: {script_name}\n\nAvailable scripts:\n  {}",
+                    available.join("\n  ")
+                );
+            }
+            let extra_args: Vec<String> = env::args().skip(3).collect();
+            let mut command = std::process::Command::new("nu");
+            command.arg(&script_path);
+            command.args(&extra_args);
+            command.current_dir(root);
+            let status = command
+                .status()
+                .map_err(|e| anyhow::anyhow!("failed to run nu {}: {e}", script_path.display()))?;
+            if !status.success() {
+                bail!("script {script_name} exited with {status}");
+            }
+            Ok(())
+        }
         Some(other) => bail!("unknown task: {other}"),
         None => {
             eprintln!("Available tasks:");
@@ -324,6 +357,8 @@ fn main() -> Result<()> {
             eprintln!(
                 "  promote [--from <tier>] [--to <tier>] [--dry-run]  run quality gates for tier promotion"
             );
+            eprintln!();
+            eprintln!("  run <script> [args...]  run scripts/<script>.nu with forwarded arguments");
             Ok(())
         }
     }
