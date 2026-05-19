@@ -30,6 +30,25 @@ If changing container code, protocol types, adapters, or tests, read the relevan
 - Prefer editing existing files over creating new ones.
 - Remove unused code completely; do not comment it out.
 - Never commit secrets, credentials, or API keys.
+- `skill-frontmatter-validator` hook renames prompt files to add `.{skillname}.` infix on write
+  (e.g., `analysis.txt` → `analysis.whatidid.txt`). Always reference the post-rename filename in code.
+- `sha2::Digest` trait clashes with any struct named `Digest`; alias it:
+  `use sha2::{Digest as Sha2Digest, Sha256}`
+- `gpt-4o-mini` wraps JSON responses in markdown fences despite prompt instructions — strip fences
+  before parsing
+- rust-script binary: `~/.local/share/mise/installs/cargo-rust-script/0.36.0/bin/rust-script`
+- Fuzz seeds, corpus, and artifacts are gitignored via `**/fuzz/seeds/`,
+  `**/fuzz/corpus/`, `**/fuzz/artifacts/`. Do not commit generated fuzz data.
+
+## Test Daemon Gotchas
+
+- Never use `Stdio::piped()` for daemon stdout/stderr in tests unless you drain
+  the pipes in a background thread. Debug logging during slow operations (pull,
+  run) can exceed the 64KB OS pipe buffer and deadlock the daemon. Use
+  `Stdio::null()` or reduce log level to `warn`/`info`.
+- `cargo fmt --all --check` (run by pre-commit) formats ALL workspace files
+  including untracked ones. Run `cargo fmt --all` before committing if untracked
+  `.rs` files exist.
 
 ## Core Commands
 
