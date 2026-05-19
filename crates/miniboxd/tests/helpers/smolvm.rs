@@ -14,18 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
-// ---------------------------------------------------------------------------
-// Workspace root
-// ---------------------------------------------------------------------------
-
-/// Resolve the workspace root from CARGO_MANIFEST_DIR.
-pub fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("workspace root")
-        .to_path_buf()
-}
+use super::{CmdOutput, workspace_root};
 
 // ---------------------------------------------------------------------------
 // Ephemeral VM runs (machine run)
@@ -35,7 +24,7 @@ pub fn workspace_root() -> PathBuf {
 ///
 /// Uses `smolvm machine run` which handles image pull, volumes, networking,
 /// and cleanup automatically. Each call boots a fresh VM.
-pub fn smolvm_run(image: &str, args: &[&str]) -> (bool, String, String) {
+pub fn smolvm_run(image: &str, args: &[&str]) -> CmdOutput {
     smolvm_run_with_opts(image, args, &[], &[], true, 60)
 }
 
@@ -47,7 +36,7 @@ pub fn smolvm_run_with_opts(
     env: &[(&str, &str)],
     net: bool,
     timeout_secs: u32,
-) -> (bool, String, String) {
+) -> CmdOutput {
     let mut cmd = Command::new("smolvm");
     cmd.args(["machine", "run", "--image", image]);
 
@@ -55,7 +44,7 @@ pub fn smolvm_run_with_opts(
         cmd.arg("--net");
     }
 
-    cmd.args(["--timeout", &format!("{timeout_secs}s")]);
+    cmd.args(["--timeout", &format!("{timeout_secs}")]);
 
     for (host, guest) in volumes {
         cmd.args(["-v", &format!("{host}:{guest}")]);
@@ -73,15 +62,15 @@ pub fn smolvm_run_with_opts(
         .output()
         .unwrap_or_else(|e| panic!("smolvm machine run failed: {e}"));
 
-    (
-        output.status.success(),
-        String::from_utf8_lossy(&output.stdout).to_string(),
-        String::from_utf8_lossy(&output.stderr).to_string(),
-    )
+    CmdOutput {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    }
 }
 
 /// Run a command in an ephemeral VM with the workspace mounted at /workspace.
-pub fn smolvm_run_workspace(image: &str, args: &[&str]) -> (bool, String, String) {
+pub fn smolvm_run_workspace(image: &str, args: &[&str]) -> CmdOutput {
     let ws = workspace_root();
     let ws_str = ws.to_string_lossy().to_string();
     smolvm_run_with_opts(image, args, &[(&ws_str, "/workspace")], &[], true, 120)
@@ -165,13 +154,13 @@ impl SmolVmFixture {
     }
 
     /// Execute a command inside the VM and return (success, stdout, stderr).
-    pub fn exec(&self, args: &[&str]) -> (bool, String, String) {
+    pub fn exec(&self, args: &[&str]) -> CmdOutput {
         let output = self.exec_raw(args);
-        (
-            output.status.success(),
-            String::from_utf8_lossy(&output.stdout).to_string(),
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        )
+        CmdOutput {
+            success: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        }
     }
 
     /// Wait until the VM responds to a basic exec command.
@@ -200,17 +189,6 @@ impl SmolVmFixture {
             std::thread::sleep(Duration::from_millis(500));
         }
     }
-
-    /// Returns true if smolvm is installed and functional.
-    pub fn smolvm_available() -> bool {
-        Command::new("smolvm")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
 }
 
 impl Drop for SmolVmFixture {
@@ -227,4 +205,15 @@ impl Drop for SmolVmFixture {
             .stderr(Stdio::null())
             .status();
     }
+}
+
+/// Returns true if smolvm is installed and functional.
+pub fn smolvm_available() -> bool {
+    Command::new("smolvm")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }

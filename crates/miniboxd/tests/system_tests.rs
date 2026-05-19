@@ -40,14 +40,16 @@ fn test_e2e_pull_alpine() {
 
     let fixture = DaemonFixture::start();
 
-    let (success, stdout, stderr) = fixture.run_cli(&["pull", "alpine"]);
+    let out = fixture.run_cli(&["pull", "alpine"]);
     assert!(
-        success,
-        "pull should succeed.\nstdout: {stdout}\nstderr: {stderr}"
+        out.success,
+        "pull should succeed.\nstdout: {}\nstderr: {}",
+        out.stdout, out.stderr
     );
     assert!(
-        stdout.to_lowercase().contains("pull") || stdout.to_lowercase().contains("alpine"),
-        "stdout should mention pull/alpine, got: {stdout}"
+        out.stdout.to_lowercase().contains("pull") || out.stdout.to_lowercase().contains("alpine"),
+        "stdout should mention pull/alpine, got: {}",
+        out.stdout
     );
 }
 
@@ -60,10 +62,11 @@ fn test_e2e_pull_nonexistent() {
 
     let fixture = DaemonFixture::start();
 
-    let (success, stdout, stderr) = fixture.run_cli(&["pull", "nonexistent-image-xyz-99999"]);
+    let out = fixture.run_cli(&["pull", "nonexistent-image-xyz-99999"]);
     assert!(
-        !success,
-        "pull of nonexistent image should fail.\nstdout: {stdout}\nstderr: {stderr}"
+        !out.success,
+        "pull of nonexistent image should fail.\nstdout: {}\nstderr: {}",
+        out.stdout, out.stderr
     );
 }
 
@@ -81,8 +84,8 @@ fn test_e2e_run_echo() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (success, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/echo", "hello"]);
-    assert!(success, "run should succeed, stdout: {stdout}");
+    let out = fixture.run_cli(&["run", "alpine", "--", "/bin/echo", "hello"]);
+    assert!(out.success, "run should succeed, stdout: {}", out.stdout);
 }
 
 #[test]
@@ -132,9 +135,9 @@ fn test_e2e_stop_container() {
         "container {container_id} did not reach Running state within 5s"
     );
 
-    let (success, _, stderr) = fixture.run_cli(&["stop", &container_id]);
+    let out = fixture.run_cli(&["stop", &container_id]);
     let _ = cli_child.wait();
-    assert!(success, "stop should succeed.\nstderr: {stderr}");
+    assert!(out.success, "stop should succeed.\nstderr: {}", out.stderr);
 }
 
 #[test]
@@ -147,25 +150,29 @@ fn test_e2e_rm_container() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (_, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
+    let out = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
     let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+        extract_container_id(&out.stdout).expect("could not extract container ID from run output");
 
     // Wait for the container to exit (true exits immediately; poll for Stopped)
     let stopped = poll_until(Duration::from_secs(5), Duration::from_millis(100), || {
-        let (ok, ps_out, _) = fixture.run_cli(&["ps"]);
-        ok && (!ps_out.contains(&container_id) || ps_out.contains("Stopped"))
+        let ps = fixture.run_cli(&["ps"]);
+        ps.success && (!ps.stdout.contains(&container_id) || ps.stdout.contains("Stopped"))
     });
     assert!(stopped, "container {container_id} did not stop within 5s");
 
     let _ = fixture.run_cli(&["stop", &container_id]);
 
-    let (success, _, stderr) = fixture.run_cli(&["rm", &container_id]);
-    assert!(success, "rm should succeed.\nstderr: {stderr}");
-
-    let (_, ps_out, _) = fixture.run_cli(&["ps"]);
+    let rm_out = fixture.run_cli(&["rm", &container_id]);
     assert!(
-        !ps_out.contains(&container_id),
+        rm_out.success,
+        "rm should succeed.\nstderr: {}",
+        rm_out.stderr
+    );
+
+    let ps_out = fixture.run_cli(&["ps"]);
+    assert!(
+        !ps_out.stdout.contains(&container_id),
         "container should not appear in ps after rm"
     );
 }
@@ -189,10 +196,11 @@ fn test_e2e_rm_running_rejected() {
         "container {container_id} did not reach Running state within 5s"
     );
 
-    let (success, _, stderr) = fixture.run_cli(&["rm", &container_id]);
+    let out = fixture.run_cli(&["rm", &container_id]);
     assert!(
-        !success,
-        "rm on running container should fail.\nstderr: {stderr}"
+        !out.success,
+        "rm on running container should fail.\nstderr: {}",
+        out.stderr
     );
 
     // Clean up: stop the container so the CLI child exits
@@ -284,20 +292,24 @@ fn test_e2e_cgroup_cleaned_after_rm() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (_, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
+    let out = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
     let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+        extract_container_id(&out.stdout).expect("could not extract container ID from run output");
 
     // Poll until stopped
     let stopped = poll_until(Duration::from_secs(5), Duration::from_millis(100), || {
-        let (ok, ps_out, _) = fixture.run_cli(&["ps"]);
-        ok && (!ps_out.contains(&container_id) || ps_out.contains("Stopped"))
+        let ps = fixture.run_cli(&["ps"]);
+        ps.success && (!ps.stdout.contains(&container_id) || ps.stdout.contains("Stopped"))
     });
     assert!(stopped, "container {container_id} did not stop within 5s");
 
     let _ = fixture.run_cli(&["stop", &container_id]);
-    let (success, _, stderr) = fixture.run_cli(&["rm", &container_id]);
-    assert!(success, "rm should succeed.\nstderr: {stderr}");
+    let rm_out = fixture.run_cli(&["rm", &container_id]);
+    assert!(
+        rm_out.success,
+        "rm should succeed.\nstderr: {}",
+        rm_out.stderr
+    );
 
     let cgroup_dir = fixture.cgroup_root.join(&container_id);
     assert!(
@@ -321,19 +333,23 @@ fn test_e2e_overlay_cleaned_after_rm() {
     let fixture = DaemonFixture::start();
     fixture.pull_required("alpine");
 
-    let (_, stdout, _) = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
+    let out = fixture.run_cli(&["run", "alpine", "--", "/bin/true"]);
     let container_id =
-        extract_container_id(&stdout).expect("could not extract container ID from run output");
+        extract_container_id(&out.stdout).expect("could not extract container ID from run output");
 
     let stopped = poll_until(Duration::from_secs(5), Duration::from_millis(100), || {
-        let (ok, ps_out, _) = fixture.run_cli(&["ps"]);
-        ok && (!ps_out.contains(&container_id) || ps_out.contains("Stopped"))
+        let ps = fixture.run_cli(&["ps"]);
+        ps.success && (!ps.stdout.contains(&container_id) || ps.stdout.contains("Stopped"))
     });
     assert!(stopped, "container {container_id} did not stop within 5s");
 
     let _ = fixture.run_cli(&["stop", &container_id]);
-    let (success, _, stderr) = fixture.run_cli(&["rm", &container_id]);
-    assert!(success, "rm should succeed.\nstderr: {stderr}");
+    let rm_out = fixture.run_cli(&["rm", &container_id]);
+    assert!(
+        rm_out.success,
+        "rm should succeed.\nstderr: {}",
+        rm_out.stderr
+    );
 
     let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
     assert!(
