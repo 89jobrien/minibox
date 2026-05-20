@@ -209,24 +209,32 @@ fn probe_systemd_available() -> bool {
         .unwrap_or(false)
 }
 
+/// Run a command and parse a version number from the Nth whitespace-delimited
+/// token of the first output line.
+///
+/// Used by `probe_systemd_version` and similar probes that follow the pattern:
+/// run command → check success → parse first-line token as u32.
+fn probe_command_version(cmd: &str, args: &[&str], token_index: usize) -> Option<u32> {
+    let output = Command::new(cmd).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .next()?
+        .split_whitespace()
+        .nth(token_index)?
+        .parse()
+        .ok()
+}
+
 /// Parse the systemd version number from `systemctl --version`.
 ///
 /// Expects output starting with a line like `"systemd 252 (252.22-1~deb12u1)"`.
 /// Returns `None` if the command fails or the version cannot be parsed.
 fn probe_systemd_version() -> Option<u32> {
-    let output = Command::new("systemctl").arg("--version").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // "systemd 252 (252.22-1~deb12u1)"
-    stdout
-        .lines()
-        .next()?
-        .split_whitespace()
-        .nth(1)?
-        .parse()
-        .ok()
+    probe_command_version("systemctl", &["--version"], 1)
 }
 
 /// Check whether `minibox.slice` is active in systemd.

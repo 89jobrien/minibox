@@ -1158,8 +1158,13 @@ impl ContainerId {
         if id.is_empty() {
             anyhow::bail!("container ID cannot be empty");
         }
-        if id.len() > 64 {
-            anyhow::bail!("container ID too long: {} (max 64)", id.len());
+        /// Maximum length of a container ID.
+        const MAX_CONTAINER_ID_LEN: usize = 64;
+        if id.len() > MAX_CONTAINER_ID_LEN {
+            anyhow::bail!(
+                "container ID too long: {} (max {MAX_CONTAINER_ID_LEN})",
+                id.len()
+            );
         }
         if !id.chars().all(|c| c.is_ascii_alphanumeric()) {
             anyhow::bail!("container ID must be alphanumeric");

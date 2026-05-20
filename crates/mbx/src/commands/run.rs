@@ -96,31 +96,50 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
     })
 }
 
+/// Options for the `run` subcommand, bundled to avoid a long parameter list.
+pub struct RunOpts {
+    pub image: String,
+    pub tag: String,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub network: String,
+    pub privileged: bool,
+    pub volumes: Vec<String>,
+    pub mount_specs: Vec<String>,
+    pub name: Option<String>,
+    pub tty: bool,
+    pub env: Vec<String>,
+    pub entrypoint: Option<String>,
+    pub user: Option<String>,
+    pub auto_remove: bool,
+    pub platform: Option<String>,
+}
+
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
 /// streams `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`
 /// is received.  Exits with the container's exit code.
-#[allow(clippy::too_many_arguments)]
-pub async fn execute(
-    image: String,
-    tag: String,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: String,
-    privileged: bool,
-    volumes: Vec<String>,
-    mount_specs: Vec<String>,
-    name: Option<String>,
-    tty: bool,
-    env: Vec<String>,
-    entrypoint: Option<String>,
-    user: Option<String>,
-    auto_remove: bool,
-    platform: Option<String>,
-    socket_path: &std::path::Path,
-) -> Result<()> {
+pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()> {
+    let RunOpts {
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        privileged,
+        volumes,
+        mount_specs,
+        name,
+        tty,
+        env,
+        entrypoint,
+        user,
+        auto_remove,
+        platform,
+    } = opts;
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
