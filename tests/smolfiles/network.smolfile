@@ -1,0 +1,24 @@
+# Minibox network test VM — for image pull and network-dependent tests.
+#
+# Full outbound access. Used by pull/push e2e tests to verify image
+# operations in an isolated Linux VM.
+#
+# Usage:
+#   smolvm machine create minibox-net --smolfile tests/smolfiles/network.smolfile
+#   smolvm machine start --name minibox-net
+#   smolvm machine exec --name minibox-net -- ./target/debug/mbx pull alpine
+
+image = "alpine:3.20"
+cpus = 1
+memory = 768
+net = true
+storage = 10
+overlay = 2
+workdir = "/workspace"
+
+[dev]
+init = [
+    "apk add --no-cache bash coreutils util-linux mount shadow iptables",
+    "mkdir -p /var/lib/minibox /run/minibox",
+]
+volumes = ["./:/workspace"]

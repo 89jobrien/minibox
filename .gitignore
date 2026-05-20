@@ -16,9 +16,6 @@
 !docs/conformance.md
 !docs/plans/*.md
 !docs/specs/*.md
-!docs/superpowers/**/*.md
-!docs/parallel-layer-pulls-design.md
-!docs/dagu-integration.md
 !docs/diagrams/
 !docs/archive/*.md
 !docs/archive/
@@ -136,10 +133,12 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .firecrawl/
-.ctx/
+.ctx/**
+!.ctx/**/
 !.ctx/HANDOFF.*.yaml
 !.ctx/HANDOFF.*.*.yaml
 !.ctx/handoff.*.config.toml.example
+!.ctx/**/*.mbx.md
 .ctx/HANDOFF.state.yaml
 .ctx/HANDOFF.*.state.yaml
 .ctx/HANDOFF.md
@@ -152,10 +151,7 @@ minibox-assistant
 docs/archive/
 
 # handoff-begin
-.ctx/*
-!.ctx/HANDOFF.*.yaml
 .ctx/HANDOFF.*.state.json
-!.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
 .ctx/.initialized
