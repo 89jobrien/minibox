@@ -18,6 +18,7 @@ struct RepoInfo {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct RunSummary {
     #[serde(rename = "databaseId")]
     database_id: u64,
@@ -82,24 +83,6 @@ fn elapsed(started: &str, completed: &str) -> Option<String> {
     }
 }
 
-fn print_jobs(jobs: &[Job]) {
-    println!();
-    for j in jobs {
-        let icon = status_icon(j.conclusion.as_deref(), &j.status);
-        // Only show timing when the job has actually completed (both timestamps present and valid).
-        // GitHub returns zero-time for completedAt on queued/in-progress jobs, which produces
-        // massive negative durations — skip those entirely and fall back to status text.
-        let timing = match (&j.started_at, &j.completed_at) {
-            (Some(s), Some(e)) if j.conclusion.is_some() => {
-                elapsed(s, e).unwrap_or_else(|| j.status.clone())
-            }
-            _ => j.status.clone(),
-        };
-        println!("  {icon} {} — {timing}", j.name);
-    }
-    println!();
-}
-
 fn fetch_detail(sh: &Shell, run_id: &str, repo: &str) -> Result<RunDetail> {
     let json = cmd!(
         sh,
@@ -123,36 +106,95 @@ pub fn ci_watch(sh: &Shell, branch: Option<&str>) -> Result<()> {
         }
     };
 
+    // Fetch enough runs to capture all workflows triggered by the latest push.
     let runs_json = cmd!(
         sh,
-        "gh run list --branch {br} --repo {repo} --limit 1
+        "gh run list --branch {br} --repo {repo} --limit 15
          --json databaseId,displayTitle,headSha,event,status,createdAt,workflowName"
     )
     .read()?;
-    let runs: Vec<RunSummary> =
+    let all_runs: Vec<RunSummary> =
         serde_json::from_str(&runs_json).context("parse gh run list output")?;
-    let run = runs.into_iter().next().context("no runs found")?;
-    let run_id = run.database_id.to_string();
-    let sha = &run.head_sha[..7.min(run.head_sha.len())];
 
-    println!("\n━━━ CI Run {run_id} ━━━");
-    println!("  Repo:     {repo}");
-    println!("  Branch:   {br}");
-    println!("  Workflow: {}", run.workflow_name);
-    println!("  Trigger:  {}", run.event);
-    println!("  Commit:   {sha} — {}", run.display_title);
-    println!("  Started:  {}", run.created_at);
-    println!("  Status:   {}", run.status);
+    if all_runs.is_empty() {
+        anyhow::bail!("no runs found for branch {br}");
+    }
 
-    print_jobs(&fetch_detail(sh, &run_id, repo)?.jobs);
+    // Group by HEAD SHA — only show runs matching the latest commit.
+    let head_sha = all_runs[0].head_sha.clone();
+    let runs: Vec<RunSummary> = all_runs
+        .into_iter()
+        .filter(|r| r.head_sha == head_sha)
+        .collect();
 
-    let _ = cmd!(sh, "gh run watch {run_id} --repo {repo} --exit-status").run();
+    let sha = &head_sha[..7.min(head_sha.len())];
+    println!("\n━━━ CI Watch — {repo} @ {br} ━━━");
+    println!("  Commit:    {sha} — {}", runs[0].display_title);
+    println!("  Trigger:   {}", runs[0].event);
+    println!("  Workflows: {}", runs.len());
+    println!();
 
-    let detail = fetch_detail(sh, &run_id, repo)?;
-    let conclusion = detail.conclusion.as_deref().unwrap_or("unknown");
-    let icon = status_icon(Some(conclusion), "completed");
-    println!("\n━━━ Result: {icon} {} ━━━", conclusion.to_uppercase());
-    print_jobs(&detail.jobs);
+    // Print initial status for all workflows.
+    for run in &runs {
+        let detail = fetch_detail(sh, &run.database_id.to_string(), repo)?;
+        let conclusion = detail.conclusion.as_deref();
+        let icon = status_icon(conclusion, &run.status);
+        println!(
+            "  {icon} {} — {}",
+            run.workflow_name,
+            conclusion.unwrap_or(&run.status)
+        );
+    }
+
+    // Watch any runs that haven't completed yet.
+    let pending: Vec<&RunSummary> = runs.iter().filter(|r| r.status != "completed").collect();
+
+    if !pending.is_empty() {
+        println!("\nWaiting on {} workflow(s)...\n", pending.len());
+        for run in &pending {
+            let run_id = run.database_id.to_string();
+            println!("  Watching: {}", run.workflow_name);
+            let _ = cmd!(sh, "gh run watch {run_id} --repo {repo} --exit-status").run();
+        }
+    }
+
+    // Final aggregate summary.
+    println!("\n━━━ Final Results ━━━");
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+    for run in &runs {
+        let run_id = run.database_id.to_string();
+        let detail = fetch_detail(sh, &run_id, repo)?;
+        let conclusion = detail.conclusion.as_deref().unwrap_or("unknown");
+        let icon = status_icon(Some(conclusion), "completed");
+        match conclusion {
+            "success" => passed += 1,
+            "failure" => failed += 1,
+            _ => {}
+        }
+        println!("\n  {icon} {}", run.workflow_name);
+        for j in &detail.jobs {
+            let jicon = status_icon(j.conclusion.as_deref(), &j.status);
+            let timing = match (&j.started_at, &j.completed_at) {
+                (Some(s), Some(e)) if j.conclusion.is_some() => {
+                    elapsed(s, e).unwrap_or_else(|| j.status.clone())
+                }
+                _ => j.status.clone(),
+            };
+            println!("    {jicon} {} — {timing}", j.name);
+        }
+    }
+
+    let overall = if failed > 0 { "FAILURE" } else { "SUCCESS" };
+    let overall_icon = if failed > 0 { "✗" } else { "✓" };
+    println!(
+        "\n━━━ Overall: {overall_icon} {overall} ({passed}/{} workflows passed) ━━━\n",
+        runs.len()
+    );
+
+    if failed > 0 {
+        std::process::exit(1);
+    }
 
     Ok(())
 }
