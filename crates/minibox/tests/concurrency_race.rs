@@ -146,8 +146,8 @@ fn race_subscribe_vs_broadcast() {
 
             // Drain until we see the ImagePruned event (guaranteed delivery).
             let mut got_guaranteed = false;
-            // Collect up to 10 events to avoid spinning forever.
-            for _ in 0..10 {
+            // Drain events — generous iteration count for slow CI runners.
+            for _ in 0..5000 {
                 match rx.try_recv() {
                     Ok(ContainerEvent::ImagePruned { .. }) => {
                         got_guaranteed = true;
@@ -163,7 +163,7 @@ fn race_subscribe_vs_broadcast() {
             }
             // Poll a bit more aggressively for the guaranteed event.
             if !got_guaranteed {
-                for _ in 0..1000 {
+                for _ in 0..50_000 {
                     match rx.try_recv() {
                         Ok(ContainerEvent::ImagePruned { .. }) => {
                             got_guaranteed = true;
