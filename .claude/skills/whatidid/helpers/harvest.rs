@@ -114,11 +114,17 @@ fn main() -> Result<()> {
             let line = match line {
                 Ok(l) if l.trim().is_empty() => continue,
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!("warning: skipping unreadable line in {}: {e}", path.display());
+                    continue;
+                }
             };
             let event: Event = match serde_json::from_str(&line) {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!("warning: malformed event in {} — {e}", path.display());
+                    continue;
+                }
             };
 
             // Date filter — use first timestamp seen per session
@@ -272,4 +278,70 @@ fn should_include_human_turn(text: &str) -> bool {
         return false;
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_text_with_content_array() {
+        let msg: Value = serde_json::json!({
+            "content": [
+                {"type": "text", "text": "hello"},
+                {"type": "text", "text": "world"}
+            ]
+        });
+        assert_eq!(extract_text(&Some(msg)), "hello world");
+    }
+
+    #[test]
+    fn test_extract_text_with_string_content() {
+        let msg: Value = serde_json::json!({"content": "plain string"});
+        assert_eq!(extract_text(&Some(msg)), "plain string");
+    }
+
+    #[test]
+    fn test_extract_text_none() {
+        assert_eq!(extract_text(&None), "");
+    }
+
+    #[test]
+    fn test_extract_text_no_content() {
+        let msg: Value = serde_json::json!({"role": "user"});
+        assert_eq!(extract_text(&Some(msg)), "");
+    }
+
+    #[test]
+    fn test_extract_assistant_with_tools() {
+        let msg: Value = serde_json::json!({
+            "content": [
+                {"type": "text", "text": "I'll read the file"},
+                {"type": "tool_use", "name": "Read", "id": "1"},
+                {"type": "tool_use", "name": "Edit", "id": "2"}
+            ]
+        });
+        let (text, tools) = extract_assistant(&Some(msg));
+        assert_eq!(text, "I'll read the file");
+        assert_eq!(tools, vec!["Read", "Edit"]);
+    }
+
+    #[test]
+    fn test_extract_assistant_none() {
+        let (text, tools) = extract_assistant(&None);
+        assert!(text.is_empty());
+        assert!(tools.is_empty());
+    }
+
+    #[test]
+    fn test_should_include_human_turn_filters_noise() {
+        assert!(!should_include_human_turn("ok"));
+        assert!(!should_include_human_turn("yes"));
+        assert!(!should_include_human_turn("go ahead"));
+        assert!(!should_include_human_turn(""));
+        assert!(!should_include_human_turn("<current_datetime>2026-05-20"));
+        assert!(!should_include_human_turn("<system-reminder>foo"));
+        assert!(should_include_human_turn("fix the bug in handler.rs"));
+        assert!(should_include_human_turn("add retry logic to the API client"));
+    }
 }

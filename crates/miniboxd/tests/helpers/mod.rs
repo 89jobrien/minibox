@@ -13,6 +13,31 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+/// Structured output from a CLI or VM command execution.
+#[derive(Debug)]
+pub struct CmdOutput {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+// ---------------------------------------------------------------------------
+// Workspace root
+// ---------------------------------------------------------------------------
+
+/// Resolve the workspace root from CARGO_MANIFEST_DIR.
+pub fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("could not find workspace root")
+        .to_path_buf()
+}
+
+// ---------------------------------------------------------------------------
 // Binary resolution
 // ---------------------------------------------------------------------------
 
@@ -43,14 +68,10 @@ pub fn find_binary(name: &str) -> PathBuf {
     }
 
     // Try relative to workspace root (CARGO_MANIFEST_DIR points to miniboxd crate)
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("could not find workspace root");
+    let ws_root = workspace_root();
 
     for profile in ["release", "debug"] {
-        let p = workspace_root.join("target").join(profile).join(name);
+        let p = ws_root.join("target").join(profile).join(name);
         if p.exists() {
             return p;
         }
@@ -121,7 +142,7 @@ impl DaemonFixture {
             .spawn()
             .unwrap_or_else(|e| panic!("failed to start miniboxd at {:?}: {e}", daemon_bin));
 
-        let fixture = Self {
+        let mut fixture = Self {
             child: Some(child),
             socket_path: socket_path.clone(),
             data_dir,
@@ -135,8 +156,6 @@ impl DaemonFixture {
         let timeout = Duration::from_secs(10);
         while !socket_path.exists() {
             if start.elapsed() > timeout {
-                // Kill and capture stderr for debugging
-                let mut fixture = fixture;
                 let stderr = fixture.kill_and_capture_stderr();
                 panic!(
                     "miniboxd did not create socket within 10s.\nSocket: {:?}\nStderr:\n{}",
@@ -166,10 +185,11 @@ impl DaemonFixture {
     ///
     /// Use this in tests that require an image but aren't testing the pull itself.
     pub fn pull_required(&self, image: &str) {
-        let (success, stdout, stderr) = self.run_cli(&["pull", image]);
+        let out = self.run_cli(&["pull", image]);
         assert!(
-            success,
-            "prerequisite image pull failed for '{image}'.\nstdout: {stdout}\nstderr: {stderr}"
+            out.success,
+            "prerequisite image pull failed for '{image}'.\nstdout: {}\nstderr: {}",
+            out.stdout, out.stderr
         );
     }
 
@@ -240,21 +260,23 @@ impl DaemonFixture {
     /// Returns `true` if seen within timeout, `false` otherwise.
     pub fn wait_for_running(&self, container_id: &str, timeout: Duration) -> bool {
         poll_until(timeout, Duration::from_millis(100), || {
-            let (ok, stdout, _) = self.run_cli(&["ps"]);
-            ok && stdout.contains(container_id) && stdout.contains("Running")
+            let out = self.run_cli(&["ps"]);
+            out.success && out.stdout.contains(container_id) && out.stdout.contains("Running")
         })
     }
 
-    /// Run a CLI command and return (exit_status, stdout, stderr).
-    pub fn run_cli(&self, args: &[&str]) -> (bool, String, String) {
+    /// Run a CLI command and return a structured [`CmdOutput`].
+    pub fn run_cli(&self, args: &[&str]) -> CmdOutput {
         let output = self
             .cli(args)
             .output()
             .unwrap_or_else(|e| panic!("failed to run minibox {:?}: {e}", args));
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        (output.status.success(), stdout, stderr)
+        CmdOutput {
+            success: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        }
     }
 
     /// Run a CLI command and return (exit_code, stdout, stderr).
@@ -323,27 +345,21 @@ impl Drop for DaemonFixture {
             }
         }
 
-        // 4. Cleanup cgroup tree (cgroupfs only supports rmdir, not rm -rf)
+        // 4. Cleanup cgroup tree (cgroupfs only supports rmdir, not rm -rf).
+        //    Remove bottom-up so directories are empty before rmdir.
         if self.cgroup_root.exists() {
-            // Remove leaf cgroups first (children), then root.
-            // cgroupfs requires directories to be empty (no child cgroups).
-            if let Ok(entries) = std::fs::read_dir(&self.cgroup_root) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        // Recurse one level for nested cgroups (e.g., supervisor/)
-                        if let Ok(sub_entries) = std::fs::read_dir(&path) {
-                            for sub in sub_entries.flatten() {
-                                if sub.path().is_dir() {
-                                    let _ = std::fs::remove_dir(&sub.path());
-                                }
-                            }
+            fn remove_cgroup_tree(dir: &Path) {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            remove_cgroup_tree(&path);
                         }
-                        let _ = std::fs::remove_dir(&path);
                     }
                 }
+                let _ = std::fs::remove_dir(dir);
             }
-            let _ = std::fs::remove_dir(&self.cgroup_root);
+            remove_cgroup_tree(&self.cgroup_root);
         }
 
         // 5. TempDir handles data_dir and run_dir
@@ -382,17 +398,10 @@ pub fn poll_until(
 ///
 /// Looks for a 16-char hex string (the truncated UUID format used by minibox).
 pub fn extract_container_id(output: &str) -> Option<String> {
-    // Look for a hex-like ID in the output
+    // Look for a 16-char hex string (the truncated UUID format used by minibox).
     for word in output.split_whitespace() {
         let cleaned = word.trim_matches(|c: char| !c.is_ascii_alphanumeric());
         if cleaned.len() == 16 && cleaned.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Some(cleaned.to_string());
-        }
-    }
-    // Fallback: look for any alphanumeric token of length 16
-    for word in output.split_whitespace() {
-        let cleaned = word.trim_matches(|c: char| !c.is_ascii_alphanumeric());
-        if cleaned.len() == 16 && cleaned.chars().all(|c| c.is_ascii_alphanumeric()) {
             return Some(cleaned.to_string());
         }
     }
@@ -437,8 +446,8 @@ impl SandboxClient {
             return;
         }
         let (img, tag) = Self::parse_image_tag(image);
-        let (ok, _stdout, stderr) = self.fixture.run_cli(&["pull", img, "--tag", tag]);
-        assert!(ok, "failed to pull {image}: {stderr}");
+        let out = self.fixture.run_cli(&["pull", img, "--tag", tag]);
+        assert!(out.success, "failed to pull {image}: {}", out.stderr);
         self.pulled_images.insert(image.to_string());
     }
 

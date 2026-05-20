@@ -37,6 +37,11 @@ pub fn detect_interpreter(path: &Path) -> Result<(String, Vec<String>)> {
     }
 }
 
+/// Default memory limit for sandbox containers (bytes).
+const DEFAULT_SANDBOX_MEMORY_BYTES: u64 = 1024 * 1024; // 1 MiB per memory_mb unit
+/// Default CPU weight for sandbox containers.
+const DEFAULT_SANDBOX_CPU_WEIGHT: u64 = 100;
+
 /// Build the `DaemonRequest::Run` for a sandbox execution.
 pub fn build_request(
     script: &Path,
@@ -79,8 +84,8 @@ pub fn build_request(
         image: image.to_string(),
         tag: Some(tag.to_string()),
         command,
-        memory_limit_bytes: Some(memory_mb * 1024 * 1024),
-        cpu_weight: Some(100),
+        memory_limit_bytes: Some(memory_mb * DEFAULT_SANDBOX_MEMORY_BYTES),
+        cpu_weight: Some(DEFAULT_SANDBOX_CPU_WEIGHT),
         ephemeral: true,
         network: Some(network_mode),
         mounts,

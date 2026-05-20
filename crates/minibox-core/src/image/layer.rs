@@ -964,6 +964,63 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
+    // Exhaustive: validate_tar_entry_path — table-driven rejection classes
+    // ---------------------------------------------------------------------------
+
+    /// Table-driven test covering every character class and pattern that
+    /// `validate_tar_entry_path` must reject or accept.
+    ///
+    /// Rejection classes:
+    /// - Absolute paths (leading `/`)
+    /// - Parent-dir traversal (`..` as a path component)
+    ///
+    /// Acceptance classes:
+    /// - Simple relative paths
+    /// - Deeply nested paths
+    /// - Paths with dots in filenames (not `..` components)
+    /// - Single-component paths
+    #[test]
+    fn exhaustive_validate_tar_entry_path_table() {
+        let dest = TempDir::new().expect("tempdir");
+
+        // (input, should_be_ok)
+        let cases: &[(&str, bool)] = &[
+            // --- rejection: absolute paths ---
+            ("/etc/passwd", false),
+            ("/bin/sh", false),
+            ("/", false),
+            ("/usr/local/bin/tool", false),
+            // --- rejection: parent-dir traversal ---
+            ("..", false),
+            ("../escape", false),
+            ("foo/../bar", false),
+            ("a/b/../../c", false),
+            ("a/b/c/..", false),
+            ("../../../etc/shadow", false),
+            // --- acceptance: safe relative paths ---
+            ("usr/bin/env", true),
+            ("hello.txt", true),
+            ("a/b/c/d/e/f", true),
+            ("single", true),
+            // --- acceptance: dots in filenames (not .. components) ---
+            ("foo..bar", true),
+            ("..hidden", true),
+            ("file..txt", true),
+            ("a/b..c/d", true),
+        ];
+
+        for &(input, should_ok) in cases {
+            let result = validate_tar_entry_path(Path::new(input), dest.path());
+            assert_eq!(
+                result.is_ok(),
+                should_ok,
+                "validate_tar_entry_path({input:?}): expected ok={should_ok}, got {:?}",
+                result.as_ref().err()
+            );
+        }
+    }
+
+    // ---------------------------------------------------------------------------
     // Exhaustive: entry type classification — accept/reject for every tar type
     // ---------------------------------------------------------------------------
 

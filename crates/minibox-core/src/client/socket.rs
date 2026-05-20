@@ -65,14 +65,6 @@ impl DaemonResponseStream {
 
         Ok(Some(response))
     }
-
-    pub async fn try_collect(mut self) -> Result<Vec<DaemonResponse>> {
-        let mut responses = Vec::new();
-        while let Some(resp) = self.next().await? {
-            responses.push(resp);
-        }
-        Ok(responses)
-    }
 }
 
 /// A write-only connection that sends a single [`DaemonRequest`] and discards the response.

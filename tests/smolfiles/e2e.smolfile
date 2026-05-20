@@ -1,0 +1,25 @@
+# Minibox e2e test VM — full-featured environment for integration testing.
+#
+# Usage:
+#   smolvm machine create minibox-e2e --smolfile tests/smolfiles/e2e.smolfile
+#   smolvm machine start --name minibox-e2e
+#   smolvm machine exec --name minibox-e2e -- /workspace/target/debug/miniboxd
+#   smolvm machine stop --name minibox-e2e
+
+image = "alpine:3.20"
+cpus = 2
+memory = 1024
+net = true
+storage = 10
+overlay = 2
+workdir = "/workspace"
+
+[dev]
+init = [
+    "apk add --no-cache bash coreutils util-linux mount shadow iptables",
+    "mkdir -p /var/lib/minibox /run/minibox",
+]
+volumes = ["./:/workspace"]
+
+[health]
+exec = ["test", "-d", "/workspace/target"]

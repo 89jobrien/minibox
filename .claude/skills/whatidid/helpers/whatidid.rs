@@ -15,8 +15,9 @@
 use anyhow::{Context, Result};
 use chrono::Local;
 use std::{
+    io::Write,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
 };
 
 fn main() -> Result<()> {
@@ -31,44 +32,31 @@ fn main() -> Result<()> {
 
     // Step 1: harvest
     eprintln!("[1/3] harvesting sessions for {date_str}...");
-    let harvest = run_rust_script(
-        &helpers.join("harvest.rs"),
-        &[&date_str],
-    )?;
+    let harvest = run_rust_script(&helpers.join("harvest.rs"), &[&date_str], None)?;
     if harvest.trim().is_empty() || harvest.trim() == "[]" {
         eprintln!("No Claude Code sessions found for {date_str}.");
-        eprintln!(
-            "Sessions are stored under ~/.claude/projects/<project>/*.jsonl"
-        );
+        eprintln!("Sessions are stored under ~/.claude/projects/<project>/*.jsonl");
         return Ok(());
     }
 
-    // Write harvest to temp file
-    let sessions_path = format!("/tmp/whatidid-sessions-{date_str}.json");
-    std::fs::write(&sessions_path, &harvest)
-        .context("write sessions temp file")?;
-
-    // Step 2: analyze
+    // Step 2: analyze (harvest output piped via stdin)
     eprintln!("[2/3] analyzing with Claude...");
     let digest = run_rust_script(
         &helpers.join("analyze.rs"),
-        &[&sessions_path, &date_str],
+        &["-", &date_str],
+        Some(&harvest),
     )?;
 
-    let digest_path = format!("/tmp/whatidid-digest-{date_str}.json");
-    std::fs::write(&digest_path, &digest)
-        .context("write digest temp file")?;
-
-    // Step 3: report
+    // Step 3: report (digest output piped via stdin)
     let open_flag = if no_open { "--no-open" } else { "" };
     let report_args: Vec<&str> = if no_open {
-        vec![&digest_path, &date_str, open_flag]
+        vec!["-", &date_str, open_flag]
     } else {
-        vec![&digest_path, &date_str]
+        vec!["-", &date_str]
     };
 
     eprintln!("[3/3] rendering report...");
-    let summary = run_rust_script(&helpers.join("report.rs"), &report_args)?;
+    let summary = run_rust_script(&helpers.join("report.rs"), &report_args, Some(&digest))?;
     if !summary.trim().is_empty() {
         println!("{summary}");
     }
@@ -76,17 +64,33 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_rust_script(script: &PathBuf, args: &[&str]) -> Result<String> {
+fn run_rust_script(script: &PathBuf, args: &[&str], stdin_data: Option<&str>) -> Result<String> {
     let mut cmd = Command::new("rust-script");
     cmd.arg(script);
     for arg in args.iter().filter(|a| !a.is_empty()) {
         cmd.arg(arg);
     }
+    if stdin_data.is_some() {
+        cmd.stdin(Stdio::piped());
+    }
     cmd.stdout(Stdio::piped()).stderr(Stdio::inherit());
 
-    let output = cmd
-        .output()
+    let mut child: Child = cmd
+        .spawn()
         .with_context(|| format!("run rust-script {}", script.display()))?;
+
+    if let Some(data) = stdin_data {
+        child
+            .stdin
+            .take()
+            .context("stdin not available")?
+            .write_all(data.as_bytes())
+            .context("write stdin to rust-script")?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .with_context(|| format!("wait rust-script {}", script.display()))?;
 
     if !output.status.success() {
         anyhow::bail!(
@@ -102,6 +106,5 @@ fn run_rust_script(script: &PathBuf, args: &[&str]) -> Result<String> {
 fn helpers_dir() -> Result<PathBuf> {
     // Resolve relative to this script's canonical location
     let home = std::env::var("HOME").context("HOME not set")?;
-    Ok(PathBuf::from(home)
-        .join("dev/minibox/.claude/skills/whatidid/helpers"))
+    Ok(PathBuf::from(home).join("dev/minibox/.claude/skills/whatidid/helpers"))
 }

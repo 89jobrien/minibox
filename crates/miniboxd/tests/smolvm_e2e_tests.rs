@@ -12,7 +12,7 @@
 
 mod helpers;
 
-use helpers::smolvm::{SmolVmFixture, smolvm_run};
+use helpers::smolvm::{SmolVmFixture, smolvm_available, smolvm_run};
 use serial_test::serial;
 
 const IMAGE: &str = "alpine:3.20";
@@ -20,7 +20,7 @@ const IMAGE: &str = "alpine:3.20";
 /// Skip the test if smolvm is not installed.
 macro_rules! require_smolvm {
     () => {
-        if !SmolVmFixture::smolvm_available() {
+        if !smolvm_available() {
             eprintln!("SKIPPED: smolvm not installed");
             return;
         }
@@ -35,10 +35,10 @@ macro_rules! require_smolvm {
 #[serial(smolvm)]
 fn smolvm_boots_and_returns_kernel_version() {
     require_smolvm!();
-    let (ok, stdout, stderr) = smolvm_run(IMAGE, &["uname", "-r"]);
-    assert!(ok, "uname inside VM failed: {stderr}");
+    let out = smolvm_run(IMAGE, &["uname", "-r"]);
+    assert!(out.success, "uname inside VM failed: {}", out.stderr);
     assert!(
-        !stdout.trim().is_empty(),
+        !out.stdout.trim().is_empty(),
         "expected kernel version, got empty output"
     );
 }
@@ -47,11 +47,12 @@ fn smolvm_boots_and_returns_kernel_version() {
 #[serial(smolvm)]
 fn smolvm_cgroups_v2_available() {
     require_smolvm!();
-    let (ok, stdout, stderr) = smolvm_run(IMAGE, &["mount"]);
-    assert!(ok, "mount inside VM failed: {stderr}");
+    let out = smolvm_run(IMAGE, &["mount"]);
+    assert!(out.success, "mount inside VM failed: {}", out.stderr);
     assert!(
-        stdout.contains("cgroup2"),
-        "cgroups v2 not mounted in VM: {stdout}"
+        out.stdout.contains("cgroup2"),
+        "cgroups v2 not mounted in VM: {}",
+        out.stdout
     );
 }
 
@@ -59,11 +60,12 @@ fn smolvm_cgroups_v2_available() {
 #[serial(smolvm)]
 fn smolvm_overlay_fs_available() {
     require_smolvm!();
-    let (ok, stdout, stderr) = smolvm_run(IMAGE, &["cat", "/proc/filesystems"]);
-    assert!(ok, "cat /proc/filesystems failed: {stderr}");
+    let out = smolvm_run(IMAGE, &["cat", "/proc/filesystems"]);
+    assert!(out.success, "cat /proc/filesystems failed: {}", out.stderr);
     assert!(
-        stdout.contains("overlay"),
-        "overlay FS not available in VM: {stdout}"
+        out.stdout.contains("overlay"),
+        "overlay FS not available in VM: {}",
+        out.stdout
     );
 }
 
@@ -71,12 +73,13 @@ fn smolvm_overlay_fs_available() {
 #[serial(smolvm)]
 fn smolvm_namespaces_available() {
     require_smolvm!();
-    let (ok, stdout, stderr) = smolvm_run(IMAGE, &["ls", "/proc/self/ns/"]);
-    assert!(ok, "ls /proc/self/ns failed: {stderr}");
+    let out = smolvm_run(IMAGE, &["ls", "/proc/self/ns/"]);
+    assert!(out.success, "ls /proc/self/ns failed: {}", out.stderr);
     for ns in ["mnt", "pid", "net", "uts"] {
         assert!(
-            stdout.contains(ns),
-            "namespace '{ns}' not found in /proc/self/ns/: {stdout}"
+            out.stdout.contains(ns),
+            "namespace '{ns}' not found in /proc/self/ns/: {}",
+            out.stdout
         );
     }
 }
@@ -100,7 +103,7 @@ fn smolvm_namespaces_available() {
 #[serial(smolvm)]
 fn smolvm_dns_resolution_works() {
     require_smolvm!();
-    let (ok, _stdout, stderr) = smolvm_run(
+    let out = smolvm_run(
         IMAGE,
         &[
             "wget",
@@ -114,7 +117,8 @@ fn smolvm_dns_resolution_works() {
     // 401 Unauthorized is expected (no auth), but confirms network + DNS work.
     // wget returns non-zero on 401, so check stderr for the response.
     assert!(
-        ok || stderr.contains("401") || stderr.contains("server returned error"),
-        "DNS/network should work inside VM.\nstderr: {stderr}"
+        out.success || out.stderr.contains("401") || out.stderr.contains("server returned error"),
+        "DNS/network should work inside VM.\nstderr: {}",
+        out.stderr
     );
 }

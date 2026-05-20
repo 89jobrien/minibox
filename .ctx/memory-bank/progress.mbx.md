@@ -1,0 +1,184 @@
+# Progress
+
+## What works
+
+### Core container lifecycle (Linux native adapter)
+
+- **Pull**:
+    - OCI image pull from Docker Hub v2 + ghcr.io,
+    - anonymous auth,
+    - parallel layer downloads,
+    - content-addressed caching
+- **Run**:
+    - Full namespace isolation (PID, NET, UTS, IPC, MNT),
+    - cgroups v2 resource limits (memory, CPU weight, PID limit),
+    - overlay filesystem layering
+- **Exec**:
+    - setns-based exec with PTY support (`-it`),
+    - interactive terminal
+- **Stop/rm**:
+    - Graceful shutdown with signal forwarding,
+    - cleanup of cgroups + overlay mounts
+- **ps**:
+    - List running/stopped containers with status, image, command, created
+- **logs**:
+    - Stored stdout/stderr capture per container
+- **events**:
+    - `minibox events` streams lifecycle events via event bus
+- **pause/resume**:
+    - cgroup.freeze-based pause/resume
+- **Bind mounts**:
+    - `-v`/`--mount` with host path validation
+- **Privileged mode**:
+    - `--privileged` flag
+- **Bridge networking**:
+    - veth pairs,
+    - NAT via iptables DNAT
+    - `MINIBOX_NETWORK_MODE=bridge`
+- **Image management**:
+    - prune / rmi with lease-based ImageGarbageCollector
+- **Image build pipeline**:
+    - push,
+    - commit,
+    - build (experimental)
+- **Port forwarding**:
+    - DNAT via iptables in bridge network mode
+    - `BridgeNetwork::apply_port_mappings`
+    - teardown on cleanup
+- **DNS config**:
+    - defaults to 8.8.8.8 + 8.8.4.4,
+    - configurable per container
+- **Execution manifest**:
+    - persisted before spawn,
+    - workload digest,
+    - env value
+    - SHA-256 (never plaintext),
+    - policy evaluation via `mbx verify`
+- **OTEL trace export**:
+    - full OTLP/gRPC exporter via opentelemetry 0.31,
+    - batch export, graceful fallback,
+    - OtelGuard shutdown
+    - Wired in miniboxd main.
+- **Auth-policy gate**:
+    - `ContainerPolicy` deny-by-default for bind mounts and privileged mode
+    - Env-var opt-in (`MINIBOX_ALLOW_BIND_MOUNTS`, `MINIBOX_ALLOW_PRIVILEGED`)
+    - `validate_policy()` enforced on every run request
+
+### GKE adapter
+
+- Unprivileged pod execution via proot + copy-FS
+- Image pull/push support via OciPushAdapter
+
+### macOS adapters
+
+- **smolvm** (default): run/stop/ps via lightweight Linux VM
+- **krun**: run/stop/ps via libkrun VM (fallback when smolvm absent)
+- **colima**: run/stop/ps via Lima VM (Intel Macs)
+- Limitations: exec/logs not supported on any macOS adapter
+
+### Testing infrastructure
+
+- ~1,467 tests total across all categories
+- ~728 inline unit tests + ~739 integration test files
+- 19 security regression tests pinning all 12 invariants
+- ~46 proptest property tests (protocol roundtrip, cgroup bounds, daemon state)
+- 28 conformance tests (backend-agnostic adapter trait contracts)
+- 11 borrow-reasoning fixtures (must-pass/must-fail)
+- 15 e2e daemon+CLI tests (Linux+root)
+- 16 cgroup integration tests (Linux+root)
+- ~17 sandbox tests, 30 CLI subprocess tests
+- Conformance suite generates Markdown/JSON reports
+
+### CI pipeline
+
+- 8 GHA workflows:
+    - lint,
+    - test,
+    - conformance,
+    - protocol drift,
+    - nightly audit,
+    - release
+- Self-hosted runner on VPS for Linux-specific tests
+- Pre-commit/pre-push local gates via cargo xtask
+
+### Developer tooling
+
+- `mbx doctor` — preflight diagnostics (compiled adapters, capabilities)
+- `cargo xtask ci-watch` — watch GHA run status with job-level detail
+- `nu scripts/promote.nu` — branch cascade (develop->next->staging->main)
+
+## Recently completed
+
+- **Rustqual refactor** — named constants, dead code removal, RunOpts struct (d5748d6)
+- **Exhaustive small-domain tests** — path validation edge cases (870aa9f)
+- **Protocol/domain roundtrip property tests** — proptest coverage (6277bde)
+- **Test helper cleanup** — fixes #403-#409 (f8f677a)
+
+## In progress
+
+- macOS exec/logs via VM adapters — container run + stdout streaming works
+  (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
+  unsupported. No historical log retrieval.
+- Merge develop -> next (pending CI green on develop)
+
+## Not started / backlog
+
+### Partially done
+
+- **Container-in-container** (DinD):
+    - UX — works today via privileged mode + bind mounts (full e2e test in system_tests.rs). Missing: turnkey `--dind`
+      flag, auto-provisioned inner daemon, socket forwarding, shared image cache
+- **Capability dropping**:
+    - Grant path implemented (`apply_full_capabilities` with curated whitelist minus SYS*MODULE/SYS_BOOT/MAC*\*)
+    - Drop path for unprivileged containers missing (no default allowlist like Docker's ~14 caps)
+- **User namespace remapping**:
+    - `RuntimeCapabilities.supports_user_namespaces` field exists on every adapter
+    - no `CLONE_NEWUSER`
+    - no uid_map/gid_map writing
+    - no newuidmap helper
+    - purely informational today
+- **Windows (WSL2)** adapter:
+    - ~40% scaffolded. `Wsl2Runtime`/`Wsl2Filesystem`/`Wsl2Limiter` implement traits via `wsl.exe` delegation
+    - `winbox` crate has module stubs + conformance test
+    - Not wired into miniboxd
+    - no Named Pipe server
+    - no `minibox-wsl-helper` binary exists
+
+### Not started
+
+- **Seccomp filters**:
+    - zero code
+    - no BPF profiles
+    - no syscall filtering
+- **Rootless support**:
+    - blocked on user namespace impl
+    - no slirp4netns
+    - no fuse-overlayfs
+    - no unprivileged cgroup delegation
+- **MCP control surface**:
+    - zero code
+    - no agent-facing JSON-RPC/gRPC server
+- **CRI compliance**:
+    - zero protobuf/gRPC
+    - no RuntimeService/ImageService
+- **Aggregate image size limit**:
+    - per-layer 10 GiB enforced
+    - no total budget across layers in a single pull (Issue #319)
+- **ValidatedPath newtype**:
+    - all validation is function-call based (`validate_layer_path()`)
+    - no type-level guarantee
+    - documented in SECURITY_INVARIANTS.md as a consideration
+
+## Known issues
+
+- Stabilization freeze active — no new features without approval
+- krun metrics inconsistency — constructs its own `NoOpMetricsRecorder`
+  internally rather than accepting the shared broker
+- Colima path validation bypass via `..` (P1)
+- Bind-mount teardown absent on container cleanup (P2)
+- `xtask` binary not currently available (preflight reports fail)
+- Mock system duplication — two locations (`adapters/mocks.rs` + `testing/mocks/`)
+  with overlapping but slightly different APIs
+- CI coverage gaps — property tests, borrow fixtures, sandbox tests, CLI
+  subprocess tests, krun conformance not in any CI workflow
+- macOS VZ.framework — blocked by Apple bug on ARM64; adapter removed 2026-05-08

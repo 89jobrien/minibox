@@ -1151,15 +1151,21 @@ mod tests {
         let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
             Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
 
-        let deps = build_gke_handler_dependencies(
+        let deps = match build_gke_handler_dependencies(
             Arc::clone(&state),
             data_dir.join("containers"),
             data_dir.join("run/containers"),
             metrics_recorder,
             event_broker,
             image_gc,
-        )
-        .expect("gke deps");
+        ) {
+            Ok(d) => d,
+            Err(e) if e.to_string().contains("proot") => {
+                eprintln!("SKIPPED: proot not available: {e}");
+                return;
+            }
+            Err(e) => panic!("gke deps: {e}"),
+        };
 
         assert!(
             deps.build.image_pusher.is_some(),

@@ -342,21 +342,11 @@ pub(super) async fn handle_run_streaming(
 // ─── PreparedRun: shared setup extracted from run_inner / run_inner_capture ───
 
 /// All state produced by container preparation, before the process is spawned.
-///
-/// Some fields are only consumed by specific run paths (streaming vs
-/// fire-and-forget) or downstream handlers, so the struct carries
-/// `allow(dead_code)` to suppress false positives from partial usage.
 #[cfg(unix)]
-#[allow(dead_code)]
 struct PreparedRun {
     id: String,
     spawn_config: ContainerSpawnConfig,
-    container_dir: PathBuf,
-    merged_dir: PathBuf,
-    cgroup_dir: PathBuf,
     image_label: String,
-    image_ref: ImageRef,
-    layer_dirs: Vec<PathBuf>,
     /// Network lifecycle handle — must stay alive until attach is called.
     net: NetworkLifecycle,
     manifest_path: PathBuf,
@@ -632,12 +622,7 @@ async fn prepare_run(
     Ok(PreparedRun {
         id,
         spawn_config,
-        container_dir,
-        merged_dir,
-        cgroup_dir,
         image_label,
-        image_ref,
-        layer_dirs,
         net,
         manifest_path,
         workload_digest,

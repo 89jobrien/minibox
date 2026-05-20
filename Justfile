@@ -1,11 +1,6 @@
 default:
     @just --list
 
-# ── Workspace ─────────────────────────────────────────────────────────────────
-
-workspace:
-    zellij --layout minibox
-
 # ── Formatting ──────────────────────────────────────────────────────────────
 
 fmt:
@@ -20,14 +15,14 @@ fmt-check:
 lint:
     cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
 
-# ── Build ────────────────────────────────────────────────────────────────────
+# ── Build ───────────────────────────────────────────────────────────────────
+
+build:
+    cargo build --release
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
     cargo build --release -p minibox -p minibox-macros -p mbx -p miniboxd
-
-build:
-    cargo build --release
 
 # Build the sandbox toolchain image and load into minibox.
 build-sandbox:
@@ -48,7 +43,7 @@ build-linux:
         cargo build --release --target "$MUSL_TARGET" \
         -p miniboxd -p mbx
 
-# ── Gates ────────────────────────────────────────────────────────────────────
+# ── Gates ───────────────────────────────────────────────────────────────────
 
 # fmt-check + lint + build-release
 pre-commit:
@@ -64,11 +59,19 @@ ci:
     cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
     just test-unit
 
-# ── Testing ──────────────────────────────────────────────────────────────────
+# Read-only local gate: fmt, check, clippy, borrow fixtures, docs lint
+verify:
+    cargo xtask verify
+
+# ── Testing ─────────────────────────────────────────────────────────────────
 
 # All unit + conformance tests (any platform)
 test-unit:
     cargo xtask test-unit
+
+# Property tests
+test-property:
+    cargo xtask test-property
 
 # Adapter isolation tests (any platform)
 test-adapters:
@@ -105,10 +108,6 @@ test-e2e:
 test-system:
     cargo xtask test-system-suite
 
-# Daemon+CLI system tests (Linux, root) — alias for test-system
-test-e2e-suite:
-    cargo xtask test-system-suite
-
 # Sandbox contract tests (Linux, root, Docker Hub)
 test-sandbox:
     cargo xtask test-sandbox
@@ -121,15 +120,10 @@ test-linux:
 test-e2e-vps:
     ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
 
-# Full pipeline: clean state → doctor → all tests → clean state
+# Full pipeline: clean state -> doctor -> all tests -> clean state
 test-all: nuke-test-state doctor test-unit test-integration test-system nuke-test-state
 
-# ── Dashboard ────────────────────────────────────────────────────────────────
-
-# TUI dashboard (dashbox) was removed in the crate consolidation (v0.23.0).
-# Use `mbx ps` and `mbx events` for container status and event streaming.
-
-# ── Benchmarks ───────────────────────────────────────────────────────────────
+# ── Benchmarks ──────────────────────────────────────────────────────────────
 
 bench:
     cargo xtask bench
@@ -147,12 +141,7 @@ bench-sync:
 flamegraph suite="codec":
     cargo xtask flamegraph --suite {{suite}}
 
-# AI bench analysis (subcommands: report, compare, regress, cleanup, trigger)
-bench-agent *args:
-    #!/usr/bin/env bash
-    uv run scripts/bench-agent.py "$@"
-
-# ── Daemon ───────────────────────────────────────────────────────────────────
+# ── Daemon ──────────────────────────────────────────────────────────────────
 
 doctor:
     @cargo test -p minibox preflight::tests -- --nocapture 2>&1 || true
@@ -172,9 +161,6 @@ trace:
     mkdir -p "$TRACE_DIR"
 
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        # The Colima adapter does not stream container stdout back through minibox
-        # (spawn_process returns output_reader: None). uftrace is a Linux tool anyway.
-        # Run the trace directly inside the Lima VM via limactl shell, bypassing minibox.
         echo "trace: building Linux musl binary..."
         just build-linux
 
@@ -187,12 +173,11 @@ trace:
         BINARY_DIR="${TARGET_DIR}/${MUSL_TARGET}/release"
         ABS_TRACE="$(pwd)/$TRACE_DIR"
 
-        # Lima mounts /tmp and /Users into the VM — both paths are accessible.
         echo "trace: running uftrace inside Colima VM..."
         colima ssh -- bash "$(pwd)/scripts/trace-lima.sh" "$BINARY_DIR" "$ABS_TRACE"
 
         echo ""
-        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        echo "-- uftrace report (top 20 by total time) ------"
         colima ssh -- uftrace report -d "${ABS_TRACE}" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
     else
         [[ "$(uname -s)" == "Linux" ]] || { echo "error: unsupported platform"; exit 1; }
@@ -212,9 +197,9 @@ trace:
         done
         [[ -S /run/minibox/miniboxd.sock ]] || { echo "error: daemon socket did not appear"; kill "$DAEMON_PID" 2>/dev/null; exit 1; }
 
-        echo "trace: smoke — pull alpine..."
+        echo "trace: smoke -- pull alpine..."
         ./target/release/mbx pull alpine || true
-        echo "trace: smoke — run echo..."
+        echo "trace: smoke -- run echo..."
         ./target/release/mbx run alpine -- /bin/echo "uftrace smoke" || true
 
         echo "trace: stopping daemon..."
@@ -222,78 +207,22 @@ trace:
         wait "$DAEMON_PID" 2>/dev/null || true
 
         echo ""
-        echo "── uftrace report (top 20 by total time) ──────────────────────────────"
+        echo "-- uftrace report (top 20 by total time) ------"
         uftrace report -d "$TRACE_DIR" --sort=total 2>/dev/null | head -25 || echo "(no trace data)"
     fi
 
     echo ""
     echo "trace: data saved to $TRACE_DIR"
-    echo "trace: call graph      → uftrace graph -d $TRACE_DIR"
-    echo "trace: chrome devtools → uftrace dump -d $TRACE_DIR --chrome > $TRACE_DIR/trace.json"
+    echo "trace: call graph      -> uftrace graph -d $TRACE_DIR"
+    echo "trace: chrome devtools -> uftrace dump -d $TRACE_DIR --chrome > $TRACE_DIR/trace.json"
 
-# ── AI Agents ────────────────────────────────────────────────────────────────
-
-# Meta-agent: designs + spawns parallel agents from user intent (e.g. just meta-agent "audit the overlay mount code")
-meta-agent task:
-    uv run scripts/meta-agent.py {{ quote(task) }}
-
-# Multi-role council analysis of current branch (core: 3 roles, extensive: 5 roles)
-council base="main" mode="core":
-    uv run scripts/council.py --base {{ quote(base) }} --mode {{ quote(mode) }}
-
-# AI code review vs main (security + correctness focused)
-ai-review base="main":
-    uv run scripts/ai-review.py --base {{ quote(base) }}
-
-# Generate unit tests for a domain trait adapter (e.g. just gen-tests BridgeNetworking)
-gen-tests trait:
-    uv run scripts/gen-tests.py {{ quote(trait) }}
-
-# Diagnose latest container failure from logs + cgroup state
-diagnose *args:
-    #!/usr/bin/env bash
-    uv run scripts/diagnose.py "$@"
-
-# Fetch, check sync vs origin/main — safe to push check
-sync-check:
-    cruxx run .crux/sync-check.crux
-
-# ── Setup ────────────────────────────────────────────────────────────────────
-
-# Install git hooks (pre-commit, pre-push, commit-msg) from scripts/install-hooks.sh
-install-hooks:
-    bash scripts/install-hooks.sh
-
-# ── Git ──────────────────────────────────────────────────────────────────────
-
-# Sync-check then push + clean non-critical artifacts
-push *args:
-    uv run scripts/sync-check.py
-    git push {{args}}
-    cargo xtask clean-artifacts
-
-# Fetch + rebase onto origin/main
-pull:
-    git fetch origin
-    git rebase origin/main
-
-# Stage all + commit (triggers pre-commit hook)
-commit msg:
-    git add -A
-    git commit -m "{{msg}}"
-
-# Generate a commit message from staged changes (use -a to stage all, -c to commit)
-commit-msg *args:
-    #!/usr/bin/env bash
-    uv run scripts/commit-msg.py "$@"
-
-# ── Cleanup ───────────────────────────────────────────────────────────────────
-
-clean-artifacts:
-    cargo xtask clean-artifacts
+# ── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean:
     cargo clean
+
+clean-artifacts:
+    cargo xtask clean-artifacts
 
 clean-test:
     find target/debug/deps -name '*_tests-*' -delete 2>/dev/null || true
@@ -306,27 +235,7 @@ clean-stale days="7":
 nuke-test-state:
     cargo xtask nuke-test-state
 
-metrics-report:
-    uv run python scripts/collect_metrics.py --reports-dir artifacts/reports
+# ── CI ──────────────────────────────────────────────────────────────────────
 
-# ── Agentbox (Go) ─────────────────────────────────────────────────────
-
-# Build all agentbox binaries
-agentbox-build:
-    cd agentbox && go build ./cmd/agentbox/ && go build ./cmd/minibox-commit-msg/
-
-# Run agentbox tests
-agentbox-test:
-    cd agentbox && go test ./... -v
-
-# Run council analysis (Go)
-agentbox-council *ARGS:
-    cd agentbox && op run --account=my.1password.com --env-file=$HOME/.secrets -- go run ./cmd/agentbox/ council {{ARGS}}
-
-# Run meta-agent (Go)
-agentbox-meta-agent *ARGS:
-    cd agentbox && op run --account=my.1password.com --env-file=$HOME/.secrets -- go run ./cmd/agentbox/ meta-agent {{ARGS}}
-
-# Generate commit message (Go)
-agentbox-commit-msg *ARGS:
-    cd agentbox && go run ./cmd/minibox-commit-msg/ {{ARGS}}
+ci-watch *args:
+    cargo xtask ci-watch {{args}}
