@@ -236,13 +236,16 @@ oversized manifest or layer downloads.
 **Code path:**
 
 - `crates/minibox-core/src/image/registry.rs`:
-  - `MAX_MANIFEST_SIZE` = 10 MiB — checked against Content-Length and accumulated body size.
-  - `MAX_LAYER_SIZE` = 10 GiB per layer — checked against Content-Length and enforced via
-    `LimitedStream` during download.
-- `crates/minibox/src/adapters/ghcr.rs` mirrors the same constants for GHCR pulls.
-
-**Note:** There is no aggregate total-image-size limit. Each layer is independently bounded
-at 10 GiB. A future `MAX_TOTAL_IMAGE_SIZE` budget is tracked in issue #319.
+  - `MAX_MANIFEST_SIZE` = 10 MiB -- checked against Content-Length and accumulated
+    body size.
+  - `MAX_LAYER_SIZE` = 10 GiB per layer -- checked against Content-Length and
+    enforced via `LimitedStream` during download.
+  - `MAX_TOTAL_IMAGE_SIZE` = 50 GiB aggregate across all layers in a single pull.
+    Enforced in two places: (1) pre-pull manifest declared-size sum check before
+    any layer download begins, and (2) a streaming `AtomicU64` counter incremented
+    after each layer download completes.
+- `crates/minibox/src/adapters/ghcr.rs` mirrors the per-layer constants for GHCR
+  pulls.
 
 **Regression tests:**
 
@@ -250,10 +253,13 @@ at 10 GiB. A future `MAX_TOTAL_IMAGE_SIZE` budget is tracked in issue #319.
 |-----------|------|
 | `test_constants_manifest_size` | `crates/minibox-core/src/image/registry.rs` (unit) |
 | `test_constants_layer_size` | `crates/minibox-core/src/image/registry.rs` (unit) |
+| `test_constants_total_image_size` | `crates/minibox-core/src/image/registry.rs` (unit) |
 | `get_manifest_errors_when_content_length_exceeds_limit` | `crates/minibox-core/src/image/registry.rs` (integration) |
+| `pull_image_rejects_manifest_exceeding_total_size_limit` | `crates/minibox-core/src/image/registry.rs` (integration) |
 
-_(Layer size rejection is not feasible to integration-test due to 10 GiB body requirement;
-enforced by the `LimitedStream` wrapper and its own unit tests in the same file.)_
+_(Layer size rejection is not feasible to integration-test due to 10 GiB body
+requirement; enforced by the `LimitedStream` wrapper and its own unit tests in
+the same file.)_
 
 ---
 
