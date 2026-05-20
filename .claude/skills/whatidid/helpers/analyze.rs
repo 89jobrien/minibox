@@ -188,3 +188,74 @@ fn skill_dir() -> Result<PathBuf> {
     Ok(PathBuf::from(home)
         .join("dev/minibox/.claude/skills/whatidid"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_transcript_formats_sessions() {
+        let sessions: Vec<Value> = vec![serde_json::json!({
+            "cwd": "/dev/project",
+            "git_branch": "main",
+            "project_slug": "minibox",
+            "started_at": "2026-05-20T10:00:00Z",
+            "tool_calls": 5,
+            "read_calls": 2,
+            "edit_calls": 1,
+            "messages": [
+                {"role": "human", "text": "fix the bug", "tool_requests": []},
+                {"role": "assistant", "text": "I'll look at it", "tool_requests": ["Read"]}
+            ]
+        })];
+        let transcript = build_transcript(&sessions);
+        assert!(transcript.contains("SESSION 1"));
+        assert!(transcript.contains("project=minibox"));
+        assert!(transcript.contains("[human] fix the bug"));
+        assert!(transcript.contains("[assistant] I'll look at it"));
+        assert!(transcript.contains("tools: Read"));
+    }
+
+    #[test]
+    fn test_build_transcript_empty_sessions() {
+        let sessions: Vec<Value> = vec![];
+        let transcript = build_transcript(&sessions);
+        assert!(transcript.is_empty());
+    }
+
+    #[test]
+    fn test_cache_path_format() {
+        let path = cache_path("2026-05-20").expect("cache_path should succeed");
+        assert!(path.to_string_lossy().contains("cache/2026-05-20.json"));
+    }
+
+    #[test]
+    fn test_digest_schema_roundtrip() {
+        let json = r#"{
+            "headline": "Test day",
+            "primary_focus": "testing",
+            "day_narrative": "Wrote tests all day",
+            "goals": [{
+                "title": "Testing",
+                "label": "test",
+                "summary": "Add tests",
+                "human_hours": 2.0,
+                "project": "minibox",
+                "docs_referenced": [],
+                "tasks": [{
+                    "title": "Unit tests",
+                    "what_got_done": "Added tests",
+                    "domain_skills": ["testing"],
+                    "tech_skills": ["rust"],
+                    "task_type": "testing",
+                    "professional_roles": ["developer"],
+                    "human_hours": 2.0
+                }]
+            }]
+        }"#;
+        let digest: Digest = serde_json::from_str(json).expect("valid digest JSON");
+        assert_eq!(digest.headline, "Test day");
+        assert_eq!(digest.goals.len(), 1);
+        assert_eq!(digest.goals[0].tasks.len(), 1);
+    }
+}
