@@ -114,11 +114,17 @@ fn main() -> Result<()> {
             let line = match line {
                 Ok(l) if l.trim().is_empty() => continue,
                 Ok(l) => l,
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!("warning: skipping unreadable line in {}: {e}", path.display());
+                    continue;
+                }
             };
             let event: Event = match serde_json::from_str(&line) {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!("warning: malformed event in {} — {e}", path.display());
+                    continue;
+                }
             };
 
             // Date filter — use first timestamp seen per session
