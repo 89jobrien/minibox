@@ -33,6 +33,7 @@ use serde::Deserialize;
 use std::io;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context as TaskContext, Poll};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -52,6 +53,10 @@ const REGISTRY_BASE: &str = "https://registry-1.docker.io/v2";
 // bounding memory consumption during streaming download.
 const MAX_MANIFEST_SIZE: u64 = 10 * 1024 * 1024; // 10 MiB
 const MAX_LAYER_SIZE: u64 = 10 * 1024 * 1024 * 1024; // 10 GiB
+// SECURITY: Aggregate cap across all layers in a single pull. Prevents a manifest
+// with many small layers from exhausting disk even though each layer is within
+// MAX_LAYER_SIZE.
+const MAX_TOTAL_IMAGE_SIZE: u64 = 50 * 1024 * 1024 * 1024; // 50 GiB
 
 /// Maximum number of layer blobs downloaded concurrently.
 const MAX_CONCURRENT_LAYERS: usize = 4;
@@ -575,6 +580,16 @@ impl RegistryClient {
             manifest.layers.len()
         );
 
+        // 2b. Pre-pull aggregate size check.
+        let declared_total: u64 = manifest.layers.iter().map(|l| l.size).sum();
+        if declared_total > MAX_TOTAL_IMAGE_SIZE {
+            anyhow::bail!(
+                "image exceeds total size limit: {declared_total} bytes declared \
+                 across {} layers (max {MAX_TOTAL_IMAGE_SIZE})",
+                manifest.layers.len()
+            );
+        }
+
         // 3. Download all layers in parallel, up to MAX_CONCURRENT_LAYERS at once.
         //
         // Each task returns (digest, result) so that JoinErrors at the drain
@@ -582,11 +597,13 @@ impl RegistryClient {
         // placeholder. The digest is captured from `layer_desc` at spawn time
         // and echoed back regardless of success or failure.
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_LAYERS));
+        let downloaded_total = Arc::new(AtomicU64::new(0));
         let mut join_set: JoinSet<(String, anyhow::Result<()>)> = JoinSet::new();
         let total_layers = manifest.layers.len();
 
         for (idx, layer_desc) in manifest.layers.iter().cloned().enumerate() {
             let sem = semaphore.clone();
+            let agg_counter = downloaded_total.clone();
             let client = self.clone();
             let store = store.clone();
             let name = name.to_owned();
@@ -743,6 +760,17 @@ impl RegistryClient {
                         digest: digest_for_err,
                         source: e,
                     })??;
+
+                    // Update aggregate download counter and check limit.
+                    let prev = agg_counter.fetch_add(layer_desc.size, Ordering::Relaxed);
+                    if prev + layer_desc.size > MAX_TOTAL_IMAGE_SIZE {
+                        anyhow::bail!(
+                            "image exceeds total size limit: downloaded {} bytes \
+                             after layer {} (max {MAX_TOTAL_IMAGE_SIZE})",
+                            prev + layer_desc.size,
+                            layer_desc.digest,
+                        );
+                    }
 
                     info!(
                         "layer {}/{} ({}) done in {:.2?}",
@@ -998,6 +1026,15 @@ mod tests {
             MAX_LAYER_SIZE,
             10 * 1024 * 1024 * 1024,
             "MAX_LAYER_SIZE should be 10 GiB"
+        );
+    }
+
+    #[test]
+    fn test_constants_total_image_size() {
+        assert_eq!(
+            MAX_TOTAL_IMAGE_SIZE,
+            50 * 1024 * 1024 * 1024,
+            "MAX_TOTAL_IMAGE_SIZE should be 50 GiB"
         );
     }
 
@@ -1466,6 +1503,68 @@ mod tests {
         // be exercised via wiremock — hyper requires Content-Length to match the actual
         // body size, making it infeasible to serve a 10 GiB body in a unit test.
         // The identical code pattern IS covered by get_manifest_errors_when_content_length_exceeds_limit.
+
+        // ------------------------------------------------------------------
+        // pull_image — aggregate size limit
+        // ------------------------------------------------------------------
+
+        #[tokio::test]
+        async fn pull_image_rejects_manifest_exceeding_total_size_limit() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().unwrap();
+            let store = ImageStore::new(tmp.path().join("images")).unwrap();
+
+            // Token endpoint
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "testtoken"})),
+                )
+                .mount(&server)
+                .await;
+
+            // Manifest with layers whose declared sizes exceed MAX_TOTAL_IMAGE_SIZE.
+            // 6 layers x 10 GiB each = 60 GiB > 50 GiB limit.
+            let oversized_layers: Vec<_> = (0..6)
+                .map(|i| {
+                    json!({
+                        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                        "size": 10_u64 * 1024 * 1024 * 1024,
+                        "digest": format!("sha256:{:064x}", i)
+                    })
+                })
+                .collect();
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/bloated/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:config"
+                            },
+                            "layers": oversized_layers
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/bloated", "latest", &store)
+                .await
+                .unwrap_err();
+
+            let msg = format!("{err:#}");
+            assert!(
+                msg.contains("exceeds total size limit"),
+                "expected aggregate size error, got: {msg}"
+            );
+        }
 
         // ------------------------------------------------------------------
         // pull_image — end-to-end happy path
