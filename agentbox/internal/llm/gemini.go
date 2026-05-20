@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/genai"
 
+	"github.com/joe/minibox/agentbox/internal/config"
 	"github.com/joe/minibox/agentbox/internal/domain"
 )
 
@@ -28,24 +29,24 @@ func NewGeminiProvider(ctx context.Context, apiKey, model string) (*GeminiProvid
 	return &GeminiProvider{client: client, model: model}, nil
 }
 
-// NewGeminiFromEnv creates a provider reading GEMINI_API_KEY from env.
-// Uses the model from GEMINI_MODEL env var, defaulting to gemini-2.5-flash-lite.
-// Returns nil if the key is not set.
-func NewGeminiFromEnv(ctx context.Context) *GeminiProvider {
-	key := os.Getenv("GEMINI_API_KEY")
-	if key == "" {
+// NewGeminiFromConfig creates a provider from a centralized Config.
+// Returns nil if the API key is not set.
+func NewGeminiFromConfig(ctx context.Context, cfg config.Config) *GeminiProvider {
+	if cfg.GeminiKey == "" {
 		return nil
 	}
-	model := os.Getenv("GEMINI_MODEL")
-	if model == "" {
-		model = "gemini-2.5-flash-lite"
-	}
-	p, err := NewGeminiProvider(ctx, key, model)
+	p, err := NewGeminiProvider(ctx, cfg.GeminiKey, cfg.GeminiModel)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: gemini provider init failed: %v\n", err)
 		return nil
 	}
 	return p
+}
+
+// NewGeminiFromEnv creates a provider reading config from environment.
+// Returns nil if the key is not set.
+func NewGeminiFromEnv(ctx context.Context) *GeminiProvider {
+	return NewGeminiFromConfig(ctx, config.LoadFromEnv())
 }
 
 func (p *GeminiProvider) Name() string {

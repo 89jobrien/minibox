@@ -3,11 +3,11 @@ package llm
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 
+	"github.com/joe/minibox/agentbox/internal/config"
 	"github.com/joe/minibox/agentbox/internal/domain"
 )
 
@@ -25,19 +25,19 @@ func NewOpenAIProvider(apiKey, model string) *OpenAIProvider {
 	}
 }
 
-// NewOpenAIFromEnv creates a provider reading OPENAI_API_KEY from env.
-// Uses the model from OPENAI_MODEL env var, defaulting to gpt-4.1-mini.
-// Returns nil if the key is not set.
-func NewOpenAIFromEnv() *OpenAIProvider {
-	key := os.Getenv("OPENAI_API_KEY")
-	if key == "" {
+// NewOpenAIFromConfig creates a provider from a centralized Config.
+// Returns nil if the API key is not set.
+func NewOpenAIFromConfig(cfg config.Config) *OpenAIProvider {
+	if cfg.OpenAIKey == "" {
 		return nil
 	}
-	model := os.Getenv("OPENAI_MODEL")
-	if model == "" {
-		model = "gpt-4.1-mini"
-	}
-	return NewOpenAIProvider(key, model)
+	return NewOpenAIProvider(cfg.OpenAIKey, cfg.OpenAIModel)
+}
+
+// NewOpenAIFromEnv creates a provider reading config from environment.
+// Returns nil if the key is not set.
+func NewOpenAIFromEnv() *OpenAIProvider {
+	return NewOpenAIFromConfig(config.LoadFromEnv())
 }
 
 func (p *OpenAIProvider) Name() string {
