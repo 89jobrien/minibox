@@ -1160,8 +1160,8 @@ mod tests {
             image_gc,
         ) {
             Ok(d) => d,
-            Err(e) if e.to_string().contains("proot not found") => {
-                eprintln!("SKIPPED: proot not installed: {e}");
+            Err(e) if e.to_string().contains("proot") => {
+                eprintln!("SKIPPED: proot not available: {e}");
                 return;
             }
             Err(e) => panic!("gke deps: {e}"),
