@@ -75,8 +75,17 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let sessions_raw = fs::read_to_string(&sessions_path)
-        .with_context(|| format!("read {sessions_path}"))?;
+    let sessions_raw = if sessions_path == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
+        buf
+    } else {
+        fs::read_to_string(&sessions_path)
+            .with_context(|| format!("read {sessions_path}"))?
+    };
     let sessions: Vec<Value> = serde_json::from_str(&sessions_raw)
         .context("parse sessions JSON")?;
 

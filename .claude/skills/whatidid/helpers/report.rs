@@ -107,8 +107,17 @@ fn main() -> Result<()> {
         serde_json::from_str(&pricing_raw).context("parse model_pricing.json")?;
 
     // Load digest
-    let raw = fs::read_to_string(&digest_path)
-        .with_context(|| format!("read {digest_path}"))?;
+    let raw = if digest_path == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
+        buf
+    } else {
+        fs::read_to_string(&digest_path)
+            .with_context(|| format!("read {digest_path}"))?
+    };
     let digest: Digest = {
         let v: serde_json::Value = serde_json::from_str(&raw)?;
         if let Some(d) = v.get("digest") {
