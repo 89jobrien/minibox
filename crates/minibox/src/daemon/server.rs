@@ -794,22 +794,51 @@ mod tests {
         assert_eq!(q.pid, 1);
     }
 
+    /// Exhaustive table-driven test for `is_authorized`.
+    ///
+    /// Covers every combination of:
+    /// - `require_root_auth`: true / false
+    /// - `creds`: None, uid=0, uid=1, uid=1000, uid=u32::MAX
+    ///
+    /// The domain is small (2 x 5 = 10 cases) so we enumerate all of them.
     #[test]
-    fn is_authorized_requires_root_when_enabled() {
-        assert!(is_authorized(None, false));
-        assert!(is_authorized(
-            Some(&PeerCreds { uid: 1000, pid: 42 }),
-            false
-        ));
-        assert!(is_authorized(Some(&PeerCreds { uid: 0, pid: 42 }), true));
-        assert!(!is_authorized(
-            Some(&PeerCreds { uid: 1000, pid: 42 }),
-            true
-        ));
-        assert!(
-            !is_authorized(None, true),
-            "root-auth mode must fail closed when peer credentials are unavailable"
-        );
+    fn exhaustive_is_authorized_table() {
+        let creds_root = PeerCreds { uid: 0, pid: 1 };
+        let creds_uid1 = PeerCreds { uid: 1, pid: 2 };
+        let creds_regular = PeerCreds { uid: 1000, pid: 3 };
+        let creds_max = PeerCreds {
+            uid: u32::MAX,
+            pid: 4,
+        };
+
+        // (creds, require_root_auth, expected)
+        let cases: &[(Option<&PeerCreds>, bool, bool)] = &[
+            // require_root_auth=false: always allowed regardless of creds
+            (None, false, true),
+            (Some(&creds_root), false, true),
+            (Some(&creds_uid1), false, true),
+            (Some(&creds_regular), false, true),
+            (Some(&creds_max), false, true),
+            // require_root_auth=true: only uid=0 allowed
+            (None, true, false),              // fail closed
+            (Some(&creds_root), true, true),  // root allowed
+            (Some(&creds_uid1), true, false), // non-root denied
+            (Some(&creds_regular), true, false),
+            (Some(&creds_max), true, false), // u32::MAX boundary
+        ];
+
+        for (i, &(creds, require_root, expected)) in cases.iter().enumerate() {
+            let uid_desc = match creds {
+                None => "None".to_string(),
+                Some(c) => format!("uid={}", c.uid),
+            };
+            assert_eq!(
+                is_authorized(creds, require_root),
+                expected,
+                "case {i}: is_authorized({uid_desc}, require_root={require_root}) \
+                 expected {expected}"
+            );
+        }
     }
 
     // ─── is_terminal_response ────────────────────────────────────────────────
