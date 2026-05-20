@@ -17,6 +17,7 @@ use tempfile::TempDir;
 // ---------------------------------------------------------------------------
 
 /// Structured output from a CLI or VM command execution.
+#[derive(Debug)]
 pub struct CmdOutput {
     pub success: bool,
     pub stdout: String,
