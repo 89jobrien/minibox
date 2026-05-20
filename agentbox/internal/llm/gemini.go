@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"google.golang.org/genai"
 
@@ -65,7 +66,9 @@ func (p *GeminiProvider) Complete(ctx context.Context, req domain.CompletionRequ
 		}
 	}
 
+	start := time.Now()
 	resp, err := p.client.Models.GenerateContent(ctx, p.model, genai.Text(req.Prompt), config)
+	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
 		return domain.CompletionResponse{}, fmt.Errorf("gemini: %w", err)
 	}
@@ -79,8 +82,17 @@ func (p *GeminiProvider) Complete(ctx context.Context, req domain.CompletionRequ
 		}
 	}
 
+	var inputTokens, outputTokens int
+	if resp != nil && resp.UsageMetadata != nil {
+		inputTokens = int(resp.UsageMetadata.PromptTokenCount)
+		outputTokens = int(resp.UsageMetadata.CandidatesTokenCount)
+	}
+
 	return domain.CompletionResponse{
-		Text:     text,
-		Provider: p.Name(),
+		Text:         text,
+		Provider:     p.Name(),
+		LatencyMs:    latencyMs,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
 	}, nil
 }

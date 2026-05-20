@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -66,7 +67,9 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req domain.CompletionRequ
 		)
 	}
 
+	start := time.Now()
 	resp, err := p.client.Chat.Completions.New(ctx, params)
+	latencyMs := time.Since(start).Milliseconds()
 	if err != nil {
 		return domain.CompletionResponse{}, fmt.Errorf("openai: %w", err)
 	}
@@ -77,7 +80,10 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req domain.CompletionRequ
 	}
 
 	return domain.CompletionResponse{
-		Text:     text,
-		Provider: p.Name(),
+		Text:         text,
+		Provider:     p.Name(),
+		LatencyMs:    latencyMs,
+		InputTokens:  int(resp.Usage.PromptTokens),
+		OutputTokens: int(resp.Usage.CompletionTokens),
 	}, nil
 }
