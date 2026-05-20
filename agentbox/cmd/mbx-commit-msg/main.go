@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/joe/minibox/agentbox/internal/config"
 	"github.com/joe/minibox/agentbox/internal/domain"
 	"github.com/joe/minibox/agentbox/internal/llm"
 	"github.com/joe/minibox/agentbox/internal/output"
@@ -142,10 +143,12 @@ func main() {
 }
 
 func buildRunners(ctx context.Context) map[string]domain.AgentRunner {
+	cfg := config.LoadFromEnv()
+	retryCfg := llm.DefaultRetryConfig()
 	runners := make(map[string]domain.AgentRunner)
 
-	if p := llm.NewOpenAIFromEnv(); p != nil {
-		runners["openai"] = llm.NewLlmRunner(p)
+	if p := llm.NewOpenAIFromConfig(cfg); p != nil {
+		runners["openai"] = llm.NewLlmRunner(llm.NewRetryingProvider(p, retryCfg))
 	}
 	if len(runners) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no providers configured. Set OPENAI_API_KEY.")

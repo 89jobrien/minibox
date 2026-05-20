@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/joe/minibox/agentbox/internal/config"
 	gitctx "github.com/joe/minibox/agentbox/internal/context"
 	"github.com/joe/minibox/agentbox/internal/domain"
 	"github.com/joe/minibox/agentbox/internal/llm"
@@ -40,10 +41,12 @@ func main() {
 // buildRunners creates LLM-backed runners for all configured providers.
 // Returns a map of provider name -> runner. Skips providers without API keys.
 func buildRunners(ctx context.Context) map[string]domain.AgentRunner {
+	cfg := config.LoadFromEnv()
+	retryCfg := llm.DefaultRetryConfig()
 	runners := make(map[string]domain.AgentRunner)
 
-	if p := llm.NewOpenAIFromEnv(); p != nil {
-		runners["openai"] = llm.NewLlmRunner(p)
+	if p := llm.NewOpenAIFromConfig(cfg); p != nil {
+		runners["openai"] = llm.NewLlmRunner(llm.NewRetryingProvider(p, retryCfg))
 		fmt.Printf("  [openai] %s\n", p.Name())
 	}
 	if len(runners) == 0 {
