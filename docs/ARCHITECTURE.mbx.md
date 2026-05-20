@@ -81,21 +81,21 @@ All defined in `minibox-core/src/domain.rs` and re-exported via `minibox`.
 
 ## Adapter Suite Coverage Matrix
 
-| Trait              | native | gke  | colima | smolvm |  krun  |  vf  | hcs  | wsl2 | docker |
-| ------------------ | :----: | :--: | :----: | :----: | :----: | :--: | :--: | :--: | :----: |
-| ImageRegistry      |   Y    |  Y   |   Y    |   Y    |   Y    | stub | stub |  --  |   --   |
-| RegistryRouter     |   Y    |  Y   |   Y    |   Y    |   Y    |  --  |  --  |  --  |   --   |
-| ImageLoader        |   Y    |  Y   |   Y    |  noop  |  noop  |  --  |  --  |  --  |   --   |
-| FilesystemProvider |   Y    |  Y   |   Y    |   Y    |   Y    | stub | stub | stub |  stub  |
-| ResourceLimiter    |   Y    | noop |   Y    |  noop  |   Y    | stub | stub | stub |  stub  |
-| ContainerRuntime   |   Y    |  Y   |   Y    |   Y    |   Y    | stub | stub | stub |  stub  |
-| NetworkProvider    |   Y    | noop |  noop  |  noop  |  noop  |  --  |  --  |  --  |   --   |
-| MetricsRecorder    |   Y    |  Y   |   --   |   Y    | noop\* |  --  |  --  |  --  |   --   |
-| ExecRuntime        |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
-| ImagePusher        |   Y    |  Y   |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
-| ContainerCommitter |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
-| ImageBuilder       |   Y    |  --  |   --   |   --   |   --   |  --  |  --  |  --  |   --   |
-| VmCheckpoint       |  noop  | noop |  noop  |  noop  |  noop  |  --  |  --  |  --  |   --   |
+| Trait              | native | gke  | colima | smolvm | krun | vf   | hcs  | wsl2 | docker |
+| ------------------ | :----: | :--: | :----: | :----: | :--: | :--: | :--: | :--: | :----: |
+| ImageRegistry      |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub |  --  |   --   |
+| RegistryRouter     |   Y    |  Y   |   Y    |   Y    |  Y   |  --  |  --  |  --  |   --   |
+| ImageLoader        |   Y    |  Y   |   Y    | noop   | noop |  --  |  --  |  --  |   --   |
+| FilesystemProvider |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub | stub   |
+| ResourceLimiter    |   Y    | noop |   Y    |   Y    |  Y   | stub | stub | stub | stub   |
+| ContainerRuntime   |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub | stub   |
+| NetworkProvider    |   Y    | noop | noop   | noop   | noop |  --  |  --  |  --  |   --   |
+| MetricsRecorder    |   Y    |  Y   | noop   |   Y    |  Y   |  --  |  --  |  --  |   --   |
+| ExecRuntime        |   Y    |  --  |   --   |   --   |  --  |  --  |  --  |  --  |   --   |
+| ImagePusher        |   Y    |  Y   |   Y    |   --   |  --  |  --  |  --  |  --  |   --   |
+| ContainerCommitter |   Y    |  --  |   Y    |   --   |  --  |  --  |  --  |  --  |   --   |
+| ImageBuilder       |   Y    |  --  |   Y    |   Y    |  --  |  --  |  --  |  --  |   --   |
+| VmCheckpoint       | noop   | noop | noop   | noop   | noop |  --  |  --  |  --  |   --   |
 
 Note: `vz` (VZ.framework) adapter was removed in 2026-05-08. See git history for prior state.
 
