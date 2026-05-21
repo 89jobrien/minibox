@@ -47,6 +47,13 @@ let results = [
     (check "1Password authed" ((do { op account list } | complete | get exit_code) == 0)),
 ]
 
+let smolvm_found = (which smolvm | length) > 0
+if $smolvm_found {
+    note "smolvm on PATH" "default adapter available"
+} else {
+    note "smolvm not on PATH" "will fall back to native (Linux) or krun (macOS)"
+}
+
 let git_status = (do { git status --porcelain } | complete | get stdout | str trim)
 if ($git_status | is-empty) {
     note "git repo clean"
