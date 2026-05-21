@@ -392,6 +392,34 @@ mod tests {
         assert_eq!(d.to_string(), "sha256:abcdef");
     }
 
+    #[test]
+    fn sealed_manifest_persists_to_disk_and_roundtrips() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let manifest_path = dir.path().join("execution-manifest.json");
+
+        let mut m = sample_manifest();
+        m.seal().expect("seal");
+        m.manifest_path = Some(manifest_path.clone());
+
+        let json = serde_json::to_string_pretty(&m).expect("serialise");
+        std::fs::write(&manifest_path, &json).expect("write manifest");
+
+        assert!(manifest_path.exists(), "manifest file must exist on disk");
+
+        let read_back = std::fs::read_to_string(&manifest_path).expect("read manifest");
+        let deserialized: ExecutionManifest =
+            serde_json::from_str(&read_back).expect("deserialise");
+        assert_eq!(m, deserialized);
+        assert!(
+            deserialized.workload_digest.is_some(),
+            "sealed manifest must have workload_digest"
+        );
+        assert!(
+            deserialized.manifest_path.is_some(),
+            "persisted manifest must have manifest_path"
+        );
+    }
+
     // ── Proptest strategies ───────────────────────────────────────────────────
 
     fn arb_env_var() -> impl Strategy<Value = ExecutionManifestEnvVar> {

@@ -374,6 +374,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::VerifyResult { .. }
             | DaemonResponse::WorkflowStepComplete { .. }
             | DaemonResponse::WorkflowComplete { .. }
+            | DaemonResponse::PipelineList { .. }
+            | DaemonResponse::PipelineDetail { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -994,6 +996,17 @@ mod tests {
                 },
                 true, // terminal: single verify result returned
             ),
+            (
+                DaemonResponse::PipelineList { pipelines: vec![] },
+                true, // terminal: complete list returned
+            ),
+            (
+                DaemonResponse::PipelineDetail {
+                    id: "trace-1".to_string(),
+                    trace: serde_json::json!({}),
+                },
+                true, // terminal: single trace returned
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -1035,6 +1048,8 @@ mod tests {
                 DaemonResponse::VerifyResult { .. } => true,
                 DaemonResponse::WorkflowStepComplete { .. } => true,
                 DaemonResponse::WorkflowComplete { .. } => true,
+                DaemonResponse::PipelineList { .. } => true,
+                DaemonResponse::PipelineDetail { .. } => true,
             };
         }
     }
