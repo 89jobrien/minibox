@@ -264,3 +264,4 @@ State machine: Created -> Running -> Paused -> Stopped (+ Failed, Orphaned).
 | [`docs/TEST_INFRASTRUCTURE.mbx.md`](TEST_INFRASTRUCTURE.mbx.md) | Test categories, CI coverage, xtask commands    |
 | [`docs/STATE_MODEL.mbx.md`](STATE_MODEL.mbx.md)            | Daemon persistence model and state machine           |
 | [`docs/SECURITY_INVARIANTS.mbx.md`](SECURITY_INVARIANTS.mbx.md) | Security rules to preserve across changes       |
+| [`docs/verifiable-execution.mbx.md`](verifiable-execution.mbx.md) | Execution manifest format, attestation path |
