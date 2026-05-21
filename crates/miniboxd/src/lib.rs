@@ -7,6 +7,7 @@
 //! to compile without changes.
 
 pub mod adapter_registry;
+pub mod config;
 #[cfg(unix)]
 pub mod listener;
 

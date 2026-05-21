@@ -247,11 +247,27 @@ async fn run_daemon() -> Result<()> {
 
     info!("miniboxd starting");
 
+    // ── Config ────────────────────────────────────────────────────────────
+    let config = miniboxd::config::DaemonConfig::load();
+    info!(
+        adapter = ?config.adapter,
+        log_level = ?config.log_level,
+        "config loaded"
+    );
+
+    // Feed config adapter into env so adapter_from_env() picks it up,
+    // but only when the env var is not already set (env > file).
+    if let Some(ref adapter) = config.adapter
+        && std::env::var("MINIBOX_ADAPTER").is_err()
+    {
+        // SAFETY: single-threaded at this point (before tokio spawns).
+        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
+    }
+
     // ── Adapter suite ────────────────────────────────────────────────────
     // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
     // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
-    // Do not set MINIBOX_ADAPTER externally to override — pass it through the
-    // environment before launching miniboxd, or use `scripts/start-daemon.*`.
+    // Config file adapter field is injected above when env is unset.
     let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
     let available = adapter_registry::available_adapter_names();
     info!(

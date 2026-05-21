@@ -32,6 +32,8 @@ tailnet = []
 minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+serde = { workspace = true }
+toml = "0.8"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
