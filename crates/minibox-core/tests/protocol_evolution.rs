@@ -142,6 +142,11 @@ fn all_response_variants() -> Vec<DaemonResponse> {
             id: "abc123".to_string(),
             snapshots: vec![],
         },
+        DaemonResponse::PipelineList { pipelines: vec![] },
+        DaemonResponse::PipelineDetail {
+            id: "trace-1".to_string(),
+            trace: serde_json::json!({"steps": []}),
+        },
     ]
 }
 
@@ -328,7 +333,9 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::SnapshotSaved { .. }
         | DaemonResponse::SnapshotRestored { .. }
         | DaemonResponse::SnapshotList { .. }
-        | DaemonResponse::ImageList { .. } => true,
+        | DaemonResponse::ImageList { .. }
+        | DaemonResponse::PipelineList { .. }
+        | DaemonResponse::PipelineDetail { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }
@@ -404,6 +411,11 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::SnapshotList {
             id: "abc123".to_string(),
             snapshots: vec![],
+        },
+        DaemonResponse::PipelineList { pipelines: vec![] },
+        DaemonResponse::PipelineDetail {
+            id: "trace-1".to_string(),
+            trace: serde_json::json!({"steps": []}),
         },
     ];
 

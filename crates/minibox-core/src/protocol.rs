@@ -395,6 +395,22 @@ pub enum DaemonRequest {
         policy_json: String,
     },
 
+    /// List pipeline runs, optionally filtered.
+    ListPipelines {
+        /// Maximum number of results.
+        #[serde(default)]
+        limit: Option<usize>,
+        /// Only show runs of this pipeline path.
+        #[serde(default)]
+        pipeline: Option<String>,
+    },
+
+    /// Show details of a specific pipeline run.
+    ShowPipeline {
+        /// Pipeline run / trace ID.
+        id: String,
+    },
+
     /// Execute a sequential multi-container workflow.
     RunWorkflow(WorkflowDef),
 }
@@ -429,6 +445,8 @@ impl DaemonRequest {
             Self::Update { .. } => "Update",
             Self::GetManifest { .. } => "GetManifest",
             Self::VerifyManifest { .. } => "VerifyManifest",
+            Self::ListPipelines { .. } => "ListPipelines",
+            Self::ShowPipeline { .. } => "ShowPipeline",
             Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
@@ -611,6 +629,20 @@ pub enum DaemonResponse {
         container_id: String,
         /// Exit code of the `crux run` process.
         exit_code: i32,
+    },
+
+    /// Response to `ListPipelines`: summaries of stored pipeline runs.
+    PipelineList {
+        /// Pipeline run summaries, newest-first.
+        pipelines: Vec<crate::trace::TraceSummary>,
+    },
+
+    /// Response to `ShowPipeline`: full trace for a single pipeline run.
+    PipelineDetail {
+        /// The pipeline run / trace ID.
+        id: String,
+        /// Full trace data.
+        trace: serde_json::Value,
     },
 
     /// Confirmation that a snapshot was saved.
