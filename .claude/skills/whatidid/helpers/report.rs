@@ -27,6 +27,9 @@ use std::{fs, path::PathBuf, process::Command};
 
 #[derive(Debug, Deserialize)]
 struct PricingFile {
+    /// ISO 8601 date when pricing was last verified against providers.
+    #[serde(default)]
+    last_updated: Option<String>,
     models: Vec<ModelEntry>,
     fallback: FallbackEntry,
 }
@@ -44,7 +47,44 @@ struct FallbackEntry {
     output: f64,
 }
 
+const PRICING_STALENESS_DAYS: i64 = 30;
+
 impl PricingFile {
+    /// Warn on stderr if pricing data is stale (older than threshold days).
+    fn check_drift(&self) {
+        let Some(ref updated) = self.last_updated else {
+            eprintln!(
+                "WARNING: model_pricing.json has no last_updated field — \
+                 pricing drift cannot be detected"
+            );
+            return;
+        };
+        let Ok(updated_date) = chrono::NaiveDate::parse_from_str(updated, "%Y-%m-%d")
+        else {
+            eprintln!(
+                "WARNING: model_pricing.json last_updated '{}' is not a \
+                 valid YYYY-MM-DD date",
+                updated
+            );
+            return;
+        };
+        let today = Local::now().date_naive();
+        let age_days = (today - updated_date).num_days();
+        if age_days > PRICING_STALENESS_DAYS {
+            eprintln!(
+                "WARNING: model_pricing.json is {} days stale \
+                 (last_updated: {}, threshold: {} days). \
+                 Verify pricing against provider dashboards.",
+                age_days, updated, PRICING_STALENESS_DAYS
+            );
+        } else if age_days < 0 {
+            eprintln!(
+                "WARNING: model_pricing.json last_updated '{}' is in the future",
+                updated
+            );
+        }
+    }
+
     fn cost_for(&self, model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
         let (inp_rate, out_rate) = self
             .models
@@ -105,6 +145,9 @@ fn main() -> Result<()> {
 
     let pricing: PricingFile =
         serde_json::from_str(&pricing_raw).context("parse model_pricing.json")?;
+
+    // Check for pricing drift (stale entries)
+    pricing.check_drift();
 
     // Load digest
     let raw = if digest_path == "-" {
