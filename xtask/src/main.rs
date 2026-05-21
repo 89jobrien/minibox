@@ -77,6 +77,7 @@ fn main() -> Result<()> {
         Some("test-unit") => gates::test_unit(&sh),
         Some("test-conformance") => gates::test_conformance(&sh),
         Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
+        Some("test-turmoil") => gates::test_turmoil(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-quickcheck") => gates::test_quickcheck(&sh),
         Some("test-integration") => gates::test_integration(&sh),
@@ -292,6 +293,7 @@ fn main() -> Result<()> {
             eprintln!(
                 "  test-krun-conformance krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)"
             );
+            eprintln!("  test-turmoil     turmoil network simulation tests (any platform)");
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-quickcheck   quickcheck property tests (cross-platform)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
