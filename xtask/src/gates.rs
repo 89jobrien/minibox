@@ -254,6 +254,19 @@ pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Turmoil network simulation tests
+pub fn test_turmoil(sh: &Shell) -> Result<()> {
+    let fail_fast = fail_fast_flag();
+    cmd!(
+        sh,
+        "cargo nextest run -p minibox --test turmoil_network_tests {fail_fast...}"
+    )
+    .run()
+    .context("turmoil network simulation tests failed")?;
+    eprintln!("turmoil network simulation tests passed");
+    Ok(())
+}
+
 /// Property-based tests (proptest)
 pub fn test_property(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
