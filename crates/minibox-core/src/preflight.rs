@@ -120,7 +120,8 @@ pub fn format_report(caps: &HostCapabilities) -> String {
 fn probe_root() -> bool {
     #[cfg(unix)]
     {
-        nix::unistd::geteuid().is_root()
+        // SAFETY: geteuid() is a read-only syscall with no side effects.
+        unsafe { libc::geteuid() == 0 }
     }
     #[cfg(not(unix))]
     {
