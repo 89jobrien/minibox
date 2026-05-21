@@ -65,6 +65,8 @@ struct MockRegistryState {
     pull_should_succeed: bool,
     /// Running count of `pull_image` invocations.
     pull_count: usize,
+    /// Whether `get_image_layers` should return an empty list.
+    return_empty_layers: bool,
 }
 
 impl MockRegistry {
@@ -75,6 +77,7 @@ impl MockRegistry {
                 cached_images: Vec::new(),
                 pull_should_succeed: true,
                 pull_count: 0,
+                return_empty_layers: false,
             })),
         }
     }
@@ -94,6 +97,14 @@ impl MockRegistry {
     /// Configure all subsequent `pull_image` calls to return an error.
     pub fn with_pull_failure(self) -> Self {
         self.state.lock().unwrap().pull_should_succeed = false;
+        self
+    }
+
+    /// Configure `get_image_layers` to return an empty layer list.
+    ///
+    /// Used to exercise the `EmptyImage` error path in `run_inner`.
+    pub fn with_empty_layers(self) -> Self {
+        self.state.lock().unwrap().return_empty_layers = true;
         self
     }
 
@@ -167,7 +178,14 @@ impl ImageRegistry for MockRegistry {
     }
 
     /// Return two fixed mock layer paths regardless of the image name or tag.
+    ///
+    /// Returns an empty vec if configured via [`with_empty_layers`], which
+    /// triggers the `EmptyImage` error path in `run_inner`.
     fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
+        let state = self.state.lock().unwrap();
+        if state.return_empty_layers {
+            return Ok(vec![]);
+        }
         Ok(vec![
             PathBuf::from("/mock/layer1"),
             PathBuf::from("/mock/layer2"),
@@ -220,6 +238,14 @@ impl MockFilesystem {
     /// Configure `setup_rootfs` to return an error on the next call.
     pub fn with_setup_failure(self) -> Self {
         self.state.lock().unwrap().setup_should_succeed = false;
+        self
+    }
+
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort filesystem cleanup path in `remove_inner`.
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state.lock().unwrap().cleanup_should_succeed = false;
         self
     }
 
@@ -330,6 +356,14 @@ impl MockLimiter {
         self
     }
 
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort cgroup cleanup path in `remove_inner`.
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state.lock().unwrap().cleanup_should_succeed = false;
+        self
+    }
+
     /// Return the number of times `create` has been called.
     pub fn create_count(&self) -> usize {
         self.state.lock().unwrap().create_count
@@ -403,6 +437,11 @@ struct MockRuntimeState {
     next_pid: u32,
     /// Running count of `spawn_process` invocations (both sync and async).
     spawn_count: usize,
+    /// When true, `spawn_process` creates an OS pipe and returns the read end as
+    /// `output_reader`.  The write end is closed immediately, so the reader sees
+    /// EOF at once.  This enables testing of streaming/ephemeral container paths
+    /// without a real container process.
+    provide_output_pipe: bool,
 }
 
 impl MockRuntime {
@@ -413,8 +452,22 @@ impl MockRuntime {
                 spawn_should_succeed: true,
                 next_pid: 10000,
                 spawn_count: 0,
+                provide_output_pipe: false,
             })),
         }
+    }
+
+    /// Configure spawn to return a real OS pipe as `output_reader`.
+    ///
+    /// The write end of the pipe is closed immediately after creation, so the
+    /// reader sees EOF at once.  This allows tests that exercise the streaming
+    /// (ephemeral) container path without running a real container process.
+    ///
+    /// Only has effect on Unix targets where `OwnedFd` is available.
+    #[cfg(unix)]
+    pub fn with_output_pipe(self) -> Self {
+        self.state.lock().unwrap().provide_output_pipe = true;
+        self
     }
 
     /// Configure all subsequent `spawn_process` calls to return an error.
@@ -464,7 +517,10 @@ impl ContainerRuntime for MockRuntime {
     /// Simulate spawning a container process and return a fake PID.
     ///
     /// Increments the spawn counter and the internal PID counter on success.
-    /// The `output_reader` field is always `None`.
+    /// When `provide_output_pipe` is set (via [`MockRuntime::with_output_pipe`]),
+    /// creates a real OS pipe on Unix and returns the read end as `output_reader`
+    /// (the write end is closed immediately, so the reader sees EOF at once).
+    /// Otherwise `output_reader` is `None`.
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut state = self.state.lock().unwrap();
         state.spawn_count += 1;
@@ -475,10 +531,35 @@ impl ContainerRuntime for MockRuntime {
 
         let pid = state.next_pid;
         state.next_pid += 1;
+
+        #[cfg(unix)]
+        let output_reader = if state.provide_output_pipe {
+            use std::os::fd::{FromRawFd, OwnedFd};
+            // Create a pipe: read_fd -> returned as output_reader; write_fd closed immediately
+            // so the reader sees EOF at once.
+            let mut fds = [0i32; 2];
+            // SAFETY: `pipe` is a standard POSIX syscall. `fds` is valid storage for 2 fds.
+            // We own both fds after the call and wrap them in OwnedFd for drop safety.
+            unsafe {
+                if libc::pipe(fds.as_mut_ptr()) != 0 {
+                    anyhow::bail!("MockRuntime: pipe() syscall failed");
+                }
+                let read_fd = OwnedFd::from_raw_fd(fds[0]);
+                // Close write end immediately -- causes reader to see EOF.
+                let _write_fd = OwnedFd::from_raw_fd(fds[1]);
+                Some(read_fd)
+            }
+        } else {
+            None
+        };
+
+        #[cfg(not(unix))]
+        let output_reader = None;
+
         Ok(SpawnResult {
             runtime_id: None,
             pid,
-            output_reader: None,
+            output_reader,
         })
     }
 
