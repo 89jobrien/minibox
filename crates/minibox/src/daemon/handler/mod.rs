@@ -4,6 +4,9 @@
 //! returns a `DaemonResponse`.  Errors are caught and returned as
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
+// TODO(#116): raise coverage on handler and lifecycle/error paths
+// TODO(#328): expose manifest inspection and verification via CLI
+//!
 //! # Hexagonal Architecture
 //!
 //! Handlers use dependency injection to receive infrastructure adapters

@@ -201,7 +201,7 @@ impl ImageBuilder for MiniboxImageBuilder {
                         args,
                         env: env_state.clone(),
                         hostname: format!("minibox-build-{build_id}"),
-                        cgroup_path,
+                        cgroup_path: cgroup_path.into(),
                         capture_output: true,
                         hooks: ContainerHooks::default(),
                         skip_network_namespace: true,

@@ -1,3 +1,6 @@
+// TODO(#414): add multi-provider synthesis strategy — voting/ranking instead
+//   of first-success-wins (council report item #5)
+
 package main
 
 import (

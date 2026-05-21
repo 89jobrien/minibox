@@ -1,4 +1,6 @@
 //! Container lifecycle handlers: pause, resume, remove, list.
+// TODO(#219): add container lifecycle failure tests
+// TODO(#263): paused state migration — wire Paused into lifecycle handlers
 
 use minibox_core::domain::DomainError;
 use minibox_core::events::{ContainerEvent, EventSink};

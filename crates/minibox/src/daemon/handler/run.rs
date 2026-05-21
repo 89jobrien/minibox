@@ -1,4 +1,6 @@
 //! Container run handlers and supporting infrastructure.
+// TODO(#326): persist execution manifest before container spawn
+// TODO(#366): extract shared run preparation path from handle_run
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;
@@ -502,7 +504,7 @@ async fn prepare_run(
             pid: None,
         },
         pid: None,
-        rootfs_path: merged_dir.clone(),
+        rootfs_path: merged_dir.clone().into_inner(),
         cgroup_path: cgroup_dir.clone(),
         post_exit_hooks: vec![],
         rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
@@ -551,7 +553,7 @@ async fn prepare_run(
         command: spawn_command,
         args: spawn_args,
         env: container_env,
-        cgroup_path: cgroup_dir.clone(),
+        cgroup_path: cgroup_dir.clone().into(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output,
         hooks: ContainerHooks::default(),
@@ -961,10 +963,10 @@ async fn daemon_wait_for_exit(
     pid: u32,
     id: &str,
     state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     event_sink: Arc<dyn EventSink>,
-    cgroup_path: std::path::PathBuf,
+    cgroup_path: minibox_core::path::InternalPath,
     runtime: DynContainerRuntime,
     runtime_id: Option<String>,
 ) {
@@ -1017,10 +1019,10 @@ async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: std::path::PathBuf,
+    _cgroup_path: minibox_core::path::InternalPath,
     _runtime: DynContainerRuntime,
     _runtime_id: Option<String>,
 ) {
@@ -1033,10 +1035,10 @@ async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: std::path::PathBuf,
+    _cgroup_path: minibox_core::path::InternalPath,
     _runtime: DynContainerRuntime,
     _runtime_id: Option<String>,
 ) {

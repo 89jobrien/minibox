@@ -311,12 +311,12 @@ mod conformance {
     async fn runtime_must_return_valid_pid() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -336,12 +336,12 @@ mod conformance {
     async fn runtime_must_increment_pids_for_multiple_spawns() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1199,12 +1199,12 @@ mod runtime_conformance {
     async fn runtime_pids_are_unique_and_monotonically_increasing() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1242,12 +1242,12 @@ mod runtime_conformance {
     async fn runtime_with_spawn_failure_increments_count_on_failure() {
         let runtime = MockRuntime::new().with_spawn_failure();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,

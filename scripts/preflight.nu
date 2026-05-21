@@ -1,5 +1,6 @@
 #!/usr/bin/env nu
 # preflight.nu — minibox environment validation (SessionStart hook)
+# TODO(#96): add automated test coverage for preflight.nu behavior
 #
 # CANONICAL PREFLIGHT COMMAND: `cargo xtask doctor`
 #   - Checks all required tools (cargo, just, rustup, cargo-nextest, gh, op)

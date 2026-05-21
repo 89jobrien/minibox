@@ -4,6 +4,11 @@
 //! Usage: report.rs <digest.json> [YYYY-MM-DD]
 //!
 //! Loads token pricing from model_pricing.json (sibling of helpers/).
+//!
+//! TODO(#417): add automated drift detection for model_pricing.json —
+//!   alert when pricing data diverges from actual provider costs
+//! TODO(#420): add token cost monitoring/caps
+//! TODO(#419): consider encrypting cached API responses on disk
 //! Computes SHA-256 of the pricing file and prints it so drift is visible.
 //!
 //! ```cargo

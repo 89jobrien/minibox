@@ -15,7 +15,7 @@ use super::{HandlerDependencies, send_error};
 /// Run a crux pipeline inside an ephemeral container.
 ///
 /// Higher-level than `handle_run`: pulls image, creates container with the
-/// pipeline file bind-mounted at `/pipeline.cruxx`, streams `ContainerOutput`
+/// pipeline file bind-mounted at `/pipeline.crux`, streams `ContainerOutput`
 /// to the client, then after the container exits reads `/trace.json` from the
 /// overlay upper dir and emits [`DaemonResponse::PipelineComplete`].
 ///
@@ -62,7 +62,7 @@ pub async fn handle_pipeline(
 
     #[cfg(unix)]
     {
-        let image_ref = image.unwrap_or_else(|| "cruxx-runtime:latest".to_string());
+        let image_ref = image.unwrap_or_else(|| "crux-runtime:latest".to_string());
 
         // Validate pipeline path is absolute so the bind-mount is unambiguous.
         let host_pipeline = std::path::PathBuf::from(&pipeline_path);
@@ -76,26 +76,26 @@ pub async fn handle_pipeline(
             return;
         }
 
-        // Build the bind mount: pipeline file → /pipeline.cruxx (read-only).
+        // Build the bind mount: pipeline file → /pipeline.crux (read-only).
         let pipeline_mount = BindMount {
             host_path: host_pipeline,
-            container_path: std::path::PathBuf::from("/pipeline.cruxx"),
+            container_path: std::path::PathBuf::from("/pipeline.crux"),
             read_only: true,
         };
 
-        // Build env list: inherit caller env, add CRUXX_PLUGIN_PATH and optional budget.
+        // Build env list: inherit caller env, add CRUX_PLUGIN_PATH and optional budget.
         let mut container_env: Vec<String> =
             env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
-        container_env.push("CRUXX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
+        container_env.push("CRUX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
         if let Some(ref b) = budget
             && let Ok(s) = serde_json::to_string(b)
         {
-            container_env.push(format!("CRUXX_BUDGET_JSON={s}"));
+            container_env.push(format!("CRUX_BUDGET_JSON={s}"));
         }
         if let Some(inp) = &input
             && let Ok(s) = serde_json::to_string(inp)
         {
-            container_env.push(format!("CRUXX_INPUT_JSON={s}"));
+            container_env.push(format!("CRUX_INPUT_JSON={s}"));
         }
 
         // Clone deps and override policy to permit bind mounts for this
@@ -119,7 +119,7 @@ pub async fn handle_pipeline(
                 vec![
                     "crux".to_string(),
                     "run".to_string(),
-                    "/pipeline.cruxx".to_string(),
+                    "/pipeline.crux".to_string(),
                     "--output".to_string(),
                     "/trace.json".to_string(),
                 ],

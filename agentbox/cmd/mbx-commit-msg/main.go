@@ -1,3 +1,6 @@
+// TODO(#414): add multi-provider synthesis — voting/ranking instead of
+//   first-success-wins for commit messages (council report item #5)
+
 package main
 
 import (

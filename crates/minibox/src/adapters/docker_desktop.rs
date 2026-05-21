@@ -276,7 +276,7 @@ impl minibox_core::domain::RootfsSetup for DockerDesktopFilesystem {
 
         // Docker paths map directly back to macOS
         Ok(RootfsLayout {
-            merged_dir: PathBuf::from(response.merged_path),
+            merged_dir: PathBuf::from(response.merged_path).into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })

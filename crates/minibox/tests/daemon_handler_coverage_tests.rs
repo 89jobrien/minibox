@@ -762,7 +762,7 @@ async fn test_handle_pipeline_nonexistent_file_returns_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
     handler::handle_pipeline(
-        "/nonexistent/pipeline.cruxx".to_string(),
+        "/nonexistent/pipeline.crux".to_string(),
         None,
         None,
         None,

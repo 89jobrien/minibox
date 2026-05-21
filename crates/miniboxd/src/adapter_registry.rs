@@ -1,4 +1,5 @@
 //! Adapter registry — centralizes adapter suite discovery and validation.
+// TODO(#307): make smolvm the default adapter on macOS and Linux
 //!
 //! This module provides [`AdapterInfo`] descriptors and functions to enumerate
 //! available adapter suites at compile time, validate user-provided adapter

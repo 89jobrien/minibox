@@ -1,4 +1,5 @@
 //! Bridge network adapter — Linux-only.
+// TODO(#229): container networking — expand bridge adapter for full CNI support
 
 use ipnet::IpNet;
 use std::collections::BTreeSet;

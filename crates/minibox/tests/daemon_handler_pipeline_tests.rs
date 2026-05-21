@@ -24,7 +24,7 @@ async fn test_handle_pipeline_rejects_relative_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
 
     handler::handle_pipeline(
-        "relative/path.cruxx".to_string(),
+        "relative/path.crux".to_string(),
         None,
         None,
         None,
@@ -66,13 +66,13 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
 
     // Create a real pipeline file on disk so the absolute-path check passes.
-    let pipeline_file = temp_dir.path().join("work.cruxx");
+    let pipeline_file = temp_dir.path().join("work.crux");
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
         pipeline_file.to_str().expect("unwrap in test").to_string(),
         None,
-        Some("cruxx-runtime:latest".to_string()),
+        Some("crux-runtime:latest".to_string()),
         None,
         vec![],
         state,
@@ -98,7 +98,7 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
 
     // Pipeline file must exist and be absolute.
-    let pipeline_file = temp_dir.path().join("work.cruxx");
+    let pipeline_file = temp_dir.path().join("work.crux");
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
@@ -168,7 +168,7 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
 
-    let pipeline_file = temp_dir.path().join("work.cruxx");
+    let pipeline_file = temp_dir.path().join("work.crux");
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     // Pre-seed the channel: we need to know the container ID before the run so

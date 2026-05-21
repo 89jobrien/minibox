@@ -4,6 +4,12 @@
 //! must implement. Following hexagonal architecture principles, the domain
 //! layer has **zero dependencies** on infrastructure details.
 //!
+// TODO(#83): add PTY/stdio piping trait surface for interactive containers
+// TODO(#263): paused state migration — add Paused variant to ContainerStatus
+// TODO(#327): add measured execution policy gate (ExecutionPolicy port)
+// TODO(#354): remove nix OS primitives from domain layer
+// TODO(#374): add 8 BackendCapability variants for capability-gated testing
+//!
 //! # Architecture
 //!
 //! ```text
@@ -746,7 +752,7 @@ pub enum BackendRootfsMetadata {
     /// `metadata` carries adapter-specific key/value pairs, e.g.:
     /// - `"colima_instance"` — Lima/Colima instance name
     Overlay {
-        upper_dir: PathBuf,
+        upper_dir: crate::path::InternalPath,
         #[serde(default, skip_serializing_if = "HashMap::is_empty")]
         metadata: HashMap<String, String>,
     },
@@ -754,7 +760,7 @@ pub enum BackendRootfsMetadata {
 
 impl BackendRootfsMetadata {
     /// Return the host-visible overlay upper directory.
-    pub fn overlay_upper_dir(&self) -> &PathBuf {
+    pub fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
         match self {
             Self::Overlay { upper_dir, .. } => upper_dir,
         }
@@ -772,7 +778,7 @@ impl BackendRootfsMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootfsLayout {
     /// Path to the merged/mounted rootfs that the runtime will use.
-    pub merged_dir: PathBuf,
+    pub merged_dir: crate::path::InternalPath,
     /// Typed backend metadata for the writable layer, when the backend exposes
     /// one.  `None` for copy-based (GKE/proot) and VZ (in-VM) backends.
     pub rootfs_metadata: Option<BackendRootfsMetadata>,
@@ -1012,7 +1018,7 @@ pub struct ContainerHooks {
 #[derive(Debug, Clone)]
 pub struct ContainerSpawnConfig {
     /// Path to the container rootfs (merged overlay directory).
-    pub rootfs: PathBuf,
+    pub rootfs: crate::path::InternalPath,
     /// Command to execute (e.g., `"/bin/sh"`).
     pub command: String,
     /// Command arguments (e.g., `["-c", "echo hello"]`).
@@ -1022,7 +1028,7 @@ pub struct ContainerSpawnConfig {
     /// Hostname to set inside the container.
     pub hostname: String,
     /// Path to the cgroup directory for this container.
-    pub cgroup_path: PathBuf,
+    pub cgroup_path: crate::path::InternalPath,
     /// When `true`, container stdout+stderr are captured to a pipe.
     /// The read end is returned in [`SpawnResult::output_reader`].
     pub capture_output: bool,
@@ -2023,10 +2029,10 @@ mod tests {
         fn overlay_upper_dir_returns_path_for_native_variant() {
             let path = PathBuf::from("/var/lib/minibox/containers/abc/upper");
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: path.clone(),
+                upper_dir: path.clone().into(),
                 metadata: std::collections::HashMap::new(),
             };
-            assert_eq!(meta.overlay_upper_dir(), &path);
+            assert_eq!(&**meta.overlay_upper_dir(), path.as_path());
         }
 
         #[test]
@@ -2035,16 +2041,16 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: path.clone(),
+                upper_dir: path.clone().into(),
                 metadata: kv,
             };
-            assert_eq!(meta.overlay_upper_dir(), &path);
+            assert_eq!(&**meta.overlay_upper_dir(), path.as_path());
         }
 
         #[test]
         fn metadata_value_none_for_missing_key() {
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/tmp/upper"),
+                upper_dir: PathBuf::from("/tmp/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             assert_eq!(meta.metadata_value("colima_instance"), None);
@@ -2055,7 +2061,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/tmp/upper"),
+                upper_dir: PathBuf::from("/tmp/upper").into(),
                 metadata: kv,
             };
             assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
@@ -2064,7 +2070,7 @@ mod tests {
         #[test]
         fn backend_rootfs_metadata_roundtrips_serde_overlay() {
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2077,7 +2083,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper").into(),
                 metadata: kv,
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2094,11 +2100,11 @@ mod tests {
             let mut metadata = std::collections::HashMap::new();
             metadata.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: upper.clone(),
+                upper_dir: upper.clone().into(),
                 metadata,
             };
             let layout = RootfsLayout {
-                merged_dir: PathBuf::from("/tmp/merged"),
+                merged_dir: PathBuf::from("/tmp/merged").into(),
                 rootfs_metadata: Some(meta),
                 source_image_ref: Some("alpine:latest".to_string()),
             };
@@ -2107,7 +2113,7 @@ mod tests {
                 .as_ref()
                 .expect("metadata present")
                 .overlay_upper_dir();
-            assert_eq!(recovered_upper, &upper);
+            assert_eq!(&**recovered_upper, upper.as_path());
         }
 
         // --- Task 1: OCP fix tests ---
@@ -2120,10 +2126,10 @@ mod tests {
             metadata.insert("colima_instance".to_string(), "colima".to_string());
             let upper = PathBuf::from("/Users/joe/.lima/colima/upper");
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: upper.clone(),
+                upper_dir: upper.clone().into(),
                 metadata: metadata.clone(),
             };
-            assert_eq!(meta.overlay_upper_dir(), &upper);
+            assert_eq!(&**meta.overlay_upper_dir(), upper.as_path());
             assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
         }
 
@@ -2131,7 +2137,7 @@ mod tests {
         fn overlay_variant_metadata_empty_for_native() {
             // Native overlay encodes no extra KVs.
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             assert_eq!(meta.metadata_value("colima_instance"), None);
@@ -2142,7 +2148,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper").into(),
                 metadata: kv,
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2237,7 +2243,7 @@ mod tests {
                 _container_dir: &Path,
             ) -> Result<RootfsLayout> {
                 Ok(RootfsLayout {
-                    merged_dir: PathBuf::from("/tmp/merged"),
+                    merged_dir: PathBuf::from("/tmp/merged").into(),
                     rootfs_metadata: None,
                     source_image_ref: None,
                 })

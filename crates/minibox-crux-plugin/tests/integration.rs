@@ -1,6 +1,6 @@
 //! Integration tests for minibox-crux-plugin.
 //!
-//! These tests drive the binary via stdin/stdout using the cruxx plugin wire
+//! These tests drive the binary via stdin/stdout using the crux plugin wire
 //! protocol (newline-delimited JSON). A mock minibox daemon socket is bound in
 //! each test so that `dispatch()` -> `DaemonClient` calls succeed without a real
 //! daemon running.

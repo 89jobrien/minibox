@@ -23,27 +23,10 @@ if not ($file_path | path exists) {
     exit 0
 }
 
-let ext = $file_path | path parse | get extension
-
-match $ext {
-    "json" => {
-        let result = do { open $file_path | ignore } | complete
-        if $result.exit_code != 0 {
-            print $"agentlint ERROR: ($file_path) invalid JSON"
-            exit 1
-        }
-        print $"agentlint: ($file_path) valid JSON"
-    }
-    "md" => {
-        let content = open --raw $file_path
-        if ($content | str starts-with "---") {
-            let missing = ["name:" "description:"] | where { |k| not ($content | str contains $k) }
-            if ($missing | length) > 0 {
-                print $"agentlint ERROR: ($file_path) frontmatter missing: ($missing | str join ', ')"
-                exit 1
-            }
-            print $"agentlint: ($file_path) frontmatter OK"
-        }
-    }
-    _ => { exit 0 }
+let result = do { agentlint --format gnu $file_path } | complete
+if $result.exit_code != 0 {
+    print $result.stdout
+    print $"agentlint: ($file_path) failed"
+    exit 1
 }
+print $"agentlint: ($file_path) OK"

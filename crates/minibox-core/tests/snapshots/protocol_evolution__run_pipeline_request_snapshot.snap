@@ -4,7 +4,7 @@ expression: req
 ---
 {
   "type": "RunPipeline",
-  "pipeline_path": "/workspace/.cruxx/pipelines/work.cruxx",
+  "pipeline_path": "/workspace/.crux/pipelines/work.crux",
   "input": {
     "prompt": "hello"
   },

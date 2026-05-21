@@ -9,12 +9,12 @@ use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 
 fn default_config() -> ContainerSpawnConfig {
     ContainerSpawnConfig {
-        rootfs: std::path::PathBuf::from("/mock/rootfs"),
+        rootfs: std::path::PathBuf::from("/mock/rootfs").into(),
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "conformance-test".to_string(),
-        cgroup_path: std::path::PathBuf::from("/mock/cgroup/conformanceruntime01"),
+        cgroup_path: std::path::PathBuf::from("/mock/cgroup/conformanceruntime01").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,

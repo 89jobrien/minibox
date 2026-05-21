@@ -1,4 +1,5 @@
 //! Lease service: protect images from GC during in-flight operations.
+// TODO(#175): add ImageLeaseService port conformance suite
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;

@@ -1,3 +1,4 @@
+# TODO(#255): uncomment target triples to prevent spurious cross-platform warnings
 # This template contains all of the possible sections and their default values
 
 # Note that all fields that take a lint level have these possible values:

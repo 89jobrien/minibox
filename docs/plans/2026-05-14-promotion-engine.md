@@ -10,14 +10,14 @@ subcommand that gates branch promotion through dev→testing→staging→main ti
 ## Architecture
 
 - **minibox crates affected**: `minibox-core`, `miniboxd`, `xtask`
-- **crux crates affected**: `cruxx-core`, `cruxx-types`, `cruxx-script`
+- **crux crates affected**: `crux-runtime`, `crux-types`, `crux-script`
 - **New traits/types**:
   - `minibox-core`: `WorkflowStep`, `WorkflowPhase`, `StepStatus`, `RunWorkflow` request,
     `StepRunner` trait, `StepRunnerRegistry`, `StepRetry`, `StepTimeout`, `StartFromStep`
-  - `cruxx-core`: `AliasNamespace` (inter-step state), expression evaluator for if-guards,
+  - `crux-runtime`: `AliasNamespace` (inter-step state), expression evaluator for if-guards,
     `DetermineFinalPhase` using worst-case step status
-  - `cruxx-types`: `StepState` carrying alias propagation metadata
-  - `cruxx-script`: `StepRunnerRegistry` with capability declarations
+  - `crux-types`: `StepState` carrying alias propagation metadata
+  - `crux-script`: `StepRunnerRegistry` with capability declarations
 - **Data flow**:
   - CLI → `RunWorkflow` request → daemon handler → `StepRunnerRegistry::dispatch` →
     per-step `StepRunner::run` → alias propagation → streaming `WorkflowStepResult` responses
@@ -810,13 +810,13 @@ Branch: `feat/issue-363-xtask-promote` (cut from `develop`, independent of Tasks
 
 ### Task 7: crux — inter-step state propagation via alias namespace
 
-**Crate**: `cruxx-core`, `cruxx-types`
-**File(s)**: `crates/cruxx-core/src/ctx.rs`, `crates/cruxx-types/src/step.rs`
-**Run**: `cargo nextest run -p cruxx-core -p cruxx-types`
+**Crate**: `crux-runtime`, `crux-types`
+**File(s)**: `crates/crux-runtime/src/ctx.rs`, `crates/crux-types/src/step.rs`
+**Run**: `cargo nextest run -p crux-runtime -p crux-types`
 
 Branch: `feat/issue-60-alias-namespace` (cut from `develop` in crux repo)
 
-1. Write failing tests in `crates/cruxx-core/src/ctx.rs`:
+1. Write failing tests in `crates/crux-runtime/src/ctx.rs`:
 
    ```rust
    #[cfg(test)]
@@ -861,10 +861,10 @@ Branch: `feat/issue-60-alias-namespace` (cut from `develop` in crux repo)
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-core -- propagate_and_read_round_trip`
+   Run: `cargo nextest run -p crux-runtime -- propagate_and_read_round_trip`
    Expected: FAIL
 
-2. Implement in `crates/cruxx-core/src/ctx.rs`:
+2. Implement in `crates/crux-runtime/src/ctx.rs`:
 
    ```rust
    /// Alias namespace: accumulated key→value state shared across steps in a crux execution.
@@ -890,27 +890,27 @@ Branch: `feat/issue-60-alias-namespace` (cut from `develop` in crux repo)
    }
    ```
 
-   Add `alias_namespace: AliasNamespace` field to `cruxx-types`'s `StepState` in
-   `crates/cruxx-types/src/step.rs` with `#[serde(default)]`.
+   Add `alias_namespace: AliasNamespace` field to `crux-types`'s `StepState` in
+   `crates/crux-types/src/step.rs` with `#[serde(default)]`.
 
 3. Verify:
 
    ```
-   cargo nextest run -p cruxx-core -p cruxx-types    → all green
-   cargo clippy -p cruxx-core -p cruxx-types -- -D warnings   → zero warnings
+   cargo nextest run -p crux-runtime -p crux-types    → all green
+   cargo clippy -p crux-runtime -p crux-types -- -D warnings   → zero warnings
    ```
 
 4. Run: `git branch --show-current`
    Expected: `feat/issue-60-alias-namespace`
-   Commit: `git commit -m "feat(cruxx-core): add AliasNamespace for inter-step state propagation (#60)"`
+   Commit: `git commit -m "feat(crux-runtime): add AliasNamespace for inter-step state propagation (#60)"`
 
 ---
 
 ### Task 8: crux — expression evaluation for step if-guards
 
-**Crate**: `cruxx-core`
-**File(s)**: `crates/cruxx-core/src/ctx.rs`
-**Run**: `cargo nextest run -p cruxx-core`
+**Crate**: `crux-runtime`
+**File(s)**: `crates/crux-runtime/src/ctx.rs`
+**Run**: `cargo nextest run -p crux-runtime`
 
 Branch: `feat/issue-59-if-guard-eval` (cut from `develop` in crux repo, depends on Task 7 merged)
 
@@ -954,10 +954,10 @@ Branch: `feat/issue-59-if-guard-eval` (cut from `develop` in crux repo, depends 
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-core -- field_access_resolves_from_alias_ns`
+   Run: `cargo nextest run -p crux-runtime -- field_access_resolves_from_alias_ns`
    Expected: FAIL
 
-2. Implement in `crates/cruxx-core/src/ctx.rs`:
+2. Implement in `crates/crux-runtime/src/ctx.rs`:
 
    ```rust
    /// Evaluate a step `if:` guard expression against the current alias namespace.
@@ -981,26 +981,26 @@ Branch: `feat/issue-59-if-guard-eval` (cut from `develop` in crux repo, depends 
 3. Verify:
 
    ```
-   cargo nextest run -p cruxx-core    → all green
-   cargo clippy -p cruxx-core -- -D warnings   → zero warnings
+   cargo nextest run -p crux-runtime    → all green
+   cargo clippy -p crux-runtime -- -D warnings   → zero warnings
    ```
 
 4. Run: `git branch --show-current`
    Expected: `feat/issue-59-if-guard-eval`
-   Commit: `git commit -m "feat(cruxx-core): add if-guard expression evaluation (#59)"`
+   Commit: `git commit -m "feat(crux-runtime): add if-guard expression evaluation (#59)"`
 
 ---
 
 ### Task 9: crux — StepRunnerRegistry with capability declarations
 
-**Crate**: `cruxx-script`
-**File(s)**: `crates/cruxx-script/src/registry.rs`
-**Run**: `cargo nextest run -p cruxx-script`
+**Crate**: `crux-script`
+**File(s)**: `crates/crux-script/src/registry.rs`
+**Run**: `cargo nextest run -p crux-script`
 
 Branch: `feat/issue-58-step-runner-registry` (cut from `develop` in crux repo, independent of
 Tasks 7–8)
 
-1. Write failing tests in `crates/cruxx-script/src/registry.rs`:
+1. Write failing tests in `crates/crux-script/src/registry.rs`:
 
    ```rust
    #[cfg(test)]
@@ -1067,10 +1067,10 @@ Tasks 7–8)
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-script -- registry_lists_capabilities_for_all_runners`
+   Run: `cargo nextest run -p crux-script -- registry_lists_capabilities_for_all_runners`
    Expected: FAIL
 
-2. Implement in `crates/cruxx-script/src/registry.rs`:
+2. Implement in `crates/crux-script/src/registry.rs`:
 
    ```rust
    use std::sync::Arc;
@@ -1169,26 +1169,26 @@ Tasks 7–8)
 3. Verify:
 
    ```
-   cargo nextest run -p cruxx-script    → all green
-   cargo clippy -p cruxx-script -- -D warnings   → zero warnings
+   cargo nextest run -p crux-script    → all green
+   cargo clippy -p crux-script -- -D warnings   → zero warnings
    ```
 
 4. Run: `git branch --show-current`
    Expected: `feat/issue-58-step-runner-registry`
-   Commit: `git commit -m "feat(cruxx-script): add StepRunnerRegistry with capability declarations (#58)"`
+   Commit: `git commit -m "feat(crux-script): add StepRunnerRegistry with capability declarations (#58)"`
 
 ---
 
 ### Task 10: crux — DetermineFinalPhase using worst-case step status
 
-**Crate**: `cruxx-core`, `cruxx-types`
-**File(s)**: `crates/cruxx-core/src/ctx.rs`, `crates/cruxx-types/src/crux_value.rs`
-**Run**: `cargo nextest run -p cruxx-core -p cruxx-types`
+**Crate**: `crux-runtime`, `crux-types`
+**File(s)**: `crates/crux-runtime/src/ctx.rs`, `crates/crux-types/src/crux_value.rs`
+**Run**: `cargo nextest run -p crux-runtime -p crux-types`
 
 Branch: `feat/issue-61-determine-final-phase` (cut from `develop` in crux repo, depends on
 Task 7 merged)
 
-1. Write failing tests in `crates/cruxx-core/src/ctx.rs`:
+1. Write failing tests in `crates/crux-runtime/src/ctx.rs`:
 
    ```rust
    use super::*;
@@ -1239,16 +1239,16 @@ Task 7 merged)
    }
    ```
 
-   Run: `cargo nextest run -p cruxx-core -- empty_steps_returns_success`
+   Run: `cargo nextest run -p crux-runtime -- empty_steps_returns_success`
    Expected: FAIL
 
-2. Implement in `crates/cruxx-core/src/ctx.rs`:
+2. Implement in `crates/crux-runtime/src/ctx.rs`:
 
    ```rust
    /// Severity-ordered outcome of a workflow.
    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
    // Requires `proptest-derive` in dev-dependencies:
-   // cruxx-core/Cargo.toml: proptest-derive = { version = "0.4", optional = false }
+   // crux-runtime/Cargo.toml: proptest-derive = { version = "0.4", optional = false }
    // under [dev-dependencies]
    #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
    pub enum FinalPhase {
@@ -1295,10 +1295,10 @@ Task 7 merged)
 3. Verify:
 
    ```
-   cargo nextest run -p cruxx-core    → all green
-   cargo clippy -p cruxx-core -- -D warnings   → zero warnings
+   cargo nextest run -p crux-runtime    → all green
+   cargo clippy -p crux-runtime -- -D warnings   → zero warnings
    ```
 
 4. Run: `git branch --show-current`
    Expected: `feat/issue-61-determine-final-phase`
-   Commit: `git commit -m "feat(cruxx-core): add DetermineFinalPhase using worst-case step status (#61)"`
+   Commit: `git commit -m "feat(crux-runtime): add DetermineFinalPhase using worst-case step status (#61)"`

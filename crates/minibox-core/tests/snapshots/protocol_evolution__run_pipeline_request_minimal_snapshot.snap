@@ -4,7 +4,7 @@ expression: req
 ---
 {
   "type": "RunPipeline",
-  "pipeline_path": "work.cruxx",
+  "pipeline_path": "work.crux",
   "input": null,
   "image": null,
   "budget": null,

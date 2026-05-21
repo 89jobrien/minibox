@@ -1,4 +1,5 @@
 //! Image update handler: re-pull cached images, optionally restart containers.
+// TODO(#178): add regression test for handle_update restart ContainerRecord gap
 
 use minibox_core::image::reference::ImageRef;
 use minibox_core::protocol::DaemonResponse;

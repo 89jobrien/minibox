@@ -1,6 +1,6 @@
 //! minibox-crux-plugin — crux JSON-RPC plugin for minibox container operations.
 //!
-//! Implements the cruxx plugin stdio protocol:
+//! Implements the crux plugin stdio protocol:
 //! - Reads `Request` (newline-delimited JSON) from stdin
 //! - Writes `Response` (newline-delimited JSON) to stdout
 //!
@@ -8,7 +8,7 @@
 //! `minibox::container::*` and `minibox::image::*` namespaces.
 
 use anyhow::{Context, Result};
-use cruxx_plugin::protocol::{HandlerDecl, Request, Response};
+use crux_plugin::protocol::{HandlerDecl, Request, Response};
 use minibox_core::client::{DaemonClient, default_socket_path};
 use minibox_core::domain::BindMount;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};

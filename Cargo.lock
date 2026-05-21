@@ -534,41 +534,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
-name = "cruxx-core"
-version = "0.2.5"
-source = "git+https://github.com/89jobrien/crux?rev=c456d5308e966b3e4527eabf1915fcef9173044d#c456d5308e966b3e4527eabf1915fcef9173044d"
+name = "crux-domain"
+version = "0.2.6"
+source = "git+https://github.com/89jobrien/crux?rev=6cfb95eb5614d4938aacb6de48d0db92619db59d#6cfb95eb5614d4938aacb6de48d0db92619db59d"
 dependencies = [
- "chrono",
- "cruxx-domain",
- "cruxx-types",
- "futures",
  "serde",
  "serde_json",
- "slashcrux",
- "thiserror 2.0.18",
- "tokio",
- "ulid",
-]
-
-[[package]]
-name = "cruxx-domain"
-version = "0.2.5"
-source = "git+https://github.com/89jobrien/crux?rev=c456d5308e966b3e4527eabf1915fcef9173044d#c456d5308e966b3e4527eabf1915fcef9173044d"
-dependencies = [
- "cruxx-types",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
  "tokio",
 ]
 
 [[package]]
-name = "cruxx-plugin"
-version = "0.2.5"
-source = "git+https://github.com/89jobrien/crux?rev=c456d5308e966b3e4527eabf1915fcef9173044d#c456d5308e966b3e4527eabf1915fcef9173044d"
+name = "crux-plugin"
+version = "0.2.6"
+source = "git+https://github.com/89jobrien/crux?rev=6cfb95eb5614d4938aacb6de48d0db92619db59d#6cfb95eb5614d4938aacb6de48d0db92619db59d"
 dependencies = [
- "cruxx-core",
- "cruxx-script",
+ "crux-runtime",
+ "crux-script",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -577,12 +558,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-script"
-version = "0.2.5"
-source = "git+https://github.com/89jobrien/crux?rev=c456d5308e966b3e4527eabf1915fcef9173044d#c456d5308e966b3e4527eabf1915fcef9173044d"
+name = "crux-runtime"
+version = "0.2.6"
+source = "git+https://github.com/89jobrien/crux?rev=6cfb95eb5614d4938aacb6de48d0db92619db59d#6cfb95eb5614d4938aacb6de48d0db92619db59d"
 dependencies = [
- "cruxx-core",
+ "anyhow",
+ "chrono",
+ "crux-domain",
+ "crux-types",
  "futures",
+ "serde",
+ "serde_json",
+ "slashcrux",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "crux-script"
+version = "0.2.6"
+source = "git+https://github.com/89jobrien/crux?rev=6cfb95eb5614d4938aacb6de48d0db92619db59d#6cfb95eb5614d4938aacb6de48d0db92619db59d"
+dependencies = [
+ "anyhow",
+ "crux-runtime",
  "serde",
  "serde-saphyr",
  "serde_json",
@@ -591,9 +589,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "cruxx-types"
-version = "0.2.5"
-source = "git+https://github.com/89jobrien/crux?rev=c456d5308e966b3e4527eabf1915fcef9173044d#c456d5308e966b3e4527eabf1915fcef9173044d"
+name = "crux-types"
+version = "0.2.6"
+source = "git+https://github.com/89jobrien/crux?rev=6cfb95eb5614d4938aacb6de48d0db92619db59d#6cfb95eb5614d4938aacb6de48d0db92619db59d"
 dependencies = [
  "chrono",
  "serde",
@@ -1635,7 +1633,7 @@ name = "minibox-crux-plugin"
 version = "0.29.10"
 dependencies = [
  "anyhow",
- "cruxx-plugin",
+ "crux-plugin",
  "minibox-core",
  "serde_json",
  "tempfile",

@@ -492,7 +492,7 @@ fn test_terminal_classification_is_exhaustive() {
 /// deserializes with the expected defaults.
 #[test]
 fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
-    let json = r#"{"type":"RunPipeline","pipeline_path":"work.cruxx"}"#;
+    let json = r#"{"type":"RunPipeline","pipeline_path":"work.crux"}"#;
 
     let req: DaemonRequest =
         serde_json::from_str(json).expect("backward-compat RunPipeline deserialization failed");
@@ -507,7 +507,7 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
             max_depth,
             ..
         } => {
-            assert_eq!(pipeline_path, "work.cruxx");
+            assert_eq!(pipeline_path, "work.crux");
             assert!(input.is_none(), "input should default to None");
             assert!(image.is_none(), "image should default to None");
             assert!(budget.is_none(), "budget should default to None");
@@ -525,7 +525,7 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
 #[test]
 fn run_pipeline_request_snapshot() {
     let req = DaemonRequest::RunPipeline {
-        pipeline_path: "/workspace/.cruxx/pipelines/work.cruxx".into(),
+        pipeline_path: "/workspace/.crux/pipelines/work.crux".into(),
         input: Some(serde_json::json!({"prompt": "hello"})),
         image: None,
         budget: None,
@@ -541,7 +541,7 @@ fn run_pipeline_request_snapshot() {
 #[test]
 fn run_pipeline_request_minimal_snapshot() {
     let req = DaemonRequest::RunPipeline {
-        pipeline_path: "work.cruxx".into(),
+        pipeline_path: "work.crux".into(),
         input: None,
         image: None,
         budget: None,

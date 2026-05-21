@@ -453,9 +453,9 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         metadata.insert("colima_instance".to_string(), self.instance.clone());
 
         Ok(RootfsLayout {
-            merged_dir,
+            merged_dir: merged_dir.into(),
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
-                upper_dir,
+                upper_dir: upper_dir.into(),
                 metadata,
             }),
             source_image_ref: None,
@@ -1169,12 +1169,12 @@ mod tests {
         }));
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/tmp/rootfs"),
+            rootfs: PathBuf::from("/tmp/rootfs").into(),
             command: "/bin/echo".to_string(),
             args: vec!["hello".to_string(), "world".to_string()],
             env: vec![],
             hostname: "test-container".to_string(),
-            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1385,12 +1385,12 @@ mod tests {
         }));
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/tmp/rootfs"),
+            rootfs: PathBuf::from("/tmp/rootfs").into(),
             command: "/bin/echo".to_string(),
             args: vec!["hello".to_string()],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
             capture_output: true,
             skip_network_namespace: false,
             hooks: ContainerHooks::default(),

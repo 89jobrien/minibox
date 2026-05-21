@@ -4,6 +4,11 @@
 //! `/run/minibox/miniboxd.sock` ([`DAEMON_SOCKET_PATH`]). Each message is a
 //! single JSON object terminated by `\n`.
 //!
+// TODO(#83): add PTY/stdio protocol variants for interactive containers
+// TODO(#183): add BuildImage DaemonRequest variant + mbx build command
+// TODO(#229): add container networking protocol variants
+// TODO(#328): add manifest inspection/verification protocol variants
+//!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
 //! (`"type"`) appear explicitly in the JSON, e.g.:
 //!
@@ -308,12 +313,12 @@ pub enum DaemonRequest {
     /// Higher-level than `Run` — bundles image pull + container create +
     /// pipeline execution + trace collection.
     RunPipeline {
-        /// Path to the `.cruxx` pipeline file (host-side).
+        /// Path to the `.crux` pipeline file (host-side).
         pipeline_path: String,
         /// Optional JSON input to the pipeline.
         #[serde(default)]
         input: Option<serde_json::Value>,
-        /// Container image to use. Defaults to `cruxx-runtime:latest`.
+        /// Container image to use. Defaults to `crux-runtime:latest`.
         #[serde(default)]
         image: Option<String>,
         /// Token/step/time budget for the pipeline execution.

@@ -228,7 +228,7 @@ mod tests {
         let store = FileTraceStore::new(tmp.path()).unwrap();
 
         store
-            .store("trace-1", "my-pipeline.cruxx", &sample_trace(), 0)
+            .store("trace-1", "my-pipeline.crux", &sample_trace(), 0)
             .unwrap();
 
         let loaded = store.load("trace-1").unwrap().expect("should be present");
@@ -256,19 +256,19 @@ mod tests {
         let store = FileTraceStore::new(tmp.path()).unwrap();
 
         store
-            .store("id-a", "pipeline-a.cruxx", &sample_trace(), 0)
+            .store("id-a", "pipeline-a.crux", &sample_trace(), 0)
             .unwrap();
         store
             .store(
                 "id-b",
-                "pipeline-b.cruxx",
+                "pipeline-b.crux",
                 &serde_json::json!({"steps":[]}),
                 1,
             )
             .unwrap();
 
         let filter = TraceFilter {
-            pipeline: Some("pipeline-a.cruxx".to_string()),
+            pipeline: Some("pipeline-a.crux".to_string()),
             ..Default::default()
         };
         let results = store.list(&filter).unwrap();
@@ -282,9 +282,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let store = FileTraceStore::new(tmp.path()).unwrap();
 
-        store.store("id-1", "p.cruxx", &sample_trace(), 0).unwrap();
-        store.store("id-2", "p.cruxx", &sample_trace(), 0).unwrap();
-        store.store("id-3", "p.cruxx", &sample_trace(), 0).unwrap();
+        store.store("id-1", "p.crux", &sample_trace(), 0).unwrap();
+        store.store("id-2", "p.crux", &sample_trace(), 0).unwrap();
+        store.store("id-3", "p.crux", &sample_trace(), 0).unwrap();
 
         let filter = TraceFilter {
             limit: Some(2),

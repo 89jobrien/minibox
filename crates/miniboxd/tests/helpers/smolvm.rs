@@ -1,5 +1,6 @@
 //! SmolVM test helpers for e2e tests.
 //!
+//!
 //! Two execution modes:
 //!
 //! 1. **Persistent machines** (`SmolVmFixture`) — `machine create/start/exec/stop/delete`.

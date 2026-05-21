@@ -1,9 +1,8 @@
 pipeline: minibox_sync_check
-# Pre-push divergence check against origin/main.
-# Exits ERR if behind or diverged — safe to push only when all steps OK.
+# Pre-push divergence check against the current branch's upstream.
+# Exits ERR if behind or diverged -- safe to push only when all steps OK.
 #
-# Run: cruxx run .crux/sync-check.crux
-# With custom base: cruxx run .crux/sync-check.crux .crux/input/sync-check-next.json
+# Run: crux run .crux/sync-check.crux
 budget: { calls: 4 }
 
 steps:
@@ -11,38 +10,40 @@ steps:
     handler: shell::capture
     args:
       cmd: "git fetch origin --quiet 2>&1 || true"
-    # Always succeeds — offline fetch is a warn, not a hard failure.
-    # shell::exec would also work here; capture gives us stderr in the trace.
 
-  - step: check_base_exists
+  - step: resolve_upstream
     handler: shell::capture
     args:
-      cmd: "git rev-parse --verify --quiet origin/main"
-    # ERR if origin/main doesn't exist (fresh repo, wrong remote).
+      cmd: >-
+        UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null);
+        if [ -z "$UPSTREAM" ]; then
+          echo "no upstream configured for $(git branch --show-current)" >&2;
+          exit 1;
+        fi;
+        echo "$UPSTREAM"
 
   - step: count_divergence
     handler: shell::capture
     args:
       cmd: >-
-        AHEAD=$(git rev-list --count origin/main..HEAD);
-        BEHIND=$(git rev-list --count HEAD..origin/main);
-        echo "{\"ahead\": $AHEAD, \"behind\": $BEHIND}"
-    # Output: { "exit_code": 0, "stdout": "{\"ahead\": N, \"behind\": M}", ... }
+        UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u});
+        AHEAD=$(git rev-list --count "$UPSTREAM"..HEAD);
+        BEHIND=$(git rev-list --count HEAD.."$UPSTREAM");
+        echo "{\"upstream\": \"$UPSTREAM\", \"ahead\": $AHEAD, \"behind\": $BEHIND}"
 
   - step: assert_safe_to_push
     handler: shell::capture
     args:
       cmd: >-
-        BEHIND=$(git rev-list --count HEAD..origin/main);
+        UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u});
+        BEHIND=$(git rev-list --count HEAD.."$UPSTREAM");
+        AHEAD=$(git rev-list --count "$UPSTREAM"..HEAD);
         if [ "$BEHIND" -gt 0 ]; then
-          AHEAD=$(git rev-list --count origin/main..HEAD);
-          echo "NOT SAFE: behind by $BEHIND commit(s), ahead by $AHEAD";
-          git log --oneline HEAD..origin/main | sed 's/^/  remote: /';
+          echo "NOT SAFE: behind $UPSTREAM by $BEHIND commit(s), ahead by $AHEAD" >&2;
+          git log --oneline HEAD.."$UPSTREAM" | head -10 >&2;
           exit 1;
         fi;
-        AHEAD=$(git rev-list --count origin/main..HEAD);
-        echo "SAFE: ahead by $AHEAD commit(s), not behind"
-    # ERR step in trace = unsafe to push. OK step = push is safe.
+        echo "SAFE: ahead of $UPSTREAM by $AHEAD commit(s), not behind"
 
   - step: summary
     handler: ctrl::log

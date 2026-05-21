@@ -274,7 +274,7 @@ impl crate::domain::RootfsSetup for MockFilesystem {
         }
 
         Ok(RootfsLayout {
-            merged_dir: container_dir.join("merged"),
+            merged_dir: container_dir.join("merged").into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -748,7 +748,7 @@ impl crate::domain::RootfsSetup for FailableFilesystemMock {
             anyhow::bail!("injected setup failure");
         }
         Ok(RootfsLayout {
-            merged_dir: container_dir.join("merged"),
+            merged_dir: container_dir.join("merged").into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -882,12 +882,12 @@ mod tests {
         use crate::domain::{ContainerHooks, ContainerSpawnConfig};
         let runtime = MockRuntime::new();
         let cfg = ContainerSpawnConfig {
-            rootfs: std::path::PathBuf::from("/mock/rootfs"),
+            rootfs: std::path::PathBuf::from("/mock/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "mock".to_string(),
-            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -959,12 +959,12 @@ mod tests {
         assert_eq!(runtime.spawn_count(), 0);
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/mock/rootfs"),
+            rootfs: PathBuf::from("/mock/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "mock-host".to_string(),
-            cgroup_path: PathBuf::from("/mock/cgroup"),
+            cgroup_path: PathBuf::from("/mock/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,

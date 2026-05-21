@@ -56,10 +56,9 @@ pub fn demo(_sh: &Shell, root: &Path, adapter: &str) -> Result<()> {
     };
 
     eprintln!();
-    eprintln!("$ mbx pull alpine:latest");
+    eprintln!("$ mbx pull alpine --tag latest");
     let pull_status = Command::new(&mbx)
-        .arg("pull")
-        .arg("alpine:latest")
+        .args(["pull", "alpine", "--tag", "latest"])
         .env("MINIBOX_ADAPTER", adapter)
         .status();
     match pull_status {
@@ -69,9 +68,16 @@ pub fn demo(_sh: &Shell, root: &Path, adapter: &str) -> Result<()> {
     }
 
     eprintln!();
-    eprintln!("$ mbx run --rm alpine:latest echo \"hello from minibox\"");
+    eprintln!("$ mbx run --rm alpine:latest -- echo \"hello from minibox\"");
     let run_status = Command::new(&mbx)
-        .args(["run", "--rm", "alpine:latest", "echo", "hello from minibox"])
+        .args([
+            "run",
+            "--rm",
+            "alpine:latest",
+            "--",
+            "echo",
+            "hello from minibox",
+        ])
         .env("MINIBOX_ADAPTER", adapter)
         .status();
     match run_status {
