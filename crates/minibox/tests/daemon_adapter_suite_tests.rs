@@ -139,6 +139,7 @@ fn make_deps_from_parts(
             allow_bind_mounts: true,
             allow_privileged: false,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }

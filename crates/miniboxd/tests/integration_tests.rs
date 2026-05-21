@@ -127,6 +127,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 

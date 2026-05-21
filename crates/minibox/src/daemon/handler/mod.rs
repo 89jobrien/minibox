@@ -267,6 +267,9 @@ pub struct HandlerDependencies {
     pub events: EventDeps,
     /// Policy controlling which container capabilities are permitted.
     pub policy: ContainerPolicy,
+    /// Manifest-level execution policy for admission control.
+    /// `None` means all runs are allowed (backward compatible).
+    pub execution_policy: Option<minibox_core::domain::ExecutionPolicy>,
     /// VM checkpoint adapter for save/restore snapshot operations.
     pub checkpoint: minibox_core::domain::DynVmCheckpoint,
 }
@@ -414,6 +417,7 @@ mod pub_crate_handler_tests {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            execution_policy: None,
             checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     }
@@ -1173,6 +1177,66 @@ mod pub_crate_handler_tests {
         assert!(
             matches!(resp, DaemonResponse::Manifest { .. }),
             "valid manifest file should produce Manifest, got {resp:?}"
+        );
+    }
+
+    // ── execution_policy wiring ───────────────────────────────────────
+
+    #[test]
+    fn handler_deps_accepts_execution_policy() {
+        use minibox_core::domain::{ExecutionPolicy, PolicyDecision};
+
+        let tmp = TempDir::new().expect("create temp dir");
+        let mut deps = (*make_deps(&tmp)).clone();
+
+        // Default: no policy, all allowed.
+        assert!(deps.execution_policy.is_none());
+
+        // Set a restrictive policy and verify it evaluates correctly.
+        let policy = ExecutionPolicy {
+            allowed_images: Some(vec!["trusted/*".to_string()]),
+            ..Default::default()
+        };
+        deps.execution_policy = Some(policy);
+
+        // Build a minimal manifest to test evaluation through the field.
+        let manifest = minibox_core::domain::ExecutionManifest {
+            schema_version: 1,
+            container_id: "test-001".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            manifest_path: None,
+            workload_digest: None,
+            subject: minibox_core::domain::ExecutionManifestSubject {
+                image_ref: "untrusted/evil:latest".to_string(),
+                image: minibox_core::domain::ExecutionManifestImage {
+                    manifest_digest: None,
+                    config_digest: None,
+                    layer_digests: vec![],
+                },
+            },
+            runtime: minibox_core::domain::ExecutionManifestRuntime {
+                command: vec!["sh".to_string()],
+                env: vec![],
+                mounts: vec![],
+                resource_limits: None,
+                network_mode: "none".to_string(),
+                privileged: false,
+                platform: None,
+            },
+            request: minibox_core::domain::ExecutionManifestRequest {
+                name: None,
+                ephemeral: false,
+            },
+        };
+
+        let decision = deps
+            .execution_policy
+            .as_ref()
+            .expect("policy was set")
+            .evaluate(&manifest);
+        assert!(
+            matches!(decision, PolicyDecision::Deny(_)),
+            "untrusted image must be denied by restrictive policy"
         );
     }
 }
