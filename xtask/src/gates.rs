@@ -255,6 +255,17 @@ pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
 }
 
 /// Property-based tests (proptest)
+/// Shuttle concurrency tests (deterministic random scheduling).
+pub fn test_shuttle(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo nextest run -p minibox --test shuttle_concurrency"
+    )
+    .run()
+    .context("shuttle concurrency tests failed")?;
+    Ok(())
+}
+
 pub fn test_property(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
         .run()

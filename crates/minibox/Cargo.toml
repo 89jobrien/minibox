@@ -72,6 +72,7 @@ tempfile = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { workspace = true }
 macbox = { workspace = true }
+shuttle = "0.9"
 # Enable conformance test infrastructure from minibox-core.
 minibox-core = { workspace = true, features = ["test-utils"] }
 

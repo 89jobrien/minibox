@@ -77,6 +77,7 @@ fn main() -> Result<()> {
         Some("test-unit") => gates::test_unit(&sh),
         Some("test-conformance") => gates::test_conformance(&sh),
         Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
+        Some("test-shuttle") => gates::test_shuttle(&sh),
         Some("test-property") => gates::test_property(&sh),
         Some("test-integration") => gates::test_integration(&sh),
         Some("test-e2e") => gates::test_e2e(&sh),
@@ -290,6 +291,9 @@ fn main() -> Result<()> {
             eprintln!("  test-conformance commit+build+push conformance suite + artifact reports");
             eprintln!(
                 "  test-krun-conformance krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)"
+            );
+            eprintln!(
+                "  test-shuttle     shuttle concurrency tests (deterministic random scheduling)"
             );
             eprintln!("  test-property    property-based tests (proptest)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
