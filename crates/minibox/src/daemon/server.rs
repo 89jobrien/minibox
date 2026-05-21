@@ -1666,3 +1666,46 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 5: is_authorized matches the behaviour table in
+    /// SECURITY_INVARIANTS.md:
+    ///
+    /// | require_root_auth | creds         | Result  |
+    /// |-------------------|---------------|---------|
+    /// | false             | any / None    | allowed |
+    /// | true              | None          | denied  |
+    /// | true              | Some(uid = 0) | allowed |
+    /// | true              | Some(uid > 0) | denied  |
+    #[kani::proof]
+    fn is_authorized_matches_truth_table() {
+        let require_root: bool = kani::any();
+        let has_creds: bool = kani::any();
+        let uid: u32 = kani::any();
+
+        let creds = if has_creds {
+            Some(PeerCreds { uid, pid: 1 })
+        } else {
+            None
+        };
+
+        let result = is_authorized(creds.as_ref(), require_root);
+
+        if !require_root {
+            assert!(result, "auth disabled => always allowed");
+        } else if !has_creds {
+            assert!(!result, "auth required + no creds => denied");
+        } else if uid == 0 {
+            assert!(result, "auth required + root => allowed");
+        } else {
+            assert!(!result, "auth required + non-root => denied");
+        }
+    }
+}
