@@ -2881,3 +2881,183 @@ mod start_from_step_tests {
         assert!(resume_workflow("nonexistent", &steps, &prior).is_err());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Slashcrux integration unit tests (#283)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod slashcrux_tests {
+    use super::*;
+
+    // ── meets_min_priority ─────────────────────────────────────────────
+
+    #[test]
+    fn priority_same_level_meets_threshold() {
+        for p in [
+            Priority::Critical,
+            Priority::High,
+            Priority::Medium,
+            Priority::Low,
+            Priority::Deferred,
+        ] {
+            assert!(
+                meets_min_priority(&p, &p),
+                "{p:?} should meet its own threshold"
+            );
+        }
+    }
+
+    #[test]
+    fn priority_higher_meets_lower_threshold() {
+        assert!(meets_min_priority(&Priority::Critical, &Priority::Deferred));
+        assert!(meets_min_priority(&Priority::High, &Priority::Medium));
+        assert!(meets_min_priority(&Priority::Medium, &Priority::Low));
+        assert!(meets_min_priority(&Priority::Low, &Priority::Deferred));
+    }
+
+    #[test]
+    fn priority_lower_does_not_meet_higher_threshold() {
+        assert!(!meets_min_priority(
+            &Priority::Deferred,
+            &Priority::Critical
+        ));
+        assert!(!meets_min_priority(&Priority::Low, &Priority::High));
+        assert!(!meets_min_priority(&Priority::Medium, &Priority::Critical));
+        assert!(!meets_min_priority(&Priority::Deferred, &Priority::Low));
+    }
+
+    #[test]
+    fn priority_all_combinations_consistent() {
+        let variants = [
+            Priority::Deferred,
+            Priority::Low,
+            Priority::Medium,
+            Priority::High,
+            Priority::Critical,
+        ];
+        for (i, actual) in variants.iter().enumerate() {
+            for (j, min) in variants.iter().enumerate() {
+                let result = meets_min_priority(actual, min);
+                assert_eq!(
+                    result,
+                    i >= j,
+                    "meets_min_priority({actual:?}, {min:?}) expected {} got {result}",
+                    i >= j,
+                );
+            }
+        }
+    }
+
+    // ── StepState From<StepStatus> ─────────────────────────────────────
+
+    #[test]
+    fn step_status_pending_maps_to_pending() {
+        assert_eq!(StepState::from(StepStatus::Pending), StepState::Pending);
+    }
+
+    #[test]
+    fn step_status_running_maps_to_running() {
+        assert_eq!(StepState::from(StepStatus::Running), StepState::Running);
+    }
+
+    #[test]
+    fn step_status_succeeded_maps_to_completed() {
+        assert_eq!(StepState::from(StepStatus::Succeeded), StepState::Completed);
+    }
+
+    #[test]
+    fn step_status_failed_maps_to_failed() {
+        assert_eq!(StepState::from(StepStatus::Failed), StepState::Failed);
+    }
+
+    #[test]
+    fn step_status_errored_maps_to_failed() {
+        assert_eq!(StepState::from(StepStatus::Errored), StepState::Failed);
+    }
+
+    #[test]
+    fn step_status_skipped_maps_to_skipped() {
+        assert_eq!(StepState::from(StepStatus::Skipped), StepState::Skipped);
+    }
+
+    // ── execution_context_to_env ───────────────────────────────────────
+
+    #[test]
+    fn env_string_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("NAME", serde_json::Value::String("alice".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["NAME=alice"]);
+    }
+
+    #[test]
+    fn env_number_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("PORT", serde_json::Value::Number(8080.into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["PORT=8080"]);
+    }
+
+    #[test]
+    fn env_boolean_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("DEBUG", serde_json::Value::Bool(true));
+        ctx.set("VERBOSE", serde_json::Value::Bool(false));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["DEBUG=true", "VERBOSE=false"]);
+    }
+
+    #[test]
+    fn env_null_value_skipped() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("SKIP_ME", serde_json::Value::Null);
+        ctx.set("KEEP", serde_json::Value::String("yes".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["KEEP=yes"]);
+    }
+
+    #[test]
+    fn env_unset_value_skipped() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("VISIBLE", serde_json::Value::String("ok".into()));
+        ctx.unset("GONE");
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["VISIBLE=ok"]);
+    }
+
+    #[test]
+    fn env_array_json_serialized() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("TAGS", serde_json::json!(["alpha", "beta"]));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env.len(), 1);
+        assert_eq!(env[0], r#"TAGS=["alpha","beta"]"#);
+    }
+
+    #[test]
+    fn env_object_json_serialized() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("META", serde_json::json!({"k": "v"}));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env.len(), 1);
+        assert_eq!(env[0], r#"META={"k":"v"}"#);
+    }
+
+    #[test]
+    fn env_empty_context_returns_empty() {
+        let ctx = ExecutionContext::new();
+        let env = execution_context_to_env(&ctx);
+        assert!(env.is_empty());
+    }
+
+    #[test]
+    fn env_preserves_insertion_order() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("Z_VAR", serde_json::Value::String("z".into()));
+        ctx.set("A_VAR", serde_json::Value::String("a".into()));
+        ctx.set("M_VAR", serde_json::Value::String("m".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["Z_VAR=z", "A_VAR=a", "M_VAR=m"]);
+    }
+}
