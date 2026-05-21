@@ -52,6 +52,7 @@ pub mod load;
 pub mod logs;
 pub mod manifest;
 pub mod pause;
+pub mod pipeline;
 pub mod prune;
 pub mod ps;
 pub mod pull;

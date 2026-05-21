@@ -619,6 +619,14 @@ async fn dispatch(
             handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
                 .await;
         }
+        DaemonRequest::ListPipelines { limit, pipeline } => {
+            let response = handler::handle_list_pipelines(limit, pipeline, state).await;
+            send_terminal_response(&tx, "ListPipelines", response).await;
+        }
+        DaemonRequest::ShowPipeline { id } => {
+            let response = handler::handle_show_pipeline(id, state).await;
+            send_terminal_response(&tx, "ShowPipeline", response).await;
+        }
         DaemonRequest::Update {
             images,
             all,

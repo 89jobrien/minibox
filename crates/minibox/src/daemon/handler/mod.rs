@@ -47,7 +47,7 @@ pub(crate) use self::image::{handle_list_images, handle_prune, handle_remove_ima
 pub use self::lifecycle::{handle_list, handle_pause, handle_remove, handle_resume};
 pub use self::logs::handle_logs;
 pub use self::manifest::{handle_get_manifest, handle_verify_manifest};
-pub use self::pipeline::handle_pipeline;
+pub use self::pipeline::{handle_list_pipelines, handle_pipeline, handle_show_pipeline};
 pub use self::run::handle_run;
 pub use self::snapshot::{handle_list_snapshots, handle_restore_snapshot, handle_save_snapshot};
 pub use self::stop::handle_stop;

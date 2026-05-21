@@ -2,6 +2,7 @@
 
 use minibox_core::domain::BindMount;
 use minibox_core::protocol::DaemonResponse;
+use minibox_core::trace::TraceFilter;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
@@ -276,5 +277,37 @@ pub async fn handle_pipeline(
         {
             warn!("handle_pipeline: client disconnected before PipelineComplete could be sent");
         }
+    }
+}
+
+/// List pipeline runs from the trace store.
+pub async fn handle_list_pipelines(
+    limit: Option<usize>,
+    pipeline: Option<String>,
+    state: Arc<DaemonState>,
+) -> DaemonResponse {
+    let filter = TraceFilter {
+        limit,
+        pipeline,
+        ..Default::default()
+    };
+    match state.trace_store.list(&filter) {
+        Ok(pipelines) => DaemonResponse::PipelineList { pipelines },
+        Err(e) => DaemonResponse::Error {
+            message: format!("failed to list pipelines: {e}"),
+        },
+    }
+}
+
+/// Show details of a specific pipeline run.
+pub async fn handle_show_pipeline(id: String, state: Arc<DaemonState>) -> DaemonResponse {
+    match state.trace_store.load(&id) {
+        Ok(Some(trace)) => DaemonResponse::PipelineDetail { id, trace },
+        Ok(None) => DaemonResponse::Error {
+            message: format!("pipeline run not found: {id}"),
+        },
+        Err(e) => DaemonResponse::Error {
+            message: format!("failed to load pipeline run {id}: {e}"),
+        },
     }
 }
