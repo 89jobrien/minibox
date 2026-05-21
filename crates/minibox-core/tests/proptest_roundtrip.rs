@@ -8,6 +8,7 @@ use minibox_core::domain::{
     ExecutionManifestRuntime, ExecutionManifestSubject, NetworkMode, PhaseOutcome, StepRetry,
     StepStatus, WorkflowDef, WorkflowStep,
 };
+use minibox_core::image::reference::ImageRef;
 use minibox_core::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind, PushCredentials,
 };
@@ -103,6 +104,28 @@ fn arb_workflow_def() -> impl Strategy<Value = WorkflowDef> {
             state: std::collections::HashMap::new(),
             start_from_step: start,
         })
+}
+
+// ---------------------------------------------------------------------------
+// Strategy helpers: ImageRef (parse/display roundtrip)
+// ---------------------------------------------------------------------------
+
+/// Generate valid image reference strings in one of three forms:
+/// - `name:tag` (bare Docker Hub library image)
+/// - `org/name:tag` (Docker Hub with namespace)
+/// - `registry.io/org/name:tag` (custom registry, requires dot in host)
+fn arb_image_ref_string() -> impl Strategy<Value = String> {
+    let bare = ("[a-z]{3,10}", "[a-z0-9.]{1,8}").prop_map(|(name, tag)| format!("{name}:{tag}"));
+    let org = ("[a-z]{3,10}", "[a-z]{3,10}", "[a-z0-9.]{1,8}")
+        .prop_map(|(org, name, tag)| format!("{org}/{name}:{tag}"));
+    let registry = (
+        "[a-z]{3,8}\\.[a-z]{2,4}",
+        "[a-z]{3,10}",
+        "[a-z]{3,10}",
+        "[a-z0-9.]{1,8}",
+    )
+        .prop_map(|(reg, org, name, tag)| format!("{reg}/{org}/{name}:{tag}"));
+    prop_oneof![bare, org, registry]
 }
 
 // ---------------------------------------------------------------------------
@@ -454,5 +477,20 @@ proptest::proptest! {
         let json = serde_json::to_string(&os).expect("serialize");
         let decoded: OutputStreamKind = serde_json::from_str(&json).expect("deserialize");
         prop_assert_eq!(os, decoded);
+    }
+
+    /// ImageRef survives parse(display(x)) == x roundtrip.
+    ///
+    /// ImageRef is not Serialize/Deserialize — it uses parse/display instead.
+    /// We generate valid image references in three forms:
+    /// - bare name (docker.io/library default)
+    /// - org/name (docker.io with custom namespace)
+    /// - registry.tld/org/name (custom registry)
+    #[test]
+    fn image_ref_parse_display_roundtrip(ref_str in arb_image_ref_string()) {
+        let parsed = ImageRef::parse(&ref_str).expect("parse should succeed");
+        let displayed = parsed.to_string();
+        let reparsed = ImageRef::parse(&displayed).expect("reparse should succeed");
+        prop_assert_eq!(parsed, reparsed);
     }
 }
