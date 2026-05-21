@@ -268,6 +268,24 @@ pub fn test_property(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Quickcheck property-based tests (cross-platform).
+pub fn test_quickcheck(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test --release -p minibox-core --test quickcheck_properties"
+    )
+    .run()
+    .context("minibox-core quickcheck tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test quickcheck_properties"
+    )
+    .run()
+    .context("minibox quickcheck tests failed")?;
+    eprintln!("quickcheck property tests passed");
+    Ok(())
+}
+
 /// Cgroup + integration tests (Linux, root required)
 ///
 /// Builds release binaries first, then runs each test suite under `sudo -E`

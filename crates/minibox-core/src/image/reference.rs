@@ -62,6 +62,23 @@ impl ImageRef {
         })
     }
 
+    /// Format as a fully-qualified image reference string.
+    ///
+    /// For docker.io with the `library` namespace, emits the short form
+    /// (e.g. `alpine:latest`). Otherwise emits `registry/namespace/name:tag`.
+    pub fn to_canonical_string(&self) -> String {
+        if self.registry == "docker.io" && self.namespace == "library" {
+            format!("{}:{}", self.name, self.tag)
+        } else if self.registry == "docker.io" {
+            format!("{}/{}:{}", self.namespace, self.name, self.tag)
+        } else {
+            format!(
+                "{}/{}/{}:{}",
+                self.registry, self.namespace, self.name, self.tag
+            )
+        }
+    }
+
     pub fn registry_host(&self) -> &str {
         match self.registry.as_str() {
             "docker.io" => "registry-1.docker.io",
@@ -97,6 +114,12 @@ impl ImageRef {
                 .join(&self.name)
                 .join(&self.tag)
         }
+    }
+}
+
+impl std::fmt::Display for ImageRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_canonical_string())
     }
 }
 
