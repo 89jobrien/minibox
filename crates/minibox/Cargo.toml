@@ -6,7 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-minibox-core = { workspace = true }
+minibox-core = { workspace = true, features = ["test-utils"] }
 minibox-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -45,7 +45,7 @@ tracing-opentelemetry = { workspace = true, optional = true }
 
 [features]
 ## Test infrastructure: mocks, fixtures, conformance helpers (never compile into production)
-test-utils = []
+test-utils = ["minibox-core/test-utils"]
 ## Prometheus /metrics endpoint + prometheus-client recorder
 metrics = ["dep:prometheus-client", "dep:axum"]
 ## OTLP trace export via opentelemetry + tonic
