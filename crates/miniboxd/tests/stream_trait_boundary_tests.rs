@@ -78,6 +78,7 @@ fn test_deps(tmp: &TempDir) -> (Arc<DaemonState>, Arc<HandlerDependencies>) {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     (state, deps)

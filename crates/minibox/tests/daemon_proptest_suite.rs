@@ -113,6 +113,7 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }

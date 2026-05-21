@@ -610,6 +610,26 @@ async fn prepare_run(
         .seal()
         .context("failed to compute execution manifest digest")?;
 
+    // ── Execution policy gate ───────────────────────────────────────
+    if let Some(ref policy) = deps.execution_policy {
+        use minibox_core::domain::PolicyDecision;
+        match policy.evaluate(&manifest) {
+            PolicyDecision::Allow => {}
+            PolicyDecision::Deny(reason) => {
+                // Best-effort cleanup: remove container dir.
+                if let Err(e) = std::fs::remove_dir_all(&container_dir) {
+                    warn!(
+                        container_id = %id,
+                        error = %e,
+                        "policy: cleanup container dir failed after denial"
+                    );
+                }
+                state.remove_container(&id).await;
+                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+            }
+        }
+    }
+
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
         serde_json::to_string_pretty(&manifest).context("serialise execution manifest")?;
