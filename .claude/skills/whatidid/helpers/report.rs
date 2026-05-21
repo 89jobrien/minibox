@@ -16,12 +16,12 @@
 //! hex = "0.4"
 //! ```
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::Local;
 use hex::ToHex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as Sha2Digest, Sha256};
-use std::{fs, path::PathBuf, process::Command};
+use std::{collections::HashMap, fs, path::PathBuf, process::Command};
 
 // ── Pricing types (loaded from model_pricing.json) ───────────────────────────
 
@@ -85,6 +85,109 @@ struct Task {
 
 const HOURLY_RATE: f64 = 72.0;
 const SEAT_COST_PER_MONTH: f64 = 39.0;
+const WARN_THRESHOLD: f64 = 0.80;
+
+// ── Spend tracker (persisted to cache/spend-tracker.json) ───────────────────
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct SpendTracker {
+    /// Daily spend keyed by "YYYY-MM-DD"
+    daily: HashMap<String, f64>,
+    /// Monthly spend keyed by "YYYY-MM"
+    monthly: HashMap<String, f64>,
+}
+
+impl SpendTracker {
+    fn load(path: &PathBuf) -> Self {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    fn save(&self, path: &PathBuf) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("create dir {}", parent.display()))?;
+        }
+        let json = serde_json::to_string_pretty(self)
+            .context("serialize spend tracker")?;
+        fs::write(path, json)
+            .with_context(|| format!("write {}", path.display()))
+    }
+
+    fn record(&mut self, date: &str, cost: f64) {
+        *self.daily.entry(date.to_string()).or_default() += cost;
+        let month_key = &date[..7]; // "YYYY-MM"
+        *self.monthly.entry(month_key.to_string()).or_default() += cost;
+    }
+
+    fn daily_total(&self, date: &str) -> f64 {
+        self.daily.get(date).copied().unwrap_or(0.0)
+    }
+
+    fn monthly_total(&self, date: &str) -> f64 {
+        let month_key = &date[..7];
+        self.monthly.get(month_key).copied().unwrap_or(0.0)
+    }
+}
+
+/// Check spend caps from env vars. Returns (daily_cap, monthly_cap) as
+/// Option<f64>. Unset or empty means no cap.
+fn read_caps() -> (Option<f64>, Option<f64>) {
+    let daily = std::env::var("WHATIDID_DAILY_CAP")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok());
+    let monthly = std::env::var("WHATIDID_MONTHLY_CAP")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok());
+    (daily, monthly)
+}
+
+/// Enforce caps: warn at 80%, halt at 100%. Returns Err to halt.
+fn enforce_caps(tracker: &SpendTracker, date: &str) -> Result<()> {
+    let (daily_cap, monthly_cap) = read_caps();
+
+    if let Some(cap) = daily_cap {
+        let total = tracker.daily_total(date);
+        if total >= cap {
+            bail!(
+                "daily token cost cap exceeded: ${:.4} >= ${:.2} \
+                 (set WHATIDID_DAILY_CAP to adjust)",
+                total, cap
+            );
+        }
+        if total >= cap * WARN_THRESHOLD {
+            eprintln!(
+                "WARNING: daily spend ${:.4} is {:.0}% of ${:.2} cap",
+                total,
+                (total / cap) * 100.0,
+                cap
+            );
+        }
+    }
+
+    if let Some(cap) = monthly_cap {
+        let total = tracker.monthly_total(date);
+        if total >= cap {
+            bail!(
+                "monthly token cost cap exceeded: ${:.4} >= ${:.2} \
+                 (set WHATIDID_MONTHLY_CAP to adjust)",
+                total, cap
+            );
+        }
+        if total >= cap * WARN_THRESHOLD {
+            eprintln!(
+                "WARNING: monthly spend ${:.4} is {:.0}% of ${:.2} cap",
+                total,
+                (total / cap) * 100.0,
+                cap
+            );
+        }
+    }
+
+    Ok(())
+}
 
 fn main() -> Result<()> {
     let digest_path = std::env::args()
@@ -131,6 +234,34 @@ fn main() -> Result<()> {
     let human_value = total_hours as f64 * HOURLY_RATE;
     let leverage = human_value / SEAT_COST_PER_MONTH;
 
+    // ── Spend tracking and cap enforcement ────────────────────────────────
+    let tracker_path = skill_dir.join("cache/spend-tracker.json");
+    let mut tracker = SpendTracker::load(&tracker_path);
+
+    // Estimate session cost from the analysis call itself (gpt-4o-mini).
+    // The digest JSON is ~2-4k tokens output; the prompt is ~8k input.
+    // Use conservative estimates since we don't have exact token counts here.
+    let estimated_input_tokens: u64 = 8000;
+    let estimated_output_tokens: u64 = 4000;
+    let session_cost = pricing.cost_for(
+        "gpt-4o-mini",
+        estimated_input_tokens,
+        estimated_output_tokens,
+    );
+
+    tracker.record(&date_str, session_cost);
+    tracker.save(&tracker_path)?;
+
+    // Check caps AFTER recording (so the tracker file is always up to date)
+    enforce_caps(&tracker, &date_str)?;
+
+    eprintln!(
+        "Token cost: ${:.4} (daily: ${:.4}, monthly: ${:.4})",
+        session_cost,
+        tracker.daily_total(&date_str),
+        tracker.monthly_total(&date_str),
+    );
+
     let html = render_html(&digest, &date_str, total_hours, human_value, leverage);
 
     let out_path = format!("/tmp/whatidid-{date_str}.html");
@@ -146,9 +277,6 @@ fn main() -> Result<()> {
         total_hours
     );
     eprintln!("Human value: ${human_value:.0}  |  Leverage: {leverage:.0}x");
-
-    // Demonstrate pricing lookup (printed only if model metrics available)
-    let _ = pricing.cost_for("gpt-4o-mini", 0, 0);
 
     Ok(())
 }
