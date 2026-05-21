@@ -10,6 +10,7 @@ members = [
     "crates/winbox",
     "crates/minibox-crux-plugin",
     "crates/minibox-testsuite",
+    "crates/smolbox",
     "xtask",
 ]
 
