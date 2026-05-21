@@ -16,6 +16,7 @@ import (
 	"github.com/joe/minibox/agentbox/internal/llm"
 	"github.com/joe/minibox/agentbox/internal/orchestrator"
 	"github.com/joe/minibox/agentbox/internal/output"
+	"github.com/joe/minibox/agentbox/internal/synthesis"
 )
 
 func main() {
@@ -151,30 +152,49 @@ func runCouncil(ctx context.Context, args []string) {
 	}
 
 	if !*noSynth {
-		// Synthesize across all providers — merge all role outputs
+		// When multiple providers produced results, quality-rank per role
+		// before feeding into synthesis.
+		strategy := synthesis.Default()
 		merged := make(map[string]string)
-		for provider, roleOutputs := range allProviderOutputs {
-			for key, out := range roleOutputs {
-				mergedKey := fmt.Sprintf("%s (%s)", key, provider)
-				merged[mergedKey] = out
+		if len(allProviderOutputs) > 1 {
+			// Collect per-role candidates across providers.
+			roleProviders := make(map[string]map[string]string)
+			for provider, roleOutputs := range allProviderOutputs {
+				for key, out := range roleOutputs {
+					if roleProviders[key] == nil {
+						roleProviders[key] = make(map[string]string)
+					}
+					roleProviders[key][provider] = out
+				}
+			}
+			for role, candidates := range roleProviders {
+				best, bestProv := strategy.Select(candidates)
+				merged[role] = best
+				fmt.Printf("  %s: selected %s via quality ranking\n", role, bestProv)
+			}
+		} else {
+			for _, roleOutputs := range allProviderOutputs {
+				for key, out := range roleOutputs {
+					merged[key] = out
+				}
 			}
 		}
 
-		// Use the first available runner for synthesis
+		// Pick the best runner for the final synthesis LLM call.
 		var synthRunner domain.AgentRunner
 		for _, r := range runners {
 			synthRunner = r
 			break
 		}
 		council := orchestrator.NewCouncil(synthRunner)
-		synthesis, err := council.RunSynthesis(ctx, merged, branchCtx)
+		synthResult, err := council.RunSynthesis(ctx, merged, branchCtx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "synthesis: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("\n%s\n  CROSS-PROVIDER SYNTHESIS\n%s\n%s\n\n",
-			strings.Repeat("═", 60), strings.Repeat("═", 60), synthesis)
-		allOutput = append(allOutput, fmt.Sprintf("## Cross-Provider Synthesis\n%s", synthesis))
+			strings.Repeat("═", 60), strings.Repeat("═", 60), synthResult)
+		allOutput = append(allOutput, fmt.Sprintf("## Cross-Provider Synthesis\n%s", synthResult))
 	}
 
 	fullOutput := strings.Join(allOutput, "\n\n")
@@ -255,7 +275,7 @@ func runMetaAgent(ctx context.Context, args []string) {
 		close(results)
 	}()
 
-	var allOutput []string
+	candidates := make(map[string]string)
 	for res := range results {
 		if res.err != nil {
 			fmt.Fprintf(os.Stderr, "warning: %s meta-agent failed: %v\n", res.provider, res.err)
@@ -263,15 +283,28 @@ func runMetaAgent(ctx context.Context, args []string) {
 		}
 		header := fmt.Sprintf("═══ %s ", strings.ToUpper(res.provider))
 		fmt.Printf("\n%s%s\n%s\n", header, strings.Repeat("═", max(0, 60-len(header))), res.output)
-		allOutput = append(allOutput, fmt.Sprintf("## [%s]\n%s", res.provider, res.output))
+		candidates[res.provider] = res.output
 	}
 
-	if len(allOutput) == 0 {
+	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "error: all providers failed")
 		os.Exit(1)
 	}
 
-	fullOutput := strings.Join(allOutput, "\n\n")
+	// Quality-rank when multiple providers succeeded.
+	var fullOutput string
+	if len(candidates) > 1 {
+		strategy := synthesis.Default()
+		best, bestProv := strategy.Select(candidates)
+		fmt.Printf("\nSelected: %s (via quality ranking)\n", bestProv)
+		fullOutput = fmt.Sprintf("## Selected: %s\n%s", bestProv, best)
+	} else {
+		var parts []string
+		for prov, out := range candidates {
+			parts = append(parts, fmt.Sprintf("## [%s]\n%s", prov, out))
+		}
+		fullOutput = strings.Join(parts, "\n\n")
+	}
 	duration := time.Since(start).Seconds()
 	writer.WriteRun(ctx, domain.AgentRun{
 		RunID: runID, Script: "meta-agent",
