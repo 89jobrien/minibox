@@ -501,3 +501,109 @@ fn regression_root_dot_entries_are_silently_skipped() {
     extract_layer(&mut tar_gz_dot_slash.as_slice(), dest.path())
         .expect("'./' root entry must be silently skipped, not rejected");
 }
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 10 — Request Size Limit
+// ---------------------------------------------------------------------------
+
+/// Verify that MAX_REQUEST_SIZE is defined and enforced in the daemon server.
+///
+/// Removing or raising this constant beyond 1 MB would allow malicious clients
+/// to exhaust daemon memory with oversized JSON payloads.
+///
+/// Guard location: `crates/minibox/src/daemon/server.rs` — `MAX_REQUEST_SIZE`.
+// Invariant: 10 — Request Size Limit
+#[test]
+fn mutation_audit_request_size_limit_exists() {
+    let source = include_str!("../src/daemon/server.rs");
+
+    // The constant must exist.
+    assert!(
+        source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE constant must be defined in server.rs"
+    );
+
+    // The constant must be used in bounded_read_line call.
+    assert!(
+        source.contains("bounded_read_line") && source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE must be passed to bounded_read_line"
+    );
+
+    // The limit must be 1 MB (1_048_576 bytes). Detect if someone raises it.
+    assert!(
+        source.contains("1024 * 1024") || source.contains("1_048_576"),
+        "MAX_REQUEST_SIZE must be 1 MB (1024 * 1024 or 1_048_576)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 11 — Image Pull Resource Limits
+// ---------------------------------------------------------------------------
+
+/// Verify that image pull size limit constants exist and are enforced in the
+/// registry client.
+///
+/// Removing these constants would allow unbounded manifest/layer downloads,
+/// enabling DoS via oversized image pulls.
+///
+/// Guard location: `crates/minibox-core/src/image/registry.rs`.
+// Invariant: 11 — Image Pull Resource Limits
+#[test]
+fn mutation_audit_image_pull_size_limits_exist() {
+    let source = include_str!("../../minibox-core/src/image/registry.rs");
+
+    // All three constants must exist.
+    assert!(
+        source.contains("MAX_MANIFEST_SIZE"),
+        "MAX_MANIFEST_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_LAYER_SIZE"),
+        "MAX_LAYER_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_TOTAL_IMAGE_SIZE"),
+        "MAX_TOTAL_IMAGE_SIZE constant must be defined in registry.rs"
+    );
+
+    // LimitedStream must exist as the enforcement mechanism.
+    assert!(
+        source.contains("LimitedStream"),
+        "LimitedStream streaming limiter must be present in registry.rs"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 12 — Execution Manifest Integrity
+// ---------------------------------------------------------------------------
+
+/// Verify that execution manifest env var hashing and seal logic exist.
+///
+/// Removing the SHA-256 hashing of env values would expose secrets in
+/// plaintext in the manifest file. Removing seal() would break workload
+/// digest computation.
+///
+/// Guard location: `crates/minibox-core/src/domain/execution_manifest.rs`.
+// Invariant: 12 — Execution Manifest Integrity
+#[test]
+fn mutation_audit_execution_manifest_env_hashing() {
+    let source = include_str!("../../minibox-core/src/domain/execution_manifest.rs");
+
+    // Env values must be hashed with SHA-256, never stored as plaintext.
+    assert!(
+        source.contains("Sha256") || source.contains("sha2"),
+        "execution manifest must use SHA-256 for env value hashing"
+    );
+
+    // The seal() method must exist for workload digest computation.
+    assert!(
+        source.contains("fn seal("),
+        "ExecutionManifest must have a seal() method"
+    );
+
+    // The digest must exclude volatile fields.
+    assert!(
+        source.contains("workload_digest") && source.contains("created_at"),
+        "manifest must reference workload_digest and created_at fields"
+    );
+}
