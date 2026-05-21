@@ -78,6 +78,7 @@ fn main() -> Result<()> {
         Some("test-conformance") => gates::test_conformance(&sh),
         Some("test-krun-conformance") => gates::test_krun_conformance(&sh),
         Some("test-property") => gates::test_property(&sh),
+        Some("test-quickcheck") => gates::test_quickcheck(&sh),
         Some("test-integration") => gates::test_integration(&sh),
         Some("test-e2e") => gates::test_e2e(&sh),
         Some("test-system-suite") => gates::test_system_suite(&sh),
@@ -292,6 +293,7 @@ fn main() -> Result<()> {
                 "  test-krun-conformance krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)"
             );
             eprintln!("  test-property    property-based tests (proptest)");
+            eprintln!("  test-quickcheck   quickcheck property tests (cross-platform)");
             eprintln!("  test-integration cgroup + integration tests (Linux, root)");
             eprintln!("  test-e2e         protocol e2e tests (any platform, no root required)");
             eprintln!("  test-system-suite full-stack system tests (Linux, root, cgroups v2)");
