@@ -12,12 +12,12 @@ use minibox_core::domain::{ContainerRuntime, ContainerSpawnConfig};
 
 fn default_spawn_config() -> ContainerSpawnConfig {
     ContainerSpawnConfig {
-        rootfs: std::path::PathBuf::from("/mock/rootfs"),
+        rootfs: std::path::PathBuf::from("/mock/rootfs").into(),
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "conformance-test".to_string(),
-        cgroup_path: std::path::PathBuf::from("/mock/cgroup/conformanceruntime01"),
+        cgroup_path: std::path::PathBuf::from("/mock/cgroup/conformanceruntime01").into(),
         capture_output: false,
         hooks: minibox_core::domain::ContainerHooks::default(),
         skip_network_namespace: false,

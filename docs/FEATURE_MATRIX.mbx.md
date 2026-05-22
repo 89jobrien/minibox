@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 ---
 
@@ -10,11 +10,11 @@ Last updated: 2026-05-20
 
 | Adapter  | Platform             | Status       | Crate   | Default?                    |
 | -------- | -------------------- | ------------ | ------- | --------------------------- |
-| `native` | Linux (x86_64/arm64) | Production   | minibox | --                          |
+| `native` | Linux (x86_64/arm64) | Production   | minibox | Fallback on Linux           |
 | `gke`    | Linux (GKE pods)     | Production   | minibox | --                          |
 | `colima` | macOS/Linux (Colima) | Experimental | minibox | --                          |
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (falls back to `krun`)  |
-| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback when smolvm absent |
+| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (all platforms)         |
+| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback on macOS           |
 | `winbox` | Windows              | Stub         | winbox  | --                          |
 
 ---
@@ -97,8 +97,9 @@ Last updated: 2026-05-20
 - **`colima` adapter** delegates to `nerdctl`/`limactl` inside a Lima VM.
   Exec and logs are limited because they go through Lima's SSH tunnel.
 - **`smolvm` adapter** is the **default** when `MINIBOX_ADAPTER` is unset and
-  the `smolvm` binary is present on PATH. Automatically falls back to `krun`
-  when the binary is absent. Lightweight Linux VMs with subsecond boot.
+  the `smolvm` binary is present on PATH. Falls back to `native` on Linux or
+  `krun` on macOS when the binary is absent. Lightweight Linux VMs with
+  subsecond boot.
 - **`krun` adapter** uses libkrun to run containers in lightweight VMs.
   All four adapter ports (runtime, registry, filesystem, limiter) are wired
   into the daemon and pass 31 conformance tests. Acts as the fallback when

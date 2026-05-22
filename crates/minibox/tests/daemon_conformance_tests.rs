@@ -38,18 +38,20 @@ async fn handle_run_once(
 ) -> DaemonResponse {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        ephemeral,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: image,
+            tag: tag,
+            command: command,
+            memory_limit_bytes: memory_limit_bytes,
+            cpu_weight: cpu_weight,
+            ephemeral: ephemeral,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -105,6 +107,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -155,6 +158,7 @@ fn mock_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -309,12 +313,12 @@ mod conformance {
     async fn runtime_must_return_valid_pid() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -334,12 +338,12 @@ mod conformance {
     async fn runtime_must_increment_pids_for_multiple_spawns() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1197,12 +1201,12 @@ mod runtime_conformance {
     async fn runtime_pids_are_unique_and_monotonically_increasing() {
         let runtime = MockRuntime::new();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1240,12 +1244,12 @@ mod runtime_conformance {
     async fn runtime_with_spawn_failure_increments_count_on_failure() {
         let runtime = MockRuntime::new().with_spawn_failure();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: PathBuf::from("/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: PathBuf::from("/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1558,6 +1562,7 @@ mod error_path_conformance {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         let state = mock_state(&temp_dir);
@@ -1679,6 +1684,7 @@ mod krun_suite {
                 allow_bind_mounts: false,
                 allow_privileged: false,
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     }
@@ -1699,18 +1705,20 @@ mod krun_suite {
     ) -> DaemonResponse {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
         handler::handle_run(
-            image,
-            tag,
-            command,
-            None,
-            None,
-            ephemeral,
-            None,
-            vec![],
-            false,
-            vec![],
-            None,
-            None,
+            handler::RunParams {
+                image: image,
+                tag: tag,
+                command: command,
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                ephemeral: ephemeral,
+                network: None,
+                mounts: vec![],
+                privileged: false,
+                env: vec![],
+                name: None,
+                platform: None,
+            },
             state,
             deps,
             tx,
@@ -1768,18 +1776,20 @@ mod krun_suite {
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
         handler::handle_run(
-            "alpine".to_string(),
-            Some("latest".to_string()),
-            vec!["/bin/echo".to_string(), "krun-phase3".to_string()],
-            None,
-            None,
-            true,
-            None,
-            vec![],
-            false,
-            vec![],
-            None,
-            None,
+            handler::RunParams {
+                image: "alpine".to_string(),
+                tag: Some("latest".to_string()),
+                command: vec!["/bin/echo".to_string(), "krun-phase3".to_string()],
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                ephemeral: true,
+                network: None,
+                mounts: vec![],
+                privileged: false,
+                env: vec![],
+                name: None,
+                platform: None,
+            },
             state,
             deps,
             tx,
@@ -2618,6 +2628,7 @@ mod policy_conformance {
                 allow_bind_mounts,
                 allow_privileged,
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     }
@@ -2631,18 +2642,20 @@ mod policy_conformance {
     ) -> DaemonResponse {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
         handler::handle_run(
-            "alpine".to_string(),
-            Some("latest".to_string()),
-            vec!["/bin/sh".to_string()],
-            None,
-            None,
-            false,
-            None,
-            mounts,
-            privileged,
-            vec![],
-            None,
-            None,
+            handler::RunParams {
+                image: "alpine".to_string(),
+                tag: Some("latest".to_string()),
+                command: vec!["/bin/sh".to_string()],
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                ephemeral: false,
+                network: None,
+                mounts: mounts,
+                privileged: privileged,
+                env: vec![],
+                name: None,
+                platform: None,
+            },
             state,
             deps,
             tx,

@@ -52,8 +52,10 @@ pub async fn handle_exec(
     // Allocate PTY channels and register them so SendInput/ResizePty can reach
     // the running exec session.
     let session_key = container_id.clone();
-    let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(8);
-    let (stdin_ch_tx, _stdin_ch_rx) = mpsc::channel::<Vec<u8>>(32);
+    const RESIZE_CHANNEL_CAPACITY: usize = 8;
+    const STDIN_CHANNEL_CAPACITY: usize = 32;
+    let (resize_tx, resize_rx) = mpsc::channel::<(u16, u16)>(RESIZE_CHANNEL_CAPACITY);
+    let (stdin_ch_tx, _stdin_ch_rx) = mpsc::channel::<Vec<u8>>(STDIN_CHANNEL_CAPACITY);
     if tty {
         // Only register PTY channels for tty sessions; non-tty execs have no
         // use for resize or stdin channels. Registered entries are removed when

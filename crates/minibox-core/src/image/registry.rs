@@ -112,6 +112,7 @@ impl<S> LimitedStream<S> {
     }
 
     /// Bytes consumed so far.
+    #[cfg(test)]
     pub fn consumed(&self) -> u64 {
         self.consumed
     }
@@ -228,6 +229,93 @@ fn resolve_manifest_action(
     }
 }
 
+/// Extract a layer from a sync reader, verify its digest, and atomically commit.
+///
+/// This is the synchronous core of the per-layer pull task, designed to run
+/// inside `spawn_blocking`. The byte flow is:
+///   reader → HashingReader → GzDecoder → tar::Archive
+///
+/// On success the layer is renamed from a `.tmp` sibling into `layer_dir`.
+/// On failure (digest mismatch or extraction error) the tmp dir is cleaned up.
+fn extract_and_verify_layer(
+    reader: impl io::Read,
+    layer_dir: &std::path::Path,
+    digest: &str,
+) -> anyhow::Result<()> {
+    let mut hashing_reader = HashingReader::new(reader);
+
+    // Prepare tmp dir adjacent to the final dest.
+    let tmp_dir = {
+        let mut p = layer_dir.to_path_buf();
+        let stem = p
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "layer".to_owned());
+        p.set_file_name(format!("{stem}.tmp"));
+        p
+    };
+
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir)
+            .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
+    }
+    std::fs::create_dir_all(&tmp_dir).with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
+
+    // Extract into tmp dir.
+    let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
+
+    // Drain remaining bytes so HashingReader covers the full compressed stream,
+    // needed for digest verification even when extraction fails partway.
+    if extract_result.is_err() {
+        let _ = std::io::copy(&mut hashing_reader, &mut std::io::sink());
+    }
+
+    // Verify digest before committing or surfacing extract error.
+    let actual_hex = hashing_reader.finalize();
+    let expected_hex = digest
+        .strip_prefix("sha256:")
+        .ok_or_else(|| anyhow::anyhow!("digest missing sha256: prefix: {digest}"))?;
+
+    if actual_hex != expected_hex {
+        cleanup_tmp_dir(&tmp_dir, digest);
+        return Err(crate::error::ImageError::DigestMismatch {
+            digest: digest.to_owned(),
+            expected: expected_hex.to_owned(),
+            actual: actual_hex,
+        }
+        .into());
+    }
+
+    // Digest matched -- surface any extraction error now.
+    if let Err(e) = extract_result {
+        cleanup_tmp_dir(&tmp_dir, digest);
+        return Err(e).with_context(|| format!("extract layer {digest}"));
+    }
+
+    // Atomic rename: tmp -> final dest.
+    if let Err(e) = std::fs::rename(&tmp_dir, layer_dir) {
+        if layer_dir.exists() {
+            let _ = std::fs::remove_dir_all(&tmp_dir);
+            return Ok(());
+        }
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        return Err(e).with_context(|| format!("rename {tmp_dir:?} -> {layer_dir:?}"));
+    }
+
+    Ok(())
+}
+
+/// Best-effort cleanup of a temporary layer directory, logging on failure.
+fn cleanup_tmp_dir(tmp_dir: &std::path::Path, digest: &str) {
+    if let Err(ce) = std::fs::remove_dir_all(tmp_dir) {
+        warn!(
+            digest = %digest,
+            error = %ce,
+            "layer: failed to clean up tmp dir"
+        );
+    }
+}
+
 /// A Docker Hub registry client.
 ///
 /// Internally wraps a [`reqwest::Client`] with redirect following enabled
@@ -249,16 +337,17 @@ impl RegistryClient {
     ///
     /// - HTTPS-only: Rejects HTTP connections to prevent MitM attacks
     /// - TLS 1.2+: Enforces minimum TLS version
-    /// - Redirect limits: Max 10 redirects to prevent redirect loops
+    /// - Redirect limits: Max redirects to prevent redirect loops
     pub fn new() -> anyhow::Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true) // SECURITY: Reject HTTP, require HTTPS
             .min_tls_version(reqwest::tls::Version::TLS_1_2) // SECURITY: Minimum TLS 1.2
             .build()
             .map_err(RegistryError::Network)?;
         let insecure_http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {
@@ -285,8 +374,9 @@ impl RegistryClient {
     /// Does not enforce HTTPS — the test server runs on plain HTTP.
     #[cfg(test)]
     pub(crate) fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {
@@ -632,7 +722,8 @@ impl RegistryClient {
                         .join("layers")
                         .join(&digest_key);
 
-                    let digest_short = digest.get(..19).unwrap_or(digest);
+                    const DIGEST_SHORT_LEN: usize = 19;
+                    let digest_short = digest.get(..DIGEST_SHORT_LEN).unwrap_or(digest);
 
                     // Early exit if the layer is already cached.
                     if layer_dir.exists() {
@@ -666,94 +757,10 @@ impl RegistryClient {
                     let digest_for_err = digest_owned.clone();
 
                     // Bridge async → sync for tar/gz extraction.
-                    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                    tokio::task::spawn_blocking(move || {
                         let sync_reader =
                             SyncIoBridge::new_with_handle(StreamReader::new(limited), handle);
-
-                        // Byte flow:
-                        // HTTP → LimitedStream → StreamReader → SyncIoBridge
-                        //      → HashingReader → GzDecoder → tar::Archive
-                        let mut hashing_reader = HashingReader::new(sync_reader);
-
-                        // Prepare tmp dir adjacent to the final dest.
-                        let tmp_dir = {
-                            let mut p = layer_dir.clone();
-                            let stem = p
-                                .file_name()
-                                .map(|s| s.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| "layer".to_owned());
-                            p.set_file_name(format!("{stem}.tmp"));
-                            p
-                        };
-
-                        if tmp_dir.exists() {
-                            std::fs::remove_dir_all(&tmp_dir)
-                                .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
-                        }
-                        std::fs::create_dir_all(&tmp_dir)
-                            .with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
-
-                        // Extract into tmp dir.
-                        let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
-
-                        // Drain any remaining bytes so HashingReader covers the full
-                        // compressed stream — needed for digest verification even when
-                        // extraction fails partway through (e.g. bad gzip header).
-                        if extract_result.is_err() {
-                            let _ = std::io::copy(&mut hashing_reader, &mut std::io::sink());
-                        }
-
-                        // Verify digest before committing or surfacing extract error.
-                        // A digest mismatch is the root cause — prefer it over gz errors.
-                        let actual_hex = hashing_reader.finalize();
-                        let expected_hex =
-                            digest_owned.strip_prefix("sha256:").ok_or_else(|| {
-                                anyhow::anyhow!("digest missing sha256: prefix: {digest_owned}")
-                            })?;
-
-                        let digest_ok = actual_hex == expected_hex;
-
-                        if !digest_ok {
-                            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                                warn!(
-                                    digest = %digest_owned,
-                                    error = %ce,
-                                    "layer: failed to clean up tmp dir after digest mismatch"
-                                );
-                            }
-                            return Err(crate::error::ImageError::DigestMismatch {
-                                digest: digest_owned.clone(),
-                                expected: expected_hex.to_owned(),
-                                actual: actual_hex,
-                            }
-                            .into());
-                        }
-
-                        // Digest matched — surface any extraction error now.
-                        if let Err(e) = extract_result {
-                            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                                warn!(
-                                    digest = %digest_owned,
-                                    error = %ce,
-                                    "layer: failed to clean up tmp dir after extract error"
-                                );
-                            }
-                            return Err(e).with_context(|| format!("extract layer {digest_owned}"));
-                        }
-
-                        // Atomic rename: tmp → final dest.
-                        if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
-                            // Another concurrent task may have won the race.
-                            if layer_dir.exists() {
-                                let _ = std::fs::remove_dir_all(&tmp_dir);
-                                return Ok(());
-                            }
-                            let _ = std::fs::remove_dir_all(&tmp_dir);
-                            return Err(e)
-                                .with_context(|| format!("rename {tmp_dir:?} → {layer_dir:?}"));
-                        }
-
-                        Ok(())
+                        extract_and_verify_layer(sync_reader, &layer_dir, &digest_owned)
                     })
                     .await
                     .map_err(|e| RegistryError::LayerTask {

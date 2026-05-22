@@ -13,7 +13,7 @@ fmt-check:
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
+    cargo clippy -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p macbox -p miniboxd -- -D warnings
 
 # ── Build ───────────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ build:
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p minibox -p minibox-macros -p mbx -p miniboxd
+    cargo build --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd
 
 # Build the sandbox toolchain image and load into minibox.
 build-sandbox:
@@ -56,7 +56,7 @@ prepush:
 # fmt-check + lint + test-unit
 ci:
     cargo fmt --all --check
-    cargo clippy -p minibox -p minibox-macros -p mbx -p macbox -p miniboxd -- -D warnings
+    just lint
     just test-unit
 
 # Read-only local gate: fmt, check, clippy, borrow fixtures, docs lint
@@ -76,15 +76,15 @@ test-property:
 # Adapter isolation tests (any platform)
 test-adapters:
     cargo test -p minibox --test adapter_colima_tests
-    cargo test -p minibox --test handler_adapter_swap_tests
+    cargo test -p minibox --test daemon_handler_adapter_swap_tests
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox -p minibox-macros -p mbx -p miniboxd
+    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p minibox -p minibox-macros -p mbx -p miniboxd --html
+    cargo llvm-cov nextest -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd --html
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # CLI subprocess integration tests (builds binary first, any platform)

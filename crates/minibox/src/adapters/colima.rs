@@ -98,27 +98,18 @@ pub type LimaExecutor = Arc<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 #[allow(dead_code)]
 pub type LimaSpawner = Arc<dyn Fn(&[&str]) -> Result<std::process::Child> + Send + Sync>;
 
-// ============================================================================
-// Colima Image Registry Adapter
-// ============================================================================
-
-/// Colima implementation of [`ImageRegistry`].
+/// Shared Lima VM execution context used by all Colima adapter structs.
 ///
-/// Pulls images and inspects layer metadata via `nerdctl` running inside the
-/// Colima Lima VM. Returned layer paths are under `/tmp/minibox-layers/…` so
-/// they are accessible from the macOS host via Lima's shared `/tmp` mount.
-pub struct ColimaRegistry {
-    /// Lima instance name (the argument passed to `limactl shell`; usually `"colima"`).
+/// Holds the instance name, `limactl` binary path, and optional test executor.
+/// Provides the single `lima_exec` implementation that all adapters delegate to.
+struct LimaContext {
     instance: String,
-    /// Path to the `limactl` binary on the macOS host.
     limactl_path: String,
-    /// Optional injected executor used in tests to avoid real `limactl` calls.
     executor: Option<LimaExecutor>,
 }
 
-impl ColimaRegistry {
-    /// Create a new registry adapter targeting the default `"colima"` Lima instance.
-    pub fn new() -> Self {
+impl LimaContext {
+    fn new() -> Self {
         Self {
             instance: "colima".to_string(),
             limactl_path: "limactl".to_string(),
@@ -126,27 +117,10 @@ impl ColimaRegistry {
         }
     }
 
-    /// Override the Lima instance name (default: `"colima"`).
-    ///
-    /// Useful when multiple Lima instances are running (e.g. `colima-arm`).
-    pub fn with_instance(mut self, instance: String) -> Self {
-        self.instance = instance;
-        self
-    }
-
-    /// Inject a custom executor for testing.
-    ///
-    /// The closure receives the argument slice that would be passed to
-    /// `limactl shell <instance>` and must return the command's stdout.
-    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
-        self.executor = Some(executor);
-        self
-    }
-
     /// Run a command inside the Lima VM and return its stdout as a `String`.
     ///
     /// If an injected executor is present it is used instead of a real
-    /// `limactl` subprocess — this is the test seam.
+    /// `limactl` subprocess -- this is the test seam.
     fn lima_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
@@ -166,6 +140,45 @@ impl ColimaRegistry {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+}
+
+// ============================================================================
+// Colima Image Registry Adapter
+// ============================================================================
+
+/// Colima implementation of [`ImageRegistry`].
+///
+/// Pulls images and inspects layer metadata via `nerdctl` running inside the
+/// Colima Lima VM. Returned layer paths are under `/tmp/minibox-layers/…` so
+/// they are accessible from the macOS host via Lima's shared `/tmp` mount.
+pub struct ColimaRegistry {
+    ctx: LimaContext,
+}
+
+impl ColimaRegistry {
+    /// Create a new registry adapter targeting the default `"colima"` Lima instance.
+    pub fn new() -> Self {
+        Self {
+            ctx: LimaContext::new(),
+        }
+    }
+
+    /// Override the Lima instance name (default: `"colima"`).
+    ///
+    /// Useful when multiple Lima instances are running (e.g. `colima-arm`).
+    pub fn with_instance(mut self, instance: String) -> Self {
+        self.ctx.instance = instance;
+        self
+    }
+
+    /// Inject a custom executor for testing.
+    ///
+    /// The closure receives the argument slice that would be passed to
+    /// `limactl shell <instance>` and must return the command's stdout.
+    pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
+        self.ctx.executor = Some(executor);
+        self
     }
 
     /// Translate a macOS host path to the equivalent path visible inside the Lima VM.
@@ -201,15 +214,16 @@ impl ImageRegistry for ColimaRegistry {
         let full_name = format!("{short_name}:{tag}");
         // Use `images --filter` which works with both nerdctl-as-docker and real docker.
         // `image inspect` can fail even when the image exists (nerdctl docker-compat quirk).
-        self.lima_exec(&[
-            "docker",
-            "images",
-            "--filter",
-            &format!("reference={full_name}"),
-            "--quiet",
-        ])
-        .map(|out| !out.trim().is_empty())
-        .unwrap_or(false)
+        self.ctx
+            .lima_exec(&[
+                "docker",
+                "images",
+                "--filter",
+                &format!("reference={full_name}"),
+                "--quiet",
+            ])
+            .map(|out| !out.trim().is_empty())
+            .unwrap_or(false)
     }
 
     /// Pull the image via `nerdctl` inside the VM and return its metadata.
@@ -232,10 +246,12 @@ impl ImageRegistry for ColimaRegistry {
         let full_name = format!("{cache_name}:{tag}");
 
         // Pull image using nerdctl inside the Colima VM.
-        self.lima_exec(&["nerdctl", "pull", &full_name])?;
+        self.ctx.lima_exec(&["nerdctl", "pull", &full_name])?;
 
         // Retrieve layer information from the containerd image store.
-        let inspect_output = self.lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
+        let inspect_output = self
+            .ctx
+            .lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
             .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
 
@@ -289,7 +305,7 @@ impl ImageRegistry for ColimaRegistry {
         // directory containing `layer.tar`. We parse `manifest.json` to locate
         // those layer tarballs rather than guessing directory names.
         let tar_path = format!("{export_base}.tar");
-        self.lima_exec(&[
+        self.ctx.lima_exec(&[
             "sh",
             "-c",
             &format!(
@@ -297,7 +313,9 @@ impl ImageRegistry for ColimaRegistry {
             ),
         ])?;
 
-        let manifest_output = self.lima_exec(&["cat", &format!("{export_base}/manifest.json")])?;
+        let manifest_output = self
+            .ctx
+            .lima_exec(&["cat", &format!("{export_base}/manifest.json")])?;
         let manifest: Vec<DockerSaveManifestEntry> = serde_json::from_str(&manifest_output)
             .map_err(|e| anyhow!("Failed to parse exported image manifest: {e}"))?;
         let layer_paths = manifest
@@ -311,8 +329,10 @@ impl ImageRegistry for ColimaRegistry {
                 let layer_rootfs = format!("{export_base}/rootfs-{index}");
                 // Use two separate argv-style calls instead of sh -c to avoid
                 // command injection via shell metacharacters in manifest-provided paths.
-                let _ = self.lima_exec(&["mkdir", "-p", &layer_rootfs]);
-                let _ = self.lima_exec(&["tar", "xf", &layer_tar, "-C", &layer_rootfs]);
+                let _ = self.ctx.lima_exec(&["mkdir", "-p", &layer_rootfs]);
+                let _ = self
+                    .ctx
+                    .lima_exec(&["tar", "xf", &layer_tar, "-C", &layer_rootfs]);
                 PathBuf::from(layer_rootfs)
             })
             .collect();
@@ -332,7 +352,8 @@ impl ImageLoader for ColimaRegistry {
         let path_str = path
             .to_str()
             .ok_or_else(|| anyhow!("non-UTF-8 path: {}", path.display()))?;
-        self.lima_exec(&["nerdctl", "load", "-i", path_str])
+        self.ctx
+            .lima_exec(&["nerdctl", "load", "-i", path_str])
             .map(|_| ())
             .map_err(|e| anyhow!("nerdctl load failed: {e}"))
     }
@@ -349,21 +370,14 @@ impl ImageLoader for ColimaRegistry {
 /// must be under `/tmp` or `/Users` so it is visible from both the host and
 /// the VM.
 pub struct ColimaFilesystem {
-    /// Lima instance name.
-    instance: String,
-    /// Path to the `limactl` binary on the macOS host.
-    limactl_path: String,
-    /// Optional injected executor used in tests.
-    executor: Option<LimaExecutor>,
+    ctx: LimaContext,
 }
 
 impl ColimaFilesystem {
     /// Create a new filesystem adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
-            instance: "colima".to_string(),
-            limactl_path: "limactl".to_string(),
-            executor: None,
+            ctx: LimaContext::new(),
         }
     }
 
@@ -372,30 +386,8 @@ impl ColimaFilesystem {
     /// The closure receives the argument slice that would be passed to
     /// `limactl shell <instance>` and must return the command's stdout.
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
-        self.executor = Some(executor);
+        self.ctx.executor = Some(executor);
         self
-    }
-
-    /// Run a command inside the Lima VM and return its stdout as a `String`.
-    fn lima_exec(&self, args: &[&str]) -> Result<String> {
-        if let Some(exec) = &self.executor {
-            return exec(args);
-        }
-        let output = limactl_command(&self.limactl_path)
-            .arg("shell")
-            .arg(&self.instance)
-            .args(args)
-            .output()
-            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
-
-        if !output.status.success() {
-            return Err(anyhow!(
-                "Lima command failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
 
@@ -424,9 +416,12 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         let merged_dir = container_dir.join("merged");
 
         // Create the overlay support directories inside the VM.
-        self.lima_exec(&["mkdir", "-p", &upper_dir.to_string_lossy()])?;
-        self.lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
-        self.lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["mkdir", "-p", &upper_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
 
         // Mount the overlay filesystem inside the VM. Pass argv directly so
         // host paths such as "~/Library/Application Support/..." are handled
@@ -438,7 +433,7 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
             work_dir.to_string_lossy(),
         );
 
-        self.lima_exec(&[
+        self.ctx.lima_exec(&[
             "sudo",
             "mount",
             "-t",
@@ -450,12 +445,12 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         ])?;
 
         let mut metadata = std::collections::HashMap::new();
-        metadata.insert("colima_instance".to_string(), self.instance.clone());
+        metadata.insert("colima_instance".to_string(), self.ctx.instance.clone());
 
         Ok(RootfsLayout {
-            merged_dir,
+            merged_dir: merged_dir.into(),
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
-                upper_dir,
+                upper_dir: upper_dir.into(),
                 metadata,
             }),
             source_image_ref: None,
@@ -471,8 +466,10 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         let merged_dir = container_dir.join("merged");
 
         // Unmount the overlay before removing the directory tree.
-        self.lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
-        self.lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
 
         Ok(())
     }
@@ -502,12 +499,7 @@ impl minibox_core::domain::ChildInit for ColimaFilesystem {
 /// ignored by the kernel. A future improvement would detect the correct device
 /// by reading `/sys/block/*/dev` inside the VM.
 pub struct ColimaLimiter {
-    /// Lima instance name.
-    instance: String,
-    /// Path to the `limactl` binary on the macOS host.
-    limactl_path: String,
-    /// Optional injected executor used in tests.
-    executor: Option<LimaExecutor>,
+    ctx: LimaContext,
     /// Block device major:minor detected from the VM (e.g. "253:0" for virtio).
     /// Probed once in `with_executor`; used for io.max writes.
     block_device: Option<String>,
@@ -517,9 +509,7 @@ impl ColimaLimiter {
     /// Create a new resource limiter adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
-            instance: "colima".to_string(),
-            limactl_path: "limactl".to_string(),
-            executor: None,
+            ctx: LimaContext::new(),
             block_device: None,
         }
     }
@@ -530,7 +520,7 @@ impl ColimaLimiter {
     /// unexpected format, `block_device` stays `None` and io.max writes are
     /// silently skipped (matching GkeLimiter's best-effort behavior).
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
-        // Probe block device — best-effort, io.max is optional.
+        // Probe block device -- best-effort, io.max is optional.
         self.block_device = executor(&[
             "sh",
             "-c",
@@ -550,30 +540,8 @@ impl ColimaLimiter {
                 "colima: no block device detected in VM — io.max writes will be skipped"
             );
         }
-        self.executor = Some(executor);
+        self.ctx.executor = Some(executor);
         self
-    }
-
-    /// Run a command inside the Lima VM and return its stdout as a `String`.
-    fn lima_exec(&self, args: &[&str]) -> Result<String> {
-        if let Some(exec) = &self.executor {
-            return exec(args);
-        }
-        let output = limactl_command(&self.limactl_path)
-            .arg("shell")
-            .arg(&self.instance)
-            .args(args)
-            .output()
-            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
-
-        if !output.status.success() {
-            return Err(anyhow!(
-                "Lima command failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
 
@@ -596,21 +564,22 @@ impl ResourceLimiter for ColimaLimiter {
         let parent_cgroup = "/sys/fs/cgroup/minibox";
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
-        self.lima_exec(&["sudo", "mkdir", "-p", parent_cgroup])?;
+        self.ctx
+            .lima_exec(&["sudo", "mkdir", "-p", parent_cgroup])?;
         // Writing to subtree_control fails with EBUSY on cgroup v2 once child
         // cgroups already exist (kernel restriction). Ignore the error so that
         // the second and subsequent container creations succeed.
-        let _ = self.lima_exec(&[
+        let _ = self.ctx.lima_exec(&[
             "sudo",
             "sh",
             "-c",
             &format!("echo +cpu +memory +pids +io > {parent_cgroup}/cgroup.subtree_control 2>/dev/null || true"),
         ]);
-        self.lima_exec(&["sudo", "mkdir", "-p", &cgroup_path])?;
+        self.ctx.lima_exec(&["sudo", "mkdir", "-p", &cgroup_path])?;
 
         if let Some(memory_bytes) = config.memory_limit_bytes {
             let memory_file = format!("{cgroup_path}/memory.max");
-            self.lima_exec(&[
+            self.ctx.lima_exec(&[
                 "sudo",
                 "sh",
                 "-c",
@@ -620,7 +589,7 @@ impl ResourceLimiter for ColimaLimiter {
 
         if let Some(cpu_weight) = config.cpu_weight {
             let cpu_file = format!("{cgroup_path}/cpu.weight");
-            self.lima_exec(&[
+            self.ctx.lima_exec(&[
                 "sudo",
                 "sh",
                 "-c",
@@ -630,7 +599,7 @@ impl ResourceLimiter for ColimaLimiter {
 
         if let Some(pids_max) = config.pids_max {
             let pids_file = format!("{cgroup_path}/pids.max");
-            self.lima_exec(&[
+            self.ctx.lima_exec(&[
                 "sudo",
                 "sh",
                 "-c",
@@ -644,7 +613,7 @@ impl ResourceLimiter for ColimaLimiter {
             && let Some(device) = self.block_device.as_deref()
         {
             let io_file = format!("{cgroup_path}/io.max");
-            self.lima_exec(&[
+            self.ctx.lima_exec(&[
                 "sudo",
                 "sh",
                 "-c",
@@ -666,7 +635,8 @@ impl ResourceLimiter for ColimaLimiter {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
         let procs_file = format!("{cgroup_path}/cgroup.procs");
 
-        self.lima_exec(&["sudo", "sh", "-c", &format!("echo {pid} > {procs_file}")])?;
+        self.ctx
+            .lima_exec(&["sudo", "sh", "-c", &format!("echo {pid} > {procs_file}")])?;
 
         Ok(())
     }
@@ -683,7 +653,7 @@ impl ResourceLimiter for ColimaLimiter {
         let cgroup_path = format!("/sys/fs/cgroup/minibox/{container_id}");
 
         // rmdir (not rm -rf): the kernel rejects removal of a non-empty cgroup.
-        self.lima_exec(&["sudo", "rmdir", &cgroup_path])?;
+        self.ctx.lima_exec(&["sudo", "rmdir", &cgroup_path])?;
 
         Ok(())
     }
@@ -699,12 +669,7 @@ impl ResourceLimiter for ColimaLimiter {
 /// The spawn script is executed via `limactl shell` and the VM PID is returned
 /// to the host for tracking and reaping.
 pub struct ColimaRuntime {
-    /// Lima instance name.
-    instance: String,
-    /// Path to the `limactl` binary on the macOS host.
-    limactl_path: String,
-    /// Optional injected executor used in tests.
-    executor: Option<LimaExecutor>,
+    ctx: LimaContext,
     spawner: Option<LimaSpawner>,
 }
 
@@ -712,9 +677,7 @@ impl ColimaRuntime {
     /// Create a new runtime adapter targeting the default `"colima"` Lima instance.
     pub fn new() -> Self {
         Self {
-            instance: "colima".to_string(),
-            limactl_path: "limactl".to_string(),
-            executor: None,
+            ctx: LimaContext::new(),
             spawner: None,
         }
     }
@@ -724,7 +687,7 @@ impl ColimaRuntime {
     /// The closure receives the argument slice that would be passed to
     /// `limactl shell <instance>` and must return the command's stdout.
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
-        self.executor = Some(executor);
+        self.ctx.executor = Some(executor);
         self
     }
 
@@ -733,35 +696,13 @@ impl ColimaRuntime {
         self
     }
 
-    /// Run a command inside the Lima VM and return its stdout as a `String`.
-    fn lima_exec(&self, args: &[&str]) -> Result<String> {
-        if let Some(exec) = &self.executor {
-            return exec(args);
-        }
-        let output = limactl_command(&self.limactl_path)
-            .arg("shell")
-            .arg(&self.instance)
-            .args(args)
-            .output()
-            .map_err(|e| anyhow!("Failed to execute limactl: {e}"))?;
-
-        if !output.status.success() {
-            return Err(anyhow!(
-                "Lima command failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    }
-
     fn lima_spawn(&self, args: &[&str]) -> Result<std::process::Child> {
         if let Some(spawner) = &self.spawner {
             return spawner(args);
         }
-        limactl_command(&self.limactl_path)
+        limactl_command(&self.ctx.limactl_path)
             .arg("shell")
-            .arg(&self.instance)
+            .arg(&self.ctx.instance)
             .args(args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -959,7 +900,7 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
             "#
         );
 
-        let output = self.lima_exec(&["bash", "-lc", &spawn_script])?;
+        let output = self.ctx.lima_exec(&["bash", "-lc", &spawn_script])?;
         let pid: u32 = output
             .trim()
             .parse()
@@ -1025,13 +966,13 @@ mod tests {
     #[test]
     fn test_colima_registry_creation() {
         let registry = ColimaRegistry::new();
-        assert_eq!(registry.instance, "colima");
+        assert_eq!(registry.ctx.instance, "colima");
     }
 
     #[test]
     fn test_colima_with_custom_instance() {
         let registry = ColimaRegistry::new().with_instance("custom-lima".to_string());
-        assert_eq!(registry.instance, "custom-lima");
+        assert_eq!(registry.ctx.instance, "custom-lima");
     }
 
     #[test]
@@ -1169,12 +1110,12 @@ mod tests {
         }));
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/tmp/rootfs"),
+            rootfs: PathBuf::from("/tmp/rootfs").into(),
             command: "/bin/echo".to_string(),
             args: vec!["hello".to_string(), "world".to_string()],
             env: vec![],
             hostname: "test-container".to_string(),
-            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1385,12 +1326,12 @@ mod tests {
         }));
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/tmp/rootfs"),
+            rootfs: PathBuf::from("/tmp/rootfs").into(),
             command: "/bin/echo".to_string(),
             args: vec!["hello".to_string()],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
             capture_output: true,
             skip_network_namespace: false,
             hooks: ContainerHooks::default(),

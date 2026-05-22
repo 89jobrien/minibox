@@ -285,7 +285,14 @@ impl ContainerRuntime for SmolVmRuntime {
             // Use the test executor — flatten command into a single arg list.
             self.vm_exec(&command)?;
         } else {
-            smolvm_exec_full(&self.image, &command, &vol_refs, &env_refs, 60)?;
+            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 60;
+            smolvm_exec_full(
+                &self.image,
+                &command,
+                &vol_refs,
+                &env_refs,
+                DEFAULT_EXEC_TIMEOUT_SECS,
+            )?;
         }
 
         Ok(SpawnResult {
@@ -330,7 +337,7 @@ impl minibox_core::domain::RootfsSetup for SmolVmFilesystem {
             "smolvm: setup_rootfs delegated to in-VM kernel (no-op on host)"
         );
         Ok(RootfsLayout {
-            merged_dir: container_dir.to_path_buf(),
+            merged_dir: container_dir.to_path_buf().into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -476,7 +483,7 @@ mod tests {
         let fs = SmolVmFilesystem::new();
         let dir = PathBuf::from("/tmp/test-container");
         let layout = fs.setup_rootfs(&[], &dir).expect("setup_rootfs");
-        assert_eq!(layout.merged_dir, dir);
+        assert_eq!(&*layout.merged_dir, dir.as_path());
     }
 
     /// Limiter create returns the container ID.

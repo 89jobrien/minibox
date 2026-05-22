@@ -47,21 +47,21 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: <short description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 - [ ] **Step 2: <short description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 - [ ] **Step 3: <short description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 ---
 
@@ -71,21 +71,21 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: <description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 - [ ] **Step 2: <description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 - [ ] **Step 3: <description>**
 
-  ```bash
-  # commands
-  ```
+    ```bash
+    # commands
+    ```
 
 ---
 
@@ -102,36 +102,36 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Write the failing test (red)**
 
-  <Explain where to put the test, and add a code block with the new test(s).>
+    <Explain where to put the test, and add a code block with the new test(s).>
 
-  ```rust
-  #[test]
-  fn <test_name_describes_invariant>() {
-      // arrange / act / assert
-  }
-  ```
+    ```rust
+    #[test]
+    fn <test_name_describes_invariant>() {
+        // arrange / act / assert
+    }
+    ```
 
 - [ ] **Step 2: Run to confirm red**
 
-  ```bash
-  cargo nextest run -p <crate> -E 'test(<pattern>)'
-  # expected: FAIL – current implementation violates the invariant
-  ```
+    ```bash
+    cargo nextest run -p <crate> -E 'test(<pattern>)'
+    # expected: FAIL – current implementation violates the invariant
+    ```
 
 - [ ] **Step 3: Implement the change**
 
-  <Describe which function/loop/branch you’re changing and show the new code.>
+    <Describe which function/loop/branch you’re changing and show the new code.>
 
-  ```rust
-  // updated implementation
-  ```
+    ```rust
+    // updated implementation
+    ```
 
 - [ ] **Step 4: Run focused tests (green)**
 
-  ```bash
-  cargo nextest run -p <crate> -E 'test(<pattern>)'
-  # expected: all pass
-  ```
+    ```bash
+    cargo nextest run -p <crate> -E 'test(<pattern>)'
+    # expected: all pass
+    ```
 
 ---
 
@@ -139,12 +139,12 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Stage and commit**
 
-  ```bash
-  git add <paths>
-  git commit -m "<type(scope)): <summary>
+    ```bash
+    git add <paths>
+    git commit -m "<type(scope)): <summary>
 
-  <Extended body explaining what was changed and why, including ticket reference.>"
-  ```
+    <Extended body explaining what was changed and why, including ticket reference.>"
+    ```
 
 ---
 
@@ -161,58 +161,58 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Write failing contract tests (red)**
 
-  ```rust
-  //! Conformance tests: <boundary> port contract.
-  //!
-  //! Verifies that <port> satisfies:
-  //! - <invariant>
-  //! - <invariant>
-  //! - <invariant>
+    ```rust
+    //! Conformance tests: <boundary> port contract.
+    //!
+    //! Verifies that <port> satisfies:
+    //! - <invariant>
+    //! - <invariant>
+    //! - <invariant>
 
-  use <crate>::<module>::{<symbols>};
+    use <crate>::<module>::{<symbols>};
 
-  #[test]
-  fn <test_name>() {
-      // arrange
-      // act
-      // assert
-  }
-  ```
+    #[test]
+    fn <test_name>() {
+        // arrange
+        // act
+        // assert
+    }
+    ```
 
 - [ ] **Step 2: Wire into conformance test harness**
 
-  ```rust
-  // in <crate>/tests/conformance/main.rs
-  mod <boundary>_contract;
-  ```
+    ```rust
+    // in <crate>/tests/conformance/main.rs
+    mod <boundary>_contract;
+    ```
 
 - [ ] **Step 3: Run to confirm red (visibility / linkage)**
 
-  ```bash
-  cargo nextest run -p <crate> --test conformance -E 'test(<pattern>)'
-  # expected: compile error or failing tests, confirming boundary not yet wired
-  ```
+    ```bash
+    cargo nextest run -p <crate> --test conformance -E 'test(<pattern>)'
+    # expected: compile error or failing tests, confirming boundary not yet wired
+    ```
 
 - [ ] **Step 4: Add feature/visibility for test-utils**
 
-  ```toml
-  # Cargo.toml
-  [features]
-  test-utils = []
-  ```
+    ```toml
+    # Cargo.toml
+    [features]
+    test-utils = []
+    ```
 
-  ```rust
-  // In boundary file
-  #[cfg(any(test, feature = "test-utils"))]
-  pub fn <test_double_fn>(...) { ... }
-  ```
+    ```rust
+    // In boundary file
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn <test_double_fn>(...) { ... }
+    ```
 
 - [ ] **Step 5: Run contract tests (green)**
 
-  ```bash
-  cargo nextest run -p <crate> --test conformance --features test-utils
-  # expected: new contract tests pass
-  ```
+    ```bash
+    cargo nextest run -p <crate> --test conformance --features test-utils
+    # expected: new contract tests pass
+    ```
 
 ---
 
@@ -220,12 +220,12 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Stage and commit**
 
-  ```bash
-  git add <paths>
-  git commit -m "test(conformance): add <boundary> contract tests
+    ```bash
+    git add <paths>
+    git commit -m "test(conformance): add <boundary> contract tests
 
-  <Bulleted summary of what invariants are now locked in.>"
-  ```
+    <Bulleted summary of what invariants are now locked in.>"
+    ```
 
 ---
 
@@ -240,45 +240,45 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Ensure `syn` dev-dep**
 
-  ```toml
-  [dev-dependencies]
-  syn = { version = "2", features = ["full", "visit"] }
-  ```
+    ```toml
+    [dev-dependencies]
+    syn = { version = "2", features = ["full", "visit"] }
+    ```
 
 - [ ] **Step 2: Write failing guardrail test (red)**
 
-  ```rust
-  use std::fs;
-  use std::path::Path;
-  use syn::{File, Item, ItemFn, ItemEnum, Visibility};
+    ```rust
+    use std::fs;
+    use std::path::Path;
+    use syn::{File, Item, ItemFn, ItemEnum, Visibility};
 
-  fn boundary_source() -> File {
-      let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/<boundary>.rs");
-      let src = fs::read_to_string(&path).expect("<boundary>.rs readable");
-      syn::parse_file(&src).expect("<boundary>.rs parses")
-  }
+    fn boundary_source() -> File {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/<boundary>.rs");
+        let src = fs::read_to_string(&path).expect("<boundary>.rs readable");
+        syn::parse_file(&src).expect("<boundary>.rs parses")
+    }
 
-  #[test]
-  fn <fn_name>_is_public_function() {
-      let file = boundary_source();
-      let found = file.items.iter().any(|item| matches!(item, Item::Fn(ItemFn { vis: Visibility::Public(_), sig, .. }) if sig.ident == "<fn_name>"));
-      assert!(found, "expected public fn <fn_name> in <boundary>.rs");
-  }
-  ```
+    #[test]
+    fn <fn_name>_is_public_function() {
+        let file = boundary_source();
+        let found = file.items.iter().any(|item| matches!(item, Item::Fn(ItemFn { vis: Visibility::Public(_), sig, .. }) if sig.ident == "<fn_name>"));
+        assert!(found, "expected public fn <fn_name> in <boundary>.rs");
+    }
+    ```
 
 - [ ] **Step 3: Wire into conformance harness**
 
-  ```rust
-  // in <crate>/tests/conformance/main.rs
-  mod <boundary>_guardrails;
-  ```
+    ```rust
+    // in <crate>/tests/conformance/main.rs
+    mod <boundary>_guardrails;
+    ```
 
 - [ ] **Step 4: Run to confirm red, then fix and re-run to green**
 
-  ```bash
-  cargo nextest run -p <crate> --test conformance --features test-utils \
-    -E 'test(<fn_name>_is_public_function)'
-  ```
+    ```bash
+    cargo nextest run -p <crate> --test conformance --features test-utils \
+      -E 'test(<fn_name>_is_public_function)'
+    ```
 
 ---
 
@@ -286,39 +286,39 @@ T1: <Task 1 name>                         (prereq for base state)
 
 - [ ] **Step 1: Run full test suite**
 
-  ```bash
-  cargo nextest run --workspace
-  cargo nextest run -p <crate> --test conformance --features test-utils
-  ```
+    ```bash
+    cargo nextest run --workspace
+    cargo nextest run -p <crate> --test conformance --features test-utils
+    ```
 
 - [ ] **Step 2: Stage and commit**
 
-  ```bash
-  git add <paths>
-  git commit -m "test(conformance): add AST guardrail for <boundary>
+    ```bash
+    git add <paths>
+    git commit -m "test(conformance): add AST guardrail for <boundary>
 
-  <Short summary of what the guardrail asserts and why.>"
-  ```
+    <Short summary of what the guardrail asserts and why.>"
+    ```
 
 - [ ] **Step 3: Push and open PR**
 
-  ```bash
-  git push origin <branch>
-  gh pr create \
-    --title "<type(conformance): short PR title>" \
-    --body "$(cat <<'EOF'
-  ## Summary
-  - <bullet 1>
-  - <bullet 2>
-  - <bullet 3>
+    ```bash
+    git push origin <branch>
+    gh pr create \
+      --title "<type(conformance): short PR title>" \
+      --body "$(cat <<'EOF'
+    ## Summary
+    - <bullet 1>
+    - <bullet 2>
+    - <bullet 3>
 
-  ## Test plan
-  - [ ] cargo nextest run -p <crate> --test conformance --features test-utils
-  - [ ] cargo nextest run --workspace
-  - [ ] CI green
-  EOF
-  )"
-  ```
+    ## Test plan
+    - [ ] cargo nextest run -p <crate> --test conformance --features test-utils
+    - [ ] cargo nextest run --workspace
+    - [ ] CI green
+    EOF
+    )"
+    ```
 
 ---
 

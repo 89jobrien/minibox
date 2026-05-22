@@ -89,9 +89,9 @@ impl minibox_core::domain::RootfsSetup for OverlayFilesystem {
             filesystem::setup_overlay_with_base(image_layers, container_dir, &self.images_base)?;
 
         Ok(RootfsLayout {
-            merged_dir,
+            merged_dir: merged_dir.into(),
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
-                upper_dir: container_dir.join("upper"),
+                upper_dir: container_dir.join("upper").into(),
                 metadata: std::collections::HashMap::new(),
             }),
             source_image_ref: None,

@@ -99,7 +99,8 @@ pub(super) async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()>
     // SIGKILL promptly.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     loop {
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        const STOP_POLL_INTERVAL_MS: u64 = 250;
+        tokio::time::sleep(Duration::from_millis(STOP_POLL_INTERVAL_MS)).await;
         if kill(nix_pid, None).is_err() {
             // ESRCH — process is gone.
             break;

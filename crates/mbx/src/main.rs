@@ -286,6 +286,10 @@ enum Commands {
     #[command(subcommand)]
     Snapshot(SnapshotCommands),
 
+    /// Manage pipeline runs (run, list, show).
+    #[command(subcommand)]
+    Pipeline(PipelineCommands),
+
     /// Update mbx and miniboxd to the latest release.
     #[command(disable_version_flag = true)]
     Upgrade {
@@ -363,6 +367,36 @@ enum SnapshotCommands {
     /// List available snapshots.
     List {
         /// Container ID.
+        id: String,
+    },
+}
+
+/// Pipeline sub-subcommands.
+#[derive(Subcommand)]
+enum PipelineCommands {
+    /// Run a pipeline file inside a container.
+    Run {
+        /// Path to the pipeline file (host-side, must be absolute).
+        pipeline_path: String,
+        /// Optional JSON input to the pipeline.
+        #[arg(long)]
+        input: Option<String>,
+        /// Container image to use (default: cruxx-runtime:latest).
+        #[arg(long)]
+        image: Option<String>,
+    },
+    /// List pipeline runs.
+    List {
+        /// Maximum number of results.
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Filter by pipeline path.
+        #[arg(long)]
+        pipeline: Option<String>,
+    },
+    /// Show details of a pipeline run.
+    Show {
+        /// Pipeline run / trace ID.
         id: String,
     },
 }
@@ -498,6 +532,20 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             }
             SnapshotCommands::List { id } => {
                 commands::snapshot::execute_list(id, socket_path).await
+            }
+        },
+
+        Commands::Pipeline(sub) => match sub {
+            PipelineCommands::Run {
+                pipeline_path,
+                input,
+                image,
+            } => commands::pipeline::execute_run(pipeline_path, input, image, socket_path).await,
+            PipelineCommands::List { limit, pipeline } => {
+                commands::pipeline::execute_list(limit, pipeline, socket_path).await
+            }
+            PipelineCommands::Show { id } => {
+                commands::pipeline::execute_show(id, socket_path).await
             }
         },
 

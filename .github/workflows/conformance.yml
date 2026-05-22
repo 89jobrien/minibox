@@ -81,3 +81,56 @@ jobs:
             echo "## Conformance Report (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
             cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  property-tests:
+    name: property tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run property tests
+        run: cargo xtask test-property
+
+  krun-conformance:
+    name: krun conformance
+    runs-on: macos-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.conformance == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run krun conformance
+        run: cargo xtask test-krun-conformance
+
+  cli-conformance:
+    name: CLI conformance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run CLI conformance
+        run: cargo nextest run -p mbx --test conformance_cli

@@ -318,13 +318,6 @@ impl BackendRootfsMetadata {
         }
     }
 
-    /// Return the Lima instance name for `ColimaOverlay` backends, or `None`.
-    pub fn colima_instance(&self) -> Option<&str> {
-        match self {
-            Self::ColimaOverlay { instance, .. } => Some(instance.as_str()),
-            _ => None,
-        }
-    }
 }
 
 /// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
@@ -742,11 +735,12 @@ impl ContainerId {
     /// - Alphanumeric (a-z, A-Z, 0-9)
     /// - Between 1 and 64 characters
     pub fn new(id: String) -> Result<Self> {
+        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.is_empty() {
             anyhow::bail!("container ID cannot be empty");
         }
-        if id.len() > 64 {
-            anyhow::bail!("container ID too long: {} (max 64)", id.len());
+        if id.len() > MAX_CONTAINER_ID_LEN {
+            anyhow::bail!("container ID too long: {} (max {MAX_CONTAINER_ID_LEN})", id.len());
         }
         if !id.chars().all(|c| c.is_ascii_alphanumeric()) {
             anyhow::bail!("container ID must be alphanumeric");

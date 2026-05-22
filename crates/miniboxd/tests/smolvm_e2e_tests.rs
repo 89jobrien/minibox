@@ -12,7 +12,7 @@
 
 mod helpers;
 
-use helpers::smolvm::{SmolVmFixture, smolvm_available, smolvm_run};
+use helpers::smolvm::{smolvm_available, smolvm_run};
 use serial_test::serial;
 
 const IMAGE: &str = "alpine:3.20";

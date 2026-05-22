@@ -311,7 +311,7 @@ impl minibox_core::domain::RootfsSetup for Wsl2Filesystem {
         let response: Wsl2FilesystemSetupResponse = serde_json::from_str(&output)?;
 
         Ok(RootfsLayout {
-            merged_dir: Path::new(&response.merged_path).to_path_buf(),
+            merged_dir: Path::new(&response.merged_path).to_path_buf().into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })

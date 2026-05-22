@@ -99,4 +99,20 @@ mod tests {
         let tests = reg.into_tests();
         assert_eq!(tests.len(), 2);
     }
+
+    #[test]
+    fn spoke_tests_merge_into_runner() {
+        use crate::harness::TestRunner;
+
+        let mut reg = SpokeRegistry::new();
+        reg.register(vec![Box::new(AlwaysPass), Box::new(AlwaysPass)]);
+
+        let mut runner = TestRunner::new();
+        runner.add_all(reg.into_tests());
+        assert_eq!(runner.count(), 2);
+
+        let summary = runner.run();
+        assert_eq!(summary.passed, 2);
+        assert!(summary.is_success());
+    }
 }

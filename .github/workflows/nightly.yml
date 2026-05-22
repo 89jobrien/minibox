@@ -2,7 +2,8 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 2 * * *"       # daily — geiger, tag
+    - cron: "0 3 * * 0"       # weekly (Sunday) — mutants
   workflow_dispatch:
 
 env:
@@ -56,6 +57,52 @@ jobs:
           name: geiger-report
           path: geiger-report.txt
           retention-days: 30
+
+  mutants:
+    name: mutation testing (cargo-mutants)
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 0'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-mutants
+        run: cargo install cargo-mutants --locked
+      - name: run cargo-mutants on security modules
+        run: |
+          cargo mutants -- \
+            --file crates/minibox-core/src/image/layer.rs \
+            --file crates/minibox/src/daemon/server.rs \
+            --file crates/minibox-core/src/domain/execution_manifest.rs \
+            --file crates/minibox/src/container/process.rs \
+            --file crates/minibox-core/src/image/registry.rs \
+            --file crates/minibox/src/adapters/ghcr.rs
+      - name: upload mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-report
+          path: mutants.out/
+          retention-days: 30
+      - name: summary
+        if: always()
+        run: |
+          if [ -f mutants.out/caught.txt ]; then
+            {
+              echo "## cargo-mutants security scan"
+              echo "### Caught"
+              echo '```'
+              head -50 mutants.out/caught.txt
+              echo '```'
+              if [ -f mutants.out/missed.txt ] && [ -s mutants.out/missed.txt ]; then
+                echo "### Missed"
+                echo '```'
+                cat mutants.out/missed.txt
+                echo '```'
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   tag-nightly:
     name: tag nightly release

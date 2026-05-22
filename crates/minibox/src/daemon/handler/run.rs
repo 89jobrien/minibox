@@ -1,4 +1,6 @@
 //! Container run handlers and supporting infrastructure.
+// TODO(#326): persist execution manifest before container spawn
+// TODO(#366): extract shared run preparation path from handle_run
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;
@@ -19,6 +21,28 @@ use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCrea
 
 use super::super::network_lifecycle::NetworkLifecycle;
 use super::{HandlerDependencies, send_error};
+
+// ─── RunParams: parameter bundle for the run pipeline ────────────────────────
+
+/// Groups the user-supplied container configuration that flows through the
+/// entire `handle_run` → `prepare_run` → `run_inner` call chain.
+///
+/// This eliminates 11+ individual parameters from every function signature
+/// in the run pipeline without changing observable behaviour.
+pub struct RunParams {
+    pub image: String,
+    pub tag: Option<String>,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub ephemeral: bool,
+    pub network: Option<NetworkMode>,
+    pub mounts: Vec<BindMount>,
+    pub privileged: bool,
+    pub env: Vec<String>,
+    pub name: Option<String>,
+    pub platform: Option<String>,
+}
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
 
@@ -42,26 +66,14 @@ pub(crate) fn generate_container_id() -> String {
 /// Responses are sent via `tx`.  Non-ephemeral runs send exactly one message.
 /// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
 /// followed by one terminal `ContainerStopped` message.
-#[allow(clippy::too_many_arguments)]
 pub async fn handle_run(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    #[allow(unused_variables)] ephemeral: bool,
-    #[allow(unused_variables)] network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
-    if let Err(msg) = super::validate_policy(&mounts, privileged, &deps.policy) {
+    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &deps.policy) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })
@@ -77,7 +89,7 @@ pub async fn handle_run(
     // Two-guard pattern: Option check then async check (cannot be written as
     // a single `if let ... && await` in stable Rust).
     #[allow(clippy::collapsible_if)]
-    if let Some(ref n) = name {
+    if let Some(ref n) = params.name {
         if state.name_in_use(n).await {
             send_error(
                 &tx,
@@ -90,45 +102,13 @@ pub async fn handle_run(
     }
 
     #[cfg(unix)]
-    if ephemeral {
-        handle_run_streaming(
-            image,
-            tag,
-            command,
-            memory_limit_bytes,
-            cpu_weight,
-            network,
-            mounts,
-            privileged,
-            env,
-            name,
-            platform,
-            state,
-            deps,
-            tx,
-        )
-        .await;
+    if params.ephemeral {
+        handle_run_streaming(params, state, deps, tx).await;
         return;
     }
 
     // Non-ephemeral (or non-Linux): single response.
-    let response = match run_inner(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        state,
-        deps,
-    )
-    .await
-    {
+    let response = match run_inner(params, state, deps).await {
         Ok(id) => DaemonResponse::ContainerCreated { id },
         Err(e) => {
             error!("handle_run error: {e:#}");
@@ -146,20 +126,9 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 pub(super) async fn handle_run_streaming(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    _network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -169,23 +138,12 @@ pub(super) async fn handle_run_streaming(
 
     // Build the container ID and rootfs via the shared inner setup, but we need
     // capture_output=true. We inline a variant of run_inner here.
-    let image_label = format!("{}:{}", image, tag.as_deref().unwrap_or("latest"));
-    let result = run_inner_capture(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        _network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await;
+    let image_label = format!(
+        "{}:{}",
+        params.image,
+        params.tag.as_deref().unwrap_or("latest")
+    );
+    let result = run_inner_capture(params, Arc::clone(&state), Arc::clone(&deps)).await;
 
     let (container_id, pid, output_reader, runtime_id) = match result {
         Ok(triple) => triple,
@@ -250,7 +208,8 @@ pub(super) async fn handle_run_streaming(
                 );
             })
             .ok();
-        let mut buf = [0u8; 4096];
+        const READ_BUFFER_SIZE: usize = 4096;
+        let mut buf = [0u8; READ_BUFFER_SIZE];
         loop {
             match file.read(&mut buf) {
                 Ok(0) => break, // EOF — child exited and closed its write end.
@@ -353,35 +312,169 @@ struct PreparedRun {
     workload_digest: String,
 }
 
+/// Construct an `ExecutionManifest` from container run parameters.
+#[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
+fn build_execution_manifest(
+    id: &str,
+    ref_str: &str,
+    layer_dirs: &[PathBuf],
+    command: &[String],
+    env: &[String],
+    mounts: &[BindMount],
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    net_mode: NetworkMode,
+    privileged: bool,
+    platform: &Option<String>,
+    name: &Option<String>,
+    capture_output: bool,
+) -> minibox_core::domain::ExecutionManifest {
+    use minibox_core::domain::{
+        ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
+        ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
+        ExecutionManifestSubject,
+    };
+
+    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    ExecutionManifest {
+        schema_version: 1,
+        container_id: id.to_string(),
+        created_at: Utc::now().to_rfc3339(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: ref_str.to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: layer_dirs
+                    .iter()
+                    .filter_map(|p| p.file_name()?.to_str().map(|s| s.replacen('_', ":", 1)))
+                    .collect(),
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: command.to_vec(),
+            env: env
+                .iter()
+                .filter_map(|e| {
+                    let (k, v) = e.split_once('=')?;
+                    Some(ExecutionManifestEnvVar::new(k, v))
+                })
+                .collect(),
+            mounts: mounts
+                .iter()
+                .map(ExecutionManifestMount::from_bind_mount)
+                .collect(),
+            resource_limits: Some(ExecutionManifestResourceLimits {
+                memory_limit_bytes,
+                cpu_weight,
+            }),
+            network_mode: net_mode_str,
+            privileged,
+            platform: platform.clone(),
+        },
+        request: ExecutionManifestRequest {
+            name: name.clone(),
+            ephemeral: capture_output,
+        },
+    }
+}
+
+/// Build a `ContainerRecord` in `"Created"` state for a new container.
+#[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
+fn build_container_record(
+    id: &str,
+    name: &Option<String>,
+    image_label: &str,
+    command: &[String],
+    merged_dir: &minibox_core::path::InternalPath,
+    cgroup_dir: &std::path::Path,
+    rootfs_layout: &minibox_core::domain::RootfsLayout,
+    image: &str,
+    tag: &str,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    network: Option<NetworkMode>,
+    env: &[String],
+    mounts: &[BindMount],
+    privileged: bool,
+    platform: &Option<String>,
+) -> ContainerRecord {
+    let command_str = command.join(" ");
+    ContainerRecord {
+        info: ContainerInfo {
+            id: id.to_string(),
+            name: name.clone(),
+            image: image_label.to_string(),
+            command: command_str,
+            state: "Created".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: merged_dir.clone().into_inner(),
+        cgroup_path: cgroup_dir.to_path_buf(),
+        post_exit_hooks: vec![],
+        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
+        source_image_ref: rootfs_layout
+            .source_image_ref
+            .clone()
+            .or_else(|| Some(image_label.to_string())),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.to_string(),
+            tag: Some(tag.to_string()),
+            command: command.to_vec(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.to_vec(),
+            mounts: mounts.to_vec(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
+        manifest_path: None,
+        workload_digest: None,
+    }
+}
+
 /// Shared container preparation: image pull, overlay setup, cgroup creation,
 /// network setup, container record registration, spawn config construction,
 /// and execution manifest persistence.
 ///
 /// The `capture_output` flag is the only behavioural difference between the
 /// streaming (`run_inner_capture`) and fire-and-forget (`run_inner`) paths.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 async fn prepare_run(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     capture_output: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<PreparedRun> {
-    use minibox_core::domain::{
-        ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
-        ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
-        ExecutionManifestSubject,
-    };
+    let RunParams {
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        mounts,
+        privileged,
+        env,
+        name,
+        platform,
+        ephemeral: _,
+    } = params;
 
     // Build full ref string from image + optional tag, then parse into ImageRef.
     let ref_str = match &tag {
@@ -442,7 +535,8 @@ async fn prepare_run(
     {
         use std::os::unix::fs::DirBuilderExt;
         let mut builder = std::fs::DirBuilder::new();
-        builder.mode(0o700);
+        const OWNER_RWX_PERMS: u32 = 0o700;
+        builder.mode(OWNER_RWX_PERMS);
         builder.recursive(true);
         builder.create(&container_dir)?;
         builder.create(&run_dir)?;
@@ -462,10 +556,11 @@ async fn prepare_run(
     let merged_dir = rootfs_layout.merged_dir.clone();
 
     // Setup cgroup.
+    const DEFAULT_PIDS_MAX: u64 = 1024;
     let resource_config = ResourceConfig {
         memory_limit_bytes,
         cpu_weight,
-        pids_max: Some(1024),
+        pids_max: Some(DEFAULT_PIDS_MAX),
         io_max_bytes_per_sec: None,
     };
     let cgroup_dir_str = deps
@@ -490,49 +585,24 @@ async fn prepare_run(
 
     // Build ContainerRecord in Created state.
     let image_label = format!("{image}:{tag}");
-    let command_str = command.join(" ");
-    let record = ContainerRecord {
-        info: ContainerInfo {
-            id: id.clone(),
-            name: name.clone(),
-            image: image_label.clone(),
-            command: command_str,
-            state: "Created".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            pid: None,
-        },
-        pid: None,
-        rootfs_path: merged_dir.clone(),
-        cgroup_path: cgroup_dir.clone(),
-        post_exit_hooks: vec![],
-        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
-        source_image_ref: rootfs_layout
-            .source_image_ref
-            .clone()
-            .or_else(|| Some(image_label.clone())),
-        step_state: None,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-        creation_params: Some(RunCreationParams {
-            image: image.clone(),
-            tag: Some(tag.clone()),
-            command: command.clone(),
-            memory_limit_bytes,
-            cpu_weight,
-            network,
-            env: env.clone(),
-            mounts: mounts.clone(),
-            privileged,
-            name: name.clone(),
-            tty: false,
-            entrypoint: None,
-            user: None,
-            platform: platform.clone(),
-        }),
-        manifest_path: None,
-        workload_digest: None,
-    };
+    let record = build_container_record(
+        &id,
+        &name,
+        &image_label,
+        &command,
+        &merged_dir,
+        &cgroup_dir,
+        &rootfs_layout,
+        &image,
+        &tag,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        &env,
+        &mounts,
+        privileged,
+        &platform,
+    );
     state.add_container(record).await;
 
     // Build the ContainerSpawnConfig for the runtime.
@@ -551,7 +621,7 @@ async fn prepare_run(
         command: spawn_command,
         args: spawn_args,
         env: container_env,
-        cgroup_path: cgroup_dir.clone(),
+        cgroup_path: cgroup_dir.clone().into(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output,
         hooks: ContainerHooks::default(),
@@ -562,53 +632,44 @@ async fn prepare_run(
     };
 
     // ── Persist execution manifest ─────────────────────────────────────
-    let net_mode_str = format!("{net_mode:?}").to_lowercase();
-    let mut manifest = ExecutionManifest {
-        schema_version: 1,
-        container_id: id.clone(),
-        created_at: Utc::now().to_rfc3339(),
-        manifest_path: None,
-        workload_digest: None,
-        subject: ExecutionManifestSubject {
-            image_ref: ref_str.clone(),
-            image: ExecutionManifestImage {
-                manifest_digest: None,
-                config_digest: None,
-                layer_digests: layer_dirs
-                    .iter()
-                    .filter_map(|p| p.file_name()?.to_str().map(|s| s.replacen('_', ":", 1)))
-                    .collect(),
-            },
-        },
-        runtime: ExecutionManifestRuntime {
-            command: command.clone(),
-            env: env
-                .iter()
-                .filter_map(|e| {
-                    let (k, v) = e.split_once('=')?;
-                    Some(ExecutionManifestEnvVar::new(k, v))
-                })
-                .collect(),
-            mounts: mounts
-                .iter()
-                .map(ExecutionManifestMount::from_bind_mount)
-                .collect(),
-            resource_limits: Some(ExecutionManifestResourceLimits {
-                memory_limit_bytes,
-                cpu_weight,
-            }),
-            network_mode: net_mode_str,
-            privileged,
-            platform: platform.clone(),
-        },
-        request: ExecutionManifestRequest {
-            name: name.clone(),
-            ephemeral: capture_output,
-        },
-    };
+    let mut manifest = build_execution_manifest(
+        &id,
+        &ref_str,
+        &layer_dirs,
+        &command,
+        &env,
+        &mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        &platform,
+        &name,
+        capture_output,
+    );
     manifest
         .seal()
         .context("failed to compute execution manifest digest")?;
+
+    // ── Execution policy gate ───────────────────────────────────────
+    if let Some(ref policy) = deps.execution_policy {
+        use minibox_core::domain::PolicyDecision;
+        match policy.evaluate(&manifest) {
+            PolicyDecision::Allow => {}
+            PolicyDecision::Deny(reason) => {
+                // Best-effort cleanup: remove container dir.
+                if let Err(e) = std::fs::remove_dir_all(&container_dir) {
+                    warn!(
+                        container_id = %id,
+                        error = %e,
+                        "policy: cleanup container dir failed after denial"
+                    );
+                }
+                state.remove_container(&id).await;
+                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+            }
+        }
+    }
 
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
@@ -644,40 +705,13 @@ async fn prepare_run(
 ///
 /// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
 /// and `waitpid` — both available on any Unix via the `nix` crate.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 async fn run_inner_capture(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
-    let prepared = prepare_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        true,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await?;
+    let prepared = prepare_run(params, true, Arc::clone(&state), Arc::clone(&deps)).await?;
 
     state
         .set_manifest_info(
@@ -746,39 +780,12 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
-#[allow(clippy::too_many_arguments)]
 async fn run_inner(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
-    let prepared = prepare_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        false,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await?;
+    let prepared = prepare_run(params, false, Arc::clone(&state), Arc::clone(&deps)).await?;
 
     state
         .set_manifest_info(
@@ -886,26 +893,25 @@ async fn run_inner(
 /// Delegates to `run_inner` with all fields from the stored params.
 #[cfg(unix)]
 pub(super) async fn run_from_params(
-    params: &RunCreationParams,
+    creation_params: &RunCreationParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
-    run_inner(
-        params.image.clone(),
-        params.tag.clone(),
-        params.command.clone(),
-        params.memory_limit_bytes,
-        params.cpu_weight,
-        params.network,
-        params.mounts.clone(),
-        params.privileged,
-        params.env.clone(),
-        params.name.clone(),
-        params.platform.clone(),
-        state,
-        deps,
-    )
-    .await
+    let params = RunParams {
+        image: creation_params.image.clone(),
+        tag: creation_params.tag.clone(),
+        command: creation_params.command.clone(),
+        memory_limit_bytes: creation_params.memory_limit_bytes,
+        cpu_weight: creation_params.cpu_weight,
+        ephemeral: false,
+        network: creation_params.network,
+        mounts: creation_params.mounts.clone(),
+        privileged: creation_params.privileged,
+        env: creation_params.env.clone(),
+        name: creation_params.name.clone(),
+        platform: creation_params.platform.clone(),
+    };
+    run_inner(params, state, deps).await
 }
 
 // ─── OOM detection ───────────────────────────────────────────────────────────
@@ -941,10 +947,10 @@ async fn daemon_wait_for_exit(
     pid: u32,
     id: &str,
     state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     event_sink: Arc<dyn EventSink>,
-    cgroup_path: std::path::PathBuf,
+    cgroup_path: minibox_core::path::InternalPath,
     runtime: DynContainerRuntime,
     runtime_id: Option<String>,
 ) {
@@ -997,10 +1003,10 @@ async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: std::path::PathBuf,
+    _cgroup_path: minibox_core::path::InternalPath,
     _runtime: DynContainerRuntime,
     _runtime_id: Option<String>,
 ) {
@@ -1013,10 +1019,10 @@ async fn daemon_wait_for_exit(
     _pid: u32,
     _id: &str,
     _state: Arc<DaemonState>,
-    _rootfs: std::path::PathBuf,
+    _rootfs: minibox_core::path::InternalPath,
     _post_exit_hooks: Vec<HookSpec>,
     _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: std::path::PathBuf,
+    _cgroup_path: minibox_core::path::InternalPath,
     _runtime: DynContainerRuntime,
     _runtime_id: Option<String>,
 ) {

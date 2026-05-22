@@ -141,7 +141,8 @@ fn smolvm_filesystem_setup_rootfs_is_noop() {
         .setup_rootfs(&[], &dir)
         .expect("setup_rootfs should succeed as no-op");
     assert_eq!(
-        layout.merged_dir, dir,
+        &*layout.merged_dir,
+        dir.as_path(),
         "merged_dir should equal container_dir (placeholder)"
     );
     assert!(

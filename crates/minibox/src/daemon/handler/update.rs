@@ -1,4 +1,5 @@
 //! Image update handler: re-pull cached images, optionally restart containers.
+// TODO(#178): add regression test for handle_update restart ContainerRecord gap
 
 use minibox_core::image::reference::ImageRef;
 use minibox_core::protocol::DaemonResponse;
@@ -11,6 +12,39 @@ use crate::daemon::state::DaemonState;
 use super::run::run_from_params;
 use super::stop::stop_inner;
 use super::{HandlerDependencies, send_error};
+
+/// Resolve the list of image refs to update based on `all`, `containers`, or
+/// explicit `images` list.
+async fn resolve_update_targets(
+    images: Vec<String>,
+    all: bool,
+    containers: bool,
+    state: &Arc<DaemonState>,
+    deps: &Arc<HandlerDependencies>,
+) -> std::result::Result<Vec<String>, String> {
+    if all {
+        deps.image
+            .image_store
+            .list_all_images()
+            .await
+            .map_err(|e| format!("failed to list images: {e:#}"))
+    } else if containers {
+        let containers_list = state.list_containers().await;
+        let mut seen = std::collections::HashSet::new();
+        let mut refs = Vec::new();
+        for info in containers_list {
+            let record = state.get_container(&info.id).await;
+            if let Some(source_ref) = record.and_then(|r| r.source_image_ref)
+                && seen.insert(source_ref.clone())
+            {
+                refs.push(source_ref);
+            }
+        }
+        Ok(refs)
+    } else {
+        Ok(images)
+    }
+}
 
 /// Re-pull cached images to pick up newer versions.
 ///
@@ -36,34 +70,12 @@ pub async fn handle_update(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     // ── Step 1: resolve the list of image refs to update ─────────────────────
-    let target_refs: Vec<String> = if all {
-        match deps.image.image_store.list_all_images().await {
-            Ok(refs) => refs,
-            Err(e) => {
-                send_error(
-                    &tx,
-                    "handle_update",
-                    format!("failed to list images: {e:#}"),
-                )
-                .await;
-                return;
-            }
+    let target_refs = match resolve_update_targets(images, all, containers, &state, &deps).await {
+        Ok(refs) => refs,
+        Err(msg) => {
+            send_error(&tx, "handle_update", msg).await;
+            return;
         }
-    } else if containers {
-        let containers_list = state.list_containers().await;
-        let mut seen = std::collections::HashSet::new();
-        let mut refs = Vec::new();
-        for info in containers_list {
-            let record = state.get_container(&info.id).await;
-            if let Some(source_ref) = record.and_then(|r| r.source_image_ref)
-                && seen.insert(source_ref.clone())
-            {
-                refs.push(source_ref);
-            }
-        }
-        refs
-    } else {
-        images
     };
 
     let total = target_refs.len();

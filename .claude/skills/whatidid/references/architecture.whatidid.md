@@ -7,7 +7,7 @@
 ~/.copilot/session-state/<uuid>/workspace.yaml
            │
            ▼
-       harvest.py
+       harvest.rs
   - Scans all session directories for target date
   - Extracts user instructions from user.message events (filters approvals + injected context)
   - Captures tool summaries from assistant.message.toolRequests[].intentionSummary
@@ -16,14 +16,14 @@
   - Returns: list of session dicts
            │
            ▼
-       analyze.py
+       analyze.rs
   - Builds a structured transcript from session data (includes code impact, workspace summary)
   - Calls GitHub Models API (gpt-4o-mini) using gh CLI token
   - Returns: goals[] with tasks[], skills, hours, docs_referenced
   - Caches result to <install-dir>/cache/YYYY-MM-DD.json
            │
            ▼
-       report.py
+       report.rs
   - Generates Outlook-compatible HTML
   - Layout: header → narrative → KPI cards → goals table → activity bar → token bar → task accordion
            │
@@ -76,7 +76,7 @@ Pricing is defined in `report.py → _MODEL_PRICING` with prefix-matched model n
 | Google    | gemini-2.5-flash | $0.15      | $0.60       |
 
 Cache read/write rates also vary per model. If a model name doesn't match any prefix, mid-range
-fallback pricing ($3.00/$15.00) is used. Update `_MODEL_PRICING` in `report.py` when rates change.
+fallback pricing ($3.00/$15.00) is used. Update `_MODEL_PRICING` in `report.rs` when rates change.
 
 ## Leverage metric
 

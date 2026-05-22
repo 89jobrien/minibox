@@ -124,6 +124,7 @@ pub fn build_colima_handler_dependencies(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -415,6 +416,7 @@ async fn start_krun(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 

@@ -501,3 +501,258 @@ fn regression_root_dot_entries_are_silently_skipped() {
     extract_layer(&mut tar_gz_dot_slash.as_slice(), dest.path())
         .expect("'./' root entry must be silently skipped, not rejected");
 }
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 10 — Request Size Limit
+// ---------------------------------------------------------------------------
+
+/// Verify that MAX_REQUEST_SIZE is defined and enforced in the daemon server.
+///
+/// Removing or raising this constant beyond 1 MB would allow malicious clients
+/// to exhaust daemon memory with oversized JSON payloads.
+///
+/// Guard location: `crates/minibox/src/daemon/server.rs` — `MAX_REQUEST_SIZE`.
+// Invariant: 10 — Request Size Limit
+#[test]
+fn mutation_audit_request_size_limit_exists() {
+    let source = include_str!("../src/daemon/server.rs");
+
+    // The constant must exist.
+    assert!(
+        source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE constant must be defined in server.rs"
+    );
+
+    // The constant must be used in bounded_read_line call.
+    assert!(
+        source.contains("bounded_read_line") && source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE must be passed to bounded_read_line"
+    );
+
+    // The limit must be 1 MB (1_048_576 bytes). Detect if someone raises it.
+    assert!(
+        source.contains("1024 * 1024") || source.contains("1_048_576"),
+        "MAX_REQUEST_SIZE must be 1 MB (1024 * 1024 or 1_048_576)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 11 — Image Pull Resource Limits
+// ---------------------------------------------------------------------------
+
+/// Verify that image pull size limit constants exist and are enforced in the
+/// registry client.
+///
+/// Removing these constants would allow unbounded manifest/layer downloads,
+/// enabling DoS via oversized image pulls.
+///
+/// Guard location: `crates/minibox-core/src/image/registry.rs`.
+// Invariant: 11 — Image Pull Resource Limits
+#[test]
+fn mutation_audit_image_pull_size_limits_exist() {
+    let source = include_str!("../../minibox-core/src/image/registry.rs");
+
+    // All three constants must exist.
+    assert!(
+        source.contains("MAX_MANIFEST_SIZE"),
+        "MAX_MANIFEST_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_LAYER_SIZE"),
+        "MAX_LAYER_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_TOTAL_IMAGE_SIZE"),
+        "MAX_TOTAL_IMAGE_SIZE constant must be defined in registry.rs"
+    );
+
+    // LimitedStream must exist as the enforcement mechanism.
+    assert!(
+        source.contains("LimitedStream"),
+        "LimitedStream streaming limiter must be present in registry.rs"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 12 — Execution Manifest Integrity
+// ---------------------------------------------------------------------------
+
+/// Verify that execution manifest env var hashing and seal logic exist.
+///
+/// Removing the SHA-256 hashing of env values would expose secrets in
+/// plaintext in the manifest file. Removing seal() would break workload
+/// digest computation.
+///
+/// Guard location: `crates/minibox-core/src/domain/execution_manifest.rs`.
+// Invariant: 12 — Execution Manifest Integrity
+#[test]
+fn mutation_audit_execution_manifest_env_hashing() {
+    let source = include_str!("../../minibox-core/src/domain/execution_manifest.rs");
+
+    // Env values must be hashed with SHA-256, never stored as plaintext.
+    assert!(
+        source.contains("Sha256") || source.contains("sha2"),
+        "execution manifest must use SHA-256 for env value hashing"
+    );
+
+    // The seal() method must exist for workload digest computation.
+    assert!(
+        source.contains("fn seal("),
+        "ExecutionManifest must have a seal() method"
+    );
+
+    // The digest must exclude volatile fields.
+    assert!(
+        source.contains("workload_digest") && source.contains("created_at"),
+        "manifest must reference workload_digest and created_at fields"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 1 — Zip Slip guard exists in source
+// ---------------------------------------------------------------------------
+
+/// Verify that `validate_tar_entry_path` exists and checks for `ParentDir`
+/// components in `layer.rs`.
+///
+/// The behavioral tests (regression_zip_slip_*) confirm the guard works.
+/// This test confirms the guard mechanism itself is present in source,
+/// catching refactors that might remove the function or its core check.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
+#[test]
+fn mutation_audit_zip_slip_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // The validation function must exist.
+    assert!(
+        source.contains("fn validate_tar_entry_path"),
+        "validate_tar_entry_path function must exist in layer.rs"
+    );
+
+    // It must check for ParentDir components.
+    assert!(
+        source.contains("ParentDir"),
+        "validate_tar_entry_path must check for ParentDir (dotdot) components"
+    );
+
+    // It must be called during extraction.
+    assert!(
+        source.contains("validate_tar_entry_path(&entry_path"),
+        "validate_tar_entry_path must be called during layer extraction"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 2 — Device node rejection guard exists in source
+// ---------------------------------------------------------------------------
+
+/// Verify that device node rejection logic exists in `layer.rs`.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 2 — Device Node Extraction Rejection
+#[test]
+fn mutation_audit_device_node_rejection_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must reference Block and Char entry types for rejection.
+    assert!(
+        source.contains("Block") && source.contains("Char"),
+        "layer.rs must check for Block and Char entry types"
+    );
+
+    // Must reference the DeviceNodeRejected error.
+    assert!(
+        source.contains("DeviceNodeRejected"),
+        "layer.rs must return DeviceNodeRejected error for device nodes"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 3 — Absolute symlink rewrite guard exists
+// ---------------------------------------------------------------------------
+
+/// Verify that absolute symlink rewriting and traversal rejection exist
+/// in `layer.rs`.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
+#[test]
+fn mutation_audit_symlink_rewrite_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must have the relative_path function for rewriting absolute targets.
+    assert!(
+        source.contains("fn relative_path"),
+        "relative_path function must exist in layer.rs for symlink rewriting"
+    );
+
+    // Must check for parent dir components in rewritten targets.
+    assert!(
+        source.contains("has_parent_dir_component"),
+        "has_parent_dir_component must be used to reject traversal in rewritten symlinks"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 4 — Setuid bit stripping guard exists
+// ---------------------------------------------------------------------------
+
+/// Verify that setuid/setgid bit stripping logic exists in `layer.rs`.
+///
+/// The mode mask `0o777` strips bits above the permission triad (setuid,
+/// setgid, sticky). Removing this mask would allow privilege escalation
+/// via setuid binaries in OCI layers.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 4 — Setuid / Setgid Bit Stripping
+#[test]
+fn mutation_audit_setuid_strip_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must contain the 0o777 mode mask that strips setuid/setgid/sticky bits.
+    assert!(
+        source.contains("0o777"),
+        "layer.rs must contain 0o777 mode mask for setuid stripping"
+    );
+
+    // Must call set_mode on the header before unpacking.
+    assert!(
+        source.contains("set_mode"),
+        "layer.rs must call set_mode to apply the stripped mode"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 7 — SO_PEERCRED guard called in handler
+// ---------------------------------------------------------------------------
+
+/// Verify that `is_authorized` is called in the connection handler in
+/// `server.rs`, not just defined.
+///
+/// The behavioral tests in `daemon_security_regression.rs` verify the
+/// function's logic. This test verifies the function is actually invoked
+/// in the request processing path.
+///
+/// Guard location: `crates/minibox/src/daemon/server.rs`.
+// Invariant: 7 — SO_PEERCRED Unix Socket Authentication
+#[test]
+fn mutation_audit_peercred_guard_called_in_handler() {
+    let source = include_str!("../src/daemon/server.rs");
+
+    // is_authorized must be called (not just defined).
+    let call_count = source.matches("is_authorized(").count();
+    // At least 2: 1 definition + 1 call site in handler.
+    assert!(
+        call_count >= 2,
+        "is_authorized must be called in the connection handler, \
+         found {call_count} occurrences (need >= 2: definition + call)"
+    );
+
+    // The handler must reject unauthorized connections.
+    assert!(
+        source.contains("!is_authorized("),
+        "connection handler must check !is_authorized to reject unauthorized clients"
+    );
+}

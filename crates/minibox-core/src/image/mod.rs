@@ -286,13 +286,7 @@ impl ImageStore {
             .ok_or_else(|| anyhow::anyhow!("digest missing sha256: prefix: {expected_digest}"))?;
 
         if actual_hex != expected_hex {
-            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                tracing::warn!(
-                    digest = %expected_digest,
-                    error = %ce,
-                    "layer: failed to clean up tmp dir after digest mismatch"
-                );
-            }
+            cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
             return Err(ImageError::DigestMismatch {
                 digest: expected_digest.to_owned(),
                 expected: expected_hex.to_owned(),
@@ -303,13 +297,7 @@ impl ImageStore {
 
         // Digest matched -- surface any extraction error now.
         if let Err(e) = extract_result {
-            if let Err(ce) = std::fs::remove_dir_all(&tmp_dir) {
-                tracing::warn!(
-                    digest = %expected_digest,
-                    error = %ce,
-                    "layer: failed to clean up tmp dir after extract error"
-                );
-            }
+            cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
             return Err(e).with_context(|| format!("extracting layer {expected_digest}"));
         }
 
@@ -366,39 +354,8 @@ impl ImageStore {
     /// sequences or other dangerous characters.
     fn image_dir(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
         // SECURITY: Validate name and tag
-        for (component_name, component) in [("image name", name), ("tag", tag)] {
-            // Reject empty strings
-            if component.is_empty() {
-                return Err(ImageError::Other(format!(
-                    "invalid {component_name}: cannot be empty"
-                ))
-                .into());
-            }
-
-            // Reject absolute paths
-            if component.starts_with('/') {
-                return Err(ImageError::Other(format!(
-                    "invalid {component_name}: cannot start with /"
-                ))
-                .into());
-            }
-
-            // Reject path traversal
-            if component.contains("..") {
-                return Err(ImageError::Other(format!(
-                    "invalid {component_name}: cannot contain '..'"
-                ))
-                .into());
-            }
-
-            // Reject null bytes
-            if component.contains('\0') {
-                return Err(ImageError::Other(format!(
-                    "invalid {component_name}: cannot contain null bytes"
-                ))
-                .into());
-            }
-        }
+        validate_image_component("image name", name)?;
+        validate_image_component("tag", tag)?;
 
         // Replace '/' in image name (e.g. "library/ubuntu") with '_'
         let safe_name = name.replace('/', "_");
@@ -463,6 +420,38 @@ impl ImageStore {
             })
         })
     }
+}
+
+/// Best-effort cleanup of a temporary layer directory, logging on failure.
+fn cleanup_tmp_dir_with_warn(tmp_dir: &std::path::Path, digest: &str) {
+    if let Err(ce) = std::fs::remove_dir_all(tmp_dir) {
+        tracing::warn!(
+            digest = %digest,
+            error = %ce,
+            "layer: failed to clean up tmp dir"
+        );
+    }
+}
+
+/// Validate that an image name or tag component is safe for filesystem use.
+///
+/// Rejects empty strings, absolute paths, path traversal (`..`), and null bytes.
+fn validate_image_component(label: &str, value: &str) -> anyhow::Result<()> {
+    if value.is_empty() {
+        return Err(ImageError::Other(format!("invalid {label}: cannot be empty")).into());
+    }
+    if value.starts_with('/') {
+        return Err(ImageError::Other(format!("invalid {label}: cannot start with /")).into());
+    }
+    if value.contains("..") {
+        return Err(ImageError::Other(format!("invalid {label}: cannot contain '..'")).into());
+    }
+    if value.contains('\0') {
+        return Err(
+            ImageError::Other(format!("invalid {label}: cannot contain null bytes")).into(),
+        );
+    }
+    Ok(())
 }
 
 /// Pull an OCI image into a local store.

@@ -50,8 +50,10 @@ pub fn make_mock_deps_with_registry(
     registry: MockRegistry,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img"))
+            .expect("test helper: create ImageStore"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -88,13 +90,15 @@ pub fn make_mock_deps_with_registry(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = crate::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store =
+        crate::image::ImageStore::new(base.join("images")).expect("test helper: create ImageStore");
     Arc::new(DaemonState::new(image_store, base))
 }
 
@@ -140,7 +144,7 @@ pub fn make_mock_state_with_n_containers(base: &Path, n: usize) -> Arc<DaemonSta
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .unwrap();
+        .expect("test helper: build tokio runtime");
     rt.block_on(async {
         for i in 0..n {
             state

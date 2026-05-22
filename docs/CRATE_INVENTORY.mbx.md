@@ -130,7 +130,7 @@ Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
 rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.
 
-**Depends on:** minibox-core, cruxx-plugin (git dep).
+**Depends on:** minibox-core, crux-plugin (git dep).
 
 ---
 

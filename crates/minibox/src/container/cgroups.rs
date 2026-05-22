@@ -96,27 +96,34 @@ impl CgroupManager {
         enable_subtree_controllers(&root)?;
 
         // Memory limit
+        const MIN_MEMORY_BYTES: u64 = 4096;
         if let Some(mem) = self.config.memory_limit_bytes {
             // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
-            if mem < 4096 {
-                anyhow::bail!("memory limit must be >= 4096 bytes, got {}", mem);
+            if mem < MIN_MEMORY_BYTES {
+                anyhow::bail!(
+                    "memory limit must be >= {} bytes, got {}",
+                    MIN_MEMORY_BYTES,
+                    mem
+                );
             }
             self.write_file("memory.max", &mem.to_string())?;
             debug!(memory_max = mem, "cgroup: set memory.max");
         }
 
         // CPU weight
+        const MAX_CPU_WEIGHT: u64 = 10000;
         if let Some(cpu) = self.config.cpu_weight {
             // SECURITY: Validate range (kernel range is 1-10000)
-            if !(1..=10000).contains(&cpu) {
-                anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
+            if !(1..=MAX_CPU_WEIGHT).contains(&cpu) {
+                anyhow::bail!("cpu_weight must be 1-{MAX_CPU_WEIGHT}, got {}", cpu);
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
             debug!(cpu_weight = cpu, "cgroup: set cpu.weight");
         }
 
         // SECURITY: PID limit to prevent fork bombs
-        let pids_limit = self.config.pids_max.unwrap_or(1024);
+        const DEFAULT_PIDS_MAX: u64 = 1024;
+        let pids_limit = self.config.pids_max.unwrap_or(DEFAULT_PIDS_MAX);
         self.write_file("pids.max", &pids_limit.to_string())?;
         debug!(pids_max = pids_limit, "cgroup: set pids.max");
 

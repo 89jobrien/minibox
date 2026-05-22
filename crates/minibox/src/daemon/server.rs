@@ -292,7 +292,8 @@ where
 
         debug!(bytes = trimmed.len(), "received request");
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+        const RESPONSE_CHANNEL_CAPACITY: usize = 64;
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(RESPONSE_CHANNEL_CAPACITY);
 
         match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
@@ -374,6 +375,8 @@ fn is_terminal_response(r: &DaemonResponse) -> bool {
             | DaemonResponse::VerifyResult { .. }
             | DaemonResponse::WorkflowStepComplete { .. }
             | DaemonResponse::WorkflowComplete { .. }
+            | DaemonResponse::PipelineList { .. }
+            | DaemonResponse::PipelineDetail { .. }
     )
     // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
     // Event, and UpdateProgress are non-terminal.
@@ -433,7 +436,7 @@ async fn dispatch(
             platform,
             ..
         } => {
-            handler::handle_run(
+            let params = handler::RunParams {
                 image,
                 tag,
                 command,
@@ -446,11 +449,8 @@ async fn dispatch(
                 env,
                 name,
                 platform,
-                state,
-                deps,
-                tx,
-            )
-            .await;
+            };
+            handler::handle_run(params, state, deps, tx).await;
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
@@ -619,6 +619,14 @@ async fn dispatch(
             handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
                 .await;
         }
+        DaemonRequest::ListPipelines { limit, pipeline } => {
+            let response = handler::handle_list_pipelines(limit, pipeline, state).await;
+            send_terminal_response(&tx, "ListPipelines", response).await;
+        }
+        DaemonRequest::ShowPipeline { id } => {
+            let response = handler::handle_show_pipeline(id, state).await;
+            send_terminal_response(&tx, "ShowPipeline", response).await;
+        }
         DaemonRequest::Update {
             images,
             all,
@@ -752,6 +760,7 @@ mod tests {
                 allow_bind_mounts: true,
                 allow_privileged: true,
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         (state, deps)
@@ -986,6 +995,17 @@ mod tests {
                 },
                 true, // terminal: single verify result returned
             ),
+            (
+                DaemonResponse::PipelineList { pipelines: vec![] },
+                true, // terminal: complete list returned
+            ),
+            (
+                DaemonResponse::PipelineDetail {
+                    id: "trace-1".to_string(),
+                    trace: serde_json::json!({}),
+                },
+                true, // terminal: single trace returned
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -1027,6 +1047,8 @@ mod tests {
                 DaemonResponse::VerifyResult { .. } => true,
                 DaemonResponse::WorkflowStepComplete { .. } => true,
                 DaemonResponse::WorkflowComplete { .. } => true,
+                DaemonResponse::PipelineList { .. } => true,
+                DaemonResponse::PipelineDetail { .. } => true,
             };
         }
     }
@@ -1639,6 +1661,49 @@ mod tests {
                 );
             }
             other => panic!("expected Error for 2 MB payload, got {other:?}"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 5: is_authorized matches the behaviour table in
+    /// SECURITY_INVARIANTS.md:
+    ///
+    /// | require_root_auth | creds         | Result  |
+    /// |-------------------|---------------|---------|
+    /// | false             | any / None    | allowed |
+    /// | true              | None          | denied  |
+    /// | true              | Some(uid = 0) | allowed |
+    /// | true              | Some(uid > 0) | denied  |
+    #[kani::proof]
+    fn is_authorized_matches_truth_table() {
+        let require_root: bool = kani::any();
+        let has_creds: bool = kani::any();
+        let uid: u32 = kani::any();
+
+        let creds = if has_creds {
+            Some(PeerCreds { uid, pid: 1 })
+        } else {
+            None
+        };
+
+        let result = is_authorized(creds.as_ref(), require_root);
+
+        if !require_root {
+            assert!(result, "auth disabled => always allowed");
+        } else if !has_creds {
+            assert!(!result, "auth required + no creds => denied");
+        } else if uid == 0 {
+            assert!(result, "auth required + root => allowed");
+        } else {
+            assert!(!result, "auth required + non-root => denied");
         }
     }
 }

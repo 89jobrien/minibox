@@ -71,7 +71,8 @@ fn graceful_restart() {
         Ok(s) if s.success() => {
             eprintln!("miniboxd: --restart: sent SIGTERM to existing instance(s)");
             // Brief wait for the existing daemon to release the socket.
-            std::thread::sleep(std::time::Duration::from_millis(800));
+            const RESTART_WAIT_MS: u64 = 800;
+            std::thread::sleep(std::time::Duration::from_millis(RESTART_WAIT_MS));
         }
         Ok(_) => {
             // pkill exit 1 means no process found — not an error.
@@ -247,11 +248,27 @@ async fn run_daemon() -> Result<()> {
 
     info!("miniboxd starting");
 
+    // ── Config ────────────────────────────────────────────────────────────
+    let config = miniboxd::config::DaemonConfig::load();
+    info!(
+        adapter = ?config.adapter,
+        log_level = ?config.log_level,
+        "config loaded"
+    );
+
+    // Feed config adapter into env so adapter_from_env() picks it up,
+    // but only when the env var is not already set (env > file).
+    if let Some(ref adapter) = config.adapter
+        && std::env::var("MINIBOX_ADAPTER").is_err()
+    {
+        // SAFETY: single-threaded at this point (before tokio spawns).
+        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
+    }
+
     // ── Adapter suite ────────────────────────────────────────────────────
     // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
     // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
-    // Do not set MINIBOX_ADAPTER externally to override — pass it through the
-    // environment before launching miniboxd, or use `scripts/start-daemon.*`.
+    // Config file adapter field is injected above when env is unset.
     let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
     let available = adapter_registry::available_adapter_names();
     info!(
@@ -292,6 +309,7 @@ async fn run_daemon() -> Result<()> {
     }
 
     // ── Directories ──────────────────────────────────────────────────────
+    const OWNER_RWX_PERMS: u32 = 0o700;
     {
         use std::os::unix::fs::DirBuilderExt;
         for dir in &[
@@ -302,7 +320,7 @@ async fn run_daemon() -> Result<()> {
         ] {
             std::fs::DirBuilder::new()
                 .recursive(true)
-                .mode(0o700)
+                .mode(OWNER_RWX_PERMS)
                 .create(dir)
                 .with_context(|| format!("creating directory {}", dir.display()))?;
         }
@@ -330,8 +348,9 @@ async fn run_daemon() -> Result<()> {
     // ── Metrics ──────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
     let metrics_recorder = {
+        const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
         let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-            .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
+            .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
             .parse()
             .context("parsing MINIBOX_METRICS_ADDR")?;
         let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
@@ -383,7 +402,8 @@ async fn run_daemon() -> Result<()> {
     // SECURITY: Restrict socket permissions; allow overrides for group access.
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut mode = 0o600;
+        const DEFAULT_SOCKET_PERMS: u32 = 0o600;
+        let mut mode = DEFAULT_SOCKET_PERMS;
         if let Ok(mode_str) = std::env::var("MINIBOX_SOCKET_MODE") {
             let mode_str = mode_str.trim();
             let mode_str = mode_str.strip_prefix("0o").unwrap_or(mode_str);
@@ -522,7 +542,9 @@ async fn build_handler_deps(
 
 #[cfg(target_os = "linux")]
 async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
-    let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
+    const DEFAULT_NETWORK_MODE: &str = "none";
+    let mode =
+        std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
     info!(network_mode = %mode, "network provider selected");
     match mode.as_str() {
         "bridge" => Ok(Arc::new(
@@ -531,10 +553,11 @@ async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::Networ
         "host" => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
         #[cfg(feature = "tailnet")]
         "tailnet" => {
+            const DEFAULT_TAILNET_SECRET_NAME: &str = "tailscale-auth-key";
             let tailnet_cfg = TailnetConfig {
                 auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
                 key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
-                    .unwrap_or_else(|_| "tailscale-auth-key".to_string()),
+                    .unwrap_or_else(|_| DEFAULT_TAILNET_SECRET_NAME.to_string()),
             };
             Ok(Arc::new(
                 TailnetNetwork::new(tailnet_cfg)
@@ -621,6 +644,7 @@ fn build_native_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -685,6 +709,7 @@ fn build_gke_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -801,6 +826,7 @@ fn build_smolvm_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -859,6 +885,7 @@ fn build_krun_handler_dependencies(
             metrics: metrics_recorder,
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }

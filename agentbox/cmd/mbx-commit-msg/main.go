@@ -1,3 +1,6 @@
+// TODO(#414): add multi-provider synthesis — voting/ranking instead of
+//   first-success-wins for commit messages (council report item #5)
+
 package main
 
 import (
@@ -14,6 +17,7 @@ import (
 	"github.com/joe/minibox/agentbox/internal/domain"
 	"github.com/joe/minibox/agentbox/internal/llm"
 	"github.com/joe/minibox/agentbox/internal/output"
+	"github.com/joe/minibox/agentbox/internal/synthesis"
 	"github.com/joe/minibox/agentbox/internal/tools"
 )
 
@@ -91,27 +95,31 @@ func main() {
 		close(results)
 	}()
 
-	var msgs []string
+	candidates := make(map[string]string)
 	for res := range results {
 		if res.err != nil {
 			fmt.Fprintf(os.Stderr, "warning: %s failed: %v\n", res.provider, res.err)
 			continue
 		}
 		fmt.Printf("──── %s %s\n%s\n\n", res.provider, strings.Repeat("─", max(0, 56-len(res.provider))), res.msg)
-		msgs = append(msgs, res.msg)
+		candidates[res.provider] = res.msg
 	}
 
-	if len(msgs) == 0 {
+	if len(candidates) == 0 {
 		fmt.Fprintln(os.Stderr, "error: all providers failed")
 		os.Exit(1)
 	}
 
-	// Use the first result as the commit message
-	msg := msgs[0]
+	// Synthesize: quality-rank when multiple providers, passthrough for single.
+	strategy := synthesis.Default()
+	msg, selectedProvider := strategy.Select(candidates)
+	if len(candidates) > 1 {
+		fmt.Printf("Selected: %s (via quality ranking)\n", selectedProvider)
+	}
 
 	if *commit {
 		if !*yes {
-			fmt.Print("\nCommit with the first message? [y/N] ")
+			fmt.Print("\nCommit with the selected message? [y/N] ")
 			var answer string
 			fmt.Scanln(&answer)
 			if strings.ToLower(strings.TrimSpace(answer)) != "y" {

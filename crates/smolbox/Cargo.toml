@@ -1,0 +1,19 @@
+[package]
+name = "smolbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+minibox-core = { workspace = true }
+minibox = { workspace = true }
+macbox = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+which = "6"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true }

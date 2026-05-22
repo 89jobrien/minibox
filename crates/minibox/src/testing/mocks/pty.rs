@@ -53,9 +53,11 @@ impl PtyAllocator for MockPtyAllocator {
             anyhow::bail!("mock: PtyAllocator configured to fail");
         }
         // Return synthetic fd numbers. Tests must not close these.
+        const MOCK_MASTER_FD: i32 = 100;
+        const MOCK_SLAVE_FD: i32 = 101;
         Ok(PtyHandle {
-            master_fd: 100,
-            slave_fd: 101,
+            master_fd: MOCK_MASTER_FD,
+            slave_fd: MOCK_SLAVE_FD,
         })
     }
 }

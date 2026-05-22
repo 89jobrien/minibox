@@ -156,3 +156,4 @@ docs/archive/
 .ctx/HANDOFF.hj.hj.state.json
 .ctx/.initialized
 # handoff-end
+.claude/skills/whatidid/cache/

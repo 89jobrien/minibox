@@ -135,7 +135,7 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         args: vec![],
         env: vec![],
         hostname: "test".to_string(),
-        cgroup_path: PathBuf::from(&cgroup_path),
+        cgroup_path: PathBuf::from(&cgroup_path).into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,

@@ -10,11 +10,14 @@ allowed-tools: [Bash]
 Run CI watch for the current or specified branch.
 
 1. Run `cargo xtask ci-watch` (pass `--branch <name>` if provided in `$ARGUMENTS`)
-2. If xtask is unavailable, fallback:
+2. If xtask is unavailable, fallback — aggregate all workflows for the HEAD commit:
    ```bash
-   gh run watch $(gh run list --branch $(git branch --show-current) \
-     --limit 1 --json databaseId --jq '.[0].databaseId')
+   BRANCH=$(git branch --show-current)
+   gh run list --branch "$BRANCH" --limit 15 \
+     --json databaseId,headSha,workflowName,status,conclusion
    ```
+   Filter to runs matching the latest `headSha`, report status for each workflow,
+   and watch any that haven't completed.
 
-Output includes: repo, branch, workflow, trigger, commit SHA, started time, status, and
-per-job results with timing. Exit non-zero if the run concluded with failure.
+Output includes: repo, branch, all workflows for the HEAD commit, per-job results
+with timing. Exit non-zero if any workflow concluded with failure.

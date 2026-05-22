@@ -3,6 +3,9 @@
 //! `DaemonState` is the single shared data structure held behind an
 //! `Arc<DaemonState>`.  All mutable access is gated behind a tokio
 //! `RwLock` so many readers can proceed concurrently while writes are
+//!
+// TODO(#263): paused state migration — persist Paused status across daemon restart
+// TODO(#326): persist execution manifest before container spawn
 //! exclusive.
 //!
 //! State is persisted to a JSON file after every mutation so that
@@ -116,7 +119,8 @@ impl StateRepository for JsonFileRepository {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
+            const OWNER_RW_PERMS: u32 = 0o600;
+            let permissions = std::fs::Permissions::from_mode(OWNER_RW_PERMS);
             if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
                 warn!("failed to set state file permissions: {}", e);
             }
@@ -453,7 +457,8 @@ impl DaemonState {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
+            const OWNER_RW_PERMS: u32 = 0o600;
+            let permissions = std::fs::Permissions::from_mode(OWNER_RW_PERMS);
             if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
                 warn!("failed to set state file permissions: {}", e);
             }
@@ -650,7 +655,7 @@ impl crate::container_state::ContainerStateAccess for DaemonState {
         record
             .rootfs_metadata
             .as_ref()
-            .map(|m| m.overlay_upper_dir().clone())
+            .map(|m| std::path::Path::to_path_buf(m.overlay_upper_dir()))
             .ok_or_else(|| anyhow::anyhow!("container {container_id} has no overlay upper dir"))
     }
 

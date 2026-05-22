@@ -367,7 +367,8 @@ fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<Dae
     use std::os::fd::FromRawFd;
     // SAFETY: fd is the read end of a pipe or PTY master created above; caller transfers ownership.
     let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
-    let mut buf = [0u8; 4096];
+    const READ_BUFFER_SIZE: usize = 4096;
+    let mut buf = [0u8; READ_BUFFER_SIZE];
     loop {
         match file.read(&mut buf) {
             Ok(0) => break,

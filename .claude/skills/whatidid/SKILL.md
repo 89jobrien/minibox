@@ -1,10 +1,10 @@
 ---
 name: whatidid
-description:
-    Generate a daily activity report from Claude Code session data. Harvests
-    human/assistant turns from ~/.claude/projects/*/*.jsonl, analyzes them with
-    claude-haiku-4-5 via the Anthropic API, and renders an HTML report with KPI
-    cards, goals table, and effort/leverage breakdown.
+description: >
+  Generate a daily activity report from Claude Code session data. Harvests
+  human/assistant turns from ~/.claude/projects/*/*.jsonl, analyzes them with
+  claude-haiku-4-5 via the Anthropic API, and renders an HTML report with KPI
+  cards, goals table, and effort/leverage breakdown.
 argument-hint: "[YYYY-MM-DD]"
 ---
 

@@ -8,6 +8,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use minibox_core::image::layer::validate_layer_path;
+use minibox_core::path::ValidatedPath;
 use std::path::Path;
 
 fuzz_target!(|data: &[u8]| {
@@ -19,12 +20,18 @@ fuzz_target!(|data: &[u8]| {
         use std::os::unix::ffi::OsStrExt;
         let path = Path::new(OsStr::from_bytes(data));
         let _ = validate_layer_path(path);
+        // Also exercise the ValidatedPath constructor — must not panic.
+        let dest = std::env::temp_dir();
+        let _ = ValidatedPath::new(path, &dest);
     }
     #[cfg(not(unix))]
     {
         // On non-Unix platforms paths must be valid UTF-8; skip invalid bytes.
         if let Ok(s) = std::str::from_utf8(data) {
-            let _ = validate_layer_path(Path::new(s));
+            let path = Path::new(s);
+            let _ = validate_layer_path(path);
+            let dest = std::env::temp_dir();
+            let _ = ValidatedPath::new(path, &dest);
         }
     }
 });

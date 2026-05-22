@@ -304,12 +304,12 @@ async fn runtime_spawn_process_extracts_pid_from_executor_output() {
     }));
 
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/tmp/rootfs"),
+        rootfs: PathBuf::from("/tmp/rootfs").into(),
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "test".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
@@ -333,12 +333,12 @@ async fn runtime_spawn_process_errors_on_invalid_pid() {
         .with_executor(Arc::new(|_args: &[&str]| Ok("not-a-number\n".to_string())));
 
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/tmp/rootfs"),
+        rootfs: PathBuf::from("/tmp/rootfs").into(),
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "test".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
@@ -359,12 +359,12 @@ async fn runtime_spawn_process_propagates_executor_error() {
     }));
 
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/tmp/rootfs"),
+        rootfs: PathBuf::from("/tmp/rootfs").into(),
         command: "/bin/sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "test".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
@@ -400,12 +400,12 @@ async fn runtime_spawn_script_embeds_args() {
     }));
 
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/tmp/rootfs"),
+        rootfs: PathBuf::from("/tmp/rootfs").into(),
         command: "/bin/echo".to_string(),
         args: vec!["hello".to_string(), "world".to_string()],
         env: vec![],
         hostname: "test-container".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
@@ -468,8 +468,9 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
         .expect("setup_rootfs should succeed with injected executor");
 
     assert_eq!(
-        merged.merged_dir,
+        &*merged.merged_dir,
         PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
+            .as_path()
     );
 
     let calls = calls.lock().expect("unwrap in test");

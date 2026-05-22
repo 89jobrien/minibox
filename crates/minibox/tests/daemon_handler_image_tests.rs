@@ -120,6 +120,7 @@ async fn test_handle_pull_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -187,6 +188,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -264,6 +266,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -340,6 +343,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -412,6 +416,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -549,6 +554,7 @@ async fn test_handle_run_image_pull_failure() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -614,6 +620,7 @@ async fn test_handle_run_empty_layers() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -679,6 +686,7 @@ async fn test_handle_pull_nonexistent_image() {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1305,18 +1313,20 @@ async fn test_handle_run_invalid_platform_returns_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        Some("not/a/valid/platform/triple".to_string()),
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: Some("not/a/valid/platform/triple".to_string()),
+        },
         state,
         deps,
         tx,

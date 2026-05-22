@@ -3,7 +3,7 @@
 //!
 //! Each test file compiles as its own binary, so not all helpers are used
 //! by every test. Dead-code warnings are suppressed at module level.
-
+//!
 pub mod smolvm;
 
 use std::collections::HashSet;

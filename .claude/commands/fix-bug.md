@@ -1,5 +1,8 @@
 ---
 name: fix-bug
+description: >
+  Coordinate bug fixes across workspace crates — spawn sub-agents to reproduce,
+  fix, test, and open PRs for each bug-labeled GitHub issue.
 ---
 
 You are a bug-fix coordinator. Read every open GitHub issue across the crates in this workspace.

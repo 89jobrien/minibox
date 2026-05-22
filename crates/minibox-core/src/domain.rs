@@ -4,6 +4,12 @@
 //! must implement. Following hexagonal architecture principles, the domain
 //! layer has **zero dependencies** on infrastructure details.
 //!
+// TODO(#83): add PTY/stdio piping trait surface for interactive containers
+// TODO(#263): paused state migration — add Paused variant to ContainerStatus
+// TODO(#327): add measured execution policy gate (ExecutionPolicy port)
+// TODO(#354): remove nix OS primitives from domain layer
+// TODO(#374): add 8 BackendCapability variants for capability-gated testing
+//!
 //! # Architecture
 //!
 //! ```text
@@ -64,6 +70,42 @@ pub use networking::*;
 
 // Re-export slashcrux vocabulary types for agentic workflow metadata.
 pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
+
+// ---------------------------------------------------------------------------
+// Slashcrux integration helpers
+// ---------------------------------------------------------------------------
+
+/// Returns `true` when `actual` meets or exceeds the `min` priority threshold.
+///
+/// Comparison uses [`Priority::score`], where higher scores represent higher
+/// priority.
+pub fn meets_min_priority(actual: &Priority, min: &Priority) -> bool {
+    actual.score() >= min.score()
+}
+
+/// Convert an [`ExecutionContext`] into a `Vec<String>` of `KEY=value` pairs
+/// suitable for injecting as container environment variables.
+///
+/// - String values are used directly.
+/// - Numbers and booleans are stringified.
+/// - Null values and unset variables are skipped.
+/// - Complex values (arrays, objects) are JSON-serialized.
+pub fn execution_context_to_env(ctx: &ExecutionContext) -> Vec<String> {
+    ctx.all()
+        .iter()
+        .filter_map(|(key, opt_val)| {
+            let val = opt_val.as_ref()?;
+            let s = match val {
+                serde_json::Value::Null => return None,
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                other => serde_json::to_string(other).unwrap_or_default(),
+            };
+            Some(format!("{key}={s}"))
+        })
+        .collect()
+}
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -168,6 +210,18 @@ pub enum StepStatus {
     Errored,
 }
 
+impl From<StepStatus> for StepState {
+    fn from(status: StepStatus) -> Self {
+        match status {
+            StepStatus::Pending => StepState::Pending,
+            StepStatus::Running => StepState::Running,
+            StepStatus::Succeeded => StepState::Completed,
+            StepStatus::Failed | StepStatus::Errored => StepState::Failed,
+            StepStatus::Skipped => StepState::Skipped,
+        }
+    }
+}
+
 // ── StepRunner port ──────────────────────────────────────────────────────────
 
 /// Capability tokens injected into a [`StepRunner`] at execution time.
@@ -254,6 +308,7 @@ impl StepRunnerRegistry {
 
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
+    #[cfg(test)]
     pub fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));
         self.register(Box::new(ImagePullStepRunner));
@@ -698,7 +753,7 @@ pub enum BackendRootfsMetadata {
     /// `metadata` carries adapter-specific key/value pairs, e.g.:
     /// - `"colima_instance"` — Lima/Colima instance name
     Overlay {
-        upper_dir: PathBuf,
+        upper_dir: crate::path::InternalPath,
         #[serde(default, skip_serializing_if = "HashMap::is_empty")]
         metadata: HashMap<String, String>,
     },
@@ -706,13 +761,14 @@ pub enum BackendRootfsMetadata {
 
 impl BackendRootfsMetadata {
     /// Return the host-visible overlay upper directory.
-    pub fn overlay_upper_dir(&self) -> &PathBuf {
+    pub fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
         match self {
             Self::Overlay { upper_dir, .. } => upper_dir,
         }
     }
 
     /// Look up a backend-specific metadata value by key.
+    #[cfg(test)]
     pub fn metadata_value(&self, key: &str) -> Option<&str> {
         match self {
             Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
@@ -724,7 +780,7 @@ impl BackendRootfsMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootfsLayout {
     /// Path to the merged/mounted rootfs that the runtime will use.
-    pub merged_dir: PathBuf,
+    pub merged_dir: crate::path::InternalPath,
     /// Typed backend metadata for the writable layer, when the backend exposes
     /// one.  `None` for copy-based (GKE/proot) and VZ (in-VM) backends.
     pub rootfs_metadata: Option<BackendRootfsMetadata>,
@@ -964,7 +1020,7 @@ pub struct ContainerHooks {
 #[derive(Debug, Clone)]
 pub struct ContainerSpawnConfig {
     /// Path to the container rootfs (merged overlay directory).
-    pub rootfs: PathBuf,
+    pub rootfs: crate::path::InternalPath,
     /// Command to execute (e.g., `"/bin/sh"`).
     pub command: String,
     /// Command arguments (e.g., `["-c", "echo hello"]`).
@@ -974,7 +1030,7 @@ pub struct ContainerSpawnConfig {
     /// Hostname to set inside the container.
     pub hostname: String,
     /// Path to the cgroup directory for this container.
-    pub cgroup_path: PathBuf,
+    pub cgroup_path: crate::path::InternalPath,
     /// When `true`, container stdout+stderr are captured to a pipe.
     /// The read end is returned in [`SpawnResult::output_reader`].
     pub capture_output: bool,
@@ -1975,10 +2031,10 @@ mod tests {
         fn overlay_upper_dir_returns_path_for_native_variant() {
             let path = PathBuf::from("/var/lib/minibox/containers/abc/upper");
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: path.clone(),
+                upper_dir: path.clone().into(),
                 metadata: std::collections::HashMap::new(),
             };
-            assert_eq!(meta.overlay_upper_dir(), &path);
+            assert_eq!(&**meta.overlay_upper_dir(), path.as_path());
         }
 
         #[test]
@@ -1987,16 +2043,16 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: path.clone(),
+                upper_dir: path.clone().into(),
                 metadata: kv,
             };
-            assert_eq!(meta.overlay_upper_dir(), &path);
+            assert_eq!(&**meta.overlay_upper_dir(), path.as_path());
         }
 
         #[test]
         fn metadata_value_none_for_missing_key() {
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/tmp/upper"),
+                upper_dir: PathBuf::from("/tmp/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             assert_eq!(meta.metadata_value("colima_instance"), None);
@@ -2007,7 +2063,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/tmp/upper"),
+                upper_dir: PathBuf::from("/tmp/upper").into(),
                 metadata: kv,
             };
             assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
@@ -2016,7 +2072,7 @@ mod tests {
         #[test]
         fn backend_rootfs_metadata_roundtrips_serde_overlay() {
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2029,7 +2085,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper").into(),
                 metadata: kv,
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2046,11 +2102,11 @@ mod tests {
             let mut metadata = std::collections::HashMap::new();
             metadata.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: upper.clone(),
+                upper_dir: upper.clone().into(),
                 metadata,
             };
             let layout = RootfsLayout {
-                merged_dir: PathBuf::from("/tmp/merged"),
+                merged_dir: PathBuf::from("/tmp/merged").into(),
                 rootfs_metadata: Some(meta),
                 source_image_ref: Some("alpine:latest".to_string()),
             };
@@ -2059,7 +2115,7 @@ mod tests {
                 .as_ref()
                 .expect("metadata present")
                 .overlay_upper_dir();
-            assert_eq!(recovered_upper, &upper);
+            assert_eq!(&**recovered_upper, upper.as_path());
         }
 
         // --- Task 1: OCP fix tests ---
@@ -2072,10 +2128,10 @@ mod tests {
             metadata.insert("colima_instance".to_string(), "colima".to_string());
             let upper = PathBuf::from("/Users/joe/.lima/colima/upper");
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: upper.clone(),
+                upper_dir: upper.clone().into(),
                 metadata: metadata.clone(),
             };
-            assert_eq!(meta.overlay_upper_dir(), &upper);
+            assert_eq!(&**meta.overlay_upper_dir(), upper.as_path());
             assert_eq!(meta.metadata_value("colima_instance"), Some("colima"));
         }
 
@@ -2083,7 +2139,7 @@ mod tests {
         fn overlay_variant_metadata_empty_for_native() {
             // Native overlay encodes no extra KVs.
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper"),
+                upper_dir: PathBuf::from("/var/lib/minibox/containers/abc/upper").into(),
                 metadata: std::collections::HashMap::new(),
             };
             assert_eq!(meta.metadata_value("colima_instance"), None);
@@ -2094,7 +2150,7 @@ mod tests {
             let mut kv = std::collections::HashMap::new();
             kv.insert("colima_instance".to_string(), "colima".to_string());
             let meta = BackendRootfsMetadata::Overlay {
-                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper"),
+                upper_dir: PathBuf::from("/Users/joe/.lima/colima/upper").into(),
                 metadata: kv,
             };
             let json = serde_json::to_string(&meta).expect("serialize");
@@ -2189,7 +2245,7 @@ mod tests {
                 _container_dir: &Path,
             ) -> Result<RootfsLayout> {
                 Ok(RootfsLayout {
-                    merged_dir: PathBuf::from("/tmp/merged"),
+                    merged_dir: PathBuf::from("/tmp/merged").into(),
                     rootfs_metadata: None,
                     source_image_ref: None,
                 })
@@ -2301,6 +2357,7 @@ pub enum StepCompletion {
 /// - how long the step has been running (`elapsed`),
 /// - how many consecutive errors have occurred (`error_count`), and
 /// - whether the error is terminal (unrecoverable regardless of policy).
+#[cfg(test)]
 pub fn determine_step_completion(
     result: &anyhow::Result<StepOutput>,
     retry_cfg: Option<&StepRetry>,
@@ -2541,6 +2598,7 @@ pub struct ResolvedStep {
 ///
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
+#[cfg(test)]
 pub fn resolve_step_vars(
     step: &WorkflowStep,
     state: &WorkflowState,
@@ -2571,6 +2629,7 @@ pub fn resolve_step_vars(
 /// Writes step output into shared workflow state under the step's alias.
 ///
 /// Overwrites any prior value stored under the same alias.
+#[cfg(test)]
 pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
@@ -2578,6 +2637,7 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
 /// Returns all steps that precede `alias` in declaration order.
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
+#[cfg(test)]
 pub fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
@@ -2597,6 +2657,7 @@ pub fn steps_before<'a>(
 ///
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
+#[cfg(test)]
 pub fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
@@ -2620,6 +2681,7 @@ pub fn resume_workflow(
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
+#[cfg(test)]
 fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
@@ -2650,6 +2712,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
+#[cfg(test)]
 fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
@@ -2831,5 +2894,185 @@ mod start_from_step_tests {
         let steps = vec![make_step("build")];
         let prior = WorkflowState::new();
         assert!(resume_workflow("nonexistent", &steps, &prior).is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slashcrux integration unit tests (#283)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod slashcrux_tests {
+    use super::*;
+
+    // ── meets_min_priority ─────────────────────────────────────────────
+
+    #[test]
+    fn priority_same_level_meets_threshold() {
+        for p in [
+            Priority::Critical,
+            Priority::High,
+            Priority::Medium,
+            Priority::Low,
+            Priority::Deferred,
+        ] {
+            assert!(
+                meets_min_priority(&p, &p),
+                "{p:?} should meet its own threshold"
+            );
+        }
+    }
+
+    #[test]
+    fn priority_higher_meets_lower_threshold() {
+        assert!(meets_min_priority(&Priority::Critical, &Priority::Deferred));
+        assert!(meets_min_priority(&Priority::High, &Priority::Medium));
+        assert!(meets_min_priority(&Priority::Medium, &Priority::Low));
+        assert!(meets_min_priority(&Priority::Low, &Priority::Deferred));
+    }
+
+    #[test]
+    fn priority_lower_does_not_meet_higher_threshold() {
+        assert!(!meets_min_priority(
+            &Priority::Deferred,
+            &Priority::Critical
+        ));
+        assert!(!meets_min_priority(&Priority::Low, &Priority::High));
+        assert!(!meets_min_priority(&Priority::Medium, &Priority::Critical));
+        assert!(!meets_min_priority(&Priority::Deferred, &Priority::Low));
+    }
+
+    #[test]
+    fn priority_all_combinations_consistent() {
+        let variants = [
+            Priority::Deferred,
+            Priority::Low,
+            Priority::Medium,
+            Priority::High,
+            Priority::Critical,
+        ];
+        for (i, actual) in variants.iter().enumerate() {
+            for (j, min) in variants.iter().enumerate() {
+                let result = meets_min_priority(actual, min);
+                assert_eq!(
+                    result,
+                    i >= j,
+                    "meets_min_priority({actual:?}, {min:?}) expected {} got {result}",
+                    i >= j,
+                );
+            }
+        }
+    }
+
+    // ── StepState From<StepStatus> ─────────────────────────────────────
+
+    #[test]
+    fn step_status_pending_maps_to_pending() {
+        assert_eq!(StepState::from(StepStatus::Pending), StepState::Pending);
+    }
+
+    #[test]
+    fn step_status_running_maps_to_running() {
+        assert_eq!(StepState::from(StepStatus::Running), StepState::Running);
+    }
+
+    #[test]
+    fn step_status_succeeded_maps_to_completed() {
+        assert_eq!(StepState::from(StepStatus::Succeeded), StepState::Completed);
+    }
+
+    #[test]
+    fn step_status_failed_maps_to_failed() {
+        assert_eq!(StepState::from(StepStatus::Failed), StepState::Failed);
+    }
+
+    #[test]
+    fn step_status_errored_maps_to_failed() {
+        assert_eq!(StepState::from(StepStatus::Errored), StepState::Failed);
+    }
+
+    #[test]
+    fn step_status_skipped_maps_to_skipped() {
+        assert_eq!(StepState::from(StepStatus::Skipped), StepState::Skipped);
+    }
+
+    // ── execution_context_to_env ───────────────────────────────────────
+
+    #[test]
+    fn env_string_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("NAME", serde_json::Value::String("alice".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["NAME=alice"]);
+    }
+
+    #[test]
+    fn env_number_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("PORT", serde_json::Value::Number(8080.into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["PORT=8080"]);
+    }
+
+    #[test]
+    fn env_boolean_value() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("DEBUG", serde_json::Value::Bool(true));
+        ctx.set("VERBOSE", serde_json::Value::Bool(false));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["DEBUG=true", "VERBOSE=false"]);
+    }
+
+    #[test]
+    fn env_null_value_skipped() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("SKIP_ME", serde_json::Value::Null);
+        ctx.set("KEEP", serde_json::Value::String("yes".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["KEEP=yes"]);
+    }
+
+    #[test]
+    fn env_unset_value_skipped() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("VISIBLE", serde_json::Value::String("ok".into()));
+        ctx.unset("GONE");
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["VISIBLE=ok"]);
+    }
+
+    #[test]
+    fn env_array_json_serialized() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("TAGS", serde_json::json!(["alpha", "beta"]));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env.len(), 1);
+        assert_eq!(env[0], r#"TAGS=["alpha","beta"]"#);
+    }
+
+    #[test]
+    fn env_object_json_serialized() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("META", serde_json::json!({"k": "v"}));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env.len(), 1);
+        assert_eq!(env[0], r#"META={"k":"v"}"#);
+    }
+
+    #[test]
+    fn env_empty_context_returns_empty() {
+        let ctx = ExecutionContext::new();
+        let env = execution_context_to_env(&ctx);
+        assert!(env.is_empty());
+    }
+
+    #[test]
+    fn env_preserves_insertion_order() {
+        let mut ctx = ExecutionContext::new();
+        ctx.set("Z_VAR", serde_json::Value::String("z".into()));
+        ctx.set("A_VAR", serde_json::Value::String("a".into()));
+        ctx.set("M_VAR", serde_json::Value::String("m".into()));
+        let env = execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["Z_VAR=z", "A_VAR=a", "M_VAR=m"]);
     }
 }

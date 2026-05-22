@@ -4,6 +4,11 @@
 //! `/run/minibox/miniboxd.sock` ([`DAEMON_SOCKET_PATH`]). Each message is a
 //! single JSON object terminated by `\n`.
 //!
+// TODO(#83): add PTY/stdio protocol variants for interactive containers
+// TODO(#183): add BuildImage DaemonRequest variant + mbx build command
+// TODO(#229): add container networking protocol variants
+// TODO(#328): add manifest inspection/verification protocol variants
+//!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
 //! (`"type"`) appear explicitly in the JSON, e.g.:
 //!
@@ -308,12 +313,12 @@ pub enum DaemonRequest {
     /// Higher-level than `Run` — bundles image pull + container create +
     /// pipeline execution + trace collection.
     RunPipeline {
-        /// Path to the `.cruxx` pipeline file (host-side).
+        /// Path to the `.crux` pipeline file (host-side).
         pipeline_path: String,
         /// Optional JSON input to the pipeline.
         #[serde(default)]
         input: Option<serde_json::Value>,
-        /// Container image to use. Defaults to `cruxx-runtime:latest`.
+        /// Container image to use. Defaults to `crux-runtime:latest`.
         #[serde(default)]
         image: Option<String>,
         /// Token/step/time budget for the pipeline execution.
@@ -395,6 +400,22 @@ pub enum DaemonRequest {
         policy_json: String,
     },
 
+    /// List pipeline runs, optionally filtered.
+    ListPipelines {
+        /// Maximum number of results.
+        #[serde(default)]
+        limit: Option<usize>,
+        /// Only show runs of this pipeline path.
+        #[serde(default)]
+        pipeline: Option<String>,
+    },
+
+    /// Show details of a specific pipeline run.
+    ShowPipeline {
+        /// Pipeline run / trace ID.
+        id: String,
+    },
+
     /// Execute a sequential multi-container workflow.
     RunWorkflow(WorkflowDef),
 }
@@ -429,6 +450,8 @@ impl DaemonRequest {
             Self::Update { .. } => "Update",
             Self::GetManifest { .. } => "GetManifest",
             Self::VerifyManifest { .. } => "VerifyManifest",
+            Self::ListPipelines { .. } => "ListPipelines",
+            Self::ShowPipeline { .. } => "ShowPipeline",
             Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
@@ -611,6 +634,20 @@ pub enum DaemonResponse {
         container_id: String,
         /// Exit code of the `crux run` process.
         exit_code: i32,
+    },
+
+    /// Response to `ListPipelines`: summaries of stored pipeline runs.
+    PipelineList {
+        /// Pipeline run summaries, newest-first.
+        pipelines: Vec<crate::trace::TraceSummary>,
+    },
+
+    /// Response to `ShowPipeline`: full trace for a single pipeline run.
+    PipelineDetail {
+        /// The pipeline run / trace ID.
+        id: String,
+        /// Full trace data.
+        trace: serde_json::Value,
     },
 
     /// Confirmation that a snapshot was saved.

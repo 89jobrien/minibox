@@ -32,6 +32,8 @@ tailnet = []
 minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+serde = { workspace = true }
+toml = "0.8"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
@@ -54,3 +56,4 @@ async-trait = { workspace = true }
 minibox-core = { workspace = true, features = ["test-utils"] }
 minibox = { workspace = true, features = ["test-utils"] }
 proptest = "1"
+turmoil = { workspace = true }

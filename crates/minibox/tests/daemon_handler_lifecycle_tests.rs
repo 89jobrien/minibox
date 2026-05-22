@@ -66,6 +66,7 @@ async fn test_handle_run_with_cached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -145,6 +146,7 @@ async fn test_handle_run_pulls_uncached_image() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }); // Image not cached
     let state = create_test_state_with_dir(&temp_dir);
@@ -217,6 +219,7 @@ async fn test_handle_run_filesystem_setup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -286,6 +289,7 @@ async fn test_handle_run_resource_limiter_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -355,6 +359,7 @@ async fn test_handle_run_runtime_spawn_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -637,6 +642,7 @@ fn create_test_deps_with_network(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -707,18 +713,20 @@ async fn test_handle_run_explicit_network_none() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        None,
-        vec!["/bin/true".to_string()],
-        None,
-        None,
-        false,
-        Some(NetworkMode::None),
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: Some(NetworkMode::None),
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -919,18 +927,20 @@ async fn test_run_with_network_mode_host() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        None,
-        vec!["/bin/true".to_string()],
-        None,
-        None,
-        false,
-        Some(NetworkMode::Host),
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: Some(NetworkMode::Host),
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -1017,6 +1027,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1181,6 +1192,7 @@ async fn test_handle_run_empty_image_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1315,6 +1327,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1469,6 +1482,7 @@ async fn test_handle_run_pull_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1843,6 +1857,7 @@ async fn test_handle_remove_failed_container_succeeds() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -1933,6 +1948,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -2058,18 +2074,20 @@ async fn test_handle_run_bridge_network_mode_calls_setup() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        None,
-        vec!["/bin/true".to_string()],
-        None,
-        None,
-        false,
-        Some(NetworkMode::Bridge),
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: Some(NetworkMode::Bridge),
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -2262,18 +2280,20 @@ async fn test_handle_stop_resolves_by_name() {
     // Create a named container via handle_run.
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        None,
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        false,
-        None,
-        vec![],
-        false,
-        vec![],
-        Some("my-stop-ctr".to_string()),
-        None,
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: Some("my-stop-ctr".to_string()),
+            platform: None,
+        },
         state.clone(),
         deps.clone(),
         tx,

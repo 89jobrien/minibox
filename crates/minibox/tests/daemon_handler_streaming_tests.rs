@@ -190,24 +190,28 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/sh".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral=true → streaming path
         None,
-        None,
-        true, // ephemeral=true → streaming path
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -278,24 +282,28 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral=true
         None,
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        true, // ephemeral=true
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -359,6 +367,7 @@ async fn test_run_empty_image_no_layers() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -435,6 +444,7 @@ async fn test_pull_registry_failure_with_tag() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
@@ -586,24 +596,28 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
     let state = create_test_state_with_dir(&temp_dir);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/true".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral — triggers streaming path
         None,
-        None,
-        true, // ephemeral — triggers streaming path
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,

@@ -100,13 +100,13 @@ Adapter selection is handled entirely inside `miniboxd` — no wrapper script or
 external env setup is required. The daemon reads `MINIBOX_ADAPTER` at startup and
 applies its own fallback logic (see `crates/miniboxd/src/adapter_registry.rs`):
 
-- **Unset** (default): tries `smolvm`; falls back to `krun` if the `smolvm`
-  binary is not on `PATH`.
+- **Unset** (default): tries `smolvm`; falls back to `native` on Linux or
+  `krun` on macOS if the `smolvm` binary is not on `PATH`.
 - **Explicit** (`MINIBOX_ADAPTER=<name>`): uses the named adapter as-is, no
   fallback.
 
 ```bash
-# Auto-select (smolvm → krun fallback)
+# Auto-select (smolvm → native on Linux, krun on macOS)
 sudo ./target/release/miniboxd
 
 # Pin to a specific adapter
@@ -122,7 +122,7 @@ sudo ./target/release/mbx doctor
 ```
 
 Do **not** set `MINIBOX_ADAPTER` inside start scripts or systemd units to
-hard-code an adapter — this bypasses the smolvm→krun fallback and will fail
+hard-code an adapter — this bypasses the smolvm fallback chain and will fail
 if the named adapter binary is absent.
 
 ## Building
@@ -244,7 +244,7 @@ GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
 
 | Variable               | Purpose                                          | Default                             |
 | ---------------------- | ------------------------------------------------ | ----------------------------------- |
-| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun | auto: smolvm, fallback krun         |
+| `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun | auto: smolvm, fallback native/krun  |
 | `MINIBOX_DATA_DIR`     | Image/container storage                          | `/var/lib/minibox` (root)           |
 | `MINIBOX_RUN_DIR`      | Socket/runtime directory                         | `/run/minibox`                      |
 | `MINIBOX_SOCKET_PATH`  | Unix socket path                                 | `$MINIBOX_RUN_DIR/miniboxd.sock`    |

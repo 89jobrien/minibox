@@ -20,6 +20,7 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let date_str = args

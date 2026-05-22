@@ -8,13 +8,20 @@
 
 use minibox_testsuite::adapters;
 use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
+use minibox_testsuite::spoke::SpokeRegistry;
 
 fn main() {
     let adapter_filter = std::env::var("CONFORMANCE_ADAPTER").ok();
     let verbose = std::env::var("CONFORMANCE_VERBOSE").is_ok_and(|v| v == "1");
 
+    // Hub: built-in adapter tests.
     let mut runner = TestRunner::new();
     runner.add_all(adapters::all());
+
+    // Spokes: external crate tests registered at runtime.
+    // Spoke crates add their tests here as they are wired in.
+    let spokes = SpokeRegistry::new();
+    runner.add_all(spokes.into_tests());
 
     let runner = if let Some(ref name) = adapter_filter {
         runner.filter_adapter(name)

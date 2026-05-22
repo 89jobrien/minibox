@@ -57,7 +57,7 @@ impl RootfsSetup for KrunFilesystem {
         );
 
         Ok(RootfsLayout {
-            merged_dir: container_dir.to_path_buf(),
+            merged_dir: container_dir.to_path_buf().into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -95,7 +95,7 @@ mod tests {
         let layout = fs
             .setup_rootfs(&[], tmp.path())
             .expect("setup_rootfs should succeed");
-        assert_eq!(layout.merged_dir, tmp.path().to_path_buf());
+        assert_eq!(&*layout.merged_dir, tmp.path());
         assert!(layout.rootfs_metadata.is_none());
         assert!(layout.source_image_ref.is_none());
     }
@@ -111,7 +111,7 @@ mod tests {
         let layout = fs
             .setup_rootfs(&fake_layers, tmp.path())
             .expect("setup_rootfs should succeed even with fake layers");
-        assert_eq!(layout.merged_dir, tmp.path().to_path_buf());
+        assert_eq!(&*layout.merged_dir, tmp.path());
     }
 
     #[test]

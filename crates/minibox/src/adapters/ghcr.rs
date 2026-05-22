@@ -125,9 +125,10 @@ impl GhcrRegistry {
     ///
     /// Reads `GHCR_TOKEN` from the environment if present.
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let token = std::env::var("GHCR_TOKEN").ok();
         let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .build()?;
@@ -158,8 +159,9 @@ impl GhcrRegistry {
     /// Create a test adapter pointed at a plain-HTTP mock server.
     #[cfg(test)]
     fn for_test(store: Arc<ImageStore>, base_url: &str, token: Option<&str>) -> Self {
+        const MAX_REDIRECTS: usize = 10;
         let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .expect("test reqwest client");
         Self {

@@ -94,6 +94,7 @@ fn make_deps(
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -139,18 +140,20 @@ async fn handle_run_once(
 ) -> DaemonResponse {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        ephemeral,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: image,
+            tag: tag,
+            command: command,
+            memory_limit_bytes: memory_limit_bytes,
+            cpu_weight: cpu_weight,
+            ephemeral: ephemeral,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -217,6 +220,7 @@ async fn test_handle_run_limiter_failure_returns_error_response() {
             allow_bind_mounts: true,
             allow_privileged: true,
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 

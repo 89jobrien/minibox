@@ -7,7 +7,6 @@ use minibox_core::domain::{
     BackendCapability, BackendCapabilitySet, NoopVmCheckpoint, SnapshotInfo, VmCheckpoint,
 };
 use std::path::Path;
-use tempfile::TempDir;
 
 /// Helper: returns true if the capability set includes Checkpoint.
 fn has_checkpoint(caps: &BackendCapabilitySet) -> bool {

@@ -116,7 +116,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
         }
 
         Ok(RootfsLayout {
-            merged_dir: merged,
+            merged_dir: merged.into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -288,7 +288,7 @@ impl ContainerRuntime for ProotRuntime {
 
                 // proot flags: fake root, bind /proc and /dev, set working dir
                 cmd.arg("-r")
-                    .arg(&rootfs)
+                    .arg(&*rootfs)
                     .arg("-0")
                     .arg("-b")
                     .arg("/proc:/proc")

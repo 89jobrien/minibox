@@ -57,6 +57,7 @@ pub fn probe() -> HostCapabilities {
 ///
 /// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
 /// whether it meets the requirement for running minibox containers.
+#[cfg(test)]
 pub fn format_report(caps: &HostCapabilities) -> String {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());

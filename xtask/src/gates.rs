@@ -254,7 +254,31 @@ pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Turmoil network simulation tests
+pub fn test_turmoil(sh: &Shell) -> Result<()> {
+    let fail_fast = fail_fast_flag();
+    cmd!(
+        sh,
+        "cargo nextest run -p minibox --test turmoil_network_tests {fail_fast...}"
+    )
+    .run()
+    .context("turmoil network simulation tests failed")?;
+    eprintln!("turmoil network simulation tests passed");
+    Ok(())
+}
+
 /// Property-based tests (proptest)
+/// Shuttle concurrency tests (deterministic random scheduling).
+pub fn test_shuttle(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo nextest run -p minibox --test shuttle_concurrency"
+    )
+    .run()
+    .context("shuttle concurrency tests failed")?;
+    Ok(())
+}
+
 pub fn test_property(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
         .run()
@@ -265,6 +289,24 @@ pub fn test_property(sh: &Shell) -> Result<()> {
     )
     .run()
     .context("daemon property tests failed")?;
+    Ok(())
+}
+
+/// Quickcheck property-based tests (cross-platform).
+pub fn test_quickcheck(sh: &Shell) -> Result<()> {
+    cmd!(
+        sh,
+        "cargo test --release -p minibox-core --test quickcheck_properties"
+    )
+    .run()
+    .context("minibox-core quickcheck tests failed")?;
+    cmd!(
+        sh,
+        "cargo test --release -p minibox --test quickcheck_properties"
+    )
+    .run()
+    .context("minibox quickcheck tests failed")?;
+    eprintln!("quickcheck property tests passed");
     Ok(())
 }
 
