@@ -81,6 +81,193 @@ fn split_image_tag(s: &str) -> (String, String) {
     }
 }
 
+/// Context for a single RUN step inside `build_image`.
+struct RunStepContext<'a> {
+    step_num: u32,
+    run_step: u32,
+    builds_dir: &'a std::path::Path,
+    build_id: &'a str,
+    env_state: &'a [String],
+    layer_stack: &'a [PathBuf],
+    instr_label: String,
+    shell_or_exec: &'a ShellOrExec,
+}
+
+/// Execute a single `RUN` instruction: set up rootfs, spawn the process,
+/// stream output, wait for exit, clean up, and commit the resulting layer.
+///
+/// Returns the updated layer stack on success.
+async fn execute_run_step(
+    builder: &MiniboxImageBuilder,
+    ctx: RunStepContext<'_>,
+    progress_tx: &mpsc::Sender<BuildProgress>,
+    total: u32,
+    config_tag: &str,
+) -> Result<(Vec<PathBuf>, ImageMetadata)> {
+    let container_dir = ctx.builds_dir.join(format!("run-{}", ctx.run_step));
+    tokio::fs::create_dir_all(&container_dir)
+        .await
+        .context("create run step dir")?;
+
+    let (command, args) = match ctx.shell_or_exec {
+        ShellOrExec::Shell(s) => ("/bin/sh".to_string(), vec!["-c".to_string(), s.clone()]),
+        ShellOrExec::Exec(argv) => {
+            if argv.is_empty() {
+                bail!("RUN exec form has empty argv at step {}", ctx.step_num);
+            }
+            (argv[0].clone(), argv[1..].to_vec())
+        }
+    };
+
+    // Mount the current layer stack as the container rootfs.
+    let filesystem = Arc::clone(&builder.filesystem);
+    let layer_stack_clone = ctx.layer_stack.to_vec();
+    let container_dir_clone = container_dir.clone();
+    let layout = tokio::task::spawn_blocking(move || {
+        filesystem.setup_rootfs(&layer_stack_clone, &container_dir_clone)
+    })
+    .await
+    .context("spawn_blocking setup_rootfs")?
+    .context("setup_rootfs for RUN step")?;
+
+    let cgroup_path = ctx.builds_dir.join(format!("cgroup-{}", ctx.run_step));
+
+    let spawn_config = ContainerSpawnConfig {
+        rootfs: layout.merged_dir.clone(),
+        command,
+        args,
+        env: ctx.env_state.to_vec(),
+        hostname: format!("minibox-build-{}", ctx.build_id),
+        cgroup_path: cgroup_path.into(),
+        capture_output: true,
+        hooks: ContainerHooks::default(),
+        skip_network_namespace: true,
+        mounts: vec![],
+        privileged: false,
+        image_ref: None,
+    };
+
+    let spawn_result = builder
+        .runtime
+        .spawn_process(&spawn_config)
+        .await
+        .with_context(|| format!("spawn RUN container at step {}", ctx.step_num))?;
+
+    // Stream captured output as build progress messages.
+    #[cfg(unix)]
+    if let Some(reader_fd) = spawn_result.output_reader {
+        stream_run_output(reader_fd, progress_tx, ctx.step_num, total).await;
+    }
+
+    let exit_code = builder
+        .runtime
+        .wait_for_exit(spawn_result.runtime_id.as_deref(), spawn_result.pid)
+        .await
+        .with_context(|| format!("wait_for_exit at step {}", ctx.step_num))?;
+
+    // Unmount before checking exit -- always clean up.
+    let filesystem_cleanup = Arc::clone(&builder.filesystem);
+    let container_dir_for_cleanup = container_dir.clone();
+    if let Err(e) =
+        tokio::task::spawn_blocking(move || filesystem_cleanup.cleanup(&container_dir_for_cleanup))
+            .await
+            .context("spawn_blocking cleanup")?
+    {
+        warn!(
+            step = ctx.step_num,
+            error = %e,
+            "build: rootfs cleanup failed after RUN step"
+        );
+    }
+
+    if exit_code != 0 {
+        bail!(
+            "RUN step {} exited with code {exit_code}: {}",
+            ctx.step_num,
+            ctx.instr_label
+        );
+    }
+
+    // Commit the upperdir as a new layer and extend the stack.
+    let image_store = Arc::clone(&builder.image_store);
+    let step_tag = format!("{config_tag}:build-step-{}", ctx.run_step);
+    let step_tag_for_lookup = step_tag.clone();
+    let upper_dir = layout
+        .rootfs_metadata
+        .as_ref()
+        .map(|m| m.overlay_upper_dir().clone())
+        .unwrap_or_else(|| layout.merged_dir.clone());
+    let step_meta = tokio::task::spawn_blocking(move || {
+        commit_upper_dir_to_image(
+            image_store,
+            &upper_dir,
+            &step_tag,
+            &CommitConfig {
+                author: None,
+                message: None,
+                env_overrides: vec![],
+                cmd_override: None,
+            },
+        )
+    })
+    .await
+    .context("spawn_blocking commit RUN step")?
+    .with_context(|| format!("commit RUN step {}", ctx.step_num))?;
+
+    // The new layer's extracted directory becomes the top of the stack.
+    let (step_name, step_tag_part) = split_image_tag(&step_tag_for_lookup);
+    let new_layers = builder
+        .image_store
+        .get_image_layers(&step_name, &step_tag_part)
+        .context("get_image_layers after RUN commit")?;
+    let mut updated_stack = ctx.layer_stack.to_vec();
+    let prev_len = updated_stack.len();
+    for layer in new_layers.into_iter().skip(prev_len) {
+        updated_stack.push(layer);
+    }
+
+    info!(
+        step = ctx.step_num,
+        layers = step_meta.layers.len(),
+        "build: RUN step committed"
+    );
+
+    Ok((updated_stack, step_meta))
+}
+
+/// Stream output from a RUN step's captured pipe to the progress channel.
+#[cfg(unix)]
+async fn stream_run_output(
+    reader_fd: std::os::fd::OwnedFd,
+    progress_tx: &mpsc::Sender<BuildProgress>,
+    step_num: u32,
+    total: u32,
+) {
+    use std::io::{BufRead, BufReader};
+    use std::os::fd::FromRawFd;
+
+    // SAFETY: spawn_process returned this fd to us as the read
+    // end of a pipe. We take ownership via OwnedFd -> File.
+    let file =
+        unsafe { std::fs::File::from_raw_fd(std::os::fd::IntoRawFd::into_raw_fd(reader_fd)) };
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line.unwrap_or_default();
+        if progress_tx
+            .send(BuildProgress {
+                step: step_num,
+                total_steps: total,
+                message: line,
+            })
+            .await
+            .is_err()
+        {
+            warn!("build: client disconnected during RUN output at step {step_num}");
+            break;
+        }
+    }
+}
+
 #[async_trait]
 impl ImageBuilder for MiniboxImageBuilder {
     async fn build_image(
@@ -163,165 +350,19 @@ impl ImageBuilder for MiniboxImageBuilder {
 
                 Instruction::Run(shell_or_exec) => {
                     run_step += 1;
-                    let container_dir = builds_dir.join(format!("run-{run_step}"));
-                    tokio::fs::create_dir_all(&container_dir)
-                        .await
-                        .context("create run step dir")?;
-
-                    let (command, args) = match shell_or_exec {
-                        ShellOrExec::Shell(s) => {
-                            ("/bin/sh".to_string(), vec!["-c".to_string(), s.clone()])
-                        }
-                        ShellOrExec::Exec(argv) => {
-                            if argv.is_empty() {
-                                bail!("RUN exec form has empty argv at step {step_num}");
-                            }
-                            (argv[0].clone(), argv[1..].to_vec())
-                        }
+                    let ctx = RunStepContext {
+                        step_num,
+                        run_step,
+                        builds_dir: &builds_dir,
+                        build_id: &build_id,
+                        env_state: &env_state,
+                        layer_stack: &layer_stack,
+                        instr_label: instr_display(instr),
+                        shell_or_exec,
                     };
-
-                    // Mount the current layer stack as the container rootfs.
-                    let filesystem = Arc::clone(&self.filesystem);
-                    let layer_stack_clone = layer_stack.clone();
-                    let container_dir_clone = container_dir.clone();
-                    let layout = tokio::task::spawn_blocking(move || {
-                        filesystem.setup_rootfs(&layer_stack_clone, &container_dir_clone)
-                    })
-                    .await
-                    .context("spawn_blocking setup_rootfs")?
-                    .context("setup_rootfs for RUN step")?;
-
-                    // Build the cgroup path — reuse builds_dir so it stays
-                    // within the daemon's allowed cgroup subtree.
-                    let cgroup_path = builds_dir.join(format!("cgroup-{run_step}"));
-
-                    let spawn_config = ContainerSpawnConfig {
-                        rootfs: layout.merged_dir.clone(),
-                        command,
-                        args,
-                        env: env_state.clone(),
-                        hostname: format!("minibox-build-{build_id}"),
-                        cgroup_path: cgroup_path.into(),
-                        capture_output: true,
-                        hooks: ContainerHooks::default(),
-                        skip_network_namespace: true,
-                        mounts: vec![],
-                        privileged: false,
-                        image_ref: None,
-                    };
-
-                    let spawn_result = self
-                        .runtime
-                        .spawn_process(&spawn_config)
-                        .await
-                        .with_context(|| format!("spawn RUN container at step {step_num}"))?;
-
-                    // Stream captured output as build progress messages.
-                    #[cfg(unix)]
-                    if let Some(reader_fd) = spawn_result.output_reader {
-                        use std::io::{BufRead, BufReader};
-                        use std::os::fd::FromRawFd;
-
-                        // SAFETY: spawn_process returned this fd to us as the read
-                        // end of a pipe. We take ownership via OwnedFd → File.
-                        let file = unsafe {
-                            std::fs::File::from_raw_fd(std::os::fd::IntoRawFd::into_raw_fd(
-                                reader_fd,
-                            ))
-                        };
-                        let reader = BufReader::new(file);
-                        for line in reader.lines() {
-                            let line = line.unwrap_or_default();
-                            if progress_tx
-                                .send(BuildProgress {
-                                    step: step_num,
-                                    total_steps: total,
-                                    message: line,
-                                })
-                                .await
-                                .is_err()
-                            {
-                                warn!(
-                                    "build: client disconnected during RUN output at step \
-                                     {step_num}"
-                                );
-                                break;
-                            }
-                        }
-                    }
-
-                    let exit_code = self
-                        .runtime
-                        .wait_for_exit(spawn_result.runtime_id.as_deref(), spawn_result.pid)
-                        .await
-                        .with_context(|| format!("wait_for_exit at step {step_num}"))?;
-
-                    // Unmount before checking exit — always clean up.
-                    let filesystem_cleanup = Arc::clone(&self.filesystem);
-                    let container_dir_for_cleanup = container_dir.clone();
-                    if let Err(e) = tokio::task::spawn_blocking(move || {
-                        filesystem_cleanup.cleanup(&container_dir_for_cleanup)
-                    })
-                    .await
-                    .context("spawn_blocking cleanup")?
-                    {
-                        warn!(
-                            step = step_num,
-                            error = %e,
-                            "build: rootfs cleanup failed after RUN step"
-                        );
-                    }
-
-                    if exit_code != 0 {
-                        bail!(
-                            "RUN step {step_num} exited with code {exit_code}: {}",
-                            instr_display(instr)
-                        );
-                    }
-
-                    // Commit the upperdir as a new layer and extend the stack.
-                    let image_store = Arc::clone(&self.image_store);
-                    let step_tag = format!("{}:build-step-{run_step}", config.tag);
-                    let step_tag_for_lookup = step_tag.clone();
-                    let upper_dir = layout
-                        .rootfs_metadata
-                        .as_ref()
-                        .map(|m| m.overlay_upper_dir().clone())
-                        .unwrap_or_else(|| layout.merged_dir.clone());
-                    let step_meta = tokio::task::spawn_blocking(move || {
-                        commit_upper_dir_to_image(
-                            image_store,
-                            &upper_dir,
-                            &step_tag,
-                            &CommitConfig {
-                                author: None,
-                                message: None,
-                                env_overrides: vec![],
-                                cmd_override: None,
-                            },
-                        )
-                    })
-                    .await
-                    .context("spawn_blocking commit RUN step")?
-                    .with_context(|| format!("commit RUN step {step_num}"))?;
-
-                    // The new layer's extracted directory becomes the top of the stack.
-                    let (step_name, step_tag_part) = split_image_tag(&step_tag_for_lookup);
-                    let new_layers = self
-                        .image_store
-                        .get_image_layers(&step_name, &step_tag_part)
-                        .context("get_image_layers after RUN commit")?;
-                    // Extend with layers added by this step (typically the last one).
-                    let prev_len = layer_stack.len();
-                    for layer in new_layers.into_iter().skip(prev_len) {
-                        layer_stack.push(layer);
-                    }
-
-                    info!(
-                        step = step_num,
-                        layers = step_meta.layers.len(),
-                        "build: RUN step committed"
-                    );
+                    let (new_stack, _step_meta) =
+                        execute_run_step(self, ctx, &progress_tx, total, &config.tag).await?;
+                    layer_stack = new_stack;
                 }
 
                 Instruction::Env(pairs) => {

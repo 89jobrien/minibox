@@ -193,7 +193,6 @@ pub async fn handle_pipeline(
         }
 
         // Read trace.json from the overlay upper dir.
-        // Path: <containers_base>/<id>/upper/trace.json
         let trace_path = deps
             .lifecycle
             .containers_base
@@ -201,45 +200,7 @@ pub async fn handle_pipeline(
             .join("upper")
             .join("trace.json");
 
-        let trace = if trace_path.exists() {
-            match std::fs::read_to_string(&trace_path) {
-                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
-                    Ok(v) => {
-                        info!(
-                            container_id = %container_id,
-                            path = %trace_path.display(),
-                            "handle_pipeline: trace loaded"
-                        );
-                        v
-                    }
-                    Err(e) => {
-                        warn!(
-                            container_id = %container_id,
-                            path = %trace_path.display(),
-                            error = %e,
-                            "handle_pipeline: trace file is not valid JSON, using empty trace"
-                        );
-                        serde_json::json!({"steps": []})
-                    }
-                },
-                Err(e) => {
-                    warn!(
-                        container_id = %container_id,
-                        path = %trace_path.display(),
-                        error = %e,
-                        "handle_pipeline: failed to read trace file, using empty trace"
-                    );
-                    serde_json::json!({"steps": []})
-                }
-            }
-        } else {
-            debug!(
-                container_id = %container_id,
-                path = %trace_path.display(),
-                "handle_pipeline: no trace file found, using empty trace"
-            );
-            serde_json::json!({"steps": []})
-        };
+        let trace = read_trace_file(&trace_path, &container_id);
 
         info!(
             container_id = %container_id,
@@ -279,6 +240,52 @@ pub async fn handle_pipeline(
         {
             warn!("handle_pipeline: client disconnected before PipelineComplete could be sent");
         }
+    }
+}
+
+/// Read and parse `trace.json` from the overlay upper dir.
+///
+/// Returns the parsed JSON value, or a synthetic empty trace if the file is
+/// absent or unparseable.
+fn read_trace_file(trace_path: &std::path::Path, container_id: &str) -> serde_json::Value {
+    if trace_path.exists() {
+        match std::fs::read_to_string(trace_path) {
+            Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                Ok(v) => {
+                    info!(
+                        container_id = %container_id,
+                        path = %trace_path.display(),
+                        "handle_pipeline: trace loaded"
+                    );
+                    v
+                }
+                Err(e) => {
+                    warn!(
+                        container_id = %container_id,
+                        path = %trace_path.display(),
+                        error = %e,
+                        "handle_pipeline: trace file is not valid JSON, using empty trace"
+                    );
+                    serde_json::json!({"steps": []})
+                }
+            },
+            Err(e) => {
+                warn!(
+                    container_id = %container_id,
+                    path = %trace_path.display(),
+                    error = %e,
+                    "handle_pipeline: failed to read trace file, using empty trace"
+                );
+                serde_json::json!({"steps": []})
+            }
+        }
+    } else {
+        debug!(
+            container_id = %container_id,
+            path = %trace_path.display(),
+            "handle_pipeline: no trace file found, using empty trace"
+        );
+        serde_json::json!({"steps": []})
     }
 }
 
