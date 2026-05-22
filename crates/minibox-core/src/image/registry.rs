@@ -249,16 +249,17 @@ impl RegistryClient {
     ///
     /// - HTTPS-only: Rejects HTTP connections to prevent MitM attacks
     /// - TLS 1.2+: Enforces minimum TLS version
-    /// - Redirect limits: Max 10 redirects to prevent redirect loops
+    /// - Redirect limits: Max redirects to prevent redirect loops
     pub fn new() -> anyhow::Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true) // SECURITY: Reject HTTP, require HTTPS
             .min_tls_version(reqwest::tls::Version::TLS_1_2) // SECURITY: Minimum TLS 1.2
             .build()
             .map_err(RegistryError::Network)?;
         let insecure_http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {
@@ -285,8 +286,9 @@ impl RegistryClient {
     /// Does not enforce HTTPS — the test server runs on plain HTTP.
     #[cfg(test)]
     pub(crate) fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {
@@ -632,7 +634,8 @@ impl RegistryClient {
                         .join("layers")
                         .join(&digest_key);
 
-                    let digest_short = digest.get(..19).unwrap_or(digest);
+                    const DIGEST_SHORT_LEN: usize = 19;
+                    let digest_short = digest.get(..DIGEST_SHORT_LEN).unwrap_or(digest);
 
                     // Early exit if the layer is already cached.
                     if layer_dir.exists() {

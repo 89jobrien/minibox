@@ -252,7 +252,8 @@ pub(super) async fn handle_run_streaming(
                 );
             })
             .ok();
-        let mut buf = [0u8; 4096];
+        const READ_BUFFER_SIZE: usize = 4096;
+        let mut buf = [0u8; READ_BUFFER_SIZE];
         loop {
             match file.read(&mut buf) {
                 Ok(0) => break, // EOF — child exited and closed its write end.
@@ -444,7 +445,8 @@ async fn prepare_run(
     {
         use std::os::unix::fs::DirBuilderExt;
         let mut builder = std::fs::DirBuilder::new();
-        builder.mode(0o700);
+        const OWNER_RWX_PERMS: u32 = 0o700;
+        builder.mode(OWNER_RWX_PERMS);
         builder.recursive(true);
         builder.create(&container_dir)?;
         builder.create(&run_dir)?;
@@ -464,10 +466,11 @@ async fn prepare_run(
     let merged_dir = rootfs_layout.merged_dir.clone();
 
     // Setup cgroup.
+    const DEFAULT_PIDS_MAX: u64 = 1024;
     let resource_config = ResourceConfig {
         memory_limit_bytes,
         cpu_weight,
-        pids_max: Some(1024),
+        pids_max: Some(DEFAULT_PIDS_MAX),
         io_max_bytes_per_sec: None,
     };
     let cgroup_dir_str = deps

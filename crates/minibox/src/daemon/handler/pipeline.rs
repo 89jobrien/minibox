@@ -106,7 +106,9 @@ pub async fn handle_pipeline(
         let pipeline_deps = Arc::new(pipeline_deps);
 
         // Bridge channel: collect all streaming responses from handle_run internally.
-        let (inner_tx, mut inner_rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+        const PIPELINE_CHANNEL_CAPACITY: usize = 64;
+        let (inner_tx, mut inner_rx) =
+            tokio::sync::mpsc::channel::<DaemonResponse>(PIPELINE_CHANNEL_CAPACITY);
 
         let pipeline_state = Arc::clone(&state);
         let pipeline_deps_clone = Arc::clone(&pipeline_deps);

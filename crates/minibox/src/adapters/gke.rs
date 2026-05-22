@@ -288,7 +288,7 @@ impl ContainerRuntime for ProotRuntime {
 
                 // proot flags: fake root, bind /proc and /dev, set working dir
                 cmd.arg("-r")
-                    .arg(&rootfs)
+                    .arg(&*rootfs)
                     .arg("-0")
                     .arg("-b")
                     .arg("/proc:/proc")

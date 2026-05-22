@@ -235,7 +235,9 @@ pub async fn handle_push(
         }
     };
 
-    let (progress_tx, mut progress_rx) = mpsc::channel::<minibox_core::domain::PushProgress>(32);
+    const PUSH_PROGRESS_CHANNEL_CAPACITY: usize = 32;
+    let (progress_tx, mut progress_rx) =
+        mpsc::channel::<minibox_core::domain::PushProgress>(PUSH_PROGRESS_CHANNEL_CAPACITY);
     let tx2 = tx.clone();
     tokio::spawn(async move {
         while let Some(p) = progress_rx.recv().await {
@@ -455,7 +457,9 @@ pub async fn handle_build(
         no_cache,
     };
 
-    let (progress_tx, mut progress_rx) = mpsc::channel::<minibox_core::domain::BuildProgress>(64);
+    const BUILD_PROGRESS_CHANNEL_CAPACITY: usize = 64;
+    let (progress_tx, mut progress_rx) =
+        mpsc::channel::<minibox_core::domain::BuildProgress>(BUILD_PROGRESS_CHANNEL_CAPACITY);
     let tx2 = tx.clone();
     tokio::spawn(async move {
         while let Some(p) = progress_rx.recv().await {

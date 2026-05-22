@@ -117,9 +117,10 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
             }
         }
 
+        const EXEC_FAILURE_EXIT_CODE: i32 = 127;
         if let Err(e) = child_init(config) {
             error!(error = %e, "container: child init failed");
-            unsafe { libc::_exit(127) };
+            unsafe { libc::_exit(EXEC_FAILURE_EXIT_CODE) };
         }
         // exec replaces the process image, so we never reach here.
         unsafe { libc::_exit(1) };
@@ -178,7 +179,8 @@ pub fn run_hooks(
     exit_code: Option<i32>,
 ) -> anyhow::Result<()> {
     for hook in hooks {
-        let timeout = Duration::from_secs(hook.timeout_secs.unwrap_or(30));
+        const DEFAULT_HOOK_TIMEOUT_SECS: u64 = 30;
+        let timeout = Duration::from_secs(hook.timeout_secs.unwrap_or(DEFAULT_HOOK_TIMEOUT_SECS));
         debug!(command = %hook.command, "running lifecycle hook");
 
         let mut cmd = std::process::Command::new(&hook.command);
@@ -211,7 +213,8 @@ pub fn run_hooks(
                         let _ = child.kill();
                         break;
                     }
-                    std::thread::sleep(Duration::from_millis(50));
+                    const HOOK_POLL_INTERVAL_MS: u64 = 50;
+                    std::thread::sleep(Duration::from_millis(HOOK_POLL_INTERVAL_MS));
                 }
                 Err(e) => {
                     warn!(command = %hook.command, error = %e, "lifecycle hook wait error");
@@ -450,7 +453,8 @@ fn close_extra_fds() {
     // Fast path: close_range(3, u32::MAX, 0) — available since Linux 5.9.
     // SAFETY: close_range is a pure fd-table operation with no memory side
     // effects; the worst outcome is ENOSYS on older kernels.
-    let ret = unsafe { libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, 0u32) };
+    const FIRST_NON_STDIO_FD: u32 = 3;
+    let ret = unsafe { libc::syscall(libc::SYS_close_range, FIRST_NON_STDIO_FD, u32::MAX, 0u32) };
     if ret == 0 {
         debug!("container: closed extra file descriptors via close_range");
         return;
