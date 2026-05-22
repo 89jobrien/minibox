@@ -113,6 +113,80 @@ fn relative_path(from_dir: &Path, to: &Path) -> std::path::PathBuf {
     result
 }
 
+/// Rewrite an absolute symlink target to a relative path and create it on disk.
+///
+/// Absolute symlink targets (e.g. `/bin/busybox`) are valid inside a container
+/// after `pivot_root`, but during extraction on the host they would escape the
+/// destination directory. This function strips the leading `/`, validates the
+/// result, computes a relative path from the symlink's directory, and creates
+/// the symlink.
+fn rewrite_absolute_symlink(
+    entry_path: &Path,
+    link_target: &Path,
+    dest: &Path,
+) -> anyhow::Result<()> {
+    let abs_target = link_target.strip_prefix("/").map_err(|_| {
+        ImageError::LayerExtract(format!("invalid absolute symlink target: {link_target:?}"))
+    })?;
+
+    if has_parent_dir_component(abs_target) {
+        warn!(
+            entry = ?entry_path,
+            target = ?link_target,
+            "tar: rejected symlink with parent traversal (security risk)"
+        );
+        return Err(ImageError::SymlinkTraversalRejected {
+            entry: format!("{entry_path:?}"),
+            target: format!("{link_target:?}"),
+        }
+        .into());
+    }
+
+    let entry_dir = entry_path.parent().unwrap_or(Path::new(""));
+    let rel_target = relative_path(entry_dir, abs_target);
+
+    let target_path = dest.join(entry_path);
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("creating parent dirs for symlink {target_path:?}"))?;
+    }
+
+    if target_path.exists() || target_path.symlink_metadata().is_ok() {
+        let meta = target_path.symlink_metadata().ok();
+        if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
+            fs::remove_dir_all(&target_path)
+                .with_context(|| format!("removing existing dir at {target_path:?}"))?;
+        } else {
+            fs::remove_file(&target_path)
+                .with_context(|| format!("removing existing file at {target_path:?}"))?;
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+        symlink(&rel_target, &target_path).with_context(|| {
+            format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
+        })?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        return Err(ImageError::LayerExtract(
+            "absolute symlink rewrite is not supported on this platform".into(),
+        )
+        .into());
+    }
+
+    warn!(
+        entry = ?entry_path,
+        original_target = ?link_target,
+        rewritten_target = ?rel_target,
+        "tar: rewrote absolute symlink to relative"
+    );
+    Ok(())
+}
+
 /// Extract a gzip-compressed tar layer into `dest`.
 ///
 /// Any files inside the tar are extracted relative to `dest`. The destination
@@ -187,83 +261,12 @@ pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> 
             .into());
         }
 
-        // Handle symlinks to absolute paths by rewriting to a path that is
-        // relative to the symlink's own directory.
-        //
-        // Example: entry `bin/echo` with target `/bin/busybox`
-        //   entry_dir  = "bin"
-        //   abs_target = "bin/busybox"   (strip leading "/")
-        //   rel        = "busybox"       (relative from "bin" to "bin/busybox")
-        //
-        // This is necessary because inside the container (after pivot_root)
-        // absolute symlinks resolve correctly, but on the HOST during extraction
-        // they would point into the host filesystem.
+        // Handle symlinks to absolute paths by rewriting to relative paths.
         if entry_type == EntryType::Symlink
             && let Ok(Some(link_target)) = entry.link_name()
             && link_target.is_absolute()
         {
-            let abs_target = link_target.strip_prefix("/").map_err(|_| {
-                ImageError::LayerExtract(format!(
-                    "invalid absolute symlink target: {link_target:?}"
-                ))
-            })?;
-
-            if has_parent_dir_component(abs_target) {
-                warn!(
-                    entry = ?entry_path,
-                    target = ?link_target,
-                    "tar: rejected symlink with parent traversal (security risk)"
-                );
-                return Err(ImageError::SymlinkTraversalRejected {
-                    entry: format!("{entry_path:?}"),
-                    target: format!("{link_target:?}"),
-                }
-                .into());
-            }
-
-            // Compute path relative to the symlink's directory.
-            let entry_dir = entry_path.parent().unwrap_or(Path::new(""));
-            let rel_target = relative_path(entry_dir, abs_target);
-
-            let target_path = dest.join(&entry_path);
-            if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("creating parent dirs for symlink {target_path:?}"))?;
-            }
-
-            if target_path.exists() || target_path.symlink_metadata().is_ok() {
-                let meta = target_path.symlink_metadata().ok();
-                if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
-                    fs::remove_dir_all(&target_path)
-                        .with_context(|| format!("removing existing dir at {target_path:?}"))?;
-                } else {
-                    fs::remove_file(&target_path)
-                        .with_context(|| format!("removing existing file at {target_path:?}"))?;
-                }
-            }
-
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::symlink;
-                symlink(&rel_target, &target_path).with_context(|| {
-                    format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
-                })?;
-            }
-
-            #[cfg(not(unix))]
-            {
-                return Err(ImageError::LayerExtract(
-                    "absolute symlink rewrite is not supported on this platform".into(),
-                )
-                .into());
-            }
-
-            warn!(
-                entry = ?entry_path,
-                original_target = ?link_target,
-                rewritten_target = ?rel_target,
-                "tar: rewrote absolute symlink to relative"
-            );
+            rewrite_absolute_symlink(&entry_path, &link_target, dest)?;
             continue;
         }
 
