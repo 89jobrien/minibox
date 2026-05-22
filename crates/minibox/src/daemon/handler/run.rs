@@ -22,6 +22,28 @@ use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCrea
 use super::super::network_lifecycle::NetworkLifecycle;
 use super::{HandlerDependencies, send_error};
 
+// ─── RunParams: parameter bundle for the run pipeline ────────────────────────
+
+/// Groups the user-supplied container configuration that flows through the
+/// entire `handle_run` → `prepare_run` → `run_inner` call chain.
+///
+/// This eliminates 11+ individual parameters from every function signature
+/// in the run pipeline without changing observable behaviour.
+pub struct RunParams {
+    pub image: String,
+    pub tag: Option<String>,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub ephemeral: bool,
+    pub network: Option<NetworkMode>,
+    pub mounts: Vec<BindMount>,
+    pub privileged: bool,
+    pub env: Vec<String>,
+    pub name: Option<String>,
+    pub platform: Option<String>,
+}
+
 // ─── Container ID Generation ─────────────────────────────────────────────────
 
 /// Generate a 16-char hex container ID from a UUID v4.
@@ -44,26 +66,14 @@ pub(crate) fn generate_container_id() -> String {
 /// Responses are sent via `tx`.  Non-ephemeral runs send exactly one message.
 /// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
 /// followed by one terminal `ContainerStopped` message.
-#[allow(clippy::too_many_arguments)]
 pub async fn handle_run(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    #[allow(unused_variables)] ephemeral: bool,
-    #[allow(unused_variables)] network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
-    if let Err(msg) = super::validate_policy(&mounts, privileged, &deps.policy) {
+    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &deps.policy) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })
@@ -79,7 +89,7 @@ pub async fn handle_run(
     // Two-guard pattern: Option check then async check (cannot be written as
     // a single `if let ... && await` in stable Rust).
     #[allow(clippy::collapsible_if)]
-    if let Some(ref n) = name {
+    if let Some(ref n) = params.name {
         if state.name_in_use(n).await {
             send_error(
                 &tx,
@@ -92,45 +102,13 @@ pub async fn handle_run(
     }
 
     #[cfg(unix)]
-    if ephemeral {
-        handle_run_streaming(
-            image,
-            tag,
-            command,
-            memory_limit_bytes,
-            cpu_weight,
-            network,
-            mounts,
-            privileged,
-            env,
-            name,
-            platform,
-            state,
-            deps,
-            tx,
-        )
-        .await;
+    if params.ephemeral {
+        handle_run_streaming(params, state, deps, tx).await;
         return;
     }
 
     // Non-ephemeral (or non-Linux): single response.
-    let response = match run_inner(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        state,
-        deps,
-    )
-    .await
-    {
+    let response = match run_inner(params, state, deps).await {
         Ok(id) => DaemonResponse::ContainerCreated { id },
         Err(e) => {
             error!("handle_run error: {e:#}");
@@ -148,20 +126,9 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 pub(super) async fn handle_run_streaming(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    _network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -171,23 +138,12 @@ pub(super) async fn handle_run_streaming(
 
     // Build the container ID and rootfs via the shared inner setup, but we need
     // capture_output=true. We inline a variant of run_inner here.
-    let image_label = format!("{}:{}", image, tag.as_deref().unwrap_or("latest"));
-    let result = run_inner_capture(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        _network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await;
+    let image_label = format!(
+        "{}:{}",
+        params.image,
+        params.tag.as_deref().unwrap_or("latest")
+    );
+    let result = run_inner_capture(params, Arc::clone(&state), Arc::clone(&deps)).await;
 
     let (container_id, pid, output_reader, runtime_id) = match result {
         Ok(triple) => triple,
@@ -498,24 +454,28 @@ fn build_container_record(
 ///
 /// The `capture_output` flag is the only behavioural difference between the
 /// streaming (`run_inner_capture`) and fire-and-forget (`run_inner`) paths.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 async fn prepare_run(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     capture_output: bool,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<PreparedRun> {
+    let RunParams {
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        mounts,
+        privileged,
+        env,
+        name,
+        platform,
+        ephemeral: _,
+    } = params;
+
     // Build full ref string from image + optional tag, then parse into ImageRef.
     let ref_str = match &tag {
         Some(t) => format!("{image}:{t}"),
@@ -745,40 +705,13 @@ async fn prepare_run(
 ///
 /// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
 /// and `waitpid` — both available on any Unix via the `nix` crate.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 async fn run_inner_capture(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<(String, u32, std::os::fd::OwnedFd, Option<String>)> {
-    let prepared = prepare_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        true,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await?;
+    let prepared = prepare_run(params, true, Arc::clone(&state), Arc::clone(&deps)).await?;
 
     state
         .set_manifest_info(
@@ -847,39 +780,12 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
-#[allow(clippy::too_many_arguments)]
 async fn run_inner(
-    image: String,
-    tag: Option<String>,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    mounts: Vec<BindMount>,
-    privileged: bool,
-    env: Vec<String>,
-    name: Option<String>,
-    platform: Option<String>,
+    params: RunParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
-    let prepared = prepare_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        network,
-        mounts,
-        privileged,
-        env,
-        name,
-        platform,
-        false,
-        Arc::clone(&state),
-        Arc::clone(&deps),
-    )
-    .await?;
+    let prepared = prepare_run(params, false, Arc::clone(&state), Arc::clone(&deps)).await?;
 
     state
         .set_manifest_info(
@@ -987,26 +893,25 @@ async fn run_inner(
 /// Delegates to `run_inner` with all fields from the stored params.
 #[cfg(unix)]
 pub(super) async fn run_from_params(
-    params: &RunCreationParams,
+    creation_params: &RunCreationParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<String> {
-    run_inner(
-        params.image.clone(),
-        params.tag.clone(),
-        params.command.clone(),
-        params.memory_limit_bytes,
-        params.cpu_weight,
-        params.network,
-        params.mounts.clone(),
-        params.privileged,
-        params.env.clone(),
-        params.name.clone(),
-        params.platform.clone(),
-        state,
-        deps,
-    )
-    .await
+    let params = RunParams {
+        image: creation_params.image.clone(),
+        tag: creation_params.tag.clone(),
+        command: creation_params.command.clone(),
+        memory_limit_bytes: creation_params.memory_limit_bytes,
+        cpu_weight: creation_params.cpu_weight,
+        ephemeral: false,
+        network: creation_params.network,
+        mounts: creation_params.mounts.clone(),
+        privileged: creation_params.privileged,
+        env: creation_params.env.clone(),
+        name: creation_params.name.clone(),
+        platform: creation_params.platform.clone(),
+    };
+    run_inner(params, state, deps).await
 }
 
 // ─── OOM detection ───────────────────────────────────────────────────────────

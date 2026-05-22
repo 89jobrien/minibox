@@ -801,18 +801,21 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
     handler::handle_run(
-        "alpine".to_string(),
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral = true → streaming path
         None,
-        vec!["/bin/true".to_string()],
-        None,
-        None,
-        true, // ephemeral = true → streaming path
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         Arc::clone(&state),
         deps,
         tx,

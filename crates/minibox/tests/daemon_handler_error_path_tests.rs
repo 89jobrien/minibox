@@ -192,18 +192,21 @@ async fn test_handle_run_invalid_image_ref_returns_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "".to_string(), // invalid — empty image name
+        handler::RunParams {
+            image: "".to_string(),
+            tag: // invalid — empty image name
         None,
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: false,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,

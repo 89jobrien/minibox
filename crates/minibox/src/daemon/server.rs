@@ -436,7 +436,7 @@ async fn dispatch(
             platform,
             ..
         } => {
-            handler::handle_run(
+            let params = handler::RunParams {
                 image,
                 tag,
                 command,
@@ -449,11 +449,8 @@ async fn dispatch(
                 env,
                 name,
                 platform,
-                state,
-                deps,
-                tx,
-            )
-            .await;
+            };
+            handler::handle_run(params, state, deps, tx).await;
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
