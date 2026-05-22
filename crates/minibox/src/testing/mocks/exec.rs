@@ -48,23 +48,31 @@ impl MockExecRuntime {
 
     /// Configure all subsequent `run_in_container` calls to return an error.
     pub fn with_failure(self) -> Self {
-        self.state.lock().unwrap().should_fail = true;
+        self.state.lock().expect("mock: poisoned lock").should_fail = true;
         self
     }
 
     /// Return the total number of `run_in_container` invocations.
     pub fn call_count(&self) -> usize {
-        self.state.lock().unwrap().call_count
+        self.state.lock().expect("mock: poisoned lock").call_count
     }
 
     /// Return a clone of the last `ExecSpec` received, or `None` if never called.
     pub fn last_spec(&self) -> Option<ExecSpec> {
-        self.state.lock().unwrap().last_spec.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .last_spec
+            .clone()
     }
 
     /// Return a clone of the last container ID received, or `None` if never called.
     pub fn last_container_id(&self) -> Option<ContainerId> {
-        self.state.lock().unwrap().last_container_id.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .last_container_id
+            .clone()
     }
 }
 
@@ -81,7 +89,7 @@ impl ExecRuntime for MockExecRuntime {
         spec: ExecSpec,
         _tx: Sender<DaemonResponse>,
     ) -> Result<ExecHandle> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.call_count += 1;
         state.last_container_id = Some(container_id.clone());
         state.last_spec = Some(spec.clone());

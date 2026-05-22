@@ -107,7 +107,12 @@ impl BridgeNetwork {
         if !exists {
             run_cmd(&["ip", "link", "add", &self.bridge_name, "type", "bridge"])
                 .context("create bridge")?;
-            let gw = self.ip_alloc.lock().unwrap().gateway().to_string();
+            let gw = self
+                .ip_alloc
+                .lock()
+                .expect("bridge: ip_alloc lock poisoned")
+                .gateway()
+                .to_string();
             let gw_cidr = format!("{}/{}", gw, self.subnet.prefix_len());
             run_cmd(&["ip", "addr", "add", &gw_cidr, "dev", &self.bridge_name])
                 .context("assign gateway IP to bridge")?;
@@ -260,7 +265,7 @@ impl NetworkProvider for BridgeNetwork {
         let container_ip = self
             .ip_alloc
             .lock()
-            .unwrap()
+            .expect("bridge: ip_alloc lock poisoned")
             .allocate()
             .ok_or_else(|| anyhow::anyhow!("bridge: IP pool exhausted"))?;
 
@@ -275,7 +280,12 @@ impl NetworkProvider for BridgeNetwork {
             .context("attach veth to bridge")?;
         run_cmd(&["ip", "link", "set", &veth, "up"]).context("bring host veth up")?;
 
-        let gateway = self.ip_alloc.lock().unwrap().gateway().to_string();
+        let gateway = self
+            .ip_alloc
+            .lock()
+            .expect("bridge: ip_alloc lock poisoned")
+            .gateway()
+            .to_string();
         let prefix_len = self.subnet.prefix_len();
 
         // Use DNS from config if provided, otherwise fall back to defaults.
@@ -433,7 +443,10 @@ impl NetworkProvider for BridgeNetwork {
                     .as_str()
                     .and_then(|s| s.parse::<IpAddr>().ok())
                 {
-                    self.ip_alloc.lock().unwrap().release(ip_str);
+                    self.ip_alloc
+                        .lock()
+                        .expect("bridge: ip_alloc lock poisoned")
+                        .release(ip_str);
                 }
                 // Remove port mapping rules.
                 if let Some(mappings) = ctx["port_mappings"].as_array() {
