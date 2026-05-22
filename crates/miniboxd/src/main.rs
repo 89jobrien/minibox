@@ -71,7 +71,8 @@ fn graceful_restart() {
         Ok(s) if s.success() => {
             eprintln!("miniboxd: --restart: sent SIGTERM to existing instance(s)");
             // Brief wait for the existing daemon to release the socket.
-            std::thread::sleep(std::time::Duration::from_millis(800));
+            const RESTART_WAIT_MS: u64 = 800;
+            std::thread::sleep(std::time::Duration::from_millis(RESTART_WAIT_MS));
         }
         Ok(_) => {
             // pkill exit 1 means no process found — not an error.
@@ -308,6 +309,7 @@ async fn run_daemon() -> Result<()> {
     }
 
     // ── Directories ──────────────────────────────────────────────────────
+    const OWNER_RWX_PERMS: u32 = 0o700;
     {
         use std::os::unix::fs::DirBuilderExt;
         for dir in &[
@@ -318,7 +320,7 @@ async fn run_daemon() -> Result<()> {
         ] {
             std::fs::DirBuilder::new()
                 .recursive(true)
-                .mode(0o700)
+                .mode(OWNER_RWX_PERMS)
                 .create(dir)
                 .with_context(|| format!("creating directory {}", dir.display()))?;
         }
@@ -399,7 +401,8 @@ async fn run_daemon() -> Result<()> {
     // SECURITY: Restrict socket permissions; allow overrides for group access.
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut mode = 0o600;
+        const DEFAULT_SOCKET_PERMS: u32 = 0o600;
+        let mut mode = DEFAULT_SOCKET_PERMS;
         if let Ok(mode_str) = std::env::var("MINIBOX_SOCKET_MODE") {
             let mode_str = mode_str.trim();
             let mode_str = mode_str.strip_prefix("0o").unwrap_or(mode_str);

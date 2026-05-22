@@ -92,10 +92,11 @@ impl Container {
         base_dir: &Path,
         _cgroup_config: CgroupConfig,
     ) -> anyhow::Result<Self> {
+        const CONTAINER_ID_LEN: usize = 12;
         let id = Uuid::new_v4()
             .to_string()
             .chars()
-            .take(12)
+            .take(CONTAINER_ID_LEN)
             .collect::<String>();
 
         let cgroup_path = cgroup_path_for(&id);
@@ -194,13 +195,16 @@ impl Container {
             warn!("SIGTERM to PID {} failed: {}", pid, e);
         }
 
-        // Wait up to 5 seconds for the process to exit.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        // Wait for the process to exit after SIGTERM.
+        const SIGTERM_TIMEOUT_SECS: u64 = 5;
+        const STOP_POLL_INTERVAL_MS: u64 = 100;
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(SIGTERM_TIMEOUT_SECS);
         let mut exited = false;
         while std::time::Instant::now() < deadline {
             match nix::sys::wait::waitpid(nix_pid, Some(nix::sys::wait::WaitPidFlag::WNOHANG)) {
                 Ok(nix::sys::wait::WaitStatus::StillAlive) => {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    std::thread::sleep(std::time::Duration::from_millis(STOP_POLL_INTERVAL_MS));
                 }
                 Ok(_) => {
                     exited = true;

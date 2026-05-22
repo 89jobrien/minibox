@@ -85,15 +85,18 @@ impl DaemonConfig {
                 },
                 ..Default::default()
             },
-            "production" => Self {
-                log_level: Some("info".into()),
-                policy: PolicyConfig {
-                    allow_privileged: Some(false),
-                    allow_bind_mounts: Some(false),
-                    max_image_size_mb: Some(2048),
-                },
-                ..Default::default()
-            },
+            "production" => {
+                const PRODUCTION_MAX_IMAGE_SIZE_MB: u64 = 2048;
+                Self {
+                    log_level: Some("info".into()),
+                    policy: PolicyConfig {
+                        allow_privileged: Some(false),
+                        allow_bind_mounts: Some(false),
+                        max_image_size_mb: Some(PRODUCTION_MAX_IMAGE_SIZE_MB),
+                    },
+                    ..Default::default()
+                }
+            }
             _ => {
                 tracing::warn!(profile = name, "config: unknown profile, using defaults");
                 Self::default()

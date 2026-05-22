@@ -1387,12 +1387,13 @@ impl ImagePusher for MockImagePusher {
             image_ref.registry, image_ref.namespace, image_ref.name, image_ref.tag
         );
 
+        const MOCK_PUSH_SIZE: u64 = 1024;
         if let Some(tx) = progress_tx {
             let _ = tx
                 .send(PushProgress {
                     layer_digest: digest.clone(),
-                    bytes_uploaded: 1024,
-                    total_bytes: 1024,
+                    bytes_uploaded: MOCK_PUSH_SIZE,
+                    total_bytes: MOCK_PUSH_SIZE,
                 })
                 .await;
         }
@@ -1403,7 +1404,7 @@ impl ImagePusher for MockImagePusher {
 
         Ok(PushResult {
             digest,
-            size_bytes: 1024,
+            size_bytes: MOCK_PUSH_SIZE,
         })
     }
 }

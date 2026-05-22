@@ -292,7 +292,8 @@ where
 
         debug!(bytes = trimmed.len(), "received request");
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+        const RESPONSE_CHANNEL_CAPACITY: usize = 64;
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(RESPONSE_CHANNEL_CAPACITY);
 
         match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {

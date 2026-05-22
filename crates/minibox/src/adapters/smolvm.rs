@@ -285,7 +285,14 @@ impl ContainerRuntime for SmolVmRuntime {
             // Use the test executor — flatten command into a single arg list.
             self.vm_exec(&command)?;
         } else {
-            smolvm_exec_full(&self.image, &command, &vol_refs, &env_refs, 60)?;
+            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 60;
+            smolvm_exec_full(
+                &self.image,
+                &command,
+                &vol_refs,
+                &env_refs,
+                DEFAULT_EXEC_TIMEOUT_SECS,
+            )?;
         }
 
         Ok(SpawnResult {

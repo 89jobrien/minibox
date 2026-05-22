@@ -119,7 +119,8 @@ impl StateRepository for JsonFileRepository {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
+            const OWNER_RW_PERMS: u32 = 0o600;
+            let permissions = std::fs::Permissions::from_mode(OWNER_RW_PERMS);
             if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
                 warn!("failed to set state file permissions: {}", e);
             }
@@ -456,7 +457,8 @@ impl DaemonState {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(0o600);
+            const OWNER_RW_PERMS: u32 = 0o600;
+            let permissions = std::fs::Permissions::from_mode(OWNER_RW_PERMS);
             if let Err(e) = std::fs::set_permissions(&tmp_path, permissions) {
                 warn!("failed to set state file permissions: {}", e);
             }
