@@ -116,12 +116,12 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
 
         // Convert domain ContainerSpawnConfig to infrastructure ContainerConfig
         let container_config = ContainerConfig {
-            rootfs: config.rootfs.clone(),
+            rootfs: config.rootfs.clone().to_path_buf(),
             command: config.command.clone(),
             args: config.args.clone(),
             env: config.env.clone(),
             namespace_config: NamespaceConfig::all(), // All namespaces enabled
-            cgroup_path: config.cgroup_path.clone(),
+            cgroup_path: config.cgroup_path.clone().to_path_buf(),
             hostname: config.hostname.clone(),
             capture_output,
             pre_exec_hooks: config.hooks.pre_exec.clone(),
