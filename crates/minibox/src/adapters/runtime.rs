@@ -169,6 +169,7 @@ mod tests {
     #[test]
     fn spawn_config_fields_map_to_container_config() {
         use minibox_core::domain::{BindMount, ContainerHooks, ContainerSpawnConfig};
+        use minibox_core::path::InternalPath;
         use std::path::PathBuf;
 
         let bind = BindMount {
@@ -177,12 +178,12 @@ mod tests {
             read_only: true,
         };
         let spawn_config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: InternalPath::from("/rootfs"),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: InternalPath::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -193,12 +194,12 @@ mod tests {
 
         // Build ContainerConfig the same way spawn_process does.
         let container_config = crate::container::process::ContainerConfig {
-            rootfs: spawn_config.rootfs.clone(),
+            rootfs: spawn_config.rootfs.clone().to_path_buf(),
             command: spawn_config.command.clone(),
             args: spawn_config.args.clone(),
             env: spawn_config.env.clone(),
             namespace_config: crate::container::namespace::NamespaceConfig::all(),
-            cgroup_path: spawn_config.cgroup_path.clone(),
+            cgroup_path: spawn_config.cgroup_path.clone().to_path_buf(),
             hostname: spawn_config.hostname.clone(),
             capture_output: spawn_config.capture_output,
             pre_exec_hooks: spawn_config.hooks.pre_exec.clone(),
