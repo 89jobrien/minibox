@@ -15,6 +15,34 @@ use super::HandlerDependencies;
 
 // ─── Pause / Resume ─────────────────────────────────────────────────────────
 
+/// Look up a container by `id`, verify its state matches `expected_state`, and
+/// return the `cgroup.freeze` path. Returns `Err(DaemonResponse::Error)` if
+/// the container is missing or in an unexpected state.
+async fn freeze_path_for(
+    id: &str,
+    state: &DaemonState,
+    expected_state: ContainerState,
+    verb: &str,
+) -> Result<std::path::PathBuf, DaemonResponse> {
+    let record = match state.get_container(id).await {
+        Some(r) => r,
+        None => {
+            return Err(DaemonResponse::Error {
+                message: format!("container {id} not found"),
+            });
+        }
+    };
+    if record.info.state != expected_state.as_str() {
+        return Err(DaemonResponse::Error {
+            message: format!(
+                "container {id} is not {verb} (state: {})",
+                record.info.state
+            ),
+        });
+    }
+    Ok(record.cgroup_path.join("cgroup.freeze"))
+}
+
 /// Freeze a running container by writing `1` to its `cgroup.freeze` file.
 ///
 /// Returns `DaemonResponse::ContainerPaused` on success, `DaemonResponse::Error`
@@ -24,24 +52,10 @@ pub async fn handle_pause(
     state: Arc<DaemonState>,
     event_sink: Arc<dyn EventSink>,
 ) -> DaemonResponse {
-    let record = state.get_container(&id).await;
-    let record = match record {
-        Some(r) => r,
-        None => {
-            return DaemonResponse::Error {
-                message: format!("container {id} not found"),
-            };
-        }
+    let freeze_path = match freeze_path_for(&id, &state, ContainerState::Running, "running").await {
+        Ok(p) => p,
+        Err(resp) => return resp,
     };
-    if record.info.state != ContainerState::Running.as_str() {
-        return DaemonResponse::Error {
-            message: format!(
-                "container {id} is not running (state: {})",
-                record.info.state
-            ),
-        };
-    }
-    let freeze_path = record.cgroup_path.join("cgroup.freeze");
     if let Err(e) = tokio::fs::write(&freeze_path, "1\n").await {
         return DaemonResponse::Error {
             message: format!("pause failed: {e}"),
@@ -70,24 +84,10 @@ pub async fn handle_resume(
     state: Arc<DaemonState>,
     event_sink: Arc<dyn EventSink>,
 ) -> DaemonResponse {
-    let record = state.get_container(&id).await;
-    let record = match record {
-        Some(r) => r,
-        None => {
-            return DaemonResponse::Error {
-                message: format!("container {id} not found"),
-            };
-        }
+    let freeze_path = match freeze_path_for(&id, &state, ContainerState::Paused, "paused").await {
+        Ok(p) => p,
+        Err(resp) => return resp,
     };
-    if record.info.state != ContainerState::Paused.as_str() {
-        return DaemonResponse::Error {
-            message: format!(
-                "container {id} is not paused (state: {})",
-                record.info.state
-            ),
-        };
-    }
-    let freeze_path = record.cgroup_path.join("cgroup.freeze");
     if let Err(e) = tokio::fs::write(&freeze_path, "0\n").await {
         return DaemonResponse::Error {
             message: format!("resume failed: {e}"),
