@@ -51,6 +51,7 @@ impl ValidatedPath {
         })
     }
 
+    #[cfg(test)]
     pub fn from_absolute(abs_path: &Path, base_dir: &Path) -> Result<Self> {
         let canonical_base = base_dir
             .canonicalize()
@@ -78,6 +79,7 @@ impl ValidatedPath {
         &self.base
     }
 
+    #[cfg(test)]
     pub fn join_validated(&self, component: &Path) -> Result<Self> {
         if component.is_absolute() {
             bail!(

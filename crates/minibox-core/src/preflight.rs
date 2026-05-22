@@ -57,6 +57,7 @@ pub fn probe() -> HostCapabilities {
 ///
 /// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
 /// whether it meets the requirement for running minibox containers.
+#[cfg(test)]
 pub fn format_report(caps: &HostCapabilities) -> String {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());
@@ -255,6 +256,7 @@ fn probe_minibox_slice() -> bool {
 // ---------------------------------------------------------------------------
 
 /// Result from probing whether a command can run from a workspace directory.
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct CommandProbeResult {
     /// The workspace root that was used as the working directory.
@@ -298,6 +300,7 @@ pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
 /// a `Cargo.toml` that contains `name = "<crate_name>"`.
 ///
 /// Returns `false` if `workspace_root` is not a directory or no match is found.
+#[cfg(test)]
 pub fn workspace_crate_exists(workspace_root: &Path, crate_name: &str) -> bool {
     // Search root Cargo.toml first (single-crate workspace).
     if crate_name_matches(&workspace_root.join("Cargo.toml"), crate_name) {
@@ -323,6 +326,7 @@ pub fn workspace_crate_exists(workspace_root: &Path, crate_name: &str) -> bool {
 /// `diagnostic` string that includes the resolved `workspace_root` path,
 /// the command attempted, and whether the failure was a missing binary or a
 /// non-zero exit.
+#[cfg(test)]
 pub fn command_runnable_from_workspace(
     workspace_root: &Path,
     cmd: &str,
@@ -381,6 +385,7 @@ pub fn command_runnable_from_workspace(
 }
 
 /// Return `true` when the `Cargo.toml` at `path` contains `name = "crate_name"`.
+#[cfg(test)]
 fn crate_name_matches(path: &Path, crate_name: &str) -> bool {
     if !path.exists() {
         return false;

@@ -318,13 +318,6 @@ impl BackendRootfsMetadata {
         }
     }
 
-    /// Return the Lima instance name for `ColimaOverlay` backends, or `None`.
-    pub fn colima_instance(&self) -> Option<&str> {
-        match self {
-            Self::ColimaOverlay { instance, .. } => Some(instance.as_str()),
-            _ => None,
-        }
-    }
 }
 
 /// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
