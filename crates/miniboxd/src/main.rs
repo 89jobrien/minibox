@@ -348,8 +348,9 @@ async fn run_daemon() -> Result<()> {
     // ── Metrics ──────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
     let metrics_recorder = {
+        const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
         let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-            .unwrap_or_else(|_| "127.0.0.1:9090".to_string())
+            .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
             .parse()
             .context("parsing MINIBOX_METRICS_ADDR")?;
         let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
@@ -541,7 +542,9 @@ async fn build_handler_deps(
 
 #[cfg(target_os = "linux")]
 async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
-    let mode = std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| "none".to_string());
+    const DEFAULT_NETWORK_MODE: &str = "none";
+    let mode =
+        std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
     info!(network_mode = %mode, "network provider selected");
     match mode.as_str() {
         "bridge" => Ok(Arc::new(
@@ -550,10 +553,11 @@ async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::Networ
         "host" => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
         #[cfg(feature = "tailnet")]
         "tailnet" => {
+            const DEFAULT_TAILNET_SECRET_NAME: &str = "tailscale-auth-key";
             let tailnet_cfg = TailnetConfig {
                 auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
                 key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
-                    .unwrap_or_else(|_| "tailscale-auth-key".to_string()),
+                    .unwrap_or_else(|_| DEFAULT_TAILNET_SECRET_NAME.to_string()),
             };
             Ok(Arc::new(
                 TailnetNetwork::new(tailnet_cfg)
