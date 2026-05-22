@@ -44,6 +44,7 @@ impl<R: Read> HashingReader<R> {
     }
 
     /// Total compressed bytes read.
+    #[cfg(test)]
     pub fn bytes_read(&self) -> u64 {
         self.bytes_read
     }

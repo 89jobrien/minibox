@@ -112,6 +112,7 @@ impl<S> LimitedStream<S> {
     }
 
     /// Bytes consumed so far.
+    #[cfg(test)]
     pub fn consumed(&self) -> u64 {
         self.consumed
     }

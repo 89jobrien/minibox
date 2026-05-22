@@ -308,6 +308,7 @@ impl StepRunnerRegistry {
 
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
+    #[cfg(test)]
     pub fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));
         self.register(Box::new(ImagePullStepRunner));
@@ -767,6 +768,7 @@ impl BackendRootfsMetadata {
     }
 
     /// Look up a backend-specific metadata value by key.
+    #[cfg(test)]
     pub fn metadata_value(&self, key: &str) -> Option<&str> {
         match self {
             Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
@@ -2355,6 +2357,7 @@ pub enum StepCompletion {
 /// - how long the step has been running (`elapsed`),
 /// - how many consecutive errors have occurred (`error_count`), and
 /// - whether the error is terminal (unrecoverable regardless of policy).
+#[cfg(test)]
 pub fn determine_step_completion(
     result: &anyhow::Result<StepOutput>,
     retry_cfg: Option<&StepRetry>,
@@ -2595,6 +2598,7 @@ pub struct ResolvedStep {
 ///
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
+#[cfg(test)]
 pub fn resolve_step_vars(
     step: &WorkflowStep,
     state: &WorkflowState,
@@ -2625,6 +2629,7 @@ pub fn resolve_step_vars(
 /// Writes step output into shared workflow state under the step's alias.
 ///
 /// Overwrites any prior value stored under the same alias.
+#[cfg(test)]
 pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
@@ -2632,6 +2637,7 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
 /// Returns all steps that precede `alias` in declaration order.
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
+#[cfg(test)]
 pub fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
@@ -2651,6 +2657,7 @@ pub fn steps_before<'a>(
 ///
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
+#[cfg(test)]
 pub fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
@@ -2674,6 +2681,7 @@ pub fn resume_workflow(
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
+#[cfg(test)]
 fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
@@ -2704,6 +2712,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
+#[cfg(test)]
 fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
