@@ -356,6 +356,142 @@ struct PreparedRun {
     workload_digest: String,
 }
 
+/// Construct an `ExecutionManifest` from container run parameters.
+#[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
+fn build_execution_manifest(
+    id: &str,
+    ref_str: &str,
+    layer_dirs: &[PathBuf],
+    command: &[String],
+    env: &[String],
+    mounts: &[BindMount],
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    net_mode: NetworkMode,
+    privileged: bool,
+    platform: &Option<String>,
+    name: &Option<String>,
+    capture_output: bool,
+) -> minibox_core::domain::ExecutionManifest {
+    use minibox_core::domain::{
+        ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
+        ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
+        ExecutionManifestSubject,
+    };
+
+    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    ExecutionManifest {
+        schema_version: 1,
+        container_id: id.to_string(),
+        created_at: Utc::now().to_rfc3339(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: ref_str.to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: layer_dirs
+                    .iter()
+                    .filter_map(|p| p.file_name()?.to_str().map(|s| s.replacen('_', ":", 1)))
+                    .collect(),
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: command.to_vec(),
+            env: env
+                .iter()
+                .filter_map(|e| {
+                    let (k, v) = e.split_once('=')?;
+                    Some(ExecutionManifestEnvVar::new(k, v))
+                })
+                .collect(),
+            mounts: mounts
+                .iter()
+                .map(ExecutionManifestMount::from_bind_mount)
+                .collect(),
+            resource_limits: Some(ExecutionManifestResourceLimits {
+                memory_limit_bytes,
+                cpu_weight,
+            }),
+            network_mode: net_mode_str,
+            privileged,
+            platform: platform.clone(),
+        },
+        request: ExecutionManifestRequest {
+            name: name.clone(),
+            ephemeral: capture_output,
+        },
+    }
+}
+
+/// Build a `ContainerRecord` in `"Created"` state for a new container.
+#[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
+fn build_container_record(
+    id: &str,
+    name: &Option<String>,
+    image_label: &str,
+    command: &[String],
+    merged_dir: &minibox_core::path::InternalPath,
+    cgroup_dir: &std::path::Path,
+    rootfs_layout: &minibox_core::domain::RootfsLayout,
+    image: &str,
+    tag: &str,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    network: Option<NetworkMode>,
+    env: &[String],
+    mounts: &[BindMount],
+    privileged: bool,
+    platform: &Option<String>,
+) -> ContainerRecord {
+    let command_str = command.join(" ");
+    ContainerRecord {
+        info: ContainerInfo {
+            id: id.to_string(),
+            name: name.clone(),
+            image: image_label.to_string(),
+            command: command_str,
+            state: "Created".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: merged_dir.clone().into_inner(),
+        cgroup_path: cgroup_dir.to_path_buf(),
+        post_exit_hooks: vec![],
+        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
+        source_image_ref: rootfs_layout
+            .source_image_ref
+            .clone()
+            .or_else(|| Some(image_label.to_string())),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: Some(RunCreationParams {
+            image: image.to_string(),
+            tag: Some(tag.to_string()),
+            command: command.to_vec(),
+            memory_limit_bytes,
+            cpu_weight,
+            network,
+            env: env.to_vec(),
+            mounts: mounts.to_vec(),
+            privileged,
+            name: name.clone(),
+            tty: false,
+            entrypoint: None,
+            user: None,
+            platform: platform.clone(),
+        }),
+        manifest_path: None,
+        workload_digest: None,
+    }
+}
+
 /// Shared container preparation: image pull, overlay setup, cgroup creation,
 /// network setup, container record registration, spawn config construction,
 /// and execution manifest persistence.
@@ -380,12 +516,6 @@ async fn prepare_run(
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
 ) -> Result<PreparedRun> {
-    use minibox_core::domain::{
-        ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
-        ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
-        ExecutionManifestSubject,
-    };
-
     // Build full ref string from image + optional tag, then parse into ImageRef.
     let ref_str = match &tag {
         Some(t) => format!("{image}:{t}"),
@@ -495,49 +625,24 @@ async fn prepare_run(
 
     // Build ContainerRecord in Created state.
     let image_label = format!("{image}:{tag}");
-    let command_str = command.join(" ");
-    let record = ContainerRecord {
-        info: ContainerInfo {
-            id: id.clone(),
-            name: name.clone(),
-            image: image_label.clone(),
-            command: command_str,
-            state: "Created".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            pid: None,
-        },
-        pid: None,
-        rootfs_path: merged_dir.clone().into_inner(),
-        cgroup_path: cgroup_dir.clone(),
-        post_exit_hooks: vec![],
-        rootfs_metadata: rootfs_layout.rootfs_metadata.clone(),
-        source_image_ref: rootfs_layout
-            .source_image_ref
-            .clone()
-            .or_else(|| Some(image_label.clone())),
-        step_state: None,
-        priority: None,
-        urgency: None,
-        execution_context: None,
-        creation_params: Some(RunCreationParams {
-            image: image.clone(),
-            tag: Some(tag.clone()),
-            command: command.clone(),
-            memory_limit_bytes,
-            cpu_weight,
-            network,
-            env: env.clone(),
-            mounts: mounts.clone(),
-            privileged,
-            name: name.clone(),
-            tty: false,
-            entrypoint: None,
-            user: None,
-            platform: platform.clone(),
-        }),
-        manifest_path: None,
-        workload_digest: None,
-    };
+    let record = build_container_record(
+        &id,
+        &name,
+        &image_label,
+        &command,
+        &merged_dir,
+        &cgroup_dir,
+        &rootfs_layout,
+        &image,
+        &tag,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        &env,
+        &mounts,
+        privileged,
+        &platform,
+    );
     state.add_container(record).await;
 
     // Build the ContainerSpawnConfig for the runtime.
@@ -567,50 +672,21 @@ async fn prepare_run(
     };
 
     // ── Persist execution manifest ─────────────────────────────────────
-    let net_mode_str = format!("{net_mode:?}").to_lowercase();
-    let mut manifest = ExecutionManifest {
-        schema_version: 1,
-        container_id: id.clone(),
-        created_at: Utc::now().to_rfc3339(),
-        manifest_path: None,
-        workload_digest: None,
-        subject: ExecutionManifestSubject {
-            image_ref: ref_str.clone(),
-            image: ExecutionManifestImage {
-                manifest_digest: None,
-                config_digest: None,
-                layer_digests: layer_dirs
-                    .iter()
-                    .filter_map(|p| p.file_name()?.to_str().map(|s| s.replacen('_', ":", 1)))
-                    .collect(),
-            },
-        },
-        runtime: ExecutionManifestRuntime {
-            command: command.clone(),
-            env: env
-                .iter()
-                .filter_map(|e| {
-                    let (k, v) = e.split_once('=')?;
-                    Some(ExecutionManifestEnvVar::new(k, v))
-                })
-                .collect(),
-            mounts: mounts
-                .iter()
-                .map(ExecutionManifestMount::from_bind_mount)
-                .collect(),
-            resource_limits: Some(ExecutionManifestResourceLimits {
-                memory_limit_bytes,
-                cpu_weight,
-            }),
-            network_mode: net_mode_str,
-            privileged,
-            platform: platform.clone(),
-        },
-        request: ExecutionManifestRequest {
-            name: name.clone(),
-            ephemeral: capture_output,
-        },
-    };
+    let mut manifest = build_execution_manifest(
+        &id,
+        &ref_str,
+        &layer_dirs,
+        &command,
+        &env,
+        &mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        &platform,
+        &name,
+        capture_output,
+    );
     manifest
         .seal()
         .context("failed to compute execution manifest digest")?;
