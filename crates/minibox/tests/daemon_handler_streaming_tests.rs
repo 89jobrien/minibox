@@ -197,18 +197,21 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/sh".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral=true → streaming path
         None,
-        None,
-        true, // ephemeral=true → streaming path
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -286,18 +289,21 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: None,
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral=true
         None,
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        true, // ephemeral=true
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -597,18 +603,21 @@ async fn test_handle_run_streaming_emits_container_created_first() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/true".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral — triggers streaming path
         None,
-        None,
-        true, // ephemeral — triggers streaming path
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,

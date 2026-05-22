@@ -215,18 +215,21 @@ async fn test_stream_output_chunks_are_correctly_framed() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/true".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral → streaming
         None,
-        None,
-        true, // ephemeral → streaming
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -299,18 +302,21 @@ async fn test_stream_spawn_failure_propagates_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "alpine".to_string(),
-        Some("latest".to_string()),
-        vec!["/bin/sh".to_string()],
+        handler::RunParams {
+            image: "alpine".to_string(),
+            tag: Some("latest".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral → streaming
         None,
-        None,
-        true, // ephemeral → streaming
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -348,18 +354,21 @@ async fn test_registry_pull_path_recorded_end_to_end() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
     handler::handle_run(
-        "myapp".to_string(),
-        Some("v2".to_string()),
-        vec!["/bin/true".to_string()],
+        handler::RunParams {
+            image: "myapp".to_string(),
+            tag: Some("v2".to_string()),
+            command: vec!["/bin/true".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: // ephemeral
         None,
-        None,
-        true, // ephemeral
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,
@@ -422,18 +431,20 @@ async fn test_registry_pull_failure_propagates_through_stream() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        "badimage".to_string(),
-        Some("v1".to_string()),
-        vec!["/bin/sh".to_string()],
-        None,
-        None,
-        true,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: "badimage".to_string(),
+            tag: Some("v1".to_string()),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            ephemeral: true,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,

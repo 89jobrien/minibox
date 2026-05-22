@@ -66,18 +66,22 @@ async fn handle_run_once(
 ) -> DaemonResponse {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        image,
-        tag,
-        command,
-        None, // memory_limit_bytes
-        None, // cpu_weight
+        handler::RunParams {
+            image: image,
+            tag: tag,
+            command: command,
+            memory_limit_bytes: None,
+            cpu_weight: // memory_limit_bytes
+        None,
+            ephemeral: // cpu_weight
         false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+        },
         state,
         deps,
         tx,

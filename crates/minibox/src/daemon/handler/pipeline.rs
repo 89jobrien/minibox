@@ -9,7 +9,7 @@ use tracing::{debug, info, warn};
 
 use crate::daemon::state::DaemonState;
 
-use super::run::handle_run;
+use super::run::{RunParams, handle_run};
 use super::{HandlerDependencies, send_error};
 
 /// Run a crux pipeline inside an ephemeral container.
@@ -115,30 +115,27 @@ pub async fn handle_pipeline(
 
         // Spawn handle_run in the background; we drain inner_rx below.
         tokio::spawn(async move {
-            handle_run(
-                image_ref,
-                None,
-                vec![
+            let params = RunParams {
+                image: image_ref,
+                tag: None,
+                command: vec![
                     "crux".to_string(),
                     "run".to_string(),
                     "/pipeline.crux".to_string(),
                     "--output".to_string(),
                     "/trace.json".to_string(),
                 ],
-                None,
-                None,
-                true, // ephemeral: stream output
-                None,
-                vec![pipeline_mount],
-                false,
-                container_env,
-                None,
-                None,
-                pipeline_state,
-                pipeline_deps_clone,
-                inner_tx,
-            )
-            .await;
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                ephemeral: true,
+                network: None,
+                mounts: vec![pipeline_mount],
+                privileged: false,
+                env: container_env,
+                name: None,
+                platform: None,
+            };
+            handle_run(params, pipeline_state, pipeline_deps_clone, inner_tx).await;
         });
 
         // Drain the inner channel, collecting the container ID and exit code.

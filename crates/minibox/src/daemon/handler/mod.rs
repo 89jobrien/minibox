@@ -51,7 +51,7 @@ pub use self::lifecycle::{handle_list, handle_pause, handle_remove, handle_resum
 pub use self::logs::handle_logs;
 pub use self::manifest::{handle_get_manifest, handle_verify_manifest};
 pub use self::pipeline::{handle_list_pipelines, handle_pipeline, handle_show_pipeline};
-pub use self::run::handle_run;
+pub use self::run::{RunParams, handle_run};
 pub use self::snapshot::{handle_list_snapshots, handle_restore_snapshot, handle_save_snapshot};
 pub use self::stop::handle_stop;
 pub use self::update::handle_update;
