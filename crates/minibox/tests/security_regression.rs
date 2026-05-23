@@ -363,7 +363,7 @@ fn regression_close_extra_fds_uses_close_range_syscall() {
         "close_extra_fds must use close_range syscall as fast path"
     );
     assert!(
-        source.contains("3u32"),
+        source.contains("FIRST_NON_STDIO_FD: u32 = 3"),
         "close_range must start from FD 3 (preserving stdin/stdout/stderr)"
     );
 
