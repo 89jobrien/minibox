@@ -604,8 +604,6 @@ async fn prepare_run(
         privileged,
         &platform,
     );
-    state.add_container(record).await;
-
     // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
         .first()
@@ -659,14 +657,16 @@ async fn prepare_run(
             PolicyDecision::Allow => {}
             PolicyDecision::Deny(reason) => {
                 // Best-effort cleanup: remove container dir.
-                if let Err(e) = std::fs::remove_dir_all(&container_dir) {
+                // SECURITY: verify path is under containers_base before recursive delete.
+                if container_dir.starts_with(&deps.lifecycle.containers_base)
+                    && let Err(e) = std::fs::remove_dir_all(&container_dir)
+                {
                     warn!(
                         container_id = %id,
                         error = %e,
                         "policy: cleanup container dir failed after denial"
                     );
                 }
-                state.remove_container(&id).await;
                 return Err(anyhow::anyhow!("execution policy denied: {}", reason));
             }
         }
@@ -680,6 +680,11 @@ async fn prepare_run(
     manifest.manifest_path = Some(manifest_path.clone());
 
     let workload_digest = manifest.workload_digest.clone().unwrap_or_default();
+
+    // Register the container only after all fallible ops (overlay, cgroup,
+    // network, manifest seal, policy gate) have succeeded.  This prevents
+    // phantom records when any preparation step fails.
+    state.add_container(record).await;
 
     Ok(PreparedRun {
         id,

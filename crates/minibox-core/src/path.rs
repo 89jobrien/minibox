@@ -44,6 +44,13 @@ impl ValidatedPath {
                      resolves outside base {base_dir:?}"
                 );
             }
+            // Store the canonical path to eliminate TOCTOU window between
+            // validation and use. Callers still need O_NOFOLLOW or
+            // openat2(RESOLVE_BENEATH) for race-free access to new paths.
+            return Ok(Self {
+                inner: canonical,
+                base: canonical_base,
+            });
         }
         Ok(Self {
             inner: full,

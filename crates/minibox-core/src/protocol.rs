@@ -861,6 +861,44 @@ impl TestRunDefaults {
 }
 
 // ---------------------------------------------------------------------------
+// ExecutionContext helpers
+// ---------------------------------------------------------------------------
+
+/// Convert a [`slashcrux::ExecutionContext`] into a `Vec<String>` of `KEY=value` pairs
+/// suitable for injecting as container environment variables.
+///
+/// - String values are used directly.
+/// - Numbers and booleans are stringified.
+/// - Null values and unset variables are skipped.
+/// - Complex values (arrays, objects) are JSON-serialized.
+pub fn execution_context_to_env(ctx: &slashcrux::ExecutionContext) -> Vec<String> {
+    ctx.all()
+        .iter()
+        .filter_map(|(key, opt_val)| {
+            if !is_valid_env_key(key) {
+                tracing::warn!(key = %key, "execution_context_to_env: skipping invalid env key");
+                return None;
+            }
+            let val = opt_val.as_ref()?;
+            let s = match val {
+                serde_json::Value::Null => return None,
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                other => serde_json::to_string(other).unwrap_or_default(),
+            };
+            Some(format!("{key}={s}"))
+        })
+        .collect()
+}
+
+/// Validate an env var key: non-empty, ASCII alphanumeric or `_`, no `=`,
+/// no null bytes, no newlines.
+fn is_valid_env_key(key: &str) -> bool {
+    !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1929,5 +1967,37 @@ mod tests {
             json, r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
             "wire snapshot mismatch: {json}",
         );
+    }
+
+    // -------------------------------------------------------------------
+    // is_valid_env_key / execution_context_to_env validation
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn env_key_validation_accepts_valid() {
+        assert!(super::is_valid_env_key("FOO"));
+        assert!(super::is_valid_env_key("MY_VAR_2"));
+        assert!(super::is_valid_env_key("_"));
+        assert!(super::is_valid_env_key("a"));
+    }
+
+    #[test]
+    fn env_key_validation_rejects_invalid() {
+        assert!(!super::is_valid_env_key(""));
+        assert!(!super::is_valid_env_key("FOO=BAR"));
+        assert!(!super::is_valid_env_key("FOO BAR"));
+        assert!(!super::is_valid_env_key("FOO\0BAR"));
+        assert!(!super::is_valid_env_key("FOO\nBAR"));
+        assert!(!super::is_valid_env_key("foo-bar"));
+    }
+
+    #[test]
+    fn execution_context_to_env_skips_invalid_keys() {
+        let mut ctx = slashcrux::ExecutionContext::new();
+        ctx.set("GOOD_KEY", serde_json::Value::String("ok".into()));
+        ctx.set("BAD=KEY", serde_json::Value::String("nope".into()));
+        ctx.set("", serde_json::Value::String("empty".into()));
+        let env = super::execution_context_to_env(&ctx);
+        assert_eq!(env, vec!["GOOD_KEY=ok"]);
     }
 }
