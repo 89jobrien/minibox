@@ -336,6 +336,7 @@ fn build_execution_manifest(
         ExecutionManifestSubject,
     };
 
+    // TODO(#436): replace Debug format with explicit Display/as_str
     let net_mode_str = format!("{net_mode:?}").to_lowercase();
     ExecutionManifest {
         schema_version: 1,
@@ -850,6 +851,7 @@ async fn run_inner(
         .metrics
         .set_gauge("minibox_active_containers", active, &[]);
 
+    // TODO(#429): propagate net.attach error instead of swallowing with .ok()
     prepared.net.attach(&id, pid).await.ok();
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");

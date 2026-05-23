@@ -42,6 +42,7 @@ pub fn check_smolvm() -> SmolvmStatus {
 }
 
 /// Run `smolvm --version` and parse the version string from stdout.
+// TODO(#433): simplify version parsing — redundant strip_prefix branches
 fn query_version(bin: &std::path::Path) -> Result<String> {
     let output = Command::new(bin)
         .arg("--version")

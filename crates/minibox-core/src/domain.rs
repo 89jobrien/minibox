@@ -4,6 +4,7 @@
 //! must implement. Following hexagonal architecture principles, the domain
 //! layer has **zero dependencies** on infrastructure details.
 //!
+// TODO(#434): move these TODOs outside the //! doc comment block
 // TODO(#83): add PTY/stdio piping trait surface for interactive containers
 // TODO(#263): paused state migration — add Paused variant to ContainerStatus
 // TODO(#327): add measured execution policy gate (ExecutionPolicy port)
@@ -90,6 +91,7 @@ pub fn meets_min_priority(actual: &Priority, min: &Priority) -> bool {
 /// - Numbers and booleans are stringified.
 /// - Null values and unset variables are skipped.
 /// - Complex values (arrays, objects) are JSON-serialized.
+// TODO(#428): validate env var keys — reject `=`, newlines, null bytes, empty keys
 pub fn execution_context_to_env(ctx: &ExecutionContext) -> Vec<String> {
     ctx.all()
         .iter()
@@ -308,6 +310,7 @@ impl StepRunnerRegistry {
 
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
+    // TODO(#430): remove cfg(test) gate — either delete dead code or feature-gate
     #[cfg(test)]
     pub fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));

@@ -279,6 +279,7 @@ pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> 
                 .map_err(|e| ImageError::LayerExtract(format!("failed to get mode: {e}")))?;
 
             // Remove setuid (04000), setgid (02000), and sticky (01000) bits
+            // TODO(#435): rename to SAFE_PERMISSION_BITS for clarity
             const PERMISSION_MASK: u32 = 0o777;
             let safe_mode = mode & PERMISSION_MASK;
             if mode != safe_mode {
