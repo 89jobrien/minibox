@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-20
+updated: 2026-05-22
 items:
 - id: fixture-consolidation
   doob_uuid: null
@@ -53,7 +53,7 @@ items:
   - crates/minibox/src/daemon/handler/manifest.rs
   - crates/minibox/src/daemon/handler/snapshot.rs
   - crates/minibox/src/daemon/handler/stop.rs
-  completed: '2026-05-21'
+  completed: 2026-05-21
   extra: []
 - id: a-series-testing
   doob_uuid: null
@@ -72,11 +72,11 @@ items:
   files:
   - crates/minibox-core/tests/
   - crates/minibox/tests/
-  completed: '2026-05-21'
+  completed: 2026-05-21
   extra: []
 log:
 - date: '20260521'
-  summary: 'Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop'
+  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
   commits: []
   session: 1
 - date: '20260515.171405'

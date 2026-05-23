@@ -1,0 +1,47 @@
+pipeline: minibox_promote_status
+# Triage the promotion pipeline: develop -> next -> staging -> main.
+# Outputs structured JSON with ahead/behind counts and pending commits.
+#
+# Run: crux run .crux/promote-status.crux
+budget: { calls: 4 }
+
+steps:
+  - step: fetch
+    handler: shell::capture
+    args:
+      cmd: "git fetch origin --quiet 2>&1 || true"
+
+  - step: triage
+    handler: shell::capture
+    args:
+      cmd: |
+        pair() {
+          local from=$1 to=$2
+          local fr="origin/$from" to_ref="origin/$to"
+          local ahead behind status
+          ahead=$(git rev-list --count "$to_ref".."$fr")
+          behind=$(git rev-list --count "$fr".."$to_ref")
+          if [ "$behind" -gt 0 ]; then status=diverged
+          elif [ "$ahead" -gt 0 ]; then status=promote
+          else status=synced; fi
+          local commits behind_commits
+          commits=$(git log --oneline --no-decorate "$to_ref".."$fr" 2>/dev/null \
+            | head -20 | jq -R '{sha:split(" ")[0], msg:(split(" ")[1:]|join(" "))}' | jq -sc .)
+          behind_commits=$(git log --oneline --no-decorate "$fr".."$to_ref" 2>/dev/null \
+            | head -20 | jq -R '{sha:split(" ")[0], msg:(split(" ")[1:]|join(" "))}' | jq -sc .)
+          jq -nc --arg f "$from" --arg t "$to" --arg s "$status" \
+            --argjson a "$ahead" --argjson b "$behind" \
+            --argjson c "$commits" --argjson bc "$behind_commits" \
+            '{from:$f,to:$t,status:$s,ahead:$a,behind:$b,commits:$c,behind_commits:$bc}'
+        }
+        stages=$(for s in develop next staging main; do pair_args="$pair_args $s"; done
+          set -- develop next staging main
+          while [ $# -ge 2 ]; do pair "$1" "$2"; shift; done)
+        echo "$stages" | jq -s '{
+          pipeline: .,
+          clean: (map(select(.status=="diverged")) | length == 0),
+          diverged: [.[] | select(.status=="diverged") | "\(.from)->\(.to)"]
+        }'
+
+  - step: summary
+    handler: ctrl::log

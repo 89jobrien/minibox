@@ -2,7 +2,7 @@
 
 [tasks.council]
 description = "Multi-role AI code review (OpenAI + Gemini)"
-run = "cargo xtask run agentbox-council {{arg(name='base', default='main')}} {{arg(name='mode', default='core')}}"
+run = "cargo xtask council"
 
 [tasks.meta-agent]
 description = "Parallel agent task decomposition (OpenAI + Gemini)"
