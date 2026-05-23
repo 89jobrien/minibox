@@ -109,7 +109,14 @@
 
 ## Recently completed
 
-- **Rustqual refactor** — named constants, dead code removal, RunOpts struct (d5748d6)
+- **Rustqual SRP sweep** — RunParams extraction, named constants in miniboxd,
+  dead code removal, duplicate dedup (lima_exec, lifecycle handlers),
+  long function extraction across core+minibox+miniboxd (791e81a..dd3e9a6)
+- **test-in-vm xtask** — dual backend minibox+smolvm, pull tests pass (41279b1)
+- **smolvm output_reader fix** — fixed adapter output streaming (747b636)
+- **CI fixes** — InternalPath/PathBuf mismatches, hyper pin, RunParams refactor
+  fallout (c7a82bf, 64beade, 0c8e693, b930406, a179c64)
+- **TODO markers** — GitHub issue refs from code review (b54d05d)
 - **Exhaustive small-domain tests** — path validation edge cases (870aa9f)
 - **Protocol/domain roundtrip property tests** — proptest coverage (6277bde)
 - **Test helper cleanup** — fixes #403-#409 (f8f677a)
