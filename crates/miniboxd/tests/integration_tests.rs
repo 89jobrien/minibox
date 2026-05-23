@@ -28,7 +28,7 @@ use minibox::image::ImageStore;
 use minibox::protocol::DaemonResponse;
 use miniboxd::handler::{
     self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
-    LifecycleDeps, PtySessionRegistry,
+    LifecycleDeps, PtySessionRegistry, RunParams,
 };
 use miniboxd::state::DaemonState;
 use std::sync::Arc;
@@ -63,24 +63,21 @@ async fn handle_run_once(
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     let (tx, mut rx) = mpsc::channel::<DaemonResponse>(4);
-    handler::handle_run(
+    let params = RunParams {
         image,
         tag,
         command,
         memory_limit_bytes,
         cpu_weight,
-        false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
-        state,
-        deps,
-        tx,
-    )
-    .await;
+        ephemeral: false,
+        network: None,
+        mounts: vec![],
+        privileged: false,
+        env: vec![],
+        name: None,
+        platform: None,
+    };
+    handler::handle_run(params, state, deps, tx).await;
     rx.recv().await.expect("handler sent no response")
 }
 

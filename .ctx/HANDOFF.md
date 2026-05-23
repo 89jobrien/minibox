@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-05-20)
+# Handoff — minibox (2026-05-22)
 
 **Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
@@ -31,11 +31,10 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| a-series-testing | P1 | open | Implement A-series testing surfaces A1-A5 (#368-#372) |
-| handler-split | P1 | open | Split handler.rs into feature-cluster modules (#356) |
 | fixture-consolidation | P2 | blocked | Consolidate duplicate test_fixtures.rs (#355) |
 
 ## Log
 
+- 20260521: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
 - 20260515.171405: done=23 running=0 pending=47 blocked=0
 - 20260515.131514: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues #364-#372, wrote refactoring and A-series testing plans
