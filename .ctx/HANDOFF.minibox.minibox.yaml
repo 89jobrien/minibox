@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-22
+updated: 20260523.102700
 items:
 - id: fixture-consolidation
   doob_uuid: null
@@ -22,68 +22,82 @@ items:
   - crates/minibox-core/src/adapters/test_fixtures.rs
   completed: null
   extra:
-  - date: null
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
+  - type: blocker
     note: 'User decision required: option A (feature flag) or B (won''t fix)'
-- id: handler-split
+    date: null
+    reviewed: null
+- id: test-in-vm
   doob_uuid: null
-  name: handler-split
+  name: test-in-vm
   priority: P1
-  status: done
-  title: Split handler.rs into feature-cluster modules (#356)
+  status: open
+  title: cargo xtask test-in-vm — run Linux tests in ephemeral VM
   description: |-
-    handler.rs is 4264 lines with 27 handle_* functions.
-    Plan: docs/plans/2026-05-15-refactoring.md Tasks 6-13.
-    Approach A approved: flat module siblings under daemon/handler/,
-    thin mod.rs re-exports, zero import-path churn.
-    Split into 12 module files under daemon/handler/.
+    xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
+    aarch64-unknown-linux-musl, boots smolvm VM (or minibox as backend),
+    mounts target dir at /mnt/tests, runs integration_tests + cgroup_tests.
+    Pull tests pass (2/8). Overlay/cgroup tests fail — smolvm drops
+    CAP_SYS_ADMIN from bounding set (confirmed via /proc/1/status).
+    smolvm adapter output_reader bug fixed in same session.
+    Next: request smolvm --privileged flag, or pivot to Apple Containerization
+    (macOS 26) / QEMU for full kernel access.
   files:
-  - crates/minibox/src/daemon/handler/mod.rs
-  - crates/minibox/src/daemon/handler/run.rs
-  - crates/minibox/src/daemon/handler/lifecycle.rs
-  - crates/minibox/src/daemon/handler/exec.rs
-  - crates/minibox/src/daemon/handler/image.rs
-  - crates/minibox/src/daemon/handler/logs.rs
-  - crates/minibox/src/daemon/handler/events.rs
-  - crates/minibox/src/daemon/handler/pipeline.rs
-  - crates/minibox/src/daemon/handler/update.rs
-  - crates/minibox/src/daemon/handler/manifest.rs
-  - crates/minibox/src/daemon/handler/snapshot.rs
-  - crates/minibox/src/daemon/handler/stop.rs
-  completed: 2026-05-21
-  extra: []
-- id: a-series-testing
+  - xtask/src/test_in_vm.rs
+  - xtask/src/main.rs
+  - crates/minibox/src/adapters/smolvm.rs
+  completed: null
+  extra:
+  - type: blocker
+    note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests
+      cannot pass until smolvm adds --privileged or alternative VM backend used
+    date: null
+    reviewed: null
+- id: smolvm-adapter-output-reader
   doob_uuid: null
-  name: a-series-testing
-  priority: P1
+  name: smolvm-adapter-output-reader
+  priority: P0
   status: done
-  title: Implement A-series testing surfaces A1-A5 (#368-#372)
+  title: Fix smolvm adapter output_reader bug
   description: |-
-    Plan: docs/plans/2026-05-15-a-series-testing.md
-    A1 (#368): mutation audit checklist for security guards
-    A2 (#369): exhaustive small-domain tests
-    A3 (#370): stream trait boundary mocks
-    A4 (#371): barrier-based DaemonState race tests
-    A5 (#372): roundtrip property tests
-    All 5 merged on develop.
+    spawn_process returned output_reader: None, causing all minibox run
+    commands to fail with "capture_output=true but runtime returned no
+    output_reader". Fixed by piping synchronous smolvm output into an
+    OwnedFd via nix::unistd::pipe(). Also fixed: non-zero exit codes were
+    swallowed (smolvm_exec_full returned Err on any non-zero exit); now
+    stores exit code in Mutex for wait_for_exit. Timeout increased 60s→600s.
   files:
-  - crates/minibox-core/tests/
-  - crates/minibox/tests/
-  completed: 2026-05-21
+  - crates/minibox/src/adapters/smolvm.rs
+  completed: 2026-05-23
   extra: []
 log:
+- date: '20260523.102700'
+  summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual
+    backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN
+    restriction; fixed CI failures from rustqual RunParams refactor
+  commits:
+  - sha: 747b636
+    branch: develop
+  - sha: 64beade
+    branch: develop
+  - sha: c7a82bf
+    branch: develop
+  - sha: dd3e9a6
+    branch: develop
+  - sha: 791e81a
+    branch: develop
+  session: 4
 - date: '20260521'
-  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
+  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already
+    complete on develop
   commits: []
-  session: 1
+  session: 3
 - date: '20260515.171405'
   summary: done=23 running=0 pending=47 blocked=0
   commits: []
-  session: 1
-- date: '20260515.131514'
-  summary: 'Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues #364-#372, wrote refactoring and A-series testing plans'
-  commits: []
   session: 2
+- date: '20260515.131514'
+  summary: Completed stable->staging migration, implemented CI change detection (cargo
+    xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
+    #364-#372, wrote refactoring and A-series testing plans
+  commits: []
+  session: 1

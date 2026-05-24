@@ -237,11 +237,12 @@ fn resolve_manifest_action(
 ///
 /// On success the layer is renamed from a `.tmp` sibling into `layer_dir`.
 /// On failure (digest mismatch or extraction error) the tmp dir is cleaned up.
+/// Returns actual compressed bytes read on success.
 fn extract_and_verify_layer(
     reader: impl io::Read,
     layer_dir: &std::path::Path,
     digest: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<u64> {
     let mut hashing_reader = HashingReader::new(reader);
 
     // Prepare tmp dir adjacent to the final dest.
@@ -271,6 +272,7 @@ fn extract_and_verify_layer(
     }
 
     // Verify digest before committing or surfacing extract error.
+    let actual_bytes = hashing_reader.bytes_read();
     let actual_hex = hashing_reader.finalize();
     let expected_hex = digest
         .strip_prefix("sha256:")
@@ -296,13 +298,13 @@ fn extract_and_verify_layer(
     if let Err(e) = std::fs::rename(&tmp_dir, layer_dir) {
         if layer_dir.exists() {
             let _ = std::fs::remove_dir_all(&tmp_dir);
-            return Ok(());
+            return Ok(actual_bytes);
         }
         let _ = std::fs::remove_dir_all(&tmp_dir);
         return Err(e).with_context(|| format!("rename {tmp_dir:?} -> {layer_dir:?}"));
     }
 
-    Ok(())
+    Ok(actual_bytes)
 }
 
 /// Best-effort cleanup of a temporary layer directory, logging on failure.
@@ -757,7 +759,7 @@ impl RegistryClient {
                     let digest_for_err = digest_owned.clone();
 
                     // Bridge async → sync for tar/gz extraction.
-                    tokio::task::spawn_blocking(move || {
+                    let actual_bytes = tokio::task::spawn_blocking(move || {
                         let sync_reader =
                             SyncIoBridge::new_with_handle(StreamReader::new(limited), handle);
                         extract_and_verify_layer(sync_reader, &layer_dir, &digest_owned)
@@ -768,13 +770,15 @@ impl RegistryClient {
                         source: e,
                     })??;
 
-                    // Update aggregate download counter and check limit.
-                    let prev = agg_counter.fetch_add(layer_desc.size, Ordering::Relaxed);
-                    if prev + layer_desc.size > MAX_TOTAL_IMAGE_SIZE {
+                    // Update aggregate download counter using actual bytes
+                    // downloaded, not declared manifest sizes (which a
+                    // malicious registry could understate).
+                    let prev = agg_counter.fetch_add(actual_bytes, Ordering::Relaxed);
+                    if prev + actual_bytes > MAX_TOTAL_IMAGE_SIZE {
                         anyhow::bail!(
                             "image exceeds total size limit: downloaded {} bytes \
                              after layer {} (max {MAX_TOTAL_IMAGE_SIZE})",
-                            prev + layer_desc.size,
+                            prev + actual_bytes,
                             layer_desc.digest,
                         );
                     }

@@ -101,6 +101,7 @@ pub async fn handle_pipeline(
         // Clone deps and override policy to permit bind mounts for this
         // internal pipeline run.  Pipeline requests originate from the daemon
         // (not from an end user), so the bind-mount policy exception is safe.
+        // TODO(#431): replace clone+mutate with explicit PolicyOverride
         let mut pipeline_deps = (*deps).clone();
         pipeline_deps.policy.allow_bind_mounts = true;
         let pipeline_deps = Arc::new(pipeline_deps);
@@ -197,7 +198,16 @@ pub async fn handle_pipeline(
             .join("upper")
             .join("trace.json");
 
-        let trace = read_trace_file(&trace_path, &container_id);
+        let trace_path_clone = trace_path.clone();
+        let container_id_clone = container_id.clone();
+        let trace = tokio::task::spawn_blocking(move || {
+            read_trace_file(&trace_path_clone, &container_id_clone)
+        })
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "read_trace_file task panicked");
+            serde_json::json!({"steps": []})
+        });
 
         info!(
             container_id = %container_id,
@@ -287,6 +297,10 @@ fn read_trace_file(trace_path: &std::path::Path, container_id: &str) -> serde_js
 }
 
 /// List pipeline runs from the trace store.
+///
+/// No per-request auth check: the Unix socket is already gated by
+/// `SO_PEERCRED` (UID==0) at connection accept time, so all callers
+/// reaching this handler are pre-authorized.
 pub async fn handle_list_pipelines(
     limit: Option<usize>,
     pipeline: Option<String>,
@@ -306,6 +320,8 @@ pub async fn handle_list_pipelines(
 }
 
 /// Show details of a specific pipeline run.
+///
+/// No per-request auth check — see [`handle_list_pipelines`] rationale.
 pub async fn handle_show_pipeline(id: String, state: Arc<DaemonState>) -> DaemonResponse {
     match state.trace_store.load(&id) {
         Ok(Some(trace)) => DaemonResponse::PipelineDetail { id, trace },

@@ -105,6 +105,7 @@ impl DaemonConfig {
     }
 
     /// Apply `MINIBOX_*` env var overrides on top of this config.
+    // TODO(#432): add env overrides for PolicyConfig fields
     pub fn with_env_overrides(mut self) -> Self {
         if let Ok(v) = std::env::var("MINIBOX_ADAPTER") {
             self.adapter = Some(v);
