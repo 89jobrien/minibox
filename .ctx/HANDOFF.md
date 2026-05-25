@@ -32,7 +32,6 @@ d4fb4b7 ci: trigger workflow
 | ID | P | Status | Title |
 |---|---|---|---|
 | test-in-vm | P1 | open | cargo xtask test-in-vm — run Linux tests in ephemeral VM |
-| fixture-consolidation | P2 | blocked | Consolidate duplicate test_fixtures.rs (#355) |
 
 ## Log
 

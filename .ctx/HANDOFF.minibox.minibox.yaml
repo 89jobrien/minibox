@@ -2,32 +2,6 @@ project: minibox
 id: minibox
 updated: 2026-05-25
 items:
-- id: fixture-consolidation
-  doob_uuid: null
-  name: fixture-consolidation
-  priority: P2
-  status: blocked
-  title: Consolidate duplicate test_fixtures.rs (#355)
-  description: |-
-    minibox/src/adapters/test_fixtures.rs is a copy-paste of
-    minibox-core/src/adapters/test_fixtures.rs. Simple re-export fails
-    because minibox-core's test_fixtures is #[cfg(test)] and not visible
-    as a dependency. Two viable approaches:
-    A) Gate via #[cfg(any(test, feature = "test-utils"))] in minibox-core + dev-dep feature
-    B) Close as won't-fix — boundary is intentional
-    Awaiting decision from user.
-  files:
-  - crates/minibox/src/adapters/test_fixtures.rs
-  - crates/minibox/src/adapters/mod.rs
-  - crates/minibox-core/src/adapters/test_fixtures.rs
-  completed: null
-  extra:
-  - date: null
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: 'User decision required: option A (feature flag) or B (won''t fix)'
 - id: test-in-vm
   doob_uuid: null
   name: test-in-vm
@@ -38,9 +12,8 @@ items:
     xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
     aarch64-unknown-linux-musl, boots smolvm VM (or minibox as backend),
     mounts target dir at /mnt/tests, runs integration_tests + cgroup_tests.
-    Pull tests pass (2/8). Overlay/cgroup tests fail — smolvm drops
-    CAP_SYS_ADMIN from bounding set (confirmed via /proc/1/status).
-    smolvm adapter output_reader bug fixed in same session.
+    Pull tests pass. cgroup_tests auto-skipped on unprivileged backends
+    (smolvm). smolvm drops CAP_SYS_ADMIN from bounding set.
     Next: request smolvm --privileged flag, or pivot to Apple Containerization
     (macOS 26) / QEMU for full kernel access.
   files:

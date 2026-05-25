@@ -50,6 +50,13 @@ enum VmBackend {
     Smolvm(PathBuf),
 }
 
+impl VmBackend {
+    /// Whether this backend supports privileged operations (cgroups, overlayfs).
+    fn is_privileged(&self) -> bool {
+        matches!(self, VmBackend::Minibox(_))
+    }
+}
+
 pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
     let backend = detect_backend()?;
 
@@ -75,7 +82,7 @@ pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
     }
 
     // 3. Build the test runner script
-    let script = build_test_script(&deps_dir, &opts.test_args)?;
+    let script = build_test_script(&deps_dir, &opts.test_args, backend.is_privileged())?;
     let script_path = target_dir.join("test-in-vm-runner.sh");
     std::fs::write(&script_path, &script).context("writing test runner script")?;
 
@@ -185,12 +192,15 @@ fn cross_compile(workspace_root: &Path) -> Result<()> {
 }
 
 /// Find test binaries in the deps dir and build a shell script to run them.
-fn build_test_script(deps_dir: &Path, extra_args: &[String]) -> Result<String> {
+fn build_test_script(deps_dir: &Path, extra_args: &[String], privileged: bool) -> Result<String> {
     // TODO(#444): add sandbox_tests, system_tests, cli_e2e_tests once minibox
     //       backend is validated end-to-end with privileged mode.
-    // TODO(#445): detect backend and skip cgroup_tests when using smolvm (no
-    //       cgroup write access in unprivileged VMs).
-    let suites = ["integration_tests", "cgroup_tests"];
+    let mut suites = vec!["integration_tests"];
+    if privileged {
+        suites.push("cgroup_tests");
+    } else {
+        println!("  (skipping cgroup_tests — unprivileged backend)");
+    }
 
     let mut found = Vec::new();
     if deps_dir.exists() {
@@ -273,9 +283,9 @@ fn build_test_script(deps_dir: &Path, extra_args: &[String]) -> Result<String> {
 
     script.push_str("echo \"\"\n");
     script.push_str("echo \"=== Results: $PASS passed, $FAIL failed ===\"\n");
-    script.push_str(
-        "echo \"Note: overlay/cgroup tests require privileged VM (not yet supported by smolvm)\"\n",
-    );
+    if !privileged {
+        script.push_str("echo \"Note: cgroup tests skipped (unprivileged backend)\"\n");
+    }
     script.push_str("[ \"$FAIL\" -eq 0 ]\n");
 
     Ok(script)
@@ -313,14 +323,14 @@ mod tests {
 
     #[test]
     fn build_test_script_fails_on_missing_dir() {
-        let result = build_test_script(Path::new("/nonexistent"), &[]);
+        let result = build_test_script(Path::new("/nonexistent"), &[], true);
         assert!(result.is_err());
     }
 
     #[test]
     fn build_test_script_fails_on_empty_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = build_test_script(tmp.path(), &[]);
+        let result = build_test_script(tmp.path(), &[], true);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
     }
