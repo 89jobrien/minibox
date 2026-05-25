@@ -73,6 +73,15 @@ fn main() -> Result<()> {
             None => bail!("usage: cargo xtask borrow fixtures"),
         },
         Some("lint") => gates::lint(&sh),
+        Some("agentlint") => {
+            let all = env::args().any(|a| a == "--all");
+            if all {
+                gates::agentlint_all()
+            } else {
+                // Staged-only mode requires a shell for git commands.
+                gates::agentlint_staged(&sh)
+            }
+        }
         Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
@@ -336,6 +345,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  test-in-vm       run Linux tests in ephemeral smolvm VM [--skip-build] [--keep]"
+            );
+            eprintln!(
+                "  agentlint [--all] lint agent config files (staged only, or --all on disk)"
             );
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"

@@ -79,7 +79,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
     // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.
     if staged_agent_files(sh)? {
-        agentlint(sh).context("agentlint failed")?;
+        agentlint_staged(sh).context("agentlint failed")?;
     }
 
     // Workflow lint: run actionlint when .github/workflows/ files are staged.
@@ -823,20 +823,51 @@ fn staged_agent_files(sh: &Shell) -> Result<bool> {
 ///   - `.json`  → parse with serde_json and report errors
 ///   - `.md`    → check required frontmatter keys (name, description)
 ///   - `.yaml`/`.yml` inside agent dirs → check with actionlint if in `.github/`, else YAML parse
-fn agentlint(sh: &Shell) -> Result<()> {
+pub fn agentlint_staged(sh: &Shell) -> Result<()> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
 
-    let agent_files: Vec<&str> = staged
+    let agent_files: Vec<String> = staged
         .lines()
         .filter(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d)))
+        .map(|s| s.to_string())
         .collect();
 
+    agentlint_check(&agent_files)
+}
+
+/// Lint all agent config files on disk (not just staged).
+pub fn agentlint_all() -> Result<()> {
+    let mut files = Vec::new();
+    for dir in AGENT_DIRS {
+        let dir_path = Path::new(dir);
+        if dir_path.is_dir() {
+            collect_files_recursive(dir_path, &mut files);
+        }
+    }
+    agentlint_check(&files)
+}
+
+fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_recursive(&path, out);
+        } else {
+            out.push(path.to_string_lossy().to_string());
+        }
+    }
+}
+
+fn agentlint_check(agent_files: &[String]) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
-    for file in &agent_files {
+    for file in agent_files {
         let path = Path::new(file);
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
