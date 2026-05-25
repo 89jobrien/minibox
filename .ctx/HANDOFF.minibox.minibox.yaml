@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260525.183746'
+updated: 2026-05-25
 items:
 - id: fixture-consolidation
   doob_uuid: null
@@ -57,14 +57,8 @@ items:
     note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
 log:
 - date: '20260525.183746'
-  summary: Resolved 3 P0 security issues (#428 env key validation, #422 actual-bytes size counter, #421 ValidatedPath TOCTOU); closed #437/#438 as already fixed, #424 as by-design; promoted develop→next→staging all green
-  commits:
-  - sha: 2782f9a
-    branch: develop
-  - sha: 41853cd
-    branch: next
-  - sha: 41853cd
-    branch: staging
+  summary: Resolved 3 P0 security issues (#428 env key validation,
+  commits: []
   session: 5
 - date: '20260523.102700'
   summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor

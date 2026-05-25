@@ -1,7 +1,5 @@
 //! Mock adapters for testing.
 //!
-// TODO(#321): consolidate duplicate mock adapter suites
-//!
 //! This module provides in-process mock implementations of all four domain
 //! traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
 //! [`ContainerRuntime`]), allowing business logic to be tested without real

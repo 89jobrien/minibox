@@ -59,14 +59,23 @@ fn smolvm_exec(image: &str, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Output from a synchronous smolvm command execution.
+struct SmolVmOutput {
+    stdout: String,
+    exit_code: i32,
+}
+
 /// Run a command via the real `smolvm` binary with volume mounts and env vars.
+///
+/// Returns both stdout and exit code. Does NOT treat non-zero exit as an error
+/// — the caller (handler) decides how to handle the exit code.
 fn smolvm_exec_full(
     image: &str,
     args: &[&str],
     volumes: &[(&str, &str)],
     env: &[(&str, &str)],
     timeout_secs: u32,
-) -> Result<String> {
+) -> Result<SmolVmOutput> {
     let mut cmd = Command::new("smolvm");
     cmd.args(["machine", "run", "--net", "--image", image]);
     cmd.args(["--timeout", &format!("{timeout_secs}s")]);
@@ -85,14 +94,15 @@ fn smolvm_exec_full(
         .output()
         .map_err(|e| anyhow!("failed to execute smolvm: {e}"))?;
 
-    if !output.status.success() {
-        return Err(anyhow!(
-            "smolvm command failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
+    if !output.stderr.is_empty() {
+        combined.push_str(&String::from_utf8_lossy(&output.stderr));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(SmolVmOutput {
+        stdout: combined,
+        exit_code: output.status.code().unwrap_or(1),
+    })
 }
 
 // ============================================================================
@@ -201,6 +211,10 @@ pub struct SmolVmRuntime {
     image: String,
     /// Optional injected executor used in tests.
     executor: Option<SmolVmExecutor>,
+    /// Exit code from the last synchronous smolvm execution.
+    /// smolvm runs commands synchronously in `spawn_process`, so
+    /// the exit code is available immediately rather than via waitpid.
+    last_exit_code: std::sync::Mutex<i32>,
 }
 
 impl SmolVmRuntime {
@@ -209,6 +223,7 @@ impl SmolVmRuntime {
         Self {
             image: DEFAULT_IMAGE.to_string(),
             executor: None,
+            last_exit_code: std::sync::Mutex::new(0),
         }
     }
 
@@ -281,30 +296,49 @@ impl ContainerRuntime for SmolVmRuntime {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        if self.executor.is_some() {
+        let (stdout, exit_code) = if self.executor.is_some() {
             // Use the test executor — flatten command into a single arg list.
-            self.vm_exec(&command)?;
+            (self.vm_exec(&command)?, 0)
         } else {
-            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 60;
-            smolvm_exec_full(
+            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
+            let result = smolvm_exec_full(
                 &self.image,
                 &command,
                 &vol_refs,
                 &env_refs,
                 DEFAULT_EXEC_TIMEOUT_SECS,
             )?;
-        }
+            (result.stdout, result.exit_code)
+        };
+
+        // Store exit code for wait_for_exit.
+        *self.last_exit_code.lock().expect("lock poisoned") = exit_code;
+
+        // The command already ran synchronously. Pipe captured output into
+        // an OwnedFd so the handler's streaming loop can read it.
+        #[cfg(unix)]
+        let output_reader = {
+            let (read_fd, write_fd) =
+                nix::unistd::pipe().map_err(|e| anyhow!("pipe() failed: {e}"))?;
+            let stdout_bytes = stdout.as_bytes();
+            let _ = nix::unistd::write(&write_fd, stdout_bytes);
+            drop(write_fd);
+            Some(read_fd)
+        };
+        #[cfg(not(unix))]
+        let output_reader = None;
 
         Ok(SpawnResult {
             runtime_id: None,
             pid: 0,
-            output_reader: None,
+            output_reader,
         })
     }
 
     async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
-        // SmolVM manages its own process lifecycle inside the VM.
-        Ok(0)
+        // The command already ran synchronously in spawn_process.
+        // Return the stored exit code.
+        Ok(*self.last_exit_code.lock().expect("lock poisoned"))
     }
 }
 

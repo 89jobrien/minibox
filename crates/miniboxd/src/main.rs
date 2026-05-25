@@ -16,8 +16,9 @@
 //! - **colima**: Colima/Lima VM via limactl + nerdctl. Cross-platform.
 //!
 //! # Startup sequence
-//! 1. Build tokio runtime, run `run_daemon()`.
-//! 2. `run_daemon()`: tracing → adapter selection → privilege check →
+//! 1. `main()`: load config, bridge `config.adapter` into `MINIBOX_ADAPTER` env
+//!    (safe: single-threaded, before tokio runtime), build tokio runtime.
+//! 2. `run_daemon(config)`: tracing → adapter selection → privilege check →
 //!    path resolution → directory creation → state load → dependency injection →
 //!    socket bind → signal handler → accept loop.
 
@@ -39,13 +40,22 @@ fn main() {
         graceful_restart();
     }
 
+    // Load config and bridge adapter into env before the runtime starts.
+    // SAFETY: single-threaded — no tokio workers exist yet.
+    let config = miniboxd::config::DaemonConfig::load();
+    if let Some(ref adapter) = config.adapter
+        && std::env::var("MINIBOX_ADAPTER").is_err()
+    {
+        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
+    }
+
     // Standard tokio runtime for all adapters.
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("failed to build tokio runtime");
 
-    if let Err(e) = rt.block_on(run_daemon()) {
+    if let Err(e) = rt.block_on(run_daemon(config)) {
         eprintln!("miniboxd: fatal: {e:#}");
         std::process::exit(1);
     }
@@ -236,7 +246,7 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
-async fn run_daemon() -> Result<()> {
+async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
     let _otel_guard = {
@@ -249,21 +259,11 @@ async fn run_daemon() -> Result<()> {
     info!("miniboxd starting");
 
     // ── Config ────────────────────────────────────────────────────────────
-    let config = miniboxd::config::DaemonConfig::load();
     info!(
         adapter = ?config.adapter,
         log_level = ?config.log_level,
         "config loaded"
     );
-
-    // Feed config adapter into env so adapter_from_env() picks it up,
-    // but only when the env var is not already set (env > file).
-    if let Some(ref adapter) = config.adapter
-        && std::env::var("MINIBOX_ADAPTER").is_err()
-    {
-        // SAFETY: single-threaded at this point (before tokio spawns).
-        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
-    }
 
     // ── Adapter suite ────────────────────────────────────────────────────
     // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
@@ -368,11 +368,23 @@ async fn run_daemon() -> Result<()> {
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
 
-    let policy = ContainerPolicy::from_env();
+    // Build container policy: config file values take precedence, then env
+    // vars, then deny-all defaults.
+    let env_policy = ContainerPolicy::from_env();
+    let policy = ContainerPolicy {
+        allow_bind_mounts: config
+            .policy
+            .allow_bind_mounts
+            .unwrap_or(env_policy.allow_bind_mounts),
+        allow_privileged: config
+            .policy
+            .allow_privileged
+            .unwrap_or(env_policy.allow_privileged),
+    };
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,
         allow_privileged = policy.allow_privileged,
-        "container policy configured"
+        "container policy configured (config > env > default)"
     );
 
     let deps = build_handler_deps(

@@ -518,6 +518,12 @@ async fn prepare_run(
         .into());
     }
 
+    let net_mode = network.unwrap_or(NetworkMode::None);
+
+    // ── Execution policy gate ───────────────────────────────────────
+    // Evaluate BEFORE creating any resources (overlay, cgroup, network).
+    // The manifest depends only on request parameters and cached layer
+    // digests, so no cleanup is needed on denial.
     let id = generate_container_id();
 
     // SECURITY: Verify no collision with existing containers.
@@ -526,6 +532,35 @@ async fn prepare_run(
             "container ID collision (extremely rare): {id}"
         ))
         .into());
+    }
+
+    let mut manifest = build_execution_manifest(
+        &id,
+        &ref_str,
+        &layer_dirs,
+        &command,
+        &env,
+        &mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        &platform,
+        &name,
+        capture_output,
+    );
+    manifest
+        .seal()
+        .context("failed to compute execution manifest digest")?;
+
+    if let Some(ref policy) = deps.execution_policy {
+        use minibox_core::domain::PolicyDecision;
+        match policy.evaluate(&manifest) {
+            PolicyDecision::Allow => {}
+            PolicyDecision::Deny(reason) => {
+                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+            }
+        }
     }
 
     let container_dir = deps.lifecycle.containers_base.join(&id);
@@ -571,7 +606,6 @@ async fn prepare_run(
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
-    let net_mode = network.unwrap_or(NetworkMode::None);
     let network_config = minibox_core::domain::NetworkConfig {
         mode: net_mode,
         ..minibox_core::domain::NetworkConfig::default()
@@ -631,47 +665,6 @@ async fn prepare_run(
     };
 
     // ── Persist execution manifest ─────────────────────────────────────
-    let mut manifest = build_execution_manifest(
-        &id,
-        &ref_str,
-        &layer_dirs,
-        &command,
-        &env,
-        &mounts,
-        memory_limit_bytes,
-        cpu_weight,
-        net_mode,
-        privileged,
-        &platform,
-        &name,
-        capture_output,
-    );
-    manifest
-        .seal()
-        .context("failed to compute execution manifest digest")?;
-
-    // ── Execution policy gate ───────────────────────────────────────
-    if let Some(ref policy) = deps.execution_policy {
-        use minibox_core::domain::PolicyDecision;
-        match policy.evaluate(&manifest) {
-            PolicyDecision::Allow => {}
-            PolicyDecision::Deny(reason) => {
-                // Best-effort cleanup: remove container dir.
-                // SECURITY: verify path is under containers_base before recursive delete.
-                if container_dir.starts_with(&deps.lifecycle.containers_base)
-                    && let Err(e) = std::fs::remove_dir_all(&container_dir)
-                {
-                    warn!(
-                        container_id = %id,
-                        error = %e,
-                        "policy: cleanup container dir failed after denial"
-                    );
-                }
-                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
-            }
-        }
-    }
-
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
         serde_json::to_string_pretty(&manifest).context("serialise execution manifest")?;

@@ -181,7 +181,17 @@ async fn remove_inner(
     // Remove runtime state directory.
     let run_dir = deps.lifecycle.run_containers_base.join(id);
     if run_dir.exists() {
-        std::fs::remove_dir_all(&run_dir).ok();
+        // SECURITY: assert the path is under the expected base to prevent
+        // accidental recursive deletion outside the run directory.
+        if !run_dir.starts_with(&deps.lifecycle.run_containers_base) {
+            warn!(
+                path = %run_dir.display(),
+                base = %deps.lifecycle.run_containers_base.display(),
+                "remove: run_dir escapes base directory, skipping removal"
+            );
+        } else {
+            std::fs::remove_dir_all(&run_dir).ok();
+        }
     }
 
     // Cleanup cgroup (using injected resource limiter trait).
