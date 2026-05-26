@@ -325,6 +325,69 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Cgroup delegation (nested container support)
+// ---------------------------------------------------------------------------
+
+/// Paths for cgroup subtree delegation (nested container support).
+#[derive(Debug, Clone)]
+pub struct DelegationPaths {
+    /// The delegated subtree root (e.g. `.../minibox/<id>`).
+    pub subtree: PathBuf,
+    /// Leaf cgroup where the container process lives
+    /// (required by cgroups v2 "no internal processes" rule).
+    pub init_leaf: PathBuf,
+}
+
+/// Compute delegation paths under the default cgroup root.
+pub fn delegation_paths(container_id: &str) -> DelegationPaths {
+    delegation_paths_under(container_id, &cgroup_root())
+}
+
+/// Compute delegation paths under a custom parent.
+pub fn delegation_paths_under(container_id: &str, parent: &std::path::Path) -> DelegationPaths {
+    let subtree = parent.join(container_id);
+    let init_leaf = subtree.join("init");
+    DelegationPaths { subtree, init_leaf }
+}
+
+/// Set up a delegated cgroup subtree for nested container support.
+///
+/// Creates the subtree directory, enables controllers on it via
+/// `cgroup.subtree_control`, and creates the `init` leaf cgroup.
+/// The container process should be placed in `init_leaf` so it can
+/// create child cgroups in sibling directories.
+///
+/// Only called for privileged containers. Non-privileged containers
+/// use the flat cgroup model (no delegation).
+pub fn delegate_subtree(paths: &DelegationPaths) -> anyhow::Result<()> {
+    // Create the subtree directory.
+    fs::create_dir_all(&paths.subtree).with_context(|| {
+        format!(
+            "cgroup: failed to create delegation subtree {}",
+            paths.subtree.display()
+        )
+    })?;
+
+    // Enable controllers on the subtree so child cgroups can use them.
+    enable_subtree_controllers(&paths.subtree)?;
+
+    // Create the init leaf where the container process will live.
+    fs::create_dir_all(&paths.init_leaf).with_context(|| {
+        format!(
+            "cgroup: failed to create init leaf {}",
+            paths.init_leaf.display()
+        )
+    })?;
+
+    info!(
+        subtree = %paths.subtree.display(),
+        init_leaf = %paths.init_leaf.display(),
+        "cgroup: delegated subtree created"
+    );
+    Ok(())
+}
+
 /// Build the cgroup path for a container without constructing a full manager.
 ///
 /// Useful when only the path is needed (e.g., to pass to `ContainerConfig`
@@ -373,6 +436,35 @@ mod tests {
         assert_eq!(
             mgr.cgroup_path(),
             std::path::Path::new("/sys/fs/cgroup/custom-slice/test-id")
+        );
+    }
+
+    #[test]
+    fn delegate_subtree_builds_correct_paths() {
+        let result = delegation_paths("test-container-id");
+        assert_eq!(
+            result.subtree.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/minibox/test-container-id")
+        );
+        assert_eq!(
+            result.init_leaf.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/minibox/test-container-id/init")
+        );
+    }
+
+    #[test]
+    fn delegate_subtree_with_custom_parent() {
+        let result = delegation_paths_under(
+            "test-id",
+            &std::path::PathBuf::from("/sys/fs/cgroup/user.slice/minibox"),
+        );
+        assert_eq!(
+            result.subtree.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/user.slice/minibox/test-id")
+        );
+        assert_eq!(
+            result.init_leaf.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/user.slice/minibox/test-id/init")
         );
     }
 
