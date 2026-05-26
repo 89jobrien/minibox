@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
@@ -79,6 +79,57 @@ jobs:
           tool: cargo-nextest
       - name: cargo xtask test-unit
         run: cargo xtask test-unit
+
+  coverage-check:
+    name: coverage check
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true' ||
+        needs.detect-changes.outputs.runtime == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true'
+      )
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo xtask coverage-check
+        run: cargo xtask coverage-check
+
+  lint-docs:
+    name: lint docs
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref)
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask lint-docs
+        run: cargo xtask lint-docs
+
+  check-protocol-drift:
+    name: check protocol drift
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true'
+      )
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask check-protocol-drift
+        run: cargo xtask check-protocol-drift
 
   build-test-archive:
     name: build test archive
@@ -233,6 +284,9 @@ jobs:
       - detect-changes
       - lint
       - test-unit
+      - coverage-check
+      - lint-docs
+      - check-protocol-drift
       - build-test-archive
       - test-archive
       - test-all-features
@@ -249,6 +303,9 @@ jobs:
           results=(
             "${{ needs.lint.result }}"
             "${{ needs.test-unit.result }}"
+            "${{ needs.coverage-check.result }}"
+            "${{ needs.lint-docs.result }}"
+            "${{ needs.check-protocol-drift.result }}"
             "${{ needs.build-test-archive.result }}"
             "${{ needs.test-archive.result }}"
             "${{ needs.test-all-features.result }}"
