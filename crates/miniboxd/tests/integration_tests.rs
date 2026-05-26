@@ -76,6 +76,7 @@ async fn handle_run_once(
         env: vec![],
         name: None,
         platform: None,
+        cgroup_parent: None,
     };
     handler::handle_run(params, state, deps, tx).await;
     rx.recv().await.expect("handler sent no response")
@@ -592,4 +593,74 @@ async fn test_multiple_concurrent_containers() {
             .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Nesting support
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[serial]
+async fn test_container_receives_nesting_env_vars() {
+    if !is_root() {
+        eprintln!("SKIP: test_container_receives_nesting_env_vars (not root)");
+        return;
+    }
+
+    let (state, deps) = create_test_deps().await;
+
+    // Pull a minimal image.
+    let _ = handler::handle_pull("alpine:latest".to_string(), deps.clone(), state.clone()).await;
+
+    // Run a container that prints MINIBOX_NEST_DEPTH.
+    let response = handler::handle_run(
+        handler::RunParams {
+            image: "alpine:latest".to_string(),
+            command: vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "echo DEPTH=$MINIBOX_NEST_DEPTH MAX=$MINIBOX_MAX_NEST_DEPTH".to_string(),
+            ],
+            env: vec![],
+            mounts: vec![],
+            privileged: false,
+            network_mode: None,
+            capture_output: true,
+            cgroup_parent: None,
+        },
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+
+    // Collect output lines.
+    let mut output_lines = Vec::new();
+    match response {
+        DaemonResponse::ContainerStarted { id, .. } => {
+            // Wait for container to finish.
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            if let Some(output) = state.get_captured_output(&id).await {
+                output_lines.extend(output.lines().map(String::from));
+            }
+            state
+                .update_container_state(&id, minibox::daemon::state::ContainerState::Stopped)
+                .await;
+            let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
+        }
+        other => panic!("expected ContainerStarted, got: {other:?}"),
+    }
+
+    // The container should see MINIBOX_NEST_DEPTH=1 (child of host depth 0).
+    let depth_line = output_lines
+        .iter()
+        .find(|l| l.contains("DEPTH="))
+        .expect("should have DEPTH= line in output");
+    assert!(
+        depth_line.contains("DEPTH=1"),
+        "expected DEPTH=1, got: {depth_line}"
+    );
+    assert!(
+        depth_line.contains("MAX=4"),
+        "expected MAX=4, got: {depth_line}"
+    );
 }
