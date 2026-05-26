@@ -172,10 +172,18 @@ async fn remove_inner(
 
     // Unmount overlay (using injected filesystem trait).
     let container_dir = deps.lifecycle.containers_base.join(id);
-    if container_dir.exists()
-        && let Err(e) = deps.lifecycle.filesystem.cleanup(&container_dir)
-    {
-        warn!("cleanup_mounts for {id}: {e}");
+    if container_dir.exists() {
+        // SECURITY: assert the path is under the expected base to prevent
+        // accidental recursive deletion outside the containers directory.
+        if !container_dir.starts_with(&deps.lifecycle.containers_base) {
+            warn!(
+                path = %container_dir.display(),
+                base = %deps.lifecycle.containers_base.display(),
+                "remove: container_dir escapes base directory, skipping cleanup"
+            );
+        } else if let Err(e) = deps.lifecycle.filesystem.cleanup(&container_dir) {
+            warn!("cleanup_mounts for {id}: {e}");
+        }
     }
 
     // Remove runtime state directory.

@@ -124,6 +124,19 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
         debug!("copy filesystem: removing {:?}", container_dir);
+        // SECURITY: defensive check — reject paths that contain parent traversal
+        // or point at the filesystem root to prevent accidental recursive deletion.
+        if container_dir
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+            || container_dir == Path::new("/")
+        {
+            warn!(
+                path = %container_dir.display(),
+                "copy filesystem: refusing to remove suspicious path"
+            );
+            anyhow::bail!("container_dir contains path traversal or is root: {container_dir:?}");
+        }
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
                 .with_context(|| format!("removing container dir {container_dir:?}"))?;
