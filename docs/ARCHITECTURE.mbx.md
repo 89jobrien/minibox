@@ -3,15 +3,16 @@
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-05: crate count, version, dep graph, default adapter, protocol counts.
 > Updated 2026-05-06: GKE adapter ImagePusher wired (OciPushAdapter via oci_push_adapter).
-> Updated 2026-05-07: colima push/commit/build corrected to -- (not wired in daemon); colima
-> wiring note corrected (minibox crate, not macbox); vz wiring row corrected (selectable via
-> macbox env-var branch, feature-gated, macOS only — not in AdapterSuite enum).
+> Updated 2026-05-07: colima wiring note corrected (minibox crate, not macbox);
+> vz wiring row corrected (selectable via macbox env-var branch, feature-gated,
+> macOS only — not in AdapterSuite enum). Colima push/commit/build are now wired
+> via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
 
 ## Workspace Overview
 
-10 crates, Rust 2024 edition, workspace version 0.24.0.
+10 crates, Rust 2024 edition, workspace version 0.30.0.
 
 ```
 minibox-macros          (proc-macro, ~300 LOC)
@@ -49,7 +50,8 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 
 ## Domain Traits (Hexagonal Ports)
 
-All defined in `minibox-core/src/domain.rs` and re-exported via `minibox`.
+All defined in `crates/minibox-core/src/domain.rs` and re-exported
+via `crates/minibox/src/domain.rs`.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -153,8 +155,8 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-26 request variants, 24 response variants. Canonical source:
-`minibox-core/src/protocol.rs`.
+27 request variants, 28 response variants. Canonical source:
+`crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
 
