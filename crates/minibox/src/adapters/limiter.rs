@@ -124,13 +124,15 @@ mod tests {
     #[test]
     fn test_limiter_creation() {
         let limiter = CgroupV2Limiter::new();
-        let _ = limiter;
+        // CgroupV2Limiter is a unit struct; verify Debug output is non-empty.
+        assert!(!format!("{limiter:?}").is_empty());
     }
 
     #[test]
     fn test_limiter_default() {
         let limiter = CgroupV2Limiter;
-        let _ = limiter;
+        // Unit struct equality is trivially true; verify new() and the literal form are identical.
+        assert_eq!(limiter, CgroupV2Limiter::new());
     }
 
     #[test]

@@ -1057,17 +1057,33 @@ mod tests {
         assert!(client.is_ok(), "RegistryClient::new() should succeed");
     }
 
-    /// `Default` must not panic.
+    /// `Default` must not panic and must use the canonical Docker Hub auth and registry URLs.
     #[test]
     fn test_registry_client_default() {
-        let _client = RegistryClient::default();
+        let client = RegistryClient::default();
+        assert_eq!(
+            client.auth_url, AUTH_URL,
+            "default auth_url should point to Docker Hub"
+        );
+        assert_eq!(
+            client.registry_base, REGISTRY_BASE,
+            "default registry_base should point to Docker Hub v2 API"
+        );
     }
 
-    /// `Clone` must produce an independent, usable client.
+    /// `Clone` must produce a client with identical field values.
     #[test]
     fn test_registry_client_clone() {
         let original = RegistryClient::new().expect("RegistryClient::new() failed");
-        let _cloned = original.clone();
+        let cloned = original.clone();
+        assert_eq!(
+            original.auth_url, cloned.auth_url,
+            "cloned client auth_url should match original"
+        );
+        assert_eq!(
+            original.registry_base, cloned.registry_base,
+            "cloned client registry_base should match original"
+        );
     }
 
     /// `Debug` must be implemented and produce non-empty output.

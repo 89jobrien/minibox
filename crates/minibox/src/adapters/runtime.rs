@@ -154,13 +154,17 @@ mod tests {
     #[test]
     fn test_runtime_creation() {
         let runtime = LinuxNamespaceRuntime::new();
-        let _ = runtime;
+        // Verify the reported capabilities match the known Linux namespace feature set.
+        let caps = runtime.capabilities();
+        assert!(caps.supports_user_namespaces);
+        assert!(caps.supports_overlay_fs);
     }
 
     #[test]
     fn test_runtime_default() {
         let runtime = LinuxNamespaceRuntime;
-        let _ = runtime;
+        // Unit struct equality — new() and the literal form must be identical.
+        assert_eq!(runtime, LinuxNamespaceRuntime::new());
     }
 
     // Note: Actual spawn tests require Linux with root privileges

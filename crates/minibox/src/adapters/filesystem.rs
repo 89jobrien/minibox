@@ -131,7 +131,11 @@ mod tests {
     #[test]
     fn test_filesystem_default() {
         let fs = OverlayFilesystem::default();
-        let _ = fs;
+        assert_eq!(
+            fs.images_base,
+            std::path::PathBuf::from("/var/lib/minibox/images"),
+            "default images_base should be /var/lib/minibox/images"
+        );
     }
 
     // Note: Actual setup_rootfs tests require Linux with root privileges
