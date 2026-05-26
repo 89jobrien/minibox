@@ -109,6 +109,10 @@ broker — an inconsistency vs native/gke/smolvm.
 
 ### Wiring Status
 
+All `build_*_handler_dependencies` functions live in
+`crates/miniboxd/src/main.rs`. Adapter selection logic is in
+`crates/miniboxd/src/main.rs:select_adapter`.
+
 | Suite                         | Wired in miniboxd                                | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ------------------------------------------------ | ----------------------- | ------------ |
 | native                        | `build_native_handler_dependencies`              | `native`                | Linux only   |
@@ -121,6 +125,8 @@ broker — an inconsistency vs native/gke/smolvm.
 ---
 
 ## HandlerDependencies Structure
+
+(see `crates/minibox/src/daemon/handler/mod.rs:HandlerDependencies`)
 
 ```
 HandlerDependencies
@@ -179,6 +185,9 @@ BuildOutput, Event, LogLine, UpdateProgress
 
 ## Execution Manifest
 
+(see `crates/minibox-core/src/domain/execution_manifest.rs`,
+persisted in `crates/minibox/src/daemon/handler/run.rs:prepare_run`)
+
 Every container run produces a persisted `execution-manifest.json` at
 `{containers_base}/{id}/execution-manifest.json` **before** the process
 is spawned. The manifest captures every measured input:
@@ -200,14 +209,15 @@ A deterministic `sha256` digest computed from a stable JSON projection
 that excludes volatile fields (`created_at`, `manifest_path`,
 `workload_digest` itself). Equal semantic inputs always produce equal
 digests. Canonical implementation: `ExecutionManifest::seal()` in
-`minibox-core/src/domain/execution_manifest.rs`.
+`crates/minibox-core/src/domain/execution_manifest.rs`.
 
 ### Execution Policy
 
 `ExecutionPolicy` evaluates a manifest against a rule set:
 allowed/denied image patterns, network mode restrictions, privileged
 gate, memory limit cap, mount path prefix allowlist. Loaded from JSON.
-Canonical implementation: `minibox-core/src/domain/execution_policy.rs`.
+Canonical implementation:
+`crates/minibox-core/src/domain/execution_policy.rs`.
 
 ### CLI
 
@@ -241,19 +251,30 @@ MockRegistry; Location B has public state structs).
 ## Container Lifecycle Flow
 
 1. CLI sends `Run` request via Unix socket
+   (see `crates/minibox-core/src/protocol.rs:DaemonRequest::Run`)
 2. Daemon checks image cache, pulls from Docker Hub if missing
+   (see `crates/minibox/src/daemon/handler/image.rs`)
 3. Creates overlay mount (lowerdir=layers, upperdir=container_rw)
-4. `spawn_blocking` -> fork child with `clone(CLONE_NEWPID|NS|UTS|IPC|NET)`
+   (see `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem`)
+4. `spawn_blocking` -> fork child with
+   `clone(CLONE_NEWPID|NS|UTS|IPC|NET)`
+   (see `crates/minibox/src/container/namespace.rs`)
 5. Child: create cgroup, write PID, set limits, mount proc/sys/tmpfs,
    `pivot_root`, close extra FDs, `execve` user command
+   (see `crates/minibox/src/container/process.rs:child_init`,
+   `crates/minibox/src/container/filesystem.rs`)
 6. Parent: track PID, spawn reaper task
 7. On exit: reaper updates state to Stopped
 
 ## State Persistence
 
-`DaemonState` persists container records to disk (atomic rename) on every
-add/remove. Records survive daemon restart; running processes do not reattach.
-State machine: Created -> Running -> Paused -> Stopped (+ Failed, Orphaned).
+`DaemonState`
+(see `crates/minibox/src/daemon/state.rs:DaemonState`) persists
+container records to disk (atomic rename) on every add/remove.
+Records survive daemon restart; running processes do not reattach.
+State machine: Created -> Running -> Paused -> Stopped
+(+ Failed, Orphaned).
+See `docs/STATE_MODEL.mbx.md` for full detail.
 
 ---
 
