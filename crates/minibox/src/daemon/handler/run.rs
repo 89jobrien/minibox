@@ -684,6 +684,10 @@ async fn prepare_run(
         "TERM=xterm".to_string(),
     ];
     container_env.extend(env.clone());
+
+    // Inject nesting depth for minibox-in-minibox support.
+    let nesting = crate::nesting::NestingContext::from_env();
+    container_env.extend(nesting.child_env_vars());
     let spawn_config = ContainerSpawnConfig {
         rootfs: merged_dir.clone(),
         command: spawn_command,
