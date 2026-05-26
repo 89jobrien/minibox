@@ -18,20 +18,30 @@ use std::process::Command;
 const TARGET: &str = "aarch64-unknown-linux-musl";
 
 /// Options parsed from CLI args.
+/// Path to the CI-gate smolfile used by the smolvm backend.
+const CI_GATE_SMOLFILE: &str = "tests/smolfiles/ci-gate.smolfile";
+
 pub struct Options {
     /// Skip cross-compilation (assume binaries already built).
     pub skip_build: bool,
     /// Keep the VM running after tests (for debugging).
     pub keep: bool,
+    /// Override smolfile path (smolvm backend only).
+    pub smolfile: Option<String>,
     /// Extra arguments forwarded to the test runner.
     pub test_args: Vec<String>,
 }
 
 impl Options {
     pub fn from_args(args: &[String]) -> Self {
+        let smolfile = args
+            .windows(2)
+            .find(|w| w[0] == "--smolfile")
+            .map(|w| w[1].clone());
         Self {
             skip_build: args.iter().any(|a| a == "--skip-build"),
             keep: args.iter().any(|a| a == "--keep"),
+            smolfile,
             test_args: args
                 .iter()
                 .skip_while(|a| *a != "--")
@@ -101,17 +111,43 @@ pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
             c
         }
         VmBackend::Smolvm(bin) => {
-            println!("[2/3] booting smolvm VM (unprivileged) ...");
-            let mut c = Command::new(bin);
-            c.args(["machine", "run", "--net", "--image", "alpine"]);
-            c.args(["-v", &mount_spec]);
-            c.args(["--mem", "4096"]);
-            if opts.keep {
-                c.arg("--detach");
+            let smolfile = opts.smolfile.as_deref().unwrap_or(CI_GATE_SMOLFILE);
+            let smolfile_path = workspace_root.join(smolfile);
+            if smolfile_path.exists() {
+                println!(
+                    "[2/3] booting smolvm VM (unprivileged) via {} ...",
+                    smolfile
+                );
+                let mut c = Command::new(bin);
+                c.args([
+                    "machine",
+                    "run",
+                    "--smolfile",
+                    &smolfile_path.to_string_lossy(),
+                ]);
+                c.args(["-v", &mount_spec]);
+                if opts.keep {
+                    c.arg("--detach");
+                }
+                c.args(["--", "/bin/sh", "-c"]);
+                c.arg(&script);
+                c
+            } else {
+                println!(
+                    "[2/3] booting smolvm VM (unprivileged, inline — {} not found) ...",
+                    smolfile
+                );
+                let mut c = Command::new(bin);
+                c.args(["machine", "run", "--net", "--image", "alpine"]);
+                c.args(["-v", &mount_spec]);
+                c.args(["--mem", "4096"]);
+                if opts.keep {
+                    c.arg("--detach");
+                }
+                c.args(["--", "/bin/sh", "-c"]);
+                c.arg(&script);
+                c
             }
-            c.args(["--", "/bin/sh", "-c"]);
-            c.arg(&script);
-            c
         }
     };
 
@@ -333,5 +369,55 @@ mod tests {
         let result = build_test_script(tmp.path(), &[], true);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
+    }
+
+    #[test]
+    fn options_parse_smolfile() {
+        let args: Vec<String> = vec!["--smolfile", "custom.smolfile"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let opts = Options::from_args(&args);
+        assert_eq!(opts.smolfile.as_deref(), Some("custom.smolfile"));
+    }
+
+    #[test]
+    fn options_default_smolfile_is_none() {
+        let opts = Options::from_args(&[]);
+        assert!(opts.smolfile.is_none());
+    }
+
+    #[test]
+    fn all_smolfiles_exist_and_have_required_keys() {
+        let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("workspace root");
+        let smolfiles = [
+            "tests/smolfiles/minimal.smolfile",
+            "tests/smolfiles/ci-gate.smolfile",
+            "tests/smolfiles/e2e.smolfile",
+            "tests/smolfiles/network.smolfile",
+        ];
+        for sf in &smolfiles {
+            let path = ws.join(sf);
+            assert!(path.exists(), "smolfile missing: {sf}");
+            let content =
+                std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {sf}: {e}"));
+            assert!(content.contains("image ="), "{sf} missing 'image' key");
+            assert!(content.contains("cpus ="), "{sf} missing 'cpus' key");
+            assert!(content.contains("memory ="), "{sf} missing 'memory' key");
+        }
+    }
+
+    #[test]
+    fn ci_gate_smolfile_constant_matches_real_file() {
+        let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("workspace root");
+        assert!(
+            ws.join(CI_GATE_SMOLFILE).exists(),
+            "CI_GATE_SMOLFILE constant points to missing file: {}",
+            CI_GATE_SMOLFILE
+        );
     }
 }
