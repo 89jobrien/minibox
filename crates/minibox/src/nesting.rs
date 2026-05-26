@@ -4,8 +4,100 @@
 //! The daemon reads this to know its nesting level and enforce the
 //! max depth limit (`MINIBOX_MAX_NEST_DEPTH`, default 4).
 
+use std::sync::OnceLock;
+
 /// Default maximum nesting depth.
 pub const DEFAULT_MAX_NEST_DEPTH: u32 = 4;
+
+static NESTED_OVERLAY_SUPPORT: OnceLock<bool> = OnceLock::new();
+
+/// Check whether the kernel supports overlay-on-overlay mounts.
+///
+/// Performs an empirical probe: mounts a tmpfs, creates a base overlay,
+/// then attempts a second overlay using the first as a lowerdir. The
+/// result is cached for the process lifetime.
+///
+/// Returns `false` on non-Linux or if any mount fails.
+pub fn supports_nested_overlay() -> bool {
+    *NESTED_OVERLAY_SUPPORT.get_or_init(probe_nested_overlay)
+}
+
+#[cfg(target_os = "linux")]
+fn probe_nested_overlay() -> bool {
+    use nix::mount::{MntFlags, MsFlags, mount, umount2};
+    use std::fs;
+
+    let probe_dir = match tempfile::tempdir() {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let base = probe_dir.path();
+
+    // Mount tmpfs as the base filesystem
+    if mount(
+        Some("tmpfs"),
+        base,
+        Some("tmpfs"),
+        MsFlags::empty(),
+        Some("size=4m"),
+    )
+    .is_err()
+    {
+        return false;
+    }
+
+    let result = (|| -> anyhow::Result<bool> {
+        // First overlay: lower1 -> merged1
+        for d in &[
+            "lower1", "upper1", "work1", "merged1", "upper2", "work2", "merged2",
+        ] {
+            fs::create_dir_all(base.join(d))?;
+        }
+        fs::write(base.join("lower1/probe.txt"), "probe")?;
+
+        mount(
+            Some("overlay"),
+            &base.join("merged1"),
+            Some("overlay"),
+            MsFlags::empty(),
+            Some(&format!(
+                "lowerdir={lower},upperdir={upper},workdir={work}",
+                lower = base.join("lower1").display(),
+                upper = base.join("upper1").display(),
+                work = base.join("work1").display(),
+            )),
+        )?;
+
+        // Second overlay: use merged1 as lowerdir
+        let nested_ok = mount(
+            Some("overlay"),
+            &base.join("merged2"),
+            Some("overlay"),
+            MsFlags::empty(),
+            Some(&format!(
+                "lowerdir={lower},upperdir={upper},workdir={work}",
+                lower = base.join("merged1").display(),
+                upper = base.join("upper2").display(),
+                work = base.join("work2").display(),
+            )),
+        )
+        .is_ok();
+
+        // Cleanup
+        let _ = umount2(&base.join("merged2"), MntFlags::MNT_DETACH);
+        let _ = umount2(&base.join("merged1"), MntFlags::MNT_DETACH);
+
+        Ok(nested_ok)
+    })();
+
+    let _ = umount2(base, MntFlags::MNT_DETACH);
+    result.unwrap_or(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn probe_nested_overlay() -> bool {
+    false
+}
 
 /// Nesting metadata passed through the container init path.
 #[derive(Debug, Clone)]
@@ -108,6 +200,13 @@ mod tests {
     fn custom_max_depth() {
         let ctx = NestingContext::new(Some(1), Some(2));
         assert_eq!(ctx.max_depth, 2);
+    }
+
+    #[test]
+    fn probe_result_is_cached() {
+        let a = supports_nested_overlay();
+        let b = supports_nested_overlay();
+        assert_eq!(a, b);
     }
 
     #[test]

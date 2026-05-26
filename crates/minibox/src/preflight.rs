@@ -33,6 +33,8 @@ pub struct HostCapabilities {
     pub systemd_version: Option<u32>,
     /// minibox.slice is loaded in systemd.
     pub minibox_slice_active: bool,
+    /// Whether overlay-on-overlay mounts work (empirical probe).
+    pub nested_overlay: bool,
 }
 
 /// Probe the current host for minibox-relevant capabilities.
@@ -50,6 +52,7 @@ pub fn probe() -> HostCapabilities {
         systemd_available: probe_systemd_available(),
         systemd_version: probe_systemd_version(),
         minibox_slice_active: probe_minibox_slice(),
+        nested_overlay: crate::nesting::supports_nested_overlay(),
     }
 }
 
