@@ -166,6 +166,82 @@ pub fn setup_overlay_with_base(
     Ok(merged)
 }
 
+/// Set up a container filesystem, falling back to tmpfs copy if overlay-on-overlay
+/// fails (common in nested containers).
+///
+/// Tries `setup_overlay_with_base` first. On failure, if `allow_tmpfs_fallback` is
+/// true, copies the lowest image layer to a tmpfs mount and returns that as the rootfs.
+pub fn setup_overlay_or_tmpfs(
+    image_layers: &[PathBuf],
+    container_dir: &Path,
+    images_base: &Path,
+    allow_tmpfs_fallback: bool,
+) -> anyhow::Result<PathBuf> {
+    match setup_overlay_with_base(image_layers, container_dir, images_base) {
+        Ok(merged) => Ok(merged),
+        Err(e) if allow_tmpfs_fallback => {
+            warn!(
+                error = %e,
+                "filesystem: overlay mount failed, falling back to tmpfs copy"
+            );
+            setup_tmpfs_fallback(image_layers, container_dir)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Mount a tmpfs at `container_dir/merged` and copy the top image layer into it.
+///
+/// This is a degraded-mode fallback for nested containers where overlay-on-overlay
+/// is unsupported. Writes inside the container are lost on unmount.
+fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
+    let merged = container_dir.join("merged");
+    fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {
+        path: merged.display().to_string(),
+        source,
+    })?;
+
+    mount(
+        Some("tmpfs"),
+        &merged,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        Some("size=512m"),
+    )
+    .with_context(|| format!("tmpfs mount at {}", merged.display()))?;
+
+    // Copy top layer (most recent) into the tmpfs rootfs.
+    let top_layer = image_layers
+        .last()
+        .context("no image layers for tmpfs fallback")?;
+
+    copy_dir_recursive(top_layer, &merged)
+        .with_context(|| format!("copy layer {} to tmpfs", top_layer.display()))?;
+
+    info!(merged = %merged.display(), "filesystem: tmpfs fallback mounted");
+    Ok(merged)
+}
+
+/// Recursively copy directory contents from `src` to `dst`.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    for entry in fs::read_dir(src).with_context(|| format!("read_dir {}", src.display()))? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            fs::create_dir_all(&dst_path)?;
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if ft.is_symlink() {
+            let target = fs::read_link(&src_path)?;
+            std::os::unix::fs::symlink(&target, &dst_path).ok();
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // pivot_root (child process)
 // ---------------------------------------------------------------------------

@@ -639,6 +639,25 @@ async fn prepare_run(
     };
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
+    // ── Cgroup delegation for nested containers ────────────────────────
+    // Enable subtree controllers so a nested miniboxd inside this container
+    // can create child cgroups. The container process itself goes into the
+    // init leaf (cgroups v2 "no internal processes" rule).
+    #[cfg(target_os = "linux")]
+    {
+        let delegation = crate::container::cgroups::DelegationPaths {
+            subtree: cgroup_dir.clone(),
+            init_leaf: cgroup_dir.join("init"),
+        };
+        if let Err(e) = crate::container::cgroups::delegate_subtree(&delegation) {
+            debug!(
+                container_id = %id,
+                error = %e,
+                "cgroup delegation skipped (non-fatal)"
+            );
+        }
+    }
+
     // ── Network setup ──────────────────────────────────────────────────
     let network_config = minibox_core::domain::NetworkConfig {
         mode: net_mode,
