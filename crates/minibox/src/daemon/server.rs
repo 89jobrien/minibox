@@ -434,6 +434,7 @@ async fn dispatch(
             name,
             tty: _,
             platform,
+            cgroup_parent,
             ..
         } => {
             let params = handler::RunParams {
@@ -449,6 +450,7 @@ async fn dispatch(
                 env,
                 name,
                 platform,
+                cgroup_parent,
             };
             handler::handle_run(params, state, deps, tx).await;
         }

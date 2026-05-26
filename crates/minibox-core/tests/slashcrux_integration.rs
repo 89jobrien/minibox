@@ -96,7 +96,7 @@ fn step_state_from_errored() {
 #[test]
 fn execution_context_to_env_empty() {
     let ctx = ExecutionContext::new();
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert!(env.is_empty());
 }
 
@@ -105,7 +105,7 @@ fn execution_context_to_env_string_values() {
     let mut ctx = ExecutionContext::new();
     ctx.set("FOO", serde_json::Value::String("bar".into()));
     ctx.set("BAZ", serde_json::Value::String("qux".into()));
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert!(env.contains(&"FOO=bar".to_string()));
     assert!(env.contains(&"BAZ=qux".to_string()));
 }
@@ -114,7 +114,7 @@ fn execution_context_to_env_string_values() {
 fn execution_context_to_env_number_values() {
     let mut ctx = ExecutionContext::new();
     ctx.set("PORT", serde_json::Value::Number(8080.into()));
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert!(env.contains(&"PORT=8080".to_string()));
 }
 
@@ -122,7 +122,7 @@ fn execution_context_to_env_number_values() {
 fn execution_context_to_env_bool_values() {
     let mut ctx = ExecutionContext::new();
     ctx.set("DEBUG", serde_json::Value::Bool(true));
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert!(env.contains(&"DEBUG=true".to_string()));
 }
 
@@ -131,7 +131,7 @@ fn execution_context_to_env_null_skipped() {
     let mut ctx = ExecutionContext::new();
     ctx.set("PRESENT", serde_json::Value::String("yes".into()));
     ctx.set("NULL_VAL", serde_json::Value::Null);
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert_eq!(env.len(), 1);
     assert!(env.contains(&"PRESENT=yes".to_string()));
 }
@@ -141,7 +141,7 @@ fn execution_context_to_env_unset_skipped() {
     let mut ctx = ExecutionContext::new();
     ctx.set("KEEP", serde_json::Value::String("yes".into()));
     ctx.unset("GONE");
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert_eq!(env.len(), 1);
     assert!(env.contains(&"KEEP=yes".to_string()));
 }
@@ -150,7 +150,7 @@ fn execution_context_to_env_unset_skipped() {
 fn execution_context_to_env_complex_json_stringified() {
     let mut ctx = ExecutionContext::new();
     ctx.set("DATA", serde_json::json!({"key": "value"}));
-    let env = minibox_core::domain::execution_context_to_env(&ctx);
+    let env = minibox_core::protocol::execution_context_to_env(&ctx);
     assert_eq!(env.len(), 1);
     // Complex values get JSON-stringified
     let val = &env[0];

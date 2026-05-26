@@ -84,31 +84,6 @@ pub fn meets_min_priority(actual: &Priority, min: &Priority) -> bool {
     actual.score() >= min.score()
 }
 
-/// Convert an [`ExecutionContext`] into a `Vec<String>` of `KEY=value` pairs
-/// suitable for injecting as container environment variables.
-///
-/// - String values are used directly.
-/// - Numbers and booleans are stringified.
-/// - Null values and unset variables are skipped.
-/// - Complex values (arrays, objects) are JSON-serialized.
-// TODO(#428): validate env var keys — reject `=`, newlines, null bytes, empty keys
-pub fn execution_context_to_env(ctx: &ExecutionContext) -> Vec<String> {
-    ctx.all()
-        .iter()
-        .filter_map(|(key, opt_val)| {
-            let val = opt_val.as_ref()?;
-            let s = match val {
-                serde_json::Value::Null => return None,
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                serde_json::Value::Bool(b) => b.to_string(),
-                other => serde_json::to_string(other).unwrap_or_default(),
-            };
-            Some(format!("{key}={s}"))
-        })
-        .collect()
-}
-
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;
@@ -2907,6 +2882,7 @@ mod start_from_step_tests {
 #[cfg(test)]
 mod slashcrux_tests {
     use super::*;
+    use crate::protocol::execution_context_to_env;
 
     // ── meets_min_priority ─────────────────────────────────────────────
 

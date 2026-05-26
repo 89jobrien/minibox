@@ -110,6 +110,7 @@ fn generate_request_corpus() {
                 urgency: None,
                 execution_context: None,
                 platform: None,
+                cgroup_parent: None,
             },
         ),
         (
@@ -134,6 +135,7 @@ fn generate_request_corpus() {
                 urgency: None,
                 execution_context: None,
                 platform: Some("linux/amd64".into()),
+                cgroup_parent: None,
             },
         ),
         (

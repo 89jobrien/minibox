@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-05-22)
+# Handoff — minibox (2026-05-25)
 
 **Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
@@ -31,10 +31,12 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| fixture-consolidation | P2 | blocked | Consolidate duplicate test_fixtures.rs (#355) |
+| test-in-vm | P1 | open | cargo xtask test-in-vm — run Linux tests in ephemeral VM |
 
 ## Log
 
+- 20260525.183746: Resolved 3 P0 security issues (#428 env key validation,
+- 20260523.102700: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
 - 20260521: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
 - 20260515.171405: done=23 running=0 pending=47 blocked=0
-- 20260515.131514: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues #364-#372, wrote refactoring and A-series testing plans
+- 20260515.131514: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues

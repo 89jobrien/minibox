@@ -22,6 +22,7 @@ mod ci_watch;
 mod cleanup;
 mod collect_metrics;
 mod context;
+mod council;
 mod daily_orchestration;
 mod demo;
 mod detect_changes;
@@ -35,6 +36,7 @@ mod protocol_drift;
 mod protocol_sites;
 mod stale_names;
 mod test_image;
+mod test_in_vm;
 mod test_linux;
 mod utils;
 
@@ -71,6 +73,15 @@ fn main() -> Result<()> {
             None => bail!("usage: cargo xtask borrow fixtures"),
         },
         Some("lint") => gates::lint(&sh),
+        Some("agentlint") => {
+            let all = env::args().any(|a| a == "--all");
+            if all {
+                gates::agentlint_all()
+            } else {
+                // Staged-only mode requires a shell for git commands.
+                gates::agentlint_staged(&sh)
+            }
+        }
         Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
@@ -111,6 +122,11 @@ fn main() -> Result<()> {
         Some("build-test-image") => {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
+        }
+        Some("test-in-vm") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let opts = test_in_vm::Options::from_args(&args);
+            test_in_vm::run(root, &opts)
         }
         Some("check-repo-clean") => {
             gates::check_repo_cleanliness(&sh);
@@ -243,6 +259,22 @@ fn main() -> Result<()> {
                 .and_then(|w| promote::Tier::from_str(&w[1]));
             promote::run(root, from, to, dry_run)
         }
+        Some("council") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let base = args
+                .windows(2)
+                .find(|w| w[0] == "--base")
+                .map(|w| w[1].clone())
+                .unwrap_or_else(|| "main".to_string());
+            let mode = args
+                .windows(2)
+                .find(|w| w[0] == "--mode")
+                .map(|w| w[1].clone())
+                .unwrap_or_else(|| "core".to_string());
+            let no_synthesis = args.iter().any(|a| a == "--no-synthesis");
+            let prod = args.iter().any(|a| a == "--prod");
+            council::run(root, &base, &mode, no_synthesis, prod)
+        }
         Some("run") => {
             let script_name = env::args()
                 .nth(2)
@@ -310,6 +342,12 @@ fn main() -> Result<()> {
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
             eprintln!(
                 "  test-linux       build image + load into minibox + run tests in container"
+            );
+            eprintln!(
+                "  test-in-vm       run Linux tests in ephemeral smolvm VM [--skip-build] [--keep]"
+            );
+            eprintln!(
+                "  agentlint [--all] lint agent config files (staged only, or --all on disk)"
             );
             eprintln!(
                 "  cas-add <file> [--ref <name>]  add file to CAS overlay store (~/.minibox/vm/overlay/cas/)"

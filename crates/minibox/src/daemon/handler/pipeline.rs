@@ -135,6 +135,7 @@ pub async fn handle_pipeline(
                 env: container_env,
                 name: None,
                 platform: None,
+                cgroup_parent: None,
             };
             handle_run(params, pipeline_state, pipeline_deps_clone, inner_tx).await;
         });

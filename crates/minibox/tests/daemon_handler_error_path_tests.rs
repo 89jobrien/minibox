@@ -206,6 +206,7 @@ async fn test_handle_run_invalid_image_ref_returns_error() {
             env: vec![],
             name: None,
             platform: None,
+            cgroup_parent: None,
         },
         state,
         deps,

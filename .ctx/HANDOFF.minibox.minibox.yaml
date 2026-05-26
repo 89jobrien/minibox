@@ -1,31 +1,7 @@
 project: minibox
 id: minibox
-updated: 20260523.102700
+updated: 2026-05-25
 items:
-- id: fixture-consolidation
-  doob_uuid: null
-  name: fixture-consolidation
-  priority: P2
-  status: blocked
-  title: Consolidate duplicate test_fixtures.rs (#355)
-  description: |-
-    minibox/src/adapters/test_fixtures.rs is a copy-paste of
-    minibox-core/src/adapters/test_fixtures.rs. Simple re-export fails
-    because minibox-core's test_fixtures is #[cfg(test)] and not visible
-    as a dependency. Two viable approaches:
-    A) Gate via #[cfg(any(test, feature = "test-utils"))] in minibox-core + dev-dep feature
-    B) Close as won't-fix — boundary is intentional
-    Awaiting decision from user.
-  files:
-  - crates/minibox/src/adapters/test_fixtures.rs
-  - crates/minibox/src/adapters/mod.rs
-  - crates/minibox-core/src/adapters/test_fixtures.rs
-  completed: null
-  extra:
-  - type: blocker
-    note: 'User decision required: option A (feature flag) or B (won''t fix)'
-    date: null
-    reviewed: null
 - id: test-in-vm
   doob_uuid: null
   name: test-in-vm
@@ -36,9 +12,8 @@ items:
     xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
     aarch64-unknown-linux-musl, boots smolvm VM (or minibox as backend),
     mounts target dir at /mnt/tests, runs integration_tests + cgroup_tests.
-    Pull tests pass (2/8). Overlay/cgroup tests fail — smolvm drops
-    CAP_SYS_ADMIN from bounding set (confirmed via /proc/1/status).
-    smolvm adapter output_reader bug fixed in same session.
+    Pull tests pass. cgroup_tests auto-skipped on unprivileged backends
+    (smolvm). smolvm drops CAP_SYS_ADMIN from bounding set.
     Next: request smolvm --privileged flag, or pivot to Apple Containerization
     (macOS 26) / QEMU for full kernel access.
   files:
@@ -47,48 +22,23 @@ items:
   - crates/minibox/src/adapters/smolvm.rs
   completed: null
   extra:
-  - type: blocker
-    note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests
-      cannot pass until smolvm adds --privileged or alternative VM backend used
-    date: null
+  - date: null
+    type: blocker
+    field: null
+    value: null
     reviewed: null
-- id: smolvm-adapter-output-reader
-  doob_uuid: null
-  name: smolvm-adapter-output-reader
-  priority: P0
-  status: done
-  title: Fix smolvm adapter output_reader bug
-  description: |-
-    spawn_process returned output_reader: None, causing all minibox run
-    commands to fail with "capture_output=true but runtime returned no
-    output_reader". Fixed by piping synchronous smolvm output into an
-    OwnedFd via nix::unistd::pipe(). Also fixed: non-zero exit codes were
-    swallowed (smolvm_exec_full returned Err on any non-zero exit); now
-    stores exit code in Mutex for wait_for_exit. Timeout increased 60s→600s.
-  files:
-  - crates/minibox/src/adapters/smolvm.rs
-  completed: 2026-05-23
-  extra: []
+    note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
 log:
+- date: '20260525.183746'
+  summary: Resolved 3 P0 security issues (#428 env key validation,
+  commits: []
+  session: 5
 - date: '20260523.102700'
-  summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual
-    backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN
-    restriction; fixed CI failures from rustqual RunParams refactor
-  commits:
-  - sha: 747b636
-    branch: develop
-  - sha: 64beade
-    branch: develop
-  - sha: c7a82bf
-    branch: develop
-  - sha: dd3e9a6
-    branch: develop
-  - sha: 791e81a
-    branch: develop
+  summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
+  commits: []
   session: 4
 - date: '20260521'
-  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already
-    complete on develop
+  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
   commits: []
   session: 3
 - date: '20260515.171405'
@@ -96,8 +46,6 @@ log:
   commits: []
   session: 2
 - date: '20260515.131514'
-  summary: Completed stable->staging migration, implemented CI change detection (cargo
-    xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
-    #364-#372, wrote refactoring and A-series testing plans
+  summary: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
   commits: []
   session: 1

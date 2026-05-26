@@ -161,6 +161,7 @@ fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 urgency: None,
                 execution_context: None,
                 platform,
+                cgroup_parent: None,
             })
         }
 

@@ -79,7 +79,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
     // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.
     if staged_agent_files(sh)? {
-        agentlint(sh).context("agentlint failed")?;
+        agentlint_staged(sh).context("agentlint failed")?;
     }
 
     // Workflow lint: run actionlint when .github/workflows/ files are staged.
@@ -823,35 +823,75 @@ fn staged_agent_files(sh: &Shell) -> Result<bool> {
 ///   - `.json`  → parse with serde_json and report errors
 ///   - `.md`    → check required frontmatter keys (name, description)
 ///   - `.yaml`/`.yml` inside agent dirs → check with actionlint if in `.github/`, else YAML parse
-fn agentlint(sh: &Shell) -> Result<()> {
+pub fn agentlint_staged(sh: &Shell) -> Result<()> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
 
-    let agent_files: Vec<&str> = staged
+    let agent_files: Vec<String> = staged
         .lines()
         .filter(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d)))
+        .map(|s| s.to_string())
         .collect();
 
-    let mut errors: Vec<String> = Vec::new();
+    agentlint_check(&agent_files)
+}
 
-    for file in &agent_files {
+/// Lint all agent config files on disk (not just staged).
+pub fn agentlint_all() -> Result<()> {
+    let mut files = Vec::new();
+    for dir in AGENT_DIRS {
+        let dir_path = Path::new(dir);
+        if dir_path.is_dir() {
+            collect_files_recursive(dir_path, &mut files);
+        }
+    }
+    agentlint_check(&files)
+}
+
+fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_recursive(&path, out);
+        } else {
+            out.push(path.to_string_lossy().to_string());
+        }
+    }
+}
+
+fn agentlint_check(agent_files: &[String]) -> Result<()> {
+    let mut errors: Vec<String> = Vec::new();
+    let mut linted: usize = 0;
+
+    for file in agent_files {
         let path = Path::new(file);
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+        // Skip binary/non-lintable files.
+        if matches!(ext, "zip" | "png" | "jpg" | "gif") || filename == ".DS_Store" {
+            continue;
+        }
 
         let Ok(content) = fs::read_to_string(path) else {
-            // File deleted or unreadable — skip.
+            // File deleted, binary, or unreadable — skip.
             continue;
         };
 
         match ext {
             "json" => {
+                linted += 1;
                 if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
                     errors.push(format!("{file}: JSON parse error: {e}"));
                 }
             }
             "md" => {
+                linted += 1;
                 // Skills and agent docs should declare name and description.
                 if content.starts_with("---") {
                     let missing: Vec<&str> = ["name:", "description:"]
@@ -867,23 +907,90 @@ fn agentlint(sh: &Shell) -> Result<()> {
                     }
                 }
             }
-            _ => {}
+            "yaml" | "yml" => {
+                linted += 1;
+                if content.trim().is_empty() {
+                    errors.push(format!("{file}: empty YAML file"));
+                }
+            }
+            "sh" | "nu" | "" => {
+                linted += 1;
+                // Scripts and extensionless hooks must have a shebang.
+                lint_script(file, &content, &mut errors);
+            }
+            "rs" => {
+                linted += 1;
+                // Rust helper files: check they parse (basic syntax).
+                // Full compilation is left to cargo; just ensure no empty files.
+                if content.trim().is_empty() {
+                    errors.push(format!("{file}: empty Rust file"));
+                }
+            }
+            "txt" => {
+                linted += 1;
+                if content.trim().is_empty() {
+                    errors.push(format!("{file}: empty text file"));
+                }
+            }
+            _ => {
+                // Unrecognized extension — still count as scanned but not linted.
+            }
         }
     }
 
     if errors.is_empty() {
         eprintln!(
-            "agentlint: checked {} file(s), 0 error(s)",
-            agent_files.len()
+            "agentlint: scanned {} file(s), linted {}, 0 error(s)",
+            agent_files.len(),
+            linted,
         );
     } else {
         for e in &errors {
             eprintln!("agentlint: {e}");
         }
-        anyhow::bail!("agentlint found {} error(s)", errors.len());
+        anyhow::bail!(
+            "agentlint: scanned {} file(s), linted {}, {} error(s)",
+            agent_files.len(),
+            linted,
+            errors.len()
+        );
     }
 
     Ok(())
+}
+
+/// Lint a script file (`.sh`, `.nu`, or extensionless hook).
+fn lint_script(file: &str, content: &str, errors: &mut Vec<String>) {
+    if content.trim().is_empty() {
+        errors.push(format!("{file}: empty script"));
+        return;
+    }
+    // Must start with a shebang.
+    if !content.starts_with("#!") {
+        errors.push(format!("{file}: missing shebang (expected #!/...)"));
+        return;
+    }
+    let first_line = content.lines().next().unwrap_or("");
+    // Shebang must reference a known interpreter.
+    let valid_interpreters = [
+        "bash", "sh", "zsh", "nu", "python", "python3", "ruby", "perl", "node",
+    ];
+    if !valid_interpreters.iter().any(|i| first_line.contains(i)) {
+        errors.push(format!(
+            "{file}: shebang does not reference a known interpreter: {first_line}"
+        ));
+    }
+    // Check executable permission (unix only).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(file) {
+            let mode = meta.permissions().mode();
+            if mode & 0o111 == 0 {
+                errors.push(format!("{file}: script is not executable (mode {mode:o})"));
+            }
+        }
+    }
 }
 
 /// Returns `["--fail-fast"]` when `MINIBOX_FAIL_FAST=true`, otherwise empty.

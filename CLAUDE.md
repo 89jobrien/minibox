@@ -126,11 +126,6 @@ New adapter? Update composition   → miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 ```
 
-
-
-
-
-
 <!-- cloude-code-toolbox:mcp-skills-awareness-begin -->
 
 ### MCP & Skills awareness (Cloude Code ToolBox)
@@ -153,57 +148,83 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 - **personal** (stdio)
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
-<!-- cloude-code-memory-bank:begin -->
-# Plan / Act workflow (Cursor-style)
+<!-- godmode-workflow:begin -->
 
-Unless the user clearly opts out (e.g. **"skip plan, implement now"** or **"just fix it"** with no ambiguity), use **two modes**. This matches Cursor’s PLAN → approve → ACT flow.
+# Phased workflow
 
-## Plan mode (default)
+Unless the user clearly opts out (e.g. **"skip plan, just fix it"**), every
+non-trivial task progresses through five phases. Short confirmations like
+**"do it"**, **"act"**, **"go"** advance to the next phase.
 
-- **First line of every Plan-mode response MUST be exactly:** `# Mode: PLAN`
-- **Do not modify the repository in any way**, including:
-  - No creating, editing, or deleting files (source, config, docs, **including `./memory-bank/**` memory-bank files**).
-  - No applying multi-file edits, quick fixes, or patch-style changes.
-  - No terminal commands that change the workspace (installs, builds that write outputs you were asked to apply, `git` writes, etc.).
-- **Allowed in Plan mode:** Read/search files to understand the codebase, answer questions, list steps, identify risks, and produce a **written plan** (markdown).
-- **End Plan-mode responses** by telling the user how to proceed, e.g. **Type `ACT` when you approve this plan** (or ask them to refine the plan first).
+## Phases
 
-## Act mode
+<godmode-phase name="ORIENT" mode="read-only" response-header="# Phase: ORIENT" skills="godmode handon">
+Default phase. Read files, search code, run `godmode handon`, check task
+graph. Summarize current state: branch, dirty files, relevant context.
+No modifications to the repository. End by stating what you found and
+what phase comes next.
+</godmode-phase>
 
-- Enter **only** when the user’s message **clearly approves implementation**, e.g. they send **`ACT`**, **`act`**, or phrases like **"go ahead"**, **"implement the plan"**, **"approved"** right after a plan—or they explicitly told you to skip planning and implement.
-- **First line of every Act-mode response MUST be exactly:** `# Mode: ACT`
-- **Then** you may edit files, run commands, and update **`./memory-bank/`** when appropriate.
-- After you finish an Act-mode turn, assume the next user message starts in **Plan mode** again unless they again approve with **`ACT`** (or equivalent) for further edits.
+<godmode-phase name="PLAN" mode="read-only" response-header="# Phase: PLAN" skills="brainstorm, writing-plans">
+Produce a written plan: files to touch, approach, risks. Still read-only
+— no edits, no builds that write output. For complex work, invoke
+`godmode:brainstorm` or `godmode:writing-plans`. End with "Type ACT to
+proceed" (or suggest refinements).
+</godmode-phase>
 
-## If the user asks for code changes while you are in Plan mode
+<godmode-phase name="ACT" mode="read-write" response-header="# Phase: ACT" skills="task-driven-development, parallel-agents">
+Enter when the user approves: "act", "go ahead", "do it". Edit files,
+run commands, dispatch subagents. For multi-task work, use
+`godmode:task-management` and `godmode:parallel-agents` when tasks are
+independent. After finishing, transition to VERIFY automatically.
+</godmode-phase>
 
-- **Do not implement.** Respond with `# Mode: PLAN`, briefly restate or adjust the plan, and ask them to type **`ACT`** when they want you to apply changes.
+<godmode-phase name="VERIFY" mode="read + test" response-header="# Phase: VERIFY" skills="verification-before-completion">
+Run `cargo check`, `cargo clippy`, `cargo test` (or `godmode verify`).
+Invoke `godmode:verification-before-completion` for non-trivial changes.
+Report results. If failures exist, return to ACT to fix them. When
+green, state readiness and ask to SHIP.
+</godmode-phase>
 
----
+<godmode-phase name="SHIP" mode="commit/push" response-header="# Phase: SHIP" skills="cap, handoff">
+Commit, push, update handoff: `godmode:cap`, then `godmode handoff`.
+Only entered with explicit user approval. After shipping, return to
+ORIENT for the next task.
+</godmode-phase>
 
-# Memory bank (persistent context)
+## Phase transitions
 
-This repository uses a **memory bank** under `./memory-bank/` — structured markdown that survives sessions, similar to Cursor-style workflows.
+- **User can skip phases**: "skip plan, implement now" jumps to ACT.
+  "just fix it" implies ORIENT → ACT → VERIFY → SHIP in one pass.
+- **After each ACT turn**, default back to VERIFY unless the user says
+  otherwise.
+- **Multiple ACT turns** are fine — the user can keep approving.
+- When the user gives a lettered choice or short confirmation, advance
+  to the most obvious next phase without asking.
 
-Context layers (read deeper files after foundations): **projectbrief** → **productContext** / **systemPatterns** / **techContext** → **activeContext** → **progress**.
+## Skill invocation rule
 
-## What Claude should do
+Before responding in any phase, check if a godmode skill applies.
+1% chance it’s relevant = invoke it. Process skills (`brainstorm`,
+`systematic-debugging`) before implementation skills
+(`task-driven-development`, `parallel-agents`).
 
-1. **Before substantive work**, read **all** of the following under `./memory-bank/` when the task depends on project state (not optional for non-trivial work). In **Plan mode**, reading for the plan is allowed; **do not edit** these files until **Act mode** unless the user only asked for a documentation/memory update with no code change.
-   - `projectbrief.md` — scope and goals
-   - `productContext.md` — product intent and UX
-   - `systemPatterns.md` — architecture and conventions
-   - `techContext.md` — stack and constraints
-   - `progress.md` — done / pending / known issues
-   - `activeContext.md` — current task and decisions
+## Task graph
 
-2. **During Act-mode work**, keep `activeContext.md` aligned with the current task (update when focus shifts).
+Tasks live in `.ctx/GODMODE.tasks.yaml`. Use `godmode task` CLI for
+state transitions. Independent chains can run in parallel via
+`godmode:parallel-agents`. A task is runnable when all `depends_on`
+items are `done`.
 
-3. **After meaningful milestones** (in Act mode), update `progress.md` and any affected docs in `./memory-bank/`.
+## Memory bank
 
-4. When the user asks to **update memory bank** (or similar), **open and review every** file in `./memory-bank/`, then update what changed — especially `activeContext.md` and `progress.md`, even if other files are unchanged. Prefer doing heavy memory-bank writes in **Act mode** unless the user asked for documentation-only updates.
+Persistent context lives in `.ctx/memory-bank/`. Read before
+substantive work; update `activeContext` and `progress` after
+milestones. See `AGENTS.md` for the full file list.
 
-5. Prefer **short, factual updates** over long prose. Reference files, symbols, and tickets instead of duplicating code.
+## Agent-specific guidance
 
-Do not delete these files; evolve them as the project changes.
-<!-- cloude-code-memory-bank:end -->
+For subagent conventions, Codex integration, and memory-bank file
+inventory, see `AGENTS.md`.
+
+<!-- godmode-workflow:end -->

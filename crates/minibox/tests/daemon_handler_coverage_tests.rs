@@ -815,6 +815,7 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
+            cgroup_parent: None,
         },
         Arc::clone(&state),
         deps,

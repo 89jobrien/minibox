@@ -46,6 +46,7 @@ struct Cli {
 /// Each variant maps directly to a [`minibox::protocol::DaemonRequest`]
 /// variant sent over the Unix socket.
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Run a container from an image.
     ///
@@ -123,6 +124,13 @@ enum Commands {
         /// Target platform (e.g. linux/arm64). Defaults to host platform.
         #[arg(long)]
         platform: Option<String>,
+
+        /// Override the cgroup root for this container (DinD).
+        ///
+        /// The container's cgroup is created under this path. Subtree controllers
+        /// are enabled automatically. Must be under /sys/fs/cgroup/.
+        #[arg(long, value_name = "PATH")]
+        cgroup_parent: Option<String>,
     },
 
     /// List all containers
@@ -435,6 +443,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             user,
             rm,
             platform,
+            cgroup_parent,
         } => {
             let (image, tag) = split_image_tag(image, tag);
             commands::run::execute(
@@ -455,6 +464,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
                     user,
                     auto_remove: rm,
                     platform,
+                    cgroup_parent,
                 },
                 socket_path,
             )

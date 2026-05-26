@@ -127,7 +127,9 @@ impl ExecutionPolicy {
                 if self.allow_readonly_mounts && mount.read_only {
                     continue;
                 }
-                let allowed = prefixes.iter().any(|p| mount.host_path.starts_with(p));
+                let allowed = prefixes
+                    .iter()
+                    .any(|p| std::path::Path::new(&mount.host_path).starts_with(p));
                 if !allowed {
                     return PolicyDecision::Deny(format!(
                         "mount host_path '{}' not under any allowed prefix",
@@ -312,6 +314,31 @@ mod tests {
             read_only: true,
         }];
         assert_eq!(policy.evaluate(&manifest), PolicyDecision::Allow);
+    }
+
+    #[test]
+    fn mount_prefix_uses_path_component_boundary() {
+        let policy = ExecutionPolicy {
+            allowed_mount_prefixes: Some(vec!["/tmp/safe".to_string()]),
+            ..Default::default()
+        };
+        // /tmp/safe/data should be allowed
+        let mut m1 = sample_manifest();
+        m1.runtime.mounts = vec![ExecutionManifestMount {
+            host_path: "/tmp/safe/data".to_string(),
+            container_path: "/mnt".to_string(),
+            read_only: false,
+        }];
+        assert_eq!(policy.evaluate(&m1), PolicyDecision::Allow);
+
+        // /tmp/safevil should NOT match /tmp/safe (not a path component boundary)
+        let mut m2 = sample_manifest();
+        m2.runtime.mounts = vec![ExecutionManifestMount {
+            host_path: "/tmp/safevil".to_string(),
+            container_path: "/mnt".to_string(),
+            read_only: false,
+        }];
+        assert!(matches!(policy.evaluate(&m2), PolicyDecision::Deny(_)));
     }
 
     #[test]

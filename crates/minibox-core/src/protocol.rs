@@ -157,6 +157,17 @@ pub enum DaemonRequest {
         /// Target platform (e.g. `"linux/arm64"`). Defaults to host platform.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         platform: Option<String>,
+        /// Override the cgroup root for this container.
+        ///
+        /// When set, the container's cgroup is created under this path instead of
+        /// the daemon's default `MINIBOX_CGROUP_ROOT`. The daemon enables
+        /// subtree controllers on the parent automatically. Required for
+        /// minibox-in-minibox (DinD) where the inner daemon needs a delegated
+        /// cgroup slice.
+        ///
+        /// Must be an absolute path under `/sys/fs/cgroup/`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cgroup_parent: Option<String>,
     },
 
     /// Stop a running container by ID.
@@ -806,6 +817,7 @@ pub struct TestRunDefaults {
     pub priority: Option<slashcrux::Priority>,
     pub urgency: Option<slashcrux::Urgency>,
     pub execution_context: Option<slashcrux::ExecutionContext>,
+    pub cgroup_parent: Option<String>,
 }
 
 impl Default for TestRunDefaults {
@@ -829,6 +841,7 @@ impl Default for TestRunDefaults {
             priority: None,
             urgency: None,
             execution_context: None,
+            cgroup_parent: None,
         }
     }
 }
@@ -856,6 +869,7 @@ impl TestRunDefaults {
             urgency: self.urgency,
             execution_context: self.execution_context,
             platform: None,
+            cgroup_parent: self.cgroup_parent,
         }
     }
 }
@@ -1414,6 +1428,7 @@ mod tests {
             urgency: None,
             execution_context: None,
             platform: None,
+            cgroup_parent: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1570,6 +1585,7 @@ mod tests {
             urgency: None,
             execution_context: None,
             platform: None,
+            cgroup_parent: None,
         };
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
@@ -1765,6 +1781,7 @@ mod tests {
                 priority: None,
                 urgency: None,
                 execution_context: None,
+                cgroup_parent: None,
             }
             .type_tag(),
             "Run"

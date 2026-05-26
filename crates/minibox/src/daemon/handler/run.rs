@@ -42,6 +42,7 @@ pub struct RunParams {
     pub env: Vec<String>,
     pub name: Option<String>,
     pub platform: Option<String>,
+    pub cgroup_parent: Option<String>,
 }
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
@@ -403,6 +404,7 @@ fn build_container_record(
     mounts: &[BindMount],
     privileged: bool,
     platform: &Option<String>,
+    cgroup_parent: &Option<String>,
 ) -> ContainerRecord {
     let command_str = command.join(" ");
     ContainerRecord {
@@ -443,6 +445,7 @@ fn build_container_record(
             entrypoint: None,
             user: None,
             platform: platform.clone(),
+            cgroup_parent: cgroup_parent.clone(),
         }),
         manifest_path: None,
         workload_digest: None,
@@ -474,6 +477,7 @@ async fn prepare_run(
         env,
         name,
         platform,
+        cgroup_parent,
         ephemeral: _,
     } = params;
 
@@ -518,6 +522,12 @@ async fn prepare_run(
         .into());
     }
 
+    let net_mode = network.unwrap_or(NetworkMode::None);
+
+    // ── Execution policy gate ───────────────────────────────────────
+    // Evaluate BEFORE creating any resources (overlay, cgroup, network).
+    // The manifest depends only on request parameters and cached layer
+    // digests, so no cleanup is needed on denial.
     let id = generate_container_id();
 
     // SECURITY: Verify no collision with existing containers.
@@ -526,6 +536,35 @@ async fn prepare_run(
             "container ID collision (extremely rare): {id}"
         ))
         .into());
+    }
+
+    let mut manifest = build_execution_manifest(
+        &id,
+        &ref_str,
+        &layer_dirs,
+        &command,
+        &env,
+        &mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        &platform,
+        &name,
+        capture_output,
+    );
+    manifest
+        .seal()
+        .context("failed to compute execution manifest digest")?;
+
+    if let Some(ref policy) = deps.execution_policy {
+        use minibox_core::domain::PolicyDecision;
+        match policy.evaluate(&manifest) {
+            PolicyDecision::Allow => {}
+            PolicyDecision::Deny(reason) => {
+                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+            }
+        }
     }
 
     let container_dir = deps.lifecycle.containers_base.join(&id);
@@ -564,14 +603,43 @@ async fn prepare_run(
         pids_max: Some(DEFAULT_PIDS_MAX),
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps
-        .lifecycle
-        .resource_limiter
-        .create(&id, &resource_config)?;
+    let cgroup_dir_str = {
+        #[cfg(target_os = "linux")]
+        if let Some(ref parent) = cgroup_parent {
+            // Validate cgroup_parent is under /sys/fs/cgroup/ to prevent arbitrary
+            // directory creation elsewhere on the filesystem.
+            crate::container::cgroups::validate_cgroup_parent(parent)?;
+            let mgr = crate::container::cgroups::CgroupManager::with_root(
+                &id,
+                crate::container::cgroups::CgroupConfig {
+                    memory_limit_bytes: resource_config.memory_limit_bytes,
+                    cpu_weight: resource_config.cpu_weight,
+                    pids_max: resource_config.pids_max,
+                    io_max_bytes_per_sec: resource_config.io_max_bytes_per_sec,
+                },
+                std::path::PathBuf::from(parent),
+            );
+            mgr.create()?;
+            mgr.cgroup_path().display().to_string()
+        } else {
+            deps.lifecycle
+                .resource_limiter
+                .create(&id, &resource_config)?
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            if cgroup_parent.is_some() {
+                anyhow::bail!("--cgroup-parent is only supported on Linux");
+            }
+            deps.lifecycle
+                .resource_limiter
+                .create(&id, &resource_config)?
+        }
+    };
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
-    let net_mode = network.unwrap_or(NetworkMode::None);
     let network_config = minibox_core::domain::NetworkConfig {
         mode: net_mode,
         ..minibox_core::domain::NetworkConfig::default()
@@ -603,6 +671,7 @@ async fn prepare_run(
         &mounts,
         privileged,
         &platform,
+        &cgroup_parent,
     );
     // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
@@ -631,47 +700,6 @@ async fn prepare_run(
     };
 
     // ── Persist execution manifest ─────────────────────────────────────
-    let mut manifest = build_execution_manifest(
-        &id,
-        &ref_str,
-        &layer_dirs,
-        &command,
-        &env,
-        &mounts,
-        memory_limit_bytes,
-        cpu_weight,
-        net_mode,
-        privileged,
-        &platform,
-        &name,
-        capture_output,
-    );
-    manifest
-        .seal()
-        .context("failed to compute execution manifest digest")?;
-
-    // ── Execution policy gate ───────────────────────────────────────
-    if let Some(ref policy) = deps.execution_policy {
-        use minibox_core::domain::PolicyDecision;
-        match policy.evaluate(&manifest) {
-            PolicyDecision::Allow => {}
-            PolicyDecision::Deny(reason) => {
-                // Best-effort cleanup: remove container dir.
-                // SECURITY: verify path is under containers_base before recursive delete.
-                if container_dir.starts_with(&deps.lifecycle.containers_base)
-                    && let Err(e) = std::fs::remove_dir_all(&container_dir)
-                {
-                    warn!(
-                        container_id = %id,
-                        error = %e,
-                        "policy: cleanup container dir failed after denial"
-                    );
-                }
-                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
-            }
-        }
-    }
-
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
         serde_json::to_string_pretty(&manifest).context("serialise execution manifest")?;
@@ -917,6 +945,7 @@ pub(super) async fn run_from_params(
         env: creation_params.env.clone(),
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),
+        cgroup_parent: creation_params.cgroup_parent.clone(),
     };
     run_inner(params, state, deps).await
 }

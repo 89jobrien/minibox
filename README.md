@@ -140,13 +140,34 @@ rootless support.
 
 ## Configuration
 
-| Variable              | Default                                         | Purpose                   |
-| --------------------- | ----------------------------------------------- | ------------------------- |
-| `MINIBOX_ADAPTER`     | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
-| `MINIBOX_DATA_DIR`    | `/var/lib/minibox`                              | Image + container storage |
-| `MINIBOX_RUN_DIR`     | `/run/minibox`                                  | Socket + runtime state    |
-| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
-| `RUST_LOG`            | —                                               | Tracing log level         |
+Configuration is layered: TOML config file → environment variables → defaults.
+
+**Config files** (later overrides earlier):
+
+1. `/etc/minibox/config.toml` (system)
+2. `~/.config/minibox/config.toml` (user)
+
+```toml
+adapter = "smolvm"
+log_level = "info"
+
+[policy]
+allow_privileged = false
+allow_bind_mounts = false
+max_image_size_mb = 2048
+```
+
+**Environment variables** (override config file values):
+
+| Variable                    | Default                                         | Purpose                 |
+| --------------------------- | ----------------------------------------------- | ----------------------- |
+| `MINIBOX_ADAPTER`           | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection |
+| `MINIBOX_DATA_DIR`          | `/var/lib/minibox`                              | Image + container storage |
+| `MINIBOX_RUN_DIR`           | `/run/minibox`                                  | Socket + runtime state  |
+| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root             |
+| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                         | Permit `-v` bind mounts |
+| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                         | Permit `--privileged`   |
+| `RUST_LOG`                  | —                                               | Tracing log level       |
 
 ---
 
