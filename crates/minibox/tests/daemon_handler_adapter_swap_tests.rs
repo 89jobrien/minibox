@@ -217,8 +217,15 @@ async fn test_run_with_all_success_adapters() {
             assert_eq!(id.len(), 16);
 
             // Verify container landed in state
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            assert!(state.get_container(&id).await.is_some());
+            assert!(
+                daemon_handler_common::wait_for_container(
+                    &state,
+                    &id,
+                    std::time::Duration::from_secs(2)
+                )
+                .await,
+                "container should appear in state"
+            );
         }
         other => panic!("expected ContainerCreated, got {other:?}"),
     }

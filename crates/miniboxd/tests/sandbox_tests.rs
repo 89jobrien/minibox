@@ -45,7 +45,7 @@ fn require_sandbox_caps() {
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_stdout_captured() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -59,7 +59,7 @@ fn sandbox_stdout_captured() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_stderr_captured() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -72,7 +72,7 @@ fn sandbox_stderr_captured() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_exit_code_zero() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -81,7 +81,7 @@ fn sandbox_exit_code_zero() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_nonzero_exit_code() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -93,7 +93,7 @@ fn sandbox_nonzero_exit_code() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_large_output() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -107,7 +107,7 @@ fn sandbox_large_output() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_network_isolated() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -130,7 +130,7 @@ fn sandbox_network_isolated() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_filesystem_write_read() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -144,7 +144,7 @@ fn sandbox_filesystem_write_read() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_sequential_runs_isolated() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -166,7 +166,7 @@ fn sandbox_sequential_runs_isolated() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_concurrent_runs_isolated() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -202,7 +202,7 @@ fn sandbox_concurrent_runs_isolated() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn sandbox_oom_kill() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -239,7 +239,7 @@ fn sandbox_oom_kill() {
 const PYTHON_IMAGE: &str = "python:3.12-alpine";
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn python_sandbox_basic_script() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -249,7 +249,7 @@ fn python_sandbox_basic_script() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn python_sandbox_exception_captured() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -266,7 +266,7 @@ fn python_sandbox_exception_captured() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn python_sandbox_json_output() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -287,7 +287,7 @@ fn python_sandbox_json_output() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn python_sandbox_multiline_output() {
     require_sandbox_caps();
     let mut sb = sandbox();
@@ -301,7 +301,7 @@ fn python_sandbox_multiline_output() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires Linux root + cgroups v2 + Docker Hub"]
 fn python_sandbox_network_blocked() {
     require_sandbox_caps();
     let mut sb = sandbox();

@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-05-25
+updated: 2026-05-26
 items:
 - id: test-in-vm
   doob_uuid: null

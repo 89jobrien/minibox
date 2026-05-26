@@ -409,12 +409,6 @@ mod tests {
     }
 
     #[test]
-    fn test_probe_does_not_panic() {
-        let caps = probe();
-        let _ = format!("{caps:?}");
-    }
-
-    #[test]
     fn test_format_report_does_not_panic() {
         let caps = probe();
         let report = format_report(&caps);
