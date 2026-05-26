@@ -279,6 +279,7 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
                         urgency,
                         execution_context: None,
                         platform,
+                        cgroup_parent: None,
                     }
                 },
             ),

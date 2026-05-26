@@ -178,6 +178,8 @@ pub struct RunCreationParams {
     pub user: Option<String>,
     #[serde(default)]
     pub platform: Option<String>,
+    #[serde(default)]
+    pub cgroup_parent: Option<String>,
 }
 
 /// A complete record for a container tracked by the daemon.
@@ -1172,6 +1174,7 @@ mod tests {
             entrypoint: Some("/bin/bash".to_string()),
             user: Some("root".to_string()),
             platform: Some("linux/amd64".to_string()),
+            cgroup_parent: None,
         };
         let mut record = make_test_record();
         record.creation_params = Some(params.clone());

@@ -114,6 +114,7 @@ pub struct RunOpts {
     pub user: Option<String>,
     pub auto_remove: bool,
     pub platform: Option<String>,
+    pub cgroup_parent: Option<String>,
 }
 
 /// Execute the `run` subcommand.
@@ -139,6 +140,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         user,
         auto_remove,
         platform,
+        cgroup_parent,
     } = opts;
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
@@ -182,6 +184,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         urgency: None,
         execution_context: None,
         platform,
+        cgroup_parent,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -284,6 +287,7 @@ mod tests {
                 user: None,
                 auto_remove: false,
                 platform: None,
+                cgroup_parent: None,
             },
             &socket_path,
         )

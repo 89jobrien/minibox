@@ -42,6 +42,7 @@ pub struct RunParams {
     pub env: Vec<String>,
     pub name: Option<String>,
     pub platform: Option<String>,
+    pub cgroup_parent: Option<String>,
 }
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
@@ -403,6 +404,7 @@ fn build_container_record(
     mounts: &[BindMount],
     privileged: bool,
     platform: &Option<String>,
+    cgroup_parent: &Option<String>,
 ) -> ContainerRecord {
     let command_str = command.join(" ");
     ContainerRecord {
@@ -443,6 +445,7 @@ fn build_container_record(
             entrypoint: None,
             user: None,
             platform: platform.clone(),
+            cgroup_parent: cgroup_parent.clone(),
         }),
         manifest_path: None,
         workload_digest: None,
@@ -474,6 +477,7 @@ async fn prepare_run(
         env,
         name,
         platform,
+        cgroup_parent,
         ephemeral: _,
     } = params;
 
@@ -599,10 +603,40 @@ async fn prepare_run(
         pids_max: Some(DEFAULT_PIDS_MAX),
         io_max_bytes_per_sec: None,
     };
-    let cgroup_dir_str = deps
-        .lifecycle
-        .resource_limiter
-        .create(&id, &resource_config)?;
+    let cgroup_dir_str = {
+        #[cfg(target_os = "linux")]
+        if let Some(ref parent) = cgroup_parent {
+            // Validate cgroup_parent is under /sys/fs/cgroup/ to prevent arbitrary
+            // directory creation elsewhere on the filesystem.
+            crate::container::cgroups::validate_cgroup_parent(parent)?;
+            let mgr = crate::container::cgroups::CgroupManager::with_root(
+                &id,
+                crate::container::cgroups::CgroupConfig {
+                    memory_limit_bytes: resource_config.memory_limit_bytes,
+                    cpu_weight: resource_config.cpu_weight,
+                    pids_max: resource_config.pids_max,
+                    io_max_bytes_per_sec: resource_config.io_max_bytes_per_sec,
+                },
+                std::path::PathBuf::from(parent),
+            );
+            mgr.create()?;
+            mgr.cgroup_path().display().to_string()
+        } else {
+            deps.lifecycle
+                .resource_limiter
+                .create(&id, &resource_config)?
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            if cgroup_parent.is_some() {
+                anyhow::bail!("--cgroup-parent is only supported on Linux");
+            }
+            deps.lifecycle
+                .resource_limiter
+                .create(&id, &resource_config)?
+        }
+    };
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Network setup ──────────────────────────────────────────────────
@@ -637,6 +671,7 @@ async fn prepare_run(
         &mounts,
         privileged,
         &platform,
+        &cgroup_parent,
     );
     // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
@@ -910,6 +945,7 @@ pub(super) async fn run_from_params(
         env: creation_params.env.clone(),
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),
+        cgroup_parent: creation_params.cgroup_parent.clone(),
     };
     run_inner(params, state, deps).await
 }

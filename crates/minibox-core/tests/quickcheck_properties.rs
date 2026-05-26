@@ -215,6 +215,7 @@ fn protocol_request_codec_roundtrip(seed: u8) -> TestResult {
             urgency: None,
             execution_context: None,
             platform: None,
+            cgroup_parent: None,
         },
     ];
 

@@ -100,6 +100,7 @@ pub fn build_request(
         urgency: None,
         execution_context: None,
         platform: None,
+        cgroup_parent: None,
     })
 }
 

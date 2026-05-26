@@ -64,6 +64,27 @@ fn cgroup_root() -> PathBuf {
     }
 }
 
+/// Validate that a cgroup parent path is under `/sys/fs/cgroup/`.
+///
+/// Rejects relative paths, paths outside the cgroupfs mount, and paths
+/// containing `..` components to prevent directory traversal.
+pub fn validate_cgroup_parent(path: &str) -> anyhow::Result<()> {
+    let p = std::path::Path::new(path);
+    if !p.is_absolute() {
+        anyhow::bail!("--cgroup-parent must be an absolute path, got {path:?}");
+    }
+    // Reject `..` components before canonicalization to prevent traversal.
+    for component in p.components() {
+        if let std::path::Component::ParentDir = component {
+            anyhow::bail!("--cgroup-parent must not contain '..': {path:?}");
+        }
+    }
+    if !path.starts_with("/sys/fs/cgroup/") && path != "/sys/fs/cgroup" {
+        anyhow::bail!("--cgroup-parent must be under /sys/fs/cgroup/, got {path:?}");
+    }
+    Ok(())
+}
+
 impl CgroupManager {
     /// Create a new manager for `container_id` with the given resource limits.
     ///
@@ -71,6 +92,19 @@ impl CgroupManager {
     /// create the directory and write the limits.
     pub fn new(container_id: &str, config: CgroupConfig) -> Self {
         let cgroup_path = cgroup_root().join(container_id);
+        Self {
+            id: container_id.to_string(),
+            cgroup_path,
+            config,
+        }
+    }
+
+    /// Create a manager with an explicit cgroup root instead of the default.
+    ///
+    /// The container cgroup is placed at `root/{container_id}`. Subtree
+    /// controllers are enabled on `root` during [`create`](Self::create).
+    pub fn with_root(container_id: &str, config: CgroupConfig, root: PathBuf) -> Self {
+        let cgroup_path = root.join(container_id);
         Self {
             id: container_id.to_string(),
             cgroup_path,
@@ -92,8 +126,12 @@ impl CgroupManager {
         // Enable controllers on the parent cgroup so child cgroups can use them.
         // Without this, writing pids.max/memory.max/etc. in the child fails with
         // Permission denied because the controllers aren't delegated.
-        let root = cgroup_root();
-        enable_subtree_controllers(&root)?;
+        // Derive from self.cgroup_path so with_root() delegates the custom parent.
+        let parent = self
+            .cgroup_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("/sys/fs/cgroup"));
+        enable_subtree_controllers(parent)?;
 
         // Memory limit
         const MIN_MEMORY_BYTES: u64 = 4096;
@@ -299,6 +337,44 @@ pub fn cgroup_path_for(container_id: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_cgroup_parent_rejects_relative_path() {
+        assert!(super::validate_cgroup_parent("minibox-dind").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_rejects_outside_cgroupfs() {
+        assert!(super::validate_cgroup_parent("/tmp/cgroup-fake").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_rejects_dotdot() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/../../tmp").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_accepts_valid_path() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/minibox-dind").is_ok());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_accepts_nested_path() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/user.slice/minibox").is_ok());
+    }
+
+    #[test]
+    fn with_root_uses_custom_root() {
+        let mgr = CgroupManager::with_root(
+            "test-id",
+            CgroupConfig::default(),
+            std::path::PathBuf::from("/sys/fs/cgroup/custom-slice"),
+        );
+        assert_eq!(
+            mgr.cgroup_path(),
+            std::path::Path::new("/sys/fs/cgroup/custom-slice/test-id")
+        );
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

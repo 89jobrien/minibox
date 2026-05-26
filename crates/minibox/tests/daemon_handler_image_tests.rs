@@ -1326,6 +1326,7 @@ async fn test_handle_run_invalid_platform_returns_error() {
             env: vec![],
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),
+            cgroup_parent: None,
         },
         state,
         deps,
