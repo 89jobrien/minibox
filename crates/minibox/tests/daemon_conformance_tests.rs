@@ -7,6 +7,8 @@
 //! platform-specific behavior into domain logic.
 // Issues #62, #67, #71: commit/build/push conformance tests added below.
 
+mod daemon_handler_common;
+
 use minibox::daemon::handler::{self, HandlerDependencies};
 use minibox::daemon::state::{ContainerState, DaemonState};
 use minibox::testing::mocks::{
@@ -526,8 +528,16 @@ mod conformance {
             _ => panic!("Expected ContainerCreated"),
         };
 
-        // Wait and mark as stopped
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Wait for container to appear, then mark as stopped
+        assert!(
+            daemon_handler_common::wait_for_container(
+                &state,
+                &container_id,
+                std::time::Duration::from_secs(2),
+            )
+            .await,
+            "container should appear in state before removal"
+        );
         state
             .update_container_state(&container_id, ContainerState::Stopped)
             .await
@@ -540,36 +550,6 @@ mod conformance {
             matches!(response, DaemonResponse::Success { .. }),
             "Remove handler must work with any FilesystemProvider implementation"
         );
-    }
-}
-
-/// OS-specific behavior documentation tests.
-///
-/// These tests document expected differences between platforms
-/// rather than asserting conformance.
-#[cfg(test)]
-mod platform_differences {
-    #[test]
-    #[ignore] // Documentation test
-    fn linux_uses_native_overlayfs() {
-        // Linux: Direct overlay mount syscall
-        // WSL2: Delegated to WSL helper binary
-        // Docker Desktop: Delegated to container in VM
-    }
-
-    #[test]
-    #[ignore] // Documentation test
-    fn wsl2_requires_path_translation() {
-        // Windows paths (C:\...) must convert to WSL paths (/mnt/c/...)
-        // Linux and Docker Desktop use paths directly
-    }
-
-    #[test]
-    #[ignore] // Documentation test
-    fn docker_desktop_uses_vm_networking() {
-        // Docker Desktop: Operations run in LinuxKit VM
-        // WSL2: Operations run in WSL2 VM
-        // Linux: Operations run on host kernel directly
     }
 }
 
