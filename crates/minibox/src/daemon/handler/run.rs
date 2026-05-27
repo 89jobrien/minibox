@@ -73,6 +73,21 @@ pub async fn handle_run(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    // Nesting depth gate: refuse to create containers if we've hit the limit.
+    let nesting = crate::nesting::NestingContext::from_env();
+    if let Err(e) = nesting.check_depth() {
+        let msg = format!("handle_run: {e}");
+        warn!(message = %msg, "handle_run: nesting depth exceeded");
+        if tx
+            .send(DaemonResponse::Error { message: msg })
+            .await
+            .is_err()
+        {
+            warn!("handle_run: client disconnected before depth error could be sent");
+        }
+        return;
+    }
+
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
     if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &deps.policy) {
         warn!(message = %msg, "handle_run: policy violation");
@@ -640,11 +655,10 @@ async fn prepare_run(
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     // ── Cgroup delegation for nested containers ────────────────────────
-    // Enable subtree controllers so a nested miniboxd inside this container
-    // can create child cgroups. The container process itself goes into the
-    // init leaf (cgroups v2 "no internal processes" rule).
+    // Only privileged containers get subtree delegation — non-privileged
+    // containers use the flat cgroup model (no child cgroup creation).
     #[cfg(target_os = "linux")]
-    {
+    if privileged {
         let delegation = crate::container::cgroups::DelegationPaths {
             subtree: cgroup_dir.clone(),
             init_leaf: cgroup_dir.join("init"),

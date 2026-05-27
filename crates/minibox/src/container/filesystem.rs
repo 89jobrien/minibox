@@ -210,13 +210,15 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
     )
     .with_context(|| format!("tmpfs mount at {}", merged.display()))?;
 
-    // Copy top layer (most recent) into the tmpfs rootfs.
-    let top_layer = image_layers
-        .last()
-        .context("no image layers for tmpfs fallback")?;
-
-    copy_dir_recursive(top_layer, &merged)
-        .with_context(|| format!("copy layer {} to tmpfs", top_layer.display()))?;
+    // Copy all layers bottom-to-top into the tmpfs rootfs, simulating
+    // overlay merge order. Later layers overwrite earlier ones.
+    if image_layers.is_empty() {
+        anyhow::bail!("no image layers for tmpfs fallback");
+    }
+    for layer in image_layers {
+        copy_dir_recursive(layer, &merged)
+            .with_context(|| format!("copy layer {} to tmpfs", layer.display()))?;
+    }
 
     info!(merged = %merged.display(), "filesystem: tmpfs fallback mounted");
     Ok(merged)
