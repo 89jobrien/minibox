@@ -1299,7 +1299,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn run_request_defaults_ephemeral_false() {
+    fn daemon_request_run_defaults_ephemeral_false() {
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
         match req {
@@ -1309,7 +1309,7 @@ mod tests {
     }
 
     #[test]
-    fn run_request_explicit_ephemeral_true() {
+    fn daemon_request_run_explicit_ephemeral_true() {
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"ephemeral":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
         match req {
@@ -1336,7 +1336,7 @@ mod tests {
     }
 
     #[test]
-    fn container_stopped_roundtrip() {
+    fn daemon_response_container_stopped_roundtrip() {
         let msg = DaemonResponse::ContainerStopped { exit_code: 42 };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"exit_code\":42"));
@@ -1368,7 +1368,7 @@ mod tests {
     }
 
     #[test]
-    fn run_request_without_network_defaults_to_none_option() {
+    fn daemon_request_run_without_network_defaults_to_none() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1463,7 +1463,7 @@ mod tests {
     }
 
     #[test]
-    fn container_logs_request_follow_defaults_false() {
+    fn daemon_request_container_logs_follow_defaults_false() {
         let json = r#"{"type":"ContainerLogs","container_id":"abc"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1491,7 +1491,7 @@ mod tests {
     }
 
     #[test]
-    fn run_request_old_json_without_mounts_defaults() {
+    fn daemon_request_run_old_json_without_mounts_defaults() {
         // Old clients that don't send mounts/privileged must still deserialize.
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
@@ -1544,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    fn run_request_tty_defaults_false() {
+    fn daemon_request_run_tty_defaults_false() {
         // Old clients omitting `tty` must still deserialise cleanly.
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
@@ -1563,7 +1563,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn wire_snapshot_run_request() {
+    fn daemon_request_wire_snapshot_run() {
         let req = DaemonRequest::Run {
             image: "library/alpine".to_string(),
             tag: Some("3.18".to_string()),
@@ -1611,7 +1611,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_stop_request() {
+    fn daemon_request_wire_snapshot_stop() {
         let json = serde_json::to_string(&DaemonRequest::Stop {
             id: "abc123def456".to_string(),
         })
@@ -1626,7 +1626,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_pull_request() {
+    fn daemon_request_wire_snapshot_pull() {
         let json = serde_json::to_string(&DaemonRequest::Pull {
             image: "library/nginx".to_string(),
             tag: Some("stable".to_string()),
@@ -1640,7 +1640,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_container_created_response() {
+    fn daemon_response_wire_snapshot_container_created() {
         let json = serde_json::to_string(&DaemonResponse::ContainerCreated {
             id: "deadbeef1234".to_string(),
         })
@@ -1649,7 +1649,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_success_response() {
+    fn daemon_response_wire_snapshot_success() {
         let json = serde_json::to_string(&DaemonResponse::Success {
             message: "stopped".to_string(),
         })
@@ -1658,7 +1658,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_error_response() {
+    fn daemon_response_wire_snapshot_error() {
         let json = serde_json::to_string(&DaemonResponse::Error {
             message: "container not found".to_string(),
         })
@@ -1693,14 +1693,14 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_container_stopped_response() {
+    fn daemon_response_wire_snapshot_container_stopped() {
         let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 0 })
             .expect("serialize");
         assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":0}"#);
     }
 
     #[test]
-    fn wire_snapshot_container_stopped_nonzero_exit() {
+    fn daemon_response_wire_snapshot_container_stopped_nonzero_exit() {
         let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 137 })
             .expect("serialize");
         assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":137}"#);
@@ -1713,7 +1713,7 @@ mod tests {
     }
 
     #[test]
-    fn wire_snapshot_push_credentials_basic() {
+    fn push_credentials_wire_snapshot_basic() {
         let json = serde_json::to_string(&PushCredentials::Basic {
             username: "user".to_string(),
             password: "s3cr3t".to_string(),
@@ -1819,7 +1819,7 @@ mod tests {
     /// (old clients omitting it still decode). Renaming a field is a breaking
     /// change and will cause this test to fail.
     #[test]
-    fn wire_format_run_request_field_names_stable() {
+    fn daemon_request_wire_format_run_field_names_stable() {
         let req = test_run!(image: "i".to_string(), command: Vec::<String>::new());
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
@@ -1852,7 +1852,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn pull_without_platform_deserializes() {
+    fn daemon_request_pull_without_platform_deserializes() {
         let json = r#"{"type":"Pull","image":"alpine","tag":"latest"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1862,7 +1862,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_with_platform_deserializes() {
+    fn daemon_request_pull_with_platform_deserializes() {
         let json = r#"{"type":"Pull","image":"alpine","tag":"latest","platform":"linux/arm64"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1874,7 +1874,7 @@ mod tests {
     }
 
     #[test]
-    fn run_without_platform_deserializes() {
+    fn daemon_request_run_without_platform_deserializes() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1884,7 +1884,7 @@ mod tests {
     }
 
     #[test]
-    fn run_with_platform_deserializes() {
+    fn daemon_request_run_with_platform_deserializes() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"platform":"linux/arm64"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1901,7 +1901,7 @@ mod tests {
 
     /// Wire-format snapshot for `DaemonRequest::Update` with explicit image list.
     #[test]
-    fn wire_snapshot_update_request() {
+    fn daemon_request_wire_snapshot_update() {
         let req = DaemonRequest::Update {
             images: vec!["alpine:latest".to_string(), "nginx:stable".to_string()],
             all: false,
@@ -1920,7 +1920,7 @@ mod tests {
 
     /// Deserialize `Update` with only the `images` field — booleans default to false.
     #[test]
-    fn update_request_defaults_bools_false() {
+    fn daemon_request_update_defaults_bools_false() {
         let json = r#"{"type":"Update","images":["alpine:latest"]}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1941,7 +1941,7 @@ mod tests {
 
     /// Deserialize `Update` with `all: true`.
     #[test]
-    fn update_request_all_true() {
+    fn daemon_request_update_all_true() {
         let json = r#"{"type":"Update","images":[],"all":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1955,7 +1955,7 @@ mod tests {
 
     /// Deserialize `Update` with `containers: true, restart: true`.
     #[test]
-    fn update_request_containers_and_restart() {
+    fn daemon_request_update_containers_and_restart() {
         let json = r#"{"type":"Update","images":[],"containers":true,"restart":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
         match req {
@@ -1973,7 +1973,7 @@ mod tests {
 
     /// Wire-format snapshot for `DaemonResponse::UpdateProgress`.
     #[test]
-    fn wire_snapshot_update_progress_response() {
+    fn daemon_response_wire_snapshot_update_progress() {
         let resp = DaemonResponse::UpdateProgress {
             image: "alpine:latest".to_string(),
             status: "updated".to_string(),

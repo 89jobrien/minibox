@@ -419,7 +419,7 @@ mod tests {
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]
-    fn decode_output_chunk() {
+    fn daemon_response_decode_output_chunk() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(b"hello world\n");
         let response = DaemonResponse::ContainerOutput {
             stream: OutputStreamKind::Stdout,
@@ -560,7 +560,7 @@ mod tests {
     /// Verify that a base64-encoded stderr chunk round-trips and retains the
     /// correct stream kind discriminant.
     #[test]
-    fn decode_stderr_chunk() {
+    fn daemon_response_decode_stderr_chunk() {
         let encoded =
             base64::engine::general_purpose::STANDARD.encode(b"error: something went wrong\n");
         let response = DaemonResponse::ContainerOutput {

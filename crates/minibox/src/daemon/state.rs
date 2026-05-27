@@ -1095,7 +1095,7 @@ mod tests {
     }
 
     #[test]
-    fn container_record_deserializes_without_creation_params() {
+    fn container_record_deserialize_without_creation_params() {
         let json = r#"{
             "info": {
                 "id": "abc123",

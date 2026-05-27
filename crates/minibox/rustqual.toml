@@ -8,6 +8,9 @@ ignore_functions = ["main", "test_*"]
 exclude_files = [
     "tests/*",
     "benches/*",
+    "src/adapters/mocks.rs",
+    "src/testing/*",
+    "examples/*",
 ]
 
 # Cross-crate consumers (miniboxd, mbx, minibox-testsuite) use pub API;

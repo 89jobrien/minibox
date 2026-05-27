@@ -871,7 +871,7 @@ mod tests {
     // --- DomainError tests ---
 
     #[test]
-    fn test_domain_error_display_image_not_found() {
+    fn domain_error_display_image_not_found() {
         let err = DomainError::ImageNotFound {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
@@ -880,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_container_not_found() {
+    fn domain_error_display_container_not_found() {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
@@ -888,7 +888,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_resource_limit_exceeded() {
+    fn domain_error_display_resource_limit_exceeded() {
         let err = DomainError::ResourceLimitExceeded {
             limit: "memory_bytes".to_string(),
             value: 9999,

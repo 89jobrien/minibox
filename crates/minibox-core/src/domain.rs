@@ -1851,7 +1851,7 @@ mod tests {
     // --- DomainError tests ---
 
     #[test]
-    fn test_domain_error_display_image_not_found() {
+    fn domain_error_display_image_not_found() {
         let err = DomainError::ImageNotFound {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
@@ -1860,7 +1860,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_container_not_found() {
+    fn domain_error_display_container_not_found() {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
@@ -1868,7 +1868,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_resource_limit_exceeded() {
+    fn domain_error_display_resource_limit_exceeded() {
         let err = DomainError::ResourceLimitExceeded {
             limit: "memory_bytes".to_string(),
             value: 9999,
@@ -2159,7 +2159,7 @@ mod tests {
         }
 
         #[test]
-        fn pty_config_json_missing_fields_use_serde_default() {
+        fn pty_config_deserialize_missing_fields_use_serde_default() {
             // When a JSON payload omits fields the struct must still deserialize.
             let json = r#"{"enabled":false,"cols":80,"rows":24}"#;
             let cfg: PtyConfig = serde_json::from_str(json).expect("deserialize");
@@ -2253,7 +2253,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn workflow_step_defaults_continue_on_error_false() {
+        fn workflow_step_deserialize_defaults_continue_on_error_false() {
             let json = r#"{"kind":"container-run","alias":"build"}"#;
             let step: WorkflowStep = serde_json::from_str(json).unwrap();
             assert!(!step.continue_on_error);

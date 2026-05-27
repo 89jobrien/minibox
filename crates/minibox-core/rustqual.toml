@@ -1,0 +1,26 @@
+# rustqual config for minibox-core
+# Core domain crate with cross-crate pub API consumers.
+
+ignore_functions = ["main", "test_*"]
+
+# Test and mock files use .unwrap()/.expect() by design.
+# Conformance tests construct enum variants directly (no function call for
+# rustqual to trace), producing TQ_NO_SUT false positives.
+exclude_files = [
+    "src/adapters/mocks.rs",
+    "tests/*",
+]
+
+# Cross-crate pub API usage invisible to single-crate analysis.
+[duplicates]
+detect_dead_code = false
+
+[complexity]
+max_cognitive = 18
+max_cyclomatic = 11
+max_function_lines = 68
+
+[srp]
+max_parameters = 5
+file_length_baseline = 300
+file_length_ceiling = 800

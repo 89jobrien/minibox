@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 20260527.115757
+updated: 2026-05-27
 items:
 - id: test-in-vm
   doob_uuid: null
@@ -30,18 +30,8 @@ items:
     note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
 log:
 - date: '20260527.115757'
-  summary: Resolved 12 TODOs — quick-win code fixes (#429 #436 #431 #430); stale TODO removal (#326 #328 #366); test coverage for #219 lifecycle failures, #328 manifest inspection, #178 update restart; implemented #263 paused state persistence with reconciliation and 6 unit tests
-  commits:
-  - sha: e1b949cd
-    branch: develop
-  - sha: 97d2790b
-    branch: develop
-  - sha: 0c7edf5c
-    branch: develop
-  - sha: cbf70ba0
-    branch: develop
-  - sha: 71a697e5
-    branch: develop
+  summary: Resolved 12 TODOs — quick-win code fixes (#429
+  commits: []
   session: 6
 - date: '20260525.183746'
   summary: Resolved 3 P0 security issues (#428 env key validation,

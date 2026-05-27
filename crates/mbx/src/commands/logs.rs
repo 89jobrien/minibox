@@ -63,7 +63,7 @@ mod tests {
 
     /// Verify the `ContainerLogs` request serialises with the correct type tag.
     #[test]
-    fn logs_request_has_type_tag() {
+    fn daemon_request_logs_has_type_tag() {
         let req = DaemonRequest::ContainerLogs {
             container_id: "ctr1".to_string(),
             follow: false,
@@ -77,7 +77,7 @@ mod tests {
 
     /// Verify `follow: true` serialises correctly.
     #[test]
-    fn logs_request_follow_field() {
+    fn daemon_request_logs_follow_field() {
         let req = DaemonRequest::ContainerLogs {
             container_id: "ctr2".to_string(),
             follow: true,
@@ -91,7 +91,7 @@ mod tests {
 
     /// Verify that a `LogLine` response deserialises correctly.
     #[test]
-    fn log_line_response_deserialises() {
+    fn daemon_response_log_line_deserialises() {
         let json = r#"{"type":"LogLine","stream":"stdout","line":"hello world"}"#;
         let resp: DaemonResponse = serde_json::from_str(json).unwrap();
         match resp {

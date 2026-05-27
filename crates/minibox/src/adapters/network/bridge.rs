@@ -712,7 +712,7 @@ mod tests {
     /// The iptables `--to-destination` argument must be `container_ip:container_port`.
     /// This test verifies the format string without invoking any iptables binary.
     #[test]
-    fn dnat_destination_format() {
+    fn bridge_network_dnat_destination_format() {
         let container_ip = "172.20.0.5";
         let container_port: u16 = 8080;
         let to_dest = format!("{container_ip}:{container_port}");
@@ -721,7 +721,7 @@ mod tests {
 
     /// Issue #134: DNS fallback must be 8.8.8.8 and 1.1.1.1 when no servers are configured.
     #[test]
-    fn dns_fallback_when_config_has_no_servers() {
+    fn bridge_network_dns_fallback_when_config_has_no_servers() {
         let empty: Vec<String> = vec![];
         let dns: Vec<String> = if empty.is_empty() {
             vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
@@ -733,7 +733,7 @@ mod tests {
 
     /// Issue #134: DNS config is used verbatim when non-empty.
     #[test]
-    fn dns_config_used_verbatim_when_non_empty() {
+    fn bridge_network_dns_config_used_verbatim_when_non_empty() {
         let servers = vec!["1.0.0.1".to_string(), "9.9.9.9".to_string()];
         let dns: Vec<String> = if servers.is_empty() {
             vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]

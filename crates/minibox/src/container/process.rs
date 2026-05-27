@@ -527,7 +527,7 @@ mod tests {
     /// Verify that the privileged capability bitmasks exclude the four
     /// host-escape capabilities and retain all others.
     #[test]
-    fn privileged_capability_bitmasks_exclude_host_escape_caps() {
+    fn apply_privileged_capabilities_bitmasks_exclude_host_escape_caps() {
         // Reproduce the constants from apply_privileged_capabilities.
         const CAP_PRIVILEGED_LOW: u32 = !(1_u32 << 16) & !(1_u32 << 22);
         const CAP_PRIVILEGED_HIGH: u32 = 0x0000_01FF & !(1 << 0) & !(1 << 1);
