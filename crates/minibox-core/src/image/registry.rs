@@ -297,10 +297,10 @@ fn extract_and_verify_layer(
     // Atomic rename: tmp -> final dest.
     if let Err(e) = std::fs::rename(&tmp_dir, layer_dir) {
         if layer_dir.exists() {
-            let _ = std::fs::remove_dir_all(&tmp_dir);
+            cleanup_tmp_dir(&tmp_dir, digest);
             return Ok(actual_bytes);
         }
-        let _ = std::fs::remove_dir_all(&tmp_dir);
+        cleanup_tmp_dir(&tmp_dir, digest);
         return Err(e).with_context(|| format!("rename {tmp_dir:?} -> {layer_dir:?}"));
     }
 

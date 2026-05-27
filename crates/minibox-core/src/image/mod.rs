@@ -305,10 +305,10 @@ impl ImageStore {
         if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
             // Another concurrent caller may have won the race.
             if layer_dir.exists() {
-                let _ = std::fs::remove_dir_all(&tmp_dir);
+                cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
                 return Ok(layer_dir);
             }
-            let _ = std::fs::remove_dir_all(&tmp_dir);
+            cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
             return Err(e).with_context(|| {
                 format!("rename {} -> {}", tmp_dir.display(), layer_dir.display())
             });
