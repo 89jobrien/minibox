@@ -61,31 +61,33 @@ fn probe_nested_overlay() -> bool {
         }
         fs::write(base.join("lower1/probe.txt"), "probe")?;
 
+        let opts1 = format!(
+            "lowerdir={lower},upperdir={upper},workdir={work}",
+            lower = base.join("lower1").display(),
+            upper = base.join("upper1").display(),
+            work = base.join("work1").display(),
+        );
         mount(
             Some("overlay"),
             &base.join("merged1"),
             Some("overlay"),
             MsFlags::empty(),
-            Some(&format!(
-                "lowerdir={lower},upperdir={upper},workdir={work}",
-                lower = base.join("lower1").display(),
-                upper = base.join("upper1").display(),
-                work = base.join("work1").display(),
-            )),
+            Some(opts1.as_str()),
         )?;
 
         // Second overlay: use merged1 as lowerdir
+        let opts2 = format!(
+            "lowerdir={lower},upperdir={upper},workdir={work}",
+            lower = base.join("merged1").display(),
+            upper = base.join("upper2").display(),
+            work = base.join("work2").display(),
+        );
         let nested_ok = mount(
             Some("overlay"),
             &base.join("merged2"),
             Some("overlay"),
             MsFlags::empty(),
-            Some(&format!(
-                "lowerdir={lower},upperdir={upper},workdir={work}",
-                lower = base.join("merged1").display(),
-                upper = base.join("upper2").display(),
-                work = base.join("work2").display(),
-            )),
+            Some(opts2.as_str()),
         )
         .is_ok();
 

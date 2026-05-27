@@ -710,7 +710,7 @@ fn setup_cgroup(
     };
     let cgroup_dir_str = {
         #[cfg(target_os = "linux")]
-        if let Some(ref parent) = cgroup_parent {
+        if let Some(parent) = cgroup_parent {
             crate::container::cgroups::validate_cgroup_parent(parent)?;
             let mgr = crate::container::cgroups::CgroupManager::with_root(
                 id,
