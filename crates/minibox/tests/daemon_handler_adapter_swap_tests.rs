@@ -15,6 +15,8 @@ use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+mod daemon_handler_common;
+
 // ---------------------------------------------------------------------------
 // Shared helpers (mirror handler_tests.rs patterns exactly)
 // ---------------------------------------------------------------------------

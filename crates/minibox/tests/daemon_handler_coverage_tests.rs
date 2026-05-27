@@ -751,6 +751,322 @@ async fn test_handle_build_relative_context_path_returns_error() {
     );
 }
 
+// ---- handle_get_manifest (happy path) ---------------------------------------
+
+/// handle_get_manifest returns Manifest with correct content when the manifest
+/// file exists on disk and the container record points to it.
+#[tokio::test]
+async fn test_handle_get_manifest_success() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // Write a valid ExecutionManifest JSON to a file in the TempDir.
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-manifest-test".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string(), "hello".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest.json");
+    let json = serde_json::to_string_pretty(&manifest).expect("serialize manifest");
+    std::fs::write(&manifest_path, &json).expect("write manifest file");
+
+    // Register a container record whose manifest_path points to the file.
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-manifest-test".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo hello".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_get_manifest("ctr-manifest-test".to_string(), state, deps, tx).await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_get_manifest");
+    match resp {
+        DaemonResponse::Manifest { manifest: val } => {
+            let image_ref = val
+                .get("subject")
+                .and_then(|s| s.get("image_ref"))
+                .and_then(|v| v.as_str())
+                .expect("image_ref missing from manifest value");
+            assert_eq!(
+                image_ref, "alpine:3.18",
+                "returned manifest must contain correct image_ref"
+            );
+        }
+        other => panic!("expected Manifest, got {other:?}"),
+    }
+}
+
+// ---- handle_verify_manifest (happy path: allowed) ---------------------------
+
+/// handle_verify_manifest returns VerifyResult { allowed: true } when the
+/// policy permits the workload described in the manifest.
+#[tokio::test]
+async fn test_handle_verify_manifest_allowed() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-verify-allow".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest-allow.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize"),
+    )
+    .expect("write manifest");
+
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-verify-allow".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    // A permissive policy: no constraints at all.
+    let permissive_policy = r#"{}"#;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_verify_manifest(
+        "ctr-verify-allow".to_string(),
+        permissive_policy.to_string(),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_verify_manifest");
+    match resp {
+        DaemonResponse::VerifyResult { allowed, reason } => {
+            assert!(allowed, "permissive policy must allow; reason: {reason:?}");
+            assert!(reason.is_none(), "allowed result must have no reason");
+        }
+        other => panic!("expected VerifyResult, got {other:?}"),
+    }
+}
+
+// ---- handle_verify_manifest (happy path: denied) ----------------------------
+
+/// handle_verify_manifest returns VerifyResult { allowed: false, reason: Some(...) }
+/// when the policy rejects the workload (e.g. image not in allowed list).
+#[tokio::test]
+async fn test_handle_verify_manifest_denied() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-verify-deny".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest-deny.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize"),
+    )
+    .expect("write manifest");
+
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-verify-deny".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    // A restrictive policy: only ubuntu images are allowed.
+    let restrictive_policy = r#"{"allowed_images":["ubuntu*"]}"#;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_verify_manifest(
+        "ctr-verify-deny".to_string(),
+        restrictive_policy.to_string(),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_verify_manifest");
+    match resp {
+        DaemonResponse::VerifyResult { allowed, reason } => {
+            assert!(!allowed, "restrictive policy must deny alpine image");
+            assert!(
+                reason.is_some(),
+                "denied result must include a reason string"
+            );
+            let r = reason.expect("reason is Some");
+            assert!(
+                r.contains("not in allowed list"),
+                "denial reason must mention 'not in allowed list', got: {r}"
+            );
+        }
+        other => panic!("expected VerifyResult, got {other:?}"),
+    }
+}
+
 // ---- handle_pipeline --------------------------------------------------------
 
 /// handle_pipeline with a nonexistent pipeline file returns Error.
