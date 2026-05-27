@@ -135,6 +135,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - uses: taiki-e/install-action@nextest
+
       - name: run CLI conformance
         run: cargo nextest run -p mbx --test conformance_cli
 
