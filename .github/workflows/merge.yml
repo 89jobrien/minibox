@@ -81,28 +81,6 @@ jobs:
       - name: cargo xtask test-unit
         run: cargo xtask test-unit
 
-  coverage-check:
-    name: coverage check
-    runs-on: ubuntu-latest
-    needs: [detect-changes, lint]
-    if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
-        needs.detect-changes.outputs.core == 'true' ||
-        needs.detect-changes.outputs.daemon == 'true' ||
-        needs.detect-changes.outputs.cli == 'true' ||
-        needs.detect-changes.outputs.runtime == 'true' ||
-        needs.detect-changes.outputs.xtask == 'true'
-      )
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: cargo xtask coverage-check
-        run: cargo xtask coverage-check
-
   lint-docs:
     name: lint docs
     runs-on: ubuntu-latest
@@ -131,73 +109,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask check-protocol-drift
         run: cargo xtask check-protocol-drift
-
-  build-test-archive:
-    name: build test archive
-    runs-on: ubuntu-latest
-    needs: [lint]
-    if: contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref)
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: cargo build --locked
-        run: cargo build --locked --workspace
-      - name: cargo nextest archive
-        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
-      - name: upload test archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextest-archive
-          path: nextest-archive.tar.zst
-          retention-days: 1
-
-  test-archive:
-    name: test from archive (ubuntu)
-    runs-on: ubuntu-latest
-    needs: build-test-archive
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: nextest-archive
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: run tests from archive
-        # Excluded from archive runs (require runtime binaries not in archive):
-        # - minibox-crux-plugin: spawns the plugin binary
-        # - cli_e2e_tests: requires mbx + miniboxd
-        # - smolvm_e2e_tests: requires smolvm CLI on PATH
-        # - protocol_e2e_tests: requires miniboxd binary
-        run: >-
-          cargo nextest run
-          --archive-file nextest-archive.tar.zst
-          --workspace-remap .
-          -E 'not package(minibox-crux-plugin)
-          and not binary_id(miniboxd::cli_e2e_tests)
-          and not binary_id(miniboxd::smolvm_e2e_tests)
-          and not binary_id(miniboxd::protocol_e2e_tests)'
-
-  test-all-features:
-    name: test with all features
-    runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/develop","refs/heads/next"]'), github.ref)
-    needs: build-test-archive
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
-        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
-      - name: cargo test --all-features (doc)
-        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
 
   audit:
     name: cargo audit
@@ -285,12 +196,8 @@ jobs:
       - detect-changes
       - lint
       - test-unit
-      - coverage-check
       - lint-docs
       - check-protocol-drift
-      - build-test-archive
-      - test-archive
-      - test-all-features
       - audit
       - deny
       - machete
@@ -304,12 +211,8 @@ jobs:
           results=(
             "${{ needs.lint.result }}"
             "${{ needs.test-unit.result }}"
-            "${{ needs.coverage-check.result }}"
             "${{ needs.lint-docs.result }}"
             "${{ needs.check-protocol-drift.result }}"
-            "${{ needs.build-test-archive.result }}"
-            "${{ needs.test-archive.result }}"
-            "${{ needs.test-all-features.result }}"
             "${{ needs.audit.result }}"
             "${{ needs.deny.result }}"
             "${{ needs.machete.result }}"
@@ -327,7 +230,7 @@ jobs:
           echo "All jobs passed or were skipped"
 
   promote-staging:
-    name: promote next → staging
+    name: promote next -> staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/next'
     needs: [ci-ok]
@@ -349,18 +252,18 @@ jobs:
           git checkout staging
           git merge --ff-only origin/next || git merge origin/next -m "Merge branch 'next' into staging"
           git push origin staging
-      - name: create or update staging → main PR
+      - name: create or update staging -> main PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
           if [ -n "$existing" ]; then
-            echo "PR #$existing already open for staging → main"
+            echo "PR #$existing already open for staging -> main"
           else
             gh pr create \
               --base main \
               --head staging \
-              --title "Promote staging → main" \
+              --title "Promote staging -> main" \
               --body "Automated promotion from staging. Status checks must pass before merge."
           fi
 

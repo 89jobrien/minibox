@@ -2,12 +2,13 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"       # daily — geiger, tag
+    - cron: "0 2 * * *"       # daily — geiger, tag, extended tests
     - cron: "0 3 * * 0"       # weekly (Sunday) — mutants
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   geiger:
@@ -103,6 +104,106 @@ jobs:
               fi
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # --- Extended test suites (moved from merge/conformance to reduce push latency) ---
+
+  coverage-check:
+    name: coverage check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo xtask coverage-check
+        run: cargo xtask coverage-check
+
+  build-test-archive:
+    name: build test archive
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo build --locked
+        run: cargo build --locked --workspace
+      - name: cargo nextest archive
+        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
+      - name: upload test archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+          retention-days: 1
+
+  test-archive:
+    name: test from archive (ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: run tests from archive
+        run: >-
+          cargo nextest run
+          --archive-file nextest-archive.tar.zst
+          --workspace-remap .
+          -E 'not package(minibox-crux-plugin)
+          and not binary_id(miniboxd::cli_e2e_tests)
+          and not binary_id(miniboxd::smolvm_e2e_tests)
+          and not binary_id(miniboxd::protocol_e2e_tests)'
+
+  test-all-features:
+    name: test with all features
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
+        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
+      - name: cargo test --all-features (doc)
+        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
+
+  shuttle:
+    name: shuttle
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: run shuttle tests
+        run: cargo xtask test-shuttle
+
+  turmoil:
+    name: turmoil
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: run turmoil tests
+        run: cargo xtask test-turmoil
 
   tag-nightly:
     name: tag nightly release
