@@ -130,7 +130,7 @@ impl NestingContext {
 
     /// The depth value to set for a child container.
     pub fn child_depth(&self) -> u32 {
-        self.depth + 1
+        self.depth.saturating_add(1)
     }
 
     /// Fail if current depth has reached or exceeded the limit.
@@ -215,5 +215,23 @@ mod tests {
         let vars = ctx.child_env_vars();
         assert!(vars.contains(&"MINIBOX_NEST_DEPTH=2".to_string()));
         assert!(vars.contains(&"MINIBOX_MAX_NEST_DEPTH=8".to_string()));
+    }
+
+    #[test]
+    fn child_depth_saturates_at_u32_max() {
+        let ctx = NestingContext::new(Some(u32::MAX), Some(u32::MAX));
+        assert_eq!(ctx.child_depth(), u32::MAX);
+    }
+
+    #[test]
+    fn check_depth_zero_max_zero_fails() {
+        let ctx = NestingContext::new(Some(0), Some(0));
+        assert!(ctx.check_depth().is_err());
+    }
+
+    #[test]
+    fn check_depth_zero_max_one_ok() {
+        let ctx = NestingContext::new(Some(0), Some(1));
+        assert!(ctx.check_depth().is_ok());
     }
 }

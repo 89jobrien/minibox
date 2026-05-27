@@ -924,6 +924,78 @@ mod tests {
         assert_eq!(tty_node.minor, 0);
     }
 
+    // ── copy_dir_recursive ─────────────────────────────────────────────────
+
+    #[test]
+    fn copy_dir_recursive_copies_files_and_dirs() {
+        let src = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+
+        // Create source structure: file.txt, sub/nested.txt
+        fs::write(src.path().join("file.txt"), "hello").unwrap();
+        fs::create_dir_all(src.path().join("sub")).unwrap();
+        fs::write(src.path().join("sub/nested.txt"), "world").unwrap();
+
+        copy_dir_recursive(src.path(), dst.path()).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(dst.path().join("file.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            fs::read_to_string(dst.path().join("sub/nested.txt")).unwrap(),
+            "world"
+        );
+    }
+
+    #[test]
+    fn copy_dir_recursive_copies_symlinks() {
+        let src = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+
+        fs::write(src.path().join("target.txt"), "data").unwrap();
+        std::os::unix::fs::symlink("target.txt", src.path().join("link.txt")).unwrap();
+
+        copy_dir_recursive(src.path(), dst.path()).unwrap();
+
+        let link_target = fs::read_link(dst.path().join("link.txt")).unwrap();
+        assert_eq!(link_target.to_str().unwrap(), "target.txt");
+    }
+
+    #[test]
+    fn copy_dir_recursive_later_layer_overwrites_earlier() {
+        let layer1 = TempDir::new().unwrap();
+        let layer2 = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+
+        fs::write(layer1.path().join("config"), "v1").unwrap();
+        fs::write(layer1.path().join("base"), "unchanged").unwrap();
+        fs::write(layer2.path().join("config"), "v2").unwrap();
+
+        copy_dir_recursive(layer1.path(), dst.path()).unwrap();
+        copy_dir_recursive(layer2.path(), dst.path()).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(dst.path().join("config")).unwrap(),
+            "v2",
+            "later layer should overwrite"
+        );
+        assert_eq!(
+            fs::read_to_string(dst.path().join("base")).unwrap(),
+            "unchanged"
+        );
+    }
+
+    #[test]
+    fn copy_dir_recursive_empty_source_is_noop() {
+        let src = TempDir::new().unwrap();
+        let dst = TempDir::new().unwrap();
+        copy_dir_recursive(src.path(), dst.path()).unwrap();
+        // dst should still be empty (no entries besides . and ..)
+        let entries: Vec<_> = fs::read_dir(dst.path()).unwrap().collect();
+        assert!(entries.is_empty());
+    }
+
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
     // Run with: sudo cargo test -p minibox container::filesystem::tests
