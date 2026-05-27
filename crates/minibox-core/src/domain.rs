@@ -4,13 +4,6 @@
 //! must implement. Following hexagonal architecture principles, the domain
 //! layer has **zero dependencies** on infrastructure details.
 //!
-// TODO(#434): move these TODOs outside the //! doc comment block
-// TODO(#83): add PTY/stdio piping trait surface for interactive containers
-// TODO(#263): paused state migration — add Paused variant to ContainerStatus
-// TODO(#327): add measured execution policy gate (ExecutionPolicy port)
-// TODO(#354): remove nix OS primitives from domain layer
-// TODO(#374): add 8 BackendCapability variants for capability-gated testing
-//!
 //! # Architecture
 //!
 //! ```text
