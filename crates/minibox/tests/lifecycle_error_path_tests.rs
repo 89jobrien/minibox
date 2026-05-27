@@ -433,10 +433,10 @@ async fn test_handle_remove_cgroup_cleanup_failure_is_best_effort() {
 // GH #219 — additional lifecycle failure / edge-case tests
 // ---------------------------------------------------------------------------
 
-/// handle_remove on a Paused container succeeds: the Running guard only blocks
-/// "Running" state. The container must be deregistered from state.
+/// handle_remove on a Paused container is blocked: a paused container has a
+/// live frozen process, so it must be resumed or stopped before removal.
 #[tokio::test]
-async fn test_handle_remove_paused_container_succeeds() {
+async fn test_handle_remove_paused_container_blocked() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let state = make_state(&temp_dir);
 
@@ -453,13 +453,13 @@ async fn test_handle_remove_paused_container_succeeds() {
     let resp = handler::handle_remove(id.to_string(), state.clone(), deps).await;
 
     assert!(
-        matches!(resp, DaemonResponse::Success { .. }),
-        "expected Success when removing a Paused container, got {resp:?}"
+        matches!(resp, DaemonResponse::Error { .. }),
+        "expected Error when removing a Paused container (must resume or stop first), got {resp:?}"
     );
-    let gone = state.get_container(id).await;
+    let still_there = state.get_container(id).await;
     assert!(
-        gone.is_none(),
-        "Paused container must be removed from state after successful remove"
+        still_there.is_some(),
+        "Paused container must remain in state after blocked remove"
     );
 }
 
