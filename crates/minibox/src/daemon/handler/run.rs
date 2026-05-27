@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
 
 use super::super::network_lifecycle::NetworkLifecycle;
+use super::stop::stop_inner;
 use super::{HandlerDependencies, send_error};
 
 // ─── RunParams: parameter bundle for the run pipeline ────────────────────────
@@ -967,12 +968,21 @@ async fn run_inner(
         .set_gauge("minibox_active_containers", active, &[]);
 
     if let Err(e) = prepared.net.attach(&id, pid).await {
-        warn!(
+        error!(
             container_id = %id,
             pid = pid,
             error = %e,
-            "container: network attach failed"
+            "container: network attach failed, stopping container"
         );
+        // Best-effort cleanup: stop the half-started container.
+        if let Err(stop_err) = stop_inner(&id, &state).await {
+            warn!(
+                container_id = %id,
+                error = %stop_err,
+                "container: cleanup stop after network failure also failed"
+            );
+        }
+        return Err(e.context("network attach failed after container start"));
     }
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
