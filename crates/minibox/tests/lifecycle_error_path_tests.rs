@@ -428,3 +428,193 @@ async fn test_handle_remove_cgroup_cleanup_failure_is_best_effort() {
         "container must be removed from state even when cgroup cleanup fails"
     );
 }
+
+// ---------------------------------------------------------------------------
+// GH #219 — additional lifecycle failure / edge-case tests
+// ---------------------------------------------------------------------------
+
+/// handle_remove on a Paused container succeeds: the Running guard only blocks
+/// "Running" state. The container must be deregistered from state.
+#[tokio::test]
+async fn test_handle_remove_paused_container_succeeds() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = make_state(&temp_dir);
+
+    let id = "remove-paused-001";
+    let cgroup_path = temp_dir.path().join("cgroup-paused-remove");
+    let record = make_record_with_state(id, "Paused", cgroup_path);
+    state.add_container(record).await;
+
+    let runtime = Arc::new(MockRuntime::new());
+    let filesystem = Arc::new(MockFilesystem::new());
+    let registry = Arc::new(MockRegistry::new());
+    let deps = make_deps(&temp_dir, runtime, filesystem, registry);
+
+    let resp = handler::handle_remove(id.to_string(), state.clone(), deps).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Success { .. }),
+        "expected Success when removing a Paused container, got {resp:?}"
+    );
+    let gone = state.get_container(id).await;
+    assert!(
+        gone.is_none(),
+        "Paused container must be removed from state after successful remove"
+    );
+}
+
+/// handle_remove on a Stopped container whose container dir does not exist on
+/// disk succeeds: the `container_dir.exists()` guard skips cleanup gracefully.
+#[tokio::test]
+async fn test_handle_remove_container_dir_absent_succeeds() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = make_state(&temp_dir);
+
+    let id = "remove-no-container-dir-001";
+    // container_dir = containers_base/id — we intentionally do NOT create it.
+    let cgroup_path = temp_dir.path().join("cgroup-no-container-dir");
+    let record = make_record_with_state(id, "Stopped", cgroup_path);
+    state.add_container(record).await;
+
+    let runtime = Arc::new(MockRuntime::new());
+    let filesystem = Arc::new(MockFilesystem::new());
+    let registry = Arc::new(MockRegistry::new());
+    let deps = make_deps(&temp_dir, runtime, filesystem, registry);
+
+    let resp = handler::handle_remove(id.to_string(), state.clone(), deps).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Success { .. }),
+        "expected Success when container dir absent, got {resp:?}"
+    );
+    let gone = state.get_container(id).await;
+    assert!(
+        gone.is_none(),
+        "container must be deregistered from state when container dir is absent"
+    );
+}
+
+/// handle_remove on a Stopped container whose run dir does not exist on disk
+/// succeeds: the `run_dir.exists()` guard skips removal gracefully.
+#[tokio::test]
+async fn test_handle_remove_run_dir_absent_succeeds() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = make_state(&temp_dir);
+
+    let id = "remove-no-run-dir-001";
+    // run_dir = run_containers_base/id — we intentionally do NOT create it.
+    // We do create the container dir so only the run-dir path is exercised.
+    let containers_base = temp_dir.path().join("containers");
+    std::fs::create_dir_all(containers_base.join(id)).expect("create container dir");
+
+    let cgroup_path = temp_dir.path().join("cgroup-no-run-dir");
+    let record = make_record_with_state(id, "Stopped", cgroup_path);
+    state.add_container(record).await;
+
+    let runtime = Arc::new(MockRuntime::new());
+    let filesystem = Arc::new(MockFilesystem::new());
+    let registry = Arc::new(MockRegistry::new());
+
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("images_norundir"))
+            .expect("image store"),
+    );
+    let deps = Arc::new(minibox::daemon::handler::HandlerDependencies {
+        image: minibox::daemon::handler::ImageDeps {
+            registry_router: Arc::new(HostnameRegistryRouter::new(
+                registry as DynImageRegistry,
+                [("ghcr.io", Arc::new(MockRegistry::new()) as DynImageRegistry)],
+            )),
+            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_gc: Arc::new(NoopImageGc),
+            image_store,
+        },
+        lifecycle: minibox::daemon::handler::LifecycleDeps {
+            filesystem,
+            resource_limiter: Arc::new(MockLimiter::new()),
+            runtime,
+            network_provider: Arc::new(MockNetwork::new()),
+            containers_base,
+            // run dir deliberately points to a base that has no subdirectory for `id`
+            run_containers_base: temp_dir.path().join("run"),
+        },
+        exec: minibox::daemon::handler::ExecDeps {
+            exec_runtime: None,
+            pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                minibox::daemon::handler::PtySessionRegistry::default(),
+            )),
+        },
+        build: minibox::daemon::handler::BuildDeps {
+            image_pusher: None,
+            commit_adapter: None,
+            image_builder: None,
+        },
+        events: minibox::daemon::handler::EventDeps {
+            event_sink: Arc::new(minibox_core::events::NoopEventSink),
+            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
+            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+        },
+        policy: minibox::daemon::handler::ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        },
+        execution_policy: None,
+        checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
+    });
+
+    let resp = handler::handle_remove(id.to_string(), state.clone(), deps).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Success { .. }),
+        "expected Success when run dir absent, got {resp:?}"
+    );
+    let gone = state.get_container(id).await;
+    assert!(
+        gone.is_none(),
+        "container must be deregistered from state when run dir is absent"
+    );
+}
+
+/// handle_pause on a Paused container returns an error containing "not running".
+///
+/// `freeze_path_for` requires state == "Running"; a "Paused" container fails
+/// the guard.
+#[tokio::test]
+async fn test_handle_pause_already_paused_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = make_state(&temp_dir);
+
+    let id = "pause-already-paused-001";
+    let cgroup_path = temp_dir.path().join("cgroup-already-paused");
+    let record = make_record_with_state(id, "Paused", cgroup_path);
+    state.add_container(record).await;
+
+    let resp = handler::handle_pause(id.to_string(), state, noop_event_sink()).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not running")),
+        "expected 'not running' error when pausing an already-Paused container, got {resp:?}"
+    );
+}
+
+/// handle_resume on a Stopped container returns an error containing "not paused".
+///
+/// `freeze_path_for` requires state == "Paused"; a "Stopped" container fails
+/// the guard.
+#[tokio::test]
+async fn test_handle_resume_stopped_container_returns_error() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = make_state(&temp_dir);
+
+    let id = "resume-stopped-001";
+    let cgroup_path = temp_dir.path().join("cgroup-stopped-resume");
+    let record = make_record_with_state(id, "Stopped", cgroup_path);
+    state.add_container(record).await;
+
+    let resp = handler::handle_resume(id.to_string(), state, noop_event_sink()).await;
+
+    assert!(
+        matches!(resp, DaemonResponse::Error { ref message } if message.contains("not paused")),
+        "expected 'not paused' error when resuming a Stopped container, got {resp:?}"
+    );
+}
