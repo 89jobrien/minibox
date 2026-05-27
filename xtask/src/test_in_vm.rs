@@ -120,6 +120,17 @@ fn run_persistent(backend: &VmBackend, _workspace_root: &Path, opts: &Options) -
         format!(" -- {}", opts.test_args.join(" "))
     };
 
+    // SmolvmPersistent is unprivileged — integration_tests require root, cgroups v2,
+    // and overlayfs.  Only run --lib (unit) tests unless the backend is privileged.
+    let test_cmd = if backend.is_privileged() {
+        format!(
+            "cargo test -p miniboxd --lib --test integration_tests -- --include-ignored{extra} 2>&1"
+        )
+    } else {
+        println!("  (skipping integration_tests — unprivileged backend, no cgroup/overlay)");
+        format!("cargo test -p miniboxd --lib{extra} 2>&1")
+    };
+
     let script = format!(
         r#"set -e
 . "$HOME/.cargo/env"
@@ -129,11 +140,16 @@ cd /mnt/workspace
 echo "--- cargo check -p miniboxd ---"
 cargo check -p miniboxd 2>&1
 echo ""
-echo "--- cargo test -p miniboxd --lib --test integration_tests ---"
-cargo test -p miniboxd --lib --test integration_tests -- --include-ignored{extra} 2>&1
+echo "--- {test_cmd_label} ---"
+{test_cmd}
 echo ""
 echo "test-in-vm: all tests passed"
-"#
+"#,
+        test_cmd_label = if backend.is_privileged() {
+            "cargo test -p miniboxd --lib --test integration_tests"
+        } else {
+            "cargo test -p miniboxd --lib"
+        },
     );
 
     println!(
