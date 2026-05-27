@@ -216,32 +216,12 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
         anyhow::bail!("no image layers for tmpfs fallback");
     }
     for layer in image_layers {
-        copy_dir_recursive(layer, &merged)
+        crate::fs_util::copy_dir_recursive(layer, &merged)
             .with_context(|| format!("copy layer {} to tmpfs", layer.display()))?;
     }
 
     info!(merged = %merged.display(), "filesystem: tmpfs fallback mounted");
     Ok(merged)
-}
-
-/// Recursively copy directory contents from `src` to `dst`.
-fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
-    for entry in fs::read_dir(src).with_context(|| format!("read_dir {}", src.display()))? {
-        let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        let ft = entry.file_type()?;
-        if ft.is_dir() {
-            fs::create_dir_all(&dst_path)?;
-            copy_dir_recursive(&src_path, &dst_path)?;
-        } else if ft.is_symlink() {
-            let target = fs::read_link(&src_path)?;
-            std::os::unix::fs::symlink(&target, &dst_path).ok();
-        } else {
-            fs::copy(&src_path, &dst_path)?;
-        }
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -531,95 +511,8 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
 // /dev setup (tmpfs + mknod, runc-compatible)
 // ---------------------------------------------------------------------------
 
-/// A device node to create via mknod inside the container's /dev.
-#[derive(Debug, Clone)]
-pub struct DeviceNode {
-    pub name: &'static str,
-    pub major: u32,
-    pub minor: u32,
-    pub mode: u32,
-}
-
-/// A symlink to create inside the container's /dev.
-#[derive(Debug, Clone)]
-pub struct DevSymlink {
-    pub name: &'static str,
-    pub target: &'static str,
-}
-
-/// Standard device nodes matching runc/libcontainer defaults.
-pub fn default_device_nodes() -> Vec<DeviceNode> {
-    vec![
-        DeviceNode {
-            name: "null",
-            major: 1,
-            minor: 3,
-            mode: 0o666,
-        },
-        DeviceNode {
-            name: "zero",
-            major: 1,
-            minor: 5,
-            mode: 0o666,
-        },
-        DeviceNode {
-            name: "full",
-            major: 1,
-            minor: 7,
-            mode: 0o666,
-        },
-        DeviceNode {
-            name: "random",
-            major: 1,
-            minor: 8,
-            mode: 0o666,
-        },
-        DeviceNode {
-            name: "urandom",
-            major: 1,
-            minor: 9,
-            mode: 0o444,
-        },
-        DeviceNode {
-            name: "tty",
-            major: 5,
-            minor: 0,
-            mode: 0o666,
-        },
-        DeviceNode {
-            name: "console",
-            major: 5,
-            minor: 1,
-            mode: 0o600,
-        },
-    ]
-}
-
-/// Standard /dev symlinks.
-pub fn default_dev_symlinks() -> Vec<DevSymlink> {
-    vec![
-        DevSymlink {
-            name: "fd",
-            target: "/proc/self/fd",
-        },
-        DevSymlink {
-            name: "stdin",
-            target: "/proc/self/fd/0",
-        },
-        DevSymlink {
-            name: "stdout",
-            target: "/proc/self/fd/1",
-        },
-        DevSymlink {
-            name: "stderr",
-            target: "/proc/self/fd/2",
-        },
-        DevSymlink {
-            name: "ptmx",
-            target: "pts/ptmx",
-        },
-    ]
-}
+// Re-use cross-platform types from fs_util.
+use crate::fs_util::{default_dev_symlinks, default_device_nodes};
 
 /// Set up /dev inside the container rootfs using tmpfs + mknod.
 ///
@@ -888,113 +781,8 @@ mod tests {
         }
     }
 
-    // ── device node / symlink lists ──────────────────────────────────────────
-
-    #[test]
-    fn default_device_nodes_complete() {
-        let nodes = default_device_nodes();
-        let names: Vec<&str> = nodes.iter().map(|n| n.name).collect();
-        assert!(names.contains(&"null"), "missing /dev/null");
-        assert!(names.contains(&"zero"), "missing /dev/zero");
-        assert!(names.contains(&"full"), "missing /dev/full");
-        assert!(names.contains(&"random"), "missing /dev/random");
-        assert!(names.contains(&"urandom"), "missing /dev/urandom");
-        assert!(names.contains(&"tty"), "missing /dev/tty");
-        assert!(names.contains(&"console"), "missing /dev/console");
-    }
-
-    #[test]
-    fn default_dev_symlinks_complete() {
-        let links = default_dev_symlinks();
-        let names: Vec<&str> = links.iter().map(|l| l.name).collect();
-        assert!(names.contains(&"fd"), "missing /dev/fd");
-        assert!(names.contains(&"stdin"), "missing /dev/stdin");
-        assert!(names.contains(&"stdout"), "missing /dev/stdout");
-        assert!(names.contains(&"stderr"), "missing /dev/stderr");
-    }
-
-    #[test]
-    fn device_node_majmin_matches_linux_standard() {
-        let nodes = default_device_nodes();
-        let null_node = nodes.iter().find(|n| n.name == "null").unwrap();
-        assert_eq!(null_node.major, 1);
-        assert_eq!(null_node.minor, 3);
-        let tty_node = nodes.iter().find(|n| n.name == "tty").unwrap();
-        assert_eq!(tty_node.major, 5);
-        assert_eq!(tty_node.minor, 0);
-    }
-
-    // ── copy_dir_recursive ─────────────────────────────────────────────────
-
-    #[test]
-    fn copy_dir_recursive_copies_files_and_dirs() {
-        let src = TempDir::new().unwrap();
-        let dst = TempDir::new().unwrap();
-
-        // Create source structure: file.txt, sub/nested.txt
-        fs::write(src.path().join("file.txt"), "hello").unwrap();
-        fs::create_dir_all(src.path().join("sub")).unwrap();
-        fs::write(src.path().join("sub/nested.txt"), "world").unwrap();
-
-        copy_dir_recursive(src.path(), dst.path()).unwrap();
-
-        assert_eq!(
-            fs::read_to_string(dst.path().join("file.txt")).unwrap(),
-            "hello"
-        );
-        assert_eq!(
-            fs::read_to_string(dst.path().join("sub/nested.txt")).unwrap(),
-            "world"
-        );
-    }
-
-    #[test]
-    fn copy_dir_recursive_copies_symlinks() {
-        let src = TempDir::new().unwrap();
-        let dst = TempDir::new().unwrap();
-
-        fs::write(src.path().join("target.txt"), "data").unwrap();
-        std::os::unix::fs::symlink("target.txt", src.path().join("link.txt")).unwrap();
-
-        copy_dir_recursive(src.path(), dst.path()).unwrap();
-
-        let link_target = fs::read_link(dst.path().join("link.txt")).unwrap();
-        assert_eq!(link_target.to_str().unwrap(), "target.txt");
-    }
-
-    #[test]
-    fn copy_dir_recursive_later_layer_overwrites_earlier() {
-        let layer1 = TempDir::new().unwrap();
-        let layer2 = TempDir::new().unwrap();
-        let dst = TempDir::new().unwrap();
-
-        fs::write(layer1.path().join("config"), "v1").unwrap();
-        fs::write(layer1.path().join("base"), "unchanged").unwrap();
-        fs::write(layer2.path().join("config"), "v2").unwrap();
-
-        copy_dir_recursive(layer1.path(), dst.path()).unwrap();
-        copy_dir_recursive(layer2.path(), dst.path()).unwrap();
-
-        assert_eq!(
-            fs::read_to_string(dst.path().join("config")).unwrap(),
-            "v2",
-            "later layer should overwrite"
-        );
-        assert_eq!(
-            fs::read_to_string(dst.path().join("base")).unwrap(),
-            "unchanged"
-        );
-    }
-
-    #[test]
-    fn copy_dir_recursive_empty_source_is_noop() {
-        let src = TempDir::new().unwrap();
-        let dst = TempDir::new().unwrap();
-        copy_dir_recursive(src.path(), dst.path()).unwrap();
-        // dst should still be empty (no entries besides . and ..)
-        let entries: Vec<_> = fs::read_dir(dst.path()).unwrap().collect();
-        assert!(entries.is_empty());
-    }
+    // device node/symlink and copy_dir_recursive tests live in
+    // crate::fs_util::tests (cross-platform, runs on macOS).
 
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
