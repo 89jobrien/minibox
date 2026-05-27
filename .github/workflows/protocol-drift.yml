@@ -9,6 +9,11 @@ on:
       - "crates/minibox-core/src/domain/networking.rs"
       - "crates/minibox-core/src/domain/extensions.rs"
       - "crates/minibox-core/src/events.rs"
+      - "crates/minibox-core/src/domain/execution_manifest.rs"
+      - "crates/minibox-core/src/domain/execution_policy.rs"
+      - "crates/minibox-core/src/error.rs"
+      - "crates/minibox-core/src/client/mod.rs"
+      - "crates/minibox-core/src/typestate.rs"
       - "xtask/protocol-drift.lock"
       - "xtask/src/protocol_drift.rs"
   pull_request:
@@ -19,6 +24,11 @@ on:
       - "crates/minibox-core/src/domain/networking.rs"
       - "crates/minibox-core/src/domain/extensions.rs"
       - "crates/minibox-core/src/events.rs"
+      - "crates/minibox-core/src/domain/execution_manifest.rs"
+      - "crates/minibox-core/src/domain/execution_policy.rs"
+      - "crates/minibox-core/src/error.rs"
+      - "crates/minibox-core/src/client/mod.rs"
+      - "crates/minibox-core/src/typestate.rs"
       - "xtask/protocol-drift.lock"
       - "xtask/src/protocol_drift.rs"
 
