@@ -9,6 +9,11 @@ use std::sync::OnceLock;
 /// Default maximum nesting depth.
 pub const DEFAULT_MAX_NEST_DEPTH: u32 = 4;
 
+/// Environment variable for current nesting depth.
+pub const ENV_NEST_DEPTH: &str = "MINIBOX_NEST_DEPTH";
+/// Environment variable for maximum nesting depth.
+pub const ENV_MAX_NEST_DEPTH: &str = "MINIBOX_MAX_NEST_DEPTH";
+
 static NESTED_OVERLAY_SUPPORT: OnceLock<bool> = OnceLock::new();
 
 /// Check whether the kernel supports overlay-on-overlay mounts.
@@ -119,10 +124,10 @@ impl NestingContext {
 
     /// Read nesting context from the current process environment.
     pub fn from_env() -> Self {
-        let depth = std::env::var("MINIBOX_NEST_DEPTH")
+        let depth = std::env::var(ENV_NEST_DEPTH)
             .ok()
             .and_then(|v| v.parse().ok());
-        let max = std::env::var("MINIBOX_MAX_NEST_DEPTH")
+        let max = std::env::var(ENV_MAX_NEST_DEPTH)
             .ok()
             .and_then(|v| v.parse().ok());
         Self::new(depth, max)
@@ -137,7 +142,7 @@ impl NestingContext {
     pub fn check_depth(&self) -> anyhow::Result<()> {
         if self.depth >= self.max_depth {
             anyhow::bail!(
-                "nesting depth {} exceeds maximum (MINIBOX_MAX_NEST_DEPTH={})",
+                "nesting depth {} exceeds maximum ({ENV_MAX_NEST_DEPTH}={})",
                 self.depth,
                 self.max_depth
             );
@@ -148,8 +153,8 @@ impl NestingContext {
     /// Environment variables to inject into child containers.
     pub fn child_env_vars(&self) -> Vec<String> {
         vec![
-            format!("MINIBOX_NEST_DEPTH={}", self.child_depth()),
-            format!("MINIBOX_MAX_NEST_DEPTH={}", self.max_depth),
+            format!("{ENV_NEST_DEPTH}={}", self.child_depth()),
+            format!("{ENV_MAX_NEST_DEPTH}={}", self.max_depth),
         ]
     }
 }

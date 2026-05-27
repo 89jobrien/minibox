@@ -20,30 +20,39 @@ use std::path::Path;
 pub fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
     for entry in fs::read_dir(src).with_context(|| format!("read_dir {}", src.display()))? {
         let entry = entry?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-        let ft = entry.file_type()?;
-        if ft.is_dir() {
-            fs::create_dir_all(&dst_path)?;
-            copy_dir_recursive(&src_path, &dst_path)?;
-        } else if ft.is_symlink() {
-            let target = fs::read_link(&src_path)?;
-            // Remove existing file/symlink before creating new one.
-            if dst_path.symlink_metadata().is_ok() {
-                fs::remove_file(&dst_path).ok();
-            }
-            #[cfg(unix)]
-            std::os::unix::fs::symlink(&target, &dst_path).with_context(|| {
-                format!("symlink {} -> {}", dst_path.display(), target.display())
-            })?;
-            #[cfg(not(unix))]
-            {
-                let _ = target;
-                let _ = dst_path;
-            }
-        } else {
-            fs::copy(&src_path, &dst_path)?;
-        }
+        copy_entry(&entry, dst)?;
+    }
+    Ok(())
+}
+
+/// Copy a single directory entry to `dst`, dispatching by file type.
+fn copy_entry(entry: &fs::DirEntry, dst: &Path) -> anyhow::Result<()> {
+    let src_path = entry.path();
+    let dst_path = dst.join(entry.file_name());
+    let ft = entry.file_type()?;
+    if ft.is_dir() {
+        fs::create_dir_all(&dst_path)?;
+        copy_dir_recursive(&src_path, &dst_path)?;
+    } else if ft.is_symlink() {
+        copy_symlink(&src_path, &dst_path)?;
+    } else {
+        fs::copy(&src_path, &dst_path)?;
+    }
+    Ok(())
+}
+
+/// Copy a symlink, replacing any existing file at `dst`.
+fn copy_symlink(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    let target = fs::read_link(src)?;
+    if dst.symlink_metadata().is_ok() {
+        fs::remove_file(dst).ok();
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, dst)
+        .with_context(|| format!("symlink {} -> {}", dst.display(), target.display()))?;
+    #[cfg(not(unix))]
+    {
+        let _ = target;
     }
     Ok(())
 }
