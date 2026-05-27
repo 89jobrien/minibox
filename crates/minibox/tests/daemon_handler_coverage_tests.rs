@@ -720,6 +720,239 @@ async fn test_handle_update_containers_true_collects_refs() {
     );
 }
 
+// ---- handle_update restart regression tests (#178) --------------------------
+
+/// Regression test for #178: container with pid=None causes stop_inner to fail.
+///
+/// When restart=true and stop_inner returns Err (no PID), the handler must
+/// `continue` past that container without panicking. The container record must
+/// remain in state unchanged.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_update_restart_stop_fails_continues() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // Container with pid=None — stop_inner will return Err for this record.
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-no-pid".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs-no-pid"),
+        cgroup_path: tmp.path().join("cgroup-no-pid"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        true, // restart=true
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    // Drain all responses — must terminate with Success (not hang or panic).
+    let mut got_success = false;
+    while let Ok(resp) = rx.try_recv() {
+        if matches!(resp, DaemonResponse::Success { .. }) {
+            got_success = true;
+        }
+    }
+    // If try_recv missed it, do a blocking recv.
+    if !got_success {
+        let resp = rx
+            .recv()
+            .await
+            .expect("handle_update must send terminal response");
+        got_success = matches!(resp, DaemonResponse::Success { .. });
+    }
+    assert!(
+        got_success,
+        "handle_update must send Success terminal response"
+    );
+
+    // Original record must still be present and unchanged.
+    let record = state
+        .get_container("ctr-no-pid")
+        .await
+        .expect("record must still exist after failed stop");
+    assert_eq!(
+        record.info.state, "Running",
+        "container state must remain Running when stop_inner failed"
+    );
+}
+
+/// Regression test for #178: running container with creation_params=None.
+///
+/// When restart=true and stop succeeds but creation_params is None, the handler
+/// hits the warn branch and does not attempt to re-run the container.
+/// The final Success message must indicate stopped=1, restarted=0.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_update_restart_no_creation_params_warns() {
+    use minibox::daemon::state::{ContainerRecord, ContainerState};
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // A "Running" container with a PID that doesn't exist (high value) so
+    // nix::kill returns ESRCH immediately.  stop_inner treats that as "process
+    // already gone" and marks the container Stopped, returning Ok(()).
+    // This avoids sending SIGTERM to the test process itself.
+    let our_pid = 2_000_000_u32; // far above OS PID limit — ESRCH on any signal
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-no-params".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            pid: Some(our_pid),
+        },
+        pid: Some(our_pid),
+        rootfs_path: tmp.path().join("rootfs-no-params"),
+        cgroup_path: tmp.path().join("cgroup-no-params"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None, // No creation_params — cannot restart.
+        manifest_path: None,
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        true, // restart=true
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    // Collect all responses.
+    let mut responses = Vec::new();
+    while let Ok(resp) = rx.try_recv() {
+        responses.push(resp);
+    }
+    if let Some(resp) = rx.recv().await {
+        responses.push(resp);
+    }
+
+    // Terminal response must be Success.
+    let success_msg = responses
+        .iter()
+        .find_map(|r| {
+            if let DaemonResponse::Success { message } = r {
+                Some(message.clone())
+            } else {
+                None
+            }
+        })
+        .expect("handle_update must send a Success terminal response");
+
+    // Container was stopped (stop_inner succeeded) but not restarted.
+    // Message must mention stopped=1, restarted=0.
+    assert!(
+        success_msg.contains("stopped 1") && success_msg.contains("restarted 0"),
+        "expected 'stopped 1' and 'restarted 0' in message, got: {success_msg:?}"
+    );
+
+    // Container state must now be Stopped (stop_inner calls update_container_state).
+    let record = state
+        .get_container("ctr-no-params")
+        .await
+        .expect("record must still exist");
+    assert_eq!(
+        record.info.state,
+        ContainerState::Stopped.as_str(),
+        "container must be Stopped after successful stop with no creation_params"
+    );
+}
+
+// ---- handle_list (multiple containers) --------------------------------------
+
+/// handle_list returns all containers when multiple are present.
+#[tokio::test]
+async fn test_handle_list_multiple_containers() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    for i in 0..3usize {
+        let record = ContainerRecord {
+            info: ContainerInfo {
+                id: format!("ctr-list-{i}"),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "1970-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: tmp.path().join(format!("rootfs-list-{i}")),
+            cgroup_path: tmp.path().join(format!("cgroup-list-{i}")),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
+        };
+        state.add_container(record).await;
+    }
+
+    let resp = handler::handle_list(Arc::clone(&state)).await;
+    match resp {
+        DaemonResponse::ContainerList { containers } => {
+            assert_eq!(containers.len(), 3, "expected 3 containers in list");
+        }
+        other => panic!("expected ContainerList, got {other:?}"),
+    }
+}
+
 // ---- handle_build (context path validation) ---------------------------------
 
 /// handle_build with a relative context_path returns Error (security check).
