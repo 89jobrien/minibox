@@ -5,7 +5,6 @@
 //! `RwLock` so many readers can proceed concurrently while writes are
 //!
 // TODO(#263): paused state migration — persist Paused status across daemon restart
-// TODO(#326): persist execution manifest before container spawn
 //! exclusive.
 //!
 //! State is persisted to a JSON file after every mutation so that

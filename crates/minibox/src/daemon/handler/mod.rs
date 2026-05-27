@@ -5,7 +5,6 @@
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
 // TODO(#116): raise coverage on handler and lifecycle/error paths
-// TODO(#328): expose manifest inspection and verification via CLI
 //!
 //! # Hexagonal Architecture
 //!
@@ -281,6 +280,13 @@ impl HandlerDependencies {
     /// Override the image loader (builder-style).
     pub fn with_image_loader(mut self, loader: minibox_core::domain::DynImageLoader) -> Self {
         self.image.image_loader = loader;
+        self
+    }
+
+    /// Return a clone with bind-mount policy overridden.
+    /// Used by internal pipeline runs that need elevated permissions.
+    pub fn with_allow_bind_mounts(mut self, allow: bool) -> Self {
+        self.policy.allow_bind_mounts = allow;
         self
     }
 }

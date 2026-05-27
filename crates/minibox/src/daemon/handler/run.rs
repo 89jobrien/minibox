@@ -1,6 +1,4 @@
 //! Container run handlers and supporting infrastructure.
-// TODO(#326): persist execution manifest before container spawn
-// TODO(#366): extract shared run preparation path from handle_run
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;
@@ -353,8 +351,7 @@ fn build_execution_manifest(
         ExecutionManifestSubject,
     };
 
-    // TODO(#436): replace Debug format with explicit Display/as_str
-    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    let net_mode_str = net_mode.to_string();
     ExecutionManifest {
         schema_version: 1,
         container_id: id.to_string(),
@@ -969,8 +966,14 @@ async fn run_inner(
         .metrics
         .set_gauge("minibox_active_containers", active, &[]);
 
-    // TODO(#429): propagate net.attach error instead of swallowing with .ok()
-    prepared.net.attach(&id, pid).await.ok();
+    if let Err(e) = prepared.net.attach(&id, pid).await {
+        warn!(
+            container_id = %id,
+            pid = pid,
+            error = %e,
+            "container: network attach failed"
+        );
+    }
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {

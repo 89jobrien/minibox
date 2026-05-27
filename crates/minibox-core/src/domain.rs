@@ -278,7 +278,6 @@ impl StepRunnerRegistry {
 
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
-    // TODO(#430): remove cfg(test) gate — either delete dead code or feature-gate
     #[cfg(test)]
     pub fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));

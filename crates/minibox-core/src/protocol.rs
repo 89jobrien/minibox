@@ -7,7 +7,6 @@
 // TODO(#83): add PTY/stdio protocol variants for interactive containers
 // TODO(#183): add BuildImage DaemonRequest variant + mbx build command
 // TODO(#229): add container networking protocol variants
-// TODO(#328): add manifest inspection/verification protocol variants
 //!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
 //! (`"type"`) appear explicitly in the JSON, e.g.:
