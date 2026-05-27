@@ -21,7 +21,7 @@ use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, info, warn};
 
 // ---------------------------------------------------------------------------
-// ProcessChecker port (hexagonal architecture — process liveness port)
+// ProcessChecker port (process liveness port)
 // ---------------------------------------------------------------------------
 
 /// Port for checking whether a host PID is still alive.
@@ -46,7 +46,7 @@ impl ProcessChecker for KillProcessChecker {
 }
 
 // ---------------------------------------------------------------------------
-// StateRepository port (hexagonal architecture — persistence port)
+// StateRepository port (persistence port)
 // ---------------------------------------------------------------------------
 
 /// Port for persisting and loading the container state map.
