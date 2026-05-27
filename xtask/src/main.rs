@@ -34,6 +34,7 @@ mod preflight;
 mod promote;
 mod protocol_drift;
 mod protocol_sites;
+mod setup_test_vm;
 mod stale_names;
 mod test_image;
 mod test_in_vm;
@@ -123,6 +124,10 @@ fn main() -> Result<()> {
         Some("build-test-image") => {
             let force = env::args().any(|a| a == "--force");
             test_image::build_test_image(force)
+        }
+        Some("setup-test-vm") => {
+            let force = env::args().any(|a| a == "--force");
+            setup_test_vm::run(root, force)
         }
         Some("test-in-vm") => {
             let args: Vec<String> = env::args().skip(2).collect();
@@ -341,6 +346,9 @@ fn main() -> Result<()> {
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
+            eprintln!(
+                "  setup-test-vm    create persistent smolvm VM with Rust toolchain [--force]"
+            );
             eprintln!(
                 "  test-linux       build image + load into minibox + run tests in container"
             );

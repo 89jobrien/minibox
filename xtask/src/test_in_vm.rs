@@ -15,6 +15,8 @@ use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::setup_test_vm;
+
 const TARGET: &str = "aarch64-unknown-linux-musl";
 
 /// Options parsed from CLI args.
@@ -56,7 +58,9 @@ impl Options {
 enum VmBackend {
     /// minibox run --privileged (full cgroup/overlay support)
     Minibox(PathBuf),
-    /// smolvm machine run (unprivileged — no mount/cgroup)
+    /// smolvm persistent machine (pre-provisioned with Rust toolchain)
+    SmolvmPersistent(PathBuf),
+    /// smolvm machine run (ephemeral — no Rust toolchain, cross-compiled binaries only)
     Smolvm(PathBuf),
 }
 
@@ -65,11 +69,96 @@ impl VmBackend {
     fn is_privileged(&self) -> bool {
         matches!(self, VmBackend::Minibox(_))
     }
+
+    /// Whether this backend has Rust toolchain pre-installed.
+    fn has_rust(&self) -> bool {
+        matches!(self, VmBackend::SmolvmPersistent(_))
+    }
 }
 
 pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
     let backend = detect_backend()?;
 
+    // Persistent VM path: mount workspace, run cargo test directly (no cross-compile)
+    if backend.has_rust() {
+        return run_persistent(&backend, workspace_root, opts);
+    }
+
+    // Ephemeral path: cross-compile, mount binaries, run pre-compiled tests
+    run_ephemeral(&backend, workspace_root, opts)
+}
+
+/// Run tests via a pre-provisioned persistent smolvm machine.
+///
+/// The machine already has Rust toolchain installed. We mount the workspace
+/// and run cargo commands directly — no cross-compilation needed.
+fn run_persistent(backend: &VmBackend, _workspace_root: &Path, opts: &Options) -> Result<()> {
+    let VmBackend::SmolvmPersistent(bin) = backend else {
+        bail!("run_persistent called with non-persistent backend");
+    };
+
+    // Ensure machine is running
+    println!(
+        "[1/2] ensuring '{vm}' is running ...",
+        vm = setup_test_vm::VM_NAME
+    );
+    let status = Command::new(bin)
+        .args(["machine", "start", "--name", setup_test_vm::VM_NAME])
+        .status()
+        .context("starting persistent machine")?;
+    if !status.success() {
+        bail!(
+            "failed to start '{}' — run `cargo xtask setup-test-vm` first",
+            setup_test_vm::VM_NAME
+        );
+    }
+
+    // Build cargo test command
+    let extra = if opts.test_args.is_empty() {
+        String::new()
+    } else {
+        format!(" -- {}", opts.test_args.join(" "))
+    };
+
+    let script = format!(
+        r#"set -e
+. "$HOME/.cargo/env"
+export CARGO_BUILD_JOBS=1
+export CARGO_TARGET_DIR=/tmp/target
+cd /mnt/workspace
+echo "--- cargo check -p miniboxd ---"
+cargo check -p miniboxd 2>&1
+echo ""
+echo "--- cargo test -p miniboxd --lib --test integration_tests ---"
+cargo test -p miniboxd --lib --test integration_tests -- --include-ignored{extra} 2>&1
+echo ""
+echo "test-in-vm: all tests passed"
+"#
+    );
+
+    println!(
+        "[2/2] running tests in '{vm}' ...",
+        vm = setup_test_vm::VM_NAME
+    );
+    // Volume is already mounted via create-time -v flag.
+    // Use -t for TTY allocation so cargo progress output streams live.
+    let status = Command::new(bin)
+        .args(["machine", "exec", "-t", "--name", setup_test_vm::VM_NAME])
+        .args(["--", "/bin/sh", "-c", &script])
+        .status()
+        .context("exec in persistent machine")?;
+
+    if !status.success() {
+        bail!(
+            "test-in-vm: tests failed (exit {})",
+            status.code().unwrap_or(-1)
+        );
+    }
+    Ok(())
+}
+
+/// Run tests via ephemeral VM with cross-compiled binaries.
+fn run_ephemeral(backend: &VmBackend, workspace_root: &Path, opts: &Options) -> Result<()> {
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_root.join("target"));
@@ -98,7 +187,7 @@ pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
 
     // 4. Boot VM and run tests
     let mount_spec = format!("{}:/mnt/tests:ro", target_dir.display());
-    let mut cmd = match &backend {
+    let mut cmd = match backend {
         VmBackend::Minibox(bin) => {
             println!("[2/3] booting minibox VM (privileged) ...");
             let mut c = Command::new(bin);
@@ -149,6 +238,7 @@ pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
                 c
             }
         }
+        VmBackend::SmolvmPersistent(_) => unreachable!(),
     };
 
     println!("[3/3] running tests ...");
@@ -174,18 +264,44 @@ fn which_bin(name: &str) -> Option<PathBuf> {
         .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim().to_string()))
 }
 
-/// Prefer minibox (privileged, full cgroup/overlay support) over smolvm (unprivileged).
+/// Prefer persistent smolvm > minibox (privileged) > ephemeral smolvm.
+///
+/// Persistent smolvm is preferred because it has Rust toolchain pre-installed
+/// and avoids cross-compilation entirely.
 ///
 /// TODO(#442): check daemon policy (MINIBOX_ALLOW_BIND_MOUNTS / MINIBOX_ALLOW_PRIVILEGED)
 ///       before selecting minibox backend, and print actionable error if denied.
 fn detect_backend() -> Result<VmBackend> {
+    // Persistent smolvm machine first — has Rust, no cross-compile needed
+    if let Some(path) = which_bin("smolvm") {
+        if persistent_machine_exists(&path)? {
+            println!(
+                "detected persistent '{vm}' — using native cargo test (no cross-compile)",
+                vm = setup_test_vm::VM_NAME
+            );
+            return Ok(VmBackend::SmolvmPersistent(path));
+        }
+    }
+    // minibox with privileged mode (requires running daemon)
     if let Some(path) = which_bin("minibox") {
         return Ok(VmBackend::Minibox(path));
     }
+    // Ephemeral smolvm fallback
     if let Some(path) = which_bin("smolvm") {
         return Ok(VmBackend::Smolvm(path));
     }
     bail!("neither minibox nor smolvm found on PATH. Install one first.");
+}
+
+fn persistent_machine_exists(smolvm: &Path) -> Result<bool> {
+    let output = Command::new(smolvm)
+        .args(["machine", "list"])
+        .output()
+        .context("smolvm machine list")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .any(|line| line.starts_with(setup_test_vm::VM_NAME)))
 }
 
 fn cross_compile(workspace_root: &Path) -> Result<()> {
@@ -395,6 +511,7 @@ mod tests {
         let smolfiles = [
             "tests/smolfiles/minimal.smolfile",
             "tests/smolfiles/ci-gate.smolfile",
+            "tests/smolfiles/ci-cached.smolfile",
             "tests/smolfiles/e2e.smolfile",
             "tests/smolfiles/network.smolfile",
         ];
