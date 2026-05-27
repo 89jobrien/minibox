@@ -1,6 +1,7 @@
 name: Merge
 
 on:
+  merge_group:
   push:
     branches: [develop, main, next, staging, "feature/*", "hotfix/*", "chore/*"]
   workflow_dispatch:
@@ -332,6 +333,7 @@ jobs:
     needs: [ci-ok]
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -347,6 +349,20 @@ jobs:
           git checkout staging
           git merge --ff-only origin/next || git merge origin/next -m "Merge branch 'next' into staging"
           git push origin staging
+      - name: create or update staging → main PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for staging → main"
+          else
+            gh pr create \
+              --base main \
+              --head staging \
+              --title "Promote staging → main" \
+              --body "Automated promotion from staging. Status checks must pass before merge."
+          fi
 
   cleanup-linux:
     name: cleanup (Linux)

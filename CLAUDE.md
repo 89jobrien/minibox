@@ -104,6 +104,16 @@ Branches follow the stability pipeline:
 - Do not commit unless explicitly asked.
 - `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
 
+### Branch Protection
+
+- `main` is protected via GitHub rulesets. All changes land via PR
+  with required status checks. Branch must be up-to-date before merge.
+- `next` and `staging` block force pushes and deletions; require
+  `CI passed` status check.
+- `staging` -> `main` promotion creates a PR automatically via CI.
+- Required status checks on `main`: `CI passed`, stability gates,
+  `actionlint`.
+
 ## Hook Notes
 
 Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook runs `nu scripts/preflight.nu`; it should be fast, read-only, and non-fatal so startup is not blocked by normal local state like an uncommitted working tree.
