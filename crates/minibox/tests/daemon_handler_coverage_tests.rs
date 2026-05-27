@@ -1329,6 +1329,78 @@ async fn test_handle_pipeline_nonexistent_file_returns_error() {
     );
 }
 
+// ---- handle_list_pipelines --------------------------------------------------
+
+/// handle_list_pipelines on a fresh (empty) trace store returns an empty list.
+#[tokio::test]
+async fn test_handle_list_pipelines_empty_store() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_list_pipelines(None, None, state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(pipelines.is_empty(), "expected empty pipeline list");
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+/// handle_list_pipelines with a limit returns at most that many entries.
+#[tokio::test]
+async fn test_handle_list_pipelines_with_limit() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_list_pipelines(Some(5), None, state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(
+                pipelines.len() <= 5,
+                "expected at most 5 pipelines, got {}",
+                pipelines.len()
+            );
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+/// handle_list_pipelines with a pipeline name filter on an empty store returns empty.
+#[tokio::test]
+async fn test_handle_list_pipelines_with_pipeline_filter() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp =
+        handler::handle_list_pipelines(None, Some("nonexistent.crux".to_string()), state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(pipelines.is_empty(), "expected empty filtered list");
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+// ---- handle_show_pipeline ---------------------------------------------------
+
+/// handle_show_pipeline with a nonexistent ID returns Error.
+#[tokio::test]
+async fn test_handle_show_pipeline_not_found() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_show_pipeline("no-such-run".to_string(), state).await;
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found"),
+                "expected 'not found' in error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
+}
+
 // ---- ephemeral run (streaming path) -----------------------------------------
 
 /// handle_run with ephemeral=true exercises handle_run_streaming and run_inner_capture.
