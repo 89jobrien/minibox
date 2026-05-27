@@ -18,8 +18,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 
 // ---------------------------------------------------------------------------
+mod test_helpers;
+
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+use test_helpers::wait_for_socket;
 
 /// Bind a Unix socket, accept one connection, read one request line, send back
 /// `response`, then close.  Spawned as a background task before running the
@@ -86,7 +90,7 @@ async fn setup(response: DaemonResponse) -> (TempDir, std::path::PathBuf) {
     let socket_path = tmp.path().join("test.sock");
     let sp = socket_path.clone();
     tokio::spawn(async move { serve_once(&sp, response).await });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
     (tmp, socket_path)
 }
 
@@ -317,7 +321,7 @@ async fn exec_exits_zero_on_exec_started_then_close() {
         write_half.flush().await.unwrap();
         // Close — stream.next() returns None, execute returns Ok(()).
     });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
 
     minibox(&socket_path)
         .args(["exec", "abc123", "--", "/bin/sh"])
@@ -374,7 +378,7 @@ async fn logs_exits_zero_on_success() {
         }
         write_half.flush().await.unwrap();
     });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
 
     minibox(&socket_path)
         .args(["logs", "abc123"])
@@ -620,7 +624,7 @@ async fn events_exits_zero_when_daemon_closes_connection() {
         write_half.flush().await.unwrap();
         // Close connection — events loop breaks, exits 0.
     });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
 
     minibox(&socket_path)
         .arg("events")

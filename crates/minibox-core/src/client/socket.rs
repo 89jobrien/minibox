@@ -112,7 +112,17 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let _client = DaemonClient::new();
+        let client = DaemonClient::new();
+        // Default socket path must be non-empty and end with the expected filename.
+        assert!(
+            client.socket_path.file_name().is_some(),
+            "socket path must have a filename component"
+        );
+        assert_eq!(
+            client.socket_path.file_name().unwrap(),
+            "miniboxd.sock",
+            "default socket filename should be miniboxd.sock"
+        );
     }
 
     #[test]

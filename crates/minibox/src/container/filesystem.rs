@@ -166,6 +166,84 @@ pub fn setup_overlay_with_base(
     Ok(merged)
 }
 
+/// Set up a container filesystem, falling back to tmpfs copy if overlay-on-overlay
+/// fails (common in nested containers).
+///
+/// Tries `setup_overlay_with_base` first. On failure, if `allow_tmpfs_fallback` is
+/// true, copies the lowest image layer to a tmpfs mount and returns that as the rootfs.
+pub fn setup_overlay_or_tmpfs(
+    image_layers: &[PathBuf],
+    container_dir: &Path,
+    images_base: &Path,
+    allow_tmpfs_fallback: bool,
+) -> anyhow::Result<PathBuf> {
+    match setup_overlay_with_base(image_layers, container_dir, images_base) {
+        Ok(merged) => Ok(merged),
+        Err(e) if allow_tmpfs_fallback => {
+            warn!(
+                error = %e,
+                "filesystem: overlay mount failed, falling back to tmpfs copy"
+            );
+            setup_tmpfs_fallback(image_layers, container_dir)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Mount a tmpfs at `container_dir/merged` and copy the top image layer into it.
+///
+/// This is a degraded-mode fallback for nested containers where overlay-on-overlay
+/// is unsupported. Writes inside the container are lost on unmount.
+fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
+    let merged = container_dir.join("merged");
+    fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {
+        path: merged.display().to_string(),
+        source,
+    })?;
+
+    mount(
+        Some("tmpfs"),
+        &merged,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        Some("size=512m"),
+    )
+    .with_context(|| format!("tmpfs mount at {}", merged.display()))?;
+
+    // Copy all layers bottom-to-top into the tmpfs rootfs, simulating
+    // overlay merge order. Later layers overwrite earlier ones.
+    if image_layers.is_empty() {
+        anyhow::bail!("no image layers for tmpfs fallback");
+    }
+    for layer in image_layers {
+        copy_dir_recursive(layer, &merged)
+            .with_context(|| format!("copy layer {} to tmpfs", layer.display()))?;
+    }
+
+    info!(merged = %merged.display(), "filesystem: tmpfs fallback mounted");
+    Ok(merged)
+}
+
+/// Recursively copy directory contents from `src` to `dst`.
+fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    for entry in fs::read_dir(src).with_context(|| format!("read_dir {}", src.display()))? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            fs::create_dir_all(&dst_path)?;
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if ft.is_symlink() {
+            let target = fs::read_link(&src_path)?;
+            std::os::unix::fs::symlink(&target, &dst_path).ok();
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // pivot_root (child process)
 // ---------------------------------------------------------------------------
@@ -260,22 +338,8 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         source,
     })?;
 
-    // Mount devtmpfs inside new_root.
-    // SECURITY: Mount with nosuid and noexec to prevent privilege escalation
-    let dev_dir = new_root.join("dev");
-    fs::create_dir_all(&dev_dir).ok();
-    mount(
-        Some("devtmpfs"),
-        &dev_dir,
-        Some("devtmpfs"),
-        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
-        None::<&str>,
-    )
-    .map_err(|source| FilesystemError::Mount {
-        fs: "devtmpfs".into(),
-        target: dev_dir.display().to_string(),
-        source,
-    })?;
+    // Set up /dev with tmpfs + mknod (works at any nesting depth).
+    setup_container_dev(new_root).with_context(|| "pivot_root: setup_container_dev")?;
 
     // Create the put_old directory for the old root.
     let put_old = new_root.join(".put_old");
@@ -464,6 +528,186 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
 }
 
 // ---------------------------------------------------------------------------
+// /dev setup (tmpfs + mknod, runc-compatible)
+// ---------------------------------------------------------------------------
+
+/// A device node to create via mknod inside the container's /dev.
+#[derive(Debug, Clone)]
+pub struct DeviceNode {
+    pub name: &'static str,
+    pub major: u32,
+    pub minor: u32,
+    pub mode: u32,
+}
+
+/// A symlink to create inside the container's /dev.
+#[derive(Debug, Clone)]
+pub struct DevSymlink {
+    pub name: &'static str,
+    pub target: &'static str,
+}
+
+/// Standard device nodes matching runc/libcontainer defaults.
+pub fn default_device_nodes() -> Vec<DeviceNode> {
+    vec![
+        DeviceNode {
+            name: "null",
+            major: 1,
+            minor: 3,
+            mode: 0o666,
+        },
+        DeviceNode {
+            name: "zero",
+            major: 1,
+            minor: 5,
+            mode: 0o666,
+        },
+        DeviceNode {
+            name: "full",
+            major: 1,
+            minor: 7,
+            mode: 0o666,
+        },
+        DeviceNode {
+            name: "random",
+            major: 1,
+            minor: 8,
+            mode: 0o666,
+        },
+        DeviceNode {
+            name: "urandom",
+            major: 1,
+            minor: 9,
+            mode: 0o444,
+        },
+        DeviceNode {
+            name: "tty",
+            major: 5,
+            minor: 0,
+            mode: 0o666,
+        },
+        DeviceNode {
+            name: "console",
+            major: 5,
+            minor: 1,
+            mode: 0o600,
+        },
+    ]
+}
+
+/// Standard /dev symlinks.
+pub fn default_dev_symlinks() -> Vec<DevSymlink> {
+    vec![
+        DevSymlink {
+            name: "fd",
+            target: "/proc/self/fd",
+        },
+        DevSymlink {
+            name: "stdin",
+            target: "/proc/self/fd/0",
+        },
+        DevSymlink {
+            name: "stdout",
+            target: "/proc/self/fd/1",
+        },
+        DevSymlink {
+            name: "stderr",
+            target: "/proc/self/fd/2",
+        },
+        DevSymlink {
+            name: "ptmx",
+            target: "pts/ptmx",
+        },
+    ]
+}
+
+/// Set up /dev inside the container rootfs using tmpfs + mknod.
+///
+/// Called in the child init path after CLONE_NEWNS, before pivot_root.
+/// Uses the same approach as runc/libcontainer: tmpfs mount + explicit
+/// mknod calls. Works reliably at any nesting depth.
+pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
+    let dev_dir = rootfs.join("dev");
+    fs::create_dir_all(&dev_dir).ok();
+
+    // Mount tmpfs at /dev
+    mount(
+        Some("tmpfs"),
+        &dev_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+        Some("mode=0755,size=65536k"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs".into(),
+        target: dev_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount tmpfs at /dev")?;
+
+    // Create device nodes
+    for node in default_device_nodes() {
+        let path = dev_dir.join(node.name);
+        let dev = nix::sys::stat::makedev(node.major as u64, node.minor as u64);
+        nix::sys::stat::mknod(
+            &path,
+            nix::sys::stat::SFlag::S_IFCHR,
+            nix::sys::stat::Mode::from_bits_truncate(node.mode),
+            dev,
+        )
+        .with_context(|| format!("mknod /dev/{}", node.name))?;
+    }
+
+    // Create /dev/pts and mount devpts
+    let pts_dir = dev_dir.join("pts");
+    fs::create_dir_all(&pts_dir).ok();
+    mount(
+        Some("devpts"),
+        &pts_dir,
+        Some("devpts"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+        Some("newinstance,ptmxmode=0666,mode=0620"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "devpts".into(),
+        target: pts_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount devpts")?;
+
+    // Create /dev/shm
+    let shm_dir = dev_dir.join("shm");
+    fs::create_dir_all(&shm_dir).ok();
+    mount(
+        Some("tmpfs"),
+        &shm_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+        Some("mode=1777,size=65536k"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs-shm".into(),
+        target: shm_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount /dev/shm")?;
+
+    // Create symlinks
+    for link in default_dev_symlinks() {
+        let path = dev_dir.join(link.name);
+        // Remove existing file/symlink if present (e.g. ptmx placeholder)
+        if path.exists() || path.symlink_metadata().is_ok() {
+            fs::remove_file(&path).ok();
+        }
+        std::os::unix::fs::symlink(link.target, &path)
+            .with_context(|| format!("symlink /dev/{} -> {}", link.name, link.target))?;
+    }
+
+    debug!(dev_dir = %dev_dir.display(), "filesystem: container /dev setup complete");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Cleanup (parent process, post container exit)
 // ---------------------------------------------------------------------------
 
@@ -642,6 +886,42 @@ mod tests {
                 prop_assert!(result.is_err(), "expected rejection for {:?}", evil);
             }
         }
+    }
+
+    // ── device node / symlink lists ──────────────────────────────────────────
+
+    #[test]
+    fn default_device_nodes_complete() {
+        let nodes = default_device_nodes();
+        let names: Vec<&str> = nodes.iter().map(|n| n.name).collect();
+        assert!(names.contains(&"null"), "missing /dev/null");
+        assert!(names.contains(&"zero"), "missing /dev/zero");
+        assert!(names.contains(&"full"), "missing /dev/full");
+        assert!(names.contains(&"random"), "missing /dev/random");
+        assert!(names.contains(&"urandom"), "missing /dev/urandom");
+        assert!(names.contains(&"tty"), "missing /dev/tty");
+        assert!(names.contains(&"console"), "missing /dev/console");
+    }
+
+    #[test]
+    fn default_dev_symlinks_complete() {
+        let links = default_dev_symlinks();
+        let names: Vec<&str> = links.iter().map(|l| l.name).collect();
+        assert!(names.contains(&"fd"), "missing /dev/fd");
+        assert!(names.contains(&"stdin"), "missing /dev/stdin");
+        assert!(names.contains(&"stdout"), "missing /dev/stdout");
+        assert!(names.contains(&"stderr"), "missing /dev/stderr");
+    }
+
+    #[test]
+    fn device_node_majmin_matches_linux_standard() {
+        let nodes = default_device_nodes();
+        let null_node = nodes.iter().find(|n| n.name == "null").unwrap();
+        assert_eq!(null_node.major, 1);
+        assert_eq!(null_node.minor, 3);
+        let tty_node = nodes.iter().find(|n| n.name == "tty").unwrap();
+        assert_eq!(tty_node.major, 5);
+        assert_eq!(tty_node.minor, 0);
     }
 
     // ── apply_bind_mounts ────────────────────────────────────────────────────

@@ -89,9 +89,15 @@ async fn test_handle_run_with_cached_image() {
             assert_eq!(id.len(), 16); // UUID truncated to 16 chars
 
             // Verify container was added to state
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            let container = state.get_container(&id).await;
-            assert!(container.is_some());
+            assert!(
+                daemon_handler_common::wait_for_container(
+                    &state,
+                    &id,
+                    std::time::Duration::from_secs(2)
+                )
+                .await,
+                "container should appear in state"
+            );
         }
         _ => panic!("expected ContainerCreated response, got {response:?}"),
     }

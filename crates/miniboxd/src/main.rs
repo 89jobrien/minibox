@@ -468,8 +468,14 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     minibox::daemon::server::run_server(listener, state, deps, require_root_auth, shutdown).await?;
 
     // ── Cleanup ──────────────────────────────────────────────────────────
-    if sock_path.exists() {
-        let _ = std::fs::remove_file(sock_path);
+    if sock_path.exists()
+        && let Err(e) = std::fs::remove_file(sock_path)
+    {
+        warn!(
+            path = %sock_path.display(),
+            error = %e,
+            "daemon: failed to remove socket on shutdown"
+        );
     }
     info!("miniboxd stopped");
     Ok(())

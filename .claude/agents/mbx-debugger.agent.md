@@ -190,7 +190,7 @@ cat /proc/self/cgroup
 
 # Verify test cgroup isolation
 # Integration tests must run inside minibox-test-slice/runner-leaf
-scripts/run-cgroup-tests.sh
+cargo xtask run-cgroup-tests
 ```
 
 ### 5. Implement Minimal Fix

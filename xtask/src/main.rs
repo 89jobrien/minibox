@@ -72,6 +72,7 @@ fn main() -> Result<()> {
             Some(other) => bail!("unknown borrow task: {other}. Available: fixtures"),
             None => bail!("usage: cargo xtask borrow fixtures"),
         },
+        Some("verify") => gates::verify(&sh, root),
         Some("lint") => gates::lint(&sh),
         Some("agentlint") => {
             let all = env::args().any(|a| a == "--all");
@@ -344,7 +345,7 @@ fn main() -> Result<()> {
                 "  test-linux       build image + load into minibox + run tests in container"
             );
             eprintln!(
-                "  test-in-vm       run Linux tests in ephemeral smolvm VM [--skip-build] [--keep]"
+                "  test-in-vm       run Linux tests in ephemeral smolvm VM [--skip-build] [--keep] [--smolfile <path>]"
             );
             eprintln!(
                 "  agentlint [--all] lint agent config files (staged only, or --all on disk)"

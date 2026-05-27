@@ -3,15 +3,16 @@
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-05: crate count, version, dep graph, default adapter, protocol counts.
 > Updated 2026-05-06: GKE adapter ImagePusher wired (OciPushAdapter via oci_push_adapter).
-> Updated 2026-05-07: colima push/commit/build corrected to -- (not wired in daemon); colima
-> wiring note corrected (minibox crate, not macbox); vz wiring row corrected (selectable via
-> macbox env-var branch, feature-gated, macOS only — not in AdapterSuite enum).
+> Updated 2026-05-07: colima wiring note corrected (minibox crate, not macbox);
+> vz wiring row corrected (selectable via macbox env-var branch, feature-gated,
+> macOS only — not in AdapterSuite enum). Colima push/commit/build are now wired
+> via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
 
 ## Workspace Overview
 
-10 crates, Rust 2024 edition, workspace version 0.24.0.
+10 crates, Rust 2024 edition, workspace version 0.30.0.
 
 ```
 minibox-macros          (proc-macro, ~300 LOC)
@@ -49,7 +50,8 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 
 ## Domain Traits (Hexagonal Ports)
 
-All defined in `minibox-core/src/domain.rs` and re-exported via `minibox`.
+All defined in `crates/minibox-core/src/domain.rs` and re-exported
+via `crates/minibox/src/domain.rs`.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -107,6 +109,10 @@ broker — an inconsistency vs native/gke/smolvm.
 
 ### Wiring Status
 
+All `build_*_handler_dependencies` functions live in
+`crates/miniboxd/src/main.rs`. Adapter selection logic is in
+`crates/miniboxd/src/main.rs:select_adapter`.
+
 | Suite                         | Wired in miniboxd                                | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ------------------------------------------------ | ----------------------- | ------------ |
 | native                        | `build_native_handler_dependencies`              | `native`                | Linux only   |
@@ -119,6 +125,8 @@ broker — an inconsistency vs native/gke/smolvm.
 ---
 
 ## HandlerDependencies Structure
+
+(see `crates/minibox/src/daemon/handler/mod.rs:HandlerDependencies`)
 
 ```
 HandlerDependencies
@@ -153,8 +161,8 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-26 request variants, 24 response variants. Canonical source:
-`minibox-core/src/protocol.rs`.
+27 request variants, 28 response variants. Canonical source:
+`crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
 
@@ -177,6 +185,9 @@ BuildOutput, Event, LogLine, UpdateProgress
 
 ## Execution Manifest
 
+(see `crates/minibox-core/src/domain/execution_manifest.rs`,
+persisted in `crates/minibox/src/daemon/handler/run.rs:prepare_run`)
+
 Every container run produces a persisted `execution-manifest.json` at
 `{containers_base}/{id}/execution-manifest.json` **before** the process
 is spawned. The manifest captures every measured input:
@@ -198,14 +209,15 @@ A deterministic `sha256` digest computed from a stable JSON projection
 that excludes volatile fields (`created_at`, `manifest_path`,
 `workload_digest` itself). Equal semantic inputs always produce equal
 digests. Canonical implementation: `ExecutionManifest::seal()` in
-`minibox-core/src/domain/execution_manifest.rs`.
+`crates/minibox-core/src/domain/execution_manifest.rs`.
 
 ### Execution Policy
 
 `ExecutionPolicy` evaluates a manifest against a rule set:
 allowed/denied image patterns, network mode restrictions, privileged
 gate, memory limit cap, mount path prefix allowlist. Loaded from JSON.
-Canonical implementation: `minibox-core/src/domain/execution_policy.rs`.
+Canonical implementation:
+`crates/minibox-core/src/domain/execution_policy.rs`.
 
 ### CLI
 
@@ -239,19 +251,30 @@ MockRegistry; Location B has public state structs).
 ## Container Lifecycle Flow
 
 1. CLI sends `Run` request via Unix socket
+   (see `crates/minibox-core/src/protocol.rs:DaemonRequest::Run`)
 2. Daemon checks image cache, pulls from Docker Hub if missing
+   (see `crates/minibox/src/daemon/handler/image.rs`)
 3. Creates overlay mount (lowerdir=layers, upperdir=container_rw)
-4. `spawn_blocking` -> fork child with `clone(CLONE_NEWPID|NS|UTS|IPC|NET)`
+   (see `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem`)
+4. `spawn_blocking` -> fork child with
+   `clone(CLONE_NEWPID|NS|UTS|IPC|NET)`
+   (see `crates/minibox/src/container/namespace.rs`)
 5. Child: create cgroup, write PID, set limits, mount proc/sys/tmpfs,
    `pivot_root`, close extra FDs, `execve` user command
+   (see `crates/minibox/src/container/process.rs:child_init`,
+   `crates/minibox/src/container/filesystem.rs`)
 6. Parent: track PID, spawn reaper task
 7. On exit: reaper updates state to Stopped
 
 ## State Persistence
 
-`DaemonState` persists container records to disk (atomic rename) on every
-add/remove. Records survive daemon restart; running processes do not reattach.
-State machine: Created -> Running -> Paused -> Stopped (+ Failed, Orphaned).
+`DaemonState`
+(see `crates/minibox/src/daemon/state.rs:DaemonState`) persists
+container records to disk (atomic rename) on every add/remove.
+Records survive daemon restart; running processes do not reattach.
+State machine: Created -> Running -> Paused -> Stopped
+(+ Failed, Orphaned).
+See `docs/STATE_MODEL.mbx.md` for full detail.
 
 ---
 

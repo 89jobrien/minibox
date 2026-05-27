@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{bump, docs_lint, utils::cargo_target_dir};
+use crate::{borrow_fixtures, bump, docs_lint, utils::cargo_target_dir};
 
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
@@ -25,6 +25,37 @@ pub fn lint(sh: &Shell) -> Result<()> {
         .run()
         .context("cargo check --workspace failed")?;
     eprintln!("lint gate passed");
+    Ok(())
+}
+
+/// Read-only local verification gate: fmt check, workspace check, clippy,
+/// borrow fixtures, and docs lint. Does not modify files.
+pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
+    eprintln!("--- verify: fmt check ---");
+    cmd!(sh, "cargo fmt --all --check")
+        .run()
+        .context("cargo fmt --check failed")?;
+
+    eprintln!("--- verify: workspace check ---");
+    cmd!(sh, "cargo check --workspace")
+        .run()
+        .context("cargo check --workspace failed")?;
+
+    eprintln!("--- verify: clippy ---");
+    cmd!(
+        sh,
+        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+    )
+    .run()
+    .context("cargo clippy failed")?;
+
+    eprintln!("--- verify: borrow fixtures ---");
+    borrow_fixtures::run(root)?;
+
+    eprintln!("--- verify: docs lint ---");
+    docs_lint::lint_docs(root)?;
+
+    eprintln!("verify gate passed");
     Ok(())
 }
 

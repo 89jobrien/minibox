@@ -8,7 +8,8 @@ Last updated: 2026-05-14
 
 ## Overview
 
-`DaemonState` (defined in `crates/minibox/src/daemon/state.rs`) is the single
+`DaemonState` (defined in
+`crates/minibox/src/daemon/state.rs:DaemonState`) is the single
 shared data structure for all container metadata. It is held behind
 `Arc<RwLock<...>>` (verified against source 2026-05-06) so many readers
 proceed concurrently while writes are exclusive.
@@ -62,9 +63,10 @@ adjusts stale records:
 | `Failed`              | Unchanged         | Already terminal                                  |
 | `Orphaned`            | Unchanged         | Already terminal                                  |
 
-The PID liveness check is performed by the `ProcessChecker` port (default
-adapter uses `kill(pid, 0)`). Tests inject doubles that always return
-alive or dead.
+The PID liveness check is performed by the `ProcessChecker` port
+(see `crates/minibox-core/src/domain.rs:ProcessChecker`; default
+adapter uses `kill(pid, 0)`). Tests inject doubles that always
+return alive or dead.
 
 ## Container State Machine
 
@@ -79,8 +81,9 @@ Created ──► Running ──► Stopped
               └── (daemon restart, PID dead) ──► Orphaned
 ```
 
-Valid transitions are enforced by `update_container_state()`. Invalid
-transitions return an error.
+Valid transitions are enforced by
+`crates/minibox/src/daemon/state.rs:update_container_state`.
+Invalid transitions return an error.
 
 ## Persistence Port
 
@@ -93,8 +96,11 @@ pub trait StateRepository: Send + Sync + 'static {
 }
 ```
 
-- **Production adapter**: `JsonFileRepository` — atomic JSON file.
-- **Test adapter**: in-memory doubles or `TempDir`-backed `DaemonState`.
+- **Production adapter**: `JsonFileRepository`
+  (see `crates/minibox/src/daemon/state.rs:JsonFileRepository`)
+  -- atomic JSON file.
+- **Test adapter**: in-memory doubles or `TempDir`-backed
+  `DaemonState`.
 
 `DaemonState::with_repository()` accepts an `Arc<dyn StateRepository>` for
 dependency injection. This is the preferred constructor for tests. The production

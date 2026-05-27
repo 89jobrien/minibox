@@ -14,6 +14,7 @@ use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::DynImageRegistry;
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -384,6 +385,21 @@ pub fn make_deps_with_policy(
 // ---------------------------------------------------------------------------
 // wait_for_container_state
 // ---------------------------------------------------------------------------
+
+/// Poll DaemonState until the container exists (any state), or the deadline
+/// passes. Returns `true` if found.
+pub async fn wait_for_container(state: &Arc<DaemonState>, id: &str, timeout: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if state.get_container(id).await.is_some() {
+            return true;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+    }
+}
 
 /// Poll DaemonState until the container reaches the expected state or the
 /// deadline passes.  Returns the final state string.
