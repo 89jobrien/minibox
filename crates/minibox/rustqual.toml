@@ -1,0 +1,26 @@
+# rustqual config for minibox lib crate
+# Test-heavy crate with cross-crate pub API consumers — tune accordingly.
+
+ignore_functions = ["main", "test_*"]
+
+# Bench and integration test files contain structural repetition (setup patterns)
+# that is not meaningful duplication. Exclude them from DRY analysis.
+exclude_files = [
+    "tests/*",
+    "benches/*",
+]
+
+# Cross-crate consumers (miniboxd, mbx, minibox-testsuite) use pub API;
+# single-crate dead-code detection produces false positives.
+[duplicates]
+detect_dead_code = false
+
+[complexity]
+max_cognitive = 18
+max_cyclomatic = 11
+max_function_lines = 68
+
+[srp]
+max_parameters = 5
+file_length_baseline = 300
+file_length_ceiling = 800

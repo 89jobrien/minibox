@@ -28,6 +28,7 @@ pub fn supports_nested_overlay() -> bool {
 }
 
 #[cfg(target_os = "linux")]
+// qual:allow(complexity) reason: "overlay probe with tmpdir mount/unmount"
 fn probe_nested_overlay() -> bool {
     use nix::mount::{MntFlags, MsFlags, mount, umount2};
     use std::fs;

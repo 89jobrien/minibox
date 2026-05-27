@@ -259,6 +259,7 @@ fn run_pipe_exec_command(
 ///
 /// The parent reads PTY output from the master fd and forwards resize events
 /// via `TIOCSWINSZ`.
+// qual:allow(complexity) reason: "PTY setup with nsenter, master fd, and resize forwarding"
 fn run_pty_exec(
     container_pid: u32,
     exec_id: &str,

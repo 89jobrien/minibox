@@ -253,6 +253,7 @@ impl NetworkProvider for BridgeNetwork {
     /// Returns a JSON blob with `container_ip`, `ceth`, `veth`, `gateway`, and `dns`
     /// fields. The caller stores this as `/run/minibox/net/{container_id}.json` so
     /// that `attach` can read it.
+    // qual:allow(complexity) reason: "bridge network setup: veth pair, IP alloc, iptables"
     async fn setup(&self, container_id: &str, config: &NetworkConfig) -> Result<String> {
         self.ensure_bridge().context("bridge: ensure bridge")?;
         self.ensure_nat().context("bridge: ensure NAT")?;
@@ -339,6 +340,7 @@ impl NetworkProvider for BridgeNetwork {
     }
 
     /// Move `ceth` into the container network namespace and configure IP/routes.
+    // qual:allow(complexity) reason: "netns move + ip addr/route configuration"
     async fn attach(&self, container_id: &str, pid: u32) -> Result<()> {
         let ctx_path = Self::net_context_path(container_id);
         let ctx_raw = std::fs::read_to_string(&ctx_path)
@@ -421,6 +423,7 @@ impl NetworkProvider for BridgeNetwork {
     }
 
     /// Delete the veth pair and remove the net context file.
+    // qual:allow(complexity) reason: "network teardown: veth delete, IP release, iptables"
     async fn cleanup(&self, container_id: &str) -> Result<()> {
         let ctx_path = Self::net_context_path(container_id);
 

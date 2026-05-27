@@ -241,6 +241,7 @@ async fn bounded_read_line<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// Streaming responses (`ContainerOutput`) are forwarded until the terminal
 /// `ContainerStopped` message closes the exchange.
+// qual:allow(complexity) reason: "protocol read/write loop with error recovery"
 pub async fn handle_connection<S>(
     stream: S,
     state: Arc<DaemonState>,
@@ -413,6 +414,7 @@ async fn send_terminal_response(
 /// Each variant maps 1-to-1 to a handler function in [`crate::handler`].
 /// The `Run` variant is the only one that may produce multiple responses
 /// (streaming output chunks); all others produce exactly one response.
+// qual:allow(complexity) reason: "pure routing match — one arm per request variant"
 async fn dispatch(
     request: DaemonRequest,
     state: Arc<DaemonState>,

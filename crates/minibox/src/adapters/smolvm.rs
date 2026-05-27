@@ -261,6 +261,7 @@ impl ContainerRuntime for SmolVmRuntime {
     ///
     /// Builds the command from `config.command` + `config.args`, passes
     /// environment variables and bind mounts, and runs via smolvm.
+    // qual:allow(complexity) reason: "smolvm CLI invocation with mount/env assembly"
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut command = vec![config.command.as_str()];
         let args: Vec<&str> = config.args.iter().map(|s| s.as_str()).collect();

@@ -15,6 +15,7 @@ use super::{HandlerDependencies, send_error};
 /// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
 /// Returns `Error` immediately if the exec runtime is unavailable or the
 /// container is not running.
+// qual:allow(complexity) reason: "exec handler: lookup, nsenter, stream output"
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_exec(
     container_id: String,

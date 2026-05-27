@@ -13,6 +13,7 @@ use super::run::{RunParams, handle_run};
 use super::{HandlerDependencies, send_error};
 
 /// Run a crux pipeline inside an ephemeral container.
+// qual:allow(complexity) reason: "pipeline lifecycle phases in cfg(unix) block"
 ///
 /// Higher-level than `handle_run`: pulls image, creates container with the
 /// pipeline file bind-mounted at `/pipeline.crux`, streams `ContainerOutput`

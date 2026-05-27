@@ -61,6 +61,7 @@ pub struct ContainerConfig {
 /// `config.capture_output` is true, the read end of a pipe connected to
 /// the container's stdout+stderr.
 #[cfg(target_os = "linux")]
+// qual:allow(complexity) reason: "fork/clone setup — must be single cohesive unit"
 pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnResult> {
     use nix::fcntl::OFlag;
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -331,6 +332,7 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
 ///
 /// On any error the caller is expected to call `libc::_exit(127)` so the
 /// process terminates without running Rust destructors.
+// qual:allow(complexity) reason: "child init sequence — must be linear and auditable"
 fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     // 1. Set hostname (requires UTS namespace).
     debug!(hostname = %config.hostname, "container: setting hostname");
