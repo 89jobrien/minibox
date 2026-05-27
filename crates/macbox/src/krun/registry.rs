@@ -45,7 +45,8 @@ impl KrunRegistry {
     ///
     /// Used by K-I-05 to verify the size limit configuration is present.
     pub const fn manifest_size_limit_bytes() -> u64 {
-        10 * 1024 * 1024 // 10 MiB — matches MAX_MANIFEST_SIZE in minibox-core
+        const TEN_MIB: u64 = 10 * 1024 * 1024;
+        TEN_MIB // matches MAX_MANIFEST_SIZE in minibox-core
     }
 }
 

@@ -41,6 +41,7 @@ impl DaemonConfig {
     /// 1. `/etc/minibox/config.toml` (system)
     /// 2. `$HOME/.config/minibox/config.toml` (user)
     /// 3. `MINIBOX_*` env vars (highest priority)
+    // qual:allow(iosp) reason: "config loading inherently mixes file I/O with merge logic"
     pub fn load() -> Self {
         let mut cfg = Self::default();
 
