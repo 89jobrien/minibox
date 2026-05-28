@@ -18,6 +18,9 @@ tempfile = "3"
 path = "../crates/minibox-core"
 features = ["fuzzing"]
 
+[dependencies.minibox]
+path = "../crates/minibox"
+
 [dependencies.minibox-crux-plugin]
 path = "../crates/minibox-crux-plugin"
 
@@ -68,6 +71,27 @@ bench = false
 [[bin]]
 name = "fuzz_parse_image_ref"
 path = "fuzz_targets/fuzz_parse_image_ref.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_dockerfile"
+path = "fuzz_targets/fuzz_parse_dockerfile.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_www_authenticate"
+path = "fuzz_targets/fuzz_parse_www_authenticate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_cgroup_parent"
+path = "fuzz_targets/fuzz_validate_cgroup_parent.rs"
 test = false
 doc = false
 bench = false
