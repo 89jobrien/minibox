@@ -21,6 +21,8 @@
 !docs/archive/
 *.csv
 fuzz/*
+!fuzz/Cargo.toml
+!fuzz/.gitignore
 !fuzz/fuzz_targets/
 **/fuzz/seeds/
 **/fuzz/corpus/

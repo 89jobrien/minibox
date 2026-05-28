@@ -11,11 +11,17 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+serde_json = "1"
 tempfile = "3"
 
 [dependencies.minibox-core]
-path = "../../minibox-core"
+path = "../crates/minibox-core"
 features = ["fuzzing"]
+
+[dependencies.minibox-crux-plugin]
+path = "../crates/minibox-crux-plugin"
+
+# ── minibox-core targets ────────────────────────────────────────────────────────
 
 [[bin]]
 name = "fuzz_decode_request"
@@ -62,6 +68,22 @@ bench = false
 [[bin]]
 name = "fuzz_parse_image_ref"
 path = "fuzz_targets/fuzz_parse_image_ref.rs"
+test = false
+doc = false
+bench = false
+
+# ── minibox-crux-plugin targets ─────────────────────────────────────────────────
+
+[[bin]]
+name = "fuzz_build_request"
+path = "fuzz_targets/fuzz_build_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_request"
+path = "fuzz_targets/fuzz_parse_request.rs"
 test = false
 doc = false
 bench = false
