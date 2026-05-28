@@ -58,6 +58,56 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// - **Linux**: Uses `SO_PEERCRED` via `getsockopt` (returns uid + pid).
+/// - **macOS**: Uses `getpeereid(2)` (returns uid; pid = 0 sentinel).
+///
+/// Returns `None` if the syscall fails.
+#[cfg(target_os = "linux")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    use std::mem;
+    let mut cred: nix::libc::ucred = unsafe { mem::zeroed() };
+    let mut len = mem::size_of::<nix::libc::ucred>() as nix::libc::socklen_t;
+    // SAFETY: fd is a valid connected Unix socket fd. getsockopt with
+    // SO_PEERCRED is safe on any connected Unix domain socket.
+    let ret = unsafe {
+        nix::libc::getsockopt(
+            fd,
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_PEERCRED,
+            &mut cred as *mut _ as *mut nix::libc::c_void,
+            &mut len,
+        )
+    };
+    if ret == 0 {
+        Some(PeerCreds {
+            uid: cred.uid,
+            pid: cred.pid,
+        })
+    } else {
+        warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// macOS variant using `getpeereid(2)`.
+#[cfg(target_os = "macos")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    let mut uid: nix::libc::uid_t = 0;
+    let mut gid: nix::libc::gid_t = 0;
+    // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
+    // call on any connected Unix domain socket.
+    if unsafe { nix::libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
+        Some(PeerCreds { uid, pid: 0 })
+    } else {
+        warn!("getpeereid failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
 /// Determine whether a connection should be accepted given peer credentials
 /// and the `require_root_auth` flag.
 ///

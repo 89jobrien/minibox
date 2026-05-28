@@ -1145,23 +1145,13 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
-        unsafe {
-            std::env::remove_var("COLIMA_HOME");
-            std::env::set_var("HOME", "/tmp/test-home");
-        }
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
+        minibox_macros::unsafe_set_var!("HOME", "/tmp/test-home");
 
         let result = colima_home();
 
-        unsafe {
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-            match prev_home {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
+        minibox_macros::unsafe_restore_var!("HOME", prev_home);
 
         assert_eq!(result, PathBuf::from("/tmp/test-home").join(".colima"));
     }
@@ -1171,14 +1161,9 @@ mod tests {
         let _guard = ENV_MUTEX.lock().unwrap();
         let prev = std::env::var("COLIMA_HOME").ok();
 
-        unsafe { std::env::set_var("COLIMA_HOME", "/custom/colima") };
+        minibox_macros::unsafe_set_var!("COLIMA_HOME", "/custom/colima");
         let result = colima_home();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev);
 
         assert_eq!(result, PathBuf::from("/custom/colima"));
     }
@@ -1190,28 +1175,15 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
-        unsafe {
-            std::env::remove_var("LIMA_HOME");
-            std::env::remove_var("COLIMA_HOME");
-            std::env::set_var("HOME", "/tmp/test-home");
-        }
+        minibox_macros::unsafe_remove_var!("LIMA_HOME");
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
+        minibox_macros::unsafe_set_var!("HOME", "/tmp/test-home");
 
         let result = lima_home();
 
-        unsafe {
-            match prev_lima {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-            match prev_home {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev_lima);
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
+        minibox_macros::unsafe_restore_var!("HOME", prev_home);
 
         assert_eq!(result, "/tmp/test-home/.colima/_lima");
     }
@@ -1221,14 +1193,9 @@ mod tests {
         let _guard = ENV_MUTEX.lock().unwrap();
         let prev = std::env::var("LIMA_HOME").ok();
 
-        unsafe { std::env::set_var("LIMA_HOME", "/custom/lima") };
+        minibox_macros::unsafe_set_var!("LIMA_HOME", "/custom/lima");
         let result = lima_home();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev);
 
         assert_eq!(result, "/custom/lima");
     }
@@ -1239,24 +1206,14 @@ mod tests {
         let prev_lima = std::env::var("LIMA_HOME").ok();
         let prev_colima = std::env::var("COLIMA_HOME").ok();
 
-        unsafe {
-            std::env::remove_var("LIMA_HOME");
-            std::env::remove_var("COLIMA_HOME");
-        }
+        minibox_macros::unsafe_remove_var!("LIMA_HOME");
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
 
         let cmd = limactl_command("limactl");
         let expected_lima_home = lima_home();
 
-        unsafe {
-            match prev_lima {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev_lima);
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
 
         assert!(
             !expected_lima_home.is_empty(),

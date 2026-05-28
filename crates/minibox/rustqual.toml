@@ -3,8 +3,8 @@
 
 ignore_functions = ["main", "test_*"]
 
-# Bench and integration test files contain structural repetition (setup patterns)
-# that is not meaningful duplication. Exclude them from DRY analysis.
+# Bench, integration test, mock, and example files contain structural
+# repetition and .unwrap()/.expect() by design.
 exclude_files = [
     "tests/*",
     "benches/*",
