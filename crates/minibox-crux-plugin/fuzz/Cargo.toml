@@ -1,0 +1,31 @@
+[package]
+name = "minibox-crux-plugin-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+
+[dependencies.minibox-crux-plugin]
+path = ".."
+
+[[bin]]
+name = "fuzz_build_request"
+path = "fuzz_targets/fuzz_build_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_request"
+path = "fuzz_targets/fuzz_parse_request.rs"
+test = false
+doc = false
+bench = false
