@@ -188,6 +188,51 @@ jobs:
           cargo fetch --locked
           cargo xtask test-e2e
 
+  test-protocol-e2e:
+    name: protocol e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true'
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build daemon and CLI
+        run: cargo build --release -p miniboxd -p mbx
+      - name: run protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1
+
+  test-cli-e2e:
+    name: CLI e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true'
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build daemon and CLI
+        run: cargo build --release -p miniboxd -p mbx
+      - name: run CLI e2e tests
+        run: cargo test -p miniboxd --test cli_e2e_tests --release -- --test-threads=1
+
   ci-ok:
     name: CI passed
     runs-on: ubuntu-latest
@@ -205,6 +250,8 @@ jobs:
       - test-e2e
       - test-integration
       - test-protocol-e2e-linux
+      - test-protocol-e2e
+      - test-cli-e2e
     steps:
       - name: check job results
         run: |
@@ -220,6 +267,8 @@ jobs:
             "${{ needs.test-e2e.result }}"
             "${{ needs.test-integration.result }}"
             "${{ needs.test-protocol-e2e-linux.result }}"
+            "${{ needs.test-protocol-e2e.result }}"
+            "${{ needs.test-cli-e2e.result }}"
           )
           for r in "${results[@]}"; do
             if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
