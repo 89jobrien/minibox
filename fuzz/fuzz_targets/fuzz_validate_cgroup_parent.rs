@@ -16,4 +16,6 @@ fuzz_target!(|data: &[u8]| {
             let _ = minibox::container::cgroups::validate_cgroup_parent(s);
         }
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = data;
 });
