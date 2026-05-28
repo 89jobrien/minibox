@@ -1608,6 +1608,7 @@ dependencies = [
  "hex",
  "insta",
  "libc",
+ "minibox-core",
  "minibox-macros",
  "pin-project-lite",
  "proptest",
