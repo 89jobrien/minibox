@@ -13,6 +13,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 serde_json = "1"
 tempfile = "3"
+toml = "0.8"
 
 [dependencies.minibox-core]
 path = "../crates/minibox-core"
@@ -20,6 +21,9 @@ features = ["fuzzing"]
 
 [dependencies.minibox]
 path = "../crates/minibox"
+
+[dependencies.miniboxd]
+path = "../crates/miniboxd"
 
 [dependencies.minibox-crux-plugin]
 path = "../crates/minibox-crux-plugin"
@@ -92,6 +96,20 @@ bench = false
 [[bin]]
 name = "fuzz_validate_cgroup_parent"
 path = "fuzz_targets/fuzz_validate_cgroup_parent.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verify_digest"
+path = "fuzz_targets/fuzz_verify_digest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_daemon_config"
+path = "fuzz_targets/fuzz_parse_daemon_config.rs"
 test = false
 doc = false
 bench = false
