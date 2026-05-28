@@ -2787,6 +2787,7 @@ dependencies = [
  "anyhow",
  "macbox",
  "minibox",
+ "proptest",
  "tempfile",
  "tokio",
  "which",

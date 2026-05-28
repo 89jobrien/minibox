@@ -12,5 +12,6 @@ anyhow = { workspace = true }
 which = "6"
 
 [dev-dependencies]
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

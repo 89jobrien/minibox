@@ -134,3 +134,30 @@ and root-required tests add ~700 more.
 - `mocks.rs` — cross-platform mock adapters (duplicates minibox mocks)
 - `test_fixtures.rs` — shared fixtures
 - `conformance.rs` — conformance harness
+
+---
+
+## Regression Test Convention
+
+Every bug fix commit must include a regression test that reproduces the
+original failure. This prevents the same bug from recurring.
+
+### Naming
+
+```
+regression_gh_NNN_short_description
+```
+
+Where `NNN` is the GitHub issue number. Examples:
+
+- `regression_gh_42_symlink_escape_in_tar`
+- `regression_gh_108_overlay_cleanup_on_cgroup_error`
+
+### Rules
+
+- Never delete a regression test. If the code it covers is removed,
+  mark it `#[ignore]` with a comment explaining why.
+- Regression tests live alongside related unit/integration tests in
+  the appropriate crate, not in a separate file.
+- If the bug was found by a property test, commit the
+  `proptest-regressions/` counterexample file.

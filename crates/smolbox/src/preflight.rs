@@ -41,8 +41,19 @@ pub fn check_smolvm() -> SmolvmStatus {
     }
 }
 
+/// Parse a version string from raw `smolvm --version` output.
+///
+/// Handles formats: `"smolvm 0.5.2"`, `"smolvm version 0.5.2"`, `"0.5.2"`.
+pub fn parse_version_output(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let after_name = trimmed.strip_prefix("smolvm ").unwrap_or(trimmed);
+    after_name
+        .strip_prefix("version ")
+        .unwrap_or(after_name)
+        .to_string()
+}
+
 /// Run `smolvm --version` and parse the version string from stdout.
-// TODO(#433): simplify version parsing — redundant strip_prefix branches
 fn query_version(bin: &std::path::Path) -> Result<String> {
     let output = Command::new(bin)
         .arg("--version")
@@ -50,21 +61,7 @@ fn query_version(bin: &std::path::Path) -> Result<String> {
         .with_context(|| format!("failed to run {} --version", bin.display()))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Typical output: "smolvm 0.5.2" or "smolvm version 0.5.2"
-    let version = stdout
-        .trim()
-        .strip_prefix("smolvm ")
-        .unwrap_or(stdout.trim())
-        .strip_prefix("version ")
-        .unwrap_or(
-            stdout
-                .trim()
-                .strip_prefix("smolvm ")
-                .unwrap_or(stdout.trim()),
-        )
-        .to_string();
-
-    Ok(version)
+    Ok(parse_version_output(&stdout))
 }
 
 /// Check whether `smolvm` is on PATH (quick boolean probe).
@@ -118,5 +115,25 @@ mod tests {
         };
         let b = a.clone();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn parse_version_output_standard() {
+        assert_eq!(parse_version_output("smolvm 0.5.2"), "0.5.2");
+    }
+
+    #[test]
+    fn parse_version_output_with_version_prefix() {
+        assert_eq!(parse_version_output("smolvm version 0.5.2"), "0.5.2");
+    }
+
+    #[test]
+    fn parse_version_output_bare_version() {
+        assert_eq!(parse_version_output("0.5.2"), "0.5.2");
+    }
+
+    #[test]
+    fn parse_version_output_with_trailing_newline() {
+        assert_eq!(parse_version_output("smolvm 0.5.2\n"), "0.5.2");
     }
 }
