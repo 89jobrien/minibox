@@ -48,6 +48,7 @@ slashcrux = { workspace = true }
 libc = { workspace = true }
 
 [dev-dependencies]
+minibox-core = { path = ".", features = ["test-utils"] }
 wiremock = { workspace = true }
 proptest = "1"
 quickcheck = { workspace = true }
