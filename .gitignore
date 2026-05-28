@@ -46,6 +46,9 @@ agentbox/bin/
 # Version bump state
 .minibox-bump-state
 
+# Nix
+/result
+
 # Rust build artifacts
 /target/
 **/*.rs.bk
