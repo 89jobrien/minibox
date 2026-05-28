@@ -279,7 +279,7 @@ impl StepRunnerRegistry {
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
     #[cfg(test)]
-    pub fn register_builtin_runners(&mut self) {
+    fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));
         self.register(Box::new(ImagePullStepRunner));
         self.register(Box::new(ExecStepRunner));
@@ -808,7 +808,7 @@ impl BackendRootfsMetadata {
 
     /// Look up a backend-specific metadata value by key.
     #[cfg(test)]
-    pub fn metadata_value(&self, key: &str) -> Option<&str> {
+    fn metadata_value(&self, key: &str) -> Option<&str> {
         match self {
             Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
         }
@@ -2397,7 +2397,7 @@ pub enum StepCompletion {
 /// - how many consecutive errors have occurred (`error_count`), and
 /// - whether the error is terminal (unrecoverable regardless of policy).
 #[cfg(test)]
-pub fn determine_step_completion(
+fn determine_step_completion(
     result: &anyhow::Result<StepOutput>,
     retry_cfg: Option<&StepRetry>,
     elapsed: std::time::Duration,
@@ -2638,10 +2638,7 @@ pub struct ResolvedStep {
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
 #[cfg(test)]
-pub fn resolve_step_vars(
-    step: &WorkflowStep,
-    state: &WorkflowState,
-) -> anyhow::Result<ResolvedStep> {
+fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<ResolvedStep> {
     use anyhow::Context as _;
     let mut resolved_vars = std::collections::HashMap::new();
 
@@ -2669,7 +2666,7 @@ pub fn resolve_step_vars(
 ///
 /// Overwrites any prior value stored under the same alias.
 #[cfg(test)]
-pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
+fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
 
@@ -2677,7 +2674,7 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
 #[cfg(test)]
-pub fn steps_before<'a>(
+fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
 ) -> anyhow::Result<Vec<&'a WorkflowStep>> {
@@ -2697,7 +2694,7 @@ pub fn steps_before<'a>(
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
 #[cfg(test)]
-pub fn resume_workflow(
+fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
     prior_outputs: &WorkflowState,
