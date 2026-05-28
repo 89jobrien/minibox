@@ -46,10 +46,10 @@ pub fn check_smolvm() -> SmolvmStatus {
 /// Handles formats: `"smolvm 0.5.2"`, `"smolvm version 0.5.2"`, `"0.5.2"`.
 pub fn parse_version_output(raw: &str) -> String {
     let trimmed = raw.trim();
-    let after_name = trimmed.strip_prefix("smolvm ").unwrap_or(trimmed);
-    after_name
-        .strip_prefix("version ")
-        .unwrap_or(after_name)
+    trimmed
+        .strip_prefix("smolvm version ")
+        .or_else(|| trimmed.strip_prefix("smolvm "))
+        .unwrap_or(trimmed)
         .to_string()
 }
 
