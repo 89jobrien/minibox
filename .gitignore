@@ -43,8 +43,6 @@ fuzz/*
 # Go build artifacts (agentbox)
 agentbox/bin/
 
-# Version bump state
-.minibox-bump-state
 
 # Nix
 /result
@@ -110,9 +108,6 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
-# Promotion pipeline state
-.minibox-promote-state
-
 # Local development
 .env
 .env.local
@@ -162,3 +157,11 @@ docs/archive/
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/
+.envrc
+.env
+crates/.env
+.claude/settings.local.json
+.idea/
+.worktrees/
+# .claude/
+.worktrees/crux
