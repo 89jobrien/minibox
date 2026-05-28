@@ -18,6 +18,7 @@ pub mod adapters;
 pub mod container;
 pub mod container_state;
 pub mod daemon;
+pub mod fs_util;
 pub mod nesting;
 
 // The `as_any!` and `adapt!` macros from minibox-macros expand to

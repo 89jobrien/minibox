@@ -1,6 +1,4 @@
 //! Container run handlers and supporting infrastructure.
-// TODO(#326): persist execution manifest before container spawn
-// TODO(#366): extract shared run preparation path from handle_run
 
 use anyhow::{Context as _, Result};
 use chrono::Utc;
@@ -20,6 +18,7 @@ use uuid::Uuid;
 use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
 
 use super::super::network_lifecycle::NetworkLifecycle;
+use super::stop::stop_inner;
 use super::{HandlerDependencies, send_error};
 
 // ─── RunParams: parameter bundle for the run pipeline ────────────────────────
@@ -143,6 +142,7 @@ pub async fn handle_run(
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
 #[cfg(unix)]
+// qual:allow(complexity) reason: "streaming run: pipe drain, waitpid, event emission"
 pub(super) async fn handle_run_streaming(
     params: RunParams,
     state: Arc<DaemonState>,
@@ -352,8 +352,7 @@ fn build_execution_manifest(
         ExecutionManifestSubject,
     };
 
-    // TODO(#436): replace Debug format with explicit Display/as_str
-    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    let net_mode_str = net_mode.to_string();
     ExecutionManifest {
         schema_version: 1,
         container_id: id.to_string(),
@@ -470,6 +469,7 @@ fn build_container_record(
 /// Shared container preparation: image pull, overlay setup, cgroup creation,
 /// network setup, container record registration, spawn config construction,
 /// and execution manifest persistence.
+// qual:allow(complexity) reason: "orchestration sequence — helpers already extracted"
 ///
 /// The `capture_output` flag is the only behavioural difference between the
 /// streaming (`run_inner_capture`) and fire-and-forget (`run_inner`) paths.
@@ -540,9 +540,6 @@ async fn prepare_run(
     let net_mode = network.unwrap_or(NetworkMode::None);
 
     // ── Execution policy gate ───────────────────────────────────────
-    // Evaluate BEFORE creating any resources (overlay, cgroup, network).
-    // The manifest depends only on request parameters and cached layer
-    // digests, so no cleanup is needed on denial.
     let id = generate_container_id();
 
     // SECURITY: Verify no collision with existing containers.
@@ -582,97 +579,26 @@ async fn prepare_run(
         }
     }
 
+    // ── Resource setup: dirs, overlay, cgroup, network ─────────────
     let container_dir = deps.lifecycle.containers_base.join(&id);
     let run_dir = deps.lifecycle.run_containers_base.join(&id);
+    create_container_dirs(&container_dir, &run_dir)?;
 
-    // SECURITY: Create container directories with restricted permissions (0700).
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = std::fs::DirBuilder::new();
-        const OWNER_RWX_PERMS: u32 = 0o700;
-        builder.mode(OWNER_RWX_PERMS);
-        builder.recursive(true);
-        builder.create(&container_dir)?;
-        builder.create(&run_dir)?;
-    }
-
-    #[cfg(not(unix))]
-    {
-        std::fs::create_dir_all(&container_dir)?;
-        std::fs::create_dir_all(&run_dir)?;
-    }
-
-    // Setup overlayfs.
     let rootfs_layout = deps
         .lifecycle
         .filesystem
         .setup_rootfs(&layer_dirs, &container_dir)?;
     let merged_dir = rootfs_layout.merged_dir.clone();
 
-    // Setup cgroup.
-    const DEFAULT_PIDS_MAX: u64 = 1024;
-    let resource_config = ResourceConfig {
+    let cgroup_dir = setup_cgroup(
+        &id,
         memory_limit_bytes,
         cpu_weight,
-        pids_max: Some(DEFAULT_PIDS_MAX),
-        io_max_bytes_per_sec: None,
-    };
-    let cgroup_dir_str = {
-        #[cfg(target_os = "linux")]
-        if let Some(ref parent) = cgroup_parent {
-            // Validate cgroup_parent is under /sys/fs/cgroup/ to prevent arbitrary
-            // directory creation elsewhere on the filesystem.
-            crate::container::cgroups::validate_cgroup_parent(parent)?;
-            let mgr = crate::container::cgroups::CgroupManager::with_root(
-                &id,
-                crate::container::cgroups::CgroupConfig {
-                    memory_limit_bytes: resource_config.memory_limit_bytes,
-                    cpu_weight: resource_config.cpu_weight,
-                    pids_max: resource_config.pids_max,
-                    io_max_bytes_per_sec: resource_config.io_max_bytes_per_sec,
-                },
-                std::path::PathBuf::from(parent),
-            );
-            mgr.create()?;
-            mgr.cgroup_path().display().to_string()
-        } else {
-            deps.lifecycle
-                .resource_limiter
-                .create(&id, &resource_config)?
-        }
+        &cgroup_parent,
+        privileged,
+        &deps,
+    )?;
 
-        #[cfg(not(target_os = "linux"))]
-        {
-            if cgroup_parent.is_some() {
-                anyhow::bail!("--cgroup-parent is only supported on Linux");
-            }
-            deps.lifecycle
-                .resource_limiter
-                .create(&id, &resource_config)?
-        }
-    };
-    let cgroup_dir = PathBuf::from(cgroup_dir_str);
-
-    // ── Cgroup delegation for nested containers ────────────────────────
-    // Only privileged containers get subtree delegation — non-privileged
-    // containers use the flat cgroup model (no child cgroup creation).
-    #[cfg(target_os = "linux")]
-    if privileged {
-        let delegation = crate::container::cgroups::DelegationPaths {
-            subtree: cgroup_dir.clone(),
-            init_leaf: cgroup_dir.join("init"),
-        };
-        if let Err(e) = crate::container::cgroups::delegate_subtree(&delegation) {
-            debug!(
-                container_id = %id,
-                error = %e,
-                "cgroup delegation skipped (non-fatal)"
-            );
-        }
-    }
-
-    // ── Network setup ──────────────────────────────────────────────────
     let network_config = minibox_core::domain::NetworkConfig {
         mode: net_mode,
         ..minibox_core::domain::NetworkConfig::default()
@@ -683,9 +609,7 @@ async fn prepare_run(
         .await
         .context("network setup")?;
 
-    let skip_net_ns = net_mode == NetworkMode::Host;
-
-    // Build ContainerRecord in Created state.
+    // ── Container record + spawn config ────────────────────────────
     let image_label = format!("{image}:{tag}");
     let record = build_container_record(
         &id,
@@ -706,37 +630,22 @@ async fn prepare_run(
         &platform,
         &cgroup_parent,
     );
-    // Build the ContainerSpawnConfig for the runtime.
-    let spawn_command = command
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "/bin/sh".to_string());
-    let spawn_args = command.iter().skip(1).cloned().collect();
-    let mut container_env = vec![
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
-        "TERM=xterm".to_string(),
-    ];
-    container_env.extend(env.clone());
 
-    // Inject nesting depth for minibox-in-minibox support.
-    let nesting = crate::nesting::NestingContext::from_env();
-    container_env.extend(nesting.child_env_vars());
-    let spawn_config = ContainerSpawnConfig {
-        rootfs: merged_dir.clone(),
-        command: spawn_command,
-        args: spawn_args,
-        env: container_env,
-        cgroup_path: cgroup_dir.clone().into(),
-        hostname: format!("minibox-{}", &id[..8]),
+    let skip_net_ns = net_mode == NetworkMode::Host;
+    let spawn_config = build_spawn_config(
+        &id,
+        &command,
+        &env,
+        &mounts,
+        &merged_dir,
+        &cgroup_dir,
         capture_output,
-        hooks: ContainerHooks::default(),
-        skip_network_namespace: skip_net_ns,
-        mounts: mounts.clone(),
+        skip_net_ns,
         privileged,
-        image_ref: Some(image_label.clone()),
-    };
+        &image_label,
+    );
 
-    // ── Persist execution manifest ─────────────────────────────────────
+    // ── Persist execution manifest ─────────────────────────────────
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
         serde_json::to_string_pretty(&manifest).context("serialise execution manifest")?;
@@ -746,9 +655,7 @@ async fn prepare_run(
 
     let workload_digest = manifest.workload_digest.clone().unwrap_or_default();
 
-    // Register the container only after all fallible ops (overlay, cgroup,
-    // network, manifest seal, policy gate) have succeeded.  This prevents
-    // phantom records when any preparation step fails.
+    // Register the container only after all fallible ops have succeeded.
     state.add_container(record).await;
 
     Ok(PreparedRun {
@@ -759,6 +666,144 @@ async fn prepare_run(
         manifest_path,
         workload_digest,
     })
+}
+
+/// Create container and run directories with restricted permissions (0700).
+#[cfg(unix)]
+fn create_container_dirs(container_dir: &std::path::Path, run_dir: &std::path::Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = std::fs::DirBuilder::new();
+        const OWNER_RWX_PERMS: u32 = 0o700;
+        builder.mode(OWNER_RWX_PERMS);
+        builder.recursive(true);
+        builder.create(container_dir)?;
+        builder.create(run_dir)?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::create_dir_all(container_dir)?;
+        std::fs::create_dir_all(run_dir)?;
+    }
+
+    Ok(())
+}
+
+/// Set up the cgroup for a container, including optional custom parent
+/// and subtree delegation for privileged containers.
+#[cfg(unix)]
+fn setup_cgroup(
+    id: &str,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    cgroup_parent: &Option<String>,
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] privileged: bool,
+    deps: &HandlerDependencies,
+) -> Result<PathBuf> {
+    const DEFAULT_PIDS_MAX: u64 = 1024;
+    let resource_config = ResourceConfig {
+        memory_limit_bytes,
+        cpu_weight,
+        pids_max: Some(DEFAULT_PIDS_MAX),
+        io_max_bytes_per_sec: None,
+    };
+    let cgroup_dir_str = {
+        #[cfg(target_os = "linux")]
+        if let Some(parent) = cgroup_parent {
+            crate::container::cgroups::validate_cgroup_parent(parent)?;
+            let mgr = crate::container::cgroups::CgroupManager::with_root(
+                id,
+                crate::container::cgroups::CgroupConfig {
+                    memory_limit_bytes: resource_config.memory_limit_bytes,
+                    cpu_weight: resource_config.cpu_weight,
+                    pids_max: resource_config.pids_max,
+                    io_max_bytes_per_sec: resource_config.io_max_bytes_per_sec,
+                },
+                std::path::PathBuf::from(parent),
+            );
+            mgr.create()?;
+            mgr.cgroup_path().display().to_string()
+        } else {
+            deps.lifecycle
+                .resource_limiter
+                .create(id, &resource_config)?
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            if cgroup_parent.is_some() {
+                anyhow::bail!("--cgroup-parent is only supported on Linux");
+            }
+            deps.lifecycle
+                .resource_limiter
+                .create(id, &resource_config)?
+        }
+    };
+    let cgroup_dir = PathBuf::from(cgroup_dir_str);
+
+    #[cfg(target_os = "linux")]
+    if privileged {
+        let delegation = crate::container::cgroups::DelegationPaths {
+            subtree: cgroup_dir.clone(),
+            init_leaf: cgroup_dir.join("init"),
+        };
+        if let Err(e) = crate::container::cgroups::delegate_subtree(&delegation) {
+            debug!(
+                container_id = %id,
+                error = %e,
+                "cgroup delegation skipped (non-fatal)"
+            );
+        }
+    }
+
+    Ok(cgroup_dir)
+}
+
+/// Build a `ContainerSpawnConfig` from the run parameters.
+#[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
+fn build_spawn_config(
+    id: &str,
+    command: &[String],
+    env: &[String],
+    mounts: &[BindMount],
+    merged_dir: &minibox_core::path::InternalPath,
+    cgroup_dir: &std::path::Path,
+    capture_output: bool,
+    skip_network_namespace: bool,
+    privileged: bool,
+    image_label: &str,
+) -> ContainerSpawnConfig {
+    let spawn_command = command
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "/bin/sh".to_string());
+    let spawn_args = command.iter().skip(1).cloned().collect();
+    let mut container_env = vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+        "TERM=xterm".to_string(),
+    ];
+    container_env.extend(env.iter().cloned());
+
+    let nesting = crate::nesting::NestingContext::from_env();
+    container_env.extend(nesting.child_env_vars());
+
+    ContainerSpawnConfig {
+        rootfs: merged_dir.clone(),
+        command: spawn_command,
+        args: spawn_args,
+        env: container_env,
+        cgroup_path: cgroup_dir.to_path_buf().into(),
+        hostname: format!("minibox-{}", &id[..8]),
+        capture_output,
+        hooks: ContainerHooks::default(),
+        skip_network_namespace,
+        mounts: mounts.to_vec(),
+        privileged,
+        image_ref: Some(image_label.to_string()),
+    }
 }
 
 /// Variant of `run_inner` that enables output capture for ephemeral containers.
@@ -851,6 +896,7 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
+// qual:allow(complexity) reason: "spawn + lifecycle events + reaper dispatch"
 async fn run_inner(
     params: RunParams,
     state: Arc<DaemonState>,
@@ -921,8 +967,23 @@ async fn run_inner(
         .metrics
         .set_gauge("minibox_active_containers", active, &[]);
 
-    // TODO(#429): propagate net.attach error instead of swallowing with .ok()
-    prepared.net.attach(&id, pid).await.ok();
+    if let Err(e) = prepared.net.attach(&id, pid).await {
+        error!(
+            container_id = %id,
+            pid = pid,
+            error = %e,
+            "container: network attach failed, stopping container"
+        );
+        // Best-effort cleanup: stop the half-started container.
+        if let Err(stop_err) = stop_inner(&id, &state).await {
+            warn!(
+                container_id = %id,
+                error = %stop_err,
+                "container: cleanup stop after network failure also failed"
+            );
+        }
+        return Err(e.context("network attach failed after container start"));
+    }
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {

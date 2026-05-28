@@ -68,12 +68,13 @@ impl CgroupTestGuard {
         // Create a leaf cgroup for our test process first (so the parent
         // is free to enable subtree_control).
         let test_leaf = base.join(format!("{name}-leaf"));
-        let _ = std::fs::create_dir_all(&test_leaf);
+        std::fs::create_dir_all(&test_leaf).expect("test fixture: failed to create cgroup leaf");
         // Move ourselves into the leaf
-        let _ = std::fs::write(
+        std::fs::write(
             test_leaf.join("cgroup.procs"),
             std::process::id().to_string(),
-        );
+        )
+        .expect("test fixture: failed to move process into cgroup leaf");
 
         // Now create the test root as a sibling
         let root = base.join(name);
@@ -83,7 +84,9 @@ impl CgroupTestGuard {
         // Enable controllers on parent so our test root can use them
         let subtree_ctl = base.join("cgroup.subtree_control");
         for controller in ["+memory", "+cpu", "+pids", "+io"] {
-            let _ = std::fs::write(&subtree_ctl, controller);
+            if let Err(e) = std::fs::write(&subtree_ctl, controller) {
+                eprintln!("warning: could not enable {controller}: {e}");
+            }
         }
 
         root
@@ -117,9 +120,13 @@ impl Drop for CgroupTestGuard {
         // Move ourselves back to the parent first so the leaf becomes empty.
         if let Some(parent) = self.root.parent() {
             let procs = parent.join("cgroup.procs");
-            let _ = std::fs::write(&procs, std::process::id().to_string());
+            if let Err(e) = std::fs::write(&procs, std::process::id().to_string()) {
+                eprintln!("test teardown: failed to move process out of leaf: {e}");
+            }
         }
-        let _ = std::fs::remove_dir(&leaf);
+        if let Err(e) = std::fs::remove_dir(&leaf) {
+            eprintln!("test teardown: failed to remove {}: {e}", leaf.display());
+        }
     }
 }
 
@@ -140,7 +147,9 @@ fn cleanup_cgroup_dir(dir: &Path) {
             }
         }
     }
-    let _ = std::fs::remove_dir(dir);
+    if let Err(e) = std::fs::remove_dir(dir) {
+        eprintln!("test teardown: failed to remove {}: {e}", dir.display());
+    }
 }
 
 /// Create a ResourceLimiter backed by real cgroups v2.

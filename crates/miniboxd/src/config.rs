@@ -41,6 +41,7 @@ impl DaemonConfig {
     /// 1. `/etc/minibox/config.toml` (system)
     /// 2. `$HOME/.config/minibox/config.toml` (user)
     /// 3. `MINIBOX_*` env vars (highest priority)
+    // qual:allow(iosp) reason: "config loading inherently mixes file I/O with merge logic"
     pub fn load() -> Self {
         let mut cfg = Self::default();
 
@@ -156,7 +157,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_toml_produces_defaults() {
+    fn daemon_config_empty_toml_produces_defaults() {
         let cfg: DaemonConfig = toml::from_str("").expect("empty TOML");
         assert!(cfg.adapter.is_none());
         assert!(cfg.log_level.is_none());
@@ -164,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_full_config() {
+    fn daemon_config_parses_full_config() {
         let toml_str = r#"
             adapter = "smolvm"
             log_level = "debug"
@@ -214,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_toml_returns_defaults() {
+    fn daemon_config_invalid_toml_returns_defaults() {
         // Invalid TOML should not panic — returns defaults with warning.
         let result = toml::from_str::<DaemonConfig>("not valid [[[ toml");
         assert!(result.is_err());

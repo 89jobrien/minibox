@@ -13,6 +13,7 @@ use super::run::{RunParams, handle_run};
 use super::{HandlerDependencies, send_error};
 
 /// Run a crux pipeline inside an ephemeral container.
+// qual:allow(complexity) reason: "pipeline lifecycle phases in cfg(unix) block"
 ///
 /// Higher-level than `handle_run`: pulls image, creates container with the
 /// pipeline file bind-mounted at `/pipeline.crux`, streams `ContainerOutput`
@@ -101,10 +102,7 @@ pub async fn handle_pipeline(
         // Clone deps and override policy to permit bind mounts for this
         // internal pipeline run.  Pipeline requests originate from the daemon
         // (not from an end user), so the bind-mount policy exception is safe.
-        // TODO(#431): replace clone+mutate with explicit PolicyOverride
-        let mut pipeline_deps = (*deps).clone();
-        pipeline_deps.policy.allow_bind_mounts = true;
-        let pipeline_deps = Arc::new(pipeline_deps);
+        let pipeline_deps = Arc::new((*deps).clone().with_allow_bind_mounts(true));
 
         // Bridge channel: collect all streaming responses from handle_run internally.
         const PIPELINE_CHANNEL_CAPACITY: usize = 64;

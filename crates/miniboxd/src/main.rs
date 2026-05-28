@@ -246,6 +246,7 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(complexity) reason: "daemon startup: tracing, paths, adapter selection, accept loop"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
@@ -484,6 +485,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 // ── Handler dependency builders (per adapter suite) ───────────────────────
 
 #[cfg(unix)]
+// qual:allow(srp) reason: "adapter suite dispatch — params are inherent wiring"
 async fn build_handler_deps(
     suite: AdapterSuite,
     state: Arc<DaemonState>,
@@ -589,6 +591,7 @@ async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::Networ
 
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
+// qual:allow(srp) reason: "native adapter wiring — all params needed for HandlerDependencies"
 fn build_native_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: &Path,
@@ -670,6 +673,7 @@ fn build_native_handler_dependencies(
 // ── GKE adapter (Linux only) ─────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
+// qual:allow(srp) reason: "GKE adapter wiring"
 fn build_gke_handler_dependencies(
     state: Arc<DaemonState>,
     containers_dir: PathBuf,
@@ -785,6 +789,7 @@ fn build_colima_handler_dependencies(
 // ── SmolVM adapter (cross-platform) ──────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(srp) reason: "smolvm adapter wiring"
 fn build_smolvm_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: PathBuf,
@@ -852,6 +857,7 @@ fn build_smolvm_handler_dependencies(
 // ── Krun adapter (cross-platform) ────────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(srp) reason: "krun adapter wiring"
 fn build_krun_handler_dependencies(
     state: Arc<DaemonState>,
     containers_dir: PathBuf,

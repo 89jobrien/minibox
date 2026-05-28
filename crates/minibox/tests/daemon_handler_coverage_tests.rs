@@ -720,6 +720,239 @@ async fn test_handle_update_containers_true_collects_refs() {
     );
 }
 
+// ---- handle_update restart regression tests (#178) --------------------------
+
+/// Regression test for #178: container with pid=None causes stop_inner to fail.
+///
+/// When restart=true and stop_inner returns Err (no PID), the handler must
+/// `continue` past that container without panicking. The container record must
+/// remain in state unchanged.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_update_restart_stop_fails_continues() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // Container with pid=None — stop_inner will return Err for this record.
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-no-pid".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs-no-pid"),
+        cgroup_path: tmp.path().join("cgroup-no-pid"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        true, // restart=true
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    // Drain all responses — must terminate with Success (not hang or panic).
+    let mut got_success = false;
+    while let Ok(resp) = rx.try_recv() {
+        if matches!(resp, DaemonResponse::Success { .. }) {
+            got_success = true;
+        }
+    }
+    // If try_recv missed it, do a blocking recv.
+    if !got_success {
+        let resp = rx
+            .recv()
+            .await
+            .expect("handle_update must send terminal response");
+        got_success = matches!(resp, DaemonResponse::Success { .. });
+    }
+    assert!(
+        got_success,
+        "handle_update must send Success terminal response"
+    );
+
+    // Original record must still be present and unchanged.
+    let record = state
+        .get_container("ctr-no-pid")
+        .await
+        .expect("record must still exist after failed stop");
+    assert_eq!(
+        record.info.state, "Running",
+        "container state must remain Running when stop_inner failed"
+    );
+}
+
+/// Regression test for #178: running container with creation_params=None.
+///
+/// When restart=true and stop succeeds but creation_params is None, the handler
+/// hits the warn branch and does not attempt to re-run the container.
+/// The final Success message must indicate stopped=1, restarted=0.
+#[cfg(unix)]
+#[tokio::test]
+async fn test_handle_update_restart_no_creation_params_warns() {
+    use minibox::daemon::state::{ContainerRecord, ContainerState};
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // A "Running" container with a PID that doesn't exist (high value) so
+    // nix::kill returns ESRCH immediately.  stop_inner treats that as "process
+    // already gone" and marks the container Stopped, returning Ok(()).
+    // This avoids sending SIGTERM to the test process itself.
+    let our_pid = 2_000_000_u32; // far above OS PID limit — ESRCH on any signal
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-no-params".to_string(),
+            name: None,
+            image: "alpine:latest".to_string(),
+            command: "/bin/sh".to_string(),
+            state: "Running".to_string(),
+            created_at: "1970-01-01T00:00:00Z".to_string(),
+            pid: Some(our_pid),
+        },
+        pid: Some(our_pid),
+        rootfs_path: tmp.path().join("rootfs-no-params"),
+        cgroup_path: tmp.path().join("cgroup-no-params"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: Some("alpine:latest".to_string()),
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None, // No creation_params — cannot restart.
+        manifest_path: None,
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
+    handler::handle_update(
+        vec!["alpine:latest".to_string()],
+        false,
+        false,
+        true, // restart=true
+        Arc::clone(&state),
+        Arc::clone(&deps),
+        tx,
+    )
+    .await;
+
+    // Collect all responses.
+    let mut responses = Vec::new();
+    while let Ok(resp) = rx.try_recv() {
+        responses.push(resp);
+    }
+    if let Some(resp) = rx.recv().await {
+        responses.push(resp);
+    }
+
+    // Terminal response must be Success.
+    let success_msg = responses
+        .iter()
+        .find_map(|r| {
+            if let DaemonResponse::Success { message } = r {
+                Some(message.clone())
+            } else {
+                None
+            }
+        })
+        .expect("handle_update must send a Success terminal response");
+
+    // Container was stopped (stop_inner succeeded) but not restarted.
+    // Message must mention stopped=1, restarted=0.
+    assert!(
+        success_msg.contains("stopped 1") && success_msg.contains("restarted 0"),
+        "expected 'stopped 1' and 'restarted 0' in message, got: {success_msg:?}"
+    );
+
+    // Container state must now be Stopped (stop_inner calls update_container_state).
+    let record = state
+        .get_container("ctr-no-params")
+        .await
+        .expect("record must still exist");
+    assert_eq!(
+        record.info.state,
+        ContainerState::Stopped.as_str(),
+        "container must be Stopped after successful stop with no creation_params"
+    );
+}
+
+// ---- handle_list (multiple containers) --------------------------------------
+
+/// handle_list returns all containers when multiple are present.
+#[tokio::test]
+async fn test_handle_list_multiple_containers() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    for i in 0..3usize {
+        let record = ContainerRecord {
+            info: ContainerInfo {
+                id: format!("ctr-list-{i}"),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: "1970-01-01T00:00:00Z".to_string(),
+                pid: None,
+            },
+            pid: None,
+            rootfs_path: tmp.path().join(format!("rootfs-list-{i}")),
+            cgroup_path: tmp.path().join(format!("cgroup-list-{i}")),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
+        };
+        state.add_container(record).await;
+    }
+
+    let resp = handler::handle_list(Arc::clone(&state)).await;
+    match resp {
+        DaemonResponse::ContainerList { containers } => {
+            assert_eq!(containers.len(), 3, "expected 3 containers in list");
+        }
+        other => panic!("expected ContainerList, got {other:?}"),
+    }
+}
+
 // ---- handle_build (context path validation) ---------------------------------
 
 /// handle_build with a relative context_path returns Error (security check).
@@ -751,6 +984,322 @@ async fn test_handle_build_relative_context_path_returns_error() {
     );
 }
 
+// ---- handle_get_manifest (happy path) ---------------------------------------
+
+/// handle_get_manifest returns Manifest with correct content when the manifest
+/// file exists on disk and the container record points to it.
+#[tokio::test]
+async fn test_handle_get_manifest_success() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    // Write a valid ExecutionManifest JSON to a file in the TempDir.
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-manifest-test".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string(), "hello".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest.json");
+    let json = serde_json::to_string_pretty(&manifest).expect("serialize manifest");
+    std::fs::write(&manifest_path, &json).expect("write manifest file");
+
+    // Register a container record whose manifest_path points to the file.
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-manifest-test".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo hello".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_get_manifest("ctr-manifest-test".to_string(), state, deps, tx).await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_get_manifest");
+    match resp {
+        DaemonResponse::Manifest { manifest: val } => {
+            let image_ref = val
+                .get("subject")
+                .and_then(|s| s.get("image_ref"))
+                .and_then(|v| v.as_str())
+                .expect("image_ref missing from manifest value");
+            assert_eq!(
+                image_ref, "alpine:3.18",
+                "returned manifest must contain correct image_ref"
+            );
+        }
+        other => panic!("expected Manifest, got {other:?}"),
+    }
+}
+
+// ---- handle_verify_manifest (happy path: allowed) ---------------------------
+
+/// handle_verify_manifest returns VerifyResult { allowed: true } when the
+/// policy permits the workload described in the manifest.
+#[tokio::test]
+async fn test_handle_verify_manifest_allowed() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-verify-allow".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest-allow.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize"),
+    )
+    .expect("write manifest");
+
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-verify-allow".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    // A permissive policy: no constraints at all.
+    let permissive_policy = r#"{}"#;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_verify_manifest(
+        "ctr-verify-allow".to_string(),
+        permissive_policy.to_string(),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_verify_manifest");
+    match resp {
+        DaemonResponse::VerifyResult { allowed, reason } => {
+            assert!(allowed, "permissive policy must allow; reason: {reason:?}");
+            assert!(reason.is_none(), "allowed result must have no reason");
+        }
+        other => panic!("expected VerifyResult, got {other:?}"),
+    }
+}
+
+// ---- handle_verify_manifest (happy path: denied) ----------------------------
+
+/// handle_verify_manifest returns VerifyResult { allowed: false, reason: Some(...) }
+/// when the policy rejects the workload (e.g. image not in allowed list).
+#[tokio::test]
+async fn test_handle_verify_manifest_denied() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::domain::execution_manifest::{
+        ExecutionManifest, ExecutionManifestImage, ExecutionManifestRequest,
+        ExecutionManifestRuntime, ExecutionManifestSubject,
+    };
+    use minibox_core::protocol::ContainerInfo;
+
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+    let deps = create_test_deps_with_dir(&tmp);
+
+    let manifest = ExecutionManifest {
+        schema_version: 1,
+        container_id: "ctr-verify-deny".to_string(),
+        created_at: "2026-05-11T00:00:00Z".to_string(),
+        manifest_path: None,
+        workload_digest: None,
+        subject: ExecutionManifestSubject {
+            image_ref: "alpine:3.18".to_string(),
+            image: ExecutionManifestImage {
+                manifest_digest: None,
+                config_digest: None,
+                layer_digests: vec![],
+            },
+        },
+        runtime: ExecutionManifestRuntime {
+            command: vec!["echo".to_string()],
+            env: vec![],
+            mounts: vec![],
+            resource_limits: None,
+            network_mode: "none".to_string(),
+            privileged: false,
+            platform: None,
+        },
+        request: ExecutionManifestRequest {
+            name: None,
+            ephemeral: false,
+        },
+    };
+    let manifest_path = tmp.path().join("execution-manifest-deny.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize"),
+    )
+    .expect("write manifest");
+
+    let record = ContainerRecord {
+        info: ContainerInfo {
+            id: "ctr-verify-deny".to_string(),
+            name: None,
+            image: "alpine:3.18".to_string(),
+            command: "echo".to_string(),
+            state: "Running".to_string(),
+            created_at: "2026-05-11T00:00:00Z".to_string(),
+            pid: None,
+        },
+        pid: None,
+        rootfs_path: tmp.path().join("rootfs"),
+        cgroup_path: tmp.path().join("cgroup"),
+        post_exit_hooks: vec![],
+        rootfs_metadata: None,
+        source_image_ref: None,
+        step_state: None,
+        priority: None,
+        urgency: None,
+        execution_context: None,
+        creation_params: None,
+        manifest_path: Some(manifest_path),
+        workload_digest: None,
+    };
+    state.add_container(record).await;
+
+    // A restrictive policy: only ubuntu images are allowed.
+    let restrictive_policy = r#"{"allowed_images":["ubuntu*"]}"#;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+    handler::handle_verify_manifest(
+        "ctr-verify-deny".to_string(),
+        restrictive_policy.to_string(),
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let resp = rx
+        .recv()
+        .await
+        .expect("no response from handle_verify_manifest");
+    match resp {
+        DaemonResponse::VerifyResult { allowed, reason } => {
+            assert!(!allowed, "restrictive policy must deny alpine image");
+            assert!(
+                reason.is_some(),
+                "denied result must include a reason string"
+            );
+            let r = reason.expect("reason is Some");
+            assert!(
+                r.contains("not in allowed list"),
+                "denial reason must mention 'not in allowed list', got: {r}"
+            );
+        }
+        other => panic!("expected VerifyResult, got {other:?}"),
+    }
+}
+
 // ---- handle_pipeline --------------------------------------------------------
 
 /// handle_pipeline with a nonexistent pipeline file returns Error.
@@ -778,6 +1327,78 @@ async fn test_handle_pipeline_nonexistent_file_returns_error() {
         matches!(resp, DaemonResponse::Error { .. }),
         "nonexistent pipeline file should produce Error, got {resp:?}"
     );
+}
+
+// ---- handle_list_pipelines --------------------------------------------------
+
+/// handle_list_pipelines on a fresh (empty) trace store returns an empty list.
+#[tokio::test]
+async fn test_handle_list_pipelines_empty_store() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_list_pipelines(None, None, state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(pipelines.is_empty(), "expected empty pipeline list");
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+/// handle_list_pipelines with a limit returns at most that many entries.
+#[tokio::test]
+async fn test_handle_list_pipelines_with_limit() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_list_pipelines(Some(5), None, state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(
+                pipelines.len() <= 5,
+                "expected at most 5 pipelines, got {}",
+                pipelines.len()
+            );
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+/// handle_list_pipelines with a pipeline name filter on an empty store returns empty.
+#[tokio::test]
+async fn test_handle_list_pipelines_with_pipeline_filter() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp =
+        handler::handle_list_pipelines(None, Some("nonexistent.crux".to_string()), state).await;
+    match resp {
+        DaemonResponse::PipelineList { pipelines } => {
+            assert!(pipelines.is_empty(), "expected empty filtered list");
+        }
+        other => panic!("expected PipelineList, got {other:?}"),
+    }
+}
+
+// ---- handle_show_pipeline ---------------------------------------------------
+
+/// handle_show_pipeline with a nonexistent ID returns Error.
+#[tokio::test]
+async fn test_handle_show_pipeline_not_found() {
+    let tmp = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&tmp);
+
+    let resp = handler::handle_show_pipeline("no-such-run".to_string(), state).await;
+    match resp {
+        DaemonResponse::Error { message } => {
+            assert!(
+                message.contains("not found"),
+                "expected 'not found' in error, got: {message}"
+            );
+        }
+        other => panic!("expected Error, got {other:?}"),
+    }
 }
 
 // ---- ephemeral run (streaming path) -----------------------------------------

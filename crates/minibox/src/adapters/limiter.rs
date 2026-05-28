@@ -60,7 +60,7 @@ use tracing::debug;
 /// // Later, cleanup
 /// limiter.cleanup("container-abc123")?;
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CgroupV2Limiter;
 
 impl CgroupV2Limiter {

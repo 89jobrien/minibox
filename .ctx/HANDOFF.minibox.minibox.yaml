@@ -1,12 +1,12 @@
 project: minibox
 id: minibox
-updated: 2026-05-26
+updated: 2026-05-27
 items:
 - id: test-in-vm
   doob_uuid: null
   name: test-in-vm
   priority: P1
-  status: open
+  status: blocked
   title: cargo xtask test-in-vm — run Linux tests in ephemeral VM
   description: |-
     xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
@@ -29,6 +29,10 @@ items:
     reviewed: null
     note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
 log:
+- date: '20260527.115757'
+  summary: Resolved 12 TODOs — quick-win code fixes (#429
+  commits: []
+  session: 6
 - date: '20260525.183746'
   summary: Resolved 3 P0 security issues (#428 env key validation,
   commits: []
@@ -45,7 +49,3 @@ log:
   summary: done=23 running=0 pending=47 blocked=0
   commits: []
   session: 2
-- date: '20260515.131514'
-  summary: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
-  commits: []
-  session: 1

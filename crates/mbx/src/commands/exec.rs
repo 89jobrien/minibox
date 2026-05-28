@@ -263,7 +263,7 @@ mod tests {
 
     /// Verify that the Exec request serialises with the correct JSON type tag.
     #[test]
-    fn exec_request_has_type_tag() {
+    fn daemon_request_exec_has_type_tag() {
         let req = DaemonRequest::Exec {
             container_id: "ctr1".to_string(),
             cmd: vec!["ls".to_string()],
@@ -281,7 +281,7 @@ mod tests {
 
     /// Verify that `execute` parses an ExecStarted response without panicking.
     #[test]
-    fn exec_started_response_deserialises() {
+    fn daemon_response_exec_started_deserialises() {
         let json = r#"{"type":"ExecStarted","exec_id":"exec-42"}"#;
         let resp: DaemonResponse = serde_json::from_str(json).unwrap();
         assert!(
@@ -293,7 +293,7 @@ mod tests {
     /// Verify that base64-encoded output chunks round-trip correctly in the
     /// exec output path.
     #[test]
-    fn exec_output_chunk_decodes() {
+    fn daemon_response_exec_output_chunk_decodes() {
         let raw = b"hello from exec\n";
         let encoded = base64::engine::general_purpose::STANDARD.encode(raw);
         let resp = DaemonResponse::ContainerOutput {

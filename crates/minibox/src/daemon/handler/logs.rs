@@ -16,6 +16,7 @@ use super::{HandlerDependencies, send_error};
 /// [`DaemonResponse::Success`] when `follow` is `false` (the only supported
 /// mode for now).  Sends [`DaemonResponse::Error`] when the container is not
 /// found.
+// qual:allow(complexity) reason: "logs handler: container lookup, file read, stream"
 pub async fn handle_logs(
     name_or_id: String,
     _follow: bool,

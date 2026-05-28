@@ -268,6 +268,11 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
 ///
 /// Run serially — parallel krun invocations collide on the VM hypervisor socket.
 pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
+    // smolvm must be on PATH for krun conformance tests to succeed.
+    if cmd!(sh, "which smolvm").quiet().run().is_err() {
+        eprintln!("skipping krun conformance: smolvm not found on PATH");
+        return Ok(());
+    }
     let _env = sh.push_env("MINIBOX_KRUN_TESTS", "1");
     cmd!(
         sh,

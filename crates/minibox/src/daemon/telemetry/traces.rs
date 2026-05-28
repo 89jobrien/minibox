@@ -40,6 +40,7 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
             }
             Err(e) => {
                 // Fall back to fmt-only if OTEL init fails.
+                // eprintln because tracing subscriber is not yet initialized at this point.
                 eprintln!("[minibox] OTEL trace init failed, falling back to fmt-only: {e}");
                 None
             }
@@ -53,6 +54,7 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     OtelGuard { provider }
 }
 
+// qual:allow(test) reason: "I/O wiring — requires live OTLP collector to test"
 fn build_otel_layer(
     endpoint: &str,
 ) -> Result<
@@ -98,6 +100,7 @@ impl Drop for OtelGuard {
         if let Some(provider) = self.provider.take()
             && let Err(e) = provider.shutdown()
         {
+            // eprintln because the tracing subscriber may already be torn down.
             eprintln!("[minibox] OTEL tracer shutdown error: {e}");
         }
     }

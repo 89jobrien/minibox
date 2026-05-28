@@ -115,6 +115,7 @@ impl CgroupManager {
     /// Create the cgroup directory and apply the configured resource limits.
     ///
     /// Idempotent: if the directory already exists the limits are (re-)written.
+    // qual:allow(complexity) reason: "cgroup directory creation + control file writes"
     pub fn create(&self) -> anyhow::Result<()> {
         debug!(cgroup_path = %self.cgroup_path.display(), "cgroup: creating directory");
 
