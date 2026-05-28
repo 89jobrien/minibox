@@ -106,7 +106,6 @@ impl DaemonConfig {
     }
 
     /// Apply `MINIBOX_*` env var overrides on top of this config.
-    // TODO(#432): add env overrides for PolicyConfig fields
     pub fn with_env_overrides(mut self) -> Self {
         if let Ok(v) = std::env::var("MINIBOX_ADAPTER") {
             self.adapter = Some(v);
@@ -122,6 +121,21 @@ impl DaemonConfig {
         }
         if let Ok(v) = std::env::var("MINIBOX_IMAGES_DIR") {
             self.images_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_ALLOW_PRIVILEGED")
+            && let Ok(b) = v.parse::<bool>()
+        {
+            self.policy.allow_privileged = Some(b);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_ALLOW_BIND_MOUNTS")
+            && let Ok(b) = v.parse::<bool>()
+        {
+            self.policy.allow_bind_mounts = Some(b);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_MAX_IMAGE_SIZE_MB")
+            && let Ok(n) = v.parse::<u64>()
+        {
+            self.policy.max_image_size_mb = Some(n);
         }
         self
     }
@@ -235,6 +249,29 @@ mod tests {
         let merged = base.merge(overlay);
         assert_eq!(merged.adapter.as_deref(), Some("smolvm"));
         assert_eq!(merged.log_level.as_deref(), Some("warn"));
+    }
+
+    #[test]
+    fn env_overrides_policy_fields() {
+        // SAFETY: env mutations are not thread-safe; this test is serial by convention.
+        unsafe {
+            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "true");
+            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "false");
+            std::env::set_var("MINIBOX_MAX_IMAGE_SIZE_MB", "512");
+        }
+
+        let cfg = DaemonConfig::default().with_env_overrides();
+
+        // Clean up before assertions so failures don't leak env state.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_MAX_IMAGE_SIZE_MB");
+        }
+
+        assert_eq!(cfg.policy.allow_privileged, Some(true));
+        assert_eq!(cfg.policy.allow_bind_mounts, Some(false));
+        assert_eq!(cfg.policy.max_image_size_mb, Some(512));
     }
 
     #[test]
