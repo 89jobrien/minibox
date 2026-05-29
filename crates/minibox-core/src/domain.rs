@@ -1356,6 +1356,42 @@ pub struct ExecHandle {
     pub id: String,
 }
 
+// ---------------------------------------------------------------------------
+// ProgressSink — runtime-agnostic channel abstraction (#278)
+// ---------------------------------------------------------------------------
+
+/// An async-capable sink for streaming progress updates from domain ports.
+///
+/// Replaces direct `tokio::sync::mpsc::Sender<T>` parameters in port trait
+/// signatures so the domain layer is not coupled to a specific async runtime.
+/// Adapters (and tests) provide concrete implementations — the blanket impl
+/// for `tokio::sync::mpsc::Sender<T>` covers the production case.
+#[async_trait]
+pub trait ProgressSink<T: Send + 'static>: Send + Sync {
+    /// Send a value into the sink.
+    ///
+    /// Returns `Ok(())` when the value was accepted, or `Err(())` when the
+    /// receiver has been dropped (analogous to `mpsc::SendError`).
+    async fn send(&self, value: T) -> Result<(), ()>;
+}
+
+/// Blanket implementation so `tokio::sync::mpsc::Sender<T>` satisfies
+/// `ProgressSink<T>` without wrapper code at every call site.
+#[async_trait]
+impl<T: Send + 'static> ProgressSink<T> for tokio::sync::mpsc::Sender<T> {
+    async fn send(&self, value: T) -> Result<(), ()> {
+        tokio::sync::mpsc::Sender::send(self, value)
+            .await
+            .map_err(|_| ())
+    }
+}
+
+/// Type-erased progress sink, used in port trait signatures.
+///
+/// Uses `Arc` rather than `Box` so the sink can be shared across tasks
+/// (e.g. a blocking spawn and a forwarding task in the exec adapter).
+pub type DynProgressSink<T> = Arc<dyn ProgressSink<T>>;
+
 /// Port for running commands inside already-running containers.
 #[async_trait]
 pub trait ExecRuntime: AsAny + Send + Sync {
@@ -1363,7 +1399,7 @@ pub trait ExecRuntime: AsAny + Send + Sync {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        tx: tokio::sync::mpsc::Sender<crate::protocol::DaemonResponse>,
+        tx: DynProgressSink<crate::protocol::DaemonResponse>,
     ) -> anyhow::Result<ExecHandle>;
 }
 
@@ -1404,7 +1440,7 @@ pub trait ImagePusher: AsAny + Send + Sync {
         &self,
         image_ref: &crate::image::reference::ImageRef,
         credentials: &RegistryCredentials,
-        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+        progress_tx: Option<DynProgressSink<PushProgress>>,
     ) -> anyhow::Result<PushResult>;
 }
 
@@ -1483,7 +1519,7 @@ pub trait ImageBuilder: AsAny + Send + Sync {
         &self,
         context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+        progress_tx: DynProgressSink<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata>;
 }
 

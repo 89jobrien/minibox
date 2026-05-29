@@ -820,7 +820,7 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, tx)
+            .build_image(&context, &config, Arc::new(tx))
             .await
             .expect("build must succeed");
 
@@ -858,7 +858,7 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, tx)
+            .build_image(&context, &config, Arc::new(tx))
             .await
             .expect("build must succeed");
 

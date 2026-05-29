@@ -77,7 +77,7 @@ pub async fn handle_exec(
 
     match exec_rt
         .as_ref()
-        .run_in_container(&cid, spec, tx.clone())
+        .run_in_container(&cid, spec, Arc::new(tx.clone()))
         .await
     {
         Ok(handle) => {

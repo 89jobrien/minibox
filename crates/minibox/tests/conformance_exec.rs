@@ -40,7 +40,7 @@ async fn exec_success_returns_handle_with_id() {
     let cid = make_container_id("execconf01ab1234");
 
     let handle = runtime
-        .run_in_container(&cid, default_spec(), tx)
+        .run_in_container(&cid, default_spec(), Arc::new(tx))
         .await
         .expect("exec must succeed on default mock");
 
@@ -60,7 +60,7 @@ async fn exec_success_increments_call_count() {
 
     assert_eq!(runtime.call_count(), 0);
     runtime
-        .run_in_container(&cid, default_spec(), tx)
+        .run_in_container(&cid, default_spec(), Arc::new(tx))
         .await
         .expect("unwrap in test");
     assert_eq!(runtime.call_count(), 1);
@@ -74,13 +74,13 @@ async fn exec_successive_calls_produce_different_ids() {
 
     let (tx1, _) = mpsc::channel::<DaemonResponse>(8);
     let h1 = runtime
-        .run_in_container(&cid, default_spec(), tx1)
+        .run_in_container(&cid, default_spec(), Arc::new(tx1))
         .await
         .expect("unwrap in test");
 
     let (tx2, _) = mpsc::channel::<DaemonResponse>(8);
     let h2 = runtime
-        .run_in_container(&cid, default_spec(), tx2)
+        .run_in_container(&cid, default_spec(), Arc::new(tx2))
         .await
         .expect("unwrap in test");
 
@@ -105,7 +105,7 @@ async fn exec_captures_last_spec() {
 
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     runtime
-        .run_in_container(&cid, spec.clone(), tx)
+        .run_in_container(&cid, spec.clone(), Arc::new(tx))
         .await
         .expect("unwrap in test");
 
@@ -125,7 +125,7 @@ async fn exec_captures_last_container_id() {
 
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     runtime
-        .run_in_container(&cid, default_spec(), tx)
+        .run_in_container(&cid, default_spec(), Arc::new(tx))
         .await
         .expect("unwrap in test");
 
@@ -143,7 +143,9 @@ async fn exec_failure_returns_err() {
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf06ab1234");
 
-    let result = runtime.run_in_container(&cid, default_spec(), tx).await;
+    let result = runtime
+        .run_in_container(&cid, default_spec(), Arc::new(tx))
+        .await;
     assert!(
         result.is_err(),
         "exec must fail when configured with_failure"
@@ -157,7 +159,9 @@ async fn exec_failure_increments_call_count() {
     let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf07ab1234");
 
-    let _ = runtime.run_in_container(&cid, default_spec(), tx).await;
+    let _ = runtime
+        .run_in_container(&cid, default_spec(), Arc::new(tx))
+        .await;
     assert_eq!(
         runtime.call_count(),
         1,

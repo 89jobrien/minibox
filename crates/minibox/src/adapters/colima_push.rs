@@ -9,7 +9,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    DynImageLoader, DynImagePusher, ImagePusher, PushProgress, PushResult, RegistryCredentials,
+    DynImageLoader, DynImagePusher, DynProgressSink, ImagePusher, PushProgress, PushResult,
+    RegistryCredentials,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::OciManifest;
@@ -19,7 +20,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 pub struct ColimaImagePusher {
@@ -53,7 +53,7 @@ impl ImagePusher for ColimaImagePusher {
         &self,
         image_ref: &ImageRef,
         credentials: &RegistryCredentials,
-        progress_tx: Option<mpsc::Sender<PushProgress>>,
+        progress_tx: Option<DynProgressSink<PushProgress>>,
     ) -> Result<PushResult> {
         std::fs::create_dir_all(&self.export_dir)
             .with_context(|| format!("create export dir {}", self.export_dir.display()))?;
