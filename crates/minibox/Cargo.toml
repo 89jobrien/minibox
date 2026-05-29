@@ -85,6 +85,7 @@ turmoil = { workspace = true }
 [[bench]]
 name = "trait_overhead"
 harness = false
+required-features = ["test-utils"]
 
 [[bench]]
 name = "protocol_codec"
