@@ -331,21 +331,15 @@ pub fn test_property(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Quickcheck property-based tests (cross-platform).
+/// Proptest property-based tests (cross-platform, consolidated).
 pub fn test_quickcheck(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p minibox-core --test quickcheck_properties"
+        "cargo test --release -p minibox --test proptest_properties"
     )
     .run()
-    .context("minibox-core quickcheck tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test quickcheck_properties"
-    )
-    .run()
-    .context("minibox quickcheck tests failed")?;
-    eprintln!("quickcheck property tests passed");
+    .context("proptest property tests failed")?;
+    eprintln!("proptest property tests passed");
     Ok(())
 }
 
