@@ -77,6 +77,7 @@ minibox-core = { path = "crates/minibox-core", version = "0.30.0" }
 minibox = { path = "crates/minibox" }
 minibox-macros = { path = "crates/minibox-macros", version = "0.30.0" }
 macbox = { path = "crates/macbox" }
+smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
 slashcrux = "0.1"
 dirs = "5"
