@@ -5,6 +5,7 @@
 > Updated 2026-05-06: date refresh; no structural changes.
 > Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
 > build-vm-image/run-vm/test-vm xtask commands removed.
+> Updated 2026-05-29: added smolbox (smolvm/krun adapter crate); crate count 10->11.
 
 ## Summary
 
@@ -17,6 +18,7 @@
 | macbox                 | lib        | ~3.6k  | 16           | 4                       | --                     |
 | winbox                 | lib        | ~280   | 5            | 0                       | --                         |
 | mbx                    | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests           |
+| smolbox             | lib        | ~0.4k  | 4            | 0                       | --                         |
 | minibox-crux-plugin    | bin        | --     | --           | --                      | --                         |
 | minibox-testsuite      | bin        | --     | --           | --                      | --                         |
 | xtask                  | bin        | ~5k    | 15           | 0                       | --                         |
@@ -121,6 +123,23 @@ responses.
 
 **Subcommands:** run, ps, stop, pause, resume, rm, pull, exec, logs, events,
 prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.
+
+---
+
+## smolbox
+
+Lightweight VM adapter backends for macOS and Linux.
+
+**Backends:**
+
+- **smolvm**: `SmolvmRegistry`, `SmolvmRuntime`, `SmolvmFilesystem`, `SmolvmLimiter` --
+  delegates to the `smolvm machine run` CLI binary
+- **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
+  libkrun FFI adapter for micro-VM execution (HVF on macOS, KVM on Linux)
+
+**Modules:** `smolvm/mod.rs`, `krun/mod.rs`, `preflight.rs` (smolvm binary detection).
+
+**Depends on:** minibox, macbox.
 
 ---
 
