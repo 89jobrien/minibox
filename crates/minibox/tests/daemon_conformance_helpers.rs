@@ -46,12 +46,15 @@ use tempfile::TempDir;
 // TestBackendDescriptor
 // ---------------------------------------------------------------------------
 
+/// Factory closure that builds a fresh [`HandlerDependencies`] rooted in the
+/// given temporary directory.
+pub type HandlerDepsFactory = Box<dyn Fn(&TempDir) -> Arc<HandlerDependencies> + Send + Sync>;
+
 /// Describes a daemon handler-level backend under conformance test.
 ///
 /// Boolean capability flags control which conformance tests are exercised.
 /// Tests must check the relevant flag and return early when it is `false`
 /// (skip, not fail).
-#[allow(clippy::type_complexity)]
 pub struct TestBackendDescriptor {
     /// Human-readable name used in test failure messages.
     pub name: &'static str,
@@ -75,7 +78,7 @@ pub struct TestBackendDescriptor {
     ///
     /// The closure receives a `&TempDir` so all path-based fields can be
     /// rooted in a single temporary directory owned by the caller.
-    pub make_deps: Box<dyn Fn(&TempDir) -> Arc<HandlerDependencies> + Send + Sync>,
+    pub make_deps: HandlerDepsFactory,
 }
 
 impl TestBackendDescriptor {
