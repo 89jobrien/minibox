@@ -253,7 +253,7 @@ pub async fn handle_push(
     });
 
     match pusher
-        .push_image(&image_ref, &creds, Some(progress_tx))
+        .push_image(&image_ref, &creds, Some(Arc::new(progress_tx)))
         .await
     {
         Ok(result) => {
@@ -476,7 +476,10 @@ pub async fn handle_build(
         }
     });
 
-    match builder.build_image(&context, &config, progress_tx).await {
+    match builder
+        .build_image(&context, &config, Arc::new(progress_tx))
+        .await
+    {
         Ok(meta) => {
             info!(
                 tag = %tag,

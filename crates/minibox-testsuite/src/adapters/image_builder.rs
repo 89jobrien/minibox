@@ -49,8 +49,11 @@ impl ConformanceTest for BuildImageReturnsMetadata {
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let mock = MockImageBuilder::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
-        let result =
-            rt().block_on(mock.build_image(&empty_context(), &build_config("myapp:v1"), tx));
+        let result = rt().block_on(mock.build_image(
+            &empty_context(),
+            &build_config("myapp:v1"),
+            std::sync::Arc::new(tx),
+        ));
         if let Some(meta) = ctx.assert_ok(result, "build_image should succeed") {
             ctx.assert_eq("myapp".to_string(), meta.name, "image name");
             ctx.assert_eq("v1".to_string(), meta.tag, "image tag");
@@ -74,7 +77,11 @@ impl ConformanceTest for BuildImageIncrementsCount {
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let mock = MockImageBuilder::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
-        let _ = rt().block_on(mock.build_image(&empty_context(), &build_config("img:tag"), tx));
+        let _ = rt().block_on(mock.build_image(
+            &empty_context(),
+            &build_config("img:tag"),
+            std::sync::Arc::new(tx),
+        ));
         ctx.assert_eq(1, mock.call_count(), "call_count after one build");
         ctx.result()
     }
@@ -95,7 +102,11 @@ impl ConformanceTest for BuildImageSendsProgress {
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let mock = MockImageBuilder::new();
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
-        let _ = rt().block_on(mock.build_image(&empty_context(), &build_config("img:tag"), tx));
+        let _ = rt().block_on(mock.build_image(
+            &empty_context(),
+            &build_config("img:tag"),
+            std::sync::Arc::new(tx),
+        ));
         let event = rt().block_on(rx.recv());
         ctx.assert_true(
             event.is_some(),
@@ -120,8 +131,11 @@ impl ConformanceTest for BuildImageFailureReturnsErr {
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let mock = MockImageBuilder::new().with_failure();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
-        let result =
-            rt().block_on(mock.build_image(&empty_context(), &build_config("img:tag"), tx));
+        let result = rt().block_on(mock.build_image(
+            &empty_context(),
+            &build_config("img:tag"),
+            std::sync::Arc::new(tx),
+        ));
         ctx.assert_err(
             result,
             "build_image with failure configured must return Err",
