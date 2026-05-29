@@ -282,13 +282,6 @@ impl HandlerDependencies {
         self.image.image_loader = loader;
         self
     }
-
-    /// Return a clone with bind-mount policy overridden.
-    /// Used by internal pipeline runs that need elevated permissions.
-    pub fn with_allow_bind_mounts(mut self, allow: bool) -> Self {
-        self.policy.allow_bind_mounts = allow;
-        self
-    }
 }
 
 // ─── Container Policy ────────────────────────────────────────────────────────
@@ -311,7 +304,26 @@ pub struct ContainerPolicy {
     pub allow_privileged: bool,
 }
 
+/// Scoped policy overrides for internal operations (e.g. pipeline runs).
+/// Fields are `Option` — `None` means "use the base policy value".
+#[derive(Debug, Clone, Default)]
+pub struct PolicyOverride {
+    pub allow_bind_mounts: Option<bool>,
+    pub allow_privileged: Option<bool>,
+}
+
 impl ContainerPolicy {
+    /// Apply overrides, returning a new policy. `None` fields preserve the
+    /// base value.
+    pub fn with_overrides(&self, overrides: &PolicyOverride) -> Self {
+        Self {
+            allow_bind_mounts: overrides
+                .allow_bind_mounts
+                .unwrap_or(self.allow_bind_mounts),
+            allow_privileged: overrides.allow_privileged.unwrap_or(self.allow_privileged),
+        }
+    }
+
     /// Build a `ContainerPolicy` from environment variables.
     ///
     /// - `MINIBOX_ALLOW_BIND_MOUNTS=1|true|yes` enables bind mounts (default: deny).
@@ -851,6 +863,40 @@ mod pub_crate_handler_tests {
         };
         let result = validate_policy(&[], true, &policy);
         assert!(result.is_err(), "privileged must be denied by policy");
+    }
+
+    // ── PolicyOverride + with_overrides ─────────────────────────────────
+
+    #[test]
+    fn test_policy_override_applies_some_fields() {
+        let base = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+        };
+        let ov = PolicyOverride {
+            allow_bind_mounts: Some(true),
+            allow_privileged: None,
+        };
+        let effective = base.with_overrides(&ov);
+        assert!(
+            effective.allow_bind_mounts,
+            "override should enable bind mounts"
+        );
+        assert!(
+            !effective.allow_privileged,
+            "None override should preserve base"
+        );
+    }
+
+    #[test]
+    fn test_policy_override_default_is_noop() {
+        let base = ContainerPolicy {
+            allow_bind_mounts: true,
+            allow_privileged: true,
+        };
+        let effective = base.with_overrides(&PolicyOverride::default());
+        assert!(effective.allow_bind_mounts);
+        assert!(effective.allow_privileged);
     }
 
     // ── handle_load_image error path ──────────────────────────────────────

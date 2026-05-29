@@ -1327,6 +1327,7 @@ async fn test_handle_run_invalid_platform_returns_error() {
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,

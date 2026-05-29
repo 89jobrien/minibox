@@ -503,6 +503,7 @@ async fn dispatch(
                 name,
                 platform,
                 cgroup_parent,
+                policy_override: None,
             };
             handler::handle_run(params, state, deps, tx).await;
         }

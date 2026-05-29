@@ -77,6 +77,7 @@ async fn handle_run_once(
         name: None,
         platform: None,
         cgroup_parent: None,
+        policy_override: None,
     };
     handler::handle_run(params, state, deps, tx).await;
     rx.recv().await.expect("handler sent no response")
@@ -627,6 +628,7 @@ async fn test_container_receives_nesting_env_vars() {
             network_mode: None,
             capture_output: true,
             cgroup_parent: None,
+            policy_override: None,
         },
         state.clone(),
         deps.clone(),

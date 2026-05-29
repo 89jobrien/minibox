@@ -42,6 +42,9 @@ pub struct RunParams {
     pub name: Option<String>,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    /// Scoped policy overrides for internal callers (e.g. pipeline handler).
+    /// `None` means use the base `HandlerDependencies.policy` as-is.
+    pub policy_override: Option<super::PolicyOverride>,
 }
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
@@ -88,7 +91,11 @@ pub async fn handle_run(
     }
 
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
-    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &deps.policy) {
+    let effective_policy = match &params.policy_override {
+        Some(ov) => deps.policy.with_overrides(ov),
+        None => deps.policy.clone(),
+    };
+    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &effective_policy) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })
@@ -503,6 +510,7 @@ async fn prepare_run(
         platform,
         cgroup_parent,
         ephemeral: _,
+        policy_override: _,
     } = params;
 
     // Build full ref string from image + optional tag, then parse into ImageRef.
@@ -1082,6 +1090,7 @@ pub(super) async fn run_from_params(
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),
         cgroup_parent: creation_params.cgroup_parent.clone(),
+        policy_override: None,
     };
     run_inner(params, state, deps).await
 }
