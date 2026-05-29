@@ -185,6 +185,7 @@ fn build_stream_test_deps(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),

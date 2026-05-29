@@ -110,6 +110,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -161,6 +162,7 @@ fn mock_deps_with_network(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1543,6 +1545,7 @@ mod error_path_conformance {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1665,6 +1668,7 @@ mod krun_suite {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: false,
                 allow_privileged: false,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -2613,6 +2617,7 @@ mod policy_conformance {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts,
                 allow_privileged,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

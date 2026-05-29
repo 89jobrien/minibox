@@ -34,9 +34,10 @@ impl ConformanceTest for RunWithBindMountWhenDeniedReturnsError {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         };
         let mounts = vec![a_bind_mount()];
-        let result = validate_policy(&mounts, false, &policy);
+        let result = validate_policy(&mounts, false, None, &policy);
         ctx.assert_err(result, "bind mount denied when allow_bind_mounts=false");
         ctx.result()
     }
@@ -57,8 +58,9 @@ impl ConformanceTest for RunPrivilegedWhenDeniedReturnsError {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         };
-        let result = validate_policy(&[], true, &policy);
+        let result = validate_policy(&[], true, None, &policy);
         ctx.assert_err(result, "privileged denied when allow_privileged=false");
         ctx.result()
     }
@@ -79,9 +81,10 @@ impl ConformanceTest for RunWithBindMountWhenAllowedSucceeds {
         let policy = ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            ..Default::default()
         };
         let mounts = vec![a_bind_mount()];
-        let result = validate_policy(&mounts, false, &policy);
+        let result = validate_policy(&mounts, false, None, &policy);
         ctx.assert_ok(result, "bind mount allowed when allow_bind_mounts=true");
         ctx.result()
     }
@@ -102,8 +105,9 @@ impl ConformanceTest for RunPrivilegedWhenAllowedSucceeds {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: true,
+            ..Default::default()
         };
-        let result = validate_policy(&[], true, &policy);
+        let result = validate_policy(&[], true, None, &policy);
         ctx.assert_ok(result, "privileged allowed when allow_privileged=true");
         ctx.result()
     }
@@ -126,11 +130,11 @@ impl ConformanceTest for DefaultPolicyDeniesBothCapabilities {
         ctx.assert_false(policy.allow_privileged, "default denies privileged mode");
         let mounts = vec![a_bind_mount()];
         ctx.assert_err(
-            validate_policy(&mounts, false, &policy),
+            validate_policy(&mounts, false, None, &policy),
             "validate_policy rejects bind mounts under default policy",
         );
         ctx.assert_err(
-            validate_policy(&[], true, &policy),
+            validate_policy(&[], true, None, &policy),
             "validate_policy rejects privileged under default policy",
         );
         ctx.result()
