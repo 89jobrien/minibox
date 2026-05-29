@@ -141,6 +141,15 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
+///
+/// # Cleanup on failure
+///
+/// If container preparation succeeds but spawn or network-attach fails,
+/// `run_inner_capture` calls `cleanup_after_spawn_failure` which marks the
+/// container as `Failed` and tears down the network allocation. Overlay and
+/// cgroup directories are preserved for post-mortem (cleaned on explicit
+/// `remove`). On the happy path, ephemeral containers are auto-removed from
+/// state after the process exits (line `state.remove_container`).
 #[cfg(unix)]
 // qual:allow(complexity) reason: "streaming run: pipe drain, waitpid, event emission"
 pub(super) async fn handle_run_streaming(
@@ -843,24 +852,53 @@ async fn run_inner_capture(
         .await
         .expect("semaphore closed");
 
-    let spawn_result = deps
+    // After prepare_run succeeds, a container record exists in state.
+    // If any subsequent step fails we must mark it Failed and clean up
+    // the network allocation so resources are not leaked.
+    let spawn_result = match deps
         .lifecycle
         .runtime
         .spawn_process(&prepared.spawn_config)
-        .await?;
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            error!(
+                container_id = %prepared.id,
+                error = %e,
+                "run_inner_capture: spawn failed, cleaning up"
+            );
+            cleanup_after_spawn_failure(&prepared.id, &prepared.net, &state, &deps).await;
+            return Err(e);
+        }
+    };
 
     let pid = spawn_result.pid;
     let runtime_id = spawn_result.runtime_id;
-    let output_reader = spawn_result.output_reader.ok_or_else(|| {
-        anyhow::anyhow!("capture_output=true but runtime returned no output_reader")
-    })?;
+    let output_reader = match spawn_result.output_reader {
+        Some(r) => r,
+        None => {
+            let e = anyhow::anyhow!("capture_output=true but runtime returned no output_reader");
+            error!(
+                container_id = %prepared.id,
+                "run_inner_capture: no output_reader, cleaning up"
+            );
+            cleanup_after_spawn_failure(&prepared.id, &prepared.net, &state, &deps).await;
+            return Err(e);
+        }
+    };
 
     // ── Network attach ─────────────────────────────────────────────────
-    prepared
-        .net
-        .attach(&prepared.id, pid)
-        .await
-        .context("network attach")?;
+    if let Err(e) = prepared.net.attach(&prepared.id, pid).await {
+        error!(
+            container_id = %prepared.id,
+            pid = pid,
+            error = %e,
+            "run_inner_capture: network attach failed, cleaning up"
+        );
+        cleanup_after_spawn_failure(&prepared.id, &prepared.net, &state, &deps).await;
+        return Err(e.context("network attach"));
+    }
 
     // Write PID file and update state.
     let pid_file = deps
@@ -1161,6 +1199,44 @@ async fn daemon_wait_for_exit(
     _runtime_id: Option<String>,
 ) {
     // No-op on this platform.
+}
+
+// ─── Spawn-failure cleanup ───────────────────────────────────────────────────
+
+/// Best-effort cleanup after `prepare_run` succeeded but a subsequent step
+/// (spawn, output_reader check, network attach) failed.
+///
+/// Marks the container as `Failed` in daemon state (matching `run_inner`
+/// behaviour) and tears down the network allocation. Overlay and cgroup
+/// directories are intentionally left in place for post-mortem inspection
+/// -- they will be cleaned up on explicit `remove` or daemon restart.
+///
+/// Secondary errors during cleanup are logged at `warn` level but never
+/// propagate, following the project convention for cleanup-on-failure paths.
+#[cfg(unix)]
+async fn cleanup_after_spawn_failure(
+    id: &str,
+    net: &NetworkLifecycle,
+    state: &DaemonState,
+    deps: &HandlerDependencies,
+) {
+    if let Err(e) = state
+        .update_container_state(id, ContainerState::Failed)
+        .await
+    {
+        warn!(
+            container_id = %id,
+            error = %e,
+            "cleanup: failed to mark container Failed"
+        );
+    }
+
+    net.cleanup(id).await;
+
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
+    );
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
