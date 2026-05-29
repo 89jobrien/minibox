@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{borrow_fixtures, bump, docs_lint, utils::cargo_target_dir};
+use crate::{borrow_fixtures, bump, docs_audit, docs_lint, utils::cargo_target_dir};
 
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
@@ -54,6 +54,9 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
 
     eprintln!("--- verify: docs lint ---");
     docs_lint::lint_docs(root)?;
+
+    eprintln!("--- verify: docs audit (quick) ---");
+    docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
 
     eprintln!("verify gate passed");
     Ok(())

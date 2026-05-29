@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use std::{fs, path::Path};
 
-const FEATURE_MATRIX: &str = "docs/FEATURE_MATRIX.mbx.md";
+const FEATURE_MATRIX: &str = "docs/core/FEATURE_MATRIX.mbx.md";
 
 /// Rewrite the `Last updated:` line in FEATURE_MATRIX.mbx.md to today's UTC date.
 pub fn update_feature_matrix_date(root: &Path) -> Result<()> {

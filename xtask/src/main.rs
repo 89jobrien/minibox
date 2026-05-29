@@ -26,6 +26,7 @@ mod council;
 mod daily_orchestration;
 mod demo;
 mod detect_changes;
+mod docs_audit;
 mod docs_lint;
 mod feature_matrix_date;
 mod fuzz;
@@ -182,6 +183,16 @@ fn main() -> Result<()> {
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
+        Some("docs-audit") => {
+            let strict = env::args().any(|a| a == "--strict");
+            let full = env::args().any(|a| a == "--full");
+            let mode = if full {
+                docs_audit::Mode::Full
+            } else {
+                docs_audit::Mode::Quick { strict }
+            };
+            docs_audit::run(&sh, root, mode)
+        }
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
             let adapter = args
@@ -389,6 +400,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  update-feature-matrix-date  rewrite Last-updated stamp in docs/FEATURE_MATRIX.mbx.md to today"
+            );
+            eprintln!(
+                "  docs-audit [--full] [--strict]  audit docs/core/ facts vs code; --full adds freshness + coverage + JSON report"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(

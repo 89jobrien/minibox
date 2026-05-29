@@ -4,5 +4,5 @@
 def main [
     --base: string = "main"  # Base branch/ref to diff against
 ] {
-    ^uv run ($env.FILE_PWD | path join "ai-review.py") --base $base
+    ^rust-script ($env.FILE_PWD | path join "ai-review.rs") --base $base
 }
