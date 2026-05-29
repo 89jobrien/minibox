@@ -408,13 +408,32 @@ mod pub_crate_handler_tests {
     use crate::adapters::mocks::{MockFilesystem, MockLimiter, MockNetwork, MockRuntime};
     use crate::daemon::state::DaemonState;
     use crate::image::ImageStore;
-    use crate::testing::helpers::gc::NoopImageGc;
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
     use minibox_core::events::{BroadcastEventBroker, NoopEventSink};
+    use minibox_core::image::gc::{ImageGarbageCollector, PruneReport};
     use minibox_core::protocol::ContainerInfo;
     use std::sync::Arc;
     use tempfile::TempDir;
+
+    struct NoopImageGc;
+
+    #[async_trait::async_trait]
+    impl ImageGarbageCollector for NoopImageGc {
+        async fn prune(&self, dry_run: bool, _in_use: &[String]) -> anyhow::Result<PruneReport> {
+            Ok(PruneReport {
+                removed: vec![],
+                freed_bytes: 0,
+                dry_run,
+            })
+        }
+    }
+
+    impl NoopImageGc {
+        fn new() -> Self {
+            Self
+        }
+    }
 
     fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
         let store = ImageStore::new(tmp.path().join("images-state")).unwrap();
