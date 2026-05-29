@@ -98,10 +98,6 @@ fn graceful_restart() {
 #[cfg(unix)]
 use anyhow::{Context, Result};
 #[cfg(unix)]
-use macbox::krun::{
-    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
-};
-#[cfg(unix)]
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
 use minibox::adapters::{
@@ -125,6 +121,10 @@ use minibox_core::image::lease::DiskLeaseService;
 use miniboxd::adapter_registry::{self, AdapterSuite};
 #[cfg(unix)]
 use miniboxd::listener::UnixServerListener;
+#[cfg(unix)]
+use smolbox::krun::{
+    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
+};
 #[cfg(unix)]
 use std::path::PathBuf;
 #[cfg(unix)]
