@@ -49,6 +49,7 @@ async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
