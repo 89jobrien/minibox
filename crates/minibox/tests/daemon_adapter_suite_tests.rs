@@ -143,6 +143,7 @@ fn make_deps_from_parts(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

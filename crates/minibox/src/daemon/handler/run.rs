@@ -95,7 +95,9 @@ pub async fn handle_run(
         Some(ov) => deps.policy.with_overrides(ov),
         None => deps.policy.clone(),
     };
-    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &effective_policy) {
+    if let Err(msg) =
+        super::validate_policy(&params.mounts, params.privileged, None, &effective_policy)
+    {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })

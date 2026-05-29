@@ -381,6 +381,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
             .policy
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
+        ..Default::default()
     };
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,

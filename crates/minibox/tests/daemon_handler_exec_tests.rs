@@ -254,6 +254,7 @@ async fn test_handler_with_dropped_receiver_does_not_panic() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

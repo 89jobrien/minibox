@@ -178,6 +178,7 @@ pub fn make_mock_deps_with_registry(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

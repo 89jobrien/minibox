@@ -302,6 +302,9 @@ pub struct ContainerPolicy {
     /// Allow containers to run in privileged mode.
     /// Default: `false` (deny).
     pub allow_privileged: bool,
+    /// Minimum priority a container must have to be accepted.
+    /// Default: `None` (no minimum).
+    pub min_priority: Option<slashcrux::Priority>,
 }
 
 /// Scoped policy overrides for internal operations (e.g. pipeline runs).
@@ -310,6 +313,7 @@ pub struct ContainerPolicy {
 pub struct PolicyOverride {
     pub allow_bind_mounts: Option<bool>,
     pub allow_privileged: Option<bool>,
+    pub min_priority: Option<Option<slashcrux::Priority>>,
 }
 
 impl ContainerPolicy {
@@ -321,6 +325,7 @@ impl ContainerPolicy {
                 .allow_bind_mounts
                 .unwrap_or(self.allow_bind_mounts),
             allow_privileged: overrides.allow_privileged.unwrap_or(self.allow_privileged),
+            min_priority: overrides.min_priority.unwrap_or(self.min_priority),
         }
     }
 
@@ -332,6 +337,7 @@ impl ContainerPolicy {
         Self {
             allow_bind_mounts: env_flag("MINIBOX_ALLOW_BIND_MOUNTS"),
             allow_privileged: env_flag("MINIBOX_ALLOW_PRIVILEGED"),
+            min_priority: None,
         }
     }
 }
@@ -356,6 +362,7 @@ pub(crate) fn env_flag(name: &str) -> bool {
 pub fn validate_policy(
     mounts: &[minibox_core::domain::BindMount],
     privileged: bool,
+    priority: Option<slashcrux::Priority>,
     policy: &ContainerPolicy,
 ) -> Result<(), String> {
     if !mounts.is_empty() && !policy.allow_bind_mounts {
@@ -368,6 +375,23 @@ pub fn validate_policy(
             "policy violation: privileged mode requested but privileged containers are not allowed"
                 .into(),
         );
+    }
+    if let Some(min) = &policy.min_priority {
+        match priority {
+            Some(p) if p.score() >= min.score() => {}
+            Some(p) => {
+                return Err(format!(
+                    "policy violation: container priority {:?} is below minimum {:?}",
+                    p, min
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "policy violation: no priority specified but minimum {:?} is required",
+                    min
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -437,6 +461,7 @@ mod pub_crate_handler_tests {
             policy: ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -831,8 +856,9 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         };
-        let result = validate_policy(&[], false, &policy);
+        let result = validate_policy(&[], false, None, &policy);
         assert!(
             result.is_ok(),
             "no mounts + not privileged must pass strict policy"
@@ -845,13 +871,14 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         };
         let mounts = vec![BindMount {
             host_path: std::path::PathBuf::from("/tmp"),
             container_path: std::path::PathBuf::from("/mnt"),
             read_only: false,
         }];
-        let result = validate_policy(&mounts, false, &policy);
+        let result = validate_policy(&mounts, false, None, &policy);
         assert!(result.is_err(), "bind mounts must be denied by policy");
     }
 
@@ -860,9 +887,64 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            ..Default::default()
         };
-        let result = validate_policy(&[], true, &policy);
+        let result = validate_policy(&[], true, None, &policy);
         assert!(result.is_err(), "privileged must be denied by policy");
+    }
+
+    #[test]
+    fn test_validate_policy_rejects_priority_below_min() {
+        use slashcrux::Priority;
+        let policy = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+            min_priority: Some(Priority::High),
+        };
+        let result = validate_policy(&[], false, Some(Priority::Low), &policy);
+        assert!(
+            result.is_err(),
+            "priority below min_priority must be rejected"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("priority"),
+            "error should mention priority, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_policy_accepts_priority_at_or_above_min() {
+        use slashcrux::Priority;
+        let policy = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+            min_priority: Some(Priority::Medium),
+        };
+        assert!(
+            validate_policy(&[], false, Some(Priority::High), &policy).is_ok(),
+            "priority above min must pass"
+        );
+        assert!(
+            validate_policy(&[], false, Some(Priority::Medium), &policy).is_ok(),
+            "priority equal to min must pass"
+        );
+    }
+
+    #[test]
+    fn test_validate_policy_accepts_none_priority_when_min_set() {
+        use slashcrux::Priority;
+        let policy = ContainerPolicy {
+            allow_bind_mounts: false,
+            allow_privileged: false,
+            min_priority: Some(Priority::High),
+        };
+        // None priority means "not specified" — reject when min is set
+        let result = validate_policy(&[], false, None, &policy);
+        assert!(
+            result.is_err(),
+            "None priority must be rejected when min_priority is set"
+        );
     }
 
     // ── PolicyOverride + with_overrides ─────────────────────────────────
@@ -872,10 +954,12 @@ mod pub_crate_handler_tests {
         let base = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         };
         let ov = PolicyOverride {
             allow_bind_mounts: Some(true),
             allow_privileged: None,
+            ..Default::default()
         };
         let effective = base.with_overrides(&ov);
         assert!(
@@ -893,6 +977,7 @@ mod pub_crate_handler_tests {
         let base = ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         };
         let effective = base.with_overrides(&PolicyOverride::default());
         assert!(effective.allow_bind_mounts);
