@@ -280,26 +280,57 @@ fn which_bin(name: &str) -> Option<PathBuf> {
         .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim().to_string()))
 }
 
+/// Returns `true` when `var` is set to `1`, `true`, or `yes` (case-insensitive).
+fn env_flag(var: &str) -> bool {
+    std::env::var(var)
+        .ok()
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+}
+
+/// Returns `true` when both `MINIBOX_ALLOW_BIND_MOUNTS` and
+/// `MINIBOX_ALLOW_PRIVILEGED` are enabled.  Prints a warning naming the
+/// missing flags when either is unset/false.
+fn minibox_policy_allows() -> bool {
+    let bind = env_flag("MINIBOX_ALLOW_BIND_MOUNTS");
+    let priv_ = env_flag("MINIBOX_ALLOW_PRIVILEGED");
+    if bind && priv_ {
+        return true;
+    }
+    let mut missing = Vec::new();
+    if !bind {
+        missing.push("MINIBOX_ALLOW_BIND_MOUNTS");
+    }
+    if !priv_ {
+        missing.push("MINIBOX_ALLOW_PRIVILEGED");
+    }
+    eprintln!(
+        "warning: minibox on PATH but daemon policy denies required capabilities.\n\
+         Set {} to 1/true/yes and restart miniboxd, or fall back to smolvm.",
+        missing.join(" and "),
+    );
+    false
+}
+
 /// Prefer persistent smolvm > minibox (privileged) > ephemeral smolvm.
 ///
 /// Persistent smolvm is preferred because it has Rust toolchain pre-installed
 /// and avoids cross-compilation entirely.
-///
-/// TODO(#442): check daemon policy (MINIBOX_ALLOW_BIND_MOUNTS / MINIBOX_ALLOW_PRIVILEGED)
-///       before selecting minibox backend, and print actionable error if denied.
 fn detect_backend() -> Result<VmBackend> {
     // Persistent smolvm machine first — has Rust, no cross-compile needed
-    if let Some(path) = which_bin("smolvm") {
-        if persistent_machine_exists(&path)? {
-            println!(
-                "detected persistent '{vm}' — using native cargo test (no cross-compile)",
-                vm = setup_test_vm::VM_NAME
-            );
-            return Ok(VmBackend::SmolvmPersistent(path));
-        }
+    if let Some(path) = which_bin("smolvm")
+        && persistent_machine_exists(&path)?
+    {
+        println!(
+            "detected persistent '{vm}' — using native cargo test (no cross-compile)",
+            vm = setup_test_vm::VM_NAME
+        );
+        return Ok(VmBackend::SmolvmPersistent(path));
     }
-    // minibox with privileged mode (requires running daemon)
-    if let Some(path) = which_bin("minibox") {
+    // minibox with privileged mode (requires running daemon with policy flags)
+    if let Some(path) = which_bin("minibox")
+        && minibox_policy_allows()
+    {
         return Ok(VmBackend::Minibox(path));
     }
     // Ephemeral smolvm fallback
@@ -552,5 +583,67 @@ mod tests {
             "CI_GATE_SMOLFILE constant points to missing file: {}",
             CI_GATE_SMOLFILE
         );
+    }
+
+    /// Serialize env-mutating tests (Rust 2024: set_var/remove_var are unsafe).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn env_flag_true_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["1", "true", "yes", "TRUE", "Yes"] {
+            // SAFETY: serialized via ENV_LOCK; no other thread reads this var.
+            unsafe { std::env::set_var("_TEST_FLAG_442", val) };
+            assert!(env_flag("_TEST_FLAG_442"), "expected true for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("_TEST_FLAG_442") };
+    }
+
+    #[test]
+    fn env_flag_false_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["0", "false", "no", ""] {
+            // SAFETY: serialized via ENV_LOCK
+            unsafe { std::env::set_var("_TEST_FLAG_442", val) };
+            assert!(!env_flag("_TEST_FLAG_442"), "expected false for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("_TEST_FLAG_442") };
+    }
+
+    #[test]
+    fn env_flag_unset_is_false() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe { std::env::remove_var("_TEST_FLAG_442_UNSET") };
+        assert!(!env_flag("_TEST_FLAG_442_UNSET"));
+    }
+
+    #[test]
+    fn minibox_policy_allows_both_set() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "1");
+            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "1");
+        }
+        assert!(minibox_policy_allows());
+        // SAFETY: cleanup
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+    }
+
+    #[test]
+    fn minibox_policy_denies_when_missing() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+        assert!(!minibox_policy_allows());
     }
 }
