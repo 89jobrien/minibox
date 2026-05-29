@@ -37,6 +37,7 @@ mod protocol_drift;
 mod protocol_sites;
 mod setup_test_vm;
 mod stale_names;
+mod test_gke;
 mod test_image;
 mod test_in_vm;
 mod test_linux;
@@ -100,6 +101,8 @@ fn main() -> Result<()> {
         Some("test-system-suite") => gates::test_system_suite(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),
         Some("test-sandbox") => gates::test_sandbox(&sh),
+        Some("test-gke-profile") => test_gke::test_gke_profile(&sh),
+        Some("test-gke-adapter") => test_gke::test_gke_adapter(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
         Some("nuke-test-state") => cleanup::nuke_test_state(&sh),
         Some("cas-add") => {
@@ -354,6 +357,8 @@ fn main() -> Result<()> {
             eprintln!("  test-system-suite full-stack system tests (Linux, root, cgroups v2)");
             eprintln!("  test-e2e-suite   alias for test-system-suite (backward compat)");
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
+            eprintln!("  test-gke-profile GKE profile unit tests (filter by 'gke' name)");
+            eprintln!("  test-gke-adapter GKE adapter integration tests");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
