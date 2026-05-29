@@ -53,7 +53,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
-- `cargo xtask prepush` — broader Linux-oriented gate: nextest and coverage.
+- `cargo xtask prepush` — broader Linux-oriented gate: nextest (use `cargo xtask coverage` separately for coverage reports).
 - `cargo xtask test-unit` — cross-platform unit and conformance subset.
 - `cargo xtask test-property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
@@ -62,7 +62,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
-- `cargo bench -p minibox` — local criterion benches.
+- `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
 
 `scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.
 
