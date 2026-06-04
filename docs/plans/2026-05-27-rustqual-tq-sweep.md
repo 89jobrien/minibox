@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Rustqual TQ + Crux-Plugin DRY Sweep
 
 ## Goal

@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: CI Change Detection
 
 ## Goal

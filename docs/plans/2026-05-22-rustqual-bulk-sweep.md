@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Rustqual Bulk Sweep — Production Crates
 
 ## Goal

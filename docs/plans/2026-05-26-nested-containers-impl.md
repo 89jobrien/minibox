@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Nested Containers (minibox-in-minibox)
 
 ## Goal
