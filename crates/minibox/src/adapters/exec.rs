@@ -544,6 +544,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let (tx, mut rx) = mpsc::channel::<DaemonResponse>(32);
+        let tx: minibox_core::domain::DynProgressSink<DaemonResponse> = std::sync::Arc::new(tx);
         let (_resize_tx, resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
         let config = ExecConfig {
             spec: ExecSpec {

@@ -32,10 +32,12 @@ impl Tier {
         }
     }
 
-    #[allow(dead_code)]
+    /// The git branch corresponding to this tier in the stability pipeline.
     pub fn branch_name(self) -> &'static str {
         match self {
-            Tier::Dev | Tier::Testing | Tier::Staging => "develop",
+            Tier::Dev => "develop",
+            Tier::Testing => "next",
+            Tier::Staging => "staging",
             Tier::Main => "main",
         }
     }
@@ -159,6 +161,9 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
 
     if dry_run {
         eprintln!("Dry run — no gates executed.");
+        let from_branch = from_tier.branch_name();
+        let to_branch = to_tier.branch_name();
+        eprintln!("Would merge branches: {} -> {}", from_branch, to_branch);
         return Ok(());
     }
 
@@ -178,6 +183,44 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
     };
     new_state.save(root)?;
     eprintln!("Promoted to: {}", to_tier.name());
+
+    // Cascade-merge branches
+    // TODO: replace with `cargo-promote branch` once workspace support lands
+    // (see cargo-promote docs/plans/2026-06-04-workspace-support.md)
+    let sequence = Tier::sequence();
+    let from_idx = sequence.iter().position(|t| *t == from_tier).unwrap_or(0);
+    let to_idx = sequence.iter().position(|t| *t == to_tier).unwrap_or(0);
+    let tiers = &sequence[from_idx..=to_idx];
+
+    let origin_branch = xshell::cmd!(sh, "git branch --show-current").read()?;
+
+    for pair in tiers.windows(2) {
+        let src = pair[0].branch_name();
+        let dst = pair[1].branch_name();
+        eprintln!("Merging: {} -> {} ...", src, dst);
+        xshell::cmd!(sh, "git checkout {dst}")
+            .run()
+            .with_context(|| format!("checkout {dst}"))?;
+        xshell::cmd!(sh, "git merge --ff-only {src}")
+            .run()
+            .with_context(|| format!("fast-forward {src} -> {dst}"))?;
+    }
+
+    // Push all target branches
+    let targets: Vec<&str> = tiers[1..].iter().map(|t| t.branch_name()).collect();
+    let targets_str = targets.join(" ");
+    eprintln!("Pushing: {}", targets_str);
+    for target in &targets {
+        xshell::cmd!(sh, "git push origin {target}")
+            .run()
+            .with_context(|| format!("push {target}"))?;
+    }
+
+    // Return to original branch
+    xshell::cmd!(sh, "git checkout {origin_branch}")
+        .run()
+        .context("return to original branch")?;
+
     Ok(())
 }
 
