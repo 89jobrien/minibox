@@ -1,0 +1,109 @@
+pipeline: minibox_promote
+# Cascade promotion through the stability pipeline:
+# develop -> next -> staging -> main.
+#
+# Mirrors `cargo xtask promote` — runs tiered quality gates, then
+# fast-forward merges and pushes each branch in sequence.
+#
+# Tier gates:
+#   dev     : lint, test-unit
+#   testing : test-conformance, test-property, borrow-fixtures
+#   staging : prepush, coverage-check
+#   main    : check-no-unwrap, check-protocol-drift, lint-docs
+#
+# Run: crux run .crux/promote.crux
+budget: { calls: 24 }
+
+steps:
+  # --- Dev tier gates ---
+  - step: gate_lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint"
+
+  - step: gate_test_unit
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-unit"
+
+  # --- Testing tier gates ---
+  - step: gate_test_conformance
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-conformance"
+
+  - step: gate_test_property
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-property"
+
+  - step: gate_borrow_fixtures
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask borrow-fixtures"
+
+  # --- Staging tier gates ---
+  - step: gate_prepush
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask prepush"
+
+  - step: gate_coverage_check
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask coverage-check"
+
+  # --- Main tier gates ---
+  - step: gate_check_protocol_drift
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask check-protocol-drift"
+
+  - step: gate_lint_docs
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  # --- Cascade merge: develop -> next -> staging -> main ---
+  - step: merge_develop_to_next
+    handler: shell::exec
+    args:
+      cmd: >-
+        git checkout next &&
+        git merge --ff-only develop &&
+        echo "merged develop -> next"
+
+  - step: merge_next_to_staging
+    handler: shell::exec
+    args:
+      cmd: >-
+        git checkout staging &&
+        git merge --ff-only next &&
+        echo "merged next -> staging"
+
+  - step: merge_staging_to_main
+    handler: shell::exec
+    args:
+      cmd: >-
+        git checkout main &&
+        git merge --ff-only staging &&
+        echo "merged staging -> main"
+
+  # --- Push all target branches ---
+  - step: push_branches
+    handler: shell::exec
+    args:
+      cmd: >-
+        git push origin next staging main &&
+        echo "pushed next, staging, main"
+
+  # --- Return to develop ---
+  - step: return_to_develop
+    handler: shell::exec
+    args:
+      cmd: "git checkout develop"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "Promotion complete: develop -> next -> staging -> main"
