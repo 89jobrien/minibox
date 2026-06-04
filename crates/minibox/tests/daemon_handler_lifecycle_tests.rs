@@ -65,6 +65,7 @@ async fn test_handle_run_with_cached_image() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -151,6 +152,7 @@ async fn test_handle_run_pulls_uncached_image() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -224,6 +226,7 @@ async fn test_handle_run_filesystem_setup_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -294,6 +297,7 @@ async fn test_handle_run_resource_limiter_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -364,6 +368,7 @@ async fn test_handle_run_runtime_spawn_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -647,6 +652,7 @@ fn create_test_deps_with_network(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -733,6 +739,7 @@ async fn test_handle_run_explicit_network_none() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -948,6 +955,7 @@ async fn test_run_with_network_mode_host() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -1034,6 +1042,7 @@ async fn test_remove_with_filesystem_cleanup_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1199,6 +1208,7 @@ async fn test_handle_run_empty_image_returns_error() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1334,6 +1344,7 @@ async fn test_handle_remove_cgroup_cleanup_failure_still_succeeds() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1489,6 +1500,7 @@ async fn test_handle_run_pull_failure_returns_error() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1864,6 +1876,7 @@ async fn test_handle_remove_failed_container_succeeds() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1955,6 +1968,7 @@ async fn test_handle_pull_ghcr_failure_returns_error() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -2096,6 +2110,7 @@ async fn test_handle_run_bridge_network_mode_calls_setup() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -2120,7 +2135,7 @@ impl minibox_core::domain::ExecRuntime for FailingExecRuntime {
         &self,
         _container_id: &minibox_core::domain::ContainerId,
         _spec: minibox_core::domain::ExecSpec,
-        _tx: tokio::sync::mpsc::Sender<minibox_core::protocol::DaemonResponse>,
+        _tx: minibox_core::domain::DynProgressSink<minibox_core::protocol::DaemonResponse>,
     ) -> anyhow::Result<minibox_core::domain::ExecHandle> {
         anyhow::bail!("mock exec runtime failure: setns not supported")
     }
@@ -2303,6 +2318,7 @@ async fn test_handle_stop_resolves_by_name() {
             name: Some("my-stop-ctr".to_string()),
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state.clone(),
         deps.clone(),

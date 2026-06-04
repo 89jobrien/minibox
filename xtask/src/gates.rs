@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
-use crate::{borrow_fixtures, bump, docs_lint, utils::cargo_target_dir};
+use crate::{borrow_fixtures, bump, docs_audit, docs_lint, utils::cargo_target_dir};
 
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
@@ -54,6 +54,9 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
 
     eprintln!("--- verify: docs lint ---");
     docs_lint::lint_docs(root)?;
+
+    eprintln!("--- verify: docs audit (quick) ---");
+    docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
 
     eprintln!("verify gate passed");
     Ok(())
@@ -328,21 +331,15 @@ pub fn test_property(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Quickcheck property-based tests (cross-platform).
+/// Proptest property-based tests (cross-platform, consolidated).
 pub fn test_quickcheck(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
-        "cargo test --release -p minibox-core --test quickcheck_properties"
+        "cargo test --release -p minibox --test proptest_properties"
     )
     .run()
-    .context("minibox-core quickcheck tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test quickcheck_properties"
-    )
-    .run()
-    .context("minibox quickcheck tests failed")?;
-    eprintln!("quickcheck property tests passed");
+    .context("proptest property tests failed")?;
+    eprintln!("proptest property tests passed");
     Ok(())
 }
 

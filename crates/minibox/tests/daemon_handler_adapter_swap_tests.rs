@@ -49,6 +49,7 @@ async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -126,6 +127,7 @@ fn make_deps(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -194,6 +196,7 @@ async fn test_run_with_all_success_adapters() {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -471,6 +474,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

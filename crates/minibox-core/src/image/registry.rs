@@ -773,7 +773,7 @@ impl RegistryClient {
                     // Update aggregate download counter using actual bytes
                     // downloaded, not declared manifest sizes (which a
                     // malicious registry could understate).
-                    let prev = agg_counter.fetch_add(actual_bytes, Ordering::Relaxed);
+                    let prev = agg_counter.fetch_add(actual_bytes, Ordering::AcqRel);
                     if prev + actual_bytes > MAX_TOTAL_IMAGE_SIZE {
                         anyhow::bail!(
                             "image exceeds total size limit: downloaded {} bytes \

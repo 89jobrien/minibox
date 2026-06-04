@@ -160,7 +160,7 @@ mod suite {
     #[tokio::test]
     async fn krun_hostname_differs_from_host() {
         skip_if_no_smolvm!();
-        let host_hostname = hostname::get()
+        let host_hostname = nix::unistd::gethostname()
             .ok()
             .and_then(|h| h.into_string().ok())
             .unwrap_or_default();

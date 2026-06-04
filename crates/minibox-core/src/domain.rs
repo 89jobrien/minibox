@@ -279,7 +279,7 @@ impl StepRunnerRegistry {
     /// Register the four built-in runners: `container-run`, `image-pull`,
     /// `exec`, and `overlay-snapshot`.
     #[cfg(test)]
-    pub fn register_builtin_runners(&mut self) {
+    fn register_builtin_runners(&mut self) {
         self.register(Box::new(ContainerRunStepRunner));
         self.register(Box::new(ImagePullStepRunner));
         self.register(Box::new(ExecStepRunner));
@@ -390,6 +390,75 @@ pub struct BindMount {
     pub container_path: std::path::PathBuf,
     /// If `true`, the mount is read-only inside the container.
     pub read_only: bool,
+}
+
+impl BindMount {
+    /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
+    pub fn parse_volume(s: &str) -> anyhow::Result<Self> {
+        let parts: Vec<&str> = s.splitn(3, ':').collect();
+        if parts.len() < 2 {
+            anyhow::bail!(
+                "invalid volume format {:?}: expected src:dst or src:dst:ro",
+                s
+            );
+        }
+        let host_path = std::path::PathBuf::from(parts[0]);
+        let container_path = std::path::PathBuf::from(parts[1]);
+        if !container_path.is_absolute() {
+            anyhow::bail!(
+                "container path {:?} must be absolute (start with /)",
+                container_path
+            );
+        }
+        let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
+        Ok(Self {
+            host_path,
+            container_path,
+            read_only,
+        })
+    }
+
+    /// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
+    pub fn parse_mount(s: &str) -> anyhow::Result<Self> {
+        let mut mount_type = None::<String>;
+        let mut src = None::<std::path::PathBuf>;
+        let mut dst = None::<std::path::PathBuf>;
+        let mut read_only = false;
+
+        for kv in s.split(',') {
+            if kv == "readonly" || kv == "ro" {
+                read_only = true;
+                continue;
+            }
+            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+            match k {
+                "type" => mount_type = Some(v.to_string()),
+                "src" | "source" => src = Some(std::path::PathBuf::from(v)),
+                "dst" | "target" | "destination" => dst = Some(std::path::PathBuf::from(v)),
+                _ => {}
+            }
+        }
+
+        match mount_type.as_deref() {
+            Some("bind") | None => {}
+            Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
+        }
+
+        let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
+        let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
+        if !container_path.is_absolute() {
+            anyhow::bail!(
+                "container path {:?} must be absolute (start with /)",
+                container_path
+            );
+        }
+
+        Ok(Self {
+            host_path,
+            container_path,
+            read_only,
+        })
+    }
 }
 
 #[cfg(unix)]
@@ -739,7 +808,7 @@ impl BackendRootfsMetadata {
 
     /// Look up a backend-specific metadata value by key.
     #[cfg(test)]
-    pub fn metadata_value(&self, key: &str) -> Option<&str> {
+    fn metadata_value(&self, key: &str) -> Option<&str> {
         match self {
             Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
         }
@@ -1287,6 +1356,42 @@ pub struct ExecHandle {
     pub id: String,
 }
 
+// ---------------------------------------------------------------------------
+// ProgressSink — runtime-agnostic channel abstraction (#278)
+// ---------------------------------------------------------------------------
+
+/// An async-capable sink for streaming progress updates from domain ports.
+///
+/// Replaces direct `tokio::sync::mpsc::Sender<T>` parameters in port trait
+/// signatures so the domain layer is not coupled to a specific async runtime.
+/// Adapters (and tests) provide concrete implementations — the blanket impl
+/// for `tokio::sync::mpsc::Sender<T>` covers the production case.
+#[async_trait]
+pub trait ProgressSink<T: Send + 'static>: Send + Sync {
+    /// Send a value into the sink.
+    ///
+    /// Returns `Ok(())` when the value was accepted, or `Err(())` when the
+    /// receiver has been dropped (analogous to `mpsc::SendError`).
+    async fn send(&self, value: T) -> Result<(), ()>;
+}
+
+/// Blanket implementation so `tokio::sync::mpsc::Sender<T>` satisfies
+/// `ProgressSink<T>` without wrapper code at every call site.
+#[async_trait]
+impl<T: Send + 'static> ProgressSink<T> for tokio::sync::mpsc::Sender<T> {
+    async fn send(&self, value: T) -> Result<(), ()> {
+        tokio::sync::mpsc::Sender::send(self, value)
+            .await
+            .map_err(|_| ())
+    }
+}
+
+/// Type-erased progress sink, used in port trait signatures.
+///
+/// Uses `Arc` rather than `Box` so the sink can be shared across tasks
+/// (e.g. a blocking spawn and a forwarding task in the exec adapter).
+pub type DynProgressSink<T> = Arc<dyn ProgressSink<T>>;
+
 /// Port for running commands inside already-running containers.
 #[async_trait]
 pub trait ExecRuntime: AsAny + Send + Sync {
@@ -1294,7 +1399,7 @@ pub trait ExecRuntime: AsAny + Send + Sync {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        tx: tokio::sync::mpsc::Sender<crate::protocol::DaemonResponse>,
+        tx: DynProgressSink<crate::protocol::DaemonResponse>,
     ) -> anyhow::Result<ExecHandle>;
 }
 
@@ -1335,7 +1440,7 @@ pub trait ImagePusher: AsAny + Send + Sync {
         &self,
         image_ref: &crate::image::reference::ImageRef,
         credentials: &RegistryCredentials,
-        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+        progress_tx: Option<DynProgressSink<PushProgress>>,
     ) -> anyhow::Result<PushResult>;
 }
 
@@ -1414,7 +1519,7 @@ pub trait ImageBuilder: AsAny + Send + Sync {
         &self,
         context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+        progress_tx: DynProgressSink<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata>;
 }
 
@@ -2328,7 +2433,7 @@ pub enum StepCompletion {
 /// - how many consecutive errors have occurred (`error_count`), and
 /// - whether the error is terminal (unrecoverable regardless of policy).
 #[cfg(test)]
-pub fn determine_step_completion(
+fn determine_step_completion(
     result: &anyhow::Result<StepOutput>,
     retry_cfg: Option<&StepRetry>,
     elapsed: std::time::Duration,
@@ -2569,10 +2674,7 @@ pub struct ResolvedStep {
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
 #[cfg(test)]
-pub fn resolve_step_vars(
-    step: &WorkflowStep,
-    state: &WorkflowState,
-) -> anyhow::Result<ResolvedStep> {
+fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<ResolvedStep> {
     use anyhow::Context as _;
     let mut resolved_vars = std::collections::HashMap::new();
 
@@ -2600,7 +2702,7 @@ pub fn resolve_step_vars(
 ///
 /// Overwrites any prior value stored under the same alias.
 #[cfg(test)]
-pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
+fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
 
@@ -2608,7 +2710,7 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
 #[cfg(test)]
-pub fn steps_before<'a>(
+fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
 ) -> anyhow::Result<Vec<&'a WorkflowStep>> {
@@ -2628,7 +2730,7 @@ pub fn steps_before<'a>(
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
 #[cfg(test)]
-pub fn resume_workflow(
+fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
     prior_outputs: &WorkflowState,

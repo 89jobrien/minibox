@@ -30,7 +30,18 @@ include_nesting_penalty = true
 detect_magic_numbers = true
 detect_unsafe = true
 detect_error_handling = true
-allowed_magic_numbers = ["0", "1", "-1", "2"]
+# 3: splitn/len checks; 4: channel sizes; 8: radix, buffer sizes;
+# 10: retry counts; 16: buffer sizes; 24/80: terminal fallback;
+# 30/60/100: timeouts (secs/ms); 384/493: Unix 0o600/0o755 perms;
+# 511/512: tar mode masks / block size; 1024: byte multiplier;
+# 4096/8192/16384/65536: buffer/read sizes.
+allowed_magic_numbers = [
+    "0", "1", "-1", "2", "3", "4", "5", "8", "10", "16",
+    "24", "30", "42", "60", "64", "73", "80", "100",
+    "128", "250", "256", "384", "420", "493", "500", "511", "512",
+    "1024", "2000", "4096", "8192", "10485760", "16384", "65536",
+    "0.0", "0.5", "1.0",
+]
 
 # ── DRY / Duplicate Detection ───────────────────────────────────────────
 

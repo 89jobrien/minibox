@@ -8,19 +8,19 @@ Guidance for Claude Code when working in this repository.
 
 Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
 
-Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `krun` when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
+Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
 
 ## Read First
 
 - `README.md` — user-facing overview and quickstart.
 - `DEVELOPMENT.md` — canonical developer workflow and command selection.
-- `docs/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
-- `docs/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
-- `docs/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
-- `docs/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
-- `docs/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
-- `docs/STATE_MODEL.mbx.md` — daemon persistence model.
-- `docs/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
+- `docs/core/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
+- `docs/core/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
+- `docs/core/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
+- `docs/core/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
+- `docs/core/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
+- `docs/core/STATE_MODEL.mbx.md` — daemon persistence model.
+- `docs/core/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
 
 If changing container code, protocol types, adapters, or tests, read the relevant reference above instead of relying on this compact file.
 
@@ -53,7 +53,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
-- `cargo xtask prepush` — broader Linux-oriented gate: nextest and coverage.
+- `cargo xtask prepush` — broader Linux-oriented gate: nextest (use `cargo xtask coverage` separately for coverage reports).
 - `cargo xtask test-unit` — cross-platform unit and conformance subset.
 - `cargo xtask test-property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
@@ -62,7 +62,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
-- `cargo bench -p minibox` — local criterion benches.
+- `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
 
 `scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.
 
@@ -221,20 +221,21 @@ Before responding in any phase, check if a godmode skill applies.
 
 ## Task graph
 
-Tasks live in `.ctx/GODMODE.tasks.yaml`. Use `godmode task` CLI for
+Tasks live in @.ctx/GODMODE.tasks.yaml. Use `Bash(godmode task)` CLI for
 state transitions. Independent chains can run in parallel via
-`godmode:parallel-agents`. A task is runnable when all `depends_on`
+`Skill(godmode:parallel-agents)`. A task is runnable when all `depends_on`
 items are `done`.
 
 ## Memory bank
 
-Persistent context lives in `.ctx/memory-bank/`. Read before
-substantive work; update `activeContext` and `progress` after
-milestones. See `AGENTS.md` for the full file list.
+- Persistent context lives in @.ctx/memory-bank/
+- Read before substantive work: !`ls .ctx/memory-bank/`
+- update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md.
+- See @AGENTS.md for the full file list.
 
 ## Agent-specific guidance
 
 For subagent conventions, Codex integration, and memory-bank file
-inventory, see `AGENTS.md`.
+inventory, see @AGENTS.md.
 
 <!-- godmode-workflow:end -->

@@ -119,6 +119,7 @@ async fn test_handle_pull_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -187,6 +188,7 @@ async fn test_handle_pull_routes_to_ghcr_registry() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -265,6 +267,7 @@ async fn test_handle_run_routes_to_ghcr_registry() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -342,6 +345,7 @@ async fn test_handle_run_ghcr_cached_skips_pull() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -415,6 +419,7 @@ async fn test_handle_run_ghcr_pull_failure_returns_error() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1327,6 +1332,7 @@ async fn test_handle_run_invalid_platform_returns_error() {
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,

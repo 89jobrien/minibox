@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 use crate::daemon::state::DaemonState;
 
 use super::run::{RunParams, handle_run};
-use super::{HandlerDependencies, send_error};
+use super::{HandlerDependencies, PolicyOverride, send_error};
 
 /// Run a crux pipeline inside an ephemeral container.
 // qual:allow(complexity) reason: "pipeline lifecycle phases in cfg(unix) block"
@@ -99,18 +99,13 @@ pub async fn handle_pipeline(
             container_env.push(format!("CRUX_INPUT_JSON={s}"));
         }
 
-        // Clone deps and override policy to permit bind mounts for this
-        // internal pipeline run.  Pipeline requests originate from the daemon
-        // (not from an end user), so the bind-mount policy exception is safe.
-        let pipeline_deps = Arc::new((*deps).clone().with_allow_bind_mounts(true));
-
         // Bridge channel: collect all streaming responses from handle_run internally.
         const PIPELINE_CHANNEL_CAPACITY: usize = 64;
         let (inner_tx, mut inner_rx) =
             tokio::sync::mpsc::channel::<DaemonResponse>(PIPELINE_CHANNEL_CAPACITY);
 
         let pipeline_state = Arc::clone(&state);
-        let pipeline_deps_clone = Arc::clone(&pipeline_deps);
+        let pipeline_deps_clone = Arc::clone(&deps);
 
         // Spawn handle_run in the background; we drain inner_rx below.
         tokio::spawn(async move {
@@ -134,6 +129,10 @@ pub async fn handle_pipeline(
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                policy_override: Some(PolicyOverride {
+                    allow_bind_mounts: Some(true),
+                    ..Default::default()
+                }),
             };
             handle_run(params, pipeline_state, pipeline_deps_clone, inner_tx).await;
         });

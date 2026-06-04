@@ -75,6 +75,7 @@ pub async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -143,6 +144,7 @@ pub fn build_deps(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -207,6 +209,7 @@ pub fn create_test_deps_with_dir(temp_dir: &TempDir) -> Arc<HandlerDependencies>
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -263,6 +266,7 @@ pub fn create_test_deps_with_dir_and_runtime(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -323,6 +327,7 @@ pub fn create_test_deps_with_network(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

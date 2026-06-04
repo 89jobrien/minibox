@@ -189,6 +189,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -211,7 +212,7 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, policy_override: None,
         },
         state,
         deps,
@@ -282,6 +283,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -304,7 +306,7 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, policy_override: None,
         },
         state,
         deps,
@@ -368,6 +370,7 @@ async fn test_run_empty_image_no_layers() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -445,6 +448,7 @@ async fn test_pull_registry_failure_with_tag() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -597,6 +601,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -619,7 +624,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, policy_override: None,
         },
         state,
         deps,

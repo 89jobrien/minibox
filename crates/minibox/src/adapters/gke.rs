@@ -602,19 +602,16 @@ mod tests {
     #[test]
     fn proot_runtime_from_env_uses_env_var() {
         let _guard = ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
-        unsafe { std::env::set_var("MINIBOX_PROOT_PATH", "/bin/sh") };
+        minibox_macros::unsafe_set_var!("MINIBOX_PROOT_PATH", "/bin/sh");
         let result = ProotRuntime::from_env();
-        // SAFETY: same mutex guard; restoring env before any other test runs.
-        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+        minibox_macros::unsafe_remove_var!("MINIBOX_PROOT_PATH");
         assert!(result.is_ok(), "expected ProotRuntime, got {result:?}");
     }
 
     #[test]
     fn proot_runtime_from_env_fails_when_proot_not_found() {
         let _guard = ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
-        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+        minibox_macros::unsafe_remove_var!("MINIBOX_PROOT_PATH");
 
         // Only run this assertion when proot is genuinely absent; skip otherwise.
         let proot_on_path = std::process::Command::new("which")

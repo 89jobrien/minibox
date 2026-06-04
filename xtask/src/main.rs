@@ -26,6 +26,7 @@ mod council;
 mod daily_orchestration;
 mod demo;
 mod detect_changes;
+mod docs_audit;
 mod docs_lint;
 mod feature_matrix_date;
 mod fuzz;
@@ -36,6 +37,7 @@ mod protocol_drift;
 mod protocol_sites;
 mod setup_test_vm;
 mod stale_names;
+mod test_gke;
 mod test_image;
 mod test_in_vm;
 mod test_linux;
@@ -99,6 +101,8 @@ fn main() -> Result<()> {
         Some("test-system-suite") => gates::test_system_suite(&sh),
         Some("test-e2e-suite") => gates::test_e2e_suite(&sh),
         Some("test-sandbox") => gates::test_sandbox(&sh),
+        Some("test-gke-profile") => test_gke::test_gke_profile(&sh),
+        Some("test-gke-adapter") => test_gke::test_gke_adapter(&sh),
         Some("clean-artifacts") => cleanup::clean_artifacts(&sh),
         Some("nuke-test-state") => cleanup::nuke_test_state(&sh),
         Some("cas-add") => {
@@ -182,6 +186,16 @@ fn main() -> Result<()> {
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
+        Some("docs-audit") => {
+            let strict = env::args().any(|a| a == "--strict");
+            let full = env::args().any(|a| a == "--full");
+            let mode = if full {
+                docs_audit::Mode::Full
+            } else {
+                docs_audit::Mode::Quick { strict }
+            };
+            docs_audit::run(&sh, root, mode)
+        }
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
             let adapter = args
@@ -343,6 +357,8 @@ fn main() -> Result<()> {
             eprintln!("  test-system-suite full-stack system tests (Linux, root, cgroups v2)");
             eprintln!("  test-e2e-suite   alias for test-system-suite (backward compat)");
             eprintln!("  test-sandbox     sandbox contract tests (Linux, root, Docker Hub)");
+            eprintln!("  test-gke-profile GKE profile unit tests (filter by 'gke' name)");
+            eprintln!("  test-gke-adapter GKE adapter integration tests");
             eprintln!("  clean-artifacts  remove non-critical build outputs");
             eprintln!("  nuke-test-state  kill orphans, unmount overlays, clean cgroups");
             eprintln!("  build-test-image cross-compile test binaries + assemble OCI tarball");
@@ -389,6 +405,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  update-feature-matrix-date  rewrite Last-updated stamp in docs/FEATURE_MATRIX.mbx.md to today"
+            );
+            eprintln!(
+                "  docs-audit [--full] [--strict]  audit docs/core/ facts vs code; --full adds freshness + coverage + JSON report"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(

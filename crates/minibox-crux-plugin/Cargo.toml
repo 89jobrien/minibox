@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Crux plugin binary exposing minibox container operations via JSON-RPC stdio"
 
+[lib]
+name = "minibox_crux_plugin"
+path = "src/lib.rs"
+
 [[bin]]
 name = "minibox-crux-plugin"
 path = "src/main.rs"

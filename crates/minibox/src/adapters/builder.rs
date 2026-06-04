@@ -11,14 +11,13 @@ use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
     BuildConfig, BuildContext, BuildProgress, CommitConfig, ContainerHooks, ContainerSpawnConfig,
-    DynContainerRuntime, DynFilesystemProvider, DynImageBuilder, DynRegistryRouter, ImageBuilder,
-    ImageMetadata,
+    DynContainerRuntime, DynFilesystemProvider, DynImageBuilder, DynProgressSink,
+    DynRegistryRouter, ImageBuilder, ImageMetadata, ProgressSink,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -101,7 +100,7 @@ struct RunStepContext<'a> {
 async fn execute_run_step(
     builder: &MiniboxImageBuilder,
     ctx: RunStepContext<'_>,
-    progress_tx: &mpsc::Sender<BuildProgress>,
+    progress_tx: &dyn ProgressSink<BuildProgress>,
     total: u32,
     config_tag: &str,
 ) -> Result<(Vec<PathBuf>, ImageMetadata)> {
@@ -240,7 +239,7 @@ async fn execute_run_step(
 #[cfg(unix)]
 async fn stream_run_output(
     reader_fd: std::os::fd::OwnedFd,
-    progress_tx: &mpsc::Sender<BuildProgress>,
+    progress_tx: &dyn ProgressSink<BuildProgress>,
     step_num: u32,
     total: u32,
 ) {
@@ -276,7 +275,7 @@ impl ImageBuilder for MiniboxImageBuilder {
         &self,
         context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: mpsc::Sender<BuildProgress>,
+        progress_tx: DynProgressSink<BuildProgress>,
     ) -> Result<ImageMetadata> {
         let dockerfile_path = context.directory.join(&context.dockerfile);
         let dockerfile_content = tokio::fs::read_to_string(&dockerfile_path)
@@ -363,7 +362,7 @@ impl ImageBuilder for MiniboxImageBuilder {
                         shell_or_exec,
                     };
                     let (new_stack, _step_meta) =
-                        execute_run_step(self, ctx, &progress_tx, total, &config.tag).await?;
+                        execute_run_step(self, ctx, &*progress_tx, total, &config.tag).await?;
                     layer_stack = new_stack;
                 }
 

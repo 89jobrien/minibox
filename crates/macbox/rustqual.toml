@@ -10,3 +10,8 @@ exclude_files = [
 
 [duplicates]
 detect_dead_code = false
+
+[complexity]
+# Test files excluded above; production .expect() on mutex/const parsing
+# is acceptable — no further suppression needed.
+detect_error_handling = true

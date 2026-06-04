@@ -19,6 +19,9 @@ detect_dead_code = false
 max_cognitive = 18
 max_cyclomatic = 11
 max_function_lines = 68
+# Mock and test files excluded above; remaining ERROR_HANDLING in production
+# code should be flagged.
+detect_error_handling = true
 
 [srp]
 max_parameters = 5

@@ -1322,7 +1322,7 @@ impl ImageBuilder for MockImageBuilder {
         &self,
         _context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+        progress_tx: crate::domain::DynProgressSink<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1427,7 +1427,7 @@ impl ImagePusher for MockImagePusher {
         &self,
         image_ref: &crate::image::reference::ImageRef,
         _credentials: &RegistryCredentials,
-        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+        progress_tx: Option<crate::domain::DynProgressSink<PushProgress>>,
     ) -> anyhow::Result<PushResult> {
         {
             let state = self.state.lock().expect("mock: poisoned lock");

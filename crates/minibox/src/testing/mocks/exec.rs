@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use minibox_core::domain::{AsAny, ContainerId, ExecHandle, ExecRuntime, ExecSpec};
+use minibox_core::domain::{
+    AsAny, ContainerId, DynProgressSink, ExecHandle, ExecRuntime, ExecSpec,
+};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::Sender;
 
 // ---------------------------------------------------------------------------
 // MockExecRuntime
@@ -87,7 +88,7 @@ impl ExecRuntime for MockExecRuntime {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        _tx: Sender<DaemonResponse>,
+        _tx: DynProgressSink<DaemonResponse>,
     ) -> Result<ExecHandle> {
         let mut state = self.state.lock().expect("mock: poisoned lock");
         state.call_count += 1;
@@ -137,7 +138,10 @@ mod tests {
             tty: false,
         };
 
-        let handle = mock.run_in_container(&id, spec.clone(), tx).await.unwrap();
+        let handle = mock
+            .run_in_container(&id, spec.clone(), Arc::new(tx))
+            .await
+            .unwrap();
         assert_eq!(mock.call_count(), 1);
         assert_eq!(mock.last_container_id().unwrap(), id);
         assert_eq!(mock.last_spec().unwrap().cmd, spec.cmd);
@@ -156,7 +160,11 @@ mod tests {
             tty: false,
         };
 
-        assert!(mock.run_in_container(&id, spec, tx).await.is_err());
+        assert!(
+            mock.run_in_container(&id, spec, Arc::new(tx))
+                .await
+                .is_err()
+        );
         assert_eq!(mock.call_count(), 1);
     }
 
@@ -171,7 +179,7 @@ mod tests {
             working_dir: None,
             tty: false,
         };
-        let _ = mock.run_in_container(&id, spec, tx).await;
+        let _ = mock.run_in_container(&id, spec, Arc::new(tx)).await;
         assert_eq!(mock.call_count(), 1);
     }
 }

@@ -29,6 +29,7 @@ pub fn init_tracing() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_macros::{unsafe_remove_var, unsafe_set_var};
 
     // Serialize env mutations across parallel test threads.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -36,8 +37,7 @@ mod tests {
     #[test]
     fn init_tracing_does_not_panic() {
         let _g = ENV_LOCK.lock().unwrap();
-        // SAFETY: serialised by ENV_LOCK; no concurrent env mutation.
-        unsafe { std::env::remove_var("MINIBOX_TRACE_LEVEL") };
+        unsafe_remove_var!("MINIBOX_TRACE_LEVEL");
         // Must not panic even when called multiple times.
         init_tracing();
         init_tracing();
@@ -46,18 +46,16 @@ mod tests {
     #[test]
     fn init_tracing_respects_env_var() {
         let _g = ENV_LOCK.lock().unwrap();
-        // SAFETY: serialised by ENV_LOCK; no concurrent env mutation.
-        unsafe { std::env::set_var("MINIBOX_TRACE_LEVEL", "debug") };
+        unsafe_set_var!("MINIBOX_TRACE_LEVEL", "debug");
         init_tracing();
-        unsafe { std::env::remove_var("MINIBOX_TRACE_LEVEL") };
+        unsafe_remove_var!("MINIBOX_TRACE_LEVEL");
     }
 
     #[test]
     fn init_tracing_falls_back_when_var_is_empty() {
         let _g = ENV_LOCK.lock().unwrap();
-        // SAFETY: serialised by ENV_LOCK; no concurrent env mutation.
-        unsafe { std::env::set_var("MINIBOX_TRACE_LEVEL", "") };
+        unsafe_set_var!("MINIBOX_TRACE_LEVEL", "");
         init_tracing();
-        unsafe { std::env::remove_var("MINIBOX_TRACE_LEVEL") };
+        unsafe_remove_var!("MINIBOX_TRACE_LEVEL");
     }
 }

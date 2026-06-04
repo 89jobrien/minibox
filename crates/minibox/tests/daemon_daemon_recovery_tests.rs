@@ -86,6 +86,7 @@ fn make_deps(temp_dir: &TempDir) -> Arc<minibox::daemon::handler::HandlerDepende
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
