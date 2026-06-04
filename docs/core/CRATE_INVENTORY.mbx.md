@@ -1,16 +1,4 @@
----
-watches:
-  - crates/*/Cargo.toml
-  - Cargo.toml
----
-
 # Crate Inventory
-
-> Generated 2026-04-28 from automated codebase analysis.
-> Updated 2026-05-05: added minibox-crux-plugin and minibox-testsuite; corrected version.
-> Updated 2026-05-06: date refresh; no structural changes.
-> Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
-> build-vm-image/run-vm/test-vm xtask commands removed.
 
 ## Summary
 
@@ -18,18 +6,20 @@ watches:
 | ------------------- | ---------- | ------ | ------------ | ----------------------- | ------------------------- |
 | minibox-core        | lib        | ~12.6k | 28           | 7 integration + inline  | test-utils, fuzzing       |
 | minibox             | lib        | ~21.5k | 71           | 36 integration + inline | test-utils, metrics, otel |
-| minibox-macros      | proc-macro | ~280   | 2            | 0                       | --                        |
+| minibox-macros      | proc-macro | ~175   | 9            | 1 integration           | --                        |
 | miniboxd            | bin+lib    | ~1.6k  | 4            | 7 integration + inline  | metrics, otel, tailnet    |
 | macbox              | lib        | ~3.6k  | 16           | 4                       | --                        |
+| smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
 | winbox              | lib        | ~280   | 5            | 0                       | --                        |
 | mbx                 | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests          |
-| minibox-crux-plugin | bin        | --     | --           | --                      | --                        |
-| minibox-testsuite   | bin        | --     | --           | --                      | --                        |
+| minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
+| minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
 | xtask               | bin        | ~5k    | 15           | 0                       | --                        |
 
-**Estimated total:** ~48k+ lines of Rust across 159+ source files. All crates at
-version 0.24.0 (xtask 0.1.0).
-<!-- fact:workspace_version=0.24.0 -->
+**Estimated total:** ~79k lines of Rust across 345 source files. All crates at
+version 0.30.0 (xtask 0.1.0).
+
+<!-- fact:workspace_version=0.30.0 -->
 
 ---
 
@@ -107,8 +97,20 @@ macOS daemon implementation.
 
 - **Colima**: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`,
   `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl
+
+---
+
+## smolbox
+
+smolvm and krun adapter implementations for macOS VM backends.
+
+**Backends:**
+
+- **smolvm**: `SmolVmRegistry`, `SmolVmRuntime`, `SmolVmFilesystem`,
+  `SmolVmLimiter` -- lightweight Linux VMs with subsecond boot
 - **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
-  libkrun micro-VMs (HVF on macOS, KVM on Linux)
+  libkrun micro-VMs (HVF on macOS, KVM on Linux); structs live in
+  `crates/smolbox/src/krun/`
 
 ---
 

@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: '20260529.040048'
+updated: 2026-06-04
 items:
 - id: test-in-vm
   doob_uuid: null
@@ -48,9 +48,7 @@ items:
 log:
 - date: '20260529.040048'
   summary: Removed all Python code and 4 dead scripts; fixed 14 docs/core/ files against code truth (smolbox, conformance crate name, version, vz, DoS limits); wired colima as Linux build VM; workspace tests pass (5 cli_e2e root-only failures expected)
-  commits:
-  - sha: a399f031
-    branch: develop
+  commits: []
   session: 7
 - date: '20260527.115757'
   summary: Resolved 12 TODOs — quick-win code fixes (#429)
