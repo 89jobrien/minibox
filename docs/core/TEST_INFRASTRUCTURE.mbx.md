@@ -51,8 +51,8 @@ and root-required tests add ~700 more.
 | Property tests (proptest)                    | ~46          | any         | no     | **no**      |
 | Borrow-reasoning fixtures                    | 11           | any         | no     | local       |
 | Security regression                          | ~19          | any         | no     | yes         |
-| Cgroup integration                           | 16           | Linux       | yes    | next/stable |
-| E2E daemon+CLI                               | 15           | Linux       | yes    | next/stable |
+| Cgroup integration                           | 16           | Linux       | yes    | next/staging |
+| E2E daemon+CLI                               | 15           | Linux       | yes    | next/staging |
 | Sandbox                                      | ~17          | Linux       | yes    | **no**      |
 | CLI subprocess                               | 30           | any         | no     | **no**      |
 | krun conformance                             | ~29          | macOS/Linux | no     | **no**      |
@@ -62,19 +62,21 @@ and root-required tests add ~700 more.
 
 ## CI Workflows
 
-8 workflows in `.github/workflows/`:
+11 workflows in `.github/workflows/`:
 
-| Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
-| --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                         |
-| `merge.yml`           | pushes to main/next/stable/feature/hotfix/chore  | lint+fmt, unit tests, protocol e2e (macOS + Linux); build-test-archive, test-archive, test-all-features, audit/deny/machete, e2e+integration (next/stable) |
-| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                            |
-| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                                  |
-| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                                                        |
-| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                                                     |
-| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                                                |
-| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                                                    |
-| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                                                 |
+| Workflow              | Trigger                                                    | Key jobs                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`              | PRs targeting main/next                                    | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                |
+| `merge.yml`           | pushes to develop/main/next/staging/feature/hotfix/chore   | detect-changes, lint, test-unit, lint-docs, protocol-drift, actionlint, protocol+CLI e2e (macOS+Ubuntu); audit/deny/machete, e2e+integration (next/staging) |
+| `macos.yml`           | pushes to main/next/staging/feature/hotfix/chore; PRs      | macOS fmt check                                                                                                                                   |
+| `reviewdog.yml`       | PRs targeting main/next                                    | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                   |
+| `stability-gates.yml` | all pushes + PRs                                           | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                        |
+| `conformance.yml`     | develop/next/staging + PRs + dispatch                      | `cargo xtask test-conformance` on self-hosted Linux                                                                                               |
+| `protocol-drift.yml`  | pushes touching protocol/domain/events/policy/client files | variant count + handler coverage check                                                                                                            |
+| `protocol-sites.yml`  | pushes touching main.rs/protocol_sites.rs                  | HandlerDependencies construction site count                                                                                                       |
+| `nightly.yml`         | daily cron                                                 | `cargo geiger` unsafe audit (informational)                                                                                                       |
+| `release.yml`         | `v*` tag                                                   | crates.io publish + musl cross-compile + GitHub release                                                                                           |
+| `summary.yml`         | issue opened                                               | AI-generated one-paragraph summary posted as issue comment                                                                                        |
 
 ---
 
