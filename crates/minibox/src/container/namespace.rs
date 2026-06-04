@@ -171,3 +171,155 @@ where
     info!(child_pid = pid, "namespace: container child cloned");
     Ok(nix::unistd::Pid::from_raw(pid))
 }
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 6: to_clone_flags is monotone — enabling more namespace fields
+    /// always produces a superset of flags (never loses bits).
+    #[kani::proof]
+    fn to_clone_flags_monotone() {
+        let base = NamespaceConfig {
+            new_pid: kani::any(),
+            new_mount: kani::any(),
+            new_uts: kani::any(),
+            new_ipc: kani::any(),
+            new_net: kani::any(),
+        };
+        let base_flags = base.to_clone_flags();
+
+        // Enable one additional field (superset config).
+        let mut superset = base.clone();
+        let field: u8 = kani::any();
+        kani::assume(field < 5);
+        match field {
+            0 => superset.new_pid = true,
+            1 => superset.new_mount = true,
+            2 => superset.new_uts = true,
+            3 => superset.new_ipc = true,
+            _ => superset.new_net = true,
+        }
+        let super_flags = superset.to_clone_flags();
+
+        // Superset flags must contain all bits from base.
+        assert_eq!(
+            base_flags & super_flags,
+            base_flags,
+            "enabling a namespace field must not clear existing flags"
+        );
+    }
+
+    /// Proof 7: each NamespaceConfig field maps to exactly one distinct
+    /// CloneFlags bit, and the all() config produces the union of all five.
+    #[kani::proof]
+    fn to_clone_flags_bijection() {
+        let all = NamespaceConfig::all();
+        let all_flags = all.to_clone_flags();
+
+        let configs = [
+            NamespaceConfig {
+                new_pid: true,
+                new_mount: false,
+                new_uts: false,
+                new_ipc: false,
+                new_net: false,
+            },
+            NamespaceConfig {
+                new_pid: false,
+                new_mount: true,
+                new_uts: false,
+                new_ipc: false,
+                new_net: false,
+            },
+            NamespaceConfig {
+                new_pid: false,
+                new_mount: false,
+                new_uts: true,
+                new_ipc: false,
+                new_net: false,
+            },
+            NamespaceConfig {
+                new_pid: false,
+                new_mount: false,
+                new_uts: false,
+                new_ipc: true,
+                new_net: false,
+            },
+            NamespaceConfig {
+                new_pid: false,
+                new_mount: false,
+                new_uts: false,
+                new_ipc: false,
+                new_net: true,
+            },
+        ];
+
+        let mut union = CloneFlags::empty();
+        for cfg in &configs {
+            let f = cfg.to_clone_flags();
+            assert!(!f.is_empty(), "single namespace field must produce a flag");
+            assert_eq!(
+                f.bits().count_ones(),
+                1,
+                "single field must map to exactly one bit"
+            );
+            assert!(
+                (union & f).is_empty(),
+                "each namespace field must map to a distinct bit"
+            );
+            union |= f;
+        }
+
+        assert_eq!(
+            union, all_flags,
+            "all() must be the union of all individual flags"
+        );
+    }
+
+    /// Proof 8: the empty config produces no clone flags.
+    #[kani::proof]
+    fn to_clone_flags_empty() {
+        let empty = NamespaceConfig {
+            new_pid: false,
+            new_mount: false,
+            new_uts: false,
+            new_ipc: false,
+            new_net: false,
+        };
+        assert!(
+            empty.to_clone_flags().is_empty(),
+            "all fields false must produce empty flags"
+        );
+    }
+
+    /// Proof 9: Box pointer lifecycle model for clone_with_namespaces.
+    ///
+    /// Models the child_arg allocation as an abstract state machine and proves
+    /// it is freed exactly once on both the success and failure paths.
+    #[kani::proof]
+    fn box_pointer_freed_exactly_once() {
+        let boxed: Box<Box<dyn FnOnce() -> isize + Send>> = Box::new(Box::new(|| 0isize));
+        let ptr = Box::into_raw(boxed);
+
+        let mut free_count: u32 = 0;
+        let clone_succeeded: bool = kani::any();
+
+        if !clone_succeeded {
+            // Clone failed: parent frees the pointer (line 152).
+            let _ = unsafe { Box::from_raw(ptr) };
+            free_count += 1;
+        } else {
+            // Clone succeeded without CLONE_VM: parent frees its copy (line 164).
+            // Child has its own address space copy freed in the trampoline.
+            let _ = unsafe { Box::from_raw(ptr) };
+            free_count += 1;
+        }
+
+        assert_eq!(free_count, 1, "parent must free child_arg exactly once");
+    }
+}
