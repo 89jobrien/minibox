@@ -65,33 +65,33 @@ steps:
     args:
       cmd: "cargo xtask lint-docs"
 
-  # --- Create or update promotion PRs ---
-  - step: pr_develop_to_next
+  # --- Direct merges for unprotected branches ---
+  - step: merge_develop_to_next
     handler: shell::exec
     args:
       cmd: |
-        existing=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
-        if [ -n "$existing" ]; then
-          echo "PR #$existing already open: develop -> next"
-        else
-          gh pr create --base next --head develop \
-            --title "Promote develop -> next" \
-            --body "Automated promotion. All local gates passed."
-        fi
+        git fetch origin next
+        git checkout next
+        git merge --ff-only develop
+        git push origin next
+        echo "pushed develop -> next"
 
-  - step: pr_next_to_staging
+  - step: merge_next_to_staging
     handler: shell::exec
     args:
       cmd: |
-        existing=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
-        if [ -n "$existing" ]; then
-          echo "PR #$existing already open: next -> staging"
-        else
-          gh pr create --base staging --head next \
-            --title "Promote next -> staging" \
-            --body "Automated promotion. All local gates passed."
-        fi
+        git fetch origin staging
+        git checkout staging
+        git merge --ff-only next
+        git push origin staging
+        echo "pushed next -> staging"
 
+  - step: return_to_develop
+    handler: shell::exec
+    args:
+      cmd: "git checkout develop"
+
+  # --- PR for protected main branch ---
   - step: pr_staging_to_main
     handler: shell::exec
     args:
@@ -108,4 +108,4 @@ steps:
   - step: done
     handler: ctrl::log
     args:
-      msg: "Promotion PRs created: develop->next, next->staging, staging->main"
+      msg: "Promotion complete: develop->next->staging pushed, staging->main PR created"
