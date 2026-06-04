@@ -53,7 +53,7 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
     borrow_fixtures::run(root)?;
 
     eprintln!("--- verify: docs lint ---");
-    docs_lint::lint_docs(root)?;
+    docs_lint::lint_docs(root, None)?;
 
     eprintln!("--- verify: docs audit (quick) ---");
     docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
@@ -138,7 +138,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
-    docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    docs_lint::lint_docs(&root, None).context("docs-lint failed")?;
     // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
     crate::feature_matrix_date::update_feature_matrix_date(&root)
         .context("update-feature-matrix-date failed")?;

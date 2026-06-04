@@ -248,6 +248,73 @@ pub enum Level {
     None,
 }
 
+// ── Generic diagnostic converter ────────────────────────────────────────
+
+/// A tool-agnostic diagnostic item. Any xtask linter can produce these,
+/// then call [`from_diagnostics`] to get a complete SARIF log.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    pub rule_id: String,
+    pub level: Level,
+    pub message: String,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+}
+
+/// Convert a flat list of diagnostics into a SARIF log.
+///
+/// Rules are auto-deduplicated from the `rule_id` values present in `items`.
+pub fn from_diagnostics(tool_name: &str, tool_version: &str, items: &[Diagnostic]) -> SarifLog {
+    let mut log = SarifLog::new(tool_name, tool_version);
+    let run = log.run_mut();
+
+    // Collect unique rule IDs in order of first appearance.
+    let mut rule_ids: Vec<String> = Vec::new();
+    for item in items {
+        if !rule_ids.contains(&item.rule_id) {
+            rule_ids.push(item.rule_id.clone());
+        }
+    }
+
+    for rule_id in &rule_ids {
+        let level = items
+            .iter()
+            .find(|d| d.rule_id == *rule_id)
+            .map(|d| d.level)
+            .unwrap_or(Level::Warning);
+        run.add_rule(ReportingDescriptor::new(rule_id, rule_id).with_level(level));
+    }
+
+    for item in items {
+        let rule_index = rule_ids.iter().position(|id| *id == item.rule_id);
+        let mut result = SarifResult::new(&item.rule_id, item.level, &item.message);
+        if let Some(idx) = rule_index {
+            result = result.with_rule_index(idx);
+        }
+        match (&item.file, item.line, item.column) {
+            (Some(file), Some(line), col) => {
+                result.locations.push(Location {
+                    physical_location: PhysicalLocation {
+                        artifact_location: ArtifactLocation { uri: file.clone() },
+                        region: Some(Region {
+                            start_line: line,
+                            start_column: col,
+                        }),
+                    },
+                });
+            }
+            (Some(file), None, _) => {
+                result = result.with_file(file);
+            }
+            _ => {}
+        }
+        run.add_result(result);
+    }
+
+    log
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -297,6 +364,66 @@ mod tests {
         assert_eq!(json, "\"error\"");
         let json = serde_json::to_string(&Level::Warning).unwrap();
         assert_eq!(json, "\"warning\"");
+    }
+
+    #[test]
+    fn from_diagnostics_deduplicates_rules() {
+        let items = vec![
+            Diagnostic {
+                rule_id: "lint/foo".into(),
+                level: Level::Warning,
+                message: "first".into(),
+                file: Some("a.rs".into()),
+                line: Some(10),
+                column: Some(5),
+            },
+            Diagnostic {
+                rule_id: "lint/foo".into(),
+                level: Level::Warning,
+                message: "second".into(),
+                file: Some("b.rs".into()),
+                line: None,
+                column: None,
+            },
+            Diagnostic {
+                rule_id: "lint/bar".into(),
+                level: Level::Error,
+                message: "third".into(),
+                file: None,
+                line: None,
+                column: None,
+            },
+        ];
+        let log = from_diagnostics("test", "0.1.0", &items);
+        let run = &log.runs[0];
+        assert_eq!(run.tool.driver.rules.len(), 2);
+        assert_eq!(run.results.len(), 3);
+        // First result has line+column
+        assert_eq!(run.results[0].locations.len(), 1);
+        let region = run.results[0].locations[0]
+            .physical_location
+            .region
+            .as_ref()
+            .expect("region");
+        assert_eq!(region.start_line, 10);
+        assert_eq!(region.start_column, Some(5));
+        // Second result has file but no line
+        assert!(
+            run.results[1].locations[0]
+                .physical_location
+                .region
+                .is_none()
+        );
+        // Third result has no location
+        assert!(run.results[2].locations.is_empty());
+    }
+
+    #[test]
+    fn from_diagnostics_empty_produces_valid_sarif() {
+        let log = from_diagnostics("empty-tool", "1.0.0", &[]);
+        let json = serde_json::to_string(&log).unwrap();
+        assert!(json.contains("\"version\":\"2.1.0\""));
+        assert!(json.contains("\"name\":\"empty-tool\""));
     }
 
     #[test]

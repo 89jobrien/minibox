@@ -58,6 +58,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask lint
         run: cargo xtask lint
+      - name: clippy SARIF
+        if: always()
+        run: cargo xtask clippy-sarif clippy.sarif
+      - name: upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: clippy.sarif
+          category: clippy
 
   test-unit:
     name: unit tests (ubuntu)
@@ -92,7 +101,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo xtask lint-docs
-        run: cargo xtask lint-docs
+        run: cargo xtask lint-docs --sarif lint-docs.sarif
+      - name: upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: lint-docs.sarif
+          category: lint-docs
 
   check-protocol-drift:
     name: check protocol drift
