@@ -231,6 +231,8 @@ jobs:
       - name: build daemon and CLI
         run: cargo build --release -p miniboxd -p mbx
       - name: run CLI e2e tests
+        env:
+          MINIBOX_ADAPTER: smolvm
         run: cargo test -p miniboxd --test cli_e2e_tests --release -- --test-threads=1
 
   ci-ok:

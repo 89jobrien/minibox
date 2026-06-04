@@ -10,7 +10,7 @@
     {
       "name": "domain-ports",
       "path": "crates/minibox-core/src/domain.rs",
-      "hash": "27e47b3173e38c8a1a5e6aee1aa463ae12d6e7a0886ff6471206863007c87c64"
+      "hash": "49562b13699ec64dd6539cceaa161b86453ba25bc449cf3bffe453b689ea46c4"
     },
     {
       "name": "domain-networking",
@@ -35,7 +35,7 @@
     {
       "name": "execution-policy",
       "path": "crates/minibox-core/src/domain/execution_policy.rs",
-      "hash": "36bf417eb4f1661b07cdcd4e80c3a9f3d4d4a358306a54f2d24f00e0301c52a0"
+      "hash": "d1af913337f1c7028943be0e9a596c7b864c2585c7528cc246f565c1e56fdde0"
     },
     {
       "name": "error-types",
