@@ -15,6 +15,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   CARGO_INCREMENTAL: 0
   MINIBOX_FAIL_FAST: ${{ inputs.fail_fast || false }}
@@ -63,7 +67,7 @@ jobs:
         run: cargo xtask clippy-sarif clippy.sarif
       - name: upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: clippy.sarif
           category: clippy
@@ -104,7 +108,7 @@ jobs:
         run: cargo xtask lint-docs --sarif lint-docs.sarif
       - name: upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: lint-docs.sarif
           category: lint-docs
@@ -126,7 +130,7 @@ jobs:
         run: cargo xtask check-protocol-drift --sarif protocol-drift.sarif
       - name: upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: protocol-drift.sarif
           category: protocol-drift
