@@ -350,16 +350,23 @@ impl GhcrRegistry {
 /// or starts with one followed by `/`.
 ///
 /// Example: `GHCR_ORG_ALLOWLIST=myorg,myorg/private-image`
+/// Pure matching kernel for GHCR org allowlist checks.
+///
+/// Returns `true` when `repo` exactly matches a list entry or starts with
+/// `entry/` (slash-bounded prefix). The slash boundary prevents `"org"` from
+/// matching `"orgmalicious/image"`.
+fn allowlist_permits(repo: &str, list: &str) -> bool {
+    list.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")))
+}
+
 fn check_ghcr_allowlist(repo: &str) -> Result<()> {
     let Ok(list) = std::env::var("GHCR_ORG_ALLOWLIST") else {
         return Ok(()); // no allowlist configured → allow all
     };
-    let permitted = list
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")));
-    if permitted {
+    if allowlist_permits(repo, &list) {
         Ok(())
     } else {
         anyhow::bail!(
@@ -1069,5 +1076,70 @@ mod tests {
             fn assert_impl<T: RegistryTransport>() {}
             assert_impl::<reqwest::Client>();
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 36: allowlist_permits requires a '/' boundary — a prefix "org"
+    /// must NOT match "orgmalicious/image". This is the critical security
+    /// invariant preventing org-squatting bypasses.
+    #[kani::proof]
+    fn allowlist_slash_boundary() {
+        // Pre-built repos avoid format! overhead in CBMC.
+        // "orgevil/image" must NOT match allowlist "org".
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("orgother/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+
+        // "org/image" MUST match allowlist "org".
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("myorg/image", "myorg"));
+        assert!(allowlist_permits("ab/image", "ab"));
+    }
+
+    /// Proof 37: allowlist_permits with exact match always returns true.
+    #[kani::proof]
+    #[kani::unwind(32)]
+    fn allowlist_exact_match() {
+        let repos: [&str; 3] = ["myorg", "other/image", "single"];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            allowlist_permits(repos[i], repos[i]),
+            "exact match must permit"
+        );
+    }
+
+    /// Proof 38: empty allowlist string permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_empty_permits_nothing() {
+        let repos: [&str; 3] = ["org/image", "anything", ""];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            !allowlist_permits(repos[i], ""),
+            "empty allowlist must deny all"
+        );
+    }
+
+    /// Proof 39: allowlist with only commas/whitespace permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_whitespace_only_permits_nothing() {
+        let lists: [&str; 3] = [",", " , , ", "  "];
+        let i: usize = kani::any();
+        kani::assume(i < lists.len());
+        assert!(
+            !allowlist_permits("org/image", lists[i]),
+            "whitespace-only allowlist must deny all"
+        );
     }
 }

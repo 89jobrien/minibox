@@ -109,6 +109,17 @@
 
 ## Recently completed
 
+- **Python code removal** — removed all 15 Python files + uv.lock from scripts/.
+  ai-review.nu now calls ai-review.rs (rust-script). Gitea CI diagnose job
+  removed. No Python remains in the project.
+- **Dead script cleanup** — removed gen-class-diagrams.py, install-claude-skills.sh,
+  demo-smolvm.sh, agent_hello_world.py (no callers found).
+- **14-doc audit and fix** — verified all 20 docs/core/ files against code.
+  Fixed 19 critical errors and 10 stale references across 14 docs:
+  smolbox crate visibility, minibox-conformance->minibox-testsuite rename,
+  version 0.24.0->0.30.0, vz adapter removal, DoS limit corrections,
+  select_adapter->adapter_from_env, stable->staging, minibox-cli->mbx,
+  SO_PEERCRED/handler file attributions.
 - **Rustqual SRP sweep** — RunParams extraction, named constants in miniboxd,
   dead code removal, duplicate dedup (lima_exec, lifecycle handlers),
   long function extraction across core+minibox+miniboxd (791e81a..dd3e9a6)

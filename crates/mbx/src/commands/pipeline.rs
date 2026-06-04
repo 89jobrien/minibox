@@ -171,7 +171,7 @@ mod tests {
         let (_tmp, socket_path) = setup(DaemonResponse::PipelineList {
             pipelines: vec![TraceSummary {
                 id: "trace-1".to_string(),
-                pipeline: "test.cruxx".to_string(),
+                pipeline: "test.crux".to_string(),
                 timestamp: "1700000000".to_string(),
                 exit_code: 0,
                 step_count: 3,
@@ -209,7 +209,7 @@ mod tests {
             },
         ])
         .await;
-        let result = execute_run("/tmp/test.cruxx".to_string(), None, None, &socket_path).await;
+        let result = execute_run("/tmp/test.crux".to_string(), None, None, &socket_path).await;
         assert!(result.is_ok(), "execute_run should succeed: {result:?}");
     }
 

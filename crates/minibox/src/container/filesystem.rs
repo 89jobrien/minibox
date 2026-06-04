@@ -921,3 +921,67 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+    use std::path::Path;
+
+    /// Proof 40: has_parent_dir_component detects ".." in any position of a
+    /// symbolic 3-segment path. Mirrors proof 2 in minibox-core/image/layer.rs
+    /// for this crate's local copy of the function.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn has_parent_dir_detects_dotdot() {
+        let segments: [&str; 5] = ["a", "b", "..", ".", "c"];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        let k: usize = kani::any();
+        kani::assume(i < segments.len());
+        kani::assume(j < segments.len());
+        kani::assume(k < segments.len());
+
+        let path_str = format!("{}/{}/{}", segments[i], segments[j], segments[k]);
+        let path = Path::new(&path_str);
+
+        let result = has_parent_dir_component(path);
+        let manual = path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir));
+
+        assert_eq!(
+            result, manual,
+            "has_parent_dir_component must match manual scan"
+        );
+    }
+
+    /// Proof 41: has_parent_dir_component is monotone — if a path has "..",
+    /// prepending or appending a segment cannot remove it.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn has_parent_dir_monotone() {
+        let segments: [&str; 4] = ["x", "..", "y", "z"];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        let extra: usize = kani::any();
+        kani::assume(i < segments.len());
+        kani::assume(j < segments.len());
+        kani::assume(extra < segments.len());
+
+        let base_str = format!("{}/{}", segments[i], segments[j]);
+        let extended_str = format!("{}/{}/{}", segments[i], segments[j], segments[extra]);
+        let base = Path::new(&base_str);
+        let extended = Path::new(&extended_str);
+
+        if has_parent_dir_component(base) {
+            assert!(
+                has_parent_dir_component(extended),
+                "appending a segment must not remove existing .."
+            );
+        }
+    }
+}

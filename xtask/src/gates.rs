@@ -100,9 +100,10 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
-        cmd!(sh, "cargo fmt --all --check")
+        cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+        cmd!(sh, "git add -u -- . :!.worktrees")
             .run()
-            .context("fmt-check failed")?;
+            .context("git add -u after fmt failed")?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"

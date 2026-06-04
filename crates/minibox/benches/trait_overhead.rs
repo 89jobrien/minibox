@@ -18,6 +18,7 @@ use minibox_core::domain::{
     ResourceConfig, ResourceLimiter, RootfsSetup,
 };
 use minibox_core::events::NoopEventSink;
+use minibox_core::path::InternalPath;
 use minibox_core::protocol::DaemonResponse;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -90,12 +91,12 @@ fn bench_runtime_direct_call(c: &mut Criterion) {
         let runtime = MockRuntime::new();
         let rt = Runtime::new().unwrap();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: InternalPath::from("/rootfs"),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: InternalPath::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -113,12 +114,12 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
         let runtime: Arc<dyn ContainerRuntime> = Arc::new(MockRuntime::new());
         let rt = Runtime::new().unwrap();
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: InternalPath::from("/rootfs"),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: InternalPath::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,

@@ -1,10 +1,3 @@
----
-watches:
-  - crates/minibox/src/daemon/server.rs
-  - crates/minibox-core/src/image/
-  - crates/minibox/src/container/
----
-
 # Security Invariants
 
 This document maps each critical security invariant to the code path that enforces it and
@@ -158,7 +151,8 @@ processing occurs.
 - `crates/minibox/src/daemon/server.rs` — `is_authorized(creds, require_root_auth)` is the
   single authorisation predicate.
 - `PeerCreds` is populated from `SO_PEERCRED` on the accepted socket.
-- Socket file is created with mode `0600` (owner-only read/write).
+- Socket file is created with mode `0600` (owner-only read/write) in
+  `crates/miniboxd/src/main.rs`.
 - Client UID and PID are logged on every connection for audit.
 
 **Behaviour table:**
@@ -279,20 +273,20 @@ the same file.)_
 Every invariant below has at least one test that passes **only** because the
 guard is present. Removing or weakening the guard causes the test to fail.
 
-| #   | Invariant                    | Guard location                                                                                                | Mutation audit test(s)                                                                                                                                                 | Crate                 |
-| --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| 1   | Zip Slip / path traversal    | `minibox-core/.../layer.rs` `validate_tar_entry_path`                                                         | `regression_zip_slip_dotdot_prefix_is_rejected`, `regression_zip_slip_dotdot_in_middle_is_rejected`, `mutation_audit_zip_slip_guard_exists`                            | minibox               |
-| 2   | Device node rejection        | `minibox-core/.../layer.rs` entry type check                                                                  | `regression_block_device_node_is_rejected`, `regression_char_device_node_is_rejected`, `mutation_audit_device_node_rejection_exists`                                   | minibox               |
-| 3   | Absolute symlink rewrite     | `minibox-core/.../layer.rs` `relative_path` + `has_parent_dir_component`                                      | `regression_absolute_symlink_with_traversal_is_rejected`, `regression_busybox_applet_symlink_is_rewritten_not_rejected`, `mutation_audit_symlink_rewrite_guard_exists` | minibox               |
-| 4   | Setuid/setgid stripping      | `minibox-core/.../layer.rs` `mode & 0o777`                                                                    | `regression_setuid_bits_stripped_on_extraction`, `mutation_audit_setuid_strip_guard_exists`                                                                            | minibox               |
-| 5   | FD-leak prevention           | `minibox/.../process.rs` `close_extra_fds`                                                                    | `regression_close_extra_fds_uses_close_range_syscall`                                                                                                                  | minibox               |
-| 6   | execve not execvp            | `minibox/.../process.rs` `child_init`                                                                         | `regression_child_init_uses_execve_not_execvp`, `regression_envp_built_from_config_env_only`                                                                           | minibox               |
-| 7   | SO_PEERCRED auth             | `minibox/.../server.rs` `is_authorized`                                                                       | `root_uid_accepted_when_root_required`, `non_root_uid_rejected_when_root_required`, +5 more, `mutation_audit_peercred_guard_called_in_handler`                         | minibox               |
-| 8   | Tar root entry skip          | `minibox-core/.../layer.rs` `"."` / `"./"` check                                                              | `regression_root_dot_entries_are_silently_skipped`                                                                                                                     | minibox               |
-| 9   | FIFO non-crash               | `minibox-core/.../layer.rs` fallthrough to `unpack_in`                                                        | `regression_fifo_entry_does_not_crash`                                                                                                                                 | minibox               |
-| 10  | Request size limit           | `minibox/.../server.rs` `MAX_REQUEST_SIZE` + `bounded_read_line`                                              | `mutation_audit_request_size_limit_exists`, `test_handle_connection_oversized_request`                                                                                 | minibox               |
-| 11  | Image pull limits            | `minibox-core/.../registry.rs` `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, `MAX_TOTAL_IMAGE_SIZE`, `LimitedStream` | `mutation_audit_image_pull_size_limits_exist`, `test_constants_*`, `get_manifest_errors_when_content_length_exceeds_limit`                                             | minibox, minibox-core |
-| 12  | Execution manifest integrity | `minibox-core/.../execution_manifest.rs` `seal()`, SHA-256 env hashing                                        | `mutation_audit_execution_manifest_env_hashing`, `env_var_value_is_never_plaintext`, `seal_sets_workload_digest`                                                       | minibox, minibox-core |
+| #   | Invariant                    | Guard location                                                                                                       | Mutation audit test(s)                                                                                                                                                 | Crate                 |
+| --- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| 1   | Zip Slip / path traversal    | `minibox-core/.../layer.rs` `validate_tar_entry_path`                                                                | `regression_zip_slip_dotdot_prefix_is_rejected`, `regression_zip_slip_dotdot_in_middle_is_rejected`, `mutation_audit_zip_slip_guard_exists`                            | minibox               |
+| 2   | Device node rejection        | `minibox-core/.../layer.rs` entry type check                                                                         | `regression_block_device_node_is_rejected`, `regression_char_device_node_is_rejected`, `mutation_audit_device_node_rejection_exists`                                   | minibox               |
+| 3   | Absolute symlink rewrite     | `minibox-core/.../layer.rs` `relative_path` + `has_parent_dir_component`                                             | `regression_absolute_symlink_with_traversal_is_rejected`, `regression_busybox_applet_symlink_is_rewritten_not_rejected`, `mutation_audit_symlink_rewrite_guard_exists` | minibox               |
+| 4   | Setuid/setgid stripping      | `minibox-core/.../layer.rs` `mode & 0o777`                                                                           | `regression_setuid_bits_stripped_on_extraction`, `mutation_audit_setuid_strip_guard_exists`                                                                            | minibox               |
+| 5   | FD-leak prevention           | `minibox/.../process.rs` `close_extra_fds`                                                                           | `regression_close_extra_fds_uses_close_range_syscall`                                                                                                                  | minibox               |
+| 6   | execve not execvp            | `minibox/.../process.rs` `child_init`                                                                                | `regression_child_init_uses_execve_not_execvp`, `regression_envp_built_from_config_env_only`                                                                           | minibox               |
+| 7   | SO_PEERCRED auth             | `minibox/.../server.rs` `is_authorized`                                                                              | `root_uid_accepted_when_root_required`, `non_root_uid_rejected_when_root_required`, +5 more, `mutation_audit_peercred_guard_called_in_handler`                         | minibox               |
+| 8   | Tar root entry skip          | `minibox-core/.../layer.rs` `"."` / `"./"` check                                                                     | `regression_root_dot_entries_are_silently_skipped`                                                                                                                     | minibox               |
+| 9   | FIFO non-crash               | `minibox-core/.../layer.rs` fallthrough to `unpack_in`                                                               | `regression_fifo_entry_does_not_crash`                                                                                                                                 | minibox               |
+| 10  | Request size limit           | `minibox/.../server.rs` `MAX_REQUEST_SIZE` + `bounded_read_line`                                                     | `mutation_audit_request_size_limit_exists`, `test_handle_connection_oversized_request`                                                                                 | minibox               |
+| 11  | Image pull limits            | `minibox-core/.../registry.rs` `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, `MAX_TOTAL_IMAGE_SIZE`, `LimitedStream`        | `mutation_audit_image_pull_size_limits_exist`, `test_constants_*`, `get_manifest_errors_when_content_length_exceeds_limit`                                             | minibox, minibox-core |
+| 12  | Execution manifest integrity | `minibox-core/.../execution_manifest.rs` `seal()`, SHA-256 env hashing; `minibox/.../handler/run.rs` `prepare_run()` | `mutation_audit_execution_manifest_env_hashing`, `env_var_value_is_never_plaintext`, `seal_sets_workload_digest`                                                       | minibox, minibox-core |
 
 Last audited: 2026-05-21 (issue #368)
 
@@ -325,7 +319,7 @@ variable values are stored as SHA-256 digests, never plaintext.
 
 - `crates/minibox-core/src/domain/execution_manifest.rs` — manifest types,
   digest computation, `seal()`.
-- `crates/minibox/src/daemon/handler.rs` — `prepare_run()` builds and persists
+- `crates/minibox/src/daemon/handler/run.rs` — `prepare_run()` builds and persists
   the manifest before returning.
 
 **Regression tests:**
