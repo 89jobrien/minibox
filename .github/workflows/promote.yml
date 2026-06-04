@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Print plan without executing merges"
+        description: "Print plan without executing"
         type: boolean
         default: false
 
 permissions:
-  contents: write
+  contents: read
+  pull-requests: write
 
 concurrency:
   group: promote
@@ -26,7 +27,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -39,13 +39,10 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: configure git
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: run promote pipeline
         if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: crux run .crux/promote.crux
 
       - name: dry run

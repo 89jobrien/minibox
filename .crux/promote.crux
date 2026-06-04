@@ -2,8 +2,9 @@ pipeline: minibox_promote
 # Cascade promotion through the stability pipeline:
 # develop -> next -> staging -> main.
 #
-# Mirrors `cargo xtask promote` — runs tiered quality gates, then
-# fast-forward merges and pushes each branch in sequence.
+# Runs tiered quality gates, then creates PRs for each hop.
+# Protected branches require PRs with passing status checks,
+# so direct merge+push is not possible.
 #
 # Tier gates:
 #   dev     : lint, test-unit
@@ -12,7 +13,7 @@ pipeline: minibox_promote
 #   main    : check-no-unwrap, check-protocol-drift, lint-docs
 #
 # Run: crux run .crux/promote.crux
-budget: { calls: 24 }
+budget: { calls: 20 }
 
 steps:
   # --- Dev tier gates ---
@@ -64,46 +65,47 @@ steps:
     args:
       cmd: "cargo xtask lint-docs"
 
-  # --- Cascade merge: develop -> next -> staging -> main ---
-  - step: merge_develop_to_next
+  # --- Create or update promotion PRs ---
+  - step: pr_develop_to_next
     handler: shell::exec
     args:
-      cmd: >-
-        git checkout next &&
-        git merge --ff-only develop &&
-        echo "merged develop -> next"
+      cmd: |
+        existing=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
+        if [ -n "$existing" ]; then
+          echo "PR #$existing already open: develop -> next"
+        else
+          gh pr create --base next --head develop \
+            --title "Promote develop -> next" \
+            --body "Automated promotion. All local gates passed."
+        fi
 
-  - step: merge_next_to_staging
+  - step: pr_next_to_staging
     handler: shell::exec
     args:
-      cmd: >-
-        git checkout staging &&
-        git merge --ff-only next &&
-        echo "merged next -> staging"
+      cmd: |
+        existing=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+        if [ -n "$existing" ]; then
+          echo "PR #$existing already open: next -> staging"
+        else
+          gh pr create --base staging --head next \
+            --title "Promote next -> staging" \
+            --body "Automated promotion. All local gates passed."
+        fi
 
-  - step: merge_staging_to_main
+  - step: pr_staging_to_main
     handler: shell::exec
     args:
-      cmd: >-
-        git checkout main &&
-        git merge --ff-only staging &&
-        echo "merged staging -> main"
-
-  # --- Push all target branches ---
-  - step: push_branches
-    handler: shell::exec
-    args:
-      cmd: >-
-        git push origin next staging main &&
-        echo "pushed next, staging, main"
-
-  # --- Return to develop ---
-  - step: return_to_develop
-    handler: shell::exec
-    args:
-      cmd: "git checkout develop"
+      cmd: |
+        existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+        if [ -n "$existing" ]; then
+          echo "PR #$existing already open: staging -> main"
+        else
+          gh pr create --base main --head staging \
+            --title "Promote staging -> main" \
+            --body "Automated promotion. All local gates passed."
+        fi
 
   - step: done
     handler: ctrl::log
     args:
-      msg: "Promotion complete: develop -> next -> staging -> main"
+      msg: "Promotion PRs created: develop->next, next->staging, staging->main"
