@@ -46,7 +46,7 @@ pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) 
             .to_string()
     };
 
-    let openai_model = if prod { "gpt-5.4-mini" } else { "gpt-4.1-mini" };
+    let openai_model = if prod { "gpt-5.3" } else { "gpt-4o" };
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let env_file = format!("--env-file={home}/dev/.env");
 

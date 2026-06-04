@@ -1,19 +1,13 @@
----
-watches:
-  - crates/miniboxd/src/adapter_registry.rs
-  - crates/minibox/src/adapters/
-  - crates/macbox/src/
----
-
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-28
+Last updated: 2026-06-04
 
 ---
 
 ## Adapter Suites
+
 <!-- fact:adapter_suites=colima,gke,krun,native,smolvm -->
 
 | Adapter  | Platform             | Status       | Crate   | Default?            |
@@ -21,8 +15,8 @@ Last updated: 2026-05-28
 | `native` | Linux (x86_64/arm64) | Production   | minibox | Fallback on Linux   |
 | `gke`    | Linux (GKE pods)     | Production   | minibox | --                  |
 | `colima` | macOS/Linux (Colima) | Experimental | minibox | --                  |
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (all platforms) |
-| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback on macOS   |
+| `smolvm` | macOS/Linux (SmolVM) | Experimental | smolbox | Yes (all platforms) |
+| `krun`   | macOS/Linux (krun)   | Experimental | smolbox | Fallback on macOS   |
 | `winbox` | Windows              | Stub         | winbox  | --                  |
 
 ---
@@ -149,7 +143,7 @@ Key implementation sites backing the "Yes" entries above:
   `MiniboxImageBuilder`.
 - **`smolvm` adapter** is the **default** when `MINIBOX_ADAPTER`
   is unset and the `smolvm` binary is present on PATH
-  (see `crates/miniboxd/src/main.rs:select_adapter`). Falls back
+  (see `crates/miniboxd/src/adapter_registry.rs:adapter_from_env`). Falls back
   to `native` on Linux or `krun` on macOS when the binary is
   absent. Lightweight Linux VMs with subsecond boot
   (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
@@ -166,7 +160,7 @@ Key implementation sites backing the "Yes" entries above:
   `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
   exported, but is not registered in `AdapterSuite` or wired into
   the daemon. Not included in the matrix above.
-    <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
+      <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
 - **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
   server, HCS/WSL2 wiring) has not started.
 - **Execution integrity** is implemented at the daemon handler

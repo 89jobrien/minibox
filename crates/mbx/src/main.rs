@@ -389,7 +389,7 @@ enum PipelineCommands {
         /// Optional JSON input to the pipeline.
         #[arg(long)]
         input: Option<String>,
-        /// Container image to use (default: cruxx-runtime:latest).
+        /// Container image to use (default: crux-runtime:latest).
         #[arg(long)]
         image: Option<String>,
     },

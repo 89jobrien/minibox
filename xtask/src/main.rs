@@ -20,6 +20,7 @@ mod cas;
 mod cgroup_tests;
 mod ci_watch;
 mod cleanup;
+mod clippy_sarif;
 mod collect_metrics;
 mod context;
 mod council;
@@ -35,6 +36,7 @@ mod preflight;
 mod promote;
 mod protocol_drift;
 mod protocol_sites;
+mod sarif;
 mod setup_test_vm;
 mod stale_names;
 mod test_gke;
@@ -185,7 +187,21 @@ fn main() -> Result<()> {
             )
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
-        Some("lint-docs") => docs_lint::lint_docs(root),
+        Some("clippy-sarif") => {
+            let sarif_path = env::args()
+                .nth(2)
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("clippy.sarif"));
+            clippy_sarif::run(&sarif_path)
+        }
+        Some("lint-docs") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let sarif_path = args
+                .windows(2)
+                .find(|w| w[0] == "--sarif")
+                .map(|w| std::path::PathBuf::from(&w[1]));
+            docs_lint::lint_docs(root, sarif_path.as_deref())
+        }
         Some("docs-audit") => {
             let strict = env::args().any(|a| a == "--strict");
             let full = env::args().any(|a| a == "--full");
@@ -231,13 +247,21 @@ fn main() -> Result<()> {
             let update = args.iter().any(|a| a == "--update");
             let warn_only = args.iter().any(|a| a == "--warn-only");
             let hook = args.iter().any(|a| a == "--hook");
-            if args
-                .iter()
-                .any(|a| a != "--update" && a != "--warn-only" && a != "--hook")
-            {
-                bail!("usage: cargo xtask check-protocol-drift [--update] [--warn-only] [--hook]");
+            let sarif_path = args
+                .windows(2)
+                .find(|w| w[0] == "--sarif")
+                .map(|w| std::path::PathBuf::from(&w[1]));
+            let known_flags = ["--update", "--warn-only", "--hook", "--sarif"];
+            if args.iter().any(|a| {
+                a.starts_with("--")
+                    && !known_flags.contains(&a.as_str())
+                    && !args.windows(2).any(|w| w[0] == "--sarif" && w[1] == *a)
+            }) {
+                bail!(
+                    "usage: cargo xtask check-protocol-drift [--update] [--warn-only] [--hook] [--sarif <path>]"
+                );
             }
-            protocol_drift::run(root, update, warn_only, hook)
+            protocol_drift::run(root, update, warn_only, hook, sarif_path.as_deref())
         }
         Some("check-protocol-sites") => {
             let file = env::args()
@@ -390,7 +414,10 @@ fn main() -> Result<()> {
                 "  check-no-unwrap [--strict]  scan production code for .unwrap() (advisory by default)"
             );
             eprintln!(
-                "  lint-docs        validate frontmatter + status values in docs/superpowers/"
+                "  clippy-sarif [<path>]  run clippy and write SARIF output (default: clippy.sarif)"
+            );
+            eprintln!(
+                "  lint-docs [--sarif <path>]  validate frontmatter + status values in docs/superpowers/"
             );
             eprintln!(
                 "  demo [--adapter <name>]  pull alpine:latest + run echo via mbx (default adapter: smolvm)"
@@ -411,7 +438,7 @@ fn main() -> Result<()> {
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(
-                "  check-protocol-drift [--update] [--warn-only] [--hook]  verify core contract hashes"
+                "  check-protocol-drift [--update] [--warn-only] [--hook] [--sarif <path>]  verify core contract hashes"
             );
             eprintln!(
                 "  collect-metrics [--save]  aggregate crate count, test count, source lines, feature matrix date (JSON)"

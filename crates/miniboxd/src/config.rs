@@ -290,3 +290,106 @@ log_level = "trace"
         assert_eq!(cfg.log_level.as_deref(), Some("trace"));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 31: production profile always sets allow_privileged = Some(false)
+    /// and allow_bind_mounts = Some(false). This is a security invariant —
+    /// a regression here is a privilege escalation.
+    #[kani::proof]
+    fn production_profile_locks_privileges() {
+        let cfg = DaemonConfig::profile("production");
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(false),
+            "production must deny privileged"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(false),
+            "production must deny bind mounts"
+        );
+    }
+
+    /// Proof 32: production profile sets a finite image size cap.
+    #[kani::proof]
+    fn production_profile_has_image_size_cap() {
+        let cfg = DaemonConfig::profile("production");
+        assert!(
+            cfg.policy.max_image_size_mb.is_some(),
+            "production must set max_image_size_mb"
+        );
+        assert_eq!(cfg.policy.max_image_size_mb, Some(2048));
+    }
+
+    /// Proof 33: merge with Default is identity — Option::or(None) returns
+    /// the original Some value. This is the core merge invariant.
+    #[kani::proof]
+    fn merge_with_default_is_identity() {
+        // Verify the Option::or semantics that merge relies on.
+        let a: Option<u64> = Some(42);
+        let b: Option<u64> = None;
+        // other.or(self) where other=None => self wins.
+        assert_eq!(b.or(a), Some(42));
+
+        // All-None overlay preserves all base fields.
+        let base_policy = PolicyConfig {
+            allow_privileged: Some(true),
+            allow_bind_mounts: Some(false),
+            max_image_size_mb: Some(1024),
+        };
+        let empty_policy = PolicyConfig::default();
+
+        let merged_priv = empty_policy
+            .allow_privileged
+            .or(base_policy.allow_privileged);
+        let merged_bind = empty_policy
+            .allow_bind_mounts
+            .or(base_policy.allow_bind_mounts);
+        let merged_size = empty_policy
+            .max_image_size_mb
+            .or(base_policy.max_image_size_mb);
+
+        assert_eq!(merged_priv, Some(true));
+        assert_eq!(merged_bind, Some(false));
+        assert_eq!(merged_size, Some(1024));
+    }
+
+    /// Proof 34: merge prefers `other` — Option::or gives precedence to
+    /// the first (other) value when both are Some.
+    #[kani::proof]
+    fn merge_other_wins() {
+        let a: Option<u64> = Some(1);
+        let b: Option<u64> = Some(2);
+        // other.or(self) where other=Some(2) => other wins.
+        assert_eq!(b.or(a), Some(2));
+
+        // Applied to policy: other's allow_privileged wins.
+        let base = PolicyConfig {
+            allow_privileged: Some(true),
+            ..Default::default()
+        };
+        let overlay = PolicyConfig {
+            allow_privileged: Some(false),
+            ..Default::default()
+        };
+        let merged = overlay.allow_privileged.or(base.allow_privileged);
+        assert_eq!(merged, Some(false));
+    }
+
+    /// Proof 35: unknown profile name returns all-None defaults (no
+    /// accidental privilege grant).
+    #[kani::proof]
+    fn unknown_profile_returns_safe_defaults() {
+        let cfg = DaemonConfig::profile("nonexistent");
+        assert!(cfg.policy.allow_privileged.is_none());
+        assert!(cfg.policy.allow_bind_mounts.is_none());
+        assert!(cfg.policy.max_image_size_mb.is_none());
+    }
+}

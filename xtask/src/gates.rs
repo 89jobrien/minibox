@@ -53,7 +53,7 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
     borrow_fixtures::run(root)?;
 
     eprintln!("--- verify: docs lint ---");
-    docs_lint::lint_docs(root)?;
+    docs_lint::lint_docs(root, None)?;
 
     eprintln!("--- verify: docs audit (quick) ---");
     docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
@@ -100,9 +100,10 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
-        cmd!(sh, "cargo fmt --all --check")
+        cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
+        cmd!(sh, "git add -u -- . :!.worktrees")
             .run()
-            .context("fmt-check failed")?;
+            .context("git add -u after fmt failed")?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
@@ -137,7 +138,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
-    docs_lint::lint_docs(&root).context("docs-lint failed")?;
+    docs_lint::lint_docs(&root, None).context("docs-lint failed")?;
     // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
     crate::feature_matrix_date::update_feature_matrix_date(&root)
         .context("update-feature-matrix-date failed")?;

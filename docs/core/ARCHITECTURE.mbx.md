@@ -1,10 +1,10 @@
 ---
 watches:
-  - crates/*/Cargo.toml
-  - crates/miniboxd/src/adapter_registry.rs
-  - crates/minibox-core/src/domain.rs
-  - crates/minibox-core/src/domain/*.rs
-  - crates/minibox-core/src/protocol.rs
+    - crates/*/Cargo.toml
+    - crates/miniboxd/src/adapter_registry.rs
+    - crates/minibox-core/src/domain.rs
+    - crates/minibox-core/src/domain/*.rs
+    - crates/minibox-core/src/protocol.rs
 ---
 
 # Minibox Architecture Reference
@@ -22,6 +22,7 @@ watches:
 ## Workspace Overview
 
 10 crates, Rust 2024 edition, workspace version 0.30.0.
+
 <!-- fact:crate_count=10 -->
 <!-- fact:workspace_version=0.30.0 -->
 
@@ -33,6 +34,8 @@ minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain trait
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
     ^     ^
 macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
+    ^
+smolbox                 (macOS VM backend) — smolvm adapter; default macOS runtime
     ^          ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
@@ -122,7 +125,7 @@ broker — an inconsistency vs native/gke/smolvm.
 
 All `build_*_handler_dependencies` functions live in
 `crates/miniboxd/src/main.rs`. Adapter selection logic is in
-`crates/miniboxd/src/main.rs:select_adapter`.
+`crates/miniboxd/src/adapter_registry.rs:adapter_from_env`.
 
 | Suite                         | Wired in miniboxd                   | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ----------------------------------- | ----------------------- | ------------ |
@@ -298,4 +301,4 @@ See `docs/STATE_MODEL.mbx.md` for full detail.
 | [`docs/TEST_INFRASTRUCTURE.mbx.md`](TEST_INFRASTRUCTURE.mbx.md)   | Test categories, CI coverage, xtask commands  |
 | [`docs/STATE_MODEL.mbx.md`](STATE_MODEL.mbx.md)                   | Daemon persistence model and state machine    |
 | [`docs/SECURITY_INVARIANTS.mbx.md`](SECURITY_INVARIANTS.mbx.md)   | Security rules to preserve across changes     |
-| [`docs/verifiable-execution.mbx.md`](verifiable-execution.mbx.md) | Execution manifest format, attestation path   |
+| `docs/verifiable-execution.mbx.md` | Execution manifest format, attestation path (file removed — see Execution Manifest section above) |

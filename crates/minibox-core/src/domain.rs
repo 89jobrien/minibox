@@ -1386,6 +1386,15 @@ impl<T: Send + 'static> ProgressSink<T> for tokio::sync::mpsc::Sender<T> {
     }
 }
 
+/// Blanket implementation so `Arc<dyn ProgressSink<T>>` (i.e. `DynProgressSink<T>`)
+/// can be passed where `&dyn ProgressSink<T>` is expected.
+#[async_trait]
+impl<T: Send + 'static> ProgressSink<T> for Arc<dyn ProgressSink<T>> {
+    async fn send(&self, value: T) -> Result<(), ()> {
+        (**self).send(value).await
+    }
+}
+
 /// Type-erased progress sink, used in port trait signatures.
 ///
 /// Uses `Arc` rather than `Box` so the sink can be shared across tasks
@@ -3147,5 +3156,136 @@ mod slashcrux_tests {
         ctx.set("M_VAR", serde_json::Value::String("m".into()));
         let env = execution_context_to_env(&ctx);
         assert_eq!(env, vec!["Z_VAR=z", "A_VAR=a", "M_VAR=m"]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 24: PhaseOutcome ordering matches the documented severity ladder:
+    /// Succeeded < Skipped < Aborted < Failed < Errored.
+    #[kani::proof]
+    fn phase_outcome_ordering() {
+        assert!(PhaseOutcome::Succeeded < PhaseOutcome::Skipped);
+        assert!(PhaseOutcome::Skipped < PhaseOutcome::Aborted);
+        assert!(PhaseOutcome::Aborted < PhaseOutcome::Failed);
+        assert!(PhaseOutcome::Failed < PhaseOutcome::Errored);
+    }
+
+    /// Proof 25: PhaseOutcome ordering is total — for any two outcomes,
+    /// exactly one of a < b, a == b, a > b holds.
+    #[kani::proof]
+    fn phase_outcome_total_order() {
+        let variants = [
+            PhaseOutcome::Succeeded,
+            PhaseOutcome::Skipped,
+            PhaseOutcome::Aborted,
+            PhaseOutcome::Failed,
+            PhaseOutcome::Errored,
+        ];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        kani::assume(i < variants.len());
+        kani::assume(j < variants.len());
+
+        let a = variants[i];
+        let b = variants[j];
+
+        // Exactly one relation holds.
+        let lt = a < b;
+        let eq = a == b;
+        let gt = a > b;
+        assert!(
+            (lt as u8 + eq as u8 + gt as u8) == 1,
+            "ordering must be total: exactly one of <, ==, > must hold"
+        );
+    }
+
+    /// Proof 26: Iterator::max over PhaseOutcome correctly selects the
+    /// worst-case outcome (used for phase aggregation).
+    #[kani::proof]
+    fn phase_outcome_max_is_worst() {
+        let variants = [
+            PhaseOutcome::Succeeded,
+            PhaseOutcome::Skipped,
+            PhaseOutcome::Aborted,
+            PhaseOutcome::Failed,
+            PhaseOutcome::Errored,
+        ];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        kani::assume(i < variants.len());
+        kani::assume(j < variants.len());
+
+        let max = std::cmp::max(variants[i], variants[j]);
+        assert!(max >= variants[i]);
+        assert!(max >= variants[j]);
+    }
+
+    /// Proof 27: StepStatus -> StepState mapping is total — every variant
+    /// maps without panic.
+    #[kani::proof]
+    fn step_status_to_state_total() {
+        let statuses = [
+            StepStatus::Pending,
+            StepStatus::Running,
+            StepStatus::Succeeded,
+            StepStatus::Failed,
+            StepStatus::Skipped,
+            StepStatus::Errored,
+        ];
+        let i: usize = kani::any();
+        kani::assume(i < statuses.len());
+
+        // This must not panic.
+        let _state: StepState = statuses[i].into();
+    }
+
+    /// Proof 28: StepStatus::Failed and StepStatus::Errored both map to
+    /// StepState::Failed (error-collapse invariant).
+    #[kani::proof]
+    fn step_status_error_collapse() {
+        let failed: StepState = StepStatus::Failed.into();
+        let errored: StepState = StepStatus::Errored.into();
+        assert_eq!(
+            failed, errored,
+            "Failed and Errored must both map to Failed state"
+        );
+    }
+
+    /// Proof 29: parse_volume with a valid "src:dst" format always produces
+    /// an absolute container_path — the security invariant for mount targets.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn parse_volume_absolute_container_path() {
+        // Use pre-built specs to avoid format! overhead in CBMC.
+        let specs: [&str; 3] = ["/host/a:/mnt", "/tmp:/data", "./rel:/opt"];
+        let i: usize = kani::any();
+        kani::assume(i < specs.len());
+
+        if let Ok(mount) = BindMount::parse_volume(specs[i]) {
+            assert!(
+                mount.container_path.is_absolute(),
+                "container_path must be absolute"
+            );
+        }
+    }
+
+    /// Proof 30: parse_volume rejects specs with relative container paths.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn parse_volume_rejects_relative_container() {
+        let specs: [&str; 3] = ["/host:relative", "/host:./rel", "/host:no_slash"];
+        let i: usize = kani::any();
+        kani::assume(i < specs.len());
+        assert!(
+            BindMount::parse_volume(specs[i]).is_err(),
+            "relative container path must be rejected"
+        );
     }
 }

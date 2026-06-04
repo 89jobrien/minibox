@@ -112,11 +112,19 @@ pub fn classify_path(path: &str) -> Option<Area> {
 // ---------------------------------------------------------------------------
 
 /// Run `git diff --name-only <base_ref>...HEAD` and classify changed paths.
+///
+/// If `base_ref` is a bare branch name (no `/`), it is prefixed with `origin/`
+/// so that CI checkouts (which only create remote-tracking refs) resolve correctly.
 pub fn detect_changes(root: &Path, base_ref: &str) -> Result<ChangeSet> {
     let sh = Shell::new()?;
     sh.change_dir(root);
 
-    let range = format!("{base_ref}...HEAD");
+    let resolved = if base_ref.contains('/') || base_ref.contains('^') || base_ref.contains('~') {
+        base_ref.to_string()
+    } else {
+        format!("origin/{base_ref}")
+    };
+    let range = format!("{resolved}...HEAD");
     let output = cmd!(sh, "git diff --name-only {range}").read()?;
 
     let mut cs = ChangeSet::default();
