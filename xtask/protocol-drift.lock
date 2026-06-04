@@ -10,7 +10,7 @@
     {
       "name": "domain-ports",
       "path": "crates/minibox-core/src/domain.rs",
-      "hash": "73f7dadba09a9023fea76f90d7755f14e10e3190924191d8095ca2c5daa675fe"
+      "hash": "27e47b3173e38c8a1a5e6aee1aa463ae12d6e7a0886ff6471206863007c87c64"
     },
     {
       "name": "domain-networking",
