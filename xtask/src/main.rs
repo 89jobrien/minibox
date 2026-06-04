@@ -18,6 +18,7 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+pub mod checkpoint;
 mod ci_watch;
 mod cleanup;
 mod clippy_sarif;

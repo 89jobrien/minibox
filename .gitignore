@@ -108,6 +108,9 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
+# Gate checkpoints (local-only, per-machine)
+.minibox/checkpoints/
+
 # Local development
 .env
 .env.local

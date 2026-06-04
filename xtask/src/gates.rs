@@ -2,7 +2,22 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
+use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
 use crate::{borrow_fixtures, bump, docs_audit, docs_lint, utils::cargo_target_dir};
+
+/// Run a gate body with checkpoint skip/record logic.
+///
+/// If a valid checkpoint exists for `gate` at the current tree hash, the gate
+/// is skipped. On success the checkpoint is recorded (if the tree is clean).
+/// Set `MINIBOX_FORCE_GATES=1` or pass `--force` to bypass.
+fn gated<F>(gate: GateId, root: &Path, f: F) -> Result<()>
+where
+    F: FnOnce() -> Result<()>,
+{
+    let hasher = GitTreeProbe;
+    let store = FileCheckpointStore::default_for_workspace(root);
+    checkpoint::run_gated(gate, &hasher, &store, f)
+}
 
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
@@ -12,54 +27,63 @@ const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
 /// on Linux it compiles but has gated code — still linted for syntax.
 pub fn lint(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo fmt --all --check")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::Lint, &root, move || {
+        cmd!(sh, "cargo fmt --all --check")
+            .run()
+            .context("cargo fmt --check failed")?;
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+        )
         .run()
-        .context("cargo fmt --check failed")?;
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
-    )
-    .run()
-    .context("cargo clippy failed")?;
-    cmd!(sh, "cargo check --workspace")
-        .run()
-        .context("cargo check --workspace failed")?;
-    eprintln!("lint gate passed");
-    Ok(())
+        .context("cargo clippy failed")?;
+        cmd!(sh, "cargo check --workspace")
+            .run()
+            .context("cargo check --workspace failed")?;
+        eprintln!("lint gate passed");
+        Ok(())
+    })
 }
 
 /// Read-only local verification gate: fmt check, workspace check, clippy,
 /// borrow fixtures, and docs lint. Does not modify files.
 pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
-    eprintln!("--- verify: fmt check ---");
-    cmd!(sh, "cargo fmt --all --check")
+    let sh = sh.clone();
+    let root = root.to_path_buf();
+    let root_ref = root.clone();
+    gated(GateId::Verify, &root_ref, move || {
+        eprintln!("--- verify: fmt check ---");
+        cmd!(sh, "cargo fmt --all --check")
+            .run()
+            .context("cargo fmt --check failed")?;
+
+        eprintln!("--- verify: workspace check ---");
+        cmd!(sh, "cargo check --workspace")
+            .run()
+            .context("cargo check --workspace failed")?;
+
+        eprintln!("--- verify: clippy ---");
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+        )
         .run()
-        .context("cargo fmt --check failed")?;
+        .context("cargo clippy failed")?;
 
-    eprintln!("--- verify: workspace check ---");
-    cmd!(sh, "cargo check --workspace")
-        .run()
-        .context("cargo check --workspace failed")?;
+        eprintln!("--- verify: borrow fixtures ---");
+        borrow_fixtures::run(&root)?;
 
-    eprintln!("--- verify: clippy ---");
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
-    )
-    .run()
-    .context("cargo clippy failed")?;
+        eprintln!("--- verify: docs lint ---");
+        docs_lint::lint_docs(&root, None)?;
 
-    eprintln!("--- verify: borrow fixtures ---");
-    borrow_fixtures::run(root)?;
+        eprintln!("--- verify: docs audit (quick) ---");
+        docs_audit::run(&sh, &root, docs_audit::Mode::Quick { strict: false })?;
 
-    eprintln!("--- verify: docs lint ---");
-    docs_lint::lint_docs(root, None)?;
-
-    eprintln!("--- verify: docs audit (quick) ---");
-    docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
-
-    eprintln!("verify gate passed");
-    Ok(())
+        eprintln!("verify gate passed");
+        Ok(())
+    })
 }
 
 /// Fix gate: version bump + fmt + clippy --fix + re-stage (macOS-safe, fast)
@@ -157,21 +181,25 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         eprintln!("pre-push: no Rust files in push range, skipping build and tests");
         return Ok(());
     }
-    cmd!(
-        sh,
-        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
-    )
-    .run()
-    .context("release build failed")?;
-    let fail_fast = fail_fast_flag();
-    cmd!(
-        sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
-    )
-    .run()
-    .context("nextest failed")?;
-    test_conformance(sh)?;
-    Ok(())
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::Prepush, &root, move || {
+        cmd!(
+            sh,
+            "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+        )
+        .run()
+        .context("release build failed")?;
+        let fail_fast = fail_fast_flag();
+        cmd!(
+            sh,
+            "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
+        )
+        .run()
+        .context("nextest failed")?;
+        test_conformance(&sh)?;
+        Ok(())
+    })
 }
 
 /// Unit tests (any platform, matches CI).
@@ -182,20 +210,24 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 ///
 /// Set `MINIBOX_FAIL_FAST=true` to stop on the first test failure.
 pub fn test_unit(sh: &Shell) -> Result<()> {
-    let fail_fast = fail_fast_flag();
-    if cfg!(target_os = "macos") {
-        cmd!(sh, "cargo nextest run --workspace --lib {fail_fast...}")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::TestUnit, &root, move || {
+        let fail_fast = fail_fast_flag();
+        if cfg!(target_os = "macos") {
+            cmd!(sh, "cargo nextest run --workspace --lib {fail_fast...}")
+                .run()
+                .context("nextest workspace --lib tests failed")?;
+        } else {
+            cmd!(
+                sh,
+                "cargo nextest run --workspace --exclude macbox --lib {fail_fast...}"
+            )
             .run()
             .context("nextest workspace --lib tests failed")?;
-    } else {
-        cmd!(
-            sh,
-            "cargo nextest run --workspace --exclude macbox --lib {fail_fast...}"
-        )
-        .run()
-        .context("nextest workspace --lib tests failed")?;
-    }
-    Ok(())
+        }
+        Ok(())
+    })
 }
 
 /// Conformance suite: builds and runs the `minibox-testsuite` harness.
@@ -320,16 +352,20 @@ pub fn test_shuttle(sh: &Shell) -> Result<()> {
 }
 
 pub fn test_property(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::TestProperty, &root, move || {
+        cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
+            .run()
+            .context("minibox property tests failed")?;
+        cmd!(
+            sh,
+            "cargo test --release -p minibox --test daemon_proptest_suite"
+        )
         .run()
-        .context("minibox property tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_proptest_suite"
-    )
-    .run()
-    .context("daemon property tests failed")?;
-    Ok(())
+        .context("daemon property tests failed")?;
+        Ok(())
+    })
 }
 
 /// Proptest property-based tests (cross-platform, consolidated).
@@ -514,7 +550,7 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
         let html_dir = cov_dir.join("html");
         cmd!(
             sh,
-            "cargo llvm-cov nextest -p minibox -p minibox-core --html --output-dir {html_dir}"
+            "cargo llvm-cov nextest -p minibox -p minibox-core --features test-utils --html --output-dir {html_dir}"
         )
         .run()
         .context("cargo llvm-cov nextest --html failed (is cargo-llvm-cov installed?)")?;
@@ -534,7 +570,7 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
         let lcov_path = cov_dir.join("lcov.info");
         cmd!(
             sh,
-            "cargo llvm-cov nextest -p minibox -p minibox-core --lcov --output-path {lcov_path}"
+            "cargo llvm-cov nextest -p minibox -p minibox-core --features test-utils --lcov --output-path {lcov_path}"
         )
         .run()
         .context("cargo llvm-cov nextest --lcov failed")?;
@@ -570,7 +606,7 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
 
     let output = cmd!(
         sh,
-        "cargo llvm-cov nextest --package minibox --json --summary-only"
+        "cargo llvm-cov nextest --package minibox --features test-utils --json --summary-only"
     )
     .output()
     .context("failed to spawn cargo llvm-cov nextest")?;
