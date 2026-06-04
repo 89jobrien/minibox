@@ -1,0 +1,24 @@
+# xtask configuration — single source for values previously hardcoded
+# across xtask modules. Loaded at startup by xconfig::load().
+
+[models]
+default = "gpt-5.2"
+prod    = "gpt-5.5"
+
+[vm]
+name              = "minibox-ci"
+setup_smolfile    = "tests/smolfiles/ci-cached.smolfile"
+ci_gate_smolfile  = "tests/smolfiles/ci-gate.smolfile"
+
+[cross]
+target = "aarch64-unknown-linux-musl"
+
+[dotenv]
+env_file = "$HOME/dev/.env"
+
+[binaries]
+agentbox_dir = "agentbox/bin/agentbox"
+agentbox_pkg = "./cmd/agentbox"
+
+[orchestration]
+allowed_tools = "Bash,Read,Write,Edit,Glob,Grep,Agent"
