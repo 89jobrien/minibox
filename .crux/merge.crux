@@ -9,32 +9,32 @@ budget: { calls: 16 }
 
 steps:
   - step: detect_changes
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo xtask detect-changes HEAD^"
 
   - step: lint
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo xtask lint"
 
   - step: test_unit
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo xtask test-unit"
 
   - step: lint_docs
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo xtask lint-docs"
 
   - step: check_protocol_drift
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo xtask check-protocol-drift"
 
   - step: actionlint
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: >-
         which actionlint > /dev/null 2>&1 || {
@@ -44,19 +44,19 @@ steps:
         actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
 
   - step: build_protocol_e2e
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: "cargo build --release -p miniboxd -p mbx"
 
   - step: protocol_e2e
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: >-
         cargo test -p miniboxd --test protocol_e2e_tests --release
         -- --test-threads=1
 
   - step: cli_e2e
-    handler: shell::capture
+    handler: shell::exec
     args:
       cmd: >-
         MINIBOX_ADAPTER=smolvm
