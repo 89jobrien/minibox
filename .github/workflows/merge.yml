@@ -65,12 +65,24 @@ jobs:
       - name: clippy SARIF
         if: always()
         run: cargo xtask clippy-sarif clippy.sarif
-      - name: upload SARIF
+      - name: upload clippy SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: clippy.sarif
           category: clippy
+      - name: install rustqual
+        if: always()
+        run: cargo install rustqual --locked
+      - name: rustqual SARIF
+        if: always()
+        run: rustqual . --format sarif --no-fail > rustqual.sarif
+      - name: upload rustqual SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: rustqual.sarif
+          category: rustqual
 
   test-unit:
     name: unit tests (ubuntu)
