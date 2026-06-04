@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Close Test Dimension Gaps
 
 ## Goal

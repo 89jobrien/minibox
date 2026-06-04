@@ -1,29 +1,41 @@
-pipeline: minibox_merge
-# Local mirror of .github/workflows/merge.yml (develop-branch gates).
-# Runs the same checks CI would: fmt, clippy, unit tests, doc lint,
-# protocol drift, and actionlint. Skips self-hosted-only jobs
-# (test-e2e, test-integration, test-protocol-e2e-linux) and promotion.
+pipeline: minibox_full_gate
+# Everything: lint + unit tests + protocol drift + actionlint + release
+# build + protocol e2e + CLI e2e. The most comprehensive local gate.
 #
-# Run: crux run .crux/merge.crux
-budget: { calls: 16 }
+# Run: crux run .crux/full-gate.crux
+budget: { calls: 18 }
 
 steps:
-  - step: detect_changes
+  - step: fmt_check
     handler: shell::exec
     args:
-      cmd: "cargo xtask detect-changes HEAD^"
+      cmd: "cargo fmt --all --check"
 
-  - step: lint
+  - step: clippy
     handler: shell::exec
     args:
-      cmd: "cargo xtask lint"
+      cmd: >-
+        cargo clippy
+        -p minibox -p minibox-macros -p mbx -p minibox-core
+        -p macbox -p miniboxd -p winbox
+        -- -D warnings
+
+  - step: workspace_check
+    handler: shell::exec
+    args:
+      cmd: "cargo check --workspace"
 
   - step: test_unit
     handler: shell::exec
     args:
       cmd: "cargo xtask test-unit"
 
-  - step: lint_docs
+  - step: borrow_fixtures
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask borrow-fixtures"
+
+  - step: docs_lint
     handler: shell::exec
     args:
       cmd: "cargo xtask lint-docs"
@@ -43,7 +55,7 @@ steps:
         };
         actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
 
-  - step: build_protocol_e2e
+  - step: release_build
     handler: shell::exec
     args:
       cmd: "cargo build --release -p miniboxd -p mbx"
@@ -63,7 +75,12 @@ steps:
         cargo test -p miniboxd --test cli_e2e_tests --release
         -- --test-threads=1
 
-  - step: ci_ok
+  - step: conformance
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-conformance"
+
+  - step: done
     handler: ctrl::log
     args:
-      msg: "All merge gates passed"
+      msg: "full gate passed"

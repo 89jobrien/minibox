@@ -20,6 +20,9 @@ Install git hooks once after cloning:
 just install-hooks
 ```
 
+Crux pipeline equivalents are available in `.crux/` for use with the
+`crux` runner (e.g. `crux run .crux/verify.crux`).
+
 See the [Command Reference](#command-reference) table below for the full list.
 
 ## Prerequisites
