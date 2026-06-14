@@ -401,9 +401,8 @@ fn main() -> Result<()> {
                 "  detect-changes [<base-ref>]  classify changed paths; emit GHA outputs (default base: HEAD^)"
             );
             eprintln!("  ci-watch [--branch <branch>]  watch latest GHA run with job-level detail");
-            eprintln!(
-                "  promote [--from <tier>] [--to <tier>] [--dry-run]  run quality gates for tier promotion"
-            );
+            eprintln!("  promote [--from <branch>] [--to <branch>] [--dry-run] [--skip-ci-check]");
+            eprintln!("                   cascade-merge develop → next → staging → main");
             eprintln!();
             eprintln!("  run <script> [args...]  run scripts/<script>.nu with forwarded arguments");
             Ok(())
