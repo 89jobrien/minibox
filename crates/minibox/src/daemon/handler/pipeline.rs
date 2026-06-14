@@ -1,4 +1,6 @@
 //! Pipeline handler: run a crux pipeline inside an ephemeral container.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 
 use minibox_core::domain::BindMount;
 use minibox_core::protocol::DaemonResponse;
@@ -38,7 +40,6 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 /// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
 /// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
 /// the pipeline still completes successfully (the exit code determines success).
-#[allow(clippy::too_many_arguments)]
 pub async fn handle_pipeline(
     pipeline_path: String,
     input: Option<serde_json::Value>,

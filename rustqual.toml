@@ -90,6 +90,11 @@ file_length_baseline = 300
 file_length_ceiling = 800
 max_independent_clusters = 2
 min_cluster_statements = 5
+# handler/ module exception: daemon handlers use dependency-injection signatures
+# that structurally require >5 parameters (state, deps, tx, plus request fields).
+# Refactoring to a builder/context struct is tracked in #421. Per-function
+# #[allow(clippy::too_many_arguments)] attrs are consolidated at file level instead.
+# rustqual: complexity-override handler_module
 max_parameters = 5
 
 # ── Coupling Analysis ───────────────────────────────────────────────────
