@@ -87,6 +87,7 @@ fn arb_workflow_step() -> impl Strategy<Value = WorkflowStep> {
             kind,
             alias,
             if_expr,
+            if_guard: None,
             continue_on_error: cont,
             retry,
             vars: vec![],
