@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-05-06
+<!-- Last-updated: auto — run `git log -1 --format="%ad" -- docs/STABILITY_CHECKLIST.mbx.md` to check -->
 
 ---
 
@@ -94,8 +94,8 @@ Gate 2 (handler coverage) is the primary remaining blocker. See
 
 ## CI Enforcement
 
-The following xtask gates are enforced in GitHub Actions (
-and ):
+The following xtask gates are enforced in GitHub Actions via `.github/workflows/stability-gates.yml`
+and `.github/workflows/protocol-drift.yml`:
 
 | Gate                       | CI Job                        | Workflow                |
 | -------------------------- | ----------------------------- | ----------------------- |
@@ -104,6 +104,6 @@ and ):
 | check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
 | check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
 
-Gates 1-6 in the table above are enforced via pre-commit () locally and
-the jobs listed here in CI. All four xtask-based gates (#133) were added in
-.
+Gates 1-6 in the table above are enforced via `cargo xtask pre-commit` locally and
+the CI jobs listed here. All four xtask-based gates (#133) were added in
+`stability-gates.yml` (see `.github/workflows/stability-gates.yml`).
