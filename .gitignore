@@ -1,56 +1,164 @@
+# Markdown files (except core documentation)
+*.md
+!.claude/**/*.md
+!README.md
+!CLAUDE.md
+!HANDOFF.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!DEVELOPMENT.md
+!AGENTS.md
+!USAGE.md
+!docs/*.mbx.md
+!docs/specs/*.md
+!docs/PLATFORM_SUPPORT.md
+!docs/SOCKET_PATHS.md
+!docs/handoff-*.md
+!docs/conformance.md
+!docs/plans/*.md
+!docs/specs/*.md
+!docs/diagrams/
+!docs/archive/*.md
+!docs/archive/
+*.csv
+fuzz/*
+!fuzz/fuzz_targets/
+**/fuzz/seeds/
+**/fuzz/corpus/
+**/fuzz/artifacts/
 
-# mdbook generated output
-/book/
-/.kgx/
-clippy.sarif.ctx
+# Claude Code — track everything except local settings and ephemeral state
+.claude/settings.local.json
+.claude/.DS_Store
+.claude/*/local/
+.claude/*/*/local/
+.worktrees/
+.superpowers/
+.remember/
+.smart-build/
+.cargo-ai/*
+!.cargo-ai/*.json
+
+# Go build artifacts (agentbox)
+agentbox/bin/
+
+# Version bump state
+.minibox-bump-state
 
 # Rust build artifacts
 /target/
-fuzz/Cargo.lock
+**/*.rs.bk
+*.pdb
+*.rlib
+rust_out
+rust_out.*
+repro.rs
 
-# Local context / session state (gitignored by convention)
-.ctx/
-.envrc
-.env.local
-.env.keys
-.firecrawl/
-.worktrees/
-.minibox/
+# Cargo
+# Cargo.lock is committed for binary projects
+# Remove the line below if this becomes a library
+# Cargo.lock
 
-# Editor and IDE
-.idea/
-.vscode/
-.DS_Store
-**/.DS_Store
+# Runtime directories (daemon creates these)
+/var/lib/minibox/
+/run/minibox/
 
-# Claude Code local overrides (not shared)
-.claude/agents/local/
-.claude/commands/local/
-.claude/hooks/local/
-.claude/rules/local/
-.claude/skills/local/
-.claude/skills/**/.DS_Store
-.claude/skills/whatidid/cache/
-.claude/skills/wave-integration/.DS_Store
-.claude/templates/local/
-.claude/settings.local.json
+# uftrace trace data
+/traces/
 
-# AI tooling caches
-.ai/
-.cargo-ai/
+# Generated artifacts / recipes
+/recipe.json
+/recipe.json.gz
+/profile.json
+/profile.json.gz
+/artifacts/
 
-# Generated / scratch files
-artifacts/
+# Benchmark output — only the canonical snapshot is versioned.
+# Historical runs (bench.jsonl) are pushed to CI artifacts or external storage;
+# they must NOT accumulate in the repo (retention policy: CI artifact, 90 days).
+/bench/results/*.json
+/bench/results/*.jsonl
+/bench/results/*.txt
+/bench/results/*.html
+!/bench/results/latest.json
+# Timestamped result directories
+/bench/results/*/
 assets/
-agentbox/bin/
-scripts/.DS_Store
-images/.DS_Store
-crates/.DS_Store
-crates/minibox-macros/.DS_Store
-crates/minibox/fuzz/
-xtask/docs-audit-report.json
-clippy.sarif
-minibox-assistant
-profile.json.gz
-promote.toml
+images/
 
+# Profiling
+/bench/profiles/
+*.profraw
+*.profdata
+*.crate
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Promotion pipeline state
+.minibox-promote-state
+
+# Local development
+.env
+.env.local
+*.log
+*.pid
+.env.nu
+
+
+# Documentation build
+/target/doc/
+
+# Backup files
+*.bak
+*.orig
+.envrc
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.firecrawl/
+.ctx/**
+!.ctx/**/
+!.ctx/HANDOFF.*.yaml
+!.ctx/HANDOFF.*.*.yaml
+!.ctx/handoff.*.config.toml.example
+!.ctx/**/*.mbx.md
+.ctx/HANDOFF.state.yaml
+.ctx/HANDOFF.*.state.yaml
+.ctx/HANDOFF.md
+.ctx/HANDOVER.md
+.tmp-dogfood/
+.smart-build/
+
+# cargo-ai
+minibox-assistant
+docs/archive/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.godmode.*.yaml
+.ctx/HANDOFF.*.state.json
+!.ctx/handoff.*.config.toml.example
+.ctx/HANDOFF.*.*.state.json
+.ctx/HANDOFF.hj.hj.state.json
+.ctx/.initialized
+# handoff-end
+.claude/skills/whatidid/cache/
