@@ -1006,6 +1006,7 @@ impl RegistryClient {
     }
 }
 
+// qual:allow(complexity) reason: "Default impl — documented panic on TLS init failure"
 impl Default for RegistryClient {
     /// Create a default [`RegistryClient`].
     ///

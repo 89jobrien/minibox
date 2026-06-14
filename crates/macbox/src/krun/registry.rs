@@ -34,6 +34,7 @@ impl KrunRegistry {
     /// Always pulls `linux/arm64` images regardless of host OS — krun always
     /// runs Linux VMs, so the host platform (`macos/arm64`) must not be used
     /// to resolve OCI manifest lists.
+    // qual:allow(complexity) reason: "infallible const parse of hardcoded platform"
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
         let platform =
             TargetPlatform::parse("linux/arm64").expect("linux/arm64 is a valid platform string");

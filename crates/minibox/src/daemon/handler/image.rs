@@ -193,7 +193,6 @@ pub async fn handle_load_image(
 /// Push a locally-stored image to a remote OCI registry.
 ///
 /// Sends zero or more `PushProgress` messages followed by `Success` or `Error`.
-// qual:allow(complexity) reason: "push handler: ref parse, adapter dispatch, progress stream"
 pub async fn handle_push(
     image_ref_str: String,
     credentials: minibox_core::protocol::PushCredentials,
@@ -295,7 +294,6 @@ pub async fn handle_push(
 
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
-// qual:allow(complexity) reason: "commit handler: lookup, tar layer, store update"
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_commit(
     container_id: String,
@@ -390,7 +388,6 @@ pub async fn handle_commit(
 /// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
 /// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
 /// success or [`DaemonResponse::Error`] on failure.
-// qual:allow(complexity) reason: "build handler: Dockerfile parse, step execution, progress"
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_build(
     dockerfile: String,

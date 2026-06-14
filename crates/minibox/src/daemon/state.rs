@@ -46,6 +46,32 @@ impl ProcessChecker for KillProcessChecker {
 }
 
 // ---------------------------------------------------------------------------
+// CgroupFreezeChecker port (cgroup freezer inspection)
+// ---------------------------------------------------------------------------
+
+/// Port for checking whether a container's cgroup is frozen.
+///
+/// Decouples `reconcile_paused` from direct filesystem access so tests can
+/// inject a mock without requiring a real cgroup hierarchy.
+pub trait CgroupFreezeChecker: Send + Sync {
+    /// Returns `true` if the cgroup at `cgroup_path` has `cgroup.freeze` set
+    /// to `1` (frozen).
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool;
+}
+
+/// Default adapter: reads `cgroup.freeze` from the filesystem.
+pub struct FsCgroupFreezeChecker;
+
+impl CgroupFreezeChecker for FsCgroupFreezeChecker {
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool {
+        let freeze_path = cgroup_path.join("cgroup.freeze");
+        std::fs::read_to_string(&freeze_path)
+            .map(|s| s.trim() == "1")
+            .unwrap_or(false)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StateRepository port (persistence port)
 // ---------------------------------------------------------------------------
 
@@ -364,7 +390,11 @@ impl DaemonState {
     /// `cgroup.freeze` contains `1`.  If either check fails, mark `"Orphaned"`.
     ///
     /// Call this **after** [`load_from_disk`] on daemon startup.
-    pub async fn reconcile_on_startup(&self, checker: &dyn ProcessChecker) {
+    pub async fn reconcile_on_startup(
+        &self,
+        checker: &dyn ProcessChecker,
+        freeze_checker: &dyn CgroupFreezeChecker,
+    ) {
         let mut map = self.containers.write().await;
         let mut orphaned_count: u32 = 0;
 
@@ -374,7 +404,7 @@ impl DaemonState {
                     reconcile_running(record, checker, &mut orphaned_count);
                 }
                 "Paused" => {
-                    reconcile_paused(record, checker, &mut orphaned_count);
+                    reconcile_paused(record, checker, freeze_checker, &mut orphaned_count);
                 }
                 _ => continue,
             }
@@ -650,9 +680,13 @@ fn reconcile_running(
 /// A paused container is recoverable only if its PID is still alive and the
 /// cgroup freezer is still engaged (`cgroup.freeze` contains `1`).  If either
 /// condition fails, the container is marked `"Orphaned"`.
+// NOTE: std::fs::read_to_string is intentionally synchronous here. This runs
+// once at daemon startup while holding the write lock — no concurrent work is
+// possible and the file is a single-digit-byte cgroup control file.
 fn reconcile_paused(
     record: &mut ContainerRecord,
     checker: &dyn ProcessChecker,
+    freeze_checker: &dyn CgroupFreezeChecker,
     orphaned_count: &mut u32,
 ) {
     let pid = match record.pid {
@@ -683,10 +717,7 @@ fn reconcile_paused(
     }
 
     // PID alive — verify the cgroup freezer is still engaged.
-    let freeze_path = record.cgroup_path.join("cgroup.freeze");
-    let frozen = std::fs::read_to_string(&freeze_path)
-        .map(|s| s.trim() == "1")
-        .unwrap_or(false);
+    let frozen = freeze_checker.is_frozen(&record.cgroup_path);
 
     if frozen {
         info!(
@@ -700,7 +731,7 @@ fn reconcile_paused(
         warn!(
             container_id = %record.info.id,
             pid = pid,
-            freeze_path = %freeze_path.display(),
+            cgroup_path = %record.cgroup_path.display(),
             "reconcile: paused container cgroup not frozen — marking Orphaned"
         );
         record.info.state = "Orphaned".to_string();
@@ -908,7 +939,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -973,7 +1006,9 @@ mod tests {
         // Session 2: load + reconcile with a checker that says "no such PID".
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -1003,7 +1038,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1028,7 +1065,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1067,6 +1106,22 @@ mod tests {
     struct AlwaysAliveChecker;
     impl super::ProcessChecker for AlwaysAliveChecker {
         fn is_alive(&self, _pid: u32) -> bool {
+            true
+        }
+    }
+
+    /// Always reports cgroups as not frozen (default for most tests).
+    struct NeverFrozenChecker;
+    impl super::CgroupFreezeChecker for NeverFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
+            false
+        }
+    }
+
+    /// Always reports cgroups as frozen.
+    struct AlwaysFrozenChecker;
+    impl super::CgroupFreezeChecker for AlwaysFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
             true
         }
     }
@@ -1325,7 +1380,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &AlwaysFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1350,7 +1407,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1380,7 +1439,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1408,7 +1469,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1432,7 +1495,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(

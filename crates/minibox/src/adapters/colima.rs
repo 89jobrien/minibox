@@ -801,7 +801,6 @@ impl ContainerRuntime for ColimaRuntime {
     ///
     /// Returns an error if the `limactl shell` command fails or if the PID
     /// printed to stdout cannot be parsed as a `u32`.
-    // qual:allow(complexity) reason: "lima VM spawn with shell-quoting and mount validation"
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let rootfs = shell_single_quote(&config.rootfs.to_string_lossy());
         let command = shell_single_quote(&config.command);

@@ -7,7 +7,16 @@
 # ── Function Classification ──────────────────────────────────────────────
 
 ignore_functions = ["main", "test_*"]
-exclude_files = []
+exclude_files = [
+    "*/tests/*",
+    "*/benches/*",
+    "*/examples/*",
+    "*/src/adapters/mocks.rs",
+    "*/src/testing/*",
+    # minibox-testsuite is pure test infrastructure — .expect()/.unwrap() is
+    # expected and acceptable in test harness code.
+    "minibox-testsuite/src/*",
+]
 strict_closures = false
 strict_iterator_chains = false
 allow_recursion = false
@@ -56,7 +65,9 @@ ignore_trait_impls = true
 # Cross-crate pub API usage is invisible to rustqual — all 621 findings
 # are false positives from workspace consumers.
 detect_dead_code = false
-detect_wildcard_imports = true
+# All 13 wildcard findings are `use super::*` in inline #[cfg(test)] modules —
+# standard Rust convention, not a code quality issue.
+detect_wildcard_imports = false
 detect_repeated_matches = true
 
 # ── Boilerplate Detection ───────────────────────────────────────────────

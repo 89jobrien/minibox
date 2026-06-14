@@ -108,6 +108,9 @@ pub async fn dispatch(handler: &str, input: Value) -> Result<Value> {
                 | DaemonResponse::ContainerStopped { .. }
                 | DaemonResponse::ContainerCreated { .. }
                 | DaemonResponse::ContainerList { .. }
+                | DaemonResponse::BuildComplete { .. }
+                | DaemonResponse::PipelineComplete { .. }
+                | DaemonResponse::WorkflowComplete { .. }
         );
         let json = serde_json::to_value(&resp).context("serialize DaemonResponse")?;
         responses.push(json);
@@ -148,7 +151,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 ephemeral: false,
                 network: None,
                 mounts,
-                privileged: false,
+                privileged: input["privileged"].as_bool().unwrap_or(false),
                 env,
                 name,
                 tty: false,

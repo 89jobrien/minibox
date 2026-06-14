@@ -60,7 +60,6 @@ async fn resolve_update_targets(
 ///
 /// When `restart` is `true`, Running or Paused containers whose source image
 /// was updated are stopped and re-run from their stored `creation_params`.
-// qual:allow(complexity) reason: "4-step update pipeline with per-image progress"
 pub async fn handle_update(
     images: Vec<String>,
     all: bool,

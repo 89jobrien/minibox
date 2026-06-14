@@ -129,6 +129,7 @@ pub async fn handle_pipeline(
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                priority: None,
                 policy_override: Some(PolicyOverride {
                     allow_bind_mounts: Some(true),
                     ..Default::default()

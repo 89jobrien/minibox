@@ -95,6 +95,7 @@ impl BridgeNetwork {
         })
     }
 
+    // qual:allow(complexity) reason: "poisoned mutex is irrecoverable"
     /// Ensure the bridge interface exists and is up with the gateway IP assigned.
     fn ensure_bridge(&self) -> Result<()> {
         let exists = Command::new("ip")
@@ -340,7 +341,6 @@ impl NetworkProvider for BridgeNetwork {
     }
 
     /// Move `ceth` into the container network namespace and configure IP/routes.
-    // qual:allow(complexity) reason: "netns move + ip addr/route configuration"
     async fn attach(&self, container_id: &str, pid: u32) -> Result<()> {
         let ctx_path = Self::net_context_path(container_id);
         let ctx_raw = std::fs::read_to_string(&ctx_path)

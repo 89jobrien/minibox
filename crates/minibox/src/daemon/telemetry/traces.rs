@@ -54,7 +54,6 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     OtelGuard { provider }
 }
 
-// qual:allow(test) reason: "I/O wiring — requires live OTLP collector to test"
 fn build_otel_layer(
     endpoint: &str,
 ) -> Result<

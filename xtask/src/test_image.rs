@@ -15,7 +15,8 @@ use std::{
 use tempfile::TempDir;
 use xshell::{Shell, cmd};
 
-const TARGET: &str = "aarch64-unknown-linux-musl";
+use crate::xconfig::XConfig;
+
 const ALPINE_IMAGE: &str = "alpine";
 const ALPINE_TAG: &str = "3.21";
 const ALPINE_ARCH: &str = "arm64";
@@ -57,7 +58,9 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 }
 
 /// Entry point: build or refresh the test OCI tarball.
-pub fn build_test_image(force: bool) -> Result<()> {
+pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
+    let cfg = XConfig::load(workspace_root)?;
+    let target = &cfg.cross.target;
     let out_dir = default_test_image_dir();
     let tar_path = out_dir.join("minibox-tester.tar");
 
@@ -76,7 +79,7 @@ pub fn build_test_image(force: bool) -> Result<()> {
     let staging = staging_tmp.path().to_path_buf();
 
     // 1. Cross-compile binaries
-    let binaries = cross_compile_binaries(force)?;
+    let binaries = cross_compile_binaries(target, force)?;
 
     // 2. Fetch Alpine base layer
     println!("[2/4] fetching Alpine {ALPINE_TAG} {ALPINE_ARCH} layer …");
@@ -160,29 +163,29 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
 // Cross-compilation
 // ---------------------------------------------------------------------------
 
-fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
+fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, PathBuf)>> {
     let target_base = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("target"));
 
-    println!("[1/4] cross-compiling for {TARGET} …");
+    println!("[1/4] cross-compiling for {target} ...");
 
     let cc = "aarch64-linux-musl-gcc";
 
     // -- miniboxd binary --
-    let miniboxd_bin = target_base.join(TARGET).join("debug").join("miniboxd");
+    let miniboxd_bin = target_base.join(target).join("debug").join("miniboxd");
     if force || !miniboxd_bin.exists() {
-        println!("  cargo build miniboxd …");
-        run_cross(&["build", "--target", TARGET, "-p", "miniboxd"], cc)?;
+        println!("  cargo build miniboxd ...");
+        run_cross(&["build", "--target", target, "-p", "miniboxd"], cc, target)?;
     } else {
         println!("  cached  miniboxd");
     }
 
     // -- mbx (CLI) binary --
-    let cli_bin = target_base.join(TARGET).join("debug").join("mbx");
+    let cli_bin = target_base.join(target).join("debug").join("mbx");
     if force || !cli_bin.exists() {
-        println!("  cargo build mbx …");
-        run_cross(&["build", "--target", TARGET, "-p", "mbx"], cc)?;
+        println!("  cargo build mbx ...");
+        run_cross(&["build", "--target", target, "-p", "mbx"], cc, target)?;
     } else {
         println!("  cached  mbx");
     }
@@ -201,19 +204,24 @@ fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
     ];
 
     for (suite_name, pkg, test_name) in test_suites {
-        println!("  cargo test --no-run --test {test_name} …");
-        let bin_path = build_test_binary(pkg, test_name, cc, &target_base, force)?;
+        println!("  cargo test --no-run --test {test_name} ...");
+        let bin_path = build_test_binary(pkg, test_name, cc, &target_base, target, force)?;
         binaries.push((suite_name.to_string(), bin_path));
     }
 
     Ok(binaries)
 }
 
-fn run_cross(args: &[&str], cc: &str) -> Result<()> {
+fn run_cross(args: &[&str], cc: &str, target: &str) -> Result<()> {
+    let cc_env = format!("CC_{}", target.replace('-', "_"));
+    let linker_env = format!(
+        "CARGO_TARGET_{}_LINKER",
+        target.to_uppercase().replace('-', "_")
+    );
     let status = Command::new("cargo")
         .args(args)
-        .env("CC_aarch64_unknown_linux_musl", cc)
-        .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER", cc)
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
         .status()
         .context("spawning cargo")?;
     if !status.success() {
@@ -229,8 +237,14 @@ fn build_test_binary(
     test_name: &str,
     cc: &str,
     target_base: &Path,
+    target: &str,
     _force: bool,
 ) -> Result<PathBuf> {
+    let cc_env = format!("CC_{}", target.replace('-', "_"));
+    let linker_env = format!(
+        "CARGO_TARGET_{}_LINKER",
+        target.to_uppercase().replace('-', "_")
+    );
     // `cargo test --no-run` outputs a line like:
     //   Executable unittests src/lib.rs (target/.../deps/foo-abc123)
     // We capture stderr and parse it.
@@ -239,15 +253,15 @@ fn build_test_binary(
             "test",
             "--no-run",
             "--target",
-            TARGET,
+            target,
             "-p",
             pkg,
             "--test",
             test_name,
             "--message-format=json",
         ])
-        .env("CC_aarch64_unknown_linux_musl", cc)
-        .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER", cc)
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
         .output()
         .context("spawning cargo test --no-run")?;
 
@@ -271,7 +285,7 @@ fn build_test_binary(
     }
 
     // Fallback: glob deps dir for a binary matching the test name prefix
-    let deps_dir = target_base.join(TARGET).join("debug").join("deps");
+    let deps_dir = target_base.join(target).join("debug").join("deps");
     let prefix = test_name.replace('-', "_");
     if deps_dir.exists() {
         for entry in

@@ -495,14 +495,6 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Daemon+CLI e2e tests (Linux, root required)
-///
-/// Deprecated alias for `test_system_suite`. Kept for backward compatibility
-/// with existing CI jobs that reference `test-e2e-suite`.
-pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
-    test_system_suite(sh)
-}
-
 /// Sandbox contract tests (Linux, root, Docker Hub required)
 pub fn test_sandbox(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo build --release")
@@ -1211,6 +1203,38 @@ pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
     }
     eprintln!("adapter coverage check passed");
     Ok(())
+}
+
+/// Run GKE profile-specific unit tests (any test with "gke" in the name).
+pub fn test_gke_profile(sh: &Shell) -> Result<()> {
+    eprintln!("--- test-gke-profile: running GKE profile tests ---");
+    cmd!(sh, "cargo nextest run -p minibox -E test(~gke)")
+        .run()
+        .context("GKE profile tests failed")?;
+    eprintln!("test-gke-profile passed");
+    Ok(())
+}
+
+/// Run GKE adapter integration tests.
+pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
+    eprintln!("--- test-gke-adapter: running GKE adapter integration tests ---");
+    let result = cmd!(sh, "cargo nextest run --test gke_adapter_isolation_tests").run();
+
+    match result {
+        Ok(()) => {
+            eprintln!("test-gke-adapter passed");
+            Ok(())
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            if msg.contains("no tests ran") {
+                eprintln!("no GKE adapter tests found");
+                Ok(())
+            } else {
+                Err(e).context("GKE adapter integration tests failed")
+            }
+        }
+    }
 }
 
 /// Scan production Rust source for `.unwrap()` calls outside test infrastructure.

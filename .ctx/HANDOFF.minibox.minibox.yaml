@@ -1,68 +1,183 @@
 project: minibox
 id: minibox
-updated: 2026-06-04
+updated: 2026-06-13
 items:
-- id: test-in-vm
+- id: uncommitted-work
   doob_uuid: null
-  name: test-in-vm
+  name: uncommitted-work
   priority: P1
-  status: blocked
-  title: cargo xtask test-in-vm — run Linux tests in ephemeral VM
-  description: |-
-    xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
-    aarch64-unknown-linux-musl, boots smolvm VM (or minibox as backend),
-    mounts target dir at /mnt/tests, runs integration_tests + cgroup_tests.
-    Pull tests pass. cgroup_tests auto-skipped on unprivileged backends
-    (smolvm). smolvm drops CAP_SYS_ADMIN from bounding set.
-    Next: request smolvm --privileged flag, or pivot to Apple Containerization
-    (macOS 26) / QEMU for full kernel access.
-  files:
-  - xtask/src/test_in_vm.rs
-  - xtask/src/main.rs
-  - crates/minibox/src/adapters/smolvm.rs
-  completed: null
-  extra:
-  - date: null
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
-- id: colima-ci
-  doob_uuid: null
-  name: colima-ci
-  priority: P2
   status: open
-  title: Wire colima VM as Linux build/test environment
+  title: Uncommitted changes (82 files)
   description: |-
-    Colima VM provisioned (Ubuntu 24.04 aarch64, 8GB RAM). mise + Rust + musl
-    toolchain installed. Builds miniboxd+mbx (aarch64-unknown-linux-musl)
-    successfully via CARGO_TARGET_DIR=/tmp/minibox-build. Workspace tests run:
-    ~majority pass; 5 cli_e2e_tests fail (socket timeout — need root/sudo).
-    integration_tests.rs stale nesting test removed (used undefined helpers).
-    Next: run sudo cargo test for cli_e2e_tests, or document root requirement.
+    Working tree has uncommitted changes:
+    .cargo/config.toml
+    .ctx/HANDOFF.md
+    .ctx/HANDOFF.minibox.minibox.yaml
+    .ctx/memory-bank/activeContext.mbx.md
+    Cargo.lock
+    agentbox/go.mod
+    agentbox/go.sum
+    crates/macbox/src/krun/limiter.rs
+    crates/macbox/src/krun/registry.rs
+    crates/macbox/src/lib.rs
+    crates/minibox-core/src/domain.rs
+    crates/minibox-core/src/image/registry.rs
+    crates/minibox-crux-plugin/src/lib.rs
+    crates/minibox/benches/trait_overhead.rs
+    crates/minibox/src/adapters/builder.rs
+    crates/minibox/src/adapters/colima.rs
+    crates/minibox/src/adapters/network/bridge.rs
+    crates/minibox/src/adapters/push.rs
+    crates/minibox/src/container/cgroups.rs
+    crates/minibox/src/container/filesystem.rs
+    crates/minibox/src/daemon/handler/exec.rs
+    crates/minibox/src/daemon/handler/image.rs
+    crates/minibox/src/daemon/handler/lifecycle.rs
+    crates/minibox/src/daemon/handler/logs.rs
+    crates/minibox/src/daemon/handler/manifest.rs
+    crates/minibox/src/daemon/handler/mod.rs
+    crates/minibox/src/daemon/handler/pipeline.rs
+    crates/minibox/src/daemon/handler/run.rs
+    crates/minibox/src/daemon/handler/update.rs
+    crates/minibox/src/daemon/server.rs
+    crates/minibox/src/daemon/state.rs
+    crates/minibox/src/daemon/telemetry/traces.rs
+    crates/minibox/src/nesting.rs
+    crates/minibox/tests/daemon_adapter_suite_tests.rs
+    crates/minibox/tests/daemon_conformance_tests.rs
+    crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
+    crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
+    crates/minibox/tests/daemon_handler_common/mod.rs
+    crates/minibox/tests/daemon_handler_coverage_tests.rs
+    crates/minibox/tests/daemon_handler_error_path_tests.rs
+    crates/minibox/tests/daemon_handler_exec_tests.rs
+    crates/minibox/tests/daemon_handler_failure_tests.rs
+    crates/minibox/tests/daemon_handler_image_tests.rs
+    crates/minibox/tests/daemon_handler_lifecycle_tests.rs
+    crates/minibox/tests/daemon_handler_stream_boundary_tests.rs
+    crates/minibox/tests/daemon_handler_streaming_tests.rs
+    crates/minibox/tests/daemon_state_persistence_tests.rs
+    crates/miniboxd/src/config.rs
+    crates/miniboxd/src/main.rs
+    crates/miniboxd/tests/integration_tests.rs
+    images/sandbox/Dockerfile
+    rustqual.toml
+    xtask/Cargo.toml
+    xtask/src/council.rs
+    xtask/src/dotenv.rs
+    xtask/src/gates.rs
+    xtask/src/main.rs
+    xtask/src/setup_test_vm.rs
+    xtask/src/test_gke.rs
+    xtask/src/test_image.rs
+    xtask/src/test_in_vm.rs
+    xtask/src/xconfig.rs
+    xtask/xconfig.toml
+    .kgx/
+    book.toml
+    book/
+    clippy.sarif
+    docs/core/ABOUT.mbx.md
+    docs/core/CODE_STYLE.mbx.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/MUTATION_AUDIT.mbx.md
+    docs/core/PRERELEASE_CHANGELOG.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/core/TESTING.mbx.md
+    docs/core/USAGE.mbx.md
+    docs/ideas/
+    docs/plans/2026-06-06-rustqual-code-quality-sweep.md
+    promote.toml
+    scripts/kani-quick.sh
   files:
+  - .cargo/config.toml
+  - .ctx/HANDOFF.md
+  - .ctx/HANDOFF.minibox.minibox.yaml
+  - .ctx/memory-bank/activeContext.mbx.md
+  - Cargo.lock
+  - agentbox/go.mod
+  - agentbox/go.sum
+  - crates/macbox/src/krun/limiter.rs
+  - crates/macbox/src/krun/registry.rs
+  - crates/macbox/src/lib.rs
+  - crates/minibox-core/src/domain.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/minibox-crux-plugin/src/lib.rs
+  - crates/minibox/benches/trait_overhead.rs
+  - crates/minibox/src/adapters/builder.rs
+  - crates/minibox/src/adapters/colima.rs
+  - crates/minibox/src/adapters/network/bridge.rs
+  - crates/minibox/src/adapters/push.rs
+  - crates/minibox/src/container/cgroups.rs
+  - crates/minibox/src/container/filesystem.rs
+  - crates/minibox/src/daemon/handler/exec.rs
+  - crates/minibox/src/daemon/handler/image.rs
+  - crates/minibox/src/daemon/handler/lifecycle.rs
+  - crates/minibox/src/daemon/handler/logs.rs
+  - crates/minibox/src/daemon/handler/manifest.rs
+  - crates/minibox/src/daemon/handler/mod.rs
+  - crates/minibox/src/daemon/handler/pipeline.rs
+  - crates/minibox/src/daemon/handler/run.rs
+  - crates/minibox/src/daemon/handler/update.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/minibox/src/daemon/state.rs
+  - crates/minibox/src/daemon/telemetry/traces.rs
+  - crates/minibox/src/nesting.rs
+  - crates/minibox/tests/daemon_adapter_suite_tests.rs
+  - crates/minibox/tests/daemon_conformance_tests.rs
+  - crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
+  - crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
+  - crates/minibox/tests/daemon_handler_common/mod.rs
+  - crates/minibox/tests/daemon_handler_coverage_tests.rs
+  - crates/minibox/tests/daemon_handler_error_path_tests.rs
+  - crates/minibox/tests/daemon_handler_exec_tests.rs
+  - crates/minibox/tests/daemon_handler_failure_tests.rs
+  - crates/minibox/tests/daemon_handler_image_tests.rs
+  - crates/minibox/tests/daemon_handler_lifecycle_tests.rs
+  - crates/minibox/tests/daemon_handler_stream_boundary_tests.rs
+  - crates/minibox/tests/daemon_handler_streaming_tests.rs
+  - crates/minibox/tests/daemon_state_persistence_tests.rs
+  - crates/miniboxd/src/config.rs
+  - crates/miniboxd/src/main.rs
   - crates/miniboxd/tests/integration_tests.rs
+  - images/sandbox/Dockerfile
+  - rustqual.toml
+  - xtask/Cargo.toml
+  - xtask/src/council.rs
+  - xtask/src/dotenv.rs
+  - xtask/src/gates.rs
+  - xtask/src/main.rs
+  - xtask/src/setup_test_vm.rs
+  - xtask/src/test_gke.rs
+  - xtask/src/test_image.rs
+  - xtask/src/test_in_vm.rs
+  - xtask/src/xconfig.rs
+  - xtask/xconfig.toml
+  - .kgx/
+  - book.toml
+  - book/
+  - clippy.sarif
+  - docs/core/ABOUT.mbx.md
+  - docs/core/CODE_STYLE.mbx.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/MUTATION_AUDIT.mbx.md
+  - docs/core/PRERELEASE_CHANGELOG.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/core/TESTING.mbx.md
+  - docs/core/USAGE.mbx.md
+  - docs/ideas/
+  - docs/plans/2026-06-06-rustqual-code-quality-sweep.md
+  - promote.toml
+  - scripts/kani-quick.sh
   completed: null
   extra: []
 log:
-- date: '20260529.040048'
-  summary: Removed all Python code and 4 dead scripts; fixed 14 docs/core/ files against code truth (smolbox, conformance crate name, version, vz, DoS limits); wired colima as Linux build VM; workspace tests pass (5 cli_e2e root-only failures expected)
+- date: '20260614.002952'
+  summary: done=69 running=0 pending=53 blocked=0
   commits: []
-  session: 7
-- date: '20260527.115757'
-  summary: Resolved 12 TODOs — quick-win code fixes (#429)
-  commits: []
-  session: 6
-- date: '20260525.183746'
-  summary: Resolved 3 P0 security issues (#428 env key validation)
-  commits: []
-  session: 5
-- date: '20260523.102700'
-  summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
-  commits: []
-  session: 4
-- date: '20260521'
-  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
-  commits: []
-  session: 3

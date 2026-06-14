@@ -42,6 +42,8 @@ pub struct RunParams {
     pub name: Option<String>,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    /// Scheduling priority from the request, forwarded to policy validation.
+    pub priority: Option<slashcrux::Priority>,
     /// Scoped policy overrides for internal callers (e.g. pipeline handler).
     /// `None` means use the base `HandlerDependencies.policy` as-is.
     pub policy_override: Option<super::PolicyOverride>,
@@ -95,9 +97,12 @@ pub async fn handle_run(
         Some(ov) => deps.policy.with_overrides(ov),
         None => deps.policy.clone(),
     };
-    if let Err(msg) =
-        super::validate_policy(&params.mounts, params.privileged, None, &effective_policy)
-    {
+    if let Err(msg) = super::validate_policy(
+        &params.mounts,
+        params.privileged,
+        params.priority,
+        &effective_policy,
+    ) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })
@@ -512,6 +517,7 @@ async fn prepare_run(
         platform,
         cgroup_parent,
         ephemeral: _,
+        priority: _,
         policy_override: _,
     } = params;
 
@@ -840,6 +846,7 @@ fn build_spawn_config(
 ///
 /// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
 /// and `waitpid` — both available on any Unix via the `nix` crate.
+// qual:allow(complexity) reason: "semaphore never closed during daemon lifetime"
 #[cfg(unix)]
 async fn run_inner_capture(
     params: RunParams,
@@ -1092,6 +1099,7 @@ pub(super) async fn run_from_params(
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),
         cgroup_parent: creation_params.cgroup_parent.clone(),
+        priority: None,
         policy_override: None,
     };
     run_inner(params, state, deps).await

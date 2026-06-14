@@ -47,7 +47,6 @@ as_any!(OciPushAdapter);
 
 #[async_trait]
 impl ImagePusher for OciPushAdapter {
-    // qual:allow(complexity) reason: "OCI push protocol: auth, blob upload, manifest put"
     async fn push_image(
         &self,
         image_ref: &minibox_core::image::reference::ImageRef,

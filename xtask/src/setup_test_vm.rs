@@ -15,8 +15,7 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;
 
-pub const VM_NAME: &str = "minibox-ci";
-const SMOLFILE: &str = "tests/smolfiles/ci-cached.smolfile";
+use crate::xconfig::XConfig;
 
 /// Provision steps run inside the VM after creation.
 const PROVISION_SCRIPT: &str = r#"
@@ -51,8 +50,12 @@ echo "provision complete"
 "#;
 
 pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
+    let cfg = XConfig::load(workspace_root)?;
+    let vm_name = &cfg.vm.name;
+    let smolfile = &cfg.vm.setup_smolfile;
+
     let smolvm = which_smolvm()?;
-    let smolfile_path = workspace_root.join(SMOLFILE);
+    let smolfile_path = workspace_root.join(smolfile);
 
     if !smolfile_path.exists() {
         bail!(
@@ -62,24 +65,24 @@ pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
     }
 
     // Check if machine already exists
-    let existing = machine_exists(&smolvm, VM_NAME)?;
+    let existing = machine_exists(&smolvm, vm_name)?;
 
     if existing && !force {
-        println!("machine '{VM_NAME}' already exists; use --force to recreate");
+        println!("machine '{vm_name}' already exists; use --force to recreate");
         return Ok(());
     }
 
     if existing {
-        println!("[1/4] tearing down existing '{VM_NAME}' ...");
+        println!("[1/4] tearing down existing '{vm_name}' ...");
         let _ = Command::new(&smolvm)
-            .args(["machine", "stop", "--name", VM_NAME])
+            .args(["machine", "stop", "--name", vm_name])
             .status();
         let status = Command::new(&smolvm)
-            .args(["machine", "delete", "--force", VM_NAME])
+            .args(["machine", "delete", "--force", vm_name])
             .status()
             .context("deleting existing machine")?;
         if !status.success() {
-            bail!("failed to delete existing machine '{VM_NAME}'");
+            bail!("failed to delete existing machine '{vm_name}'");
         }
     } else {
         println!("[1/4] no existing machine to remove");
@@ -87,12 +90,12 @@ pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
 
     // Create from smolfile with explicit workspace mount
     let mount_spec = format!("{}:/mnt/workspace", workspace_root.display());
-    println!("[2/4] creating '{VM_NAME}' from {SMOLFILE} ...");
+    println!("[2/4] creating '{vm_name}' from {smolfile} ...");
     let status = Command::new(&smolvm)
         .args([
             "machine",
             "create",
-            VM_NAME,
+            vm_name,
             "--smolfile",
             &smolfile_path.to_string_lossy(),
             "-v",
@@ -105,9 +108,9 @@ pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
     }
 
     // Start
-    println!("[3/4] starting '{VM_NAME}' ...");
+    println!("[3/4] starting '{vm_name}' ...");
     let status = Command::new(&smolvm)
-        .args(["machine", "start", "--name", VM_NAME])
+        .args(["machine", "start", "--name", vm_name])
         .status()
         .context("starting machine")?;
     if !status.success() {
@@ -121,7 +124,7 @@ pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
             "machine",
             "exec",
             "--name",
-            VM_NAME,
+            vm_name,
             "--",
             "/bin/sh",
             "-c",
@@ -133,7 +136,7 @@ pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
         bail!("provisioning failed — check output above");
     }
 
-    println!("'{VM_NAME}' ready. Run `cargo xtask test-in-vm` to use it.");
+    println!("'{vm_name}' ready. Run `cargo xtask test-in-vm` to use it.");
     Ok(())
 }
 

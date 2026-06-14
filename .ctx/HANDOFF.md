@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-06-04)
+# Handoff — minibox (2026-06-13)
 
-**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
@@ -31,13 +31,8 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| test-in-vm | P1 | blocked | cargo xtask test-in-vm — run Linux tests in ephemeral VM |
-| colima-ci | P2 | open | Wire colima VM as Linux build/test environment |
+| uncommitted-work | P1 | open | Uncommitted changes (82 files) |
 
 ## Log
 
-- 20260529.040048: Removed all Python code and 4 dead scripts; fixed 14 docs/core/ files against code truth (smolbox, conformance crate name, version, vz, DoS limits); wired colima as Linux build VM; workspace tests pass (5 cli_e2e root-only failures expected)
-- 20260527.115757: Resolved 12 TODOs — quick-win code fixes (#429)
-- 20260525.183746: Resolved 3 P0 security issues (#428 env key validation)
-- 20260523.102700: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
-- 20260521: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
+- 20260614.002952: done=69 running=0 pending=53 blocked=0

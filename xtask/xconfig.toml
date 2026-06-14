@@ -15,6 +15,7 @@ target = "aarch64-unknown-linux-musl"
 
 [dotenv]
 env_file = "$HOME/dev/.env"
+# key_op_ref read from DOTENV_KEY_OP_REF env var (op:// reference)
 
 [binaries]
 agentbox_dir = "agentbox/bin/agentbox"

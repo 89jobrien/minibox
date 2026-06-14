@@ -246,7 +246,6 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
-// qual:allow(complexity) reason: "daemon startup: tracing, paths, adapter selection, accept loop"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]

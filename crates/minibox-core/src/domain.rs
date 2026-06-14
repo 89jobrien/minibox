@@ -403,6 +403,15 @@ impl BindMount {
             );
         }
         let host_path = std::path::PathBuf::from(parts[0]);
+        if !host_path.is_absolute() {
+            anyhow::bail!("host path {:?} must be absolute (start with /)", host_path);
+        }
+        if host_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            anyhow::bail!("host path {:?} must not contain '..' components", host_path);
+        }
         let container_path = std::path::PathBuf::from(parts[1]);
         if !container_path.is_absolute() {
             anyhow::bail!(
@@ -445,6 +454,15 @@ impl BindMount {
         }
 
         let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
+        if !host_path.is_absolute() {
+            anyhow::bail!("host path {:?} must be absolute (start with /)", host_path);
+        }
+        if host_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            anyhow::bail!("host path {:?} must not contain '..' components", host_path);
+        }
         let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
         if !container_path.is_absolute() {
             anyhow::bail!(
@@ -1163,6 +1181,15 @@ pub enum DomainError {
         id: String,
     },
 
+    /// Attempted to remove a container that is not stopped (running or paused).
+    #[error("container '{id}' is not stopped (current state: {state})")]
+    ContainerNotStopped {
+        /// Container ID.
+        id: String,
+        /// Current container state (e.g. "Running", "Paused").
+        state: String,
+    },
+
     /// Invalid container configuration provided.
     #[error("invalid container configuration: {0}")]
     InvalidConfig(String),
@@ -1792,6 +1819,10 @@ mod tests {
     use std::collections::HashSet;
 
     // --- MetricsRecorder tests ---
+
+    // TODO(review-11): incomplete test_ prefix removal — remaining test_ prefixed
+    // fns below (test_metrics_recorder, test_container_id_*, etc.) should be renamed
+    // for consistency with the domain_error_display_* rename in this diff.
 
     /// Verify that a no-op MetricsRecorder can be constructed and used as a trait object.
     #[test]
@@ -3264,7 +3295,7 @@ mod kani_proofs {
     #[kani::unwind(16)]
     fn parse_volume_absolute_container_path() {
         // Use pre-built specs to avoid format! overhead in CBMC.
-        let specs: [&str; 3] = ["/host/a:/mnt", "/tmp:/data", "./rel:/opt"];
+        let specs: [&str; 3] = ["/host/a:/mnt", "/tmp:/data", "/opt/src:/opt"];
         let i: usize = kani::any();
         kani::assume(i < specs.len());
 
@@ -3286,6 +3317,19 @@ mod kani_proofs {
         assert!(
             BindMount::parse_volume(specs[i]).is_err(),
             "relative container path must be rejected"
+        );
+    }
+
+    /// Proof 31: parse_volume rejects relative host paths and paths with `..`.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn parse_volume_rejects_unsafe_host_paths() {
+        let specs: [&str; 3] = ["./rel:/opt", "host:/opt", "/tmp/../etc:/mnt"];
+        let i: usize = kani::any();
+        kani::assume(i < specs.len());
+        assert!(
+            BindMount::parse_volume(specs[i]).is_err(),
+            "relative or traversal host path must be rejected"
         );
     }
 }

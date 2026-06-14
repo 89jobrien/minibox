@@ -96,7 +96,6 @@ struct RunStepContext<'a> {
 /// stream output, wait for exit, clean up, and commit the resulting layer.
 ///
 /// Returns the updated layer stack on success.
-// qual:allow(complexity) reason: "build step lifecycle: run, stream, wait, commit"
 async fn execute_run_step(
     builder: &MiniboxImageBuilder,
     ctx: RunStepContext<'_>,
@@ -270,7 +269,6 @@ async fn stream_run_output(
 
 #[async_trait]
 impl ImageBuilder for MiniboxImageBuilder {
-    // qual:allow(complexity) reason: "multi-step image build orchestration"
     async fn build_image(
         &self,
         context: &BuildContext,

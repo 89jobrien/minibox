@@ -10,7 +10,6 @@ use crate::daemon::state::DaemonState;
 use super::{HandlerDependencies, send_error};
 
 /// Retrieve the execution manifest for a container.
-// qual:allow(complexity) reason: "manifest retrieval with fallback paths"
 pub async fn handle_get_manifest(
     id: String,
     state: Arc<DaemonState>,
@@ -95,7 +94,6 @@ pub async fn handle_get_manifest(
 }
 
 /// Verify a container's execution manifest against an execution policy.
-// qual:allow(complexity) reason: "manifest verification with policy evaluation"
 pub async fn handle_verify_manifest(
     id: String,
     policy_json: String,

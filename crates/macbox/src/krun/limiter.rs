@@ -65,6 +65,7 @@ impl ResourceLimiter for KrunLimiter {
         Ok(())
     }
 
+    // qual:allow(complexity) reason: "poisoned mutex is irrecoverable"
     /// Remove the stored config, if any.  Always returns `Ok`.
     fn cleanup(&self, container_id: &str) -> Result<()> {
         self.configs

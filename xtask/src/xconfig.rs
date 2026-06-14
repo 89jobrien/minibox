@@ -1,4 +1,10 @@
 //! Typed configuration loaded from `xtask/xconfig.toml`.
+//!
+//! All fields must be present for deserialization. Some fields are not yet
+//! wired into consuming modules — they exist so the config schema is stable
+//! and ready when those modules adopt xconfig.
+
+#![allow(dead_code)]
 
 use anyhow::{Context, Result};
 use serde::Deserialize;

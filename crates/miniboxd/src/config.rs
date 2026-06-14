@@ -253,21 +253,22 @@ mod tests {
 
     #[test]
     fn env_overrides_policy_fields() {
-        // SAFETY: env mutations are not thread-safe; this test is serial by convention.
-        unsafe {
-            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "true");
-            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "false");
-            std::env::set_var("MINIBOX_MAX_IMAGE_SIZE_MB", "512");
-        }
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+        use std::sync::Mutex;
+
+        static ENV_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "true");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "false");
+        unsafe_set_var!("MINIBOX_MAX_IMAGE_SIZE_MB", "512");
 
         let cfg = DaemonConfig::default().with_env_overrides();
 
         // Clean up before assertions so failures don't leak env state.
-        unsafe {
-            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
-            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
-            std::env::remove_var("MINIBOX_MAX_IMAGE_SIZE_MB");
-        }
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+        unsafe_remove_var!("MINIBOX_MAX_IMAGE_SIZE_MB");
 
         assert_eq!(cfg.policy.allow_privileged, Some(true));
         assert_eq!(cfg.policy.allow_bind_mounts, Some(false));

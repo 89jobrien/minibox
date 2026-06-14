@@ -8,7 +8,7 @@
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use minibox::daemon::handler;
-use minibox::daemon::state::ProcessChecker;
+use minibox::daemon::state::{CgroupFreezeChecker, ProcessChecker};
 use minibox::testing::helpers::{
     make_mock_deps, make_mock_state, make_mock_state_with_n_containers,
 };
@@ -182,6 +182,13 @@ impl ProcessChecker for AlwaysDead {
     }
 }
 
+struct NeverFrozen;
+impl CgroupFreezeChecker for NeverFrozen {
+    fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
+        false
+    }
+}
+
 fn bench_state_reconcile(c: &mut Criterion) {
     let mut group = c.benchmark_group("state_reconcile");
 
@@ -194,7 +201,7 @@ fn bench_state_reconcile(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, _| {
             b.iter(|| {
                 rt.block_on(async {
-                    state.reconcile_on_startup(&AlwaysDead).await;
+                    state.reconcile_on_startup(&AlwaysDead, &NeverFrozen).await;
                     black_box(())
                 })
             });

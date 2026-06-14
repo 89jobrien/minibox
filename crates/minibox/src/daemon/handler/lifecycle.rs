@@ -165,7 +165,11 @@ async fn remove_inner(
         .ok_or_else(|| DomainError::ContainerNotFound { id: id.to_string() })?;
 
     if record.info.state == "Running" || record.info.state == "Paused" {
-        return Err(DomainError::AlreadyRunning { id: id.to_string() }.into());
+        return Err(DomainError::ContainerNotStopped {
+            id: id.to_string(),
+            state: record.info.state.clone(),
+        }
+        .into());
     }
 
     // Unmount overlay (using injected filesystem trait).

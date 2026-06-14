@@ -168,7 +168,6 @@ impl minibox::daemon::server::ServerListener for MacUnixListener {
 /// 6. Removes any stale socket file, binds a new Unix socket, and runs the
 ///    [`minibox::daemon::server::run_server`] accept loop with root-auth disabled.
 /// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
-// qual:allow(complexity) reason: "daemon startup: tracing, paths, adapter probe, accept loop"
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -321,7 +320,6 @@ pub async fn start() -> Result<()> {
 ///
 /// The krun backend delegates container execution to `smolvm` (a thin
 /// wrapper over libkrun) rather than Linux namespaces or Colima.
-// qual:allow(complexity) reason: "krun daemon startup: socket, deps, accept loop"
 async fn start_krun(
     socket_path: std::path::PathBuf,
     _images_dir: std::path::PathBuf,
