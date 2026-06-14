@@ -18,6 +18,7 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+mod check_protocol_sites;
 mod ci_watch;
 mod cleanup;
 mod collect_metrics;
@@ -220,20 +221,7 @@ fn main() -> Result<()> {
             }
             protocol_drift::run(root, update, warn_only, hook)
         }
-        Some("check-protocol-sites") => {
-            let file = env::args()
-                .nth(2)
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| root.join("crates/miniboxd/src/main.rs"));
-            let args_vec: Vec<String> = env::args().collect();
-            let expected: usize = args_vec
-                .windows(2)
-                .find(|w| w[0] == "--expected")
-                .and_then(|w| w[1].parse().ok())
-                .unwrap_or(4);
-            let warn_only = env::args().any(|a| a == "--warn-only");
-            protocol_sites::check_protocol_sites(&file, expected, warn_only)
-        }
+        Some("check-protocol-sites") => check_protocol_sites::run(root),
         Some("detect-changes") => {
             let base_ref = env::args().nth(2).unwrap_or_else(|| "HEAD^".to_string());
             detect_changes::run(root, &base_ref)
@@ -393,9 +381,8 @@ fn main() -> Result<()> {
             eprintln!(
                 "  daily-orchestration [--ci] [--dry-run]  run the Claude daily orchestration workflow"
             );
-            eprintln!("  check-protocol-sites [<file>] [--expected N] [--warn-only]");
             eprintln!(
-                "                   verify HandlerDependencies construction site count in miniboxd/src/main.rs"
+                "  check-protocol-sites  scan crates/ for dead DaemonRequest/DaemonResponse variants"
             );
             eprintln!(
                 "  detect-changes [<base-ref>]  classify changed paths; emit GHA outputs (default base: HEAD^)"
