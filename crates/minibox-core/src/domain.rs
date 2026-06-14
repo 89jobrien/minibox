@@ -786,6 +786,8 @@ pub trait ChildInit: Send + Sync {
 ///
 /// Prefer using [`RootfsSetup`] or [`ChildInit`] directly at call sites that
 /// only need one half of the lifecycle.
+// TODO: add `Send + Sync` supertraits — needed for use in Arc<dyn FilesystemProvider> across
+// async task boundaries without unsafe workarounds.
 pub trait FilesystemProvider: RootfsSetup + ChildInit {}
 
 /// Blanket implementation: any type that implements both [`RootfsSetup`] and

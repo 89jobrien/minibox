@@ -320,6 +320,9 @@ pub async fn start() -> Result<()> {
 ///
 /// The krun backend delegates container execution to `smolvm` (a thin
 /// wrapper over libkrun) rather than Linux namespaces or Colima.
+// TODO: extract socket bind/chmod/stale-removal boilerplate shared by `start()` and
+// `start_krun()` (and any future adapter entrypoints) into a `bind_socket(path) -> Result<UnixListener>`
+// helper to eliminate 3x duplication (lines ~270-308, ~381-415).
 async fn start_krun(
     socket_path: std::path::PathBuf,
     _images_dir: std::path::PathBuf,
