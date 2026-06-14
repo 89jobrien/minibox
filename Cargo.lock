@@ -1635,6 +1635,7 @@ dependencies = [
  "macbox",
  "minibox",
  "minibox-core",
+ "minibox-macros",
  "nix",
  "proptest",
  "serde",
