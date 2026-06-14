@@ -234,6 +234,24 @@ pub struct StepOutput {
     pub status: StepStatus,
 }
 
+/// Feature declarations that a [`StepRunner`] can advertise to callers.
+///
+/// Unlike [`StepCapability`] (which governs runtime resource injection),
+/// `StepRunnerCapability` describes *what workflow features* the runner honours.
+/// Callers can query these before dispatch to decide whether to supply optional
+/// configuration fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StepRunnerCapability {
+    /// Runner evaluates `if:` guard expressions and skips the step when false.
+    SupportsIfGuards,
+    /// Runner honours `retry:` configuration (count, delay, backoff).
+    SupportsRetry,
+    /// Runner enforces `timeout:` deadlines and returns an error on expiry.
+    SupportsTimeout,
+    /// Runner supports inter-step alias passing (reading/writing step outputs).
+    SupportsAliasState,
+}
+
 /// Port: a pluggable executor for a single workflow step kind.
 ///
 /// Implementations live in `minibox/src/adapters/` or may be provided by
@@ -243,6 +261,14 @@ pub trait StepRunner: Send + Sync {
     fn kind(&self) -> &'static str;
     /// Capability tokens required by this runner.
     fn required_capabilities(&self) -> &[StepCapability];
+    /// Workflow feature declarations for this runner.
+    ///
+    /// The default implementation returns an empty slice for backward
+    /// compatibility — existing runners that do not override this method
+    /// simply advertise no optional features.
+    fn declared_capabilities(&self) -> &[StepRunnerCapability] {
+        &[]
+    }
     /// Execute one step with the given context.
     fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput>;
 }
@@ -273,6 +299,14 @@ impl StepRunnerRegistry {
     /// Look up a runner by kind string.  Returns `None` if not registered.
     pub fn get(&self, kind: &str) -> Option<&dyn StepRunner> {
         self.runners.get(kind).map(|r| r.as_ref())
+    }
+
+    /// Return the [`StepRunnerCapability`] declarations for the given runner kind.
+    ///
+    /// Returns `None` when no runner with that kind is registered.  Returns an
+    /// empty slice when the runner is registered but declares no capabilities.
+    pub fn capabilities_for(&self, kind: &str) -> Option<&[StepRunnerCapability]> {
+        self.runners.get(kind).map(|r| r.declared_capabilities())
     }
 
     /// List all registered (kind, capabilities) pairs.
@@ -2421,6 +2455,101 @@ mod step_runner_tests {
     #[test]
     fn overlay_snapshot_satisfies_contract() {
         assert_step_runner_contract(&OverlaySnapshotStepRunner);
+    }
+
+    // ── StepRunnerCapability / capabilities_for tests ────────────────────────
+
+    /// A mock runner that declares every optional capability.
+    struct FullyCapableRunner;
+
+    impl StepRunner for FullyCapableRunner {
+        fn kind(&self) -> &'static str {
+            "fully-capable"
+        }
+
+        fn required_capabilities(&self) -> &[StepCapability] {
+            &[]
+        }
+
+        fn declared_capabilities(&self) -> &[StepRunnerCapability] {
+            &[
+                StepRunnerCapability::SupportsIfGuards,
+                StepRunnerCapability::SupportsRetry,
+                StepRunnerCapability::SupportsTimeout,
+                StepRunnerCapability::SupportsAliasState,
+            ]
+        }
+
+        fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+            Ok(StepOutput {
+                value: serde_json::Value::Null,
+                status: StepStatus::Succeeded,
+            })
+        }
+    }
+
+    #[test]
+    fn default_declared_capabilities_returns_empty_slice() {
+        // Built-in runners do not override declared_capabilities — must be empty.
+        assert!(ContainerRunStepRunner.declared_capabilities().is_empty());
+        assert!(ImagePullStepRunner.declared_capabilities().is_empty());
+        assert!(ExecStepRunner.declared_capabilities().is_empty());
+        assert!(OverlaySnapshotStepRunner.declared_capabilities().is_empty());
+    }
+
+    #[test]
+    fn mock_runner_declares_all_capabilities() {
+        let runner = FullyCapableRunner;
+        let caps = runner.declared_capabilities();
+        assert!(caps.contains(&StepRunnerCapability::SupportsIfGuards));
+        assert!(caps.contains(&StepRunnerCapability::SupportsRetry));
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
+        assert!(caps.contains(&StepRunnerCapability::SupportsAliasState));
+    }
+
+    #[test]
+    fn capabilities_for_unknown_kind_returns_none() {
+        let registry = StepRunnerRegistry::new();
+        assert!(registry.capabilities_for("nonexistent").is_none());
+    }
+
+    #[test]
+    fn capabilities_for_builtin_runner_returns_empty_slice() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register_builtin_runners();
+        let caps = registry
+            .capabilities_for("container-run")
+            .expect("container-run must be registered");
+        assert!(
+            caps.is_empty(),
+            "built-in runners declare no capabilities by default"
+        );
+    }
+
+    #[test]
+    fn capabilities_for_fully_capable_runner_returns_all_four() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(FullyCapableRunner));
+        let caps = registry
+            .capabilities_for("fully-capable")
+            .expect("fully-capable must be registered");
+        assert_eq!(caps.len(), 4);
+        assert!(caps.contains(&StepRunnerCapability::SupportsIfGuards));
+        assert!(caps.contains(&StepRunnerCapability::SupportsRetry));
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
+        assert!(caps.contains(&StepRunnerCapability::SupportsAliasState));
+    }
+
+    #[test]
+    fn registry_capabilities_for_registered_after_builtin_runners() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register_builtin_runners();
+        registry.register(Box::new(FullyCapableRunner));
+        // Previously registered runners are still accessible.
+        assert!(registry.capabilities_for("exec").is_some());
+        // Newly registered runner is also accessible.
+        let caps = registry.capabilities_for("fully-capable").unwrap();
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
     }
 }
 
