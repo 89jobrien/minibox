@@ -2,8 +2,7 @@
 //!
 //! Images are stored under `{base_dir}/{name}/{tag}/`:
 //! - `manifest.json` -- the OCI manifest JSON blob.
-//! - `layers/{digest}/` -- one directory per layer, containing the extracted
-//!   tar contents.
+//! - `layers/{digest}/` -- one directory per layer, containing the extracted tar contents.
 //!
 //! [`ImageStore`] is the main entry point.
 

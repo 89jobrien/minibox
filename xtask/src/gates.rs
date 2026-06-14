@@ -900,6 +900,7 @@ pub fn agentlint_staged(sh: &Shell) -> Result<()> {
 }
 
 /// Lint all agent config files on disk (not just staged).
+// qual:allow(iosp) reason: "repo-wide lint orchestration: walks filesystem and delegates to linters"
 pub fn agentlint_all() -> Result<()> {
     let mut files = Vec::new();
     for dir in AGENT_DIRS {
@@ -911,6 +912,7 @@ pub fn agentlint_all() -> Result<()> {
     agentlint_check(&files)
 }
 
+// qual:allow(iosp) reason: "filesystem traversal helper"
 fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;

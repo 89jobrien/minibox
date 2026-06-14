@@ -57,6 +57,7 @@ fn count_crates(root: &Path) -> Result<usize> {
 
 /// Walk all `.rs` files under `dir`, accumulating total non-empty source lines
 /// and lines that contain a test annotation.
+// qual:allow(iosp) reason: "recursive fs scan and aggregation"
 fn scan_rs_files(dir: &Path, lines: &mut usize, tests: &mut usize) -> Result<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -110,6 +111,7 @@ fn feature_matrix_date(root: &Path) -> String {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "xtask entrypoint: shells out + reads filesystem + aggregates"
 pub fn collect_metrics(root: &Path, save: bool) -> Result<()> {
     let collected_at = now_utc();
     let crate_count = count_crates(root).context("count workspace crates")?;

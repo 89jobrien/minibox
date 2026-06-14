@@ -193,6 +193,7 @@ fn walkdir(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     Ok(out)
 }
 
+// qual:allow(iosp) reason: "recursive fs traversal"
 fn walkdir_inner(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
     let entries = std::fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
     for entry in entries {
@@ -311,6 +312,7 @@ fn adapter_table() -> BTreeMap<String, AdapterInfo> {
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
 pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let (commit, branch, timestamp) = git_info(sh)?;
     let workspace = workspace_version(sh)?;

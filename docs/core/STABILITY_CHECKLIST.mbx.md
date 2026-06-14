@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-<!-- Last-updated: auto — run `git log -1 --format="%ad" -- docs/STABILITY_CHECKLIST.mbx.md` to check -->
+Last updated: 2026-06-14
 
 ---
 
@@ -24,29 +24,29 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 ## Legend
 
-| Tag            | Meaning                                                                           |
-| -------------- | --------------------------------------------------------------------------------- |
-| **[GATE]**     | Mandatory merge gate. CI enforces this automatically or a reviewer must verify    |
-|                | it explicitly before merging. A failing GATE item **blocks promotion**.           |
-| **[ADVISORY]** | Review prompt. Best-effort or context-dependent. Failing an ADVISORY item does    |
-|                | not block merge, but **must be acknowledged** with a rationale comment in the PR. |
+| Tag              | Meaning                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| **[GATE]**       | Mandatory merge gate. CI enforces this automatically or a reviewer must verify     |
+|                  | it explicitly before merging. A failing GATE item **blocks promotion**.            |
+| **[ADVISORY]**   | Review prompt. Best-effort or context-dependent. Failing an ADVISORY item does     |
+|                  | not block merge, but **must be acknowledged** with a rationale comment in the PR.  |
 
 ---
 
 ## Gates
 
-| #   | Item                                                      | Tag        | Status  | Evidence                                     |
-| --- | --------------------------------------------------------- | ---------- | ------- | -------------------------------------------- |
-| 1   | Protocol types have a single source of truth              | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128)   |
-| 2   | Handler coverage >= 80% function coverage                 | [GATE]     | Not met | Current ~67.5% (`handler.rs`)                |
-| 3   | All wired adapters have at least one integration test     | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
-| 4   | `cargo xtask pre-commit` passes on macOS                  | [GATE]     | Met     | fmt + clippy + release build                 |
-| 5   | `cargo xtask test-unit` passes                            | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)     |
-| 6   | `cargo deny check` passes                                 | [GATE]     | Met     | License + advisory audit in CI               |
-| 7   | New domain trait has an in-memory mock double in tests    | [ADVISORY] | —       | Required for hexagonal port compliance       |
-| 8   | No `.unwrap()` in production paths of new code            | [ADVISORY] | —       | See rust-patterns.md rule 1                  |
-| 9   | Tracing events use structured fields, not message strings | [ADVISORY] | —       | See rust-patterns.md tracing rules           |
-| 10  | New `unsafe` blocks include a SAFETY comment              | [ADVISORY] | —       | See rust-patterns.md rule 6                  |
+| #   | Item                                                       | Tag        | Status  | Evidence                                   |
+| --- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------ |
+| 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
+| 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
+| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
+| 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | fmt + clippy + release build               |
+| 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)   |
+| 6   | `cargo deny check` passes                                  | [GATE]     | Met     | License + advisory audit in CI             |
+| 7   | New domain trait has an in-memory mock double in tests     | [ADVISORY] | —       | Required for hexagonal port compliance     |
+| 8   | No `.unwrap()` in production paths of new code             | [ADVISORY] | —       | See rust-patterns.md rule 1                |
+| 9   | Tracing events use structured fields, not message strings  | [ADVISORY] | —       | See rust-patterns.md tracing rules         |
+| 10  | New `unsafe` blocks include a SAFETY comment               | [ADVISORY] | —       | See rust-patterns.md rule 6                |
 
 ---
 
@@ -90,21 +90,20 @@ The freeze lifts when all **[GATE]** items above are verified green on the `next
 
 Gate 2 (handler coverage) is the primary remaining blocker. See
 [GH #158](https://github.com/89jobrien/minibox/issues/158) for tracking.
-
 ---
 
 ## CI Enforcement
 
-The following xtask gates are enforced in GitHub Actions via `.github/workflows/stability-gates.yml`
-and `.github/workflows/protocol-drift.yml`:
+The following xtask gates are enforced in GitHub Actions (
+and ):
 
-| Gate                 | CI Job                         | Workflow            |
-| -------------------- | ------------------------------ | ------------------- |
-| coverage-check       | handler coverage gate (>=80%)  | stability-gates.yml |
-| check-protocol-drift | core contract hash check       | protocol-drift.yml  |
-| check-stale-names    | stale crate/binary name audit  | stability-gates.yml |
-| check-protocol-sites | HandlerDependencies site count | stability-gates.yml |
+| Gate                       | CI Job                        | Workflow                |
+| -------------------------- | ----------------------------- | ----------------------- |
+| coverage-check             | handler coverage gate (>=80%) | stability-gates.yml     |
+| check-protocol-drift       | core contract hash check      | protocol-drift.yml      |
+| check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
+| check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
 
-Gates 1-6 in the table above are enforced via `cargo xtask pre-commit` locally and
-the CI jobs listed here. All four xtask-based gates (#133) were added in
-`stability-gates.yml` (see `.github/workflows/stability-gates.yml`).
+Gates 1-6 in the table above are enforced via pre-commit () locally and
+the jobs listed here in CI. All four xtask-based gates (#133) were added in
+.

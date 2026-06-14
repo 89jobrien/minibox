@@ -58,6 +58,7 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 }
 
 /// Entry point: build or refresh the test OCI tarball.
+// qual:allow(iosp) reason: "xtask orchestration: fs cache checks + builds + network fetch + tar assembly"
 pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
     let cfg = XConfig::load(workspace_root)?;
     let target = &cfg.cross.target;
@@ -111,6 +112,7 @@ pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Returns true if the tarball is newer than all .rs sources in the workspace.
+// qual:allow(iosp) reason: "cache check mixes fs reads with control flow"
 fn is_up_to_date(tar_path: &Path) -> Result<bool> {
     if !tar_path.exists() {
         return Ok(false);
@@ -133,6 +135,7 @@ fn is_up_to_date(tar_path: &Path) -> Result<bool> {
     Ok(newest_src.is_some_and(|src| tar_mtime > src))
 }
 
+// qual:allow(iosp) reason: "recursive fs scan"
 fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
     let mut newest = None;
     for entry in fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))? {

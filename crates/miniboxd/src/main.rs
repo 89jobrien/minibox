@@ -246,6 +246,7 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
@@ -573,6 +574,7 @@ async fn build_handler_deps(
 // ── Native adapter (Linux only) ──────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
+// qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
 async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
