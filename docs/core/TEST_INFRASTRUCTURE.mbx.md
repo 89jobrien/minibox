@@ -1,15 +1,9 @@
----
-watches:
-  - crates/minibox/tests/
-  - crates/minibox-core/tests/
-  - crates/miniboxd/tests/
-  - xtask/src/gates.rs
----
-
 # Test Infrastructure Report
 
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).
+> Updated 2026-06-13: CI workflow count corrected (11); xtask test count corrected (90);
+> new xtask commands added (check-protocol-sites, collect-metrics, demo).
 
 ## Test Counts
 
@@ -36,7 +30,7 @@ and root-required tests add ~700 more.
 | macbox         | 3                 | ~30               | ~63          |
 | winbox         | 0                 | 0                 | ~5           |
 | minibox-macros | 0                 | 0                 | 0            |
-| xtask          | 0                 | 0                 | 0            |
+| xtask          | 0                 | 0                 | ~90          |
 
 ---
 
@@ -51,8 +45,8 @@ and root-required tests add ~700 more.
 | Property tests (proptest)                    | ~46          | any         | no     | **no**      |
 | Borrow-reasoning fixtures                    | 11           | any         | no     | local       |
 | Security regression                          | ~19          | any         | no     | yes         |
-| Cgroup integration                           | 16           | Linux       | yes    | next/staging |
-| E2E daemon+CLI                               | 15           | Linux       | yes    | next/staging |
+| Cgroup integration                           | 16           | Linux       | yes    | next/stable |
+| E2E daemon+CLI                               | 15           | Linux       | yes    | next/stable |
 | Sandbox                                      | ~17          | Linux       | yes    | **no**      |
 | CLI subprocess                               | 30           | any         | no     | **no**      |
 | krun conformance                             | ~29          | macOS/Linux | no     | **no**      |
@@ -64,19 +58,19 @@ and root-required tests add ~700 more.
 
 11 workflows in `.github/workflows/`:
 
-| Workflow              | Trigger                                                    | Key jobs                                                                                                                                          |
-| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`              | PRs targeting main/next                                    | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                |
-| `merge.yml`           | pushes to develop/main/next/staging/feature/hotfix/chore   | detect-changes, lint, test-unit, lint-docs, protocol-drift, actionlint, protocol+CLI e2e (macOS+Ubuntu); audit/deny/machete, e2e+integration (next/staging) |
-| `macos.yml`           | pushes to main/next/staging/feature/hotfix/chore; PRs      | macOS fmt check                                                                                                                                   |
-| `reviewdog.yml`       | PRs targeting main/next                                    | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                   |
-| `stability-gates.yml` | all pushes + PRs                                           | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                        |
-| `conformance.yml`     | develop/next/staging + PRs + dispatch                      | `cargo xtask test-conformance` on self-hosted Linux                                                                                               |
-| `protocol-drift.yml`  | pushes touching protocol/domain/events/policy/client files | variant count + handler coverage check                                                                                                            |
-| `protocol-sites.yml`  | pushes touching main.rs/protocol_sites.rs                  | HandlerDependencies construction site count                                                                                                       |
-| `nightly.yml`         | daily cron                                                 | `cargo geiger` unsafe audit (informational)                                                                                                       |
-| `release.yml`         | `v*` tag                                                   | crates.io publish + musl cross-compile + GitHub release                                                                                           |
-| `summary.yml`         | issue opened                                               | AI-generated one-paragraph summary posted as issue comment                                                                                        |
+| Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
+| --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                         |
+| `merge.yml`           | pushes to main/next/stable/feature/hotfix/chore  | lint+fmt, unit tests, protocol e2e (macOS + Linux); build-test-archive, test-archive, test-all-features, audit/deny/machete, e2e+integration (next/stable) |
+| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                            |
+| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                                  |
+| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                                                        |
+| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                                                     |
+| `protocol-sites.yml`  | pushes touching miniboxd/src/main.rs or xtask    | `cargo xtask check-protocol-sites` — HandlerDependencies site count check                                                                                  |
+| `macos.yml`           | pushes to main/next/staging/feature/hotfix/chore | macOS-specific build + test jobs on mac runner                                                                                                             |
+| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                                                |
+| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                                                    |
+| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                                                 |
 
 ---
 
@@ -107,23 +101,27 @@ and root-required tests add ~700 more.
 
 ## xtask Commands
 
-| Command                 | What                                                     |
-| ----------------------- | -------------------------------------------------------- |
-| `verify`                | read-only fmt/check/clippy + borrow fixtures + docs-lint |
-| `borrow-fixtures`       | standalone Rust borrow must-pass/must-fail fixtures      |
-| `pre-commit`            | fmt-check + clippy + release build + docs-lint           |
-| `prepush`               | nextest + llvm-cov + ai-review (non-fatal)               |
-| `test-unit`             | lib + select integration tests + conformance             |
-| `test-conformance`      | commit/build/push/report conformance suite               |
-| `test-krun-conformance` | krun-specific conformance                                |
-| `test-property`         | proptest suites                                          |
-| `test-integration`      | cgroup tests (Linux+root)                                |
-| `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                              |
-| `test-sandbox`          | sandbox tests (Linux+root)                               |
-| `coverage-check`        | handler.rs fn coverage >= 80% gate                       |
-| `bench`                 | criterion benchmarks (trait_overhead + protocol_codec)   |
-| `check-stale-names`     | audit workspace for banned old crate/binary names        |
-| `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
+| Command                  | What                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| `verify`                 | read-only fmt/check/clippy + borrow fixtures + docs-lint          |
+| `borrow-fixtures`        | standalone Rust borrow must-pass/must-fail fixtures               |
+| `pre-commit`             | fmt-check + clippy + release build + docs-lint                    |
+| `prepush`                | nextest + llvm-cov + ai-review (non-fatal)                        |
+| `test-unit`              | lib + select integration tests + conformance                      |
+| `test-conformance`       | commit/build/push/report conformance suite                        |
+| `test-krun-conformance`  | krun-specific conformance                                         |
+| `test-property`          | proptest suites                                                   |
+| `test-integration`       | cgroup tests (Linux+root)                                         |
+| `test-e2e-suite`         | daemon+CLI e2e (Linux+root)                                       |
+| `test-sandbox`           | sandbox tests (Linux+root)                                        |
+| `coverage-check`         | handler.rs fn coverage >= 80% gate                                |
+| `bench`                  | criterion benchmarks (trait_overhead + protocol_codec)            |
+| `check-stale-names`      | audit workspace for banned old crate/binary names                 |
+| `check-protocol-drift`   | verify core contract hashes against known-good baseline           |
+| `check-protocol-sites`   | verify HandlerDependencies construction site count in miniboxd    |
+| `collect-metrics`        | aggregate crate count, test count, source lines to JSON           |
+| `demo [--adapter <name>]`| pull alpine:latest + run echo via mbx (default adapter: smolvm)  |
+| `nuke-test-state`        | kill orphans, unmount overlays, clean cgroups                     |
 
 ---
 
@@ -144,30 +142,3 @@ and root-required tests add ~700 more.
 - `mocks.rs` — cross-platform mock adapters (duplicates minibox mocks)
 - `test_fixtures.rs` — shared fixtures
 - `conformance.rs` — conformance harness
-
----
-
-## Regression Test Convention
-
-Every bug fix commit must include a regression test that reproduces the
-original failure. This prevents the same bug from recurring.
-
-### Naming
-
-```text
-regression_gh_NNN_short_description
-```
-
-Where `NNN` is the GitHub issue number. Examples:
-
-- `regression_gh_42_symlink_escape_in_tar`
-- `regression_gh_108_overlay_cleanup_on_cgroup_error`
-
-### Rules
-
-- Never delete a regression test. If the code it covers is removed,
-  mark it `#[ignore]` with a comment explaining why.
-- Regression tests live alongside related unit/integration tests in
-  the appropriate crate, not in a separate file.
-- If the bug was found by a property test, commit the
-  `proptest-regressions/` counterexample file.
