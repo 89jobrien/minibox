@@ -2,8 +2,9 @@
 
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).
-> Updated 2026-06-13: CI workflow count corrected (11); xtask test count corrected (90);
-> new xtask commands added (check-protocol-sites, collect-metrics, demo).
+> Updated 2026-06-14: macOS nextest count updated to 789 (789 passed, 1 skipped). minibox
+> integration test file count updated to 54. minibox-testsuite and smolbox crates added to
+> the crate table.
 
 ## Test Counts
 
@@ -13,24 +14,26 @@
 | Inline (#[cfg(test)] in src/)             | ~728         |
 | **Grand total**                           | **~1,467**   |
 
-Note: `cargo nextest` on macOS reports ~506 — that's the cross-platform
+Note: `cargo nextest` on macOS reports 789 (as of 2026-06-14) — that's the cross-platform
 subset (lib tests + included integration files). Linux-only, feature-gated,
-and root-required tests add ~700 more.
+and root-required tests add more on top.
 
 ---
 
 ## Tests by Crate
 
-| Crate          | Integration files | Integration tests | Inline tests |
-| -------------- | ----------------- | ----------------- | ------------ |
-| minibox        | 35                | ~479              | ~255         |
-| minibox-core   | 7                 | ~126              | ~285         |
-| miniboxd       | 6                 | ~72               | ~24          |
-| mbx            | 2                 | ~32               | ~96          |
-| macbox         | 3                 | ~30               | ~63          |
-| winbox         | 0                 | 0                 | ~5           |
-| minibox-macros | 0                 | 0                 | 0            |
-| xtask          | 0                 | 0                 | ~90          |
+| Crate              | Integration files | Integration tests | Inline tests |
+| ------------------ | ----------------- | ----------------- | ------------ |
+| minibox            | 54                | ~479              | ~255         |
+| minibox-core       | 7                 | ~126              | ~285         |
+| miniboxd           | 6                 | ~72               | ~24          |
+| mbx                | 2                 | ~32               | ~96          |
+| macbox             | 3                 | ~30               | ~63          |
+| minibox-testsuite  | 0                 | 0                 | ~24          |
+| smolbox            | 0                 | 0                 | ~3           |
+| winbox             | 0                 | 0                 | ~5           |
+| minibox-macros     | 0                 | 0                 | 0            |
+| xtask              | 0                 | 0                 | 0            |
 
 ---
 
@@ -56,7 +59,7 @@ and root-required tests add ~700 more.
 
 ## CI Workflows
 
-11 workflows in `.github/workflows/`:
+8 workflows in `.github/workflows/`:
 
 | Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
 | --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -66,8 +69,6 @@ and root-required tests add ~700 more.
 | `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                                  |
 | `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                                                        |
 | `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                                                     |
-| `protocol-sites.yml`  | pushes touching miniboxd/src/main.rs or xtask    | `cargo xtask check-protocol-sites` — HandlerDependencies site count check                                                                                  |
-| `macos.yml`           | pushes to main/next/staging/feature/hotfix/chore | macOS-specific build + test jobs on mac runner                                                                                                             |
 | `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                                                |
 | `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                                                    |
 | `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                                                 |
@@ -101,27 +102,23 @@ and root-required tests add ~700 more.
 
 ## xtask Commands
 
-| Command                  | What                                                              |
-| ------------------------ | ----------------------------------------------------------------- |
-| `verify`                 | read-only fmt/check/clippy + borrow fixtures + docs-lint          |
-| `borrow-fixtures`        | standalone Rust borrow must-pass/must-fail fixtures               |
-| `pre-commit`             | fmt-check + clippy + release build + docs-lint                    |
-| `prepush`                | nextest + llvm-cov + ai-review (non-fatal)                        |
-| `test-unit`              | lib + select integration tests + conformance                      |
-| `test-conformance`       | commit/build/push/report conformance suite                        |
-| `test-krun-conformance`  | krun-specific conformance                                         |
-| `test-property`          | proptest suites                                                   |
-| `test-integration`       | cgroup tests (Linux+root)                                         |
-| `test-e2e-suite`         | daemon+CLI e2e (Linux+root)                                       |
-| `test-sandbox`           | sandbox tests (Linux+root)                                        |
-| `coverage-check`         | handler.rs fn coverage >= 80% gate                                |
-| `bench`                  | criterion benchmarks (trait_overhead + protocol_codec)            |
-| `check-stale-names`      | audit workspace for banned old crate/binary names                 |
-| `check-protocol-drift`   | verify core contract hashes against known-good baseline           |
-| `check-protocol-sites`   | verify HandlerDependencies construction site count in miniboxd    |
-| `collect-metrics`        | aggregate crate count, test count, source lines to JSON           |
-| `demo [--adapter <name>]`| pull alpine:latest + run echo via mbx (default adapter: smolvm)  |
-| `nuke-test-state`        | kill orphans, unmount overlays, clean cgroups                     |
+| Command                 | What                                                     |
+| ----------------------- | -------------------------------------------------------- |
+| `verify`                | read-only fmt/check/clippy + borrow fixtures + docs-lint |
+| `borrow-fixtures`       | standalone Rust borrow must-pass/must-fail fixtures      |
+| `pre-commit`            | fmt-check + clippy + release build + docs-lint           |
+| `prepush`               | nextest + llvm-cov + ai-review (non-fatal)               |
+| `test-unit`             | lib + select integration tests + conformance             |
+| `test-conformance`      | commit/build/push/report conformance suite               |
+| `test-krun-conformance` | krun-specific conformance                                |
+| `test-property`         | proptest suites                                          |
+| `test-integration`      | cgroup tests (Linux+root)                                |
+| `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                              |
+| `test-sandbox`          | sandbox tests (Linux+root)                               |
+| `coverage-check`        | handler.rs fn coverage >= 80% gate                       |
+| `bench`                 | criterion benchmarks (trait_overhead + protocol_codec)   |
+| `check-stale-names`     | audit workspace for banned old crate/binary names        |
+| `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
 
 ---
 
