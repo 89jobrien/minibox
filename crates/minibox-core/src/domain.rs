@@ -1689,7 +1689,7 @@ mod tests {
 
     /// Verify that a no-op MetricsRecorder can be constructed and used as a trait object.
     #[test]
-    fn test_metrics_recorder_trait_object() {
+    fn metrics_recorder_trait_object() {
         struct StubRecorder;
         impl MetricsRecorder for StubRecorder {
             fn increment_counter(&self, _name: &str, _labels: &[(&str, &str)]) {}
@@ -1706,64 +1706,64 @@ mod tests {
     // --- ContainerId tests ---
 
     #[test]
-    fn test_container_id_valid() {
+    fn container_id_valid() {
         let id = ContainerId::new("abc123".to_string()).expect("valid alphanumeric id");
         assert_eq!(id.as_str(), "abc123");
     }
 
     #[test]
-    fn test_container_id_empty() {
+    fn container_id_empty() {
         let result = ContainerId::new(String::new());
         assert!(result.is_err(), "empty id should fail");
     }
 
     #[test]
-    fn test_container_id_too_long() {
+    fn container_id_too_long() {
         let long = "a".repeat(65);
         let result = ContainerId::new(long);
         assert!(result.is_err(), "65-char id should fail");
     }
 
     #[test]
-    fn test_container_id_max_length() {
+    fn container_id_max_length() {
         let id_str = "a".repeat(64);
         let id = ContainerId::new(id_str.clone()).expect("64-char id should succeed");
         assert_eq!(id.as_str(), id_str);
     }
 
     #[test]
-    fn test_container_id_special_chars() {
+    fn container_id_special_chars() {
         let result = ContainerId::new("abc-123".to_string());
         assert!(result.is_err(), "hyphen should fail alphanumeric check");
     }
 
     #[test]
-    fn test_container_id_spaces() {
+    fn container_id_spaces() {
         let result = ContainerId::new("abc 123".to_string());
         assert!(result.is_err(), "space should fail alphanumeric check");
     }
 
     #[test]
-    fn test_container_id_as_str() {
+    fn container_id_as_str() {
         let id = ContainerId::new("deadbeef".to_string()).expect("valid id");
         assert_eq!(id.as_str(), "deadbeef");
     }
 
     #[test]
-    fn test_container_id_display() {
+    fn container_id_display() {
         let id = ContainerId::new("abc123".to_string()).expect("valid id");
         assert_eq!(format!("{id}"), "abc123");
     }
 
     #[test]
-    fn test_container_id_equality() {
+    fn container_id_equality() {
         let a = ContainerId::new("abc123".to_string()).expect("valid id");
         let b = ContainerId::new("abc123".to_string()).expect("valid id");
         assert_eq!(a, b);
     }
 
     #[test]
-    fn test_container_id_hash() {
+    fn container_id_hash() {
         let a = ContainerId::new("abc123".to_string()).expect("valid id");
         let b = ContainerId::new("def456".to_string()).expect("valid id");
         let mut set: HashSet<ContainerId> = HashSet::new();
@@ -1777,14 +1777,14 @@ mod tests {
     // --- ContainerId hex edge-case tests (GH #145) ---
 
     #[test]
-    fn test_container_id_valid_16_char_hex() {
+    fn container_id_valid_16_char_hex() {
         // A standard 16-character lowercase hex ID (common Docker short-ID format) is valid.
         let id = ContainerId::new("deadbeef01234567".to_string()).expect("valid 16-char hex id");
         assert_eq!(id.as_str(), "deadbeef01234567");
     }
 
     #[test]
-    fn test_container_id_15_chars_is_valid() {
+    fn container_id_15_chars_is_valid() {
         // The validator requires 1–64 alphanumeric chars; 15 chars is within that range.
         // There is no minimum length beyond non-empty, so a 15-char hex string is accepted.
         let id = ContainerId::new("deadbeef0123456".to_string())
@@ -1793,7 +1793,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_17_chars_is_valid() {
+    fn container_id_17_chars_is_valid() {
         // Similarly, 17-char hex strings are within the 64-char maximum and accepted.
         let id = ContainerId::new("deadbeef012345678".to_string())
             .expect("17-char hex id is within the 1-64 range and must be accepted");
@@ -1801,7 +1801,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_non_hex_chars_rejected() {
+    fn container_id_non_hex_chars_rejected() {
         // Characters outside [0-9a-fA-F] that are also non-alphanumeric are rejected.
         // Hyphens and underscores are not alphanumeric, so they fail validation.
         let result = ContainerId::new("deadbeef-0123456".to_string());
@@ -1812,7 +1812,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_empty_rejected() {
+    fn container_id_empty_rejected() {
         let result = ContainerId::new(String::new());
         assert!(result.is_err(), "empty string must be rejected");
     }
@@ -1822,7 +1822,7 @@ mod tests {
     /// therefore accepted — they are alphanumeric even though they mix case. Code that compares
     /// container IDs must normalise case if canonical form matters.
     #[test]
-    fn test_container_id_mixed_case_hex_accepted() {
+    fn container_id_mixed_case_hex_accepted() {
         let id = ContainerId::new("DeadBeef01234567".to_string())
             .expect("mixed-case hex is alphanumeric and must be accepted");
         assert_eq!(id.as_str(), "DeadBeef01234567");
@@ -1831,7 +1831,7 @@ mod tests {
     // --- ContainerState tests ---
 
     #[test]
-    fn test_container_state_as_str() {
+    fn container_state_as_str() {
         assert_eq!(ContainerState::Created.as_str(), "Created");
         assert_eq!(ContainerState::Running.as_str(), "Running");
         assert_eq!(ContainerState::Paused.as_str(), "Paused");
@@ -1840,7 +1840,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_state_display() {
+    fn container_state_display() {
         assert_eq!(format!("{}", ContainerState::Created), "Created");
         assert_eq!(format!("{}", ContainerState::Running), "Running");
         assert_eq!(format!("{}", ContainerState::Paused), "Paused");
@@ -1849,7 +1849,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_state_clone_eq() {
+    fn container_state_clone_eq() {
         let state = ContainerState::Running;
         let cloned = state;
         assert_eq!(state, cloned);
@@ -1859,7 +1859,7 @@ mod tests {
     // --- DomainError tests ---
 
     #[test]
-    fn test_domain_error_display_image_not_found() {
+    fn domain_error_display_image_not_found() {
         let err = DomainError::ImageNotFound {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
@@ -1868,7 +1868,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_container_not_found() {
+    fn domain_error_display_container_not_found() {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
@@ -1876,7 +1876,7 @@ mod tests {
     }
 
     #[test]
-    fn test_domain_error_display_resource_limit_exceeded() {
+    fn domain_error_display_resource_limit_exceeded() {
         let err = DomainError::ResourceLimitExceeded {
             limit: "memory_bytes".to_string(),
             value: 9999,
@@ -1891,7 +1891,7 @@ mod tests {
     // --- ResourceConfig tests ---
 
     #[test]
-    fn test_resource_config_default() {
+    fn resource_config_default() {
         let config = ResourceConfig::default();
         assert!(config.memory_limit_bytes.is_none());
         assert!(config.cpu_weight.is_none());
@@ -1900,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resource_config_serde_roundtrip() {
+    fn resource_config_serde_roundtrip() {
         let config = ResourceConfig {
             memory_limit_bytes: Some(1024 * 1024 * 256),
             cpu_weight: Some(500),
@@ -1918,7 +1918,7 @@ mod tests {
     // --- HookSpec / ContainerHooks tests ---
 
     #[test]
-    fn test_hook_spec_default() {
+    fn hook_spec_default() {
         let hook = HookSpec::default();
         assert_eq!(hook.command, "");
         assert!(hook.args.is_empty());
@@ -1926,7 +1926,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_hooks_default() {
+    fn container_hooks_default() {
         let hooks = ContainerHooks::default();
         assert!(hooks.pre_exec.is_empty());
         assert!(hooks.post_exit.is_empty());
@@ -1935,7 +1935,7 @@ mod tests {
     // --- RuntimeCapabilities tests ---
 
     #[test]
-    fn test_runtime_capabilities_debug() {
+    fn runtime_capabilities_debug() {
         let caps = RuntimeCapabilities {
             supports_user_namespaces: true,
             supports_cgroups_v2: false,

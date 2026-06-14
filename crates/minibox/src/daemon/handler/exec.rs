@@ -1,4 +1,6 @@
 //! Exec, SendInput, and ResizePty handlers.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 
 use minibox_core::domain::SessionId;
 use minibox_core::protocol::DaemonResponse;
@@ -15,7 +17,6 @@ use super::{HandlerDependencies, send_error};
 /// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
 /// Returns `Error` immediately if the exec runtime is unavailable or the
 /// container is not running.
-#[allow(clippy::too_many_arguments)]
 pub async fn handle_exec(
     container_id: String,
     cmd: Vec<String>,

@@ -1,4 +1,6 @@
 //! Container run handlers and supporting infrastructure.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 // TODO(#326): persist execution manifest before container spawn
 // TODO(#366): extract shared run preparation path from handle_run
 
@@ -329,7 +331,6 @@ struct PreparedRun {
 }
 
 /// Construct an `ExecutionManifest` from container run parameters.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 fn build_execution_manifest(
     id: &str,
@@ -400,7 +401,6 @@ fn build_execution_manifest(
 }
 
 /// Build a `ContainerRecord` in `"Created"` state for a new container.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 fn build_container_record(
     id: &str,
@@ -1014,7 +1014,6 @@ pub(crate) async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
 /// Uses `runtime.wait_for_exit()` which dispatches to `waitpid` for native
 /// adapters or to the adapter's own wait mechanism (e.g. `SmolvmProcess::wait`
 /// for krun).
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
 async fn daemon_wait_for_exit(
     pid: u32,
