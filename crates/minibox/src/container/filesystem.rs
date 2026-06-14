@@ -194,6 +194,7 @@ pub fn setup_overlay_or_tmpfs(
 ///
 /// This is a degraded-mode fallback for nested containers where overlay-on-overlay
 /// is unsupported. Writes inside the container are lost on unmount.
+// qual:allow(iosp) reason: "I/O boundary — tmpfs mount, copy layers, fallback setup"
 fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
     let merged = container_dir.join("merged");
     fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {

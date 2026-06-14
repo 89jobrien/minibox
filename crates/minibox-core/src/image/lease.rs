@@ -50,6 +50,7 @@ impl DiskLeaseService {
     /// # Errors
     ///
     /// Returns an error if the file exists but cannot be read or parsed.
+    // qual:allow(iosp) reason: "I/O boundary — read file, parse, construct"
     pub async fn new(path: PathBuf) -> Result<Self> {
         let leases = if path.exists() {
             let bytes = tokio::fs::read(&path)

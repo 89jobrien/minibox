@@ -40,6 +40,7 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 /// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
 /// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
 /// the pipeline still completes successfully (the exit code determines success).
+// qual:allow(iosp) reason: "handler orchestration — validate, run container, collect trace"
 pub async fn handle_pipeline(
     pipeline_path: String,
     input: Option<serde_json::Value>,

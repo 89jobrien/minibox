@@ -106,6 +106,7 @@ impl MockAdapterBuilder {
     }
 
     /// Construct a [`MockAdapterSet`] with the configured failure modes.
+    // qual:allow(iosp) reason: "builder pattern — assembles mocks from config"
     #[must_use]
     pub fn build(self) -> MockAdapterSet {
         let mut registry = MockRegistry::new();

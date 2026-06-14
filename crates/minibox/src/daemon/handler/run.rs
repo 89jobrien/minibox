@@ -71,6 +71,7 @@ pub fn generate_container_id() -> String {
 /// Responses are sent via `tx`.  Non-ephemeral runs send exactly one message.
 /// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
 /// followed by one terminal `ContainerStopped` message.
+// qual:allow(iosp) reason: "handler orchestration — validate, create, start, stream"
 pub async fn handle_run(
     params: RunParams,
     state: Arc<DaemonState>,
@@ -151,6 +152,7 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
+// qual:allow(iosp) reason: "handler orchestration — spawn, stream, cleanup"
 #[cfg(unix)]
 pub(super) async fn handle_run_streaming(
     params: RunParams,
@@ -785,6 +787,7 @@ async fn prepare_run(
 ///
 /// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
 /// and `waitpid` — both available on any Unix via the `nix` crate.
+// qual:allow(iosp) reason: "container lifecycle — namespace setup, fork, exec"
 #[cfg(unix)]
 async fn run_inner_capture(
     params: RunParams,
@@ -862,6 +865,7 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
+// qual:allow(iosp) reason: "container lifecycle — overlay, spawn, reaper"
 async fn run_inner(
     params: RunParams,
     state: Arc<DaemonState>,

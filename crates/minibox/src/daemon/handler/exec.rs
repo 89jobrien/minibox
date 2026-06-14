@@ -17,6 +17,7 @@ use super::{HandlerDependencies, send_error};
 /// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
 /// Returns `Error` immediately if the exec runtime is unavailable or the
 /// container is not running.
+// qual:allow(iosp) reason: "handler orchestration — validates, dispatches, streams"
 pub async fn handle_exec(
     container_id: String,
     cmd: Vec<String>,

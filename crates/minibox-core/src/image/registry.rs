@@ -238,6 +238,7 @@ fn resolve_manifest_action(
 /// On success the layer is renamed from a `.tmp` sibling into `layer_dir`.
 /// On failure (digest mismatch or extraction error) the tmp dir is cleaned up.
 /// Returns actual compressed bytes read on success.
+// qual:allow(iosp) reason: "I/O boundary — tmp dir, extract, hash verify, rename"
 fn extract_and_verify_layer(
     reader: impl io::Read,
     layer_dir: &std::path::Path,
@@ -472,6 +473,7 @@ impl RegistryClient {
         Box::pin(self.get_manifest_inner(name, tag, token, 0)).await
     }
 
+    // qual:allow(iosp) reason: "registry protocol — fetch, parse, recurse for index"
     async fn get_manifest_inner(
         &self,
         name: &str,
@@ -667,6 +669,7 @@ impl RegistryClient {
     ///
     /// Returns an error if auth, manifest fetch, any layer download, digest
     /// verification, or manifest persistence fails.
+    // qual:allow(iosp) reason: "pull orchestration — auth, manifest, layers, verify, store"
     #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, store), fields(image = %format!("{name}:{tag}")))]
     pub async fn pull_image(

@@ -1427,6 +1427,7 @@ mod pub_crate_handler_tests {
         );
     }
 
+    #[cfg(feature = "test-utils")]
     #[tokio::test]
     async fn lifecycle_pause_container_not_running_returns_error() {
         let tmp = TempDir::new().expect("create temp dir");
@@ -1458,6 +1459,7 @@ mod pub_crate_handler_tests {
         );
     }
 
+    #[cfg(feature = "test-utils")]
     #[tokio::test]
     async fn lifecycle_resume_container_not_paused_returns_error() {
         let tmp = TempDir::new().expect("create temp dir");
@@ -1489,6 +1491,7 @@ mod pub_crate_handler_tests {
         );
     }
 
+    #[cfg(feature = "test-utils")]
     #[tokio::test]
     async fn lifecycle_remove_running_container_returns_error() {
         let tmp = TempDir::new().expect("create temp dir");

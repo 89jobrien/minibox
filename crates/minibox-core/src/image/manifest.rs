@@ -212,6 +212,7 @@ impl TargetPlatform {
     /// # Errors
     ///
     /// Returns an error if the string does not contain at least `os/arch`.
+    // qual:allow(iosp) reason: "pure validation — bail! counted as call"
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = s.split('/').collect();
         match parts.len() {

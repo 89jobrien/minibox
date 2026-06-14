@@ -171,6 +171,7 @@ impl minibox::daemon::server::ServerListener for MacUnixListener {
 /// 6. Removes any stale socket file, binds a new Unix socket, and runs the
 ///    [`minibox::daemon::server::run_server`] accept loop with root-auth disabled.
 /// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
+// qual:allow(iosp) reason: "daemon entrypoint — init tracing, build deps, run server"
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -322,6 +323,7 @@ pub async fn start() -> Result<()> {
 // TODO: extract socket bind/chmod/stale-removal boilerplate shared by `start()` and
 // `start_krun()` (and any future adapter entrypoints) into a `bind_socket(path) -> Result<UnixListener>`
 // helper to eliminate 3x duplication (lines ~270-308, ~381-415).
+// qual:allow(iosp) reason: "daemon entrypoint — build krun deps, bind socket, run server"
 async fn start_krun(
     socket_path: std::path::PathBuf,
     _images_dir: std::path::PathBuf,

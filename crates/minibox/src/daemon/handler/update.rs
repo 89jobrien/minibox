@@ -60,6 +60,7 @@ async fn resolve_update_targets(
 ///
 /// When `restart` is `true`, Running or Paused containers whose source image
 /// was updated are stopped and re-run from their stored `creation_params`.
+// qual:allow(iosp) reason: "handler orchestration — resolve images, pull, restart"
 pub async fn handle_update(
     images: Vec<String>,
     all: bool,

@@ -390,6 +390,7 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(name, tag)
     }
 
+    // qual:allow(iosp) reason: "adapter I/O boundary — auth, fetch manifest, download layers"
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,

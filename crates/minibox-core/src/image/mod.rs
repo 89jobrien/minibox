@@ -270,6 +270,7 @@ impl ImageStore {
     /// # Errors
     ///
     /// Returns an error if extraction, digest verification, or the atomic rename fails.
+    // qual:allow(iosp) reason: "I/O boundary — extract, verify digest, atomic rename"
     pub fn store_layer_verified<R: Read>(
         &self,
         name: &str,

@@ -49,6 +49,7 @@ as_any!(ColimaImagePusher);
 
 #[async_trait]
 impl ImagePusher for ColimaImagePusher {
+    // qual:allow(iosp) reason: "adapter I/O boundary — tar, upload, progress"
     async fn push_image(
         &self,
         image_ref: &ImageRef,

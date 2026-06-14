@@ -26,6 +26,7 @@ use super::{HandlerDependencies, send_error};
 ///
 /// Returns an error if `platform` cannot be parsed, or if the adapter cannot
 /// be reconstructed (e.g. TLS init failure).
+// qual:allow(iosp) reason: "handler orchestration — routing + adapter construction"
 pub(super) fn resolve_platform_registry(
     platform: &Option<String>,
     image_ref: &minibox_core::image::reference::ImageRef,
@@ -57,6 +58,7 @@ pub(super) fn resolve_platform_registry(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
@@ -195,6 +197,7 @@ pub async fn handle_load_image(
 /// Push a locally-stored image to a remote OCI registry.
 ///
 /// Sends zero or more `PushProgress` messages followed by `Success` or `Error`.
+// qual:allow(iosp) reason: "handler orchestration — validate, push, stream progress"
 pub async fn handle_push(
     image_ref_str: String,
     credentials: minibox_core::protocol::PushCredentials,
@@ -386,6 +389,7 @@ pub async fn handle_commit(
 /// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
 /// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
 /// success or [`DaemonResponse::Error`] on failure.
+// qual:allow(iosp) reason: "handler orchestration — parse, build steps, stream output"
 pub async fn handle_build(
     dockerfile: String,
     context_path: String,

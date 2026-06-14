@@ -96,6 +96,7 @@ struct RunStepContext<'a> {
 /// stream output, wait for exit, clean up, and commit the resulting layer.
 ///
 /// Returns the updated layer stack on success.
+// qual:allow(iosp) reason: "build step orchestration — rootfs, spawn, stream, commit"
 async fn execute_run_step(
     builder: &MiniboxImageBuilder,
     ctx: RunStepContext<'_>,
@@ -268,6 +269,7 @@ async fn stream_run_output(
 
 #[async_trait]
 impl ImageBuilder for MiniboxImageBuilder {
+    // qual:allow(iosp) reason: "build orchestration — parse Dockerfile, execute steps, commit"
     async fn build_image(
         &self,
         context: &BuildContext,

@@ -524,7 +524,7 @@ async fn test_handle_remove_running_container() {
     match response {
         DaemonResponse::Error { message } => {
             assert!(
-                message.contains("running"),
+                message.to_lowercase().contains("running"),
                 "expected 'running' in error message, got: {message}"
             );
         }

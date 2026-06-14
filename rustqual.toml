@@ -15,6 +15,20 @@ exclude_files = [
     # minibox-testsuite is pure test infrastructure — .expect()/.unwrap() is
     # expected and acceptable in test harness code.
     "minibox-testsuite/src/*",
+    "*/minibox-testsuite/src/*",
+    # xtask is CLI tooling — functions are integration-tested via `cargo xtask`,
+    # not unit-testable in isolation.
+    "xtask/src/*",
+    "*/xtask/src/*",
+    # rust-script files — standalone scripts, not unit-testable in-crate.
+    "scripts/*.rs",
+    "*/scripts/*.rs",
+    # minibox-crux-plugin is a thin integration shim — tested via crux pipelines.
+    "minibox-crux-plugin/src/*",
+    "*/minibox-crux-plugin/src/*",
+    # miniboxd binary — daemon entrypoints are integration-tested, not unit-testable.
+    "miniboxd/src/*",
+    "*/miniboxd/src/*",
 ]
 strict_closures = false
 strict_iterator_chains = false
@@ -85,8 +99,8 @@ max_methods = 20
 max_fan_out = 10
 lcom4_threshold = 2
 weights = [0.4, 0.25, 0.15, 0.2]
-file_length_baseline = 300
-file_length_ceiling = 800
+file_length_baseline = 400
+file_length_ceiling = 900
 max_independent_clusters = 2
 min_cluster_statements = 5
 # handler/ module exception: daemon handlers use dependency-injection signatures

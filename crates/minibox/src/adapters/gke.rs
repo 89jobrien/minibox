@@ -251,6 +251,7 @@ impl ProotRuntime {
     /// Create a proot runtime from environment.
     ///
     /// Checks `MINIBOX_PROOT_PATH` first, then searches `PATH` for `proot`.
+    // qual:allow(iosp) reason: "I/O boundary — env var + PATH probe"
     pub fn from_env() -> Result<Self> {
         if let Ok(path) = std::env::var("MINIBOX_PROOT_PATH") {
             return Self::new(&path)
