@@ -217,6 +217,8 @@ pub struct StepContext {
     pub alias: String,
     /// Step-specific configuration extracted from the workflow definition.
     pub config: serde_json::Value,
+    /// Accumulated outputs from all prior steps in this workflow execution.
+    pub prior_outputs: WorkflowState,
 }
 
 /// Result value produced by a [`StepRunner`].
@@ -2628,6 +2630,7 @@ mod step_runner_tests {
         let ctx = StepContext {
             alias: "test".to_string(),
             config: serde_json::Value::Null,
+            prior_outputs: WorkflowState::new(),
         };
         let _ = runner.run(ctx); // result not checked — contract is no-panic, not success
     }
@@ -2897,8 +2900,10 @@ pub struct ResolvedStep {
 ///
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
-#[cfg(test)]
-fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<ResolvedStep> {
+pub fn resolve_step_vars(
+    step: &WorkflowStep,
+    state: &WorkflowState,
+) -> anyhow::Result<ResolvedStep> {
     use anyhow::Context as _;
     let mut resolved_vars = std::collections::HashMap::new();
 
@@ -2925,23 +2930,21 @@ fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Resu
 /// Writes step output into shared workflow state under the step's alias.
 ///
 /// Overwrites any prior value stored under the same alias.
-#[cfg(test)]
-fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
+pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
 
 /// Returns all steps that precede `alias` in declaration order.
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
-#[cfg(test)]
-fn steps_before<'a>(
+pub fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
 ) -> anyhow::Result<Vec<&'a WorkflowStep>> {
     let idx = steps
         .iter()
         .position(|s| s.alias == alias)
-        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow steps", alias))?;
+        .ok_or_else(|| anyhow::anyhow!("alias '{alias}' not found in workflow steps"))?;
     Ok(steps[..idx].iter().collect())
 }
 
@@ -2953,8 +2956,7 @@ fn steps_before<'a>(
 ///
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
-#[cfg(test)]
-fn resume_workflow(
+pub fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
     prior_outputs: &WorkflowState,
@@ -2977,8 +2979,7 @@ fn resume_workflow(
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
-#[cfg(test)]
-fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
     if !expr.contains("${{") {
@@ -2990,7 +2991,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
         let end = result[start..]
             .find("}}")
             .map(|i| start + i + 2)
-            .ok_or_else(|| anyhow::anyhow!("unclosed '${{' in expression: {}", expr))?;
+            .ok_or_else(|| anyhow::anyhow!("unclosed '${{' in expression: {expr}"))?;
         let token = result[start..end].to_string();
         let inner = token
             .trim_start_matches("${{")
@@ -2998,7 +2999,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
             .trim();
 
         let value = resolve_output_ref(inner, state)
-            .with_context(|| format!("failed to resolve expression: {}", inner))?;
+            .with_context(|| format!("failed to resolve expression: {inner}"))?;
         result = result.replacen(&token, &value, 1);
     }
     Ok(result)
@@ -3008,23 +3009,19 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
-#[cfg(test)]
-fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
-        anyhow::anyhow!(
-            "unsupported expression form (expected outputs['alias']...): {}",
-            expr
-        )
+        anyhow::anyhow!("unsupported expression form (expected outputs['alias']...): {expr}")
     })?;
     let (alias, rest) = rest
         .split_once("']")
-        .ok_or_else(|| anyhow::anyhow!("malformed alias in expression: {}", expr))?;
+        .ok_or_else(|| anyhow::anyhow!("malformed alias in expression: {expr}"))?;
     let field_path = rest.trim_start_matches('.');
 
     let alias_val = state
         .get(alias)
-        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow state", alias))?;
+        .ok_or_else(|| anyhow::anyhow!("alias '{alias}' not found in workflow state"))?;
 
     let field_val = if field_path.is_empty() {
         alias_val.clone()
@@ -3032,7 +3029,7 @@ fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<Strin
         let mut cur = alias_val;
         for segment in field_path.split('.') {
             cur = cur.get(segment).ok_or_else(|| {
-                anyhow::anyhow!("field '{}' not found in alias '{}' output", segment, alias)
+                anyhow::anyhow!("field '{segment}' not found in alias '{alias}' output")
             })?;
         }
         cur.clone()
