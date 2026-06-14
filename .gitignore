@@ -2,4 +2,55 @@
 # mdbook generated output
 /book/
 /.kgx/
+clippy.sarif.ctx
+
+# Rust build artifacts
+/target/
+fuzz/Cargo.lock
+
+# Local context / session state (gitignored by convention)
+.ctx/
+.envrc
+.env.local
+.env.keys
+.firecrawl/
+.worktrees/
+.minibox/
+
+# Editor and IDE
+.idea/
+.vscode/
+.DS_Store
+**/.DS_Store
+
+# Claude Code local overrides (not shared)
+.claude/agents/local/
+.claude/commands/local/
+.claude/hooks/local/
+.claude/rules/local/
+.claude/skills/local/
+.claude/skills/**/.DS_Store
+.claude/skills/whatidid/cache/
+.claude/skills/wave-integration/.DS_Store
+.claude/templates/local/
+.claude/settings.local.json
+
+# AI tooling caches
+.ai/
+.cargo-ai/
+
+# Generated / scratch files
+artifacts/
+assets/
+agentbox/bin/
+scripts/.DS_Store
+images/.DS_Store
+crates/.DS_Store
+crates/minibox-macros/.DS_Store
+crates/minibox/fuzz/
+xtask/docs-audit-report.json
 clippy.sarif
+minibox-assistant
+profile.json.gz
+promote.toml
+
