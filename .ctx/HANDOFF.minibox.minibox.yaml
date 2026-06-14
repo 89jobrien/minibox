@@ -7,37 +7,17 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (12 files)
+  title: Uncommitted changes (2 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    docs/architecture-diagrams.md
-    docs/core/SUMMARY.md
-    docs/ideas/dind-sysbox.md
-    docs/ideas/nested-workflows.md
-    docs/ideas/sysbox-images.md
-    docs/ideas/sysbox-kind.md
-    docs/ideas/sysbox-security.md
-    docs/ideas/sysbox-storage.md
-    docs/notes/
-    docs/otel-design.md
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - docs/architecture-diagrams.md
-  - docs/core/SUMMARY.md
-  - docs/ideas/dind-sysbox.md
-  - docs/ideas/nested-workflows.md
-  - docs/ideas/sysbox-images.md
-  - docs/ideas/sysbox-kind.md
-  - docs/ideas/sysbox-security.md
-  - docs/ideas/sysbox-storage.md
-  - docs/notes/
-  - docs/otel-design.md
   completed: null
   extra: []
 log:
-- date: '20260614.090432'
-  summary: done=69 running=0 pending=53 blocked=0
+- date: '20260614.110932'
+  summary: done=76 running=0 pending=46 blocked=0
   commits: []

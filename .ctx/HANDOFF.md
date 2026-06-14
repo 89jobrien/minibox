@@ -31,8 +31,8 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (12 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (2 files) |
 
 ## Log
 
-- 20260614.090432: done=69 running=0 pending=53 blocked=0
+- 20260614.110932: done=76 running=0 pending=46 blocked=0
