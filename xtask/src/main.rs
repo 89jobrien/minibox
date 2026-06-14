@@ -480,7 +480,9 @@ fn dispatch_docs(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             docs_audit::run(sh, root, mode)
         }
         "lint" => {
-            let args: Vec<String> = env::args().skip(3).collect();
+            // skip(1) = skip the binary name; search remaining args for --sarif regardless
+            // of whether we arrived via `cargo xtask docs lint` or the `lint-docs` alias.
+            let args: Vec<String> = env::args().skip(1).collect();
             let sarif_path = args
                 .windows(2)
                 .find(|w| w[0] == "--sarif")
