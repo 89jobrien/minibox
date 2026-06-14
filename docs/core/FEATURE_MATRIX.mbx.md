@@ -2,21 +2,29 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-<!-- Last-updated: auto — run `git log -1 --format="%ad" -- docs/FEATURE_MATRIX.mbx.md` to check -->
-<!-- Last-verified: 2026-06-13 — adapter source cross-checked against crates/minibox/src/adapters/ and crates/macbox/src/ -->
+Last updated: 2026-06-14
 
 ---
 
 ## Adapter Suites
 
-| Adapter  | Platform             | Status       | Crate   | Default?                    |
-| -------- | -------------------- | ------------ | ------- | --------------------------- |
-| `native` | Linux (x86_64/arm64) | Production   | minibox | Fallback on Linux           | <!-- src: crates/minibox/src/adapters/runtime.rs -->
-| `gke`    | Linux (GKE pods)     | Production   | minibox | --                          | <!-- src: crates/minibox/src/adapters/gke.rs -->
-| `colima` | macOS/Linux (Colima) | Experimental | minibox | --                          | <!-- src: crates/minibox/src/adapters/colima.rs -->
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (all platforms)         | <!-- src: crates/minibox/src/adapters/smolvm.rs -->
-| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback on macOS           | <!-- src: crates/macbox/src/krun/ -->
-| `winbox` | Windows              | Stub         | winbox  | --                          | <!-- src: crates/minibox/src/adapters/hcs.rs (stub) -->
+| Adapter  | Platform                        | Status       | Crate   | Default?                          |
+| -------- | ------------------------------- | ------------ | ------- | --------------------------------- |
+| `native` | Linux only (x86_64/arm64) [^1]  | Production   | minibox | Fallback on Linux                 |
+| `gke`    | Linux only (GKE pods) [^2]      | Production   | minibox | --                                |
+| `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
+| `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
+| `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
+| `winbox` | Windows                         | Stub         | winbox  | --                                |
+
+[^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
+      (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
+[^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
+      Uses proot (ptrace) and copy-based filesystem instead of overlay.
+[^3]: `smolvm` is compiled only on Unix (`cfg!(unix)`). Not available on Windows builds.
+      Requires the `smolvm` binary on PATH at runtime.
+[^4]: `krun` fallback platform-splits: `native` on Linux, `krun` on macOS, when
+      `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 
 ---
 
@@ -25,57 +33,57 @@ Per-platform capability breakdown for minibox adapters.
 | Feature                 | native | gke  | colima  | smolvm | krun | winbox |
 | ----------------------- | ------ | ---- | ------- | ------ | ---- | ------ |
 | **Container lifecycle** |        |      |         |        |      |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/image/registry.rs -->
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/run.rs -->
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/lifecycle.rs -->
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/lifecycle.rs -->
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/lifecycle.rs -->
-| pause/resume            | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox/src/adapters/limiter.rs (CgroupV2Limiter) -->
-| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/lifecycle.rs -->
-| exec (-it)              | Yes    | No   | Limited | No     | No   | No     | <!-- src: crates/minibox/src/adapters/exec.rs (NativeExecRuntime); colima via limactl SSH tunnel -->
-| logs                    | Yes    | No   | Limited | No     | No   | No     | <!-- src: crates/minibox/src/daemon/handler/logs.rs; colima via limactl -->
-| events                  | Yes    | Yes  | No      | No     | No   | No     | <!-- src: crates/minibox-core/src/events.rs (EventSink/EventSource) -->
+| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| pause/resume            | Yes    | No   | No      | No     | No   | No     |
+| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| exec (-it)              | Yes    | No   | Limited | No     | No   | No     |
+| logs                    | Yes    | No   | Limited | No     | No   | No     |
+| events                  | Yes    | Yes  | No      | No     | No   | No     |
 | **Image management**    |        |      |         |        |      |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/image/registry.rs -->
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/adapters/ghcr.rs -->
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/image/registry.rs (pull_image, parallel layer fetch) -->
-| prune / rmi             | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox-core/src/image/gc.rs (ImageGarbageCollector) -->
-| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No     | <!-- src: crates/minibox/src/adapters/push.rs; colima: crates/minibox/src/adapters/colima_push.rs -->
-| commit (exp)            | Yes    | No   | Yes     | No     | No   | No     | <!-- src: crates/minibox/src/adapters/commit.rs -->
-| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No     | <!-- src: crates/minibox-core/src/domain.rs (ImageBuilder) -->
+| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| prune / rmi             | Yes    | No   | No      | No     | No   | No     |
+| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No     |
+| commit (exp)            | Yes    | No   | Yes     | No     | No   | No     |
+| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No     |
 | **Isolation**           |        |      |         |        |      |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | No     | <!-- src: crates/minibox/src/container/namespace.rs (native); provided by Lima/smolvm/krun VM -->
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | No     | <!-- src: crates/minibox/src/container/namespace.rs -->
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | No     | <!-- src: crates/minibox/src/container/namespace.rs -->
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | No     | <!-- src: crates/minibox/src/container/namespace.rs -->
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | No     | <!-- src: crates/minibox/src/container/namespace.rs -->
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | No     | <!-- src: crates/minibox/src/adapters/limiter.rs (CgroupV2Limiter) -->
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | No     | <!-- src: crates/minibox/src/adapters/filesystem.rs (OverlayFilesystem) -->
+| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | No     |
+| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | No     |
+| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
+| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | No     |
+| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | No     |
 | **Networking**          |        |      |         |        |      |        |
-| Bridge (exp)            | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox/src/adapters/network/bridge.rs (BridgeNetwork) -->
+| Bridge (exp)            | Yes    | No   | No      | No     | No   | No     |
 | Port forwarding         | No     | No   | No      | No     | No   | No     |
 | DNS                     | No     | No   | No      | No     | No   | No     |
 | **Mounts & Privileges** |        |      |         |        |      |        |
-| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox/src/daemon/handler/run.rs -->
-| Privileged mode         | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox/src/daemon/handler/run.rs -->
+| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No     |
+| Privileged mode         | Yes    | No   | No      | No     | No   | No     |
 | **Security**            |        |      |         |        |      |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/server.rs (is_authorized) -->
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    | <!-- src: crates/minibox-core/src/image/layer.rs (validate_tar_entry_path) -->
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    | <!-- src: crates/minibox-core/src/image/layer.rs (mode & 0o777) -->
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    | <!-- src: crates/minibox-core/src/image/layer.rs (Block/Char check) -->
-| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/image/registry.rs -->
-| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/server.rs (MAX_REQUEST_SIZE) -->
-| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/telemetry/traces.rs -->
+| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
+| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | **Execution integrity** |        |      |         |        |      |        |
-| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/handler/manifest.rs -->
-| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/domain/execution_manifest.rs -->
-| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox-core/src/domain/execution_policy.rs -->
+| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 | **State persistence**   |        |      |         |        |      |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/minibox/src/daemon/state.rs (DaemonState) -->
-| PID reconciliation      | Yes    | No   | No      | No     | No   | No     | <!-- src: crates/minibox/src/daemon/state.rs -->
+| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| PID reconciliation      | Yes    | No   | No      | No     | No   | No     |
 | **Observability**       |        |      |         |        |      |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/miniboxd/src/main.rs (tracing subscriber init) -->
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | No     | <!-- src: crates/miniboxd/src/main.rs (otel feature gate) -->
+| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
 
 ---
 
@@ -140,11 +148,12 @@ Key implementation sites backing the "Yes" entries above:
   tunnel. Push, commit, and build are wired via
   `ColimaImagePusher`, `OverlayCommitAdapter`, and
   `MiniboxImageBuilder`.
-- **`smolvm` adapter** is the **default** when `MINIBOX_ADAPTER`
-  is unset and the `smolvm` binary is present on PATH
-  (see `crates/miniboxd/src/main.rs:select_adapter`). Falls back
+- **`smolvm` adapter** is the **default on Unix** when
+  `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
+  PATH (see `crates/miniboxd/src/adapter_registry.rs`). Falls back
   to `native` on Linux or `krun` on macOS when the binary is
-  absent. Lightweight Linux VMs with subsecond boot
+  absent. Not available on Windows (`cfg!(unix)`). Lightweight Linux
+  VMs with subsecond boot
   (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
 - **`krun` adapter** uses libkrun to run containers in
   lightweight VMs
