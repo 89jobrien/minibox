@@ -99,9 +99,11 @@ macOS daemon implementation.
 **Backends:**
 
 - **Colima**: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`,
-  `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl
+  `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl.
+  Implemented in `crates/minibox/src/adapters/colima.rs` (not macbox).
 - **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
-  libkrun micro-VMs (HVF on macOS, KVM on Linux)
+  libkrun micro-VMs (HVF on macOS, KVM on Linux).
+  Implemented in `crates/macbox/src/krun/`.
 
 ---
 

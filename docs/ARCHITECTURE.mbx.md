@@ -50,8 +50,9 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 
 ## Domain Traits (Hexagonal Ports)
 
-All defined in `crates/minibox-core/src/domain.rs` and re-exported
-via `crates/minibox/src/domain.rs`.
+Most are defined in `crates/minibox-core/src/domain.rs`; `NetworkProvider` is in
+`crates/minibox-core/src/domain/networking.rs`. All are re-exported via
+`crates/minibox/src/domain.rs`.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -73,6 +74,8 @@ via `crates/minibox/src/domain.rs`.
 | `PtyAllocator`       | `allocate`                                            | internal exec path                      |
 
 ### Extension Ports (defined, not in HandlerDependencies)
+
+Defined in `crates/minibox-core/src/domain/extensions.rs`.
 
 | Trait          | Status                      |
 | -------------- | --------------------------- |
@@ -111,7 +114,7 @@ broker — an inconsistency vs native/gke/smolvm.
 
 All `build_*_handler_dependencies` functions live in
 `crates/miniboxd/src/main.rs`. Adapter selection logic is in
-`crates/miniboxd/src/main.rs:select_adapter`.
+`crates/miniboxd/src/adapter_registry.rs:adapter_from_env`.
 
 | Suite                         | Wired in miniboxd                                | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ------------------------------------------------ | ----------------------- | ------------ |
