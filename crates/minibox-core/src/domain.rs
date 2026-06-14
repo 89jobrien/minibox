@@ -123,6 +123,12 @@ pub struct WorkflowStep {
     /// Optional conditional expression — step is skipped when this evaluates to false.
     #[serde(default)]
     pub if_expr: Option<String>,
+    /// Optional if-guard expression evaluated before this step runs.
+    ///
+    /// When present, the expression is resolved via `evaluate_if_guard`; the step
+    /// is skipped when the resolved value is empty, `"false"`, or `"0"`.
+    #[serde(default)]
+    pub if_guard: Option<String>,
     /// When `true`, workflow execution continues even if this step fails.
     #[serde(default)]
     pub continue_on_error: bool,
@@ -2654,13 +2660,31 @@ pub fn resume_workflow(
     Ok((skip_count, state))
 }
 
+/// Evaluates the `if_guard` expression on `step`.
+///
+/// Returns `Ok(true)` when:
+/// - `step.if_guard` is `None` (no guard — step always runs), or
+/// - the resolved expression value is non-empty and is not `"false"` or `"0"`.
+///
+/// Returns `Ok(false)` when the resolved value is `""`, `"false"`, or `"0"`.
+/// Returns `Err` when expression resolution fails.
+pub fn evaluate_if_guard(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<bool> {
+    use anyhow::Context as _;
+    let expr = match &step.if_guard {
+        None => return Ok(true),
+        Some(e) => e,
+    };
+    let resolved = resolve_expr(expr, state)
+        .with_context(|| format!("failed to evaluate if_guard for step '{}'", step.alias))?;
+    Ok(!matches!(resolved.as_str(), "" | "false" | "0"))
+}
+
 /// Resolves a single expression string.
 ///
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
-#[cfg(test)]
-fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub(crate) fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
     if !expr.contains("${{") {
@@ -2690,8 +2714,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
-#[cfg(test)]
-fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub(crate) fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
         anyhow::anyhow!(
@@ -2739,6 +2762,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "check".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2759,6 +2783,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "check".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2777,6 +2802,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "plain".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2808,6 +2834,7 @@ mod alias_state_tests {
                 kind: "exec".to_string(),
                 alias: "s".to_string(),
                 if_expr: None,
+                if_guard: None,
                 continue_on_error: false,
                 retry: None,
                 vars: vec![ExprVar { name: key.clone(), value: val.clone() }],
@@ -2828,6 +2855,7 @@ mod start_from_step_tests {
             kind: "exec".to_string(),
             alias: alias.to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![],
@@ -3053,5 +3081,92 @@ mod slashcrux_tests {
         ctx.set("M_VAR", serde_json::Value::String("m".into()));
         let env = execution_context_to_env(&ctx);
         assert_eq!(env, vec!["Z_VAR=z", "A_VAR=a", "M_VAR=m"]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// evaluate_if_guard tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod if_guard_tests {
+    use super::*;
+
+    fn make_step(alias: &str, if_guard: Option<&str>) -> WorkflowStep {
+        WorkflowStep {
+            kind: "exec".to_string(),
+            alias: alias.to_string(),
+            if_expr: None,
+            if_guard: if_guard.map(str::to_string),
+            continue_on_error: false,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn none_guard_always_true() {
+        let step = make_step("s", None);
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_false_literal() {
+        let step = make_step("s", Some("false"));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_zero() {
+        let step = make_step("s", Some("0"));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_empty_string() {
+        let step = make_step("s", Some(""));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_true_literal() {
+        let step = make_step("s", Some("true"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_non_empty_non_false_value() {
+        let step = make_step("s", Some("yes"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_using_output_reference_truthy() {
+        let step = make_step("s", Some("${{ outputs['step1'].value }}"));
+        let mut state = WorkflowState::new();
+        state.insert("step1".to_string(), serde_json::json!({"value": "success"}));
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_using_output_reference_falsy() {
+        let step = make_step("s", Some("${{ outputs['step1'].value }}"));
+        let mut state = WorkflowState::new();
+        state.insert("step1".to_string(), serde_json::json!({"value": "false"}));
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_missing_alias_returns_err() {
+        let step = make_step("s", Some("${{ outputs['missing'].value }}"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).is_err());
     }
 }
