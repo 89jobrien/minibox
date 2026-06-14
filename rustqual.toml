@@ -6,7 +6,6 @@
 
 # ── Function Classification ──────────────────────────────────────────────
 
-ignore_functions = ["main", "test_*"]
 exclude_files = [
     "*/tests/*",
     "*/benches/*",

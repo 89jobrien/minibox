@@ -1,183 +1,43 @@
 project: minibox
 id: minibox
-updated: 2026-06-13
+updated: 2026-06-14
 items:
 - id: uncommitted-work
   doob_uuid: null
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (82 files)
+  title: Uncommitted changes (12 files)
   description: |-
     Working tree has uncommitted changes:
-    .cargo/config.toml
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .ctx/memory-bank/activeContext.mbx.md
-    Cargo.lock
-    agentbox/go.mod
-    agentbox/go.sum
-    crates/macbox/src/krun/limiter.rs
-    crates/macbox/src/krun/registry.rs
-    crates/macbox/src/lib.rs
-    crates/minibox-core/src/domain.rs
-    crates/minibox-core/src/image/registry.rs
-    crates/minibox-crux-plugin/src/lib.rs
-    crates/minibox/benches/trait_overhead.rs
-    crates/minibox/src/adapters/builder.rs
-    crates/minibox/src/adapters/colima.rs
-    crates/minibox/src/adapters/network/bridge.rs
-    crates/minibox/src/adapters/push.rs
-    crates/minibox/src/container/cgroups.rs
-    crates/minibox/src/container/filesystem.rs
-    crates/minibox/src/daemon/handler/exec.rs
-    crates/minibox/src/daemon/handler/image.rs
-    crates/minibox/src/daemon/handler/lifecycle.rs
-    crates/minibox/src/daemon/handler/logs.rs
-    crates/minibox/src/daemon/handler/manifest.rs
-    crates/minibox/src/daemon/handler/mod.rs
-    crates/minibox/src/daemon/handler/pipeline.rs
-    crates/minibox/src/daemon/handler/run.rs
-    crates/minibox/src/daemon/handler/update.rs
-    crates/minibox/src/daemon/server.rs
-    crates/minibox/src/daemon/state.rs
-    crates/minibox/src/daemon/telemetry/traces.rs
-    crates/minibox/src/nesting.rs
-    crates/minibox/tests/daemon_adapter_suite_tests.rs
-    crates/minibox/tests/daemon_conformance_tests.rs
-    crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
-    crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
-    crates/minibox/tests/daemon_handler_common/mod.rs
-    crates/minibox/tests/daemon_handler_coverage_tests.rs
-    crates/minibox/tests/daemon_handler_error_path_tests.rs
-    crates/minibox/tests/daemon_handler_exec_tests.rs
-    crates/minibox/tests/daemon_handler_failure_tests.rs
-    crates/minibox/tests/daemon_handler_image_tests.rs
-    crates/minibox/tests/daemon_handler_lifecycle_tests.rs
-    crates/minibox/tests/daemon_handler_stream_boundary_tests.rs
-    crates/minibox/tests/daemon_handler_streaming_tests.rs
-    crates/minibox/tests/daemon_state_persistence_tests.rs
-    crates/miniboxd/src/config.rs
-    crates/miniboxd/src/main.rs
-    crates/miniboxd/tests/integration_tests.rs
-    images/sandbox/Dockerfile
-    rustqual.toml
-    xtask/Cargo.toml
-    xtask/src/council.rs
-    xtask/src/dotenv.rs
-    xtask/src/gates.rs
-    xtask/src/main.rs
-    xtask/src/setup_test_vm.rs
-    xtask/src/test_gke.rs
-    xtask/src/test_image.rs
-    xtask/src/test_in_vm.rs
-    xtask/src/xconfig.rs
-    xtask/xconfig.toml
-    .kgx/
-    book.toml
-    book/
-    clippy.sarif
-    docs/core/ABOUT.mbx.md
-    docs/core/CODE_STYLE.mbx.md
-    docs/core/CRATE_TIERS.mbx.md
-    docs/core/GOTCHAS.mbx.md
-    docs/core/MUTATION_AUDIT.mbx.md
-    docs/core/PRERELEASE_CHANGELOG.mbx.md
-    docs/core/ROADMAP.mbx.md
-    docs/core/STABILITY_CHECKLIST.mbx.md
-    docs/core/SUPPORT_TIERS.mbx.md
-    docs/core/TESTING.mbx.md
-    docs/core/USAGE.mbx.md
-    docs/ideas/
-    docs/plans/2026-06-06-rustqual-code-quality-sweep.md
-    promote.toml
-    scripts/kani-quick.sh
+    docs/architecture-diagrams.md
+    docs/core/SUMMARY.md
+    docs/ideas/dind-sysbox.md
+    docs/ideas/nested-workflows.md
+    docs/ideas/sysbox-images.md
+    docs/ideas/sysbox-kind.md
+    docs/ideas/sysbox-security.md
+    docs/ideas/sysbox-storage.md
+    docs/notes/
+    docs/otel-design.md
   files:
-  - .cargo/config.toml
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .ctx/memory-bank/activeContext.mbx.md
-  - Cargo.lock
-  - agentbox/go.mod
-  - agentbox/go.sum
-  - crates/macbox/src/krun/limiter.rs
-  - crates/macbox/src/krun/registry.rs
-  - crates/macbox/src/lib.rs
-  - crates/minibox-core/src/domain.rs
-  - crates/minibox-core/src/image/registry.rs
-  - crates/minibox-crux-plugin/src/lib.rs
-  - crates/minibox/benches/trait_overhead.rs
-  - crates/minibox/src/adapters/builder.rs
-  - crates/minibox/src/adapters/colima.rs
-  - crates/minibox/src/adapters/network/bridge.rs
-  - crates/minibox/src/adapters/push.rs
-  - crates/minibox/src/container/cgroups.rs
-  - crates/minibox/src/container/filesystem.rs
-  - crates/minibox/src/daemon/handler/exec.rs
-  - crates/minibox/src/daemon/handler/image.rs
-  - crates/minibox/src/daemon/handler/lifecycle.rs
-  - crates/minibox/src/daemon/handler/logs.rs
-  - crates/minibox/src/daemon/handler/manifest.rs
-  - crates/minibox/src/daemon/handler/mod.rs
-  - crates/minibox/src/daemon/handler/pipeline.rs
-  - crates/minibox/src/daemon/handler/run.rs
-  - crates/minibox/src/daemon/handler/update.rs
-  - crates/minibox/src/daemon/server.rs
-  - crates/minibox/src/daemon/state.rs
-  - crates/minibox/src/daemon/telemetry/traces.rs
-  - crates/minibox/src/nesting.rs
-  - crates/minibox/tests/daemon_adapter_suite_tests.rs
-  - crates/minibox/tests/daemon_conformance_tests.rs
-  - crates/minibox/tests/daemon_container_lifecycle_failure_tests.rs
-  - crates/minibox/tests/daemon_handler_adapter_swap_tests.rs
-  - crates/minibox/tests/daemon_handler_common/mod.rs
-  - crates/minibox/tests/daemon_handler_coverage_tests.rs
-  - crates/minibox/tests/daemon_handler_error_path_tests.rs
-  - crates/minibox/tests/daemon_handler_exec_tests.rs
-  - crates/minibox/tests/daemon_handler_failure_tests.rs
-  - crates/minibox/tests/daemon_handler_image_tests.rs
-  - crates/minibox/tests/daemon_handler_lifecycle_tests.rs
-  - crates/minibox/tests/daemon_handler_stream_boundary_tests.rs
-  - crates/minibox/tests/daemon_handler_streaming_tests.rs
-  - crates/minibox/tests/daemon_state_persistence_tests.rs
-  - crates/miniboxd/src/config.rs
-  - crates/miniboxd/src/main.rs
-  - crates/miniboxd/tests/integration_tests.rs
-  - images/sandbox/Dockerfile
-  - rustqual.toml
-  - xtask/Cargo.toml
-  - xtask/src/council.rs
-  - xtask/src/dotenv.rs
-  - xtask/src/gates.rs
-  - xtask/src/main.rs
-  - xtask/src/setup_test_vm.rs
-  - xtask/src/test_gke.rs
-  - xtask/src/test_image.rs
-  - xtask/src/test_in_vm.rs
-  - xtask/src/xconfig.rs
-  - xtask/xconfig.toml
-  - .kgx/
-  - book.toml
-  - book/
-  - clippy.sarif
-  - docs/core/ABOUT.mbx.md
-  - docs/core/CODE_STYLE.mbx.md
-  - docs/core/CRATE_TIERS.mbx.md
-  - docs/core/GOTCHAS.mbx.md
-  - docs/core/MUTATION_AUDIT.mbx.md
-  - docs/core/PRERELEASE_CHANGELOG.mbx.md
-  - docs/core/ROADMAP.mbx.md
-  - docs/core/STABILITY_CHECKLIST.mbx.md
-  - docs/core/SUPPORT_TIERS.mbx.md
-  - docs/core/TESTING.mbx.md
-  - docs/core/USAGE.mbx.md
-  - docs/ideas/
-  - docs/plans/2026-06-06-rustqual-code-quality-sweep.md
-  - promote.toml
-  - scripts/kani-quick.sh
+  - docs/architecture-diagrams.md
+  - docs/core/SUMMARY.md
+  - docs/ideas/dind-sysbox.md
+  - docs/ideas/nested-workflows.md
+  - docs/ideas/sysbox-images.md
+  - docs/ideas/sysbox-kind.md
+  - docs/ideas/sysbox-security.md
+  - docs/ideas/sysbox-storage.md
+  - docs/notes/
+  - docs/otel-design.md
   completed: null
   extra: []
 log:
-- date: '20260614.002952'
+- date: '20260614.090432'
   summary: done=69 running=0 pending=53 blocked=0
   commits: []
