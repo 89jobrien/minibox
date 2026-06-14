@@ -14,7 +14,7 @@
 | mbx                 | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests          |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
-| xtask               | bin        | ~5k    | 15           | 0                       | --                        |
+| xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** ~79k lines of Rust across 345 source files. All crates at
 version 0.30.0 (xtask 0.1.0).
@@ -79,8 +79,8 @@ builder).
 
 ## miniboxd
 
-Daemon binary. Platform-dispatches: macOS -> `macbox::start()`, Windows ->
-`winbox::start()`, Linux -> inline `run_daemon()`.
+Daemon binary. Platform-dispatches: Unix (Linux + macOS) -> `run_daemon()`,
+Windows -> `winbox::start()`.
 
 **Key modules:** `adapter_registry.rs` (AdapterSuite enum, env-based
 selection), `listener.rs` (UnixServerListener).
@@ -91,7 +91,8 @@ selection), `listener.rs` (UnixServerListener).
 
 ## macbox
 
-macOS daemon implementation.
+macOS daemon entry point and Colima adapter wiring. smolvm and krun adapters
+live in `smolbox` (see below).
 
 **Backends:**
 
@@ -158,7 +159,15 @@ internally by `cargo xtask test-conformance`.
 
 Development tool. All CI gate commands.
 
-**Key commands:** pre-commit, prepush, test-unit, test-conformance,
-test-krun-conformance, test-property, test-integration, test-e2e, test-e2e-suite,
-test-system-suite, test-sandbox, bench, bump, nuke-test-state, clean-artifacts,
-lint-docs, preflight, doctor, check-stale-names.
+**Key commands:** pre-commit, prepush, verify, lint, fix, coverage,
+coverage-check, agentlint, build-test-image, setup-test-vm, test-in-vm,
+test-linux, bump, promote, preflight, doctor, ci-watch, daily-orchestration,
+council, bench, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
+cas-add, cas-check.
+
+**Subcommand groups:** `test <suite>` (unit, conformance, krun-conformance,
+turmoil, shuttle, property, quickcheck, integration, e2e, system-suite,
+sandbox, gke-profile, gke-adapter), `check <target>` (stale-names,
+protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
+`docs <action>` (audit, lint, update-date), `info <target>` (metrics,
+context, changes).
