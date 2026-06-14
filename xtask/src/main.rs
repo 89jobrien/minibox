@@ -19,6 +19,7 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+mod check_protocol_sites;
 pub mod checkpoint;
 mod ci_watch;
 mod cleanup;
@@ -235,6 +236,7 @@ fn main() -> Result<()> {
             let overlay_dir = cas::default_overlay_dir();
             cas::cas_check(&overlay_dir)
         }
+        Some("check-protocol-sites") => check_protocol_sites::run(root),
         Some("run") => {
             let script_name = env::args()
                 .nth(2)
