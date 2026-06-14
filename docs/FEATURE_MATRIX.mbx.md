@@ -2,20 +2,29 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-05-26
+Last updated: 2026-06-14
 
 ---
 
 ## Adapter Suites
 
-| Adapter  | Platform             | Status       | Crate   | Default?                    |
-| -------- | -------------------- | ------------ | ------- | --------------------------- |
-| `native` | Linux (x86_64/arm64) | Production   | minibox | Fallback on Linux           |
-| `gke`    | Linux (GKE pods)     | Production   | minibox | --                          |
-| `colima` | macOS/Linux (Colima) | Experimental | minibox | --                          |
-| `smolvm` | macOS/Linux (SmolVM) | Experimental | minibox | Yes (all platforms)         |
-| `krun`   | macOS/Linux (krun)   | Experimental | macbox  | Fallback on macOS           |
-| `winbox` | Windows              | Stub         | winbox  | --                          |
+| Adapter  | Platform                        | Status       | Crate   | Default?                          |
+| -------- | ------------------------------- | ------------ | ------- | --------------------------------- |
+| `native` | Linux only (x86_64/arm64) [^1]  | Production   | minibox | Fallback on Linux                 |
+| `gke`    | Linux only (GKE pods) [^2]      | Production   | minibox | --                                |
+| `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
+| `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
+| `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
+| `winbox` | Windows                         | Stub         | winbox  | --                                |
+
+[^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
+      (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
+[^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
+      Uses proot (ptrace) and copy-based filesystem instead of overlay.
+[^3]: `smolvm` is compiled only on Unix (`cfg!(unix)`). Not available on Windows builds.
+      Requires the `smolvm` binary on PATH at runtime.
+[^4]: `krun` fallback platform-splits: `native` on Linux, `krun` on macOS, when
+      `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 
 ---
 
@@ -139,11 +148,12 @@ Key implementation sites backing the "Yes" entries above:
   tunnel. Push, commit, and build are wired via
   `ColimaImagePusher`, `OverlayCommitAdapter`, and
   `MiniboxImageBuilder`.
-- **`smolvm` adapter** is the **default** when `MINIBOX_ADAPTER`
-  is unset and the `smolvm` binary is present on PATH
-  (see `crates/miniboxd/src/main.rs:select_adapter`). Falls back
+- **`smolvm` adapter** is the **default on Unix** when
+  `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
+  PATH (see `crates/miniboxd/src/adapter_registry.rs`). Falls back
   to `native` on Linux or `krun` on macOS when the binary is
-  absent. Lightweight Linux VMs with subsecond boot
+  absent. Not available on Windows (`cfg!(unix)`). Lightweight Linux
+  VMs with subsecond boot
   (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
 - **`krun` adapter** uses libkrun to run containers in
   lightweight VMs
