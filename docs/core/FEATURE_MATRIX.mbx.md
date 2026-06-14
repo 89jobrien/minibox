@@ -138,9 +138,10 @@ Key implementation sites backing the "Yes" entries above:
 ## Notes
 
 - **`gke` adapter** uses proot for filesystem isolation
-  (see `crates/minibox/src/adapters/gke.rs:GkeRuntime`) and a
-  no-op resource limiter. Designed for running inside unprivileged
-  GKE pods where namespaces and cgroups are unavailable.
+  (see `crates/minibox/src/adapters/gke.rs:ProotRuntime`) and a
+  no-op resource limiter (`crates/minibox/src/adapters/gke.rs:NoopLimiter`).
+  Designed for running inside unprivileged GKE pods where namespaces and
+  cgroups are unavailable.
 - **`colima` adapter** delegates to `nerdctl`/`limactl` inside a
   Lima VM
   (see `crates/minibox/src/adapters/colima.rs:ColimaRuntime`).
