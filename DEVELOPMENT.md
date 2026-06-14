@@ -4,6 +4,27 @@ Canonical developer workflow for minibox. See `CLAUDE.md` for architecture
 details, `TESTING.md` for the full test strategy, and `docs/SUPPORT_TIERS.mbx.md` for crate and
 adapter support-tier definitions.
 
+## Canonical Workflow
+
+These are the four commands every contributor needs. Use these — not ad-hoc
+`cargo test` or `cargo clippy` invocations — to stay aligned with CI.
+
+| Goal              | Command                      | Notes                                         |
+| ----------------- | ---------------------------- | --------------------------------------------- |
+| Run tests         | `cargo xtask test-unit`      | Any platform; no root required                |
+| Lint              | `cargo xtask verify`         | fmt-check + clippy + borrow fixtures; read-only |
+| Build             | `cargo build --workspace`    | Debug build; use `--release` for deployment   |
+| Run the daemon    | `sudo ./target/release/miniboxd` | Linux; see [Running the Daemon](#running-the-daemon) |
+
+Before every commit: `cargo xtask pre-commit` (fmt-check + clippy + release build).
+Before every push: `cargo xtask prepush` (nextest suite + coverage).
+
+Install git hooks once after cloning:
+
+```bash
+just install-hooks
+```
+
 ## Quick Start for New Contributors
 
 Three commands cover 95% of daily development:
@@ -12,12 +33,6 @@ Three commands cover 95% of daily development:
 cargo xtask pre-commit   # before every commit: fmt-check + clippy + release build
 cargo xtask test-unit    # run all unit + conformance tests (any platform)
 cargo xtask prepush      # before every push: nextest suite + coverage
-```
-
-Install git hooks once after cloning:
-
-```bash
-just install-hooks
 ```
 
 See the [Command Reference](#command-reference) table below for the full list.

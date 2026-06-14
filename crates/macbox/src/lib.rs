@@ -49,6 +49,9 @@ pub enum MacboxError {
     NoBackendAvailable,
 }
 
+// TODO(#161): centralize adapter registration — this function duplicates
+// `build_colima_handler_dependencies` in `crates/miniboxd/src/main.rs`.
+// Consolidate both into a shared builder module when refactoring adapters.
 #[allow(clippy::too_many_arguments)]
 pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,
