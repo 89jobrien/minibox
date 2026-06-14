@@ -8,7 +8,7 @@
 //! |----------------------|-------------------------------------------------------------|
 //! | `gates`              | Quality gates: fmt-check, clippy, nextest, coverage         |
 //! | `cleanup`            | State cleanup: kill orphans, unmount overlays, rm artifacts |
-//! | `feature_matrix_date`| Rewrite Last-updated stamp in FEATURE_MATRIX.mbx.md        |
+//! | `feature_matrix_date`| Rewrite Last-updated stamps in all docs/ markdown files     |
 use anyhow::{Result, bail};
 use std::env;
 use xshell::Shell;
@@ -380,7 +380,7 @@ fn main() -> Result<()> {
                 "  run-cgroup-tests run cgroup v2 integration tests in delegated hierarchy (Linux, root)"
             );
             eprintln!(
-                "  update-feature-matrix-date  rewrite Last-updated stamp in docs/FEATURE_MATRIX.mbx.md to today"
+                "  update-feature-matrix-date  rewrite Last-updated stamps in all docs/ files to today"
             );
             eprintln!("  check-stale-names audit workspace for banned old crate/binary names");
             eprintln!(
