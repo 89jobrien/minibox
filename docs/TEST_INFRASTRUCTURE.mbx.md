@@ -2,6 +2,9 @@
 
 > Generated 2026-04-27 from automated codebase analysis.
 > Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).
+> Updated 2026-06-14: macOS nextest count updated to 789 (789 passed, 1 skipped). minibox
+> integration test file count updated to 54. minibox-testsuite and smolbox crates added to
+> the crate table.
 
 ## Test Counts
 
@@ -11,24 +14,26 @@
 | Inline (#[cfg(test)] in src/)             | ~728         |
 | **Grand total**                           | **~1,467**   |
 
-Note: `cargo nextest` on macOS reports ~506 — that's the cross-platform
+Note: `cargo nextest` on macOS reports 789 (as of 2026-06-14) — that's the cross-platform
 subset (lib tests + included integration files). Linux-only, feature-gated,
-and root-required tests add ~700 more.
+and root-required tests add more on top.
 
 ---
 
 ## Tests by Crate
 
-| Crate          | Integration files | Integration tests | Inline tests |
-| -------------- | ----------------- | ----------------- | ------------ |
-| minibox        | 35                | ~479              | ~255         |
-| minibox-core   | 7                 | ~126              | ~285         |
-| miniboxd       | 6                 | ~72               | ~24          |
-| mbx            | 2                 | ~32               | ~96          |
-| macbox         | 3                 | ~30               | ~63          |
-| winbox         | 0                 | 0                 | ~5           |
-| minibox-macros | 0                 | 0                 | 0            |
-| xtask          | 0                 | 0                 | 0            |
+| Crate              | Integration files | Integration tests | Inline tests |
+| ------------------ | ----------------- | ----------------- | ------------ |
+| minibox            | 54                | ~479              | ~255         |
+| minibox-core       | 7                 | ~126              | ~285         |
+| miniboxd           | 6                 | ~72               | ~24          |
+| mbx                | 2                 | ~32               | ~96          |
+| macbox             | 3                 | ~30               | ~63          |
+| minibox-testsuite  | 0                 | 0                 | ~24          |
+| smolbox            | 0                 | 0                 | ~3           |
+| winbox             | 0                 | 0                 | ~5           |
+| minibox-macros     | 0                 | 0                 | 0            |
+| xtask              | 0                 | 0                 | 0            |
 
 ---
 
