@@ -56,7 +56,7 @@ fn instr_display(instr: &Instruction) -> String {
     match instr {
         Instruction::From { image, tag, .. } => format!("FROM {image}:{tag}"),
         Instruction::Run(ShellOrExec::Shell(s)) => format!("RUN {s}"),
-        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {:?}", args),
+        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {args:?}"),
         Instruction::Copy { dest, .. } => format!("COPY -> {}", dest.display()),
         Instruction::Add { dest, .. } => format!("ADD -> {}", dest.display()),
         Instruction::Env(pairs) => format!("ENV {} pairs", pairs.len()),
@@ -191,11 +191,10 @@ async fn execute_run_step(
     let image_store = Arc::clone(&builder.image_store);
     let step_tag = format!("{config_tag}:build-step-{}", ctx.run_step);
     let step_tag_for_lookup = step_tag.clone();
-    let upper_dir = layout
-        .rootfs_metadata
-        .as_ref()
-        .map(|m| m.overlay_upper_dir().clone())
-        .unwrap_or_else(|| layout.merged_dir.clone());
+    let upper_dir = layout.rootfs_metadata.as_ref().map_or_else(
+        || layout.merged_dir.clone(),
+        |m| m.overlay_upper_dir().clone(),
+    );
     let step_meta = tokio::task::spawn_blocking(move || {
         commit_upper_dir_to_image(
             image_store,

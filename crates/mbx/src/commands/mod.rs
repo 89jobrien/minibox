@@ -13,7 +13,7 @@ use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 ///
 /// Used by simple one-shot commands (stop, rm, pause, resume, rmi) that
 /// differ only in which [`DaemonRequest`] variant they send.
-pub(crate) async fn send_request(
+pub async fn send_request(
     request: DaemonRequest,
     socket_path: &std::path::Path,
 ) -> anyhow::Result<()> {

@@ -1,4 +1,5 @@
 //! `run-conformance` — execute all minibox conformance tests and report results.
+#![allow(clippy::expect_used)]
 //!
 //! Exits 0 on success, 1 on any failure.
 //!

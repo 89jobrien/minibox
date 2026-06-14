@@ -60,13 +60,13 @@ enum VmBackend {
 
 impl VmBackend {
     /// Whether this backend supports privileged operations (cgroups, overlayfs).
-    fn is_privileged(&self) -> bool {
-        matches!(self, VmBackend::Minibox(_))
+    const fn is_privileged(&self) -> bool {
+        matches!(self, Self::Minibox(_))
     }
 
     /// Whether this backend has Rust toolchain pre-installed.
-    fn has_rust(&self) -> bool {
-        matches!(self, VmBackend::SmolvmPersistent(_))
+    const fn has_rust(&self) -> bool {
+        matches!(self, Self::SmolvmPersistent(_))
     }
 }
 
@@ -177,8 +177,7 @@ fn run_ephemeral(
     ci_gate_smolfile: &str,
 ) -> Result<()> {
     let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace_root.join("target"));
+        .map_or_else(|_| workspace_root.join("target"), PathBuf::from);
 
     // 1. Cross-compile
     if opts.skip_build {
@@ -220,10 +219,7 @@ fn run_ephemeral(
             let smolfile = opts.smolfile.as_deref().unwrap_or(ci_gate_smolfile);
             let smolfile_path = workspace_root.join(smolfile);
             if smolfile_path.exists() {
-                println!(
-                    "[2/3] booting smolvm VM (unprivileged) via {} ...",
-                    smolfile
-                );
+                println!("[2/3] booting smolvm VM (unprivileged) via {smolfile} ...");
                 let mut c = Command::new(bin);
                 c.args([
                     "machine",
@@ -240,8 +236,7 @@ fn run_ephemeral(
                 c
             } else {
                 println!(
-                    "[2/3] booting smolvm VM (unprivileged, inline — {} not found) ...",
-                    smolfile
+                    "[2/3] booting smolvm VM (unprivileged, inline — {smolfile} not found) ..."
                 );
                 let mut c = Command::new(bin);
                 c.args(["machine", "run", "--net", "--image", "alpine"]);
@@ -285,8 +280,7 @@ fn which_bin(name: &str) -> Option<PathBuf> {
 fn env_flag(var: &str) -> bool {
     std::env::var(var)
         .ok()
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+        .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Returns `true` when both `MINIBOX_ALLOW_BIND_MOUNTS` and

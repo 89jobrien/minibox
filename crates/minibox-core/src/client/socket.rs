@@ -9,6 +9,7 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             socket_path: super::default_socket_path(),
@@ -21,6 +22,9 @@ impl DaemonClient {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the socket connection or request send fails.
     pub async fn call(&self, request: DaemonRequest) -> Result<DaemonResponseStream> {
         let mut stream = UnixStream::connect(&self.socket_path)
             .await
@@ -29,7 +33,7 @@ impl DaemonClient {
         // Send request
         let payload = serde_json::to_string(&request)?;
         stream
-            .write_all(format!("{}\n", payload).as_bytes())
+            .write_all(format!("{payload}\n").as_bytes())
             .await
             .map_err(ClientError::ConnectionFailed)?;
         stream
@@ -48,6 +52,10 @@ pub struct DaemonResponseStream {
 }
 
 impl DaemonResponseStream {
+    /// # Errors
+    ///
+    /// Returns an error if reading from the socket fails or the response
+    /// cannot be deserialized.
     pub async fn next(&mut self) -> Result<Option<DaemonResponse>> {
         let mut line = String::new();
         let n = self
@@ -83,13 +91,16 @@ impl DaemonWriter {
     }
 
     /// Send `request` to the daemon and return immediately without reading the response.
+    /// # Errors
+    ///
+    /// Returns an error if the socket connection or request send fails.
     pub async fn send(&self, request: DaemonRequest) -> Result<()> {
         let mut stream = UnixStream::connect(&self.socket_path)
             .await
             .map_err(ClientError::ConnectionFailed)?;
         let payload = serde_json::to_string(&request)?;
         stream
-            .write_all(format!("{}\n", payload).as_bytes())
+            .write_all(format!("{payload}\n").as_bytes())
             .await
             .map_err(ClientError::ConnectionFailed)?;
         stream

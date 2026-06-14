@@ -359,10 +359,7 @@ pub async fn handle_commit(
                     message: format!(
                         "committed {} digest:{}",
                         target_image,
-                        meta.layers
-                            .first()
-                            .map(|l| l.digest.as_str())
-                            .unwrap_or("unknown")
+                        meta.layers.first().map_or("unknown", |l| l.digest.as_str())
                     ),
                 })
                 .await;
@@ -495,8 +492,7 @@ pub async fn handle_build(
             let image_id = meta
                 .layers
                 .first()
-                .map(|l| l.digest.clone())
-                .unwrap_or_else(|| format!("built:{tag}"));
+                .map_or_else(|| format!("built:{tag}"), |l| l.digest.clone());
             let _ = tx
                 .send(DaemonResponse::BuildComplete { image_id, tag })
                 .await;
@@ -519,7 +515,7 @@ pub async fn handle_build(
 // ─── Prune ──────────────────────────────────────────────────────────────────
 
 /// Remove unused images from the image store.
-pub(crate) async fn handle_prune(
+pub async fn handle_prune(
     dry_run: bool,
     state: Arc<DaemonState>,
     image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
@@ -532,7 +528,7 @@ pub(crate) async fn handle_prune(
         .into_iter()
         .filter_map(|c| {
             if c.state == "running" || c.state == "paused" {
-                Some(c.image.clone())
+                Some(c.image)
             } else {
                 None
             }
@@ -565,7 +561,7 @@ pub(crate) async fn handle_prune(
 // ─── RemoveImage ─────────────────────────────────────────────────────────────
 
 /// Remove a specific image by reference.
-pub(crate) async fn handle_remove_image(
+pub async fn handle_remove_image(
     image_ref: String,
     state: Arc<DaemonState>,
     image_store: Arc<minibox_core::image::ImageStore>,
@@ -588,17 +584,16 @@ pub(crate) async fn handle_remove_image(
         return;
     }
 
-    let (name, tag) = match image_ref.rsplit_once(':') {
-        Some(pair) => pair,
-        None => {
-            send_error(
-                &tx,
-                "handle_remove_image",
-                format!("invalid image ref: {image_ref}"),
-            )
-            .await;
-            return;
-        }
+    let (name, tag) = if let Some(pair) = image_ref.rsplit_once(':') {
+        pair
+    } else {
+        send_error(
+            &tx,
+            "handle_remove_image",
+            format!("invalid image ref: {image_ref}"),
+        )
+        .await;
+        return;
     };
 
     match image_store.delete_image(name, tag).await {
@@ -620,7 +615,7 @@ pub(crate) async fn handle_remove_image(
 }
 
 /// List all cached images stored in the image store.
-pub(crate) async fn handle_list_images(
+pub async fn handle_list_images(
     image_store: Arc<minibox_core::image::ImageStore>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {

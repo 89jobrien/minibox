@@ -103,9 +103,9 @@ pub(crate) async fn send_error(tx: &mpsc::Sender<DaemonResponse>, context: &str,
 /// `handle_send_input` / `handle_resize_pty` dispatched from `server.rs`.
 #[derive(Default)]
 pub struct PtySessionRegistry {
-    /// Resize event senders: session_id → sender for `(cols, rows)`.
+    /// Resize event senders: `session_id` → sender for `(cols, rows)`.
     pub resize: HashMap<String, mpsc::Sender<(u16, u16)>>,
-    /// Stdin byte senders: session_id → sender for raw bytes.
+    /// Stdin byte senders: `session_id` → sender for raw bytes.
     /// Only populated when `tty = true`.
     pub stdin: HashMap<String, mpsc::Sender<Vec<u8>>>,
 }
@@ -161,7 +161,7 @@ pub struct ImageDeps {
     pub image_loader: minibox_core::domain::DynImageLoader,
     /// Image garbage collector for prune operations.
     pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
-    /// Image store for direct image operations (e.g. RemoveImage).
+    /// Image store for direct image operations (e.g. `RemoveImage`).
     pub image_store: Arc<minibox_core::image::ImageStore>,
 }
 
@@ -321,6 +321,7 @@ pub struct PolicyOverride {
 impl ContainerPolicy {
     /// Apply overrides, returning a new policy. `None` fields preserve the
     /// base value.
+    #[must_use]
     pub fn with_overrides(&self, overrides: &PolicyOverride) -> Self {
         Self {
             allow_bind_mounts: overrides
@@ -335,6 +336,7 @@ impl ContainerPolicy {
     ///
     /// - `MINIBOX_ALLOW_BIND_MOUNTS=1|true|yes` enables bind mounts (default: deny).
     /// - `MINIBOX_ALLOW_PRIVILEGED=1|true|yes` enables privileged mode (default: deny).
+    #[must_use]
     pub fn from_env() -> Self {
         Self {
             allow_bind_mounts: env_flag("MINIBOX_ALLOW_BIND_MOUNTS"),
@@ -348,8 +350,7 @@ impl ContainerPolicy {
 pub(crate) fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .ok()
-        .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+        .is_some_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Validate a container run request against the active policy.
@@ -385,14 +386,12 @@ pub fn validate_policy(
             Some(p) if p.score() >= min.score() => {}
             Some(p) => {
                 return Err(format!(
-                    "policy violation: container priority {:?} is below minimum {:?}",
-                    p, min
+                    "policy violation: container priority {p:?} is below minimum {min:?}"
                 ));
             }
             None => {
                 return Err(format!(
-                    "policy violation: no priority specified but minimum {:?} is required",
-                    min
+                    "policy violation: no priority specified but minimum {min:?} is required"
                 ));
             }
         }

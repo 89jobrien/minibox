@@ -78,6 +78,7 @@ pub struct DevSymlink {
 }
 
 /// Standard device nodes matching runc/libcontainer defaults.
+#[must_use]
 pub fn default_device_nodes() -> Vec<DeviceNode> {
     vec![
         DeviceNode {
@@ -126,6 +127,7 @@ pub fn default_device_nodes() -> Vec<DeviceNode> {
 }
 
 /// Standard /dev symlinks.
+#[must_use]
 pub fn default_dev_symlinks() -> Vec<DevSymlink> {
     vec![
         DevSymlink {

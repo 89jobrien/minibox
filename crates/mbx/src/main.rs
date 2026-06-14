@@ -78,7 +78,7 @@ enum Commands {
         #[arg(long, default_value = "none")]
         network: String,
 
-        /// Grant full Linux capabilities to the container (required for DinD).
+        /// Grant full Linux capabilities to the container (required for `DinD`).
         #[arg(long)]
         privileged: bool,
 
@@ -125,7 +125,7 @@ enum Commands {
         #[arg(long)]
         platform: Option<String>,
 
-        /// Override the cgroup root for this container (DinD).
+        /// Override the cgroup root for this container (`DinD`).
         ///
         /// The container's cgroup is created under this path. Subtree controllers
         /// are enabled automatically. Must be under /sys/fs/cgroup/.
@@ -583,7 +583,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             let mut extra_mounts = Vec::new();
             for v in &volumes {
                 let mut mount = commands::run::parse_volume(v)
-                    .with_context(|| format!("invalid -v flag {:?}", v))?;
+                    .with_context(|| format!("invalid -v flag {v:?}"))?;
                 mount.host_path = mount.host_path.canonicalize().with_context(|| {
                     format!(
                         "sandbox mount host path not found: {}",

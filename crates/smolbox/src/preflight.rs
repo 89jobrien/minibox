@@ -20,6 +20,7 @@ pub struct SmolvmStatus {
 ///
 /// Returns a [`SmolvmStatus`] describing what was found. Never errors --
 /// a missing binary is reported as `found: false`.
+#[must_use]
 pub fn check_smolvm() -> SmolvmStatus {
     let bin = match which::which("smolvm") {
         Ok(p) => p,
@@ -44,6 +45,7 @@ pub fn check_smolvm() -> SmolvmStatus {
 /// Parse a version string from raw `smolvm --version` output.
 ///
 /// Handles formats: `"smolvm 0.5.2"`, `"smolvm version 0.5.2"`, `"0.5.2"`.
+#[must_use]
 pub fn parse_version_output(raw: &str) -> String {
     let trimmed = raw.trim();
     trimmed
@@ -67,6 +69,7 @@ fn query_version(bin: &std::path::Path) -> Result<String> {
 /// Check whether `smolvm` is on PATH (quick boolean probe).
 ///
 /// Equivalent to `check_smolvm().found` but avoids the version query.
+#[must_use]
 pub fn smolvm_available() -> bool {
     which::which("smolvm").is_ok()
 }

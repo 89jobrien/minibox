@@ -16,7 +16,7 @@ use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn default_config() -> PtyConfig {
+const fn default_config() -> PtyConfig {
     PtyConfig {
         enabled: true,
         cols: 80,
@@ -28,13 +28,13 @@ fn default_config() -> PtyConfig {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// allocate succeeds and returns a PtyHandle with non-negative fds.
+/// allocate succeeds and returns a `PtyHandle` with non-negative fds.
 pub struct AllocateReturnsHandle;
 impl ConformanceTest for AllocateReturnsHandle {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "allocate_returns_handle"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pty"
     }
     fn category(&self) -> TestCategory {
@@ -54,10 +54,10 @@ impl ConformanceTest for AllocateReturnsHandle {
 /// allocate increments the call count.
 pub struct AllocateIncrementsCount;
 impl ConformanceTest for AllocateIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "allocate_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pty"
     }
     fn category(&self) -> TestCategory {
@@ -76,10 +76,10 @@ impl ConformanceTest for AllocateIncrementsCount {
 /// allocate returns Err when configured to fail.
 pub struct AllocateFailureReturnsErr;
 impl ConformanceTest for AllocateFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "allocate_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pty"
     }
     fn category(&self) -> TestCategory {
@@ -96,10 +96,10 @@ impl ConformanceTest for AllocateFailureReturnsErr {
 /// allocate with disabled PTY config still calls through.
 pub struct AllocateWithDisabledConfig;
 impl ConformanceTest for AllocateWithDisabledConfig {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "allocate_with_disabled_config"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pty"
     }
     fn category(&self) -> TestCategory {
@@ -121,6 +121,7 @@ impl ConformanceTest for AllocateWithDisabledConfig {
 }
 
 /// Return all pty conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(AllocateReturnsHandle),

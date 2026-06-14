@@ -147,7 +147,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         // actionlint does not accept a bare directory path; collect .yml files explicitly.
         let wf_files: Vec<_> = fs::read_dir(".github/workflows")
             .context("read .github/workflows")?
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .filter(|e| {
                 e.path()
                     .extension()
@@ -232,7 +232,7 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
 
 /// Conformance suite: builds and runs the `minibox-testsuite` harness.
 ///
-/// The harness executes all adapter conformance tests and emits JSON + JUnit XML
+/// The harness executes all adapter conformance tests and emits JSON + `JUnit` XML
 /// reports to `artifacts/conformance/` via the `generate-report` binary.
 ///
 /// Set `CONFORMANCE_ADAPTER=<name>` to restrict to a single adapter.
@@ -300,7 +300,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// krun adapter conformance tests (macOS HVF / Linux KVM, requires MINIBOX_KRUN_TESTS=1).
+/// krun adapter conformance tests (macOS HVF / Linux KVM, requires `MINIBOX_KRUN_TESTS=1`).
 ///
 /// Run serially — parallel krun invocations collide on the VM hypervisor socket.
 pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
@@ -762,8 +762,7 @@ fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
         // Short name: everything after the last `daemon/`.
         let short = filename
             .rfind("daemon/")
-            .map(|i| &filename[i..])
-            .unwrap_or(filename);
+            .map_or(filename, |i| &filename[i..]);
 
         total_count += count;
         total_covered += covered;
@@ -882,7 +881,7 @@ fn staged_agent_files(sh: &Shell) -> Result<bool> {
 }
 
 /// Lint staged agent config files:
-///   - `.json`  → parse with serde_json and report errors
+///   - `.json`  → parse with `serde_json` and report errors
 ///   - `.md`    → check required frontmatter keys (name, description)
 ///   - `.yaml`/`.yml` inside agent dirs → check with actionlint if in `.github/`, else YAML parse
 pub fn agentlint_staged(sh: &Shell) -> Result<()> {
@@ -894,7 +893,7 @@ pub fn agentlint_staged(sh: &Shell) -> Result<()> {
     let agent_files: Vec<String> = staged
         .lines()
         .filter(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d)))
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     agentlint_check(&agent_files)
@@ -1182,7 +1181,7 @@ pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
     for adapter in &adapters {
         let has_test = fs::read_dir(&test_dir)
             .with_context(|| format!("cannot read {}", test_dir.display()))?
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .any(|e| e.file_name().to_string_lossy().contains(adapter));
         if has_test {
             eprintln!("OK: adapter '{adapter}' has integration test file(s)");
@@ -1246,13 +1245,13 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
     let skip_dirs = ["xtask", "testing", "tests", "examples", "benches"];
     let mut hits: Vec<String> = Vec::new();
 
-    let mut stack = vec![root.clone()];
+    let mut stack = vec![root];
     while let Some(dir) = stack.pop() {
         let entries = match fs::read_dir(&dir) {
             Ok(e) => e,
             Err(_) => continue,
         };
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(std::result::Result::ok) {
             let ft = match entry.file_type() {
                 Ok(ft) => ft,
                 Err(_) => continue,
@@ -1348,7 +1347,7 @@ pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathB
     let dir = Path::new(deps_dir);
     let mut candidates: Vec<_> = fs::read_dir(dir)
         .ok()?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| {
             let name = e.file_name();
             let name = name.to_string_lossy();
@@ -1357,5 +1356,5 @@ pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathB
         })
         .collect();
     candidates.sort_by_key(|e| e.metadata().ok()?.modified().ok());
-    candidates.last().map(|e| e.path())
+    candidates.last().map(std::fs::DirEntry::path)
 }

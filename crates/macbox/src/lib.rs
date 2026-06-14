@@ -64,7 +64,7 @@ pub fn build_colima_handler_dependencies(
 ) -> Result<Arc<HandlerDependencies>> {
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
-    let image_loader: DynImageLoader = registry.clone();
+    let image_loader: DynImageLoader = registry;
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
@@ -179,15 +179,11 @@ pub async fn start() -> Result<()> {
     info!("miniboxd (macOS) starting");
 
     // ── Paths ────────────────────────────────────────────────────────────
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::data_dir());
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::run_dir());
-    let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::socket_path());
+    let data_dir =
+        std::env::var("MINIBOX_DATA_DIR").map_or_else(|_| paths::data_dir(), PathBuf::from);
+    let run_dir = std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| paths::run_dir(), PathBuf::from);
+    let socket_path =
+        std::env::var("MINIBOX_SOCKET_PATH").map_or_else(|_| paths::socket_path(), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");

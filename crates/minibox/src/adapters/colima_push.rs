@@ -270,7 +270,7 @@ fn write_archive_from_dir(staging_dir: &Path, tar_path: &Path) -> Result<()> {
         .with_context(|| format!("read staging dir {}", staging_dir.display()))?
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("collect staging dir entries")?;
-    entries.sort_by_key(|entry| entry.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
 
     for entry in entries {
         let path = entry.path();

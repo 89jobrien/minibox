@@ -19,19 +19,19 @@ pub enum PolicyDecision {
 ///
 /// All fields use `Option` -- `None` means "no constraint" (allow any).
 /// When a field is `Some`, the manifest value must satisfy the constraint.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionPolicy {
     /// Allowed image reference patterns (glob-style). If set, the manifest's
     /// `subject.image_ref` must match at least one pattern.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_images: Option<Vec<String>>,
 
-    /// Denied image reference patterns. If the manifest's image_ref matches
-    /// any pattern here, the run is denied (checked before allowed_images).
+    /// Denied image reference patterns. If the manifest's `image_ref` matches
+    /// any pattern here, the run is denied (checked before `allowed_images`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub denied_images: Option<Vec<String>>,
 
-    /// Allowed network modes. If set, manifest's network_mode must be in this list.
+    /// Allowed network modes. If set, manifest's `network_mode` must be in this list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_network_modes: Option<Vec<String>>,
 
@@ -39,18 +39,18 @@ pub struct ExecutionPolicy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_privileged: Option<bool>,
 
-    /// Maximum memory limit in bytes. If set and the manifest's memory_limit
+    /// Maximum memory limit in bytes. If set and the manifest's `memory_limit`
     /// exceeds this, the run is denied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_memory_bytes: Option<u64>,
 
-    /// Allowed mount host path prefixes. If set, every mount's host_path
+    /// Allowed mount host path prefixes. If set, every mount's `host_path`
     /// must start with one of these prefixes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_mount_prefixes: Option<Vec<String>>,
 
     /// If true, read-only mounts are always allowed regardless of
-    /// allowed_mount_prefixes. Default: false.
+    /// `allowed_mount_prefixes`. Default: false.
     #[serde(default)]
     pub allow_readonly_mounts: bool,
 }
@@ -60,6 +60,7 @@ impl ExecutionPolicy {
     ///
     /// Returns `PolicyDecision::Allow` if all rules pass, or
     /// `PolicyDecision::Deny(reason)` on the first violation.
+    #[must_use]
     pub fn evaluate(&self, manifest: &ExecutionManifest) -> PolicyDecision {
         // Check denied images first
         if let Some(denied) = &self.denied_images {
@@ -101,10 +102,8 @@ impl ExecutionPolicy {
         }
 
         // Check privileged
-        if let Some(false) = self.allow_privileged {
-            if manifest.runtime.privileged {
-                return PolicyDecision::Deny("privileged mode not allowed by policy".to_string());
-            }
+        if self.allow_privileged == Some(false) && manifest.runtime.privileged {
+            return PolicyDecision::Deny("privileged mode not allowed by policy".to_string());
         }
 
         // Check memory limit
@@ -113,8 +112,7 @@ impl ExecutionPolicy {
                 if let Some(mem) = limits.memory_limit_bytes {
                     if mem > max_mem {
                         return PolicyDecision::Deny(format!(
-                            "memory limit {} exceeds policy maximum {}",
-                            mem, max_mem
+                            "memory limit {mem} exceeds policy maximum {max_mem}"
                         ));
                     }
                 }

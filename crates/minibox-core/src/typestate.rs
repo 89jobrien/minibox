@@ -10,7 +10,7 @@
 //! `Container<S>` is generic over the state tag; transition methods consume
 //! `self` and return `Container<NextState>`, making the old handle unusable.
 //!
-//! Shared fields (id, rootfs_path, cgroup_path) are carried through every
+//! Shared fields (id, `rootfs_path`, `cgroup_path`) are carried through every
 //! transition without cloning.
 
 use std::path::PathBuf;
@@ -77,6 +77,7 @@ pub struct Container<S> {
 
 impl Container<Created> {
     /// Transition: Created -> Running (process forked successfully).
+    #[must_use]
     pub fn start(self, pid: u32) -> Container<Running> {
         Container {
             id: self.id,
@@ -87,6 +88,7 @@ impl Container<Created> {
     }
 
     /// Transition: Created -> Failed (process failed to start).
+    #[must_use]
     pub fn fail(self, reason: String) -> Container<Failed> {
         Container {
             id: self.id,
@@ -99,6 +101,7 @@ impl Container<Created> {
 
 impl Container<Running> {
     /// Transition: Running -> Paused (cgroup freeze).
+    #[must_use]
     pub fn pause(self) -> Container<Paused> {
         let pid = self.state.pid;
         Container {
@@ -110,6 +113,7 @@ impl Container<Running> {
     }
 
     /// Transition: Running -> Stopped (process exited).
+    #[must_use]
     pub fn stop(self, exit_code: i32) -> Container<Stopped> {
         Container {
             id: self.id,
@@ -120,6 +124,7 @@ impl Container<Running> {
     }
 
     /// Transition: Running -> Failed (process crashed).
+    #[must_use]
     pub fn fail(self, reason: String) -> Container<Failed> {
         Container {
             id: self.id,
@@ -130,13 +135,15 @@ impl Container<Running> {
     }
 
     /// Access the PID of the running container.
-    pub fn pid(&self) -> u32 {
+    #[must_use]
+    pub const fn pid(&self) -> u32 {
         self.state.pid
     }
 }
 
 impl Container<Paused> {
     /// Transition: Paused -> Running (cgroup thaw).
+    #[must_use]
     pub fn resume(self) -> Container<Running> {
         let pid = self.state.pid;
         Container {
@@ -148,6 +155,7 @@ impl Container<Paused> {
     }
 
     /// Transition: Paused -> Stopped (killed while frozen).
+    #[must_use]
     pub fn stop(self, exit_code: i32) -> Container<Stopped> {
         Container {
             id: self.id,
@@ -158,7 +166,8 @@ impl Container<Paused> {
     }
 
     /// Access the PID of the paused container.
-    pub fn pid(&self) -> u32 {
+    #[must_use]
+    pub const fn pid(&self) -> u32 {
         self.state.pid
     }
 }
@@ -169,7 +178,8 @@ impl Container<Paused> {
 
 impl Container<Created> {
     /// Create a new container in the `Created` state.
-    pub fn new(id: String, rootfs_path: PathBuf, cgroup_path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(id: String, rootfs_path: PathBuf, cgroup_path: PathBuf) -> Self {
         Self {
             id,
             rootfs_path,

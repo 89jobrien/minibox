@@ -144,11 +144,13 @@ pub struct FileCheckpointStore {
 }
 
 impl FileCheckpointStore {
-    pub fn new(dir: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(dir: PathBuf) -> Self {
         Self { dir }
     }
 
     /// Default location: `<workspace_root>/.minibox/checkpoints/`
+    #[must_use]
     pub fn default_for_workspace(root: &Path) -> Self {
         Self::new(root.join(".minibox").join("checkpoints"))
     }
@@ -212,8 +214,10 @@ fn current_rustc_version() -> String {
         .arg("--version")
         .output()
         .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+        .map_or_else(
+            || "unknown".to_string(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        )
 }
 
 /// Check whether a gate's checkpoint is still valid.
@@ -273,6 +277,7 @@ pub fn record(gate: GateId, hasher: &dyn TreeHasher, store: &dyn CheckpointStore
 }
 
 /// Returns true if `MINIBOX_FORCE_GATES` is set or `--force` is in argv.
+#[must_use]
 pub fn force_requested() -> bool {
     if std::env::var("MINIBOX_FORCE_GATES").is_ok() {
         return true;
@@ -310,11 +315,11 @@ where
     f()?;
 
     // Only record if the tree is clean — dirty checkpoints are meaningless.
-    if !hasher.is_dirty().unwrap_or(true) {
+    if hasher.is_dirty().unwrap_or(true) {
+        eprintln!("checkpoint: {gate} passed but tree is dirty, not recording");
+    } else {
         record(gate, hasher, store)?;
         eprintln!("checkpoint: {gate} recorded");
-    } else {
-        eprintln!("checkpoint: {gate} passed but tree is dirty, not recording");
     }
 
     Ok(())

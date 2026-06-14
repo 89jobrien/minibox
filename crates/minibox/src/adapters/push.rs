@@ -38,7 +38,8 @@ pub struct OciPushAdapter {
 }
 
 impl OciPushAdapter {
-    pub fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
+    #[must_use]
+    pub const fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
         Self { client, store }
     }
 }
@@ -232,6 +233,7 @@ fn registry_scheme(registry_host: &str) -> &'static str {
 }
 
 /// Construct an [`OciPushAdapter`] as a [`DynImagePusher`].
+#[must_use]
 pub fn oci_push_adapter(client: RegistryClient, store: Arc<ImageStore>) -> DynImagePusher {
     Arc::new(OciPushAdapter::new(client, store))
 }

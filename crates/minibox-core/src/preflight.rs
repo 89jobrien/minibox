@@ -14,6 +14,7 @@ use std::process::Command;
 
 /// Host capabilities relevant to minibox operation.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct HostCapabilities {
     /// Running as UID 0.
     pub is_root: bool,
@@ -23,7 +24,7 @@ pub struct HostCapabilities {
     pub cgroups_v2: bool,
     /// Controllers listed in /sys/fs/cgroup/cgroup.controllers.
     pub cgroup_controllers: Vec<String>,
-    /// Can write to cgroup.subtree_control (delegation works).
+    /// Can write to `cgroup.subtree_control` (delegation works).
     pub cgroup_subtree_delegatable: bool,
     /// "overlay" listed in /proc/filesystems.
     pub overlay_fs: bool,
@@ -39,6 +40,7 @@ pub struct HostCapabilities {
 ///
 /// This function never fails — it returns false/empty for anything it
 /// cannot determine. Safe to call on any platform.
+#[must_use]
 pub fn probe() -> HostCapabilities {
     HostCapabilities {
         is_root: probe_root(),
@@ -134,9 +136,8 @@ fn probe_root() -> bool {
 ///
 /// Returns `(0, 0, 0)` if the file is unreadable or the format is unexpected.
 fn probe_kernel_version() -> (u32, u32, u32) {
-    let content = match std::fs::read_to_string("/proc/version") {
-        Ok(s) => s,
-        Err(_) => return (0, 0, 0),
+    let Ok(content) = std::fs::read_to_string("/proc/version") else {
+        return (0, 0, 0);
     };
     // "Linux version 6.1.0-18-amd64 ..."
     let version_str = content.split_whitespace().nth(2).unwrap_or("0.0.0");
@@ -165,9 +166,7 @@ fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
 /// A `cgroup2` entry in `/proc/mounts` means the unified hierarchy is active.
 /// Missing or unreadable file returns `false`.
 fn probe_cgroups_v2() -> bool {
-    std::fs::read_to_string("/proc/mounts")
-        .map(|s| s.contains("cgroup2"))
-        .unwrap_or(false)
+    std::fs::read_to_string("/proc/mounts").is_ok_and(|s| s.contains("cgroup2"))
 }
 
 /// Read the list of available cgroup v2 controllers from
@@ -195,9 +194,7 @@ fn probe_subtree_delegatable() -> bool {
 ///
 /// Returns `false` if overlay is not compiled in or not loaded as a module.
 fn probe_overlay_fs() -> bool {
-    std::fs::read_to_string("/proc/filesystems")
-        .map(|s| s.contains("overlay"))
-        .unwrap_or(false)
+    std::fs::read_to_string("/proc/filesystems").is_ok_and(|s| s.contains("overlay"))
 }
 
 /// Check whether `systemctl --version` succeeds, indicating systemd is running.
@@ -207,8 +204,7 @@ fn probe_systemd_available() -> bool {
     Command::new("systemctl")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Run a command and parse a version number from the Nth whitespace-delimited
@@ -247,8 +243,7 @@ fn probe_minibox_slice() -> bool {
     Command::new("systemctl")
         .args(["is-active", "minibox.slice"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +268,7 @@ pub struct CommandProbeResult {
 /// `Cargo.toml` with a `[workspace]` table.
 ///
 /// Returns `None` if the filesystem root is reached without finding one.
+#[must_use]
 pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
     let mut dir = start.to_path_buf();
     // Canonicalize if possible so we get an absolute path.

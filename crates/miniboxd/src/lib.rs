@@ -1,4 +1,4 @@
-//! miniboxd library — re-exports from minibox::daemon for backward compatibility.
+//! miniboxd library — re-exports from `minibox::daemon` for backward compatibility.
 //!
 //! Also provides [`adapter_registry`] for centralized adapter suite discovery.
 //!

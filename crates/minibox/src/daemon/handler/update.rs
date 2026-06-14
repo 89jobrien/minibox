@@ -176,7 +176,7 @@ pub async fn handle_update(
                 Some(r) => (r.source_image_ref.as_deref(), r.creation_params.clone()),
                 None => (None, None),
             };
-            if !image_ref.map(|r| target_set.contains(r)).unwrap_or(false) {
+            if !image_ref.is_some_and(|r| target_set.contains(r)) {
                 continue;
             }
 

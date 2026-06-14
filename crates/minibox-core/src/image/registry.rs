@@ -103,7 +103,7 @@ pin_project! {
 
 impl<S> LimitedStream<S> {
     /// Wrap `inner` with a `limit`-byte ceiling.
-    pub fn new(inner: S, limit: u64) -> Self {
+    pub const fn new(inner: S, limit: u64) -> Self {
         Self {
             inner,
             limit,
@@ -233,7 +233,7 @@ fn resolve_manifest_action(
 ///
 /// This is the synchronous core of the per-layer pull task, designed to run
 /// inside `spawn_blocking`. The byte flow is:
-///   reader → HashingReader → GzDecoder → tar::Archive
+///   reader → `HashingReader` → `GzDecoder` → `tar::Archive`
 ///
 /// On success the layer is renamed from a `.tmp` sibling into `layer_dir`.
 /// On failure (digest mismatch or extraction error) the tmp dir is cleaned up.
@@ -250,17 +250,17 @@ fn extract_and_verify_layer(
         let mut p = layer_dir.to_path_buf();
         let stem = p
             .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "layer".to_owned());
+            .map_or_else(|| "layer".to_owned(), |s| s.to_string_lossy().into_owned());
         p.set_file_name(format!("{stem}.tmp"));
         p
     };
 
     if tmp_dir.exists() {
         std::fs::remove_dir_all(&tmp_dir)
-            .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
+            .with_context(|| format!("remove stale tmp {}", tmp_dir.display()))?;
     }
-    std::fs::create_dir_all(&tmp_dir).with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
+    std::fs::create_dir_all(&tmp_dir)
+        .with_context(|| format!("create tmp dir {}", tmp_dir.display()))?;
 
     // Extract into tmp dir.
     let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
@@ -301,7 +301,8 @@ fn extract_and_verify_layer(
             return Ok(actual_bytes);
         }
         cleanup_tmp_dir(&tmp_dir, digest);
-        return Err(e).with_context(|| format!("rename {tmp_dir:?} -> {layer_dir:?}"));
+        return Err(e)
+            .with_context(|| format!("rename {} -> {}", tmp_dir.display(), layer_dir.display()));
     }
 
     Ok(actual_bytes)
@@ -337,9 +338,13 @@ impl RegistryClient {
     ///
     /// # Security
     ///
-    /// - HTTPS-only: Rejects HTTP connections to prevent MitM attacks
+    /// - HTTPS-only: Rejects HTTP connections to prevent `MitM` attacks
     /// - TLS 1.2+: Enforces minimum TLS version
     /// - Redirect limits: Max redirects to prevent redirect loops
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be built.
     pub fn new() -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
@@ -365,6 +370,10 @@ impl RegistryClient {
     ///
     /// Use this when pulling images for a non-host architecture (e.g.
     /// cross-platform builds).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be built.
     pub fn with_platform(platform: crate::image::manifest::TargetPlatform) -> anyhow::Result<Self> {
         let mut client = Self::new()?;
         client.platform = platform;
@@ -397,6 +406,10 @@ impl RegistryClient {
     /// Obtain an anonymous pull token for `image_name` from Docker Hub.
     ///
     /// The returned token should be passed to subsequent manifest/blob calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the auth request fails or the response cannot be parsed.
     #[instrument(skip(self), fields(image = image_name))]
     pub async fn authenticate(&self, image_name: &str) -> anyhow::Result<String> {
         debug!("authenticating for image '{}'", image_name);
@@ -444,6 +457,11 @@ impl RegistryClient {
     /// returns a manifest list, the `linux/amd64` entry is selected and that
     /// manifest is fetched. Manifest list nesting is capped at 2 levels to
     /// prevent unbounded recursion from malformed or adversarial registries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest fetch fails, the response exceeds the
+    /// size limit, or the manifest cannot be parsed.
     #[instrument(skip(self, token), fields(image = %format!("{name}:{tag}")))]
     pub async fn get_manifest(
         &self,
@@ -606,6 +624,10 @@ impl RegistryClient {
     ///
     /// Used by callers that need the full blob in memory (e.g. push adapters).
     /// For bulk image pulls, prefer [`pull_image`] which uses the parallel streaming path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob download fails or the size limit is exceeded.
     pub async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> anyhow::Result<Bytes> {
         let resp = self.pull_layer_response(name, digest, token).await?;
         let mut body_stream = resp.bytes_stream();
@@ -640,6 +662,12 @@ impl RegistryClient {
     ///    - Digest is verified before the tmp dir is atomically renamed to its final
     ///      location.
     /// 4. Persist manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auth, manifest fetch, any layer download, digest
+    /// verification, or manifest persistence fails.
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, store), fields(image = %format!("{name}:{tag}")))]
     pub async fn pull_image(
         &self,
@@ -724,8 +752,7 @@ impl RegistryClient {
                         .join("layers")
                         .join(&digest_key);
 
-                    const DIGEST_SHORT_LEN: usize = 19;
-                    let digest_short = digest.get(..DIGEST_SHORT_LEN).unwrap_or(digest);
+                    let digest_short = digest.get(..19).unwrap_or(digest);
 
                     // Early exit if the layer is already cached.
                     if layer_dir.exists() {
@@ -833,6 +860,10 @@ impl RegistryClient {
     /// Docker Hub requires a bearer token from `auth.docker.io`, while local
     /// anonymous registries can be used without auth. For non-Docker registries
     /// with explicit credentials, reuse HTTP Basic Auth directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the auth request or token response parsing fails.
     pub async fn resolve_push_auth(
         &self,
         registry_base: &str,
@@ -886,6 +917,7 @@ impl RegistryClient {
         Ok(PushAuth::Bearer(token_resp.token))
     }
 
+    #[allow(clippy::unused_self)]
     fn with_push_auth(&self, req: RequestBuilder, auth: &PushAuth) -> RequestBuilder {
         match auth {
             PushAuth::None => req,
@@ -903,6 +935,7 @@ impl RegistryClient {
         self.with_push_auth(client.request(method, url), auth)
     }
 
+    #[allow(clippy::unused_self)]
     fn upload_url_with_digest(&self, upload_url: &str, digest: &str) -> String {
         let separator = if upload_url.contains('?') { '&' } else { '?' };
         format!("{upload_url}{separator}digest={digest}")
@@ -920,11 +953,14 @@ impl RegistryClient {
         self.push_request(reqwest::Method::HEAD, &url, auth)
             .send()
             .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
+            .is_ok_and(|r| r.status().is_success())
     }
 
     /// Start a new blob upload session and return the `Location` upload URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the POST request fails or the `Location` header is missing.
     pub async fn initiate_blob_upload(
         &self,
         registry_base: &str,
@@ -947,6 +983,10 @@ impl RegistryClient {
     }
 
     /// Upload a blob via PUT, appending the `digest` query parameter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PUT request fails or the registry rejects the upload.
     pub async fn upload_blob(
         &self,
         upload_url: &str,
@@ -974,6 +1014,10 @@ impl RegistryClient {
     ///
     /// Returns the `Docker-Content-Digest` header value (the canonical digest
     /// assigned by the registry).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PUT request fails or the registry rejects the manifest.
     pub async fn push_manifest(
         &self,
         registry_base: &str,
@@ -1014,6 +1058,9 @@ impl Default for RegistryClient {
     /// unlikely in practice). Prefer [`RegistryClient::new`] where you need
     /// proper error propagation.
     fn default() -> Self {
+        // Default cannot propagate errors; TLS init failure here is a fatal
+        // configuration problem with no viable recovery path.
+        #[allow(clippy::expect_used)]
         Self::new().expect("failed to build RegistryClient")
     }
 }

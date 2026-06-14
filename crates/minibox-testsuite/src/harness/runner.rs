@@ -40,11 +40,13 @@ pub struct TestSummary {
 }
 
 impl TestSummary {
-    pub fn is_success(&self) -> bool {
+    #[must_use]
+    pub const fn is_success(&self) -> bool {
         self.failed == 0
     }
 
     /// Results grouped by adapter name.
+    #[must_use]
     pub fn by_adapter(&self) -> HashMap<&str, Vec<&TestRunResult>> {
         let mut map: HashMap<&str, Vec<&TestRunResult>> = HashMap::new();
         for r in &self.results {
@@ -78,6 +80,7 @@ impl Default for TestRunner {
 }
 
 impl TestRunner {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tests: Vec::new(),
@@ -96,18 +99,21 @@ impl TestRunner {
     }
 
     /// Filter to a specific adapter.
+    #[must_use]
     pub fn filter_adapter(mut self, name: &str) -> Self {
         self.filter.adapter = Some(name.to_string());
         self
     }
 
     /// Filter to a specific category.
-    pub fn filter_category(mut self, cat: TestCategory) -> Self {
+    #[must_use]
+    pub const fn filter_category(mut self, cat: TestCategory) -> Self {
         self.filter.category = Some(cat);
         self
     }
 
     /// Filter by name substring.
+    #[must_use]
     pub fn filter_name(mut self, pattern: &str) -> Self {
         self.filter.name_pattern = Some(pattern.to_string());
         self
@@ -133,11 +139,13 @@ impl TestRunner {
     }
 
     /// Number of registered tests.
+    #[must_use]
     pub fn count(&self) -> usize {
         self.tests.len()
     }
 
     /// Number of tests that will execute after filtering.
+    #[must_use]
     pub fn filtered_count(&self) -> usize {
         self.tests
             .iter()
@@ -146,6 +154,7 @@ impl TestRunner {
     }
 
     /// Execute all (filtered) tests and return the summary.
+    #[must_use]
     pub fn run(&self) -> TestSummary {
         let suite_start = Instant::now();
         let mut results = Vec::new();

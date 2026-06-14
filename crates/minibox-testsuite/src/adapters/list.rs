@@ -55,10 +55,10 @@ fn make_record(id: &str, image: &str, state_str: &str) -> ContainerRecord {
 
 pub struct ListEmptyReturnsEmptyVec;
 impl ConformanceTest for ListEmptyReturnsEmptyVec {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_empty_returns_empty_vec"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "list"
     }
     fn category(&self) -> TestCategory {
@@ -75,10 +75,10 @@ impl ConformanceTest for ListEmptyReturnsEmptyVec {
 
 pub struct ListAfterRunShowsContainer;
 impl ConformanceTest for ListAfterRunShowsContainer {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_after_run_shows_container"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "list"
     }
     fn category(&self) -> TestCategory {
@@ -107,10 +107,10 @@ impl ConformanceTest for ListAfterRunShowsContainer {
 
 pub struct ListShowsCorrectState;
 impl ConformanceTest for ListShowsCorrectState {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_shows_correct_state"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "list"
     }
     fn category(&self) -> TestCategory {
@@ -141,10 +141,10 @@ impl ConformanceTest for ListShowsCorrectState {
 
 pub struct ListMultipleContainers;
 impl ConformanceTest for ListMultipleContainers {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_multiple_containers"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "list"
     }
     fn category(&self) -> TestCategory {
@@ -180,10 +180,10 @@ impl ConformanceTest for ListMultipleContainers {
 
 pub struct ListAfterRemoveExcludesContainer;
 impl ConformanceTest for ListAfterRemoveExcludesContainer {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_after_remove_excludes_container"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "list"
     }
     fn category(&self) -> TestCategory {
@@ -217,6 +217,7 @@ impl ConformanceTest for ListAfterRemoveExcludesContainer {
 }
 
 /// Return all list conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(ListEmptyReturnsEmptyVec),

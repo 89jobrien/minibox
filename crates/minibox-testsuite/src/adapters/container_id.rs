@@ -21,7 +21,7 @@ fn rt() -> tokio::runtime::Runtime {
         .expect("build Tokio runtime")
 }
 
-fn is_error(resp: &DaemonResponse) -> bool {
+const fn is_error(resp: &DaemonResponse) -> bool {
     matches!(resp, DaemonResponse::Error { .. })
 }
 
@@ -31,10 +31,10 @@ fn is_error(resp: &DaemonResponse) -> bool {
 
 pub struct StopEmptyIdReturnsError;
 impl ConformanceTest for StopEmptyIdReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "stop_empty_id_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_id"
     }
     fn category(&self) -> TestCategory {
@@ -44,7 +44,7 @@ impl ConformanceTest for StopEmptyIdReturnsError {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
-        let resp = rt().block_on(handle_stop("".to_string(), state, deps));
+        let resp = rt().block_on(handle_stop(String::new(), state, deps));
         ctx.assert_true(is_error(&resp), "stop with empty id returns Error response");
         ctx.result()
     }
@@ -52,10 +52,10 @@ impl ConformanceTest for StopEmptyIdReturnsError {
 
 pub struct RemoveUnknownIdReturnsError;
 impl ConformanceTest for RemoveUnknownIdReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "remove_unknown_id_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_id"
     }
     fn category(&self) -> TestCategory {
@@ -80,10 +80,10 @@ impl ConformanceTest for RemoveUnknownIdReturnsError {
 
 pub struct PauseUnknownIdReturnsError;
 impl ConformanceTest for PauseUnknownIdReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pause_unknown_id_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_id"
     }
     fn category(&self) -> TestCategory {
@@ -108,10 +108,10 @@ impl ConformanceTest for PauseUnknownIdReturnsError {
 
 pub struct ResumeUnknownIdReturnsError;
 impl ConformanceTest for ResumeUnknownIdReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "resume_unknown_id_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_id"
     }
     fn category(&self) -> TestCategory {
@@ -136,10 +136,10 @@ impl ConformanceTest for ResumeUnknownIdReturnsError {
 
 pub struct IdsAreCaseSensitive;
 impl ConformanceTest for IdsAreCaseSensitive {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ids_are_case_sensitive"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_id"
     }
     fn category(&self) -> TestCategory {
@@ -169,6 +169,7 @@ impl ConformanceTest for IdsAreCaseSensitive {
 }
 
 /// Return all container-ID edge case conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(StopEmptyIdReturnsError),

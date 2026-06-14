@@ -44,6 +44,7 @@
 use crate::domain::{
     BackendCapability, BackendCapabilitySet, DynContainerCommitter, DynImageBuilder, DynImagePusher,
 };
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -88,6 +89,7 @@ pub struct BackendDescriptor {
 
 impl BackendDescriptor {
     /// Create a descriptor with the given name and no capabilities.
+    #[must_use]
     pub fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -99,12 +101,14 @@ impl BackendDescriptor {
     }
 
     /// Declare that this backend supports `cap`.
+    #[must_use]
     pub fn with_capability(mut self, cap: BackendCapability) -> Self {
         self.capabilities = self.capabilities.with(cap);
         self
     }
 
     /// Attach a committer factory (implies `BackendCapability::Commit`).
+    #[must_use]
     pub fn with_committer<F>(mut self, f: F) -> Self
     where
         F: Fn() -> DynContainerCommitter + Send + Sync + 'static,
@@ -115,6 +119,7 @@ impl BackendDescriptor {
     }
 
     /// Attach a builder factory (implies `BackendCapability::BuildFromContext`).
+    #[must_use]
     pub fn with_builder<F>(mut self, f: F) -> Self
     where
         F: Fn() -> DynImageBuilder + Send + Sync + 'static,
@@ -125,6 +130,7 @@ impl BackendDescriptor {
     }
 
     /// Attach a pusher factory (implies `BackendCapability::PushToRegistry`).
+    #[must_use]
     pub fn with_pusher<F>(mut self, f: F) -> Self
     where
         F: Fn() -> DynImagePusher + Send + Sync + 'static,
@@ -172,6 +178,11 @@ impl MinimalStoredImageFixture {
     ///
     /// `image_name` is used verbatim as the subdirectory name under `images/`.
     /// If `None`, the name `"conformance-base"` is used.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory or any subdirectory cannot
+    /// be created, or if the placeholder manifest file cannot be written.
     pub fn new(image_name: Option<&str>) -> std::io::Result<Self> {
         let name = image_name.unwrap_or("conformance-base").to_string();
         // Use a deterministic but clearly fake digest so tests that check digest
@@ -236,6 +247,11 @@ pub struct WritableUpperDirFixture {
 
 impl WritableUpperDirFixture {
     /// Create the fixture, writing a sentinel file into the upperdir.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory or subdirectories cannot be
+    /// created, or if the sentinel file cannot be written.
     pub fn new() -> std::io::Result<Self> {
         let dir = TempDir::new()?;
         let upper_dir = dir.path().join("upper");
@@ -284,6 +300,11 @@ pub struct BuildContextFixture {
 
 impl BuildContextFixture {
     /// Create a minimal build context with a `FROM scratch` Dockerfile.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory cannot be created or if
+    /// the Dockerfile or `hello.txt` cannot be written.
     pub fn new() -> std::io::Result<Self> {
         let dir = TempDir::new()?;
         let context_dir = dir.path().to_path_buf();
@@ -331,6 +352,7 @@ impl LocalPushTargetFixture {
     /// Construct a local push target for `repository` on `localhost:5000`.
     ///
     /// `repository` should be a path like `"conformance/push-test"`.
+    #[must_use]
     pub fn new(repository: &str) -> Self {
         let registry_host = "localhost:5000".to_string();
         let tag = "latest".to_string();
@@ -362,11 +384,12 @@ pub enum ConformanceOutcome {
 
 impl ConformanceOutcome {
     /// Display string used in Markdown tables.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            ConformanceOutcome::Pass => "pass",
-            ConformanceOutcome::Skip => "skip",
-            ConformanceOutcome::Fail => "fail",
+            Self::Pass => "pass",
+            Self::Skip => "skip",
+            Self::Fail => "fail",
         }
     }
 }
@@ -397,12 +420,12 @@ pub struct ConformanceMatrixResult {
 
 impl ConformanceMatrixResult {
     /// Create a result with the current UTC timestamp.
+    #[must_use]
     pub fn new(rows: Vec<ConformanceRow>) -> Self {
         // Use a simple hand-rolled timestamp to avoid pulling in `chrono`.
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map_or(0, |d| d.as_secs());
         Self {
             timestamp: format!("{ts}"),
             rows,
@@ -410,6 +433,7 @@ impl ConformanceMatrixResult {
     }
 
     /// Count rows with a given outcome.
+    #[must_use]
     pub fn count(&self, outcome: &ConformanceOutcome) -> usize {
         self.rows.iter().filter(|r| &r.outcome == outcome).count()
     }
@@ -438,25 +462,27 @@ pub fn write_conformance_reports(
     let md_path = artifact_dir.join("report.md");
     let mut md = String::new();
     md.push_str("# Conformance Suite Report\n\n");
-    md.push_str(&format!("**Timestamp:** {}\n\n", result.timestamp));
-    md.push_str(&format!(
+    let _ = write!(md, "**Timestamp:** {}\n\n", result.timestamp);
+    let _ = write!(
+        md,
         "**Pass:** {}  **Skip:** {}  **Fail:** {}\n\n",
         result.count(&ConformanceOutcome::Pass),
         result.count(&ConformanceOutcome::Skip),
         result.count(&ConformanceOutcome::Fail),
-    ));
+    );
     md.push_str("| Backend | Capability | Test | Outcome | Message |\n");
     md.push_str("|---------|------------|------|---------|--------|\n");
     for row in &result.rows {
         let msg = row.message.as_deref().unwrap_or("");
-        md.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+        let _ = writeln!(
+            md,
+            "| {} | {} | {} | {} | {} |",
             row.backend,
             row.capability,
             row.test_name,
             row.outcome.as_str(),
             msg
-        ));
+        );
     }
     std::fs::write(&md_path, md.as_bytes())?;
 

@@ -1,4 +1,5 @@
 //! Shared helpers for daemon conformance tests.
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use crate::daemon::handler::{
     BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,

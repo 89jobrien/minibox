@@ -5,8 +5,8 @@
 //! automatically through the standard `?` operator.
 //!
 //! This module contains only cross-platform error types. Linux-specific errors
-//! that depend on `nix` (FilesystemError, CgroupError, NamespaceError,
-//! ProcessError) remain in the `minibox` crate.
+//! that depend on `nix` (`FilesystemError`, `CgroupError`, `NamespaceError`,
+//! `ProcessError`) remain in the `minibox` crate.
 
 use thiserror::Error;
 

@@ -44,6 +44,7 @@ pub struct KrunRuntime {
 
 impl KrunRuntime {
     /// Create a new `KrunRuntime` with an empty container registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             containers: Arc::new(Mutex::new(HashMap::new())),

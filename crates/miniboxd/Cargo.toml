@@ -5,9 +5,8 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
-
+[lints]
+workspace = true
 [package.metadata.cargo-machete]
 ignored = ["tracing-subscriber"]
 
@@ -36,7 +35,7 @@ minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
-toml = "0.8"
+toml = "1.1"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

@@ -108,8 +108,7 @@ fn main() -> Result<()> {
         Some("test-linux") => {
             let cfg = xconfig::XConfig::load(root)?;
             let target_base = std::env::var("CARGO_TARGET_DIR")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| root.join("target"));
+                .map_or_else(|_| root.join("target"), std::path::PathBuf::from);
             let vm_dir = dirs::home_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                 .join(".minibox")
@@ -186,13 +185,11 @@ fn main() -> Result<()> {
             let base = args
                 .windows(2)
                 .find(|w| w[0] == "--base")
-                .map(|w| w[1].clone())
-                .unwrap_or_else(|| "main".to_string());
+                .map_or_else(|| "main".to_string(), |w| w[1].clone());
             let mode = args
                 .windows(2)
                 .find(|w| w[0] == "--mode")
-                .map(|w| w[1].clone())
-                .unwrap_or_else(|| "core".to_string());
+                .map_or_else(|| "core".to_string(), |w| w[1].clone());
             let no_synthesis = args.iter().any(|a| a == "--no-synthesis");
             let prod = args.iter().any(|a| a == "--prod");
             council::run(root, &base, &mode, no_synthesis, prod)
@@ -206,16 +203,15 @@ fn main() -> Result<()> {
             let adapter = args
                 .windows(2)
                 .find(|w| w[0] == "--adapter")
-                .map(|w| w[1].clone())
-                .unwrap_or_else(|| "smolvm".to_string());
+                .map_or_else(|| "smolvm".to_string(), |w| w[1].clone());
             demo::demo(&sh, root, &adapter)
         }
         Some("borrow-fixtures") => borrow_fixtures::run(root),
         Some("clippy-sarif") => {
-            let sarif_path = env::args()
-                .nth(2)
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::PathBuf::from("clippy.sarif"));
+            let sarif_path = env::args().nth(2).map_or_else(
+                || std::path::PathBuf::from("clippy.sarif"),
+                std::path::PathBuf::from,
+            );
             clippy_sarif::run(&sarif_path)
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
@@ -246,10 +242,11 @@ fn main() -> Result<()> {
             let script_path = root.join("scripts").join(format!("{script_name}.nu"));
             if !script_path.exists() {
                 let mut available: Vec<String> = std::fs::read_dir(root.join("scripts"))?
-                    .filter_map(|e| e.ok())
+                    .filter_map(std::result::Result::ok)
                     .filter_map(|e| {
                         let name = e.file_name().to_string_lossy().to_string();
-                        name.strip_suffix(".nu").map(|s| s.to_string())
+                        name.strip_suffix(".nu")
+                            .map(std::string::ToString::to_string)
                     })
                     .collect();
                 available.sort();
@@ -303,27 +300,26 @@ fn main() -> Result<()> {
 
 fn cmd_test(sh: &Shell, root: &std::path::Path) -> Result<()> {
     let suite = env::args().nth(2);
-    match suite.as_deref() {
-        Some(s) => dispatch_test(sh, root, s),
-        None => {
-            eprintln!("Usage: cargo xtask test <suite>");
-            eprintln!();
-            eprintln!("Suites:");
-            eprintln!("  unit              unit + conformance tests (any platform)");
-            eprintln!("  conformance       commit+build+push conformance suite + reports");
-            eprintln!("  krun-conformance  krun adapter conformance (HVF/KVM)");
-            eprintln!("  turmoil           turmoil network simulation tests");
-            eprintln!("  shuttle           shuttle concurrency tests");
-            eprintln!("  property          property-based tests (proptest)");
-            eprintln!("  quickcheck        quickcheck property tests");
-            eprintln!("  integration       cgroup + integration tests (Linux, root)");
-            eprintln!("  e2e               protocol e2e tests (any platform)");
-            eprintln!("  system-suite      full-stack system tests (Linux, root)");
-            eprintln!("  sandbox           sandbox contract tests (Linux, root)");
-            eprintln!("  gke-profile       GKE profile unit tests");
-            eprintln!("  gke-adapter       GKE adapter integration tests");
-            Ok(())
-        }
+    if let Some(s) = suite.as_deref() {
+        dispatch_test(sh, root, s)
+    } else {
+        eprintln!("Usage: cargo xtask test <suite>");
+        eprintln!();
+        eprintln!("Suites:");
+        eprintln!("  unit              unit + conformance tests (any platform)");
+        eprintln!("  conformance       commit+build+push conformance suite + reports");
+        eprintln!("  krun-conformance  krun adapter conformance (HVF/KVM)");
+        eprintln!("  turmoil           turmoil network simulation tests");
+        eprintln!("  shuttle           shuttle concurrency tests");
+        eprintln!("  property          property-based tests (proptest)");
+        eprintln!("  quickcheck        quickcheck property tests");
+        eprintln!("  integration       cgroup + integration tests (Linux, root)");
+        eprintln!("  e2e               protocol e2e tests (any platform)");
+        eprintln!("  system-suite      full-stack system tests (Linux, root)");
+        eprintln!("  sandbox           sandbox contract tests (Linux, root)");
+        eprintln!("  gke-profile       GKE profile unit tests");
+        eprintln!("  gke-adapter       GKE adapter integration tests");
+        Ok(())
     }
 }
 
@@ -371,24 +367,23 @@ fn is_test_alias(cmd: &str) -> bool {
 
 fn cmd_check(sh: &Shell, root: &std::path::Path) -> Result<()> {
     let sub = env::args().nth(2);
-    match sub.as_deref() {
-        Some(s) => dispatch_check(sh, root, s),
-        None => {
-            eprintln!("Usage: cargo xtask check <target>");
-            eprintln!();
-            eprintln!("Targets:");
-            eprintln!("  stale-names        audit for banned old crate/binary names");
-            eprintln!(
-                "  protocol-drift     verify core contract hashes [--update] [--warn-only] [--hook] [--sarif <path>]"
-            );
-            eprintln!(
-                "  protocol-sites     verify HandlerDependencies construction site count [<file>] [--expected N] [--warn-only]"
-            );
-            eprintln!("  adapter-coverage   verify each adapter has integration test files");
-            eprintln!("  no-unwrap          scan production code for .unwrap() [--strict]");
-            eprintln!("  repo-clean         warn if generated artifacts are tracked by git");
-            Ok(())
-        }
+    if let Some(s) = sub.as_deref() {
+        dispatch_check(sh, root, s)
+    } else {
+        eprintln!("Usage: cargo xtask check <target>");
+        eprintln!();
+        eprintln!("Targets:");
+        eprintln!("  stale-names        audit for banned old crate/binary names");
+        eprintln!(
+            "  protocol-drift     verify core contract hashes [--update] [--warn-only] [--hook] [--sarif <path>]"
+        );
+        eprintln!(
+            "  protocol-sites     verify HandlerDependencies construction site count [<file>] [--expected N] [--warn-only]"
+        );
+        eprintln!("  adapter-coverage   verify each adapter has integration test files");
+        eprintln!("  no-unwrap          scan production code for .unwrap() [--strict]");
+        eprintln!("  repo-clean         warn if generated artifacts are tracked by git");
+        Ok(())
     }
 }
 
@@ -407,10 +402,10 @@ fn dispatch_check(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             protocol_drift::run(root, update, warn_only, hook, sarif_path.as_deref())
         }
         "protocol-sites" => {
-            let file = env::args()
-                .nth(3)
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| root.join("crates/miniboxd/src/main.rs"));
+            let file = env::args().nth(3).map_or_else(
+                || root.join("crates/miniboxd/src/main.rs"),
+                std::path::PathBuf::from,
+            );
             let args_vec: Vec<String> = env::args().collect();
             let expected: usize = args_vec
                 .windows(2)
@@ -453,17 +448,16 @@ fn check_alias_to_sub(cmd: &str) -> String {
 
 fn cmd_docs(sh: &Shell, root: &std::path::Path) -> Result<()> {
     let sub = env::args().nth(2);
-    match sub.as_deref() {
-        Some(s) => dispatch_docs(sh, root, s),
-        None => {
-            eprintln!("Usage: cargo xtask docs <action>");
-            eprintln!();
-            eprintln!("Actions:");
-            eprintln!("  audit [--full] [--strict]   audit docs/core/ facts vs code");
-            eprintln!("  lint [--sarif <path>]       validate frontmatter + status values");
-            eprintln!("  update-date                 rewrite Last-updated stamp in FEATURE_MATRIX");
-            Ok(())
-        }
+    if let Some(s) = sub.as_deref() {
+        dispatch_docs(sh, root, s)
+    } else {
+        eprintln!("Usage: cargo xtask docs <action>");
+        eprintln!();
+        eprintln!("Actions:");
+        eprintln!("  audit [--full] [--strict]   audit docs/core/ facts vs code");
+        eprintln!("  lint [--sarif <path>]       validate frontmatter + status values");
+        eprintln!("  update-date                 rewrite Last-updated stamp in FEATURE_MATRIX");
+        Ok(())
     }
 }
 
@@ -514,19 +508,16 @@ fn docs_alias_to_sub(cmd: &str) -> String {
 
 fn cmd_info(sh: &Shell, root: &std::path::Path) -> Result<()> {
     let sub = env::args().nth(2);
-    match sub.as_deref() {
-        Some(s) => dispatch_info(sh, root, s),
-        None => {
-            eprintln!("Usage: cargo xtask info <target>");
-            eprintln!();
-            eprintln!("Targets:");
-            eprintln!(
-                "  metrics [--save]             aggregate crate count, test count, source lines"
-            );
-            eprintln!("  context [--save]             machine-readable repo context snapshot");
-            eprintln!("  changes [<base-ref>]         classify changed paths; emit GHA outputs");
-            Ok(())
-        }
+    if let Some(s) = sub.as_deref() {
+        dispatch_info(sh, root, s)
+    } else {
+        eprintln!("Usage: cargo xtask info <target>");
+        eprintln!();
+        eprintln!("Targets:");
+        eprintln!("  metrics [--save]             aggregate crate count, test count, source lines");
+        eprintln!("  context [--save]             machine-readable repo context snapshot");
+        eprintln!("  changes [<base-ref>]         classify changed paths; emit GHA outputs");
+        Ok(())
     }
 }
 

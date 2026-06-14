@@ -32,7 +32,8 @@ pub struct HcsRuntime;
 
 impl HcsRuntime {
     /// Create a new (stub) HCS runtime adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -69,12 +70,13 @@ impl ContainerRuntime for HcsRuntime {
 
 /// Windows HCS implementation of [`FilesystemProvider`] (Phase 2 stub).
 ///
-/// Will provide rootfs setup via WCOW layer stacking or VirtioFS when implemented.
+/// Will provide rootfs setup via WCOW layer stacking or `VirtioFS` when implemented.
 pub struct HcsFilesystem;
 
 impl HcsFilesystem {
     /// Create a new (stub) HCS filesystem adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -112,7 +114,8 @@ pub struct HcsLimiter;
 
 impl HcsLimiter {
     /// Create a new (stub) HCS resource limiter adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -143,7 +146,8 @@ pub struct HcsRegistry;
 
 impl HcsRegistry {
     /// Create a new (stub) HCS image registry adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

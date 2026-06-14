@@ -193,14 +193,14 @@ async fn remove_inner(
     if run_dir.exists() {
         // SECURITY: assert the path is under the expected base to prevent
         // accidental recursive deletion outside the run directory.
-        if !run_dir.starts_with(&deps.lifecycle.run_containers_base) {
+        if run_dir.starts_with(&deps.lifecycle.run_containers_base) {
+            std::fs::remove_dir_all(&run_dir).ok();
+        } else {
             warn!(
                 path = %run_dir.display(),
                 base = %deps.lifecycle.run_containers_base.display(),
                 "remove: run_dir escapes base directory, skipping removal"
             );
-        } else {
-            std::fs::remove_dir_all(&run_dir).ok();
         }
     }
 

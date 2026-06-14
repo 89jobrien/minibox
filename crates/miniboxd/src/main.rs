@@ -8,7 +8,7 @@
 //! The daemon supports multiple adapter suites selected via the
 //! `MINIBOX_ADAPTER` environment variable (default: `smolvm`, fallback: `krun`):
 //!
-//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform. Falls back to krun
+//! - **smolvm** (default): `SmolVM` lightweight Linux VMs. Cross-platform. Falls back to krun
 //!   automatically when the `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 //! - **krun** (fallback): libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
@@ -50,6 +50,8 @@ fn main() {
     }
 
     // Standard tokio runtime for all adapters.
+    // Runtime build failure is fatal with no recovery path.
+    #[allow(clippy::expect_used)]
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -172,16 +174,13 @@ struct DaemonPaths {
 #[cfg(unix)]
 fn resolve_paths() -> DaemonPaths {
     let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_data_dir());
+        .map_or_else(|_| resolve_default_data_dir(), PathBuf::from);
 
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_run_dir());
+    let run_dir =
+        std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| resolve_default_run_dir(), PathBuf::from);
 
     let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| run_dir.join("miniboxd.sock"));
+        .map_or_else(|_| run_dir.join("miniboxd.sock"), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");
@@ -237,9 +236,10 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
     if uid == 0 {
         PathBuf::from("/var/lib/minibox")
     } else {
-        std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join(".minibox/cache"))
-            .unwrap_or_else(|_| PathBuf::from("/var/lib/minibox"))
+        std::env::var("HOME").map_or_else(
+            |_| PathBuf::from("/var/lib/minibox"),
+            |h| PathBuf::from(h).join(".minibox/cache"),
+        )
     }
 }
 
@@ -429,15 +429,14 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
             let group_name = group_name.trim();
             if !group_name.is_empty() {
-                match nix::unistd::Group::from_name(group_name)
+                if let Some(group) = nix::unistd::Group::from_name(group_name)
                     .with_context(|| format!("looking up group {group_name}"))?
                 {
-                    Some(group) => {
-                        nix::unistd::chown(sock_path, None, Some(group.gid))
-                            .with_context(|| format!("setting socket group to {group_name}"))?;
-                        info!("socket group set to {group_name}");
-                    }
-                    None => warn!("MINIBOX_SOCKET_GROUP={group_name} not found"),
+                    nix::unistd::chown(sock_path, None, Some(group.gid))
+                        .with_context(|| format!("setting socket group to {group_name}"))?;
+                    info!("socket group set to {group_name}");
+                } else {
+                    warn!("MINIBOX_SOCKET_GROUP={group_name} not found");
                 }
             }
         }
@@ -497,6 +496,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 //   3. Update `HandlerDependencies` construction sites in tests accordingly.
 
 #[cfg(unix)]
+#[allow(clippy::unused_async)]
 // qual:allow(srp) reason: "adapter suite dispatch — params are inherent wiring"
 async fn build_handler_deps(
     suite: AdapterSuite,

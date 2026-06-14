@@ -28,7 +28,7 @@ pub enum AdapterSuite {
     Gke,
     /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
     Colima,
-    /// macOS via SmolVM: lightweight Linux VMs with subsecond boot.
+    /// macOS via `SmolVM`: lightweight Linux VMs with subsecond boot.
     SmolVm,
     /// krun: libkrun-based micro-VM (Linux via KVM, macOS via HVF).
     Krun,
@@ -42,7 +42,8 @@ impl fmt::Display for AdapterSuite {
 
 impl AdapterSuite {
     /// The string identifier for this suite (matches `MINIBOX_ADAPTER` values).
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Native => "native",
             Self::Gke => "gke",
@@ -61,6 +62,7 @@ pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
 /// Feature-gated and platform-gated adapters are included with
 /// `available: false` when not compiled in, so error messages can
 /// list them as "known but unavailable".
+#[must_use]
 pub fn all_adapters() -> Vec<AdapterInfo> {
     vec![
         AdapterInfo {
@@ -100,11 +102,13 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
 ///
 /// Alias for [`available_adapter_names`] — preferred name for use in
 /// diagnostic output (e.g. `mbx doctor`, daemon startup logs).
+#[must_use]
 pub fn compiled_adapters() -> Vec<&'static str> {
     available_adapter_names()
 }
 
 /// Return only the names of adapters available in the current build.
+#[must_use]
 pub fn available_adapter_names() -> Vec<&'static str> {
     all_adapters()
         .into_iter()
@@ -192,8 +196,7 @@ fn smolvm_available() -> bool {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .is_ok_and(|s| s.success())
 }
 
 /// Structured error for invalid adapter selection.
@@ -236,7 +239,7 @@ impl fmt::Display for AdapterSelectionError {
                 ". Known but unavailable in this build: {}",
                 unavailable
                     .iter()
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(", ")
             )?;

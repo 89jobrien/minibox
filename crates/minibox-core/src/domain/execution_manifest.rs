@@ -24,7 +24,7 @@ use std::path::PathBuf;
 ///
 /// Persisted to `{containers_base}/{id}/execution-manifest.json` before
 /// the container process is spawned.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExecutionManifest {
     /// Schema version for forward compatibility.
     pub schema_version: u32,
@@ -71,7 +71,7 @@ pub struct ExecutionManifestImage {
 }
 
 /// Runtime configuration that affects execution behaviour.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExecutionManifestRuntime {
     /// Command and arguments.
     pub command: Vec<String>,
@@ -142,6 +142,10 @@ impl ExecutionManifest {
     ///
     /// The digest covers a stable JSON projection that excludes volatile fields:
     /// `created_at`, `manifest_path`, and `workload_digest` itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the projection cannot be serialized to JSON.
     pub fn compute_workload_digest(&self) -> anyhow::Result<ExecutionManifestDigest> {
         let projection = self.digest_projection();
         let json =
@@ -154,6 +158,10 @@ impl ExecutionManifest {
     }
 
     /// Compute and set `self.workload_digest`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if digest computation fails.
     pub fn seal(&mut self) -> anyhow::Result<()> {
         let digest = self.compute_workload_digest()?;
         self.workload_digest = Some(digest.to_string());
@@ -164,7 +172,7 @@ impl ExecutionManifest {
     ///
     /// Fields are serialised in a deterministic order via struct field order
     /// (serde serialises struct fields in declaration order).
-    fn digest_projection(&self) -> DigestProjection<'_> {
+    const fn digest_projection(&self) -> DigestProjection<'_> {
         DigestProjection {
             schema_version: self.schema_version,
             subject: &self.subject,
@@ -212,6 +220,7 @@ impl ExecutionManifestEnvVar {
 
 impl ExecutionManifestMount {
     /// Create from a domain `BindMount`.
+    #[must_use]
     pub fn from_bind_mount(m: &super::BindMount) -> Self {
         Self {
             host_path: m.host_path.to_string_lossy().to_string(),

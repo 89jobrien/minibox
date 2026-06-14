@@ -45,6 +45,11 @@ pub struct DiskLeaseService {
 }
 
 impl DiskLeaseService {
+    /// Create a new lease service backed by the JSON file at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file exists but cannot be read or parsed.
     pub async fn new(path: PathBuf) -> Result<Self> {
         let leases = if path.exists() {
             let bytes = tokio::fs::read(&path)
@@ -61,8 +66,10 @@ impl DiskLeaseService {
     }
 
     async fn persist(&self) -> Result<()> {
-        let leases = self.leases.read().await;
-        let bytes = serde_json::to_vec_pretty(&*leases)?;
+        let bytes = {
+            let leases = self.leases.read().await;
+            serde_json::to_vec_pretty(&*leases)?
+        };
         let tmp = self.path.with_extension("json.tmp");
         tokio::fs::write(&tmp, &bytes).await?;
         tokio::fs::rename(&tmp, &self.path).await?;

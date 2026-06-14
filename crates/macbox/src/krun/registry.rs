@@ -1,4 +1,6 @@
-//! KrunRegistry — ImageRegistry adapter for the krun VM backend.
+//! `KrunRegistry` — `ImageRegistry` adapter for the krun VM backend.
+// Static platform string parse cannot fail.
+#![allow(clippy::expect_used)]
 //!
 //! `KrunRegistry` is a thin newtype wrapper over [`DockerHubRegistry`] from
 //! `minibox-core`. The krun adapter uses standard Docker Hub image pulls; this
@@ -45,6 +47,7 @@ impl KrunRegistry {
     /// Return the manifest size cap enforced by the underlying registry client.
     ///
     /// Used by K-I-05 to verify the size limit configuration is present.
+    #[must_use]
     pub const fn manifest_size_limit_bytes() -> u64 {
         const TEN_MIB: u64 = 10 * 1024 * 1024;
         TEN_MIB // matches MAX_MANIFEST_SIZE in minibox-core

@@ -10,44 +10,44 @@ pub enum Tier {
 }
 
 impl Tier {
-    pub fn sequence() -> Vec<Tier> {
-        vec![Tier::Dev, Tier::Testing, Tier::Staging, Tier::Main]
+    pub fn sequence() -> Vec<Self> {
+        vec![Self::Dev, Self::Testing, Self::Staging, Self::Main]
     }
 
-    pub fn next(self) -> Option<Tier> {
+    pub const fn next(self) -> Option<Self> {
         match self {
-            Tier::Dev => Some(Tier::Testing),
-            Tier::Testing => Some(Tier::Staging),
-            Tier::Staging => Some(Tier::Main),
-            Tier::Main => None,
+            Self::Dev => Some(Self::Testing),
+            Self::Testing => Some(Self::Staging),
+            Self::Staging => Some(Self::Main),
+            Self::Main => None,
         }
     }
 
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            Tier::Dev => "dev",
-            Tier::Testing => "testing",
-            Tier::Staging => "staging",
-            Tier::Main => "main",
+            Self::Dev => "dev",
+            Self::Testing => "testing",
+            Self::Staging => "staging",
+            Self::Main => "main",
         }
     }
 
     /// The git branch corresponding to this tier in the stability pipeline.
-    pub fn branch_name(self) -> &'static str {
+    pub const fn branch_name(self) -> &'static str {
         match self {
-            Tier::Dev => "develop",
-            Tier::Testing => "next",
-            Tier::Staging => "staging",
-            Tier::Main => "main",
+            Self::Dev => "develop",
+            Self::Testing => "next",
+            Self::Staging => "staging",
+            Self::Main => "main",
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Tier> {
+    pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "dev" => Some(Tier::Dev),
-            "testing" => Some(Tier::Testing),
-            "staging" => Some(Tier::Staging),
-            "main" => Some(Tier::Main),
+            "dev" => Some(Self::Dev),
+            "testing" => Some(Self::Testing),
+            "staging" => Some(Self::Staging),
+            "main" => Some(Self::Main),
             _ => None,
         }
     }
@@ -55,10 +55,10 @@ impl Tier {
     /// Gates owned by this tier (not inherited from predecessors).
     pub fn own_gates(self) -> Vec<&'static str> {
         match self {
-            Tier::Dev => vec!["lint", "test-unit"],
-            Tier::Testing => vec!["test-conformance", "test-property", "borrow-fixtures"],
-            Tier::Staging => vec!["prepush", "coverage-check"],
-            Tier::Main => vec!["check-no-unwrap", "check-protocol-drift", "lint-docs"],
+            Self::Dev => vec!["lint", "test-unit"],
+            Self::Testing => vec!["test-conformance", "test-property", "borrow-fixtures"],
+            Self::Staging => vec!["prepush", "coverage-check"],
+            Self::Main => vec!["check-no-unwrap", "check-protocol-drift", "lint-docs"],
         }
     }
 }
@@ -90,7 +90,7 @@ impl PromoteState {
                 promoted_at = val.trim_end_matches('"').to_string();
             }
         }
-        Ok(PromoteState {
+        Ok(Self {
             current_tier: current_tier.context("missing or unknown current_tier in state file")?,
             promoted_at,
         })
@@ -110,7 +110,7 @@ impl PromoteState {
 }
 
 /// Returns the full ordered gate list for promoting from `from` to `to` (inclusive).
-/// Each entry is (tier, gate_name).
+/// Each entry is (tier, `gate_name`).
 pub fn build_promotion_plan(from: Tier, to: Tier) -> Vec<(Tier, &'static str)> {
     let sequence = Tier::sequence();
     let from_idx = sequence.iter().position(|t| *t == from).unwrap_or(0);
@@ -163,7 +163,7 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
         eprintln!("Dry run — no gates executed.");
         let from_branch = from_tier.branch_name();
         let to_branch = to_tier.branch_name();
-        eprintln!("Would merge branches: {} -> {}", from_branch, to_branch);
+        eprintln!("Would merge branches: {from_branch} -> {to_branch}");
         return Ok(());
     }
 
@@ -173,7 +173,7 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
         if let Err(e) = result {
             anyhow::bail!("[{}] gate `{}` failed: {}", tier.name(), gate, e);
         }
-        eprintln!("  ok: {}", gate);
+        eprintln!("  ok: {gate}");
     }
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -197,7 +197,7 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
     for pair in tiers.windows(2) {
         let src = pair[0].branch_name();
         let dst = pair[1].branch_name();
-        eprintln!("Merging: {} -> {} ...", src, dst);
+        eprintln!("Merging: {src} -> {dst} ...");
         xshell::cmd!(sh, "git checkout {dst}")
             .run()
             .with_context(|| format!("checkout {dst}"))?;
@@ -209,7 +209,7 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
     // Push all target branches
     let targets: Vec<&str> = tiers[1..].iter().map(|t| t.branch_name()).collect();
     let targets_str = targets.join(" ");
-    eprintln!("Pushing: {}", targets_str);
+    eprintln!("Pushing: {targets_str}");
     for target in &targets {
         xshell::cmd!(sh, "git push origin {target}")
             .run()

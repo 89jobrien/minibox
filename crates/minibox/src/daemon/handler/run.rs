@@ -55,7 +55,7 @@ pub struct RunParams {
 ///
 /// 16 hex chars = 64 bits. Birthday-paradox collision after ~4 billion containers —
 /// callers must still check for collisions against the existing container state.
-pub(crate) fn generate_container_id() -> String {
+pub fn generate_container_id() -> String {
     Uuid::new_v4()
         .to_string()
         .replace('-', "")
@@ -292,7 +292,7 @@ pub(super) async fn handle_run_streaming(
     let cgroup_path_opt = state
         .get_container(&container_id)
         .await
-        .map(|r| r.cgroup_path.clone());
+        .map(|r| r.cgroup_path);
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
@@ -586,7 +586,7 @@ async fn prepare_run(
         match policy.evaluate(&manifest) {
             PolicyDecision::Allow => {}
             PolicyDecision::Deny(reason) => {
-                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+                return Err(anyhow::anyhow!("execution policy denied: {reason}"));
             }
         }
     }
@@ -801,6 +801,8 @@ async fn run_inner_capture(
         )
         .await;
 
+    // Semaphore closed only if the daemon is shutting down; no recovery possible.
+    #[allow(clippy::expect_used)]
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -880,6 +882,8 @@ async fn run_inner(
     let spawn_config = prepared.spawn_config;
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns.
+    // Semaphore closed only if the daemon is shutting down; no recovery possible.
+    #[allow(clippy::expect_used)]
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -1004,7 +1008,7 @@ pub(super) async fn run_from_params(
 ///
 /// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
 /// the file cannot be read (e.g. cgroup already deleted, or non-Linux platform).
-pub(crate) async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
+pub async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
     let events_path = cgroup_path.join("memory.events");
     if let Ok(content) = tokio::fs::read_to_string(&events_path).await {
         for line in content.lines() {

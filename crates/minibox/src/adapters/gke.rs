@@ -52,7 +52,8 @@ pub struct NoopLimiter;
 
 #[allow(dead_code)]
 impl NoopLimiter {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -88,7 +89,8 @@ pub struct CopyFilesystem;
 
 #[allow(dead_code)]
 impl CopyFilesystem {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

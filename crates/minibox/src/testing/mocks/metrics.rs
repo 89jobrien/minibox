@@ -1,4 +1,5 @@
 //! Mock [`MetricsRecorder`] for conformance testing.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use minibox_core::domain::MetricsRecorder;
 use std::sync::Mutex;

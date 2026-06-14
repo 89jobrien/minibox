@@ -21,10 +21,10 @@ fn a_bind_mount() -> BindMount {
 
 pub struct RunWithBindMountWhenDeniedReturnsError;
 impl ConformanceTest for RunWithBindMountWhenDeniedReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_with_bind_mount_when_denied_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "policy"
     }
     fn category(&self) -> TestCategory {
@@ -45,10 +45,10 @@ impl ConformanceTest for RunWithBindMountWhenDeniedReturnsError {
 
 pub struct RunPrivilegedWhenDeniedReturnsError;
 impl ConformanceTest for RunPrivilegedWhenDeniedReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_privileged_when_denied_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "policy"
     }
     fn category(&self) -> TestCategory {
@@ -68,10 +68,10 @@ impl ConformanceTest for RunPrivilegedWhenDeniedReturnsError {
 
 pub struct RunWithBindMountWhenAllowedSucceeds;
 impl ConformanceTest for RunWithBindMountWhenAllowedSucceeds {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_with_bind_mount_when_allowed_succeeds"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "policy"
     }
     fn category(&self) -> TestCategory {
@@ -92,10 +92,10 @@ impl ConformanceTest for RunWithBindMountWhenAllowedSucceeds {
 
 pub struct RunPrivilegedWhenAllowedSucceeds;
 impl ConformanceTest for RunPrivilegedWhenAllowedSucceeds {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_privileged_when_allowed_succeeds"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "policy"
     }
     fn category(&self) -> TestCategory {
@@ -115,10 +115,10 @@ impl ConformanceTest for RunPrivilegedWhenAllowedSucceeds {
 
 pub struct DefaultPolicyDeniesBothCapabilities;
 impl ConformanceTest for DefaultPolicyDeniesBothCapabilities {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "default_policy_denies_bind_mounts"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "policy"
     }
     fn category(&self) -> TestCategory {
@@ -142,6 +142,7 @@ impl ConformanceTest for DefaultPolicyDeniesBothCapabilities {
 }
 
 /// Return all policy conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(RunWithBindMountWhenDeniedReturnsError),

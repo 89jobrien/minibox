@@ -102,7 +102,7 @@ fn probe_nested_overlay() -> bool {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn probe_nested_overlay() -> bool {
+const fn probe_nested_overlay() -> bool {
     false
 }
 
@@ -117,6 +117,7 @@ pub struct NestingContext {
 
 impl NestingContext {
     /// Build from optional env values. `None` depth means host (0).
+    #[must_use]
     pub fn new(depth: Option<u32>, max_depth: Option<u32>) -> Self {
         Self {
             depth: depth.unwrap_or(0),
@@ -125,6 +126,7 @@ impl NestingContext {
     }
 
     /// Read nesting context from the current process environment.
+    #[must_use]
     pub fn from_env() -> Self {
         let depth = std::env::var(ENV_NEST_DEPTH)
             .ok()
@@ -136,7 +138,8 @@ impl NestingContext {
     }
 
     /// The depth value to set for a child container.
-    pub fn child_depth(&self) -> u32 {
+    #[must_use]
+    pub const fn child_depth(&self) -> u32 {
         self.depth.saturating_add(1)
     }
 
@@ -153,6 +156,7 @@ impl NestingContext {
     }
 
     /// Environment variables to inject into child containers.
+    #[must_use]
     pub fn child_env_vars(&self) -> Vec<String> {
         vec![
             format!("{ENV_NEST_DEPTH}={}", self.child_depth()),

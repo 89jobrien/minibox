@@ -27,17 +27,16 @@ pub async fn handle_logs(
     use minibox_core::protocol::OutputStreamKind;
     use std::io::{BufRead, BufReader};
 
-    let id = match state.resolve_id(&name_or_id).await {
-        Some(id) => id,
-        None => {
-            send_error(
-                &tx,
-                "handle_logs",
-                format!("container not found: {name_or_id}"),
-            )
-            .await;
-            return;
-        }
+    let id = if let Some(id) = state.resolve_id(&name_or_id).await {
+        id
+    } else {
+        send_error(
+            &tx,
+            "handle_logs",
+            format!("container not found: {name_or_id}"),
+        )
+        .await;
+        return;
     };
 
     // Read stdout.log then stderr.log; missing files are silently skipped.

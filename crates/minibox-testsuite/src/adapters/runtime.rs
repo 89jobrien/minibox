@@ -34,10 +34,10 @@ fn rt() -> tokio::runtime::Runtime {
 
 pub struct SpawnReturnsNonzeroPid;
 impl ConformanceTest for SpawnReturnsNonzeroPid {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "spawn_returns_nonzero_pid"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -58,10 +58,10 @@ impl ConformanceTest for SpawnReturnsNonzeroPid {
 
 pub struct SpawnIncrementsCount;
 impl ConformanceTest for SpawnIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "spawn_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -78,10 +78,10 @@ impl ConformanceTest for SpawnIncrementsCount {
 
 pub struct SuccessiveSpawnsDifferentPids;
 impl ConformanceTest for SuccessiveSpawnsDifferentPids {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "successive_spawns_different_pids"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -107,10 +107,10 @@ impl ConformanceTest for SuccessiveSpawnsDifferentPids {
 
 pub struct SpawnFailureReturnsErr;
 impl ConformanceTest for SpawnFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "spawn_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -128,10 +128,10 @@ impl ConformanceTest for SpawnFailureReturnsErr {
 
 pub struct SpawnFailureIncrementsCount;
 impl ConformanceTest for SpawnFailureIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "spawn_failure_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -147,10 +147,10 @@ impl ConformanceTest for SpawnFailureIncrementsCount {
 
 pub struct CapabilitiesReturnsStruct;
 impl ConformanceTest for CapabilitiesReturnsStruct {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "capabilities_returns_struct"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -167,10 +167,10 @@ impl ConformanceTest for CapabilitiesReturnsStruct {
 
 pub struct SyncAsyncConsistency;
 impl ConformanceTest for SyncAsyncConsistency {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "sync_async_consistency"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -196,10 +196,10 @@ impl ConformanceTest for SyncAsyncConsistency {
 
 pub struct SyncAsyncFailureConsistency;
 impl ConformanceTest for SyncAsyncFailureConsistency {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "sync_async_failure_consistency"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "runtime"
     }
     fn category(&self) -> TestCategory {
@@ -219,6 +219,7 @@ impl ConformanceTest for SyncAsyncFailureConsistency {
 }
 
 /// Return all runtime conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(SpawnReturnsNonzeroPid),

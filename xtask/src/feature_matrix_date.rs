@@ -11,7 +11,7 @@ use std::{fs, path::Path};
 
 const FEATURE_MATRIX: &str = "docs/core/FEATURE_MATRIX.mbx.md";
 
-/// Rewrite the `Last updated:` line in FEATURE_MATRIX.mbx.md to today's UTC date.
+/// Rewrite the `Last updated:` line in `FEATURE_MATRIX.mbx.md` to today's UTC date.
 pub fn update_feature_matrix_date(root: &Path) -> Result<()> {
     let path = root.join(FEATURE_MATRIX);
     let content =

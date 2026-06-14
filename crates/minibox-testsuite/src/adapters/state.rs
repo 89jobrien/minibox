@@ -22,7 +22,7 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
     ContainerRecord {
         info: ContainerInfo {
             id: id.to_string(),
-            name: name.map(|s| s.to_string()),
+            name: name.map(std::string::ToString::to_string),
             image: image.to_string(),
             command: "/bin/sh".to_string(),
             state: "Created".to_string(),
@@ -51,10 +51,10 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
 
 pub struct AddThenGetRoundTrip;
 impl ConformanceTest for AddThenGetRoundTrip {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "add_then_get_round_trip"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -76,10 +76,10 @@ impl ConformanceTest for AddThenGetRoundTrip {
 
 pub struct RemoveReturnsRecord;
 impl ConformanceTest for RemoveReturnsRecord {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "remove_returns_record"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -97,10 +97,10 @@ impl ConformanceTest for RemoveReturnsRecord {
 
 pub struct RemoveNonExistentReturnsNone;
 impl ConformanceTest for RemoveNonExistentReturnsNone {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "remove_nonexistent_returns_none"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -117,10 +117,10 @@ impl ConformanceTest for RemoveNonExistentReturnsNone {
 
 pub struct ListContainersReturnsAll;
 impl ConformanceTest for ListContainersReturnsAll {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_containers_returns_all"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -139,10 +139,10 @@ impl ConformanceTest for ListContainersReturnsAll {
 
 pub struct UpdateStateChangesStatus;
 impl ConformanceTest for UpdateStateChangesStatus {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "update_state_changes_status"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -169,10 +169,10 @@ impl ConformanceTest for UpdateStateChangesStatus {
 
 pub struct PersistenceRoundTrip;
 impl ConformanceTest for PersistenceRoundTrip {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "persistence_round_trip"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -195,10 +195,10 @@ impl ConformanceTest for PersistenceRoundTrip {
 
 pub struct NameInUseDetectsCollision;
 impl ConformanceTest for NameInUseDetectsCollision {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "name_in_use_detects_collision"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "state"
     }
     fn category(&self) -> TestCategory {
@@ -225,6 +225,7 @@ impl ConformanceTest for NameInUseDetectsCollision {
 }
 
 /// Return all state conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(AddThenGetRoundTrip),

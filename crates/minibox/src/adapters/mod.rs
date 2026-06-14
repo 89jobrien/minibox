@@ -24,7 +24,7 @@
 //! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`ResourceLimiter`]
 //! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`ContainerRuntime`]
 //!
-//! **GKE Unprivileged (Linux, no CAP_SYS_ADMIN):**
+//! **GKE Unprivileged (Linux, no `CAP_SYS_ADMIN)`:**
 //! - [`NoopLimiter`]: No-op resource limiter (cgroups unavailable)
 //! - [`CopyFilesystem`]: Copy-based layer merging (no overlay FS)
 //! - [`ProotRuntime`]: proot (ptrace-based) fake chroot runtime
@@ -58,8 +58,8 @@
 //! - [`ColimaLimiter`]: Colima-based resource limiter
 //!
 //! **Cross-Platform (macOS via SmolVM):**
-//! - [`SmolVmRegistry`]: SmolVM implementation of [`ImageRegistry`]
-//! - [`SmolVmRuntime`]: SmolVM lightweight VM runtime
+//! - [`SmolVmRegistry`]: `SmolVM` implementation of [`ImageRegistry`]
+//! - [`SmolVmRuntime`]: `SmolVM` lightweight VM runtime
 //! - [`SmolVmFilesystem`]: SmolVM-based filesystem provider (no-op on host)
 //! - [`SmolVmLimiter`]: SmolVM-based resource limiter (no-op on host)
 //!

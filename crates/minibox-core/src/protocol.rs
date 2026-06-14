@@ -115,7 +115,7 @@ pub enum DaemonRequest {
         mounts: Vec<BindMount>,
         /// If `true`, the container process runs with a full Linux capability set.
         ///
-        /// Required for Docker-in-Docker (DinD) use cases where the inner process
+        /// Required for Docker-in-Docker (`DinD`) use cases where the inner process
         /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
         #[serde(default)]
         privileged: bool,
@@ -161,7 +161,7 @@ pub enum DaemonRequest {
         /// When set, the container's cgroup is created under this path instead of
         /// the daemon's default `MINIBOX_CGROUP_ROOT`. The daemon enables
         /// subtree controllers on the parent automatically. Required for
-        /// minibox-in-minibox (DinD) where the inner daemon needs a delegated
+        /// minibox-in-minibox (`DinD`) where the inner daemon needs a delegated
         /// cgroup slice.
         ///
         /// Must be an absolute path under `/sys/fs/cgroup/`.
@@ -432,7 +432,8 @@ pub enum DaemonRequest {
 
 impl DaemonRequest {
     /// Return the variant name without any field data — safe for logging.
-    pub fn type_tag(&self) -> &'static str {
+    #[must_use]
+    pub const fn type_tag(&self) -> &'static str {
         match self {
             Self::Run { .. } => "Run",
             Self::Stop { .. } => "Stop",
@@ -467,7 +468,7 @@ impl DaemonRequest {
     }
 }
 
-fn default_max_depth() -> u32 {
+const fn default_max_depth() -> u32 {
     3
 }
 
@@ -479,7 +480,7 @@ fn default_max_depth() -> u32 {
 ///
 /// Serialized as lowercase strings (`"stdout"` / `"stderr"`) via
 /// `#[serde(rename_all = "lowercase")]`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputStreamKind {
     /// Data came from the container's standard output (file descriptor 1).
@@ -755,6 +756,9 @@ pub struct ContainerInfo {
 // ---------------------------------------------------------------------------
 
 /// Encode a [`DaemonRequest`] as a newline-terminated JSON frame.
+/// # Errors
+///
+/// Returns an error if serialization fails.
 pub fn encode_request(req: &DaemonRequest) -> anyhow::Result<Vec<u8>> {
     let mut bytes = serde_json::to_vec(req)?;
     bytes.push(b'\n');
@@ -762,6 +766,9 @@ pub fn encode_request(req: &DaemonRequest) -> anyhow::Result<Vec<u8>> {
 }
 
 /// Encode a [`DaemonResponse`] as a newline-terminated JSON frame.
+/// # Errors
+///
+/// Returns an error if serialization fails.
 pub fn encode_response(resp: &DaemonResponse) -> anyhow::Result<Vec<u8>> {
     let mut bytes = serde_json::to_vec(resp)?;
     bytes.push(b'\n');
@@ -770,12 +777,18 @@ pub fn encode_response(resp: &DaemonResponse) -> anyhow::Result<Vec<u8>> {
 
 /// Decode a [`DaemonRequest`] from a line (may or may not include the trailing
 /// `\n`).
+/// # Errors
+///
+/// Returns an error if deserialization or UTF-8 decoding fails.
 pub fn decode_request(line: &[u8]) -> anyhow::Result<DaemonRequest> {
     let trimmed = line.strip_suffix(b"\n").unwrap_or(line);
     Ok(serde_json::from_slice(trimmed)?)
 }
 
 /// Decode a [`DaemonResponse`] from a line.
+/// # Errors
+///
+/// Returns an error if deserialization or UTF-8 decoding fails.
 pub fn decode_response(line: &[u8]) -> anyhow::Result<DaemonResponse> {
     let trimmed = line.strip_suffix(b"\n").unwrap_or(line);
     Ok(serde_json::from_slice(trimmed)?)
@@ -797,6 +810,7 @@ pub const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 /// Used by the `test_run!` macro to support struct-update syntax (`..defaults`),
 /// which is not possible directly on enum variants. Not intended for production use.
 #[doc(hidden)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TestRunDefaults {
     pub image: String,
     pub tag: Option<String>,
@@ -847,6 +861,7 @@ impl Default for TestRunDefaults {
 
 impl TestRunDefaults {
     /// Convert into a `DaemonRequest::Run`.
+    #[must_use]
     pub fn into_request(self) -> DaemonRequest {
         DaemonRequest::Run {
             image: self.image,
@@ -884,6 +899,7 @@ impl TestRunDefaults {
 /// - Numbers and booleans are stringified.
 /// - Null values and unset variables are skipped.
 /// - Complex values (arrays, objects) are JSON-serialized.
+#[must_use]
 pub fn execution_context_to_env(ctx: &slashcrux::ExecutionContext) -> Vec<String> {
     ctx.all()
         .iter()

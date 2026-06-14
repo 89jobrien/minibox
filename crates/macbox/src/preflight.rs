@@ -13,7 +13,7 @@ use anyhow::Result;
 /// `VirtualizationFramework` variant is reserved for a planned Phase 2
 /// integration with Apple's Virtualization.framework and is **never returned**
 /// by the current `preflight` implementation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MacboxStatus {
     /// Colima is installed and `colima status` reports it is running.
     Colima,
@@ -43,6 +43,7 @@ pub type Executor = Box<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 /// Spawns a child process using [`std::process::Command`] and returns its
 /// stdout. Stderr is not captured. Returns an error if the process cannot
 /// be spawned or if stdout is not valid UTF-8.
+#[must_use]
 pub fn default_executor() -> Executor {
     Box::new(|args: &[&str]| {
         let out = std::process::Command::new(args[0])
@@ -68,6 +69,7 @@ pub fn default_executor() -> Executor {
 /// [`MacboxStatus::NoBackendAvailable`].
 ///
 /// `VirtualizationFramework` is never returned by this function.
+#[must_use]
 pub fn preflight(exec: &Executor) -> MacboxStatus {
     match exec(&["colima", "status"]) {
         Ok(o) if o.contains("running") => MacboxStatus::Colima,

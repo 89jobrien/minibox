@@ -65,9 +65,7 @@ pub struct FsCgroupFreezeChecker;
 impl CgroupFreezeChecker for FsCgroupFreezeChecker {
     fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool {
         let freeze_path = cgroup_path.join("cgroup.freeze");
-        std::fs::read_to_string(&freeze_path)
-            .map(|s| s.trim() == "1")
-            .unwrap_or(false)
+        std::fs::read_to_string(&freeze_path).is_ok_and(|s| s.trim() == "1")
     }
 }
 
@@ -104,7 +102,8 @@ pub struct JsonFileRepository {
 
 impl JsonFileRepository {
     /// Create a new repository that reads/writes `path`.
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self { path }
     }
 }
@@ -132,7 +131,7 @@ impl StateRepository for JsonFileRepository {
 
     fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(containers)
-            .map_err(|e| anyhow::anyhow!("failed to serialise state: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("failed to serialise state: {e}"))?;
 
         let tmp_path = self.path.with_extension("json.tmp");
         std::fs::write(&tmp_path, &json).map_err(|e| {
@@ -265,7 +264,7 @@ pub struct DaemonState {
     /// Injected persistence port.  When `Some`, all load/save operations
     /// go through this port instead of the raw `state_file` path.
     repository: Option<Arc<dyn StateRepository>>,
-    /// IP addresses currently allocated by bridge network, keyed by container_id.
+    /// IP addresses currently allocated by bridge network, keyed by `container_id`.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
     /// Pipeline trace persistence adapter.
     pub trace_store: Arc<dyn TraceStore>,
@@ -279,14 +278,16 @@ impl DaemonState {
     /// `data_dir/traces/` by default.
     ///
     /// [`FileTraceStore`]: minibox_core::trace::FileTraceStore
+    #[must_use]
     pub fn new(image_store: ImageStore, data_dir: &Path) -> Self {
         let trace_store: Arc<dyn TraceStore> =
-            minibox_core::trace::FileTraceStore::new(data_dir.join("traces"))
-                .map(|s| Arc::new(s) as Arc<dyn TraceStore>)
-                .unwrap_or_else(|e| {
+            minibox_core::trace::FileTraceStore::new(data_dir.join("traces")).map_or_else(
+                |e| {
                     warn!("trace store: failed to create FileTraceStore: {e}, using noop");
-                    Arc::new(minibox_core::trace::NoopTraceStore)
-                });
+                    Arc::new(minibox_core::trace::NoopTraceStore) as Arc<dyn TraceStore>
+                },
+                |s| Arc::new(s) as Arc<dyn TraceStore>,
+            );
 
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
@@ -533,7 +534,7 @@ impl DaemonState {
     /// Return `ContainerInfo` snapshots for every tracked container.
     ///
     /// The returned vec is a point-in-time snapshot; order is unspecified
-    /// (HashMap iteration order).
+    /// (`HashMap` iteration order).
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
         map.values().map(|r| r.info.clone()).collect()
@@ -568,11 +569,9 @@ impl DaemonState {
                 record.info.state = "Running".to_string();
             }
             // Standard forward transitions
-            ("Created", ContainerState::Running)
-            | ("Created", ContainerState::Failed)
-            | ("Running", ContainerState::Stopped)
-            | ("Running", ContainerState::Failed)
-            | ("Paused", ContainerState::Stopped) => {
+            ("Created", ContainerState::Running | ContainerState::Failed)
+            | ("Running" | "Paused", ContainerState::Stopped)
+            | ("Running", ContainerState::Failed) => {
                 if new_state == ContainerState::Stopped {
                     record.info.pid = None;
                     record.pid = None;
@@ -638,19 +637,18 @@ fn reconcile_running(
     checker: &dyn ProcessChecker,
     orphaned_count: &mut u32,
 ) {
-    let pid = match record.pid {
-        Some(p) => p,
-        None => {
-            warn!(
-                container_id = %record.info.id,
-                stale_pid = 0_u32,
-                "reconcile: container marked Running but has no PID — marking Orphaned"
-            );
-            record.info.state = "Orphaned".to_string();
-            record.info.pid = None;
-            *orphaned_count += 1;
-            return;
-        }
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            stale_pid = 0_u32,
+            "reconcile: container marked Running but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
     };
 
     if checker.is_alive(pid) {
@@ -689,18 +687,17 @@ fn reconcile_paused(
     freeze_checker: &dyn CgroupFreezeChecker,
     orphaned_count: &mut u32,
 ) {
-    let pid = match record.pid {
-        Some(p) => p,
-        None => {
-            warn!(
-                container_id = %record.info.id,
-                "reconcile: container marked Paused but has no PID — marking Orphaned"
-            );
-            record.info.state = "Orphaned".to_string();
-            record.info.pid = None;
-            *orphaned_count += 1;
-            return;
-        }
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            "reconcile: container marked Paused but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
     };
 
     if !checker.is_alive(pid) {

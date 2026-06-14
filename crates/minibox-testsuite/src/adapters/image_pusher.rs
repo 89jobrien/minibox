@@ -20,7 +20,7 @@ fn alpine() -> ImageRef {
     ImageRef::parse("alpine:3.18").expect("parse alpine ref")
 }
 
-fn anon() -> RegistryCredentials {
+const fn anon() -> RegistryCredentials {
     RegistryCredentials::Anonymous
 }
 
@@ -28,13 +28,13 @@ fn anon() -> RegistryCredentials {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// push_image succeeds and returns a PushResult with a non-empty digest.
+/// `push_image` succeeds and returns a `PushResult` with a non-empty digest.
 pub struct PushImageReturnsDigest;
 impl ConformanceTest for PushImageReturnsDigest {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "push_image_returns_digest"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_pusher"
     }
     fn category(&self) -> TestCategory {
@@ -50,13 +50,13 @@ impl ConformanceTest for PushImageReturnsDigest {
     }
 }
 
-/// push_image records the tag in the mock.
+/// `push_image` records the tag in the mock.
 pub struct PushImageRecordsTag;
 impl ConformanceTest for PushImageRecordsTag {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "push_image_records_tag"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_pusher"
     }
     fn category(&self) -> TestCategory {
@@ -74,13 +74,13 @@ impl ConformanceTest for PushImageRecordsTag {
     }
 }
 
-/// push_image returns Err when configured to fail.
+/// `push_image` returns Err when configured to fail.
 pub struct PushImageFailureReturnsErr;
 impl ConformanceTest for PushImageFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "push_image_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_pusher"
     }
     fn category(&self) -> TestCategory {
@@ -94,13 +94,13 @@ impl ConformanceTest for PushImageFailureReturnsErr {
     }
 }
 
-/// push_image sends progress when a channel is provided.
+/// `push_image` sends progress when a channel is provided.
 pub struct PushImageSendsProgress;
 impl ConformanceTest for PushImageSendsProgress {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "push_image_sends_progress"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_pusher"
     }
     fn category(&self) -> TestCategory {
@@ -118,7 +118,8 @@ impl ConformanceTest for PushImageSendsProgress {
     }
 }
 
-/// Return all image_pusher conformance tests.
+/// Return all `image_pusher` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(PushImageReturnsDigest),

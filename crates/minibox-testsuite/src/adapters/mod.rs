@@ -27,6 +27,7 @@ pub mod vm_checkpoint;
 use crate::harness::ConformanceTest;
 
 /// Collect every conformance test across all adapters.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     let mut tests: Vec<Box<dyn ConformanceTest>> = Vec::new();
     tests.extend(registry::all());

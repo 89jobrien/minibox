@@ -43,16 +43,15 @@ pub fn demo(_sh: &Shell, root: &Path, adapter: &str) -> Result<()> {
         );
     }
 
-    let mbx = match find_mbx(root) {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "note: mbx binary not found on PATH or in target/debug/. \
-                 Run `cargo build -p mbx` first, or install mbx."
-            );
-            eprintln!("=== demo complete (skipped — mbx not found) ===");
-            return Ok(());
-        }
+    let mbx = if let Some(p) = find_mbx(root) {
+        p
+    } else {
+        eprintln!(
+            "note: mbx binary not found on PATH or in target/debug/. \
+             Run `cargo build -p mbx` first, or install mbx."
+        );
+        eprintln!("=== demo complete (skipped — mbx not found) ===");
+        return Ok(());
     };
 
     eprintln!();

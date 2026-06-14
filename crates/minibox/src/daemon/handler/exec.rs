@@ -1,4 +1,4 @@
-//! Exec, SendInput, and ResizePty handlers.
+//! Exec, `SendInput`, and `ResizePty` handlers.
 // Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
 #![allow(clippy::too_many_arguments)]
 
@@ -140,24 +140,21 @@ pub async fn handle_send_input(
         }
     };
     let reg = deps.exec.pty_sessions.lock().await;
-    match reg.stdin.get(session_id.as_ref()) {
-        Some(stdin_tx) => {
-            if stdin_tx.send(bytes).await.is_err() {
-                warn!(
-                    session_id = %session_id,
-                    "send_input: stdin channel closed"
-                );
-            }
+    if let Some(stdin_tx) = reg.stdin.get(session_id.as_ref()) {
+        if stdin_tx.send(bytes).await.is_err() {
+            warn!(
+                session_id = %session_id,
+                "send_input: stdin channel closed"
+            );
         }
-        None => {
-            send_error(
-                &tx,
-                "handle_send_input",
-                format!("no active tty session: {session_id}"),
-            )
-            .await;
-            return;
-        }
+    } else {
+        send_error(
+            &tx,
+            "handle_send_input",
+            format!("no active tty session: {session_id}"),
+        )
+        .await;
+        return;
     }
     if tx
         .send(DaemonResponse::Success {
@@ -183,24 +180,21 @@ pub async fn handle_resize_pty(
     tx: mpsc::Sender<DaemonResponse>,
 ) {
     let reg = deps.exec.pty_sessions.lock().await;
-    match reg.resize.get(session_id.as_ref()) {
-        Some(resize_tx) => {
-            if resize_tx.send((cols, rows)).await.is_err() {
-                warn!(
-                    session_id = %session_id,
-                    "resize_pty: resize channel closed"
-                );
-            }
+    if let Some(resize_tx) = reg.resize.get(session_id.as_ref()) {
+        if resize_tx.send((cols, rows)).await.is_err() {
+            warn!(
+                session_id = %session_id,
+                "resize_pty: resize channel closed"
+            );
         }
-        None => {
-            send_error(
-                &tx,
-                "handle_resize_pty",
-                format!("no active tty session: {session_id}"),
-            )
-            .await;
-            return;
-        }
+    } else {
+        send_error(
+            &tx,
+            "handle_resize_pty",
+            format!("no active tty session: {session_id}"),
+        )
+        .await;
+        return;
     }
     if tx
         .send(DaemonResponse::Success {

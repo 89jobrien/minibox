@@ -35,8 +35,7 @@ fn now_utc() -> String {
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+        .map_or_else(|| "unknown".to_string(), |s| s.trim().to_string())
 }
 
 /// Parse workspace member count from `cargo metadata`.
@@ -52,8 +51,7 @@ fn count_crates(root: &Path) -> Result<usize> {
     let meta: serde_json::Value = serde_json::from_str(&raw).context("parse cargo metadata")?;
     let count = meta["workspace_members"]
         .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
+        .map_or(0, std::vec::Vec::len);
     Ok(count)
 }
 

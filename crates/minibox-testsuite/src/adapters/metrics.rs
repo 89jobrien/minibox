@@ -11,13 +11,13 @@ use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// increment_counter records a Counter event.
+/// `increment_counter` records a Counter event.
 pub struct IncrementCounterRecordsEvent;
 impl ConformanceTest for IncrementCounterRecordsEvent {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "increment_counter_records_event"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "metrics"
     }
     fn category(&self) -> TestCategory {
@@ -36,13 +36,13 @@ impl ConformanceTest for IncrementCounterRecordsEvent {
     }
 }
 
-/// record_histogram records a Histogram event with the correct value.
+/// `record_histogram` records a Histogram event with the correct value.
 pub struct RecordHistogramStoresValue;
 impl ConformanceTest for RecordHistogramStoresValue {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "record_histogram_stores_value"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "metrics"
     }
     fn category(&self) -> TestCategory {
@@ -61,13 +61,13 @@ impl ConformanceTest for RecordHistogramStoresValue {
     }
 }
 
-/// set_gauge records a Gauge event.
+/// `set_gauge` records a Gauge event.
 pub struct SetGaugeRecordsEvent;
 impl ConformanceTest for SetGaugeRecordsEvent {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "set_gauge_records_event"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "metrics"
     }
     fn category(&self) -> TestCategory {
@@ -89,10 +89,10 @@ impl ConformanceTest for SetGaugeRecordsEvent {
 /// fresh recorder has zero events.
 pub struct FreshRecorderHasNoEvents;
 impl ConformanceTest for FreshRecorderHasNoEvents {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "fresh_recorder_has_no_events"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "metrics"
     }
     fn category(&self) -> TestCategory {
@@ -110,6 +110,7 @@ impl ConformanceTest for FreshRecorderHasNoEvents {
 }
 
 /// Return all metrics conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(IncrementCounterRecordsEvent),

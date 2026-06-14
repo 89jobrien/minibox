@@ -1,4 +1,4 @@
-//! Stop handler and platform-specific stop_inner implementations.
+//! Stop handler and platform-specific `stop_inner` implementations.
 
 use anyhow::Result;
 use minibox_core::domain::DomainError;

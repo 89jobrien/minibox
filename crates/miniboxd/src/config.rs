@@ -42,6 +42,7 @@ impl DaemonConfig {
     /// 2. `$HOME/.config/minibox/config.toml` (user)
     /// 3. `MINIBOX_*` env vars (highest priority)
     // qual:allow(iosp) reason: "config loading inherently mixes file I/O with merge logic"
+    #[must_use]
     pub fn load() -> Self {
         let mut cfg = Self::default();
 
@@ -60,6 +61,7 @@ impl DaemonConfig {
 
     /// Load config from a specific file path. Returns defaults if the
     /// file is missing; logs a warning if the file exists but is invalid.
+    #[must_use]
     pub fn load_from_path(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
             Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
@@ -106,6 +108,7 @@ impl DaemonConfig {
     }
 
     /// Apply `MINIBOX_*` env var overrides on top of this config.
+    #[must_use]
     pub fn with_env_overrides(mut self) -> Self {
         if let Ok(v) = std::env::var("MINIBOX_ADAPTER") {
             self.adapter = Some(v);

@@ -320,7 +320,7 @@ fn quantile(sorted: &[f64], q: f64) -> f64 {
         sorted[lower]
     } else {
         let weight = pos - lower as f64;
-        sorted[lower] * (1.0 - weight) + sorted[upper] * weight
+        sorted[upper].mul_add(weight, sorted[lower] * (1.0 - weight))
     }
 }
 
@@ -367,14 +367,9 @@ fn write_csv(path: &Path, metrics: &[BenchMetrics]) -> Result<()> {
 fn prune_history(history_dir: &Path, limit: usize) -> Result<()> {
     let mut entries: Vec<_> = fs::read_dir(history_dir)?
         .flatten()
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "json")
-                .unwrap_or(false)
-        })
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     while entries.len() > limit {
         let entry = entries.remove(0);
         fs::remove_file(entry.path()).ok();
@@ -385,14 +380,9 @@ fn prune_history(history_dir: &Path, limit: usize) -> Result<()> {
 fn load_history_runs(history_dir: &Path, limit: usize) -> Result<Vec<RunRecord>> {
     let mut entries: Vec<_> = fs::read_dir(history_dir)?
         .flatten()
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map(|ext| ext == "json")
-                .unwrap_or(false)
-        })
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .collect();
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     entries.reverse();
     entries.truncate(limit);
 

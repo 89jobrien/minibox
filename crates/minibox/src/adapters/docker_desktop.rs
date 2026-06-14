@@ -149,7 +149,7 @@ impl DockerDesktopRuntime {
         macos_path
             .to_str()
             .context("invalid path")
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
     }
 }
 

@@ -19,13 +19,13 @@ fn tmp() -> tempfile::TempDir {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// setup_rootfs succeeds with an empty layer list.
+/// `setup_rootfs` succeeds with an empty layer list.
 pub struct SetupRootfsSucceedsWithNoLayers;
 impl ConformanceTest for SetupRootfsSucceedsWithNoLayers {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_rootfs_succeeds_with_no_layers"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "filesystem"
     }
     fn category(&self) -> TestCategory {
@@ -40,13 +40,13 @@ impl ConformanceTest for SetupRootfsSucceedsWithNoLayers {
     }
 }
 
-/// setup_rootfs increments the call count.
+/// `setup_rootfs` increments the call count.
 pub struct SetupRootfsIncrementsCount;
 impl ConformanceTest for SetupRootfsIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_rootfs_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "filesystem"
     }
     fn category(&self) -> TestCategory {
@@ -66,10 +66,10 @@ impl ConformanceTest for SetupRootfsIncrementsCount {
 /// cleanup increments the cleanup call count.
 pub struct CleanupIncrementsCount;
 impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cleanup_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "filesystem"
     }
     fn category(&self) -> TestCategory {
@@ -84,13 +84,13 @@ impl ConformanceTest for CleanupIncrementsCount {
     }
 }
 
-/// setup_rootfs returns Err when configured to fail.
+/// `setup_rootfs` returns Err when configured to fail.
 pub struct SetupRootfsFailureReturnsErr;
 impl ConformanceTest for SetupRootfsFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_rootfs_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "filesystem"
     }
     fn category(&self) -> TestCategory {
@@ -109,6 +109,7 @@ impl ConformanceTest for SetupRootfsFailureReturnsErr {
 }
 
 /// Return all filesystem conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(SetupRootfsSucceedsWithNoLayers),

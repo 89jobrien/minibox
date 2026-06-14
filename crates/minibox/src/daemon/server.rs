@@ -1,7 +1,7 @@
 //! Transport-agnostic daemon connection handler.
 //!
 //! Callers provide a [`ServerListener`] impl — Unix socket or Named Pipe.
-//! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
+//! [`PeerCreds`] from `accept()` carries `SO_PEERCRED` data when available.
 //!
 //! The protocol is line-oriented JSON: the client writes one JSON line per
 //! request and the daemon responds with one or more JSON lines per response.
@@ -100,7 +100,7 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
     let mut gid: nix::libc::gid_t = 0;
     // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
     // call on any connected Unix domain socket.
-    if unsafe { nix::libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
+    if unsafe { nix::libc::getpeereid(fd, &raw mut uid, &raw mut gid) } == 0 {
         Some(PeerCreds { uid, pid: 0 })
     } else {
         warn!("getpeereid failed: {}", std::io::Error::last_os_error());
@@ -111,7 +111,7 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
 /// Determine whether a connection should be accepted given peer credentials
 /// and the `require_root_auth` flag.
 ///
-/// This is the single source of truth for the SO_PEERCRED gate so the logic
+/// This is the single source of truth for the `SO_PEERCRED` gate so the logic
 /// can be unit-tested without a real socket.
 ///
 /// # Rules
@@ -122,7 +122,8 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
 /// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
-pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
+#[must_use]
+pub const fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
     if !require_root_auth {
         return true;
     }
@@ -224,7 +225,7 @@ where
                     Err(e) => error!("server: accept error: {e}"),
                 }
             }
-            _ = &mut shutdown => {
+            () = &mut shutdown => {
                 info!("server: shutdown signal received");
                 break;
             }
@@ -404,7 +405,7 @@ where
 /// as the first message, followed by `ContainerOutput` chunks and then
 /// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
 /// server loop exits naturally when `rx.recv()` returns `None`.
-fn is_terminal_response(r: &DaemonResponse) -> bool {
+const fn is_terminal_response(r: &DaemonResponse) -> bool {
     matches!(
         r,
         DaemonResponse::ContainerStopped { .. }

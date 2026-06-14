@@ -24,10 +24,10 @@ fn rt() -> tokio::runtime::Runtime {
 pub struct LogsUnknownContainerReturnsError;
 
 impl ConformanceTest for LogsUnknownContainerReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "logs_unknown_container_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "logs"
     }
     fn category(&self) -> TestCategory {
@@ -72,10 +72,10 @@ impl ConformanceTest for LogsUnknownContainerReturnsError {
 pub struct LogsStoppedContainerReturnsEmptyOrError;
 
 impl ConformanceTest for LogsStoppedContainerReturnsEmptyOrError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "logs_stopped_container_returns_empty_or_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "logs"
     }
     fn category(&self) -> TestCategory {
@@ -131,10 +131,10 @@ impl ConformanceTest for LogsStoppedContainerReturnsEmptyOrError {
 pub struct LogsFollowFalseTerminates;
 
 impl ConformanceTest for LogsFollowFalseTerminates {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "logs_follow_false_terminates"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "logs"
     }
     fn category(&self) -> TestCategory {
@@ -176,6 +176,7 @@ impl ConformanceTest for LogsFollowFalseTerminates {
 }
 
 /// Return all logs conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(LogsUnknownContainerReturnsError),

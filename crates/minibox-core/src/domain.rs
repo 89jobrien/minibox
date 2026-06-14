@@ -73,6 +73,7 @@ pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 ///
 /// Comparison uses [`Priority::score`], where higher scores represent higher
 /// priority.
+#[must_use]
 pub fn meets_min_priority(actual: &Priority, min: &Priority) -> bool {
     actual.score() >= min.score()
 }
@@ -107,7 +108,7 @@ pub struct ExprVar {
 }
 
 /// A single step in a [`WorkflowDef`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct WorkflowStep {
     /// Step kind discriminant (e.g. `"container-run"`, `"shell"`).
     pub kind: String,
@@ -183,11 +184,11 @@ pub enum StepStatus {
 impl From<StepStatus> for StepState {
     fn from(status: StepStatus) -> Self {
         match status {
-            StepStatus::Pending => StepState::Pending,
-            StepStatus::Running => StepState::Running,
-            StepStatus::Succeeded => StepState::Completed,
-            StepStatus::Failed | StepStatus::Errored => StepState::Failed,
-            StepStatus::Skipped => StepState::Skipped,
+            StepStatus::Pending => Self::Pending,
+            StepStatus::Running => Self::Running,
+            StepStatus::Succeeded => Self::Completed,
+            StepStatus::Failed | StepStatus::Errored => Self::Failed,
+            StepStatus::Skipped => Self::Skipped,
         }
     }
 }
@@ -237,6 +238,10 @@ pub trait StepRunner: Send + Sync {
     /// Capability tokens required by this runner.
     fn required_capabilities(&self) -> &[StepCapability];
     /// Execute one step with the given context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the step fails.
     fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput>;
 }
 
@@ -252,6 +257,7 @@ pub struct StepRunnerRegistry {
 
 impl StepRunnerRegistry {
     /// Create an empty registry.  No built-in runners are registered.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             runners: std::collections::HashMap::new(),
@@ -264,11 +270,13 @@ impl StepRunnerRegistry {
     }
 
     /// Look up a runner by kind string.  Returns `None` if not registered.
+    #[must_use]
     pub fn get(&self, kind: &str) -> Option<&dyn StepRunner> {
-        self.runners.get(kind).map(|r| r.as_ref())
+        self.runners.get(kind).map(std::convert::AsRef::as_ref)
     }
 
     /// List all registered (kind, capabilities) pairs.
+    #[must_use]
     pub fn list(&self) -> Vec<(&str, &[StepCapability])> {
         self.runners
             .iter()
@@ -382,7 +390,7 @@ impl StepRunner for OverlaySnapshotStepRunner {
 ///
 /// `host_path` is canonicalized and validated before the mount is applied.
 /// `container_path` must be absolute (starts with `/`).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BindMount {
     /// Absolute path on the host to mount into the container.
     pub host_path: std::path::PathBuf,
@@ -394,32 +402,40 @@ pub struct BindMount {
 
 impl BindMount {
     /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the format is invalid, paths are not absolute, or
+    /// paths contain `..` components.
     pub fn parse_volume(s: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = s.splitn(3, ':').collect();
         if parts.len() < 2 {
-            anyhow::bail!(
-                "invalid volume format {:?}: expected src:dst or src:dst:ro",
-                s
-            );
+            anyhow::bail!("invalid volume format {s:?}: expected src:dst or src:dst:ro");
         }
         let host_path = std::path::PathBuf::from(parts[0]);
         if !host_path.is_absolute() {
-            anyhow::bail!("host path {:?} must be absolute (start with /)", host_path);
+            anyhow::bail!(
+                "host path {} must be absolute (start with /)",
+                host_path.display()
+            );
         }
         if host_path
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
         {
-            anyhow::bail!("host path {:?} must not contain '..' components", host_path);
+            anyhow::bail!(
+                "host path {} must not contain '..' components",
+                host_path.display()
+            );
         }
         let container_path = std::path::PathBuf::from(parts[1]);
         if !container_path.is_absolute() {
             anyhow::bail!(
-                "container path {:?} must be absolute (start with /)",
-                container_path
+                "container path {} must be absolute (start with /)",
+                container_path.display()
             );
         }
-        let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
+        let read_only = parts.get(2).is_some_and(|f| *f == "ro");
         Ok(Self {
             host_path,
             container_path,
@@ -428,6 +444,11 @@ impl BindMount {
     }
 
     /// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mount type is unsupported, required keys are
+    /// missing, or paths are not absolute.
     pub fn parse_mount(s: &str) -> anyhow::Result<Self> {
         let mut mount_type = None::<String>;
         let mut src = None::<std::path::PathBuf>;
@@ -450,24 +471,30 @@ impl BindMount {
 
         match mount_type.as_deref() {
             Some("bind") | None => {}
-            Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
+            Some(t) => anyhow::bail!("unsupported mount type {t:?}: only 'bind' is supported"),
         }
 
         let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
         if !host_path.is_absolute() {
-            anyhow::bail!("host path {:?} must be absolute (start with /)", host_path);
+            anyhow::bail!(
+                "host path {} must be absolute (start with /)",
+                host_path.display()
+            );
         }
         if host_path
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
         {
-            anyhow::bail!("host path {:?} must not contain '..' components", host_path);
+            anyhow::bail!(
+                "host path {} must not contain '..' components",
+                host_path.display()
+            );
         }
         let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
         if !container_path.is_absolute() {
             anyhow::bail!(
-                "container path {:?} must be absolute (start with /)",
-                container_path
+                "container path {} must be absolute (start with /)",
+                container_path.display()
             );
         }
 
@@ -769,7 +796,7 @@ pub trait ChildInit: Send + Sync {
     /// Returns an error if:
     /// - Bind mount fails
     /// - Essential filesystem mounts fail
-    /// - pivot_root syscall fails
+    /// - `pivot_root` syscall fails
     /// - Old root unmount fails
     ///
     /// # Security
@@ -794,10 +821,10 @@ pub trait FilesystemProvider: RootfsSetup + ChildInit {}
 /// [`ChildInit`] automatically satisfies [`FilesystemProvider`].
 impl<T: RootfsSetup + ChildInit> FilesystemProvider for T {}
 
-/// Backend-specific writable-layer metadata produced by
-/// [`RootfsSetup::setup_rootfs`] and persisted into [`ContainerRecord`]
-/// so that commit/build logic can locate the writable layer without
-/// re-querying the container runtime.
+/// Backend-specific writable-layer metadata produced by [`RootfsSetup::setup_rootfs`].
+///
+/// Persisted into [`ContainerRecord`] so that commit/build logic can locate
+/// the writable layer without re-querying the container runtime.
 ///
 /// The `metadata` map carries backend-specific key/value pairs so that new
 /// backends can encode their own data (e.g. `"colima_instance" => "colima"`)
@@ -820,7 +847,8 @@ pub enum BackendRootfsMetadata {
 
 impl BackendRootfsMetadata {
     /// Return the host-visible overlay upper directory.
-    pub fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
+    #[must_use]
+    pub const fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
         match self {
             Self::Overlay { upper_dir, .. } => upper_dir,
         }
@@ -860,7 +888,7 @@ pub struct RootfsLayout {
 ///
 /// Implementations MUST:
 /// - Validate resource limit values (minimum thresholds)
-/// - Prevent resource DoS attacks (default PID limits)
+/// - Prevent resource `DoS` attacks (default PID limits)
 /// - Properly cleanup cgroups to avoid resource leaks
 pub trait ResourceLimiter: AsAny + Send + Sync {
     /// Create resource limits for a container.
@@ -961,6 +989,7 @@ pub struct ResourceConfig {
 /// }
 /// ```
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct RuntimeCapabilities {
     /// Supports Linux user namespace remapping (rootless containers).
     pub supports_user_namespaces: bool,
@@ -1095,16 +1124,16 @@ pub struct ContainerSpawnConfig {
     pub capture_output: bool,
     /// Optional host-side lifecycle hooks.
     pub hooks: ContainerHooks,
-    /// If true, skip CLONE_NEWNET — container shares host network namespace.
+    /// If true, skip `CLONE_NEWNET` — container shares host network namespace.
     pub skip_network_namespace: bool,
-    /// Bind mounts to apply inside the container before pivot_root.
+    /// Bind mounts to apply inside the container before `pivot_root`.
     ///
     /// Each `BindMount.host_path` is mounted at `rootfs + BindMount.container_path`
     /// inside the container's new mount namespace, then the container sees it at
-    /// `container_path` after pivot_root.
+    /// `container_path` after `pivot_root`.
     pub mounts: Vec<BindMount>,
     /// If `true`, the container process is granted a full Linux capability set
-    /// via `capset(2)` before `execvp`. Required for DinD.
+    /// via `capset(2)` before `execvp`. Required for `DinD`.
     pub privileged: bool,
     /// OCI image reference that produced this container's rootfs
     /// (e.g. `"alpine:latest"`, `"ghcr.io/org/img:v1"`).
@@ -1245,7 +1274,8 @@ impl ContainerState {
     /// The returned strings (`"Created"`, `"Running"`, `"Paused"`, `"Stopped"`,
     /// `"Failed"`, `"Orphaned"`) are used directly in
     /// [`crate::protocol::ContainerInfo::state`] list responses sent to the CLI.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",
             Self::Running => "Running",
@@ -1278,12 +1308,15 @@ impl ContainerId {
     /// - Non-empty
     /// - Alphanumeric (a-z, A-Z, 0-9)
     /// - Between 1 and 64 characters
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any validation rule is violated.
     pub fn new(id: String) -> Result<Self> {
+        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.is_empty() {
             anyhow::bail!("container ID cannot be empty");
         }
-        /// Maximum length of a container ID.
-        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.len() > MAX_CONTAINER_ID_LEN {
             anyhow::bail!(
                 "container ID too long: {} (max {MAX_CONTAINER_ID_LEN})",
@@ -1297,6 +1330,7 @@ impl ContainerId {
     }
 
     /// Get the ID as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -1333,6 +1367,7 @@ impl SessionId {
     }
 
     /// Get the ID as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -1409,9 +1444,7 @@ pub trait ProgressSink<T: Send + 'static>: Send + Sync {
 #[async_trait]
 impl<T: Send + 'static> ProgressSink<T> for tokio::sync::mpsc::Sender<T> {
     async fn send(&self, value: T) -> Result<(), ()> {
-        tokio::sync::mpsc::Sender::send(self, value)
-            .await
-            .map_err(|_| ())
+        Self::send(self, value).await.map_err(|_| ())
     }
 }
 
@@ -1610,6 +1643,10 @@ pub trait PtyAllocator: Send + Sync {
     ///
     /// Returns [`PtyHandle`] on success, or `Err` when PTY allocation is not
     /// supported (e.g., [`NullPtyAllocator`]) or when the OS call fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if PTY allocation is unsupported or the OS call fails.
     fn allocate(&self, config: &PtyConfig) -> anyhow::Result<PtyHandle>;
 }
 
@@ -1641,7 +1678,8 @@ pub struct MockPtyAllocator {
 #[cfg(feature = "test-utils")]
 impl MockPtyAllocator {
     /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
-    pub fn new(master_fd: i32, slave_fd: i32) -> Self {
+    #[must_use]
+    pub const fn new(master_fd: i32, slave_fd: i32) -> Self {
         Self {
             master_fd,
             slave_fd,
@@ -1687,12 +1725,24 @@ pub struct SnapshotInfo {
 /// and omit [`BackendCapability::Checkpoint`] from their capability set.
 pub trait VmCheckpoint: Send + Sync {
     /// Persist the current VM/container state to `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if checkpointing is unsupported or the OS call fails.
     fn save_snapshot(&self, container_id: &str, path: &Path) -> Result<SnapshotInfo>;
 
     /// Restore VM/container state from a previously saved snapshot at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot cannot be found or restored.
     fn restore_snapshot(&self, container_id: &str, path: &Path) -> Result<()>;
 
     /// List all snapshots for `container_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if listing snapshots fails.
     fn list_snapshots(&self, container_id: &str) -> Result<Vec<SnapshotInfo>>;
 }
 
@@ -1799,17 +1849,20 @@ pub struct BackendCapabilitySet {
 
 impl BackendCapabilitySet {
     /// Create an empty capability set (no capabilities).
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add a capability to this set (builder-style).
+    #[must_use]
     pub fn with(mut self, cap: BackendCapability) -> Self {
         self.flags.insert(cap);
         self
     }
 
     /// Return `true` if this set includes `cap`.
+    #[must_use]
     pub fn supports(&self, cap: BackendCapability) -> bool {
         self.flags.contains(&cap)
     }

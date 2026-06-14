@@ -56,21 +56,19 @@ pub fn parse_clippy_json(output: &str) -> Vec<Diagnostic> {
         let rule_id = diag
             .code
             .as_ref()
-            .map(|c| c.code.clone())
-            .unwrap_or_else(|| "unknown".into());
+            .map_or_else(|| "unknown".into(), |c| c.code.clone());
 
-        let (file, line_num, col) = diag
-            .spans
-            .iter()
-            .find(|s| s.is_primary)
-            .map(|s| {
-                (
-                    Some(s.file_name.clone()),
-                    Some(s.line_start),
-                    Some(s.column_start),
-                )
-            })
-            .unwrap_or((None, None, None));
+        let (file, line_num, col) =
+            diag.spans
+                .iter()
+                .find(|s| s.is_primary)
+                .map_or((None, None, None), |s| {
+                    (
+                        Some(s.file_name.clone()),
+                        Some(s.line_start),
+                        Some(s.column_start),
+                    )
+                });
 
         diagnostics.push(Diagnostic {
             rule_id,

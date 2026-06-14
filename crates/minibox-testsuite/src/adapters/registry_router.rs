@@ -30,10 +30,10 @@ fn ghcr_ref() -> ImageRef {
 /// route returns the backing registry without panicking.
 pub struct RouteReturnsBacking;
 impl ConformanceTest for RouteReturnsBacking {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "route_returns_backing"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry_router"
     }
     fn category(&self) -> TestCategory {
@@ -52,10 +52,10 @@ impl ConformanceTest for RouteReturnsBacking {
 /// route always returns the same registry regardless of image ref.
 pub struct RouteAlwaysReturnsSameRegistry;
 impl ConformanceTest for RouteAlwaysReturnsSameRegistry {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "route_always_returns_same_registry"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry_router"
     }
     fn category(&self) -> TestCategory {
@@ -75,7 +75,8 @@ impl ConformanceTest for RouteAlwaysReturnsSameRegistry {
     }
 }
 
-/// Return all registry_router conformance tests.
+/// Return all `registry_router` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(RouteReturnsBacking),

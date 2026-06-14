@@ -65,7 +65,7 @@ impl XConfig {
 }
 
 impl Dotenv {
-    /// Resolve `$HOME` in the env_file path.
+    /// Resolve `$HOME` in the `env_file` path.
     pub fn resolved_env_file(&self) -> String {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         self.env_file.replace("$HOME", &home)

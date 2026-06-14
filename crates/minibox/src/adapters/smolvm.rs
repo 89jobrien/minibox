@@ -1,4 +1,4 @@
-//! SmolVM adapter suite — lightweight Linux VMs via smolmachines.
+//! `SmolVM` adapter suite — lightweight Linux VMs via smolmachines.
 //!
 //! Delegates container operations into a smolmachines VM. smolmachines
 //! uses libkrun (a lightweight VMM) to boot Linux VMs with sub-second
@@ -7,7 +7,7 @@
 //! Selected by `MINIBOX_ADAPTER=smolvm`. Compiled on all platforms.
 //!
 //! Requirements:
-//! - smolmachines installed (https://smolmachines.com)
+//! - smolmachines installed (<https://smolmachines.com>)
 //!   - macOS: `brew install smolvm`
 //!   - Linux: see smolmachines docs
 
@@ -109,7 +109,7 @@ fn smolvm_exec_full(
 // SmolVm Image Registry Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ImageRegistry`].
+/// `SmolVM` implementation of [`ImageRegistry`].
 ///
 /// Pulls images via `smolvm machine run` which handles image management
 /// internally. smolvm caches images locally after first pull.
@@ -122,6 +122,7 @@ pub struct SmolVmRegistry {
 
 impl SmolVmRegistry {
     /// Create a new registry adapter using the default smolvm image.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             image: DEFAULT_IMAGE.to_string(),
@@ -130,6 +131,7 @@ impl SmolVmRegistry {
     }
 
     /// Override the smolvm VM image (default: `ubuntu:24.04`).
+    #[must_use]
     pub fn with_image(mut self, image: String) -> Self {
         self.image = image;
         self
@@ -169,8 +171,7 @@ impl ImageRegistry for SmolVmRegistry {
             &format!("reference={full_name}"),
             "--quiet",
         ])
-        .map(|out| !out.trim().is_empty())
-        .unwrap_or(false)
+        .is_ok_and(|out| !out.trim().is_empty())
     }
 
     /// Pull an image inside the smolvm VM via `docker pull`.
@@ -202,7 +203,7 @@ impl ImageRegistry for SmolVmRegistry {
 // SmolVm Container Runtime Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ContainerRuntime`].
+/// `SmolVM` implementation of [`ContainerRuntime`].
 ///
 /// Spawns container processes by running commands inside a smolvm VM via
 /// `smolvm machine run`. Each `spawn_process` call boots a fresh VM instance.
@@ -219,6 +220,7 @@ pub struct SmolVmRuntime {
 
 impl SmolVmRuntime {
     /// Create a new runtime adapter using the default smolvm image.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             image: DEFAULT_IMAGE.to_string(),
@@ -264,7 +266,11 @@ impl ContainerRuntime for SmolVmRuntime {
     // qual:allow(complexity) reason: "smolvm CLI invocation with mount/env assembly"
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut command = vec![config.command.as_str()];
-        let args: Vec<&str> = config.args.iter().map(|s| s.as_str()).collect();
+        let args: Vec<&str> = config
+            .args
+            .iter()
+            .map(std::string::String::as_str)
+            .collect();
         command.extend(&args);
 
         // Build volume and env args for smolvm.
@@ -313,7 +319,12 @@ impl ContainerRuntime for SmolVmRuntime {
         };
 
         // Store exit code for wait_for_exit.
-        *self.last_exit_code.lock().expect("lock poisoned") = exit_code;
+        // Poisoned mutex is unrecoverable — the process that held the lock panicked.
+        {
+            #[allow(clippy::expect_used)]
+            let mut guard = self.last_exit_code.lock().expect("lock poisoned");
+            *guard = exit_code;
+        }
 
         // The command already ran synchronously. Pipe captured output into
         // an OwnedFd so the handler's streaming loop can read it.
@@ -339,7 +350,9 @@ impl ContainerRuntime for SmolVmRuntime {
     async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
         // The command already ran synchronously in spawn_process.
         // Return the stored exit code.
-        Ok(*self.last_exit_code.lock().expect("lock poisoned"))
+        #[allow(clippy::expect_used)]
+        let code = *self.last_exit_code.lock().expect("lock poisoned");
+        Ok(code)
     }
 }
 
@@ -347,15 +360,16 @@ impl ContainerRuntime for SmolVmRuntime {
 // SmolVm Filesystem Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`FilesystemProvider`].
+/// `SmolVM` implementation of [`FilesystemProvider`].
 ///
 /// Filesystem operations are handled inside the VM. All methods are no-ops
-/// on the host side — the VM's kernel manages overlay mounts and pivot_root.
+/// on the host side — the VM's kernel manages overlay mounts and `pivot_root`.
 pub struct SmolVmFilesystem;
 
 impl SmolVmFilesystem {
     /// Create a new filesystem adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -389,7 +403,7 @@ impl minibox_core::domain::RootfsSetup for SmolVmFilesystem {
 }
 
 impl minibox_core::domain::ChildInit for SmolVmFilesystem {
-    /// pivot_root runs inside the VM, not on the host.
+    /// `pivot_root` runs inside the VM, not on the host.
     fn pivot_root(&self, new_root: &Path) -> Result<()> {
         tracing::debug!(
             new_root = %new_root.display(),
@@ -403,7 +417,7 @@ impl minibox_core::domain::ChildInit for SmolVmFilesystem {
 // SmolVm Resource Limiter Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ResourceLimiter`].
+/// `SmolVM` implementation of [`ResourceLimiter`].
 ///
 /// Cgroup operations are handled inside the VM's Linux kernel. All methods
 /// are no-ops on the host side.
@@ -411,7 +425,8 @@ pub struct SmolVmLimiter;
 
 impl SmolVmLimiter {
     /// Create a new resource limiter adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
