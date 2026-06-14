@@ -483,6 +483,18 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 }
 
 // ── Handler dependency builders (per adapter suite) ───────────────────────
+//
+// TODO: centralize adapter registration into a shared builder (#161)
+//
+// Each `build_*_handler_dependencies` function below constructs a
+// `HandlerDependencies` struct for one adapter suite.  A second copy of
+// `build_colima_handler_dependencies` lives in `crates/macbox/src/lib.rs`
+// for the legacy macOS-only daemon path.  To centralize:
+//   1. Move all `build_*_handler_dependencies` fns into a new crate or
+//      module (e.g. `minibox-adapters` or `miniboxd::adapter_builders`).
+//   2. Remove the duplicate in `macbox/src/lib.rs` and have it call the
+//      shared builder instead.
+//   3. Update `HandlerDependencies` construction sites in tests accordingly.
 
 #[cfg(unix)]
 // qual:allow(srp) reason: "adapter suite dispatch — params are inherent wiring"
