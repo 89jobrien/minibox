@@ -223,6 +223,11 @@ pub struct StepContext {
     pub alias: String,
     /// Step-specific configuration extracted from the workflow definition.
     pub config: serde_json::Value,
+    /// Accumulated alias outputs from all steps that completed before this one.
+    ///
+    /// A step runner may read values from prior steps via this map but must not
+    /// mutate it — mutation is the responsibility of the workflow executor.
+    pub prior_outputs: WorkflowState,
 }
 
 /// Result value produced by a [`StepRunner`].
@@ -2402,6 +2407,7 @@ mod step_runner_tests {
         let ctx = StepContext {
             alias: "test".to_string(),
             config: serde_json::Value::Null,
+            prior_outputs: WorkflowState::new(),
         };
         let _ = runner.run(ctx); // result not checked — contract is no-panic, not success
     }
@@ -2576,7 +2582,6 @@ pub struct ResolvedStep {
 ///
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
-#[cfg(test)]
 pub fn resolve_step_vars(
     step: &WorkflowStep,
     state: &WorkflowState,
@@ -2607,7 +2612,6 @@ pub fn resolve_step_vars(
 /// Writes step output into shared workflow state under the step's alias.
 ///
 /// Overwrites any prior value stored under the same alias.
-#[cfg(test)]
 pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
@@ -2615,7 +2619,6 @@ pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut Work
 /// Returns all steps that precede `alias` in declaration order.
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
-#[cfg(test)]
 pub fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
@@ -2635,7 +2638,6 @@ pub fn steps_before<'a>(
 ///
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
-#[cfg(test)]
 pub fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
@@ -2654,12 +2656,64 @@ pub fn resume_workflow(
     Ok((skip_count, state))
 }
 
+/// Executes a slice of [`WorkflowStep`]s sequentially, propagating alias outputs
+/// between steps via a shared [`WorkflowState`].
+///
+/// For each step:
+/// 1. `step.vars` are resolved against the current state (prior alias outputs).
+/// 2. The resolved step is passed to the matching runner in `registry`.
+/// 3. On success, the step's output value is written into `state` under its alias.
+/// 4. On failure with `continue_on_error = false`, execution stops and returns `Err`.
+///
+/// Returns the final [`WorkflowState`] containing all alias outputs produced.
+pub fn run_workflow_steps(
+    steps: &[WorkflowStep],
+    registry: &StepRunnerRegistry,
+) -> anyhow::Result<WorkflowState> {
+    use anyhow::Context as _;
+
+    let mut state = WorkflowState::new();
+
+    for step in steps {
+        let resolved = resolve_step_vars(step, &state)
+            .with_context(|| format!("failed to resolve vars for step '{}'", step.alias))?;
+
+        let runner = registry
+            .get(&resolved.kind)
+            .ok_or_else(|| anyhow::anyhow!("no runner registered for kind '{}'", resolved.kind))?;
+
+        let ctx = StepContext {
+            alias: resolved.alias.clone(),
+            config: resolved.config.clone(),
+            prior_outputs: state.clone(),
+        };
+
+        let result = runner.run(ctx);
+
+        match result {
+            Ok(output) => {
+                propagate_output(&resolved.alias, output.value, &mut state);
+            }
+            Err(e) => {
+                if resolved.continue_on_error {
+                    // Record a null value so downstream steps referencing this alias
+                    // get an informative error rather than "alias not found".
+                    propagate_output(&resolved.alias, serde_json::Value::Null, &mut state);
+                } else {
+                    return Err(e).with_context(|| format!("step '{}' failed", resolved.alias));
+                }
+            }
+        }
+    }
+
+    Ok(state)
+}
+
 /// Resolves a single expression string.
 ///
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
-#[cfg(test)]
 fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
@@ -2690,7 +2744,6 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
-#[cfg(test)]
 fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
@@ -2872,6 +2925,244 @@ mod start_from_step_tests {
         let steps = vec![make_step("build")];
         let prior = WorkflowState::new();
         assert!(resume_workflow("nonexistent", &steps, &prior).is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Inter-step alias propagation tests (t7 — crux #60)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod alias_propagation_tests {
+    use super::*;
+
+    /// A stub runner that records the `prior_outputs` it received and returns
+    /// a fixed JSON value as its output.
+    struct EchoRunner {
+        kind_str: &'static str,
+        output: serde_json::Value,
+    }
+
+    impl StepRunner for EchoRunner {
+        fn kind(&self) -> &'static str {
+            self.kind_str
+        }
+        fn required_capabilities(&self) -> &[StepCapability] {
+            &[StepCapability::OutputPropagation]
+        }
+        fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+            Ok(StepOutput {
+                value: self.output.clone(),
+                status: StepStatus::Succeeded,
+            })
+        }
+    }
+
+    /// A runner that reads a specific alias key from `prior_outputs` and returns
+    /// it as part of its output so the test can verify the value was propagated.
+    struct ReadAliasRunner {
+        alias_key: &'static str,
+        field: &'static str,
+    }
+
+    impl StepRunner for ReadAliasRunner {
+        fn kind(&self) -> &'static str {
+            "read-alias"
+        }
+        fn required_capabilities(&self) -> &[StepCapability] {
+            &[StepCapability::OutputPropagation]
+        }
+        fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput> {
+            let val = ctx
+                .prior_outputs
+                .get(self.alias_key)
+                .and_then(|v| v.get(self.field))
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            Ok(StepOutput {
+                value: serde_json::json!({"observed": val}),
+                status: StepStatus::Succeeded,
+            })
+        }
+    }
+
+    fn make_step(alias: &str, kind: &str) -> WorkflowStep {
+        WorkflowStep {
+            kind: kind.to_string(),
+            alias: alias.to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn step2_receives_step1_alias_output() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(EchoRunner {
+            kind_str: "producer",
+            output: serde_json::json!({"result": "hello"}),
+        }));
+        registry.register(Box::new(ReadAliasRunner {
+            alias_key: "step1",
+            field: "result",
+        }));
+
+        let steps = vec![
+            make_step("step1", "producer"),
+            make_step("step2", "read-alias"),
+        ];
+
+        let final_state = run_workflow_steps(&steps, &registry).expect("workflow must succeed");
+
+        // step1's output is stored under its alias
+        assert_eq!(final_state["step1"]["result"], "hello");
+
+        // step2 read step1's output via prior_outputs and echoed it
+        assert_eq!(final_state["step2"]["observed"], "hello");
+    }
+
+    #[test]
+    fn workflow_state_accumulates_all_step_outputs() {
+        let mut registry = StepRunnerRegistry::new();
+        for (kind, val) in [
+            ("kind-a", serde_json::json!({"n": 1})),
+            ("kind-b", serde_json::json!({"n": 2})),
+            ("kind-c", serde_json::json!({"n": 3})),
+        ] {
+            registry.register(Box::new(EchoRunner {
+                kind_str: kind,
+                output: val,
+            }));
+        }
+
+        let steps = vec![
+            make_step("a", "kind-a"),
+            make_step("b", "kind-b"),
+            make_step("c", "kind-c"),
+        ];
+
+        let state = run_workflow_steps(&steps, &registry).expect("workflow must succeed");
+        assert_eq!(state["a"]["n"], 1);
+        assert_eq!(state["b"]["n"], 2);
+        assert_eq!(state["c"]["n"], 3);
+    }
+
+    #[test]
+    fn prior_outputs_empty_for_first_step() {
+        struct InspectRunner;
+        impl StepRunner for InspectRunner {
+            fn kind(&self) -> &'static str {
+                "inspect"
+            }
+            fn required_capabilities(&self) -> &[StepCapability] {
+                &[]
+            }
+            fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput> {
+                // The very first step must receive an empty prior_outputs map.
+                assert!(
+                    ctx.prior_outputs.is_empty(),
+                    "first step must see no prior outputs"
+                );
+                Ok(StepOutput {
+                    value: serde_json::Value::Null,
+                    status: StepStatus::Succeeded,
+                })
+            }
+        }
+
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(InspectRunner));
+
+        let steps = vec![make_step("only", "inspect")];
+        run_workflow_steps(&steps, &registry).expect("workflow must succeed");
+    }
+
+    #[test]
+    fn failed_step_halts_execution() {
+        struct FailRunner;
+        impl StepRunner for FailRunner {
+            fn kind(&self) -> &'static str {
+                "fail"
+            }
+            fn required_capabilities(&self) -> &[StepCapability] {
+                &[]
+            }
+            fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+                Err(anyhow::anyhow!("deliberate failure"))
+            }
+        }
+        struct NeverRunner;
+        impl StepRunner for NeverRunner {
+            fn kind(&self) -> &'static str {
+                "never"
+            }
+            fn required_capabilities(&self) -> &[StepCapability] {
+                &[]
+            }
+            fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+                panic!("this step must never run");
+            }
+        }
+
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(FailRunner));
+        registry.register(Box::new(NeverRunner));
+
+        let steps = vec![make_step("s1", "fail"), make_step("s2", "never")];
+
+        assert!(run_workflow_steps(&steps, &registry).is_err());
+    }
+
+    #[test]
+    fn continue_on_error_records_null_and_continues() {
+        struct FailRunner;
+        impl StepRunner for FailRunner {
+            fn kind(&self) -> &'static str {
+                "fail"
+            }
+            fn required_capabilities(&self) -> &[StepCapability] {
+                &[]
+            }
+            fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+                Err(anyhow::anyhow!("transient error"))
+            }
+        }
+
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(FailRunner));
+        registry.register(Box::new(EchoRunner {
+            kind_str: "ok",
+            output: serde_json::json!({"done": true}),
+        }));
+
+        let mut step1 = WorkflowStep {
+            kind: "fail".to_string(),
+            alias: "s1".to_string(),
+            if_expr: None,
+            continue_on_error: true,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        };
+        let step2 = WorkflowStep {
+            kind: "ok".to_string(),
+            alias: "s2".to_string(),
+            if_expr: None,
+            continue_on_error: false,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        };
+        let _ = step1; // suppress unused warning — reassign below for clarity
+        step1.continue_on_error = true;
+
+        let steps = vec![step1, step2];
+        let state = run_workflow_steps(&steps, &registry).expect("should continue past error");
+        assert_eq!(state["s1"], serde_json::Value::Null);
+        assert_eq!(state["s2"]["done"], true);
     }
 }
 
