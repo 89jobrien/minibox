@@ -11,6 +11,7 @@
 !USAGE.md
 !docs/*.mbx.md
 !docs/specs/*.md
+!docs/PLATFORM_SUPPORT.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
 !docs/conformance.md
@@ -151,7 +152,11 @@ minibox-assistant
 docs/archive/
 
 # handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.godmode.*.yaml
 .ctx/HANDOFF.*.state.json
+!.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
 .ctx/.initialized
