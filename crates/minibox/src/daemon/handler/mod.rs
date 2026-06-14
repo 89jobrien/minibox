@@ -1401,4 +1401,134 @@ mod pub_crate_handler_tests {
             "untrusted image must be denied by restrictive policy"
         );
     }
+
+    // ── lifecycle error paths ─────────────────────────────────────────────
+    //
+    // Uncovered error paths targeted here:
+    //   1. handle_pause: container not found → DaemonResponse::Error
+    //   2. handle_pause: container found but not in Running state → DaemonResponse::Error
+    //   3. handle_resume: container not found → DaemonResponse::Error
+    //   4. handle_resume: container found but not in Paused state → DaemonResponse::Error
+    //   5. handle_remove: container not found (resolve_id returns None) → DaemonResponse::Error
+    //   6. handle_remove: container is still Running → DaemonResponse::Error
+    //   7. handle_stop: container not found (resolve_id returns None) → DaemonResponse::Error
+    //   8. handle_list: empty state returns ContainerList with no entries
+
+    #[tokio::test]
+    async fn lifecycle_pause_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+
+        let resp = lifecycle::handle_pause("no-such-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_pause_container_not_running_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        // Insert a stopped container (not Running).
+        let mut record = crate::testing::helpers::daemon::make_stub_record("stopped-ctr");
+        record.info.state = "stopped".to_string();
+        state.add_container(record).await;
+
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+        let resp = lifecycle::handle_pause("stopped-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not running")),
+            "expected 'not running' error for non-running container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_resume_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+
+        let resp = lifecycle::handle_resume("no-such-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_resume_container_not_paused_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        // Insert a running container (not Paused).
+        let mut record = crate::testing::helpers::daemon::make_stub_record("running-ctr");
+        record.info.state = "running".to_string();
+        state.add_container(record).await;
+
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+        let resp = lifecycle::handle_resume("running-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not paused")),
+            "expected 'not paused' error for non-paused container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_remove_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let resp = lifecycle::handle_remove("no-such-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_remove_running_container_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Insert a running container.
+        let mut record = crate::testing::helpers::daemon::make_stub_record("run-ctr");
+        record.info.state = "Running".to_string();
+        state.add_container(record).await;
+
+        let resp = lifecycle::handle_remove("run-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error when removing a running container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_stop_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let resp = stop::handle_stop("no-such-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_list_empty_state_returns_empty_list() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        let resp = lifecycle::handle_list(state).await;
+        assert!(
+            matches!(resp, DaemonResponse::ContainerList { ref containers } if containers.is_empty()),
+            "expected empty ContainerList for empty state, got {resp:?}"
+        );
+    }
 }
