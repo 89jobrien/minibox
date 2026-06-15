@@ -73,8 +73,8 @@ async fn fetch_logs(container_id: &str, socket_path: &std::path::Path) -> Vec<St
             Ok(Some(DaemonResponse::LogLine { line, .. })) => {
                 lines.push(line);
             }
-            Ok(Some(DaemonResponse::Success { .. })) | Ok(None) => break,
-            Ok(Some(DaemonResponse::Error { .. })) | Err(_) => break,
+            Ok(Some(DaemonResponse::Success { .. } | DaemonResponse::Error { .. }) | None)
+            | Err(_) => break,
             Ok(Some(_)) => {}
         }
     }
@@ -102,7 +102,7 @@ fn find_container<'a>(id: &str, containers: &'a [ContainerInfo]) -> Option<&'a C
 }
 
 /// Format the diagnose report header line.
-pub(crate) fn format_header(container_id: &str) -> String {
+pub fn format_header(container_id: &str) -> String {
     format!("=== Container {container_id} ===")
 }
 
