@@ -1,7 +1,7 @@
 {
   "chain-g-4": {
-    "status": "in-progress",
+    "status": "done",
     "branch": "worktree-agent-a8600c1c",
-    "commits": []
+    "commits": ["71aa36c813fa3af1de5323fa8e5402bb837cf613"]
   }
 }
