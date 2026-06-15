@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 ---
 
