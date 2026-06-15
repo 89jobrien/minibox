@@ -97,6 +97,34 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
     ]
 }
 
+/// Validate an adapter name supplied via `--adapter` CLI flag or `MINIBOX_ADAPTER` env var.
+///
+/// Returns `Ok(())` when the name is recognised **and** available in this build.
+/// Returns a descriptive `Err` listing valid options when the name is unknown or
+/// unavailable, suitable for printing directly to the user.
+///
+/// # Examples
+///
+/// ```
+/// use miniboxd::adapter_registry::validate_adapter_name;
+///
+/// // Valid adapters are accepted (availability depends on platform).
+/// // On any platform "krun" is always available.
+/// assert!(validate_adapter_name("krun").is_ok());
+///
+/// // Unknown adapters are rejected with a helpful message.
+/// let err = validate_adapter_name("bogus").unwrap_err();
+/// assert!(err.to_string().contains("bogus"));
+///
+/// // Empty string is also rejected.
+/// assert!(validate_adapter_name("").is_err());
+/// ```
+pub fn validate_adapter_name(name: &str) -> anyhow::Result<()> {
+    parse_adapter(name)
+        .map(|_| ())
+        .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
 /// Return only the names of adapters compiled into the current build.
 ///
 /// Alias for [`available_adapter_names`] — preferred name for use in
@@ -545,6 +573,33 @@ mod tests {
             .expect("smolvm entry");
         assert_eq!(smolvm.platform, "any");
         assert_eq!(smolvm.available, cfg!(unix));
+    }
+
+    #[test]
+    fn validate_adapter_name_accepts_krun() {
+        // krun is always available regardless of platform.
+        assert!(
+            super::validate_adapter_name("krun").is_ok(),
+            "krun must always validate as available"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_rejects_unknown() {
+        let err = super::validate_adapter_name("bogus").expect_err("should reject bogus adapter");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error should echo the invalid name: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_rejects_empty() {
+        assert!(
+            super::validate_adapter_name("").is_err(),
+            "empty adapter name must be rejected"
+        );
     }
 
     #[test]
