@@ -199,6 +199,24 @@ impl From<StepStatus> for StepState {
     }
 }
 
+/// Determine the worst-case [`PhaseOutcome`] from a completed phase's step statuses.
+///
+/// Returns [`PhaseOutcome::Succeeded`] when `statuses` is empty (vacuously successful).
+/// Otherwise maps each status to a `PhaseOutcome` and returns the maximum (worst) value.
+pub fn determine_final_phase(statuses: &[StepStatus]) -> PhaseOutcome {
+    statuses
+        .iter()
+        .map(|s| match s {
+            StepStatus::Succeeded => PhaseOutcome::Succeeded,
+            StepStatus::Skipped => PhaseOutcome::Skipped,
+            StepStatus::Pending | StepStatus::Running => PhaseOutcome::Aborted,
+            StepStatus::Failed => PhaseOutcome::Failed,
+            StepStatus::Errored => PhaseOutcome::Errored,
+        })
+        .max()
+        .unwrap_or(PhaseOutcome::Succeeded)
+}
+
 // ── StepRunner port ──────────────────────────────────────────────────────────
 
 /// Capability tokens injected into a [`StepRunner`] at execution time.
@@ -3318,6 +3336,71 @@ mod slashcrux_tests {
     #[test]
     fn step_status_skipped_maps_to_skipped() {
         assert_eq!(StepState::from(StepStatus::Skipped), StepState::Skipped);
+    }
+
+    // ── determine_final_phase ─────────────────────────────────────────
+
+    #[cfg(test)]
+    mod determine_final_phase_tests {
+        use super::super::{PhaseOutcome, StepStatus, determine_final_phase};
+
+        #[test]
+        fn empty_slice_returns_succeeded() {
+            assert_eq!(determine_final_phase(&[]), PhaseOutcome::Succeeded);
+        }
+
+        #[test]
+        fn all_succeeded_returns_succeeded() {
+            let statuses = [StepStatus::Succeeded, StepStatus::Succeeded];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Succeeded);
+        }
+
+        #[test]
+        fn one_skipped_returns_skipped() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Skipped,
+                StepStatus::Succeeded,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Skipped);
+        }
+
+        #[test]
+        fn one_failed_returns_failed() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Failed,
+                StepStatus::Skipped,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Failed);
+        }
+
+        #[test]
+        fn one_errored_returns_errored() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Failed,
+                StepStatus::Errored,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Errored);
+        }
+
+        #[test]
+        fn errored_beats_failed_beats_skipped_beats_succeeded() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Skipped,
+                StepStatus::Failed,
+                StepStatus::Errored,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Errored);
+        }
+
+        #[test]
+        fn pending_and_running_map_to_aborted() {
+            let statuses = [StepStatus::Pending, StepStatus::Running];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Aborted);
+        }
     }
 
     // ── execution_context_to_env ───────────────────────────────────────
