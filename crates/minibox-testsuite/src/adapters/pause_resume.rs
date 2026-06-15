@@ -283,6 +283,43 @@ impl ConformanceTest for PauseUnknownContainerReturnsError {
     }
 }
 
+/// Resuming an unknown container returns an error.
+pub struct ResumeUnknownContainerReturnsError;
+impl ConformanceTest for ResumeUnknownContainerReturnsError {
+    fn name(&self) -> &str {
+        "resume_unknown_container_returns_error"
+    }
+    fn adapter(&self) -> &str {
+        "pause_resume"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let tmp = TempDir::new().expect("TempDir::new");
+        let state = make_state(&tmp);
+
+        let resp = rt().block_on(handler::handle_resume(
+            "doesnotexist0002".to_string(),
+            state.clone(),
+            Arc::new(NoopEventSink),
+        ));
+
+        ctx.assert_true(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "resume of unknown container returns Error",
+        );
+        if let DaemonResponse::Error { message } = resp {
+            ctx.assert_true(
+                message.contains("not found"),
+                "error message mentions 'not found'",
+            );
+        }
+
+        ctx.result()
+    }
+}
+
 /// Return all pause/resume conformance tests.
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
@@ -291,5 +328,6 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
         Box::new(PauseAlreadyPausedReturnsError),
         Box::new(ResumeRunningContainerReturnsNotPausedError),
         Box::new(PauseUnknownContainerReturnsError),
+        Box::new(ResumeUnknownContainerReturnsError),
     ]
 }
