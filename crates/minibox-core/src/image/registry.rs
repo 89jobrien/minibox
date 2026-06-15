@@ -2551,6 +2551,374 @@ mod tests {
                 "stale marker file must not appear in the final layer dir"
             );
         }
+
+        // ------------------------------------------------------------------
+        // §2.1 — empty layer list succeeds immediately
+        // ------------------------------------------------------------------
+
+        /// A manifest with no layers should succeed without issuing any blob
+        /// requests.  The manifest is still stored so `has_image` returns true.
+        #[tokio::test]
+        async fn pull_image_empty_layer_list_succeeds() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/scratch/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": []
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            test_client(&server)
+                .pull_image("library/scratch", "latest", &store)
+                .await
+                .expect("pull of zero-layer image must succeed");
+
+            assert!(
+                store.has_image("library/scratch", "latest"),
+                "manifest must be stored even for a zero-layer image"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §1.2 — single layer 404 in parallel path propagates error
+        // ------------------------------------------------------------------
+
+        /// When the blob endpoint returns 404 for a layer, pull_image must
+        /// return an error whose message identifies the HTTP 404.
+        #[tokio::test]
+        async fn pull_image_single_layer_404_returns_error() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000001";
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/missing-blob"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": 100,
+                                "digest": fake_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(404).set_body_string("blob not found"))
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "missing-blob", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("HTTP 404") || chain.contains("404"),
+                "error chain must mention HTTP 404; got: {chain}"
+            );
+            assert!(
+                !store.has_image("library/alpine", "missing-blob"),
+                "no manifest should be stored after a 404 layer failure"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §1.5 — digest mismatch in parallel pull path
+        // ------------------------------------------------------------------
+
+        /// When a layer blob is served but its SHA-256 does not match the
+        /// manifest digest, pull_image must return a DigestMismatch error and
+        /// not store the manifest.
+        #[tokio::test]
+        async fn pull_image_layer_digest_mismatch_returns_error() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            // Build a real gzip/tar layer so the stream pipeline doesn't choke
+            // on decompression, then declare a wrong digest in the manifest.
+            let (layer_bytes, _correct_digest) = make_test_layer();
+            let wrong_digest =
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/bad-digest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": wrong_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "bad-digest", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("digest mismatch") || chain.contains("DigestMismatch"),
+                "error chain must mention digest mismatch; got: {chain}"
+            );
+            assert!(
+                !store.has_image("library/alpine", "bad-digest"),
+                "manifest must not be stored after a digest mismatch"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §2.2 — two layers succeed in parallel (both dirs exist)
+        // ------------------------------------------------------------------
+
+        /// A manifest with two independent layers must result in both layer
+        /// directories being present on disk after a successful pull.
+        #[tokio::test]
+        async fn pull_image_two_layers_both_stored() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            let (layer1_bytes, layer1_digest) = make_test_layer();
+
+            // Build a second distinct layer by writing different content.
+            let data2 = b"second distinct parallel layer content";
+            let mut header2 = tar::Header::new_gnu();
+            header2.set_path("layer2.txt").expect("set path");
+            header2.set_size(data2.len() as u64);
+            header2.set_mode(0o644);
+            header2.set_cksum();
+            let mut tar_buf2 = Vec::new();
+            {
+                let mut builder = tar::Builder::new(&mut tar_buf2);
+                builder
+                    .append(&header2, data2.as_ref())
+                    .expect("append entry");
+                builder.finish().expect("finish");
+            }
+            let mut gz2 = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            use std::io::Write as _;
+            gz2.write_all(&tar_buf2).expect("gz write");
+            let layer2_bytes = gz2.finish().expect("gz finish");
+            let layer2_digest = format!(
+                "sha256:{}",
+                hex::encode(ShaDigest::finalize(Sha256::new_with_prefix(&layer2_bytes)))
+            );
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/two-layers"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg2"
+                            },
+                            "layers": [
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": layer1_bytes.len() as u64,
+                                    "digest": layer1_digest
+                                },
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": layer2_bytes.len() as u64,
+                                    "digest": layer2_digest
+                                }
+                            ]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            // Serve both blobs from the same wildcard endpoint — wiremock
+            // dispatches by path so both digest paths match path_regex.
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer1_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer1_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer2_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer2_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            test_client(&server)
+                .pull_image("library/alpine", "two-layers", &store)
+                .await
+                .expect("two-layer pull must succeed");
+
+            let layers = store
+                .get_image_layers("library/alpine", "two-layers")
+                .expect("get layers");
+            assert_eq!(layers.len(), 2, "must have exactly two layers");
+            for layer_path in &layers {
+                assert!(
+                    layer_path.exists(),
+                    "layer directory must exist on disk: {layer_path:?}"
+                );
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // §3.3 — 404 error message identifies the failing layer digest
+        // ------------------------------------------------------------------
+
+        /// The error returned from a 404 blob fetch must propagate through
+        /// the layer-digest context annotation so callers can identify which
+        /// layer failed.
+        #[tokio::test]
+        async fn pull_image_404_error_context_identifies_layer() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            let target_digest =
+                "sha256:cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe";
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/ctx-test"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": 100,
+                                "digest": target_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(404).set_body_string("blob not found"))
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "ctx-test", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            // The anyhow context "layer digest sha256:cafebabe..." must appear.
+            assert!(
+                chain.contains("cafebabe"),
+                "error chain must include the failing layer digest; got: {chain}"
+            );
+        }
     }
 
     #[test]
