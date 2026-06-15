@@ -1,7 +1,25 @@
 {
-  "chain-g-4": {
-    "status": "done",
-    "branch": "worktree-agent-a8600c1c",
-    "commits": ["71aa36c813fa3af1de5323fa8e5402bb837cf613"]
+  "wave": 6,
+  "agents": {
+    "t11": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-f-4": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-g-5": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-d-4a": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    }
   }
 }

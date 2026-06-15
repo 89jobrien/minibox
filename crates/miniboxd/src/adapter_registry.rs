@@ -20,7 +20,6 @@
 // TODO(#307): evaluate making smolvm the unconditional default when smolvm binary
 // detection is reliable on all CI platforms.
 
-use anyhow::Context as _;
 use std::fmt;
 
 /// Metadata about a single adapter suite.
@@ -239,29 +238,6 @@ fn adapter_from_env_with_smolvm_available(
             }
         }
     }
-}
-
-/// Validate an adapter name string, returning `anyhow::Result`.
-///
-/// This is a convenience wrapper around [`parse_adapter`] for use at daemon
-/// startup where a missing `?` context is idiomatic. Returns `Ok(())` when
-/// the name is recognized and available in this build; returns a descriptive
-/// `Err` otherwise.
-///
-/// # Errors
-///
-/// Returns an error if `name` is not in [`VALID_ADAPTERS`] or is known but
-/// unavailable in the current build (e.g. `native` on macOS).
-///
-/// ```rust
-/// # use miniboxd::adapter_registry::validate_adapter_name;
-/// assert!(validate_adapter_name("krun").is_ok());
-/// assert!(validate_adapter_name("bogus").is_err());
-/// ```
-pub fn validate_adapter_name(name: &str) -> anyhow::Result<()> {
-    parse_adapter(name)
-        .map(|_| ())
-        .with_context(|| format!("invalid MINIBOX_ADAPTER value {name:?}"))
 }
 
 /// Returns `true` if the `smolvm` binary is present on PATH.

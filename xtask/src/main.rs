@@ -36,6 +36,7 @@ mod dotenv;
 mod feature_matrix_date;
 mod fuzz;
 mod gates;
+mod lint_paths;
 mod preflight;
 mod promote;
 mod protocol_drift;
@@ -237,6 +238,7 @@ fn main() -> Result<()> {
             cas::cas_check(&overlay_dir)
         }
         Some("check-protocol-sites") => check_protocol_sites::run(root),
+        Some("lint-paths") => lint_paths::run(root),
         Some("run") => {
             let script_name = env::args()
                 .nth(2)
