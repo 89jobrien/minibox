@@ -85,6 +85,11 @@ repro.rs
 /bench/results/*/
 assets/
 images/
+# e2e test image fixture directories are not container images — un-ignore them.
+!tests/
+!tests/e2e/
+!tests/e2e/images/
+!tests/e2e/images/**/
 
 # Profiling
 /bench/profiles/
