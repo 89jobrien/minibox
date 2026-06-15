@@ -1,13 +1,16 @@
 //! Conformance tests for container-ID validation edge cases.
 //!
-//! All tests verify that daemon handlers correctly reject unknown, empty, or
-//! mismatched container IDs without touching the filesystem or real processes.
-//! Mock adapters are used throughout; no syscalls are made.
+//! Two groups of tests:
+//!
+//! 1. `ContainerId::new` — unit-level validation of the domain type.
+//! 2. Handler-level — daemon handlers reject unknown/empty/mismatched IDs
+//!    without touching the filesystem or real processes.
 
 use std::sync::Arc;
 
 use minibox::daemon::handler::{handle_pause, handle_remove, handle_resume, handle_stop};
 use minibox::testing::helpers::daemon::{make_mock_deps, make_mock_state, make_stub_record};
+use minibox_core::domain::ContainerId;
 use minibox_core::events::NoopEventSink;
 use minibox_core::protocol::DaemonResponse;
 use tempfile::TempDir;
@@ -168,6 +171,147 @@ impl ConformanceTest for IdsAreCaseSensitive {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ContainerId::new — domain-type validation tests
+// ---------------------------------------------------------------------------
+
+pub struct ContainerIdEmptyStringRejected;
+impl ConformanceTest for ContainerIdEmptyStringRejected {
+    fn name(&self) -> &'static str {
+        "container_id_empty_string_rejected"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let result = ContainerId::new(String::new());
+        ctx.assert_err(result, "ContainerId::new rejects empty string");
+        ctx.result()
+    }
+}
+
+pub struct ContainerIdWhitespaceOnlyRejected;
+impl ConformanceTest for ContainerIdWhitespaceOnlyRejected {
+    fn name(&self) -> &'static str {
+        "container_id_whitespace_only_rejected"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let result = ContainerId::new("   ".to_string());
+        ctx.assert_err(result, "ContainerId::new rejects whitespace-only string");
+        ctx.result()
+    }
+}
+
+pub struct ContainerIdTooLongRejected;
+impl ConformanceTest for ContainerIdTooLongRejected {
+    fn name(&self) -> &'static str {
+        "container_id_too_long_rejected"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        // 65 alphanumeric characters — one over the 64-char limit.
+        let long_id = "a".repeat(65);
+        let result = ContainerId::new(long_id);
+        ctx.assert_err(result, "ContainerId::new rejects IDs longer than 64 chars");
+        ctx.result()
+    }
+}
+
+pub struct ContainerIdAtMaxLengthAccepted;
+impl ConformanceTest for ContainerIdAtMaxLengthAccepted {
+    fn name(&self) -> &'static str {
+        "container_id_at_max_length_accepted"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        // Exactly 64 alphanumeric characters — at the limit.
+        let max_id = "a".repeat(64);
+        let result = ContainerId::new(max_id);
+        ctx.assert_ok(result, "ContainerId::new accepts 64-char alphanumeric ID");
+        ctx.result()
+    }
+}
+
+pub struct ContainerIdSpecialCharsRejected;
+impl ConformanceTest for ContainerIdSpecialCharsRejected {
+    fn name(&self) -> &'static str {
+        "container_id_special_chars_rejected"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let cases = [
+            "abc-123",     // hyphen
+            "abc_123",     // underscore
+            "abc.123",     // dot
+            "abc/123",     // slash
+            "abc 123",     // space
+            "abc@example", // at-sign
+        ];
+        for id in &cases {
+            let result = ContainerId::new((*id).to_string());
+            ctx.assert_err(
+                result,
+                &format!("ContainerId::new rejects special-char ID: {id:?}"),
+            );
+        }
+        ctx.result()
+    }
+}
+
+pub struct ContainerIdValidAlphanumericAccepted;
+impl ConformanceTest for ContainerIdValidAlphanumericAccepted {
+    fn name(&self) -> &'static str {
+        "container_id_valid_alphanumeric_accepted"
+    }
+    fn adapter(&self) -> &'static str {
+        "container_id"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::Unit
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let cases = [
+            "abc123",
+            "ABC123",
+            "a",
+            "deadbeef01234567",
+            "DeadBeef01234567",
+        ];
+        for id in &cases {
+            let result = ContainerId::new((*id).to_string());
+            ctx.assert_ok(
+                result,
+                &format!("ContainerId::new accepts valid alphanumeric ID: {id:?}"),
+            );
+        }
+        ctx.result()
+    }
+}
+
 /// Return all container-ID edge case conformance tests.
 #[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
@@ -177,5 +321,11 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
         Box::new(PauseUnknownIdReturnsError),
         Box::new(ResumeUnknownIdReturnsError),
         Box::new(IdsAreCaseSensitive),
+        Box::new(ContainerIdEmptyStringRejected),
+        Box::new(ContainerIdWhitespaceOnlyRejected),
+        Box::new(ContainerIdTooLongRejected),
+        Box::new(ContainerIdAtMaxLengthAccepted),
+        Box::new(ContainerIdSpecialCharsRejected),
+        Box::new(ContainerIdValidAlphanumericAccepted),
     ]
 }
