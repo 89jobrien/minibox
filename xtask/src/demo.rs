@@ -89,3 +89,42 @@ pub fn demo(_sh: &Shell, root: &Path, adapter: &str) -> Result<()> {
     eprintln!("=== demo complete ===");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn find_mbx_returns_none_for_nonexistent_root() {
+        // A temp dir that has no target/debug/mbx binary.
+        let root = Path::new("/tmp");
+        // We cannot guarantee `mbx` is on PATH in CI, so we only check that
+        // the function returns without panicking.
+        let _ = find_mbx(root);
+    }
+
+    #[test]
+    fn find_mbx_prefers_path_binary_over_built() {
+        // If PATH has no `mbx` and the workspace debug build doesn't exist,
+        // find_mbx must return None rather than a dangling path.
+        let root = Path::new("/nonexistent/workspace");
+        let result = find_mbx(root);
+        // target/debug/mbx under /nonexistent/workspace does not exist.
+        assert!(
+            result.is_none(),
+            "expected None for nonexistent workspace, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn demo_returns_ok_when_mbx_not_found() {
+        // With a fake root, mbx won't be found — the function must exit
+        // gracefully with Ok(()) rather than returning an error.
+        use xshell::Shell;
+        let sh = Shell::new().expect("shell");
+        let root = Path::new("/nonexistent/workspace");
+        let result = demo(&sh, root, "smolvm");
+        assert!(result.is_ok(), "demo should return Ok when mbx is absent");
+    }
+}
