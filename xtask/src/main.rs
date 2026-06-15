@@ -30,6 +30,7 @@ mod docs_lint;
 mod feature_matrix_date;
 mod fuzz;
 mod gates;
+mod lint_paths;
 mod preflight;
 mod promote;
 mod protocol_drift;
@@ -176,6 +177,7 @@ fn main() -> Result<()> {
             )
         }
         Some("run-cgroup-tests") => cgroup_tests::run_cgroup_tests(root),
+        Some("lint-paths") => lint_paths::run(root),
         Some("lint-docs") => docs_lint::lint_docs(root),
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
@@ -364,6 +366,9 @@ fn main() -> Result<()> {
             );
             eprintln!(
                 "  check-no-unwrap [--strict]  scan production code for .unwrap() (advisory by default)"
+            );
+            eprintln!(
+                "  lint-paths       scan crates/ for path-handling anti-patterns (advisory, exit 0)"
             );
             eprintln!(
                 "  lint-docs        validate frontmatter + status values in docs/superpowers/"
