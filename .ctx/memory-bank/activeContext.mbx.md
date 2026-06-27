@@ -13,7 +13,10 @@ Workspace at v0.30.0, 10 crates (smolbox added for smolvm/krun adapters).
 - [ ] macOS exec/logs via VM adapters — run+stdout streaming works,
       exec-into-running unsupported
 - [ ] Merge develop -> next (pending CI green on develop)
-- [ ] Commit and push doc audit fixes + script cleanup
+- [x] crux pipeline integration — promote, verify, pre-commit, prepush, merge
+      pipelines wired (a2f04782..a913d4ea)
+- [x] Mistakes ledger created — `.ctx/memory-bank/mistakes.md` catalogs 30
+      recurring patterns across xtask, CI, reverts, handler errors
 
 **Decisions (recent):**
 

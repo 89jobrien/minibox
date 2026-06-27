@@ -98,11 +98,11 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
     // Parse -v shorthand mounts.
     let mut mounts: Vec<BindMount> = Vec::new();
     for v in &volumes {
-        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {:?}", v))?);
+        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {v:?}"))?);
     }
     // Parse --mount long-form mounts.
     for m in &mount_specs {
-        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {:?}", m))?);
+        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
 
     let tty = tty && std::io::stdout().is_terminal();

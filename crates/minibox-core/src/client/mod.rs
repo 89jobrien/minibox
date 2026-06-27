@@ -19,6 +19,7 @@ use std::path::PathBuf;
 /// 3. Platform default:
 ///    - macOS: `/tmp/minibox/miniboxd.sock` (no `/run` directory on macOS)
 ///    - Linux/other: `/run/minibox/miniboxd.sock`
+#[must_use]
 pub fn default_socket_path() -> PathBuf {
     if let Ok(p) = std::env::var("MINIBOX_SOCKET_PATH") {
         return PathBuf::from(p);

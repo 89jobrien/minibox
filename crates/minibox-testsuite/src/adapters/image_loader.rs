@@ -24,13 +24,13 @@ fn tarball() -> PathBuf {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// load_image succeeds and increments the call count.
+/// `load_image` succeeds and increments the call count.
 pub struct LoadImageSucceedsAndIncrementsCount;
 impl ConformanceTest for LoadImageSucceedsAndIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "load_image_succeeds_and_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_loader"
     }
     fn category(&self) -> TestCategory {
@@ -45,13 +45,13 @@ impl ConformanceTest for LoadImageSucceedsAndIncrementsCount {
     }
 }
 
-/// load_image accumulates the count across multiple calls.
+/// `load_image` accumulates the count across multiple calls.
 pub struct LoadImageCountAccumulates;
 impl ConformanceTest for LoadImageCountAccumulates {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "load_image_count_accumulates"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_loader"
     }
     fn category(&self) -> TestCategory {
@@ -68,13 +68,13 @@ impl ConformanceTest for LoadImageCountAccumulates {
     }
 }
 
-/// load_image returns Err when configured to fail.
+/// `load_image` returns Err when configured to fail.
 pub struct LoadImageFailureReturnsErr;
 impl ConformanceTest for LoadImageFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "load_image_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_loader"
     }
     fn category(&self) -> TestCategory {
@@ -88,13 +88,13 @@ impl ConformanceTest for LoadImageFailureReturnsErr {
     }
 }
 
-/// load_image failure still increments call count.
+/// `load_image` failure still increments call count.
 pub struct LoadImageFailureIncrementsCount;
 impl ConformanceTest for LoadImageFailureIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "load_image_failure_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_loader"
     }
     fn category(&self) -> TestCategory {
@@ -112,7 +112,8 @@ impl ConformanceTest for LoadImageFailureIncrementsCount {
     }
 }
 
-/// Return all image_loader conformance tests.
+/// Return all `image_loader` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(LoadImageSucceedsAndIncrementsCount),

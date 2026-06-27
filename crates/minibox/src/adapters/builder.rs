@@ -56,7 +56,7 @@ fn instr_display(instr: &Instruction) -> String {
     match instr {
         Instruction::From { image, tag, .. } => format!("FROM {image}:{tag}"),
         Instruction::Run(ShellOrExec::Shell(s)) => format!("RUN {s}"),
-        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {:?}", args),
+        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {args:?}"),
         Instruction::Copy { dest, .. } => format!("COPY -> {}", dest.display()),
         Instruction::Add { dest, .. } => format!("ADD -> {}", dest.display()),
         Instruction::Env(pairs) => format!("ENV {} pairs", pairs.len()),
@@ -96,7 +96,7 @@ struct RunStepContext<'a> {
 /// stream output, wait for exit, clean up, and commit the resulting layer.
 ///
 /// Returns the updated layer stack on success.
-// qual:allow(complexity) reason: "build step lifecycle: run, stream, wait, commit"
+// qual:allow(iosp) reason: "build step orchestration — rootfs, spawn, stream, commit"
 async fn execute_run_step(
     builder: &MiniboxImageBuilder,
     ctx: RunStepContext<'_>,
@@ -192,11 +192,10 @@ async fn execute_run_step(
     let image_store = Arc::clone(&builder.image_store);
     let step_tag = format!("{config_tag}:build-step-{}", ctx.run_step);
     let step_tag_for_lookup = step_tag.clone();
-    let upper_dir = layout
-        .rootfs_metadata
-        .as_ref()
-        .map(|m| m.overlay_upper_dir().clone())
-        .unwrap_or_else(|| layout.merged_dir.clone());
+    let upper_dir = layout.rootfs_metadata.as_ref().map_or_else(
+        || layout.merged_dir.clone(),
+        |m| m.overlay_upper_dir().clone(),
+    );
     let step_meta = tokio::task::spawn_blocking(move || {
         commit_upper_dir_to_image(
             image_store,
@@ -270,7 +269,7 @@ async fn stream_run_output(
 
 #[async_trait]
 impl ImageBuilder for MiniboxImageBuilder {
-    // qual:allow(complexity) reason: "multi-step image build orchestration"
+    // qual:allow(iosp) reason: "build orchestration — parse Dockerfile, execute steps, commit"
     async fn build_image(
         &self,
         context: &BuildContext,

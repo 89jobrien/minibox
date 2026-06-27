@@ -9,5 +9,4 @@ inherits = "dev"
 debug = true
 
 [alias]
-x = "run -p xtask --"
 xtask = "run -p xtask --"

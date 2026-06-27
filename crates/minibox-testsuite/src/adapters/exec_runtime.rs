@@ -32,13 +32,13 @@ fn basic_spec() -> ExecSpec {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// run_in_container succeeds and returns a handle.
+/// `run_in_container` succeeds and returns a handle.
 pub struct RunInContainerReturnsHandle;
 impl ConformanceTest for RunInContainerReturnsHandle {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_in_container_returns_handle"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "exec_runtime"
     }
     fn category(&self) -> TestCategory {
@@ -57,13 +57,13 @@ impl ConformanceTest for RunInContainerReturnsHandle {
     }
 }
 
-/// run_in_container increments the call count.
+/// `run_in_container` increments the call count.
 pub struct RunInContainerIncrementsCount;
 impl ConformanceTest for RunInContainerIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_in_container_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "exec_runtime"
     }
     fn category(&self) -> TestCategory {
@@ -82,13 +82,13 @@ impl ConformanceTest for RunInContainerIncrementsCount {
     }
 }
 
-/// run_in_container records the last spec.
+/// `run_in_container` records the last spec.
 pub struct RunInContainerRecordsSpec;
 impl ConformanceTest for RunInContainerRecordsSpec {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_in_container_records_spec"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "exec_runtime"
     }
     fn category(&self) -> TestCategory {
@@ -118,13 +118,13 @@ impl ConformanceTest for RunInContainerRecordsSpec {
     }
 }
 
-/// run_in_container returns Err when configured to fail.
+/// `run_in_container` returns Err when configured to fail.
 pub struct RunInContainerFailureReturnsErr;
 impl ConformanceTest for RunInContainerFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "run_in_container_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "exec_runtime"
     }
     fn category(&self) -> TestCategory {
@@ -146,7 +146,8 @@ impl ConformanceTest for RunInContainerFailureReturnsErr {
     }
 }
 
-/// Return all exec_runtime conformance tests.
+/// Return all `exec_runtime` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(RunInContainerReturnsHandle),

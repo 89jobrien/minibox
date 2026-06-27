@@ -163,6 +163,7 @@ mod tests {
             std::env::set_var("MINIBOX_ADAPTER", "krun");
         }
         let adapter = selected_adapter();
+        // SAFETY: same unique env var set above; remove_var restores the absent state.
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }

@@ -7,7 +7,7 @@ use minibox_core::domain::{ResourceConfig, ResourceLimiter};
 
 use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 
-fn default_config() -> ResourceConfig {
+const fn default_config() -> ResourceConfig {
     ResourceConfig {
         memory_limit_bytes: Some(128 * 1024 * 1024),
         cpu_weight: Some(512),
@@ -22,10 +22,10 @@ fn default_config() -> ResourceConfig {
 
 pub struct CreateReturnsCgroupPath;
 impl ConformanceTest for CreateReturnsCgroupPath {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_returns_cgroup_path"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -46,10 +46,10 @@ impl ConformanceTest for CreateReturnsCgroupPath {
 
 pub struct CreateIncrementsCount;
 impl ConformanceTest for CreateIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -67,10 +67,10 @@ impl ConformanceTest for CreateIncrementsCount {
 
 pub struct CreateFailureReturnsErr;
 impl ConformanceTest for CreateFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -88,10 +88,10 @@ impl ConformanceTest for CreateFailureReturnsErr {
 
 pub struct CreateFailureIncrementsCount;
 impl ConformanceTest for CreateFailureIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_failure_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -107,10 +107,10 @@ impl ConformanceTest for CreateFailureIncrementsCount {
 
 pub struct AddProcessSucceedsByDefault;
 impl ConformanceTest for AddProcessSucceedsByDefault {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "add_process_succeeds_by_default"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -128,10 +128,10 @@ impl ConformanceTest for AddProcessSucceedsByDefault {
 
 pub struct CleanupIncrementsCount;
 impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cleanup_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -151,10 +151,10 @@ impl ConformanceTest for CleanupIncrementsCount {
 
 pub struct CreateThenCleanupRoundTrip;
 impl ConformanceTest for CreateThenCleanupRoundTrip {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_then_cleanup_round_trip"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "limiter"
     }
     fn category(&self) -> TestCategory {
@@ -171,6 +171,7 @@ impl ConformanceTest for CreateThenCleanupRoundTrip {
 }
 
 /// Return all limiter conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(CreateReturnsCgroupPath),

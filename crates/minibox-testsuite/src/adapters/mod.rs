@@ -20,13 +20,16 @@ pub mod policy;
 pub mod pty;
 pub mod registry;
 pub mod registry_router;
+pub mod remove;
 pub mod runtime;
 pub mod state;
+pub mod stop_handler;
 pub mod vm_checkpoint;
 
 use crate::harness::ConformanceTest;
 
 /// Collect every conformance test across all adapters.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     let mut tests: Vec<Box<dyn ConformanceTest>> = Vec::new();
     tests.extend(registry::all());
@@ -49,5 +52,7 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     tests.extend(metrics::all());
     tests.extend(registry_router::all());
     tests.extend(image_loader::all());
+    tests.extend(remove::all());
+    tests.extend(stop_handler::all());
     tests
 }

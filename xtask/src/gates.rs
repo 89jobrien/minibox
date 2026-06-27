@@ -2,7 +2,22 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
+use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
 use crate::{borrow_fixtures, bump, docs_audit, docs_lint, utils::cargo_target_dir};
+
+/// Run a gate body with checkpoint skip/record logic.
+///
+/// If a valid checkpoint exists for `gate` at the current tree hash, the gate
+/// is skipped. On success the checkpoint is recorded (if the tree is clean).
+/// Set `MINIBOX_FORCE_GATES=1` or pass `--force` to bypass.
+fn gated<F>(gate: GateId, root: &Path, f: F) -> Result<()>
+where
+    F: FnOnce() -> Result<()>,
+{
+    let hasher = GitTreeProbe;
+    let store = FileCheckpointStore::default_for_workspace(root);
+    checkpoint::run_gated(gate, &hasher, &store, f)
+}
 
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
@@ -12,54 +27,63 @@ const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
 /// on Linux it compiles but has gated code — still linted for syntax.
 pub fn lint(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo fmt --all --check")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::Lint, &root, move || {
+        cmd!(sh, "cargo fmt --all --check")
+            .run()
+            .context("cargo fmt --check failed")?;
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+        )
         .run()
-        .context("cargo fmt --check failed")?;
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
-    )
-    .run()
-    .context("cargo clippy failed")?;
-    cmd!(sh, "cargo check --workspace")
-        .run()
-        .context("cargo check --workspace failed")?;
-    eprintln!("lint gate passed");
-    Ok(())
+        .context("cargo clippy failed")?;
+        cmd!(sh, "cargo check --workspace")
+            .run()
+            .context("cargo check --workspace failed")?;
+        eprintln!("lint gate passed");
+        Ok(())
+    })
 }
 
 /// Read-only local verification gate: fmt check, workspace check, clippy,
 /// borrow fixtures, and docs lint. Does not modify files.
 pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
-    eprintln!("--- verify: fmt check ---");
-    cmd!(sh, "cargo fmt --all --check")
+    let sh = sh.clone();
+    let root = root.to_path_buf();
+    let root_ref = root.clone();
+    gated(GateId::Verify, &root_ref, move || {
+        eprintln!("--- verify: fmt check ---");
+        cmd!(sh, "cargo fmt --all --check")
+            .run()
+            .context("cargo fmt --check failed")?;
+
+        eprintln!("--- verify: workspace check ---");
+        cmd!(sh, "cargo check --workspace")
+            .run()
+            .context("cargo check --workspace failed")?;
+
+        eprintln!("--- verify: clippy ---");
+        cmd!(
+            sh,
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+        )
         .run()
-        .context("cargo fmt --check failed")?;
+        .context("cargo clippy failed")?;
 
-    eprintln!("--- verify: workspace check ---");
-    cmd!(sh, "cargo check --workspace")
-        .run()
-        .context("cargo check --workspace failed")?;
+        eprintln!("--- verify: borrow fixtures ---");
+        borrow_fixtures::run(&root)?;
 
-    eprintln!("--- verify: clippy ---");
-    cmd!(
-        sh,
-        "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
-    )
-    .run()
-    .context("cargo clippy failed")?;
+        eprintln!("--- verify: docs lint ---");
+        docs_lint::lint_docs(&root, None)?;
 
-    eprintln!("--- verify: borrow fixtures ---");
-    borrow_fixtures::run(root)?;
+        eprintln!("--- verify: docs audit (quick) ---");
+        docs_audit::run(&sh, &root, docs_audit::Mode::Quick { strict: false })?;
 
-    eprintln!("--- verify: docs lint ---");
-    docs_lint::lint_docs(root, None)?;
-
-    eprintln!("--- verify: docs audit (quick) ---");
-    docs_audit::run(sh, root, docs_audit::Mode::Quick { strict: false })?;
-
-    eprintln!("verify gate passed");
-    Ok(())
+        eprintln!("verify gate passed");
+        Ok(())
+    })
 }
 
 /// Fix gate: version bump + fmt + clippy --fix + re-stage (macOS-safe, fast)
@@ -123,7 +147,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         // actionlint does not accept a bare directory path; collect .yml files explicitly.
         let wf_files: Vec<_> = fs::read_dir(".github/workflows")
             .context("read .github/workflows")?
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .filter(|e| {
                 e.path()
                     .extension()
@@ -157,21 +181,28 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         eprintln!("pre-push: no Rust files in push range, skipping build and tests");
         return Ok(());
     }
-    cmd!(
-        sh,
-        "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
-    )
-    .run()
-    .context("release build failed")?;
-    let fail_fast = fail_fast_flag();
-    cmd!(
-        sh,
-        "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
-    )
-    .run()
-    .context("nextest failed")?;
-    test_conformance(sh)?;
-    Ok(())
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::Prepush, &root, move || {
+        // TODO: add `cargo check --target x86_64-unknown-linux-musl` here to catch
+        // cfg(target_os = "linux") compile failures before pushing. Would have prevented
+        // the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.
+        cmd!(
+            sh,
+            "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+        )
+        .run()
+        .context("release build failed")?;
+        let fail_fast = fail_fast_flag();
+        cmd!(
+            sh,
+            "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
+        )
+        .run()
+        .context("nextest failed")?;
+        test_conformance(&sh)?;
+        Ok(())
+    })
 }
 
 /// Unit tests (any platform, matches CI).
@@ -182,25 +213,29 @@ pub fn prepush(sh: &Shell) -> Result<()> {
 ///
 /// Set `MINIBOX_FAIL_FAST=true` to stop on the first test failure.
 pub fn test_unit(sh: &Shell) -> Result<()> {
-    let fail_fast = fail_fast_flag();
-    if cfg!(target_os = "macos") {
-        cmd!(sh, "cargo nextest run --workspace --lib {fail_fast...}")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::TestUnit, &root, move || {
+        let fail_fast = fail_fast_flag();
+        if cfg!(target_os = "macos") {
+            cmd!(sh, "cargo nextest run --workspace --lib {fail_fast...}")
+                .run()
+                .context("nextest workspace --lib tests failed")?;
+        } else {
+            cmd!(
+                sh,
+                "cargo nextest run --workspace --exclude macbox --lib {fail_fast...}"
+            )
             .run()
             .context("nextest workspace --lib tests failed")?;
-    } else {
-        cmd!(
-            sh,
-            "cargo nextest run --workspace --exclude macbox --lib {fail_fast...}"
-        )
-        .run()
-        .context("nextest workspace --lib tests failed")?;
-    }
-    Ok(())
+        }
+        Ok(())
+    })
 }
 
 /// Conformance suite: builds and runs the `minibox-testsuite` harness.
 ///
-/// The harness executes all adapter conformance tests and emits JSON + JUnit XML
+/// The harness executes all adapter conformance tests and emits JSON + `JUnit` XML
 /// reports to `artifacts/conformance/` via the `generate-report` binary.
 ///
 /// Set `CONFORMANCE_ADAPTER=<name>` to restrict to a single adapter.
@@ -268,7 +303,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// krun adapter conformance tests (macOS HVF / Linux KVM, requires MINIBOX_KRUN_TESTS=1).
+/// krun adapter conformance tests (macOS HVF / Linux KVM, requires `MINIBOX_KRUN_TESTS=1`).
 ///
 /// Run serially — parallel krun invocations collide on the VM hypervisor socket.
 pub fn test_krun_conformance(sh: &Shell) -> Result<()> {
@@ -320,16 +355,20 @@ pub fn test_shuttle(sh: &Shell) -> Result<()> {
 }
 
 pub fn test_property(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
+    let root = sh.current_dir();
+    let sh = sh.clone();
+    gated(GateId::TestProperty, &root, move || {
+        cmd!(sh, "cargo test --release -p minibox --test proptest_suite")
+            .run()
+            .context("minibox property tests failed")?;
+        cmd!(
+            sh,
+            "cargo test --release -p minibox --test daemon_proptest_suite"
+        )
         .run()
-        .context("minibox property tests failed")?;
-    cmd!(
-        sh,
-        "cargo test --release -p minibox --test daemon_proptest_suite"
-    )
-    .run()
-    .context("daemon property tests failed")?;
-    Ok(())
+        .context("daemon property tests failed")?;
+        Ok(())
+    })
 }
 
 /// Proptest property-based tests (cross-platform, consolidated).
@@ -459,14 +498,6 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Daemon+CLI e2e tests (Linux, root required)
-///
-/// Deprecated alias for `test_system_suite`. Kept for backward compatibility
-/// with existing CI jobs that reference `test-e2e-suite`.
-pub fn test_e2e_suite(sh: &Shell) -> Result<()> {
-    test_system_suite(sh)
-}
-
 /// Sandbox contract tests (Linux, root, Docker Hub required)
 pub fn test_sandbox(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo build --release")
@@ -514,7 +545,7 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
         let html_dir = cov_dir.join("html");
         cmd!(
             sh,
-            "cargo llvm-cov nextest -p minibox -p minibox-core --html --output-dir {html_dir}"
+            "cargo llvm-cov nextest -p minibox -p minibox-core --features test-utils --html --output-dir {html_dir}"
         )
         .run()
         .context("cargo llvm-cov nextest --html failed (is cargo-llvm-cov installed?)")?;
@@ -534,7 +565,7 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
         let lcov_path = cov_dir.join("lcov.info");
         cmd!(
             sh,
-            "cargo llvm-cov nextest -p minibox -p minibox-core --lcov --output-path {lcov_path}"
+            "cargo llvm-cov nextest -p minibox -p minibox-core --features test-utils --lcov --output-path {lcov_path}"
         )
         .run()
         .context("cargo llvm-cov nextest --lcov failed")?;
@@ -570,7 +601,7 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
 
     let output = cmd!(
         sh,
-        "cargo llvm-cov nextest --package minibox --json --summary-only"
+        "cargo llvm-cov nextest --package minibox --features test-utils --json --summary-only"
     )
     .output()
     .context("failed to spawn cargo llvm-cov nextest")?;
@@ -734,8 +765,7 @@ fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
         // Short name: everything after the last `daemon/`.
         let short = filename
             .rfind("daemon/")
-            .map(|i| &filename[i..])
-            .unwrap_or(filename);
+            .map_or(filename, |i| &filename[i..]);
 
         total_count += count;
         total_covered += covered;
@@ -854,7 +884,7 @@ fn staged_agent_files(sh: &Shell) -> Result<bool> {
 }
 
 /// Lint staged agent config files:
-///   - `.json`  → parse with serde_json and report errors
+///   - `.json`  → parse with `serde_json` and report errors
 ///   - `.md`    → check required frontmatter keys (name, description)
 ///   - `.yaml`/`.yml` inside agent dirs → check with actionlint if in `.github/`, else YAML parse
 pub fn agentlint_staged(sh: &Shell) -> Result<()> {
@@ -866,13 +896,14 @@ pub fn agentlint_staged(sh: &Shell) -> Result<()> {
     let agent_files: Vec<String> = staged
         .lines()
         .filter(|l| AGENT_DIRS.iter().any(|d| l.starts_with(d)))
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     agentlint_check(&agent_files)
 }
 
 /// Lint all agent config files on disk (not just staged).
+// qual:allow(iosp) reason: "repo-wide lint orchestration: walks filesystem and delegates to linters"
 pub fn agentlint_all() -> Result<()> {
     let mut files = Vec::new();
     for dir in AGENT_DIRS {
@@ -884,6 +915,7 @@ pub fn agentlint_all() -> Result<()> {
     agentlint_check(&files)
 }
 
+// qual:allow(iosp) reason: "filesystem traversal helper"
 fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -1154,7 +1186,7 @@ pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
     for adapter in &adapters {
         let has_test = fs::read_dir(&test_dir)
             .with_context(|| format!("cannot read {}", test_dir.display()))?
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .any(|e| e.file_name().to_string_lossy().contains(adapter));
         if has_test {
             eprintln!("OK: adapter '{adapter}' has integration test file(s)");
@@ -1177,6 +1209,38 @@ pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Run GKE profile-specific unit tests (any test with "gke" in the name).
+pub fn test_gke_profile(sh: &Shell) -> Result<()> {
+    eprintln!("--- test-gke-profile: running GKE profile tests ---");
+    cmd!(sh, "cargo nextest run -p minibox -E test(~gke)")
+        .run()
+        .context("GKE profile tests failed")?;
+    eprintln!("test-gke-profile passed");
+    Ok(())
+}
+
+/// Run GKE adapter integration tests.
+pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
+    eprintln!("--- test-gke-adapter: running GKE adapter integration tests ---");
+    let result = cmd!(sh, "cargo nextest run --test gke_adapter_isolation_tests").run();
+
+    match result {
+        Ok(()) => {
+            eprintln!("test-gke-adapter passed");
+            Ok(())
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            if msg.contains("no tests ran") {
+                eprintln!("no GKE adapter tests found");
+                Ok(())
+            } else {
+                Err(e).context("GKE adapter integration tests failed")
+            }
+        }
+    }
+}
+
 /// Scan production Rust source for `.unwrap()` calls outside test infrastructure.
 ///
 /// Mirrors the `no-unwrap-in-prod` job in `stability-gates.yml`. Advisory by default —
@@ -1186,13 +1250,13 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
     let skip_dirs = ["xtask", "testing", "tests", "examples", "benches"];
     let mut hits: Vec<String> = Vec::new();
 
-    let mut stack = vec![root.clone()];
+    let mut stack = vec![root];
     while let Some(dir) = stack.pop() {
         let entries = match fs::read_dir(&dir) {
             Ok(e) => e,
             Err(_) => continue,
         };
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(std::result::Result::ok) {
             let ft = match entry.file_type() {
                 Ok(ft) => ft,
                 Err(_) => continue,
@@ -1288,7 +1352,7 @@ pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathB
     let dir = Path::new(deps_dir);
     let mut candidates: Vec<_> = fs::read_dir(dir)
         .ok()?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| {
             let name = e.file_name();
             let name = name.to_string_lossy();
@@ -1297,5 +1361,5 @@ pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathB
         })
         .collect();
     candidates.sort_by_key(|e| e.metadata().ok()?.modified().ok());
-    candidates.last().map(|e| e.path())
+    candidates.last().map(std::fs::DirEntry::path)
 }

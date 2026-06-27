@@ -1,4 +1,4 @@
-//! Stop handler and platform-specific stop_inner implementations.
+//! Stop handler and platform-specific `stop_inner` implementations.
 
 use anyhow::Result;
 use minibox_core::domain::DomainError;
@@ -11,6 +11,16 @@ use crate::daemon::state::{ContainerState, DaemonState};
 
 use super::super::network_lifecycle::NetworkLifecycle;
 use super::HandlerDependencies;
+
+/// Record the container op counter and return the status label.
+fn record_stop_op(deps: &HandlerDependencies, ok: bool) -> &'static str {
+    let status = if ok { "ok" } else { "error" };
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "stop"), ("adapter", "daemon"), ("status", status)],
+    );
+    status
+}
 
 /// Send SIGTERM to a container, then SIGKILL after 10 seconds if needed.
 pub async fn handle_stop(
@@ -33,11 +43,7 @@ pub async fn handle_stop(
         .await;
 
     let result = stop_inner(&id, &state).await;
-    let status = if result.is_ok() { "ok" } else { "error" };
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[("op", "stop"), ("adapter", "daemon"), ("status", status)],
-    );
+    record_stop_op(&deps, result.is_ok());
 
     match result {
         Ok(()) => {

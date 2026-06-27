@@ -37,10 +37,7 @@ pub fn format_header() -> String {
 
 /// Format a single container row.
 pub fn format_row(c: &minibox_core::protocol::ContainerInfo) -> String {
-    let pid_str = c
-        .pid
-        .map(|p| p.to_string())
-        .unwrap_or_else(|| "-".to_string());
+    let pid_str = c.pid.map_or_else(|| "-".to_string(), |p| p.to_string());
     let name_str = c.name.as_deref().unwrap_or("-").to_string();
 
     let name = truncate(&name_str, COL_NAME);

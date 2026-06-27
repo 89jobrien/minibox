@@ -1,4 +1,15 @@
 //! Mock adapters for testing.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::missing_panics_doc,
+    clippy::missing_errors_doc,
+    clippy::return_self_not_must_use,
+    clippy::significant_drop_tightening,
+    clippy::items_after_statements,
+    clippy::struct_excessive_bools
+)]
 //!
 //! This module provides in-process mock implementations of all four domain
 //! traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
@@ -71,6 +82,7 @@ struct MockRegistryState {
 
 impl MockRegistry {
     /// Create a new mock registry with no cached images and pull success enabled.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRegistryState {
@@ -85,6 +97,7 @@ impl MockRegistry {
     /// Configure the registry to report `name:tag` as already cached locally.
     ///
     /// May be called multiple times to seed multiple images.
+    #[must_use]
     pub fn with_cached_image(self, name: &str, tag: &str) -> Self {
         self.state
             .lock()
@@ -95,6 +108,7 @@ impl MockRegistry {
     }
 
     /// Configure all subsequent `pull_image` calls to return an error.
+    #[must_use]
     pub fn with_pull_failure(self) -> Self {
         self.state
             .lock()
@@ -106,6 +120,7 @@ impl MockRegistry {
     /// Configure `get_image_layers` to return an empty layer list.
     ///
     /// Used to exercise the `EmptyImage` error path in `run_inner`.
+    #[must_use]
     pub fn with_empty_layers(self) -> Self {
         self.state
             .lock()
@@ -115,6 +130,7 @@ impl MockRegistry {
     }
 
     /// Return the number of times `pull_image` has been called.
+    #[must_use]
     pub fn pull_count(&self) -> usize {
         self.state.lock().expect("mock: poisoned lock").pull_count
     }
@@ -123,6 +139,7 @@ impl MockRegistry {
     ///
     /// Useful in benchmarks and synchronous test helpers where an async
     /// executor is not available.
+    #[must_use]
     pub fn has_image_sync(&self, image: &str, tag: &str) -> bool {
         self.state
             .lock()
@@ -229,6 +246,7 @@ struct MockFilesystemState {
 
 impl MockFilesystem {
     /// Create a new mock filesystem with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockFilesystemState {
@@ -242,6 +260,7 @@ impl MockFilesystem {
     }
 
     /// Configure `setup_rootfs` to return an error on the next call.
+    #[must_use]
     pub fn with_setup_failure(self) -> Self {
         self.state
             .lock()
@@ -253,6 +272,7 @@ impl MockFilesystem {
     /// Configure `cleanup` to return an error.
     ///
     /// Used to exercise the best-effort filesystem cleanup path in `remove_inner`.
+    #[must_use]
     pub fn with_cleanup_failure(self) -> Self {
         self.state
             .lock()
@@ -262,11 +282,13 @@ impl MockFilesystem {
     }
 
     /// Return the number of times `setup_rootfs` has been called.
+    #[must_use]
     pub fn setup_count(&self) -> usize {
         self.state.lock().expect("mock: poisoned lock").setup_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
         self.state
             .lock()
@@ -352,6 +374,7 @@ struct MockLimiterState {
 
 impl MockLimiter {
     /// Create a new mock resource limiter with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockLimiterState {
@@ -366,6 +389,7 @@ impl MockLimiter {
     }
 
     /// Configure `create` to return an error.
+    #[must_use]
     pub fn with_create_failure(self) -> Self {
         self.state
             .lock()
@@ -377,6 +401,7 @@ impl MockLimiter {
     /// Configure `cleanup` to return an error.
     ///
     /// Used to exercise the best-effort cgroup cleanup path in `remove_inner`.
+    #[must_use]
     pub fn with_cleanup_failure(self) -> Self {
         self.state
             .lock()
@@ -386,11 +411,13 @@ impl MockLimiter {
     }
 
     /// Return the number of times `create` has been called.
+    #[must_use]
     pub fn create_count(&self) -> usize {
         self.state.lock().expect("mock: poisoned lock").create_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
         self.state
             .lock()
@@ -470,6 +497,7 @@ struct MockRuntimeState {
 
 impl MockRuntime {
     /// Create a new mock runtime with spawn succeeding and PIDs starting at 10000.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRuntimeState {
@@ -489,6 +517,7 @@ impl MockRuntime {
     ///
     /// Only has effect on Unix targets where `OwnedFd` is available.
     #[cfg(unix)]
+    #[must_use]
     pub fn with_output_pipe(self) -> Self {
         self.state
             .lock()
@@ -498,6 +527,7 @@ impl MockRuntime {
     }
 
     /// Configure all subsequent `spawn_process` calls to return an error.
+    #[must_use]
     pub fn with_spawn_failure(self) -> Self {
         self.state
             .lock()
@@ -507,6 +537,7 @@ impl MockRuntime {
     }
 
     /// Return the total number of spawn attempts (successful and failed).
+    #[must_use]
     pub fn spawn_count(&self) -> usize {
         self.state.lock().expect("mock: poisoned lock").spawn_count
     }
@@ -626,6 +657,7 @@ struct MockNetworkState {
 
 impl MockNetwork {
     /// Create a new mock network with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockNetworkState {
@@ -638,6 +670,7 @@ impl MockNetwork {
     }
 
     /// Configure `setup` to return an error.
+    #[must_use]
     pub fn with_setup_failure(self) -> Self {
         self.state
             .lock()
@@ -647,6 +680,7 @@ impl MockNetwork {
     }
 
     /// Configure `cleanup` to return an error.
+    #[must_use]
     pub fn with_cleanup_failure(self) -> Self {
         self.state
             .lock()
@@ -656,11 +690,13 @@ impl MockNetwork {
     }
 
     /// Return the number of times `setup` has been called.
+    #[must_use]
     pub fn setup_count(&self) -> usize {
         self.state.lock().expect("mock: poisoned lock").setup_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
         self.state
             .lock()
@@ -745,7 +781,8 @@ pub struct FailableFilesystemMock {
 
 impl FailableFilesystemMock {
     /// Create a new mock with both operations succeeding by default.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             should_fail_setup: AtomicBool::new(false),
             should_fail_cleanup: AtomicBool::new(false),
@@ -838,6 +875,7 @@ struct RecordingMetricsState {
 
 impl RecordingMetricsRecorder {
     /// Create a new recorder with empty state.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(RecordingMetricsState::default())),
@@ -845,6 +883,7 @@ impl RecordingMetricsRecorder {
     }
 
     /// Return all recorded counter increments as `(name, labels)` pairs.
+    #[must_use]
     pub fn counters(&self) -> Vec<(String, Labels)> {
         self.state
             .lock()
@@ -854,6 +893,7 @@ impl RecordingMetricsRecorder {
     }
 
     /// Return all recorded histogram observations as `(name, value, labels)` triples.
+    #[must_use]
     pub fn histograms(&self) -> Vec<(String, f64, Labels)> {
         self.state
             .lock()
@@ -863,6 +903,7 @@ impl RecordingMetricsRecorder {
     }
 
     /// Return all recorded gauge settings as `(name, value, labels)` triples.
+    #[must_use]
     pub fn gauges(&self) -> Vec<(String, f64, Labels)> {
         self.state
             .lock()
@@ -1214,7 +1255,8 @@ pub struct MockContainerCommitter {
 
 impl MockContainerCommitter {
     /// Create a new, unconfigured mock committer.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
             should_fail: std::sync::atomic::AtomicBool::new(false),
@@ -1288,7 +1330,8 @@ pub struct MockImageBuilder {
 
 impl MockImageBuilder {
     /// Create a new mock builder.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
             should_fail: std::sync::atomic::AtomicBool::new(false),
@@ -1378,7 +1421,8 @@ pub struct MockImagePusher {
 
 impl MockImagePusher {
     /// Create a new mock pusher with no recorded state.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             state: Mutex::new(MockImagePusherState {
                 pushed_tags: vec![],

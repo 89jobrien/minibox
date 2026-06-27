@@ -65,10 +65,10 @@ fn make_record(id: &str, state_str: &str, cgroup_path: PathBuf) -> ContainerReco
 /// Pausing a Running container writes `cgroup.freeze` and transitions to Paused.
 pub struct PauseRunningContainerTransitionsToPaused;
 impl ConformanceTest for PauseRunningContainerTransitionsToPaused {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pause_running_container_transitions_to_paused"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pause_resume"
     }
     fn category(&self) -> TestCategory {
@@ -83,7 +83,7 @@ impl ConformanceTest for PauseRunningContainerTransitionsToPaused {
 
         let state = make_state(&tmp);
         let id = "pauserunning0001".to_string();
-        rt().block_on(state.add_container(make_record(&id, "Running", cgroup_dir.clone())));
+        rt().block_on(state.add_container(make_record(&id, "Running", cgroup_dir)));
 
         let resp = rt().block_on(handler::handle_pause(
             id.clone(),
@@ -114,10 +114,10 @@ impl ConformanceTest for PauseRunningContainerTransitionsToPaused {
 /// Resuming a Paused container writes `cgroup.freeze` and transitions to Running.
 pub struct ResumePausedContainerTransitionsToRunning;
 impl ConformanceTest for ResumePausedContainerTransitionsToRunning {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "resume_paused_container_transitions_to_running"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pause_resume"
     }
     fn category(&self) -> TestCategory {
@@ -131,7 +131,7 @@ impl ConformanceTest for ResumePausedContainerTransitionsToRunning {
 
         let state = make_state(&tmp);
         let id = "resumepaused0001".to_string();
-        rt().block_on(state.add_container(make_record(&id, "Paused", cgroup_dir.clone())));
+        rt().block_on(state.add_container(make_record(&id, "Paused", cgroup_dir)));
 
         let resp = rt().block_on(handler::handle_resume(
             id.clone(),
@@ -162,10 +162,10 @@ impl ConformanceTest for ResumePausedContainerTransitionsToRunning {
 /// Pausing an already-Paused container returns an error.
 pub struct PauseAlreadyPausedReturnsError;
 impl ConformanceTest for PauseAlreadyPausedReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pause_already_paused_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pause_resume"
     }
     fn category(&self) -> TestCategory {
@@ -182,11 +182,7 @@ impl ConformanceTest for PauseAlreadyPausedReturnsError {
             PathBuf::from("/nonexistent/cgroup"),
         )));
 
-        let resp = rt().block_on(handler::handle_pause(
-            id.clone(),
-            state.clone(),
-            Arc::new(NoopEventSink),
-        ));
+        let resp = rt().block_on(handler::handle_pause(id, state, Arc::new(NoopEventSink)));
 
         ctx.assert_true(
             matches!(resp, DaemonResponse::Error { .. }),
@@ -206,10 +202,10 @@ impl ConformanceTest for PauseAlreadyPausedReturnsError {
 /// Resuming a Running (non-paused) container returns an error.
 pub struct ResumeRunningContainerReturnsNotPausedError;
 impl ConformanceTest for ResumeRunningContainerReturnsNotPausedError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "resume_running_container_returns_not_paused_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pause_resume"
     }
     fn category(&self) -> TestCategory {
@@ -225,11 +221,7 @@ impl ConformanceTest for ResumeRunningContainerReturnsNotPausedError {
             PathBuf::from("/nonexistent/cgroup"),
         )));
 
-        let resp = rt().block_on(handler::handle_resume(
-            id.clone(),
-            state.clone(),
-            Arc::new(NoopEventSink),
-        ));
+        let resp = rt().block_on(handler::handle_resume(id, state, Arc::new(NoopEventSink)));
 
         ctx.assert_true(
             matches!(resp, DaemonResponse::Error { .. }),
@@ -249,10 +241,10 @@ impl ConformanceTest for ResumeRunningContainerReturnsNotPausedError {
 /// Pausing an unknown container returns an error.
 pub struct PauseUnknownContainerReturnsError;
 impl ConformanceTest for PauseUnknownContainerReturnsError {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pause_unknown_container_returns_error"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "pause_resume"
     }
     fn category(&self) -> TestCategory {
@@ -264,7 +256,7 @@ impl ConformanceTest for PauseUnknownContainerReturnsError {
 
         let resp = rt().block_on(handler::handle_pause(
             "doesnotexist0001".to_string(),
-            state.clone(),
+            state,
             Arc::new(NoopEventSink),
         ));
 
@@ -283,7 +275,45 @@ impl ConformanceTest for PauseUnknownContainerReturnsError {
     }
 }
 
+/// Resuming an unknown container returns an error.
+pub struct ResumeUnknownContainerReturnsError;
+impl ConformanceTest for ResumeUnknownContainerReturnsError {
+    fn name(&self) -> &str {
+        "resume_unknown_container_returns_error"
+    }
+    fn adapter(&self) -> &str {
+        "pause_resume"
+    }
+    fn category(&self) -> TestCategory {
+        TestCategory::EdgeCase
+    }
+    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        let tmp = TempDir::new().expect("TempDir::new");
+        let state = make_state(&tmp);
+
+        let resp = rt().block_on(handler::handle_resume(
+            "doesnotexist0002".to_string(),
+            state.clone(),
+            Arc::new(NoopEventSink),
+        ));
+
+        ctx.assert_true(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "resume of unknown container returns Error",
+        );
+        if let DaemonResponse::Error { message } = resp {
+            ctx.assert_true(
+                message.contains("not found"),
+                "error message mentions 'not found'",
+            );
+        }
+
+        ctx.result()
+    }
+}
+
 /// Return all pause/resume conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(PauseRunningContainerTransitionsToPaused),
@@ -291,5 +321,6 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
         Box::new(PauseAlreadyPausedReturnsError),
         Box::new(ResumeRunningContainerReturnsNotPausedError),
         Box::new(PauseUnknownContainerReturnsError),
+        Box::new(ResumeUnknownContainerReturnsError),
     ]
 }

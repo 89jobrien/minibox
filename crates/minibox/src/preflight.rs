@@ -56,12 +56,11 @@ pub fn probe() -> HostCapabilities {
     }
 }
 
-/// Format a human-readable capability report suitable for `just doctor` output.
+/// Build the common capability report lines shared between minibox-core and minibox.
 ///
-/// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
-/// whether it meets the requirement for running minibox containers.
+/// Factored out to avoid duplication between the two `format_report` implementations.
 #[cfg(test)]
-pub fn format_report(caps: &HostCapabilities) -> String {
+fn format_caps_common_lines(caps: &HostCapabilities) -> Vec<String> {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());
     lines.push("=".repeat(40));
@@ -110,8 +109,17 @@ pub fn format_report(caps: &HostCapabilities) -> String {
             .unwrap_or_else(|| "N/A".to_string())
     ));
     lines.push(format!("     minibox.slice: {}", caps.minibox_slice_active));
-    lines.push(format!("     data dir:    {}", active_data_dir().display()));
+    lines
+}
 
+/// Format a human-readable capability report suitable for `just doctor` output.
+///
+/// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
+/// whether it meets the requirement for running minibox containers.
+#[cfg(test)]
+pub fn format_report(caps: &HostCapabilities) -> String {
+    let mut lines = format_caps_common_lines(caps);
+    lines.push(format!("     data dir:    {}", active_data_dir().display()));
     lines.join("\n")
 }
 
@@ -165,24 +173,7 @@ fn probe_kernel_version() -> (u32, u32, u32) {
     };
     // "Linux version 6.1.0-18-amd64 ..."
     let version_str = content.split_whitespace().nth(2).unwrap_or("0.0.0");
-    parse_kernel_version(version_str)
-}
-
-/// Parse a kernel version string like `"6.1.0-18-amd64"` into `(major, minor, patch)`.
-///
-/// Any non-numeric suffix after the patch component (e.g. `-18-amd64`) is ignored.
-/// Individual components that fail to parse are treated as `0`.
-fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
-    let parts: Vec<&str> = s.split('.').collect();
-    let major = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
-    let minor = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
-    // Patch may have suffix like "0-18-amd64"; take only the numeric prefix.
-    let patch = parts
-        .get(2)
-        .and_then(|p| p.split('-').next())
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(0);
-    (major, minor, patch)
+    minibox_core::preflight::parse_kernel_version(version_str)
 }
 
 /// Check whether a cgroup v2 unified hierarchy is mounted by scanning `/proc/mounts`.

@@ -1,4 +1,4 @@
-//! GitHub Container Registry (ghcr.io) adapter implementing the ImageRegistry trait.
+//! GitHub Container Registry (ghcr.io) adapter implementing the `ImageRegistry` trait.
 //!
 //! Authenticates via `WWW-Authenticate` Bearer challenge. Pass a personal access
 //! token (PAT) with `read:packages` scope as `GHCR_TOKEN` to access private images;
@@ -390,6 +390,7 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(name, tag)
     }
 
+    // qual:allow(iosp) reason: "adapter I/O boundary — auth, fetch manifest, download layers"
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -474,6 +475,7 @@ impl ImageRegistry for GhcrRegistry {
 /// Parse a `WWW-Authenticate: Bearer ...` header into `(realm, service, scope)`.
 ///
 /// Returns empty strings for any missing fields.
+#[must_use]
 pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
     let mut realm = String::new();
     let mut service = String::new();
@@ -495,34 +497,26 @@ pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
         // Parse the (possibly quoted) value.
         let value = if remaining.starts_with('"') {
             remaining = &remaining[1..];
-            match remaining.find('"') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    if remaining.starts_with(',') {
-                        remaining = &remaining[1..];
-                    }
-                    val
+            if let Some(end) = remaining.find('"') {
+                let val = remaining[..end].to_owned();
+                remaining = &remaining[end + 1..];
+                if remaining.starts_with(',') {
+                    remaining = &remaining[1..];
                 }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
+                val
+            } else {
+                let val = remaining.to_owned();
+                remaining = "";
+                val
             }
+        } else if let Some(end) = remaining.find(',') {
+            let val = remaining[..end].to_owned();
+            remaining = &remaining[end + 1..];
+            val
         } else {
-            match remaining.find(',') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    val
-                }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
-            }
+            let val = remaining.to_owned();
+            remaining = "";
+            val
         };
 
         match key {

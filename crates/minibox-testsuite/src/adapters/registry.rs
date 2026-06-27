@@ -22,10 +22,10 @@ fn rt() -> tokio::runtime::Runtime {
 
 pub struct PullIncrementsCount;
 impl ConformanceTest for PullIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pull_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -41,10 +41,10 @@ impl ConformanceTest for PullIncrementsCount {
 
 pub struct MultiplePullsIncrementCount;
 impl ConformanceTest for MultiplePullsIncrementCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "multiple_pulls_increment_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -63,10 +63,10 @@ impl ConformanceTest for MultiplePullsIncrementCount {
 
 pub struct HasImageAfterPull;
 impl ConformanceTest for HasImageAfterPull {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "has_image_after_pull"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -87,10 +87,10 @@ impl ConformanceTest for HasImageAfterPull {
 
 pub struct FreshRegistryHasNoImages;
 impl ConformanceTest for FreshRegistryHasNoImages {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "fresh_registry_has_no_images"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -109,10 +109,10 @@ impl ConformanceTest for FreshRegistryHasNoImages {
 
 pub struct PullFailureRegistryReturnsErr;
 impl ConformanceTest for PullFailureRegistryReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pull_failure_registry_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -128,10 +128,10 @@ impl ConformanceTest for PullFailureRegistryReturnsErr {
 
 pub struct PullCountIncrementedOnFailure;
 impl ConformanceTest for PullCountIncrementedOnFailure {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pull_count_incremented_on_failure"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "registry"
     }
     fn category(&self) -> TestCategory {
@@ -152,6 +152,7 @@ impl ConformanceTest for PullCountIncrementedOnFailure {
 }
 
 /// Return all registry conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(PullIncrementsCount),

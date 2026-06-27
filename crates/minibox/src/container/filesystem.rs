@@ -250,7 +250,6 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
 /// the kernel's sysfs interface. `proc`, `sysfs`, and `devtmpfs` are all
 /// mounted with `MS_NOSUID | MS_NODEV | MS_NOEXEC` where applicable to prevent
 /// privilege escalation.
-// qual:allow(complexity) reason: "sequential mount syscalls — splitting loses auditability"
 pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
     debug!(new_root = ?new_root, "pivot_root: starting");
 
@@ -383,7 +382,6 @@ pub fn apply_bind_mounts(
     Ok(())
 }
 
-// qual:allow(complexity) reason: "bind mount setup with security validation"
 fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -521,7 +519,6 @@ use crate::fs_util::{default_dev_symlinks, default_device_nodes};
 /// Called in the child init path after CLONE_NEWNS, before pivot_root.
 /// Uses the same approach as runc/libcontainer: tmpfs mount + explicit
 /// mknod calls. Works reliably at any nesting depth.
-// qual:allow(complexity) reason: "sequential device node creation"
 pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
     let dev_dir = rootfs.join("dev");
     fs::create_dir_all(&dev_dir).ok();
@@ -786,6 +783,8 @@ mod tests {
 
     // device node/symlink and copy_dir_recursive tests live in
     // crate::fs_util::tests (cross-platform, runs on macOS).
+    // Verified: fs_util::tests has device_nodes_complete, dev_symlinks_complete,
+    // and device_node_majmin_matches_linux_standard with equivalent coverage.
 
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
@@ -800,6 +799,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_mounts_directory() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -827,6 +828,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_read_only() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -900,6 +903,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_creates_target_dir() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }

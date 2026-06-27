@@ -76,6 +76,10 @@ impl DockerHubRegistry {
     ///
     /// Use this when the runtime always executes images for a fixed platform
     /// regardless of the host OS (e.g. krun runs Linux VMs on macOS).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be initialised.
     pub fn with_platform(
         store: Arc<ImageStore>,
         platform: crate::image::manifest::TargetPlatform,
@@ -89,7 +93,8 @@ impl DockerHubRegistry {
     /// Useful for callers that need direct store access (e.g. checking disk
     /// usage or performing manual cache cleanup) without going through the
     /// registry abstraction.
-    pub fn store(&self) -> &Arc<ImageStore> {
+    #[must_use]
+    pub const fn store(&self) -> &Arc<ImageStore> {
         &self.store
     }
 }
@@ -165,7 +170,7 @@ impl ImageRegistry for DockerHubRegistry {
 
         Ok(ImageMetadata {
             name: store_name,
-            tag: tag.to_string(),
+            tag: tag.clone(),
             layers,
         })
     }

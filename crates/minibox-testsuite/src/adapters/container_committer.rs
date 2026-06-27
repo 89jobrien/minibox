@@ -19,7 +19,7 @@ fn container_id() -> ContainerId {
     ContainerId::new("ccmt001abc".to_string()).expect("valid container id")
 }
 
-fn commit_config() -> CommitConfig {
+const fn commit_config() -> CommitConfig {
     CommitConfig {
         author: None,
         message: None,
@@ -32,13 +32,13 @@ fn commit_config() -> CommitConfig {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// commit succeeds and returns ImageMetadata with correct name/tag.
+/// commit succeeds and returns `ImageMetadata` with correct name/tag.
 pub struct CommitReturnsImageMetadata;
 impl ConformanceTest for CommitReturnsImageMetadata {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "commit_returns_image_metadata"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_committer"
     }
     fn category(&self) -> TestCategory {
@@ -58,10 +58,10 @@ impl ConformanceTest for CommitReturnsImageMetadata {
 /// commit increments the call count.
 pub struct CommitIncrementsCount;
 impl ConformanceTest for CommitIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "commit_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_committer"
     }
     fn category(&self) -> TestCategory {
@@ -79,10 +79,10 @@ impl ConformanceTest for CommitIncrementsCount {
 /// commit defaults to "latest" tag when no colon is present in target ref.
 pub struct CommitDefaultsToLatestTag;
 impl ConformanceTest for CommitDefaultsToLatestTag {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "commit_defaults_to_latest_tag"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_committer"
     }
     fn category(&self) -> TestCategory {
@@ -105,10 +105,10 @@ impl ConformanceTest for CommitDefaultsToLatestTag {
 /// commit returns Err when configured to fail.
 pub struct CommitFailureReturnsErr;
 impl ConformanceTest for CommitFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "commit_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "container_committer"
     }
     fn category(&self) -> TestCategory {
@@ -122,7 +122,8 @@ impl ConformanceTest for CommitFailureReturnsErr {
     }
 }
 
-/// Return all container_committer conformance tests.
+/// Return all `container_committer` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(CommitReturnsImageMetadata),

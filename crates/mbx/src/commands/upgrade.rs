@@ -75,7 +75,7 @@ where
     let latest = release.tag.trim_start_matches('v');
 
     if current == latest {
-        eprintln!("mbx is already up to date ({})", current_version);
+        eprintln!("mbx is already up to date ({current_version})");
         return Ok(());
     }
 
@@ -201,10 +201,7 @@ impl ReleaseProvider for GitHubReleaseProvider {
         target_triple: &str,
     ) -> Result<ReleaseInfo> {
         let url = match version {
-            Some(v) => format!(
-                "https://api.github.com/repos/89jobrien/minibox/releases/tags/{}",
-                v
-            ),
+            Some(v) => format!("https://api.github.com/repos/89jobrien/minibox/releases/tags/{v}"),
             None => "https://api.github.com/repos/89jobrien/minibox/releases/latest".to_string(),
         };
 
@@ -224,14 +221,14 @@ impl ReleaseProvider for GitHubReleaseProvider {
             .context("missing tag_name in GitHub response")?
             .to_string();
 
-        let expected_name = format!("minibox-{}.tar.gz", target_triple);
+        let expected_name = format!("minibox-{target_triple}.tar.gz");
         let asset_url = body["assets"]
             .as_array()
             .context("missing assets array")?
             .iter()
             .find(|a| a["name"].as_str() == Some(&expected_name))
             .and_then(|a| a["browser_download_url"].as_str())
-            .with_context(|| format!("no asset named {} in release {}", expected_name, tag))?
+            .with_context(|| format!("no asset named {expected_name} in release {tag}"))?
             .to_string();
 
         Ok(ReleaseInfo { tag, asset_url })

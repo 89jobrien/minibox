@@ -1,4 +1,5 @@
 //! Mock [`VmCheckpoint`] for conformance testing.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
 use minibox_core::domain::{SnapshotInfo, VmCheckpoint};

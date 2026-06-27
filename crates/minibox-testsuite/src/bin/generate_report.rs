@@ -1,4 +1,5 @@
-//! `generate-report` — run all conformance tests and write JSON + JUnit XML reports.
+//! `generate-report` — run all conformance tests and write JSON + `JUnit` XML reports.
+#![allow(clippy::expect_used)]
 //!
 //! Reports are written to `artifacts/conformance/` (created if absent).
 //! Override with `CONFORMANCE_ARTIFACT_DIR`.
@@ -16,8 +17,7 @@ use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
 
 fn main() {
     let artifact_dir = std::env::var("CONFORMANCE_ARTIFACT_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("artifacts/conformance"));
+        .map_or_else(|_| PathBuf::from("artifacts/conformance"), PathBuf::from);
 
     fs::create_dir_all(&artifact_dir).expect("create artifact dir");
 

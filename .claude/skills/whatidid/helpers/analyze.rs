@@ -8,7 +8,7 @@
 //! Caches the result to ~/.claude/skills/whatidid/cache/YYYY-MM-DD.json.
 //! Emits the digest JSON to stdout.
 //!
-//! Requires: OPENAI_API_KEY in environment (or via op run).
+//! Requires: ANTHROPIC_API_KEY in environment (or via op run).
 //!
 //! Cache encryption: if WHATIDID_CACHE_KEY is set, cache files are encrypted
 //! at rest using AES-256-GCM with a key derived from the env var via SHA-256.
@@ -119,23 +119,24 @@ fn main() -> Result<()> {
     let analysis_prompt = load_analysis_prompt()?;
     let prompt = analysis_prompt.replace("{transcript}", &transcript);
 
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .context("OPENAI_API_KEY not set — run via: op run -- analyze.rs ...")?;
+    let api_key = std::env::var("ANTHROPIC_API_KEY")
+        .context("ANTHROPIC_API_KEY not set — run via: op run -- analyze.rs ...")?;
 
-    let response = ureq::post("https://api.openai.com/v1/chat/completions")
-        .set("Authorization", &format!("Bearer {api_key}"))
+    let response = ureq::post("https://api.anthropic.com/v1/messages")
+        .set("x-api-key", &api_key)
+        .set("anthropic-version", "2023-06-01")
         .set("content-type", "application/json")
         .send_json(json!({
-            "model": "gpt-4o-mini",
-            "max_tokens": 4096,
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 8192,
             "messages": [{"role": "user", "content": prompt}]
         }))
-        .context("OpenAI API call failed")?;
+        .context("Anthropic API call failed")?;
 
     let body: Value = response.into_json().context("parse API response")?;
-    let content_raw = body["choices"][0]["message"]["content"]
+    let content_raw = body["content"][0]["text"]
         .as_str()
-        .context("missing choices[0].message.content in response")?;
+        .context("missing content[0].text in response")?;
 
     // Strip markdown fences if present (gpt-4o-mini wraps despite prompt instruction)
     let content = content_raw

@@ -17,6 +17,7 @@ pub use crux_plugin::protocol;
 // ── Handler declarations ───────────────────────────────────────────────────────
 
 /// All handlers exposed by this plugin, in declaration order.
+#[must_use]
 pub fn handler_decls() -> Vec<HandlerDecl> {
     vec![
         HandlerDecl {
@@ -108,6 +109,9 @@ pub async fn dispatch(handler: &str, input: Value) -> Result<Value> {
                 | DaemonResponse::ContainerStopped { .. }
                 | DaemonResponse::ContainerCreated { .. }
                 | DaemonResponse::ContainerList { .. }
+                | DaemonResponse::BuildComplete { .. }
+                | DaemonResponse::PipelineComplete { .. }
+                | DaemonResponse::WorkflowComplete { .. }
         );
         let json = serde_json::to_value(&resp).context("serialize DaemonResponse")?;
         responses.push(json);
@@ -148,7 +152,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 ephemeral: false,
                 network: None,
                 mounts,
-                privileged: false,
+                privileged: input["privileged"].as_bool().unwrap_or(false),
                 env,
                 name,
                 tty: false,
@@ -307,22 +311,25 @@ pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
 pub fn str_field(v: &Value, key: &str) -> Result<String> {
     v[key]
         .as_str()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .ok_or_else(|| anyhow::anyhow!("missing or non-string field '{key}'"))
 }
 
+#[must_use]
 pub fn opt_str_field(v: &Value, key: &str) -> Option<String> {
-    v[key].as_str().map(|s| s.to_string())
+    v[key].as_str().map(std::string::ToString::to_string)
 }
 
+#[must_use]
 pub fn opt_u64_field(v: &Value, key: &str) -> Option<u64> {
     v[key].as_u64()
 }
 
+#[must_use]
 pub fn str_array_field(v: &Value, key: &str) -> Option<Vec<String>> {
     v[key].as_array().map(|arr| {
         arr.iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .filter_map(|x| x.as_str().map(std::string::ToString::to_string))
             .collect()
     })
 }

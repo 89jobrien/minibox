@@ -10,24 +10,22 @@ use crate::daemon::state::DaemonState;
 use super::{HandlerDependencies, send_error};
 
 /// Retrieve the execution manifest for a container.
-// qual:allow(complexity) reason: "manifest retrieval with fallback paths"
 pub async fn handle_get_manifest(
     id: String,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    let record = match state.get_container(&id).await {
-        Some(r) => r,
-        None => {
-            send_error(
-                &tx,
-                "handle_get_manifest",
-                format!("container not found: {id}"),
-            )
-            .await;
-            return;
-        }
+    let record = if let Some(r) = state.get_container(&id).await {
+        r
+    } else {
+        send_error(
+            &tx,
+            "handle_get_manifest",
+            format!("container not found: {id}"),
+        )
+        .await;
+        return;
     };
 
     let manifest_path = match record.manifest_path {
@@ -95,7 +93,6 @@ pub async fn handle_get_manifest(
 }
 
 /// Verify a container's execution manifest against an execution policy.
-// qual:allow(complexity) reason: "manifest verification with policy evaluation"
 pub async fn handle_verify_manifest(
     id: String,
     policy_json: String,
@@ -105,17 +102,16 @@ pub async fn handle_verify_manifest(
 ) {
     use minibox_core::domain::{ExecutionManifest, ExecutionPolicy, PolicyDecision};
 
-    let record = match state.get_container(&id).await {
-        Some(r) => r,
-        None => {
-            send_error(
-                &tx,
-                "handle_verify_manifest",
-                format!("container not found: {id}"),
-            )
-            .await;
-            return;
-        }
+    let record = if let Some(r) = state.get_container(&id).await {
+        r
+    } else {
+        send_error(
+            &tx,
+            "handle_verify_manifest",
+            format!("container not found: {id}"),
+        )
+        .await;
+        return;
     };
 
     let manifest_path = match record.manifest_path {

@@ -8,7 +8,7 @@
 //! The daemon supports multiple adapter suites selected via the
 //! `MINIBOX_ADAPTER` environment variable (default: `smolvm`, fallback: `krun`):
 //!
-//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform. Falls back to krun
+//! - **smolvm** (default): `SmolVM` lightweight Linux VMs. Cross-platform. Falls back to krun
 //!   automatically when the `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 //! - **krun** (fallback): libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
@@ -32,24 +32,37 @@ async fn main() -> anyhow::Result<()> {
 // ── Unix (Linux + macOS) ──────────────────────────────────────────────────
 #[cfg(unix)]
 fn main() {
-    // Parse --restart flag before building the tokio runtime.
+    // Parse CLI flags before building the tokio runtime.
     let args: Vec<String> = std::env::args().collect();
-    let restart = args.iter().any(|a| a == "--restart");
+    let cli = parse_cli_args(&args);
 
-    if restart {
+    if cli.restart {
         graceful_restart();
     }
 
     // Load config and bridge adapter into env before the runtime starts.
     // SAFETY: single-threaded — no tokio workers exist yet.
     let config = miniboxd::config::DaemonConfig::load();
-    if let Some(ref adapter) = config.adapter
+
+    // Priority: --adapter CLI flag > MINIBOX_ADAPTER env var > config.adapter > auto-detect.
+    if let Some(ref adapter_name) = cli.adapter {
+        // Validate early so we fail before spawning the runtime.
+        if let Err(e) = miniboxd::adapter_registry::validate_adapter_name(adapter_name.as_str()) {
+            eprintln!("miniboxd: --adapter: {e}");
+            std::process::exit(1);
+        }
+        // SAFETY: single-threaded — no tokio workers exist yet; CLI flag takes precedence.
+        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter_name) };
+    } else if let Some(ref adapter) = config.adapter
         && std::env::var("MINIBOX_ADAPTER").is_err()
     {
+        // SAFETY: single-threaded — no tokio workers exist yet.
         unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
     }
 
     // Standard tokio runtime for all adapters.
+    // Runtime build failure is fatal with no recovery path.
+    #[allow(clippy::expect_used)]
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -91,6 +104,62 @@ fn graceful_restart() {
             eprintln!("miniboxd: --restart: pkill failed: {e} (continuing)");
         }
     }
+}
+
+// ── CLI argument parsing ──────────────────────────────────────────────────
+
+/// Parsed command-line arguments for miniboxd.
+#[cfg(unix)]
+struct CliArgs {
+    /// Whether `--restart` was passed: send SIGTERM to any running miniboxd first.
+    restart: bool,
+    /// Adapter name from `--adapter <name>`, if provided.
+    ///
+    /// When set, takes precedence over both the `MINIBOX_ADAPTER` environment variable
+    /// and the `adapter` field in the daemon config file.
+    adapter: Option<String>,
+}
+
+/// Parse miniboxd CLI flags from the raw argument list.
+///
+/// Recognised flags:
+/// - `--restart`            — graceful restart mode
+/// - `--adapter <name>`     — override adapter selection
+///
+/// Unknown flags are silently ignored so future flags can be added without
+/// breaking existing scripts that may pass extra arguments.
+#[cfg(unix)]
+fn parse_cli_args(args: &[String]) -> CliArgs {
+    let mut restart = false;
+    let mut adapter: Option<String> = None;
+
+    let mut i = 1usize; // skip argv[0]
+    while i < args.len() {
+        match args[i].as_str() {
+            "--restart" => {
+                restart = true;
+            }
+            "--adapter" => {
+                i += 1;
+                if i < args.len() {
+                    adapter = Some(args[i].clone());
+                } else {
+                    eprintln!("miniboxd: --adapter requires a value");
+                    std::process::exit(1);
+                }
+            }
+            _ => {
+                // Also handle `--adapter=<name>` form.
+                if let Some(val) = args[i].strip_prefix("--adapter=") {
+                    adapter = Some(val.to_string());
+                }
+                // Unknown flags are ignored.
+            }
+        }
+        i += 1;
+    }
+
+    CliArgs { restart, adapter }
 }
 
 // ── Imports (unix only) ───────────────────────────────────────────────────
@@ -172,16 +241,13 @@ struct DaemonPaths {
 #[cfg(unix)]
 fn resolve_paths() -> DaemonPaths {
     let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_data_dir());
+        .map_or_else(|_| resolve_default_data_dir(), PathBuf::from);
 
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_run_dir());
+    let run_dir =
+        std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| resolve_default_run_dir(), PathBuf::from);
 
     let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| run_dir.join("miniboxd.sock"));
+        .map_or_else(|_| run_dir.join("miniboxd.sock"), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");
@@ -237,16 +303,17 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
     if uid == 0 {
         PathBuf::from("/var/lib/minibox")
     } else {
-        std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join(".minibox/cache"))
-            .unwrap_or_else(|_| PathBuf::from("/var/lib/minibox"))
+        std::env::var("HOME").map_or_else(
+            |_| PathBuf::from("/var/lib/minibox"),
+            |h| PathBuf::from(h).join(".minibox/cache"),
+        )
     }
 }
 
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
-// qual:allow(complexity) reason: "daemon startup: tracing, paths, adapter selection, accept loop"
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
@@ -430,15 +497,14 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
             let group_name = group_name.trim();
             if !group_name.is_empty() {
-                match nix::unistd::Group::from_name(group_name)
+                if let Some(group) = nix::unistd::Group::from_name(group_name)
                     .with_context(|| format!("looking up group {group_name}"))?
                 {
-                    Some(group) => {
-                        nix::unistd::chown(sock_path, None, Some(group.gid))
-                            .with_context(|| format!("setting socket group to {group_name}"))?;
-                        info!("socket group set to {group_name}");
-                    }
-                    None => warn!("MINIBOX_SOCKET_GROUP={group_name} not found"),
+                    nix::unistd::chown(sock_path, None, Some(group.gid))
+                        .with_context(|| format!("setting socket group to {group_name}"))?;
+                    info!("socket group set to {group_name}");
+                } else {
+                    warn!("MINIBOX_SOCKET_GROUP={group_name} not found");
                 }
             }
         }
@@ -484,8 +550,21 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 }
 
 // ── Handler dependency builders (per adapter suite) ───────────────────────
+//
+// TODO: centralize adapter registration into a shared builder (#161)
+//
+// Each `build_*_handler_dependencies` function below constructs a
+// `HandlerDependencies` struct for one adapter suite.  A second copy of
+// `build_colima_handler_dependencies` lives in `crates/macbox/src/lib.rs`
+// for the legacy macOS-only daemon path.  To centralize:
+//   1. Move all `build_*_handler_dependencies` fns into a new crate or
+//      module (e.g. `minibox-adapters` or `miniboxd::adapter_builders`).
+//   2. Remove the duplicate in `macbox/src/lib.rs` and have it call the
+//      shared builder instead.
+//   3. Update `HandlerDependencies` construction sites in tests accordingly.
 
 #[cfg(unix)]
+#[allow(clippy::unused_async)]
 // qual:allow(srp) reason: "adapter suite dispatch — params are inherent wiring"
 async fn build_handler_deps(
     suite: AdapterSuite,
@@ -562,6 +641,7 @@ async fn build_handler_deps(
 // ── Native adapter (Linux only) ──────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
+// qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
 async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
@@ -1227,5 +1307,59 @@ mod tests {
         assert!(deps.build.commit_adapter.is_none());
         // No image builder wired for GKE
         assert!(deps.build.image_builder.is_none());
+    }
+}
+
+// ── CLI argument parser tests ─────────────────────────────────────────────
+
+#[cfg(all(unix, test))]
+mod cli_args_tests {
+    use super::parse_cli_args;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        std::iter::once("miniboxd")
+            .chain(v.iter().copied())
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn no_args_yields_defaults() {
+        let cli = parse_cli_args(&args(&[]));
+        assert!(!cli.restart);
+        assert!(cli.adapter.is_none());
+    }
+
+    #[test]
+    fn restart_flag_is_parsed() {
+        let cli = parse_cli_args(&args(&["--restart"]));
+        assert!(cli.restart);
+        assert!(cli.adapter.is_none());
+    }
+
+    #[test]
+    fn adapter_space_form_is_parsed() {
+        let cli = parse_cli_args(&args(&["--adapter", "krun"]));
+        assert!(!cli.restart);
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+
+    #[test]
+    fn adapter_equals_form_is_parsed() {
+        let cli = parse_cli_args(&args(&["--adapter=smolvm"]));
+        assert_eq!(cli.adapter.as_deref(), Some("smolvm"));
+    }
+
+    #[test]
+    fn restart_and_adapter_together() {
+        let cli = parse_cli_args(&args(&["--restart", "--adapter", "krun"]));
+        assert!(cli.restart);
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+
+    #[test]
+    fn unknown_flags_are_ignored() {
+        let cli = parse_cli_args(&args(&["--unknown-flag", "--adapter", "krun"]));
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
     }
 }

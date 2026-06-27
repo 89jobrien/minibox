@@ -15,13 +15,7 @@ use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::setup_test_vm;
-
-const TARGET: &str = "aarch64-unknown-linux-musl";
-
-/// Options parsed from CLI args.
-/// Path to the CI-gate smolfile used by the smolvm backend.
-const CI_GATE_SMOLFILE: &str = "tests/smolfiles/ci-gate.smolfile";
+use crate::xconfig::XConfig;
 
 pub struct Options {
     /// Skip cross-compilation (assume binaries already built).
@@ -66,51 +60,55 @@ enum VmBackend {
 
 impl VmBackend {
     /// Whether this backend supports privileged operations (cgroups, overlayfs).
-    fn is_privileged(&self) -> bool {
-        matches!(self, VmBackend::Minibox(_))
+    const fn is_privileged(&self) -> bool {
+        matches!(self, Self::Minibox(_))
     }
 
     /// Whether this backend has Rust toolchain pre-installed.
-    fn has_rust(&self) -> bool {
-        matches!(self, VmBackend::SmolvmPersistent(_))
+    const fn has_rust(&self) -> bool {
+        matches!(self, Self::SmolvmPersistent(_))
     }
 }
 
 pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
-    let backend = detect_backend()?;
+    let cfg = XConfig::load(workspace_root)?;
+    let target = &cfg.cross.target;
+    let vm_name = &cfg.vm.name;
+    let ci_gate_smolfile = &cfg.vm.ci_gate_smolfile;
+
+    let backend = detect_backend(vm_name)?;
 
     // Persistent VM path: mount workspace, run cargo test directly (no cross-compile)
     if backend.has_rust() {
-        return run_persistent(&backend, workspace_root, opts);
+        return run_persistent(&backend, workspace_root, opts, vm_name);
     }
 
     // Ephemeral path: cross-compile, mount binaries, run pre-compiled tests
-    run_ephemeral(&backend, workspace_root, opts)
+    run_ephemeral(&backend, workspace_root, opts, target, ci_gate_smolfile)
 }
 
 /// Run tests via a pre-provisioned persistent smolvm machine.
 ///
 /// The machine already has Rust toolchain installed. We mount the workspace
 /// and run cargo commands directly — no cross-compilation needed.
-fn run_persistent(backend: &VmBackend, _workspace_root: &Path, opts: &Options) -> Result<()> {
+fn run_persistent(
+    backend: &VmBackend,
+    _workspace_root: &Path,
+    opts: &Options,
+    vm_name: &str,
+) -> Result<()> {
     let VmBackend::SmolvmPersistent(bin) = backend else {
         bail!("run_persistent called with non-persistent backend");
     };
 
     // Ensure machine is running
-    println!(
-        "[1/2] ensuring '{vm}' is running ...",
-        vm = setup_test_vm::VM_NAME
-    );
+    println!("[1/2] ensuring '{vm_name}' is running ...");
     let status = Command::new(bin)
-        .args(["machine", "start", "--name", setup_test_vm::VM_NAME])
+        .args(["machine", "start", "--name", vm_name])
         .status()
         .context("starting persistent machine")?;
     if !status.success() {
-        bail!(
-            "failed to start '{}' — run `cargo xtask setup-test-vm` first",
-            setup_test_vm::VM_NAME
-        );
+        bail!("failed to start '{vm_name}' — run `cargo xtask setup-test-vm` first");
     }
 
     // Build cargo test command
@@ -152,14 +150,11 @@ echo "test-in-vm: all tests passed"
         },
     );
 
-    println!(
-        "[2/2] running tests in '{vm}' ...",
-        vm = setup_test_vm::VM_NAME
-    );
+    println!("[2/2] running tests in '{vm_name}' ...");
     // Volume is already mounted via create-time -v flag.
     // Use -t for TTY allocation so cargo progress output streams live.
     let status = Command::new(bin)
-        .args(["machine", "exec", "-t", "--name", setup_test_vm::VM_NAME])
+        .args(["machine", "exec", "-t", "--name", vm_name])
         .args(["--", "/bin/sh", "-c", &script])
         .status()
         .context("exec in persistent machine")?;
@@ -174,21 +169,26 @@ echo "test-in-vm: all tests passed"
 }
 
 /// Run tests via ephemeral VM with cross-compiled binaries.
-fn run_ephemeral(backend: &VmBackend, workspace_root: &Path, opts: &Options) -> Result<()> {
+fn run_ephemeral(
+    backend: &VmBackend,
+    workspace_root: &Path,
+    opts: &Options,
+    target: &str,
+    ci_gate_smolfile: &str,
+) -> Result<()> {
     let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace_root.join("target"));
+        .map_or_else(|_| workspace_root.join("target"), PathBuf::from);
 
     // 1. Cross-compile
     if opts.skip_build {
         println!("[1/3] skipping build (--skip-build)");
     } else {
-        println!("[1/3] cross-compiling for {TARGET} ...");
-        cross_compile(workspace_root)?;
+        println!("[1/3] cross-compiling for {target} ...");
+        cross_compile(workspace_root, target)?;
     }
 
     // 2. Locate test binaries
-    let deps_dir = target_dir.join(TARGET).join("debug").join("deps");
+    let deps_dir = target_dir.join(target).join("debug").join("deps");
     if !deps_dir.exists() {
         bail!(
             "deps dir not found: {}\nRun without --skip-build first.",
@@ -197,7 +197,7 @@ fn run_ephemeral(backend: &VmBackend, workspace_root: &Path, opts: &Options) -> 
     }
 
     // 3. Build the test runner script
-    let script = build_test_script(&deps_dir, &opts.test_args, backend.is_privileged())?;
+    let script = build_test_script(&deps_dir, &opts.test_args, backend.is_privileged(), target)?;
     let script_path = target_dir.join("test-in-vm-runner.sh");
     std::fs::write(&script_path, &script).context("writing test runner script")?;
 
@@ -216,13 +216,10 @@ fn run_ephemeral(backend: &VmBackend, workspace_root: &Path, opts: &Options) -> 
             c
         }
         VmBackend::Smolvm(bin) => {
-            let smolfile = opts.smolfile.as_deref().unwrap_or(CI_GATE_SMOLFILE);
+            let smolfile = opts.smolfile.as_deref().unwrap_or(ci_gate_smolfile);
             let smolfile_path = workspace_root.join(smolfile);
             if smolfile_path.exists() {
-                println!(
-                    "[2/3] booting smolvm VM (unprivileged) via {} ...",
-                    smolfile
-                );
+                println!("[2/3] booting smolvm VM (unprivileged) via {smolfile} ...");
                 let mut c = Command::new(bin);
                 c.args([
                     "machine",
@@ -239,8 +236,7 @@ fn run_ephemeral(backend: &VmBackend, workspace_root: &Path, opts: &Options) -> 
                 c
             } else {
                 println!(
-                    "[2/3] booting smolvm VM (unprivileged, inline — {} not found) ...",
-                    smolfile
+                    "[2/3] booting smolvm VM (unprivileged, inline — {smolfile} not found) ..."
                 );
                 let mut c = Command::new(bin);
                 c.args(["machine", "run", "--net", "--image", "alpine"]);
@@ -284,8 +280,7 @@ fn which_bin(name: &str) -> Option<PathBuf> {
 fn env_flag(var: &str) -> bool {
     std::env::var(var)
         .ok()
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+        .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Returns `true` when both `MINIBOX_ALLOW_BIND_MOUNTS` and
@@ -316,15 +311,12 @@ fn minibox_policy_allows() -> bool {
 ///
 /// Persistent smolvm is preferred because it has Rust toolchain pre-installed
 /// and avoids cross-compilation entirely.
-fn detect_backend() -> Result<VmBackend> {
+fn detect_backend(vm_name: &str) -> Result<VmBackend> {
     // Persistent smolvm machine first — has Rust, no cross-compile needed
     if let Some(path) = which_bin("smolvm")
-        && persistent_machine_exists(&path)?
+        && persistent_machine_exists(&path, vm_name)?
     {
-        println!(
-            "detected persistent '{vm}' — using native cargo test (no cross-compile)",
-            vm = setup_test_vm::VM_NAME
-        );
+        println!("detected persistent '{vm_name}' — using native cargo test (no cross-compile)");
         return Ok(VmBackend::SmolvmPersistent(path));
     }
     // minibox with privileged mode (requires running daemon with policy flags)
@@ -340,31 +332,29 @@ fn detect_backend() -> Result<VmBackend> {
     bail!("neither minibox nor smolvm found on PATH. Install one first.");
 }
 
-fn persistent_machine_exists(smolvm: &Path) -> Result<bool> {
+fn persistent_machine_exists(smolvm: &Path, vm_name: &str) -> Result<bool> {
     let output = Command::new(smolvm)
         .args(["machine", "list"])
         .output()
         .context("smolvm machine list")?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout
-        .lines()
-        .any(|line| line.starts_with(setup_test_vm::VM_NAME)))
+    Ok(stdout.lines().any(|line| line.starts_with(vm_name)))
 }
 
-fn cross_compile(workspace_root: &Path) -> Result<()> {
+fn cross_compile(workspace_root: &Path, target: &str) -> Result<()> {
     // TODO(#443): support cross-rs as an alternative to raw musl-gcc (like youki does)
     //       for zero-setup cross-compilation.
     let cc = "aarch64-linux-musl-gcc";
-    let cc_env = format!("CC_{}", TARGET.replace('-', "_"));
+    let cc_env = format!("CC_{}", target.replace('-', "_"));
     let linker_env = format!(
         "CARGO_TARGET_{}_LINKER",
-        TARGET.to_uppercase().replace('-', "_")
+        target.to_uppercase().replace('-', "_")
     );
 
     // Cross-compile miniboxd binary (needed by e2e/system tests)
     println!("  compiling miniboxd binary ...");
     let status = Command::new("cargo")
-        .args(["build", "-p", "miniboxd", "--target", TARGET])
+        .args(["build", "-p", "miniboxd", "--target", target])
         .env(&cc_env, cc)
         .env(&linker_env, cc)
         .current_dir(workspace_root)
@@ -378,7 +368,7 @@ fn cross_compile(workspace_root: &Path) -> Result<()> {
     // suites (cgroup, integration, sandbox, system, e2e).
     println!("  compiling miniboxd tests ...");
     let status = Command::new("cargo")
-        .args(["test", "--no-run", "-p", "miniboxd", "--target", TARGET])
+        .args(["test", "--no-run", "-p", "miniboxd", "--target", target])
         .env(&cc_env, cc)
         .env(&linker_env, cc)
         .current_dir(workspace_root)
@@ -391,7 +381,12 @@ fn cross_compile(workspace_root: &Path) -> Result<()> {
 }
 
 /// Find test binaries in the deps dir and build a shell script to run them.
-fn build_test_script(deps_dir: &Path, extra_args: &[String], privileged: bool) -> Result<String> {
+fn build_test_script(
+    deps_dir: &Path,
+    extra_args: &[String],
+    privileged: bool,
+    target: &str,
+) -> Result<String> {
     // TODO(#444): add sandbox_tests, system_tests, cli_e2e_tests once minibox
     //       backend is validated end-to-end with privileged mode.
     let mut suites = vec!["integration_tests"];
@@ -462,13 +457,13 @@ fn build_test_script(deps_dir: &Path, extra_args: &[String], privileged: bool) -
     script.push_str("set -e\n\n");
 
     // Set bin dir for e2e tests that need miniboxd/minibox binaries
-    let bin_dir = format!("/mnt/tests/{TARGET}/debug");
+    let bin_dir = format!("/mnt/tests/{target}/debug");
     script.push_str(&format!("export MINIBOX_TEST_BIN_DIR={bin_dir}\n\n"));
 
     script.push_str("PASS=0\nFAIL=0\n\n");
 
     for (suite, binary) in &found {
-        let bin_path = format!("/mnt/tests/{TARGET}/debug/deps/{binary}");
+        let bin_path = format!("/mnt/tests/{target}/debug/deps/{binary}");
         let ignored_flag = if ignored_suites.contains(&suite.as_str()) {
             " --ignored"
         } else {
@@ -522,14 +517,19 @@ mod tests {
 
     #[test]
     fn build_test_script_fails_on_missing_dir() {
-        let result = build_test_script(Path::new("/nonexistent"), &[], true);
+        let result = build_test_script(
+            Path::new("/nonexistent"),
+            &[],
+            true,
+            "aarch64-unknown-linux-musl",
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn build_test_script_fails_on_empty_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = build_test_script(tmp.path(), &[], true);
+        let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
     }
@@ -574,14 +574,15 @@ mod tests {
     }
 
     #[test]
-    fn ci_gate_smolfile_constant_matches_real_file() {
+    fn ci_gate_smolfile_from_xconfig_matches_real_file() {
         let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("workspace root");
+        let cfg = XConfig::load(ws).expect("load xconfig");
         assert!(
-            ws.join(CI_GATE_SMOLFILE).exists(),
-            "CI_GATE_SMOLFILE constant points to missing file: {}",
-            CI_GATE_SMOLFILE
+            ws.join(&cfg.vm.ci_gate_smolfile).exists(),
+            "xconfig vm.ci_gate_smolfile points to missing file: {}",
+            cfg.vm.ci_gate_smolfile
         );
     }
 

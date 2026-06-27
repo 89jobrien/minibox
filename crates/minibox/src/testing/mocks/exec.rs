@@ -1,4 +1,5 @@
 //! Mock implementation of [`ExecRuntime`].
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
 use async_trait::async_trait;

@@ -26,10 +26,10 @@ fn default_config() -> NetworkConfig {
 /// setup returns a non-empty netns path.
 pub struct SetupReturnsNetnsPath;
 impl ConformanceTest for SetupReturnsNetnsPath {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_returns_netns_path"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "network"
     }
     fn category(&self) -> TestCategory {
@@ -48,10 +48,10 @@ impl ConformanceTest for SetupReturnsNetnsPath {
 /// setup increments the call count.
 pub struct SetupIncrementsCount;
 impl ConformanceTest for SetupIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "network"
     }
     fn category(&self) -> TestCategory {
@@ -68,10 +68,10 @@ impl ConformanceTest for SetupIncrementsCount {
 /// cleanup increments the cleanup count.
 pub struct CleanupIncrementsCount;
 impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cleanup_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "network"
     }
     fn category(&self) -> TestCategory {
@@ -88,10 +88,10 @@ impl ConformanceTest for CleanupIncrementsCount {
 /// setup returns Err when configured to fail.
 pub struct SetupFailureReturnsErr;
 impl ConformanceTest for SetupFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "setup_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "network"
     }
     fn category(&self) -> TestCategory {
@@ -111,10 +111,10 @@ impl ConformanceTest for SetupFailureReturnsErr {
 /// cleanup returns Err when configured to fail.
 pub struct CleanupFailureReturnsErr;
 impl ConformanceTest for CleanupFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "cleanup_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "network"
     }
     fn category(&self) -> TestCategory {
@@ -132,6 +132,7 @@ impl ConformanceTest for CleanupFailureReturnsErr {
 }
 
 /// Return all network conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(SetupReturnsNetnsPath),

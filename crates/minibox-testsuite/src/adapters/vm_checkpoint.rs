@@ -20,13 +20,13 @@ fn snap_path() -> PathBuf {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// save_snapshot succeeds and returns SnapshotInfo with matching container_id.
+/// `save_snapshot` succeeds and returns `SnapshotInfo` with matching `container_id`.
 pub struct SaveSnapshotReturnsInfo;
 impl ConformanceTest for SaveSnapshotReturnsInfo {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "save_snapshot_returns_info"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -46,13 +46,13 @@ impl ConformanceTest for SaveSnapshotReturnsInfo {
     }
 }
 
-/// save_snapshot increments the stored snapshot count.
+/// `save_snapshot` increments the stored snapshot count.
 pub struct SaveSnapshotIncrementsCount;
 impl ConformanceTest for SaveSnapshotIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "save_snapshot_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -70,13 +70,13 @@ impl ConformanceTest for SaveSnapshotIncrementsCount {
     }
 }
 
-/// list_snapshots returns only snapshots for the requested container.
+/// `list_snapshots` returns only snapshots for the requested container.
 pub struct ListSnapshotsFiltersByContainerId;
 impl ConformanceTest for ListSnapshotsFiltersByContainerId {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_snapshots_filters_by_container_id"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -101,13 +101,13 @@ impl ConformanceTest for ListSnapshotsFiltersByContainerId {
     }
 }
 
-/// list_snapshots returns empty for an unknown container.
+/// `list_snapshots` returns empty for an unknown container.
 pub struct ListSnapshotsEmptyForUnknown;
 impl ConformanceTest for ListSnapshotsEmptyForUnknown {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "list_snapshots_empty_for_unknown"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -125,13 +125,13 @@ impl ConformanceTest for ListSnapshotsEmptyForUnknown {
     }
 }
 
-/// restore_snapshot succeeds after a prior save.
+/// `restore_snapshot` succeeds after a prior save.
 pub struct RestoreSnapshotSucceedsAfterSave;
 impl ConformanceTest for RestoreSnapshotSucceedsAfterSave {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "restore_snapshot_succeeds_after_save"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -147,13 +147,13 @@ impl ConformanceTest for RestoreSnapshotSucceedsAfterSave {
     }
 }
 
-/// restore_snapshot returns Err when no snapshot exists.
+/// `restore_snapshot` returns Err when no snapshot exists.
 pub struct RestoreSnapshotFailsWithoutSave;
 impl ConformanceTest for RestoreSnapshotFailsWithoutSave {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "restore_snapshot_fails_without_save"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "vm_checkpoint"
     }
     fn category(&self) -> TestCategory {
@@ -170,7 +170,8 @@ impl ConformanceTest for RestoreSnapshotFailsWithoutSave {
     }
 }
 
-/// Return all vm_checkpoint conformance tests.
+/// Return all `vm_checkpoint` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(SaveSnapshotReturnsInfo),

@@ -8,9 +8,8 @@ description = "Cross-platform shared types, domain traits, and protocol for the 
 repository.workspace = true
 homepage.workspace = true
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
-
+[lints]
+workspace = true
 [features]
 # Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
 # dev-dependencies of other crates without cfg(test) restrictions.

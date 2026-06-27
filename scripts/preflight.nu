@@ -42,7 +42,7 @@ let results = [
     (check "CARGO_TARGET_DIR set" ($env | get -o CARGO_TARGET_DIR | is-not-empty)),
     (check "xtask available" (
         ((do { cargo metadata --no-deps --format-version 1 } | complete | get exit_code) == 0)
-        and ("crates/xtask/Cargo.toml" | path exists)
+        and ("xtask/Cargo.toml" | path exists)
     )),
     (check "op on PATH" ((which op | length) > 0)),
     (check "1Password authed" ((do { op account list } | complete | get exit_code) == 0)),

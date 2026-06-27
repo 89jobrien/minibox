@@ -8,7 +8,9 @@
 //!   223      update_container_state: container not found (no-op)
 //!   231      update_container_state: Stopped → clears pid fields
 
-use minibox::daemon::state::{ContainerRecord, ContainerState, DaemonState, ProcessChecker};
+use minibox::daemon::state::{
+    CgroupFreezeChecker, ContainerRecord, ContainerState, DaemonState, ProcessChecker,
+};
 use minibox_core::image::ImageStore;
 use minibox_core::protocol::ContainerInfo;
 use std::path::PathBuf;
@@ -19,6 +21,13 @@ struct DeadProcessChecker;
 
 impl ProcessChecker for DeadProcessChecker {
     fn is_alive(&self, _pid: u32) -> bool {
+        false
+    }
+}
+
+struct NeverFrozenChecker;
+impl CgroupFreezeChecker for NeverFrozenChecker {
+    fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
         false
     }
 }
@@ -102,7 +111,9 @@ async fn test_load_from_disk_marks_stale_running_as_stopped() {
 
     let state = make_state(&tmp);
     state.load_from_disk().await;
-    state.reconcile_on_startup(&DeadProcessChecker).await;
+    state
+        .reconcile_on_startup(&DeadProcessChecker, &NeverFrozenChecker)
+        .await;
 
     let containers = state.list_containers().await;
     assert_eq!(containers.len(), 1, "expected one container to be loaded");
@@ -183,7 +194,9 @@ async fn test_load_from_disk_mixed_states_all_stale_become_stopped() {
 
     let state = make_state(&tmp);
     state.load_from_disk().await;
-    state.reconcile_on_startup(&DeadProcessChecker).await;
+    state
+        .reconcile_on_startup(&DeadProcessChecker, &NeverFrozenChecker)
+        .await;
 
     let containers = state.list_containers().await;
     assert_eq!(containers.len(), 3);

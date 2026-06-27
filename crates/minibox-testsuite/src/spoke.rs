@@ -35,6 +35,7 @@ pub struct SpokeRegistry {
 
 impl SpokeRegistry {
     /// Create an empty registry.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -47,11 +48,13 @@ impl SpokeRegistry {
     }
 
     /// Consume the registry and return all registered tests.
+    #[must_use]
     pub fn into_tests(self) -> Vec<Box<dyn ConformanceTest>> {
         self.tests
     }
 
     /// Number of registered tests.
+    #[must_use]
     pub fn count(&self) -> usize {
         self.tests.len()
     }

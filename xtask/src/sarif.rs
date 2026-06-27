@@ -127,7 +127,7 @@ impl ReportingDescriptor {
     }
 
     /// Set the default severity level.
-    pub fn with_level(mut self, level: Level) -> Self {
+    pub const fn with_level(mut self, level: Level) -> Self {
         self.default_configuration = Some(RuleConfiguration { level });
         self
     }
@@ -168,7 +168,7 @@ impl SarifResult {
     }
 
     /// Associate this result with a rule index.
-    pub fn with_rule_index(mut self, idx: usize) -> Self {
+    pub const fn with_rule_index(mut self, idx: usize) -> Self {
         self.rule_index = Some(idx);
         self
     }
@@ -281,8 +281,7 @@ pub fn from_diagnostics(tool_name: &str, tool_version: &str, items: &[Diagnostic
         let level = items
             .iter()
             .find(|d| d.rule_id == *rule_id)
-            .map(|d| d.level)
-            .unwrap_or(Level::Warning);
+            .map_or(Level::Warning, |d| d.level);
         run.add_rule(ReportingDescriptor::new(rule_id, rule_id).with_level(level));
     }
 

@@ -675,6 +675,26 @@ pub enum DomainError {
     InfrastructureError(#[from] anyhow::Error),
 }
 
+impl DomainError {
+    /// Return a short machine-readable identifier for this error variant.
+    ///
+    /// Useful for metrics labels and structured log fields.
+    pub fn error_kind(&self) -> &'static str {
+        match self {
+            Self::ImageNotFound { .. } => "image_not_found",
+            Self::ImagePullFailed { .. } => "image_pull_failed",
+            Self::EmptyImage { .. } => "empty_image",
+            Self::ContainerNotFound { .. } => "container_not_found",
+            Self::ContainerSpawnFailed { .. } => "container_spawn_failed",
+            Self::AlreadyRunning { .. } => "already_running",
+            Self::InvalidConfig(_) => "invalid_config",
+            Self::InvalidResourceLimits(_) => "invalid_resource_limits",
+            Self::ResourceLimitExceeded { .. } => "resource_limit_exceeded",
+            Self::InfrastructureError(_) => "infrastructure_error",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Domain Types
 // ---------------------------------------------------------------------------
@@ -876,7 +896,8 @@ mod tests {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
         };
-        assert_eq!(format!("{err}"), "image library/ubuntu:22.04 not found");
+        assert_eq!(err.error_kind(), "image_not_found");
+        assert_eq!(err.to_string(), "image library/ubuntu:22.04 not found");
     }
 
     #[test]
@@ -884,7 +905,8 @@ mod tests {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
-        assert_eq!(format!("{err}"), "container 'abc123' not found");
+        assert_eq!(err.error_kind(), "container_not_found");
+        assert_eq!(err.to_string(), "container 'abc123' not found");
     }
 
     #[test]
@@ -894,7 +916,8 @@ mod tests {
             value: 9999,
             max: 1024,
         };
-        let msg = format!("{err}");
+        assert_eq!(err.error_kind(), "resource_limit_exceeded");
+        let msg = err.to_string();
         assert!(msg.contains("memory_bytes"), "should contain limit name");
         assert!(msg.contains("9999"), "should contain value");
         assert!(msg.contains("1024"), "should contain max");

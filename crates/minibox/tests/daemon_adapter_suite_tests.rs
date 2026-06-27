@@ -81,7 +81,7 @@ async fn handle_run_once(
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, policy_override: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         state,
         deps,

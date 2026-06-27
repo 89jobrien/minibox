@@ -41,7 +41,7 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
-    fn set(&mut self, area: Area) {
+    const fn set(&mut self, area: Area) {
         match area {
             Area::Core => self.core = true,
             Area::Daemon => self.daemon = true,
@@ -140,7 +140,7 @@ pub fn detect_changes(root: &Path, base_ref: &str) -> Result<ChangeSet> {
     Ok(cs)
 }
 
-/// Serialise a ChangeSet to `key=value` output lines.
+/// Serialise a `ChangeSet` to `key=value` output lines.
 pub fn changeset_to_output_lines(cs: &ChangeSet) -> Vec<String> {
     vec![
         format!("core={}", cs.core),

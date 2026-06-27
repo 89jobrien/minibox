@@ -402,7 +402,7 @@ fn parse_watches(content: &str) -> Vec<String> {
 
         if in_watches {
             if trimmed.starts_with("- ") {
-                let val = trimmed.strip_prefix("- ").unwrap().trim();
+                let val = trimmed.trim_start_matches("- ").trim();
                 watches.push(val.to_string());
             } else if !trimmed.is_empty() {
                 // Another YAML key — done with watches

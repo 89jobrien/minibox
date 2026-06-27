@@ -4,24 +4,24 @@
 //! FROM, RUN, COPY, ADD, ENV, ARG, WORKDIR, CMD, ENTRYPOINT, EXPOSE, LABEL, USER.
 //!
 //! Does NOT support: HEALTHCHECK, VOLUME, ONBUILD, SHELL, STOPSIGNAL,
-//! BuildKit --mount syntax, multi-stage (only first FROM is used).
+//! `BuildKit` --mount syntax, multi-stage (only first FROM is used).
 
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellOrExec {
     Shell(String),
     Exec(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddSource {
     Local(PathBuf),
     Url(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
     From {
         image: String,
@@ -57,6 +57,9 @@ pub enum Instruction {
     Comment(String),
 }
 
+/// # Errors
+///
+/// Returns an error if the Dockerfile contains unknown or malformed instructions.
 pub fn parse(input: &str) -> Result<Vec<Instruction>> {
     let lines = join_continuations(input);
     let mut instructions = Vec::new();
@@ -93,12 +96,12 @@ pub fn parse(input: &str) -> Result<Vec<Instruction>> {
             "ENTRYPOINT" => Instruction::Entrypoint(parse_shell_or_exec(rest)?),
             "COPY" => parse_copy(rest)?,
             "ADD" => parse_add(rest)?,
-            "ENV" => Instruction::Env(parse_env(rest)?),
-            "ARG" => parse_arg(rest)?,
+            "ENV" => Instruction::Env(parse_env(rest)),
+            "ARG" => parse_arg(rest),
             "WORKDIR" => Instruction::Workdir(PathBuf::from(rest)),
             "EXPOSE" => parse_expose(rest)?,
-            "LABEL" => Instruction::Label(parse_env(rest)?),
-            "USER" => parse_user(rest)?,
+            "LABEL" => Instruction::Label(parse_env(rest)),
+            "USER" => parse_user(rest),
             other => bail!("line {}: unsupported instruction: {}", line_num + 1, other),
         };
 
@@ -131,11 +134,8 @@ fn join_continuations(input: &str) -> Vec<String> {
 }
 
 fn split_keyword(line: &str) -> (&str, &str) {
-    if let Some(pos) = line.find(char::is_whitespace) {
-        (&line[..pos], line[pos..].trim())
-    } else {
-        (line, "")
-    }
+    line.find(char::is_whitespace)
+        .map_or((line, ""), |pos| (&line[..pos], line[pos..].trim()))
 }
 
 fn parse_shell_or_exec(s: &str) -> Result<ShellOrExec> {
@@ -199,7 +199,7 @@ fn parse_add(s: &str) -> Result<Instruction> {
     Ok(Instruction::Add { srcs, dest })
 }
 
-fn parse_env(s: &str) -> Result<Vec<(String, String)>> {
+fn parse_env(s: &str) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
     if s.contains('=') {
         // KEY=VALUE form (possibly multiple pairs)
@@ -214,20 +214,20 @@ fn parse_env(s: &str) -> Result<Vec<(String, String)>> {
             pairs.push((k.to_string(), v.trim().to_string()));
         }
     }
-    Ok(pairs)
+    pairs
 }
 
-fn parse_arg(s: &str) -> Result<Instruction> {
+fn parse_arg(s: &str) -> Instruction {
     if let Some((name, default)) = s.split_once('=') {
-        Ok(Instruction::Arg {
+        Instruction::Arg {
             name: name.trim().to_string(),
             default: Some(default.trim().to_string()),
-        })
+        }
     } else {
-        Ok(Instruction::Arg {
+        Instruction::Arg {
             name: s.trim().to_string(),
             default: None,
-        })
+        }
     }
 }
 
@@ -244,17 +244,17 @@ fn parse_expose(s: &str) -> Result<Instruction> {
     Ok(Instruction::Expose { port, proto })
 }
 
-fn parse_user(s: &str) -> Result<Instruction> {
+fn parse_user(s: &str) -> Instruction {
     if let Some((name, group)) = s.split_once(':') {
-        Ok(Instruction::User {
+        Instruction::User {
             name: name.to_string(),
             group: Some(group.to_string()),
-        })
+        }
     } else {
-        Ok(Instruction::User {
+        Instruction::User {
             name: s.to_string(),
             group: None,
-        })
+        }
     }
 }
 

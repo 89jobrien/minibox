@@ -34,13 +34,13 @@ fn build_config(tag: &str) -> BuildConfig {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// build_image succeeds and returns ImageMetadata.
+/// `build_image` succeeds and returns `ImageMetadata`.
 pub struct BuildImageReturnsMetadata;
 impl ConformanceTest for BuildImageReturnsMetadata {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "build_image_returns_metadata"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_builder"
     }
     fn category(&self) -> TestCategory {
@@ -62,13 +62,13 @@ impl ConformanceTest for BuildImageReturnsMetadata {
     }
 }
 
-/// build_image increments the call count.
+/// `build_image` increments the call count.
 pub struct BuildImageIncrementsCount;
 impl ConformanceTest for BuildImageIncrementsCount {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "build_image_increments_count"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_builder"
     }
     fn category(&self) -> TestCategory {
@@ -87,13 +87,13 @@ impl ConformanceTest for BuildImageIncrementsCount {
     }
 }
 
-/// build_image sends at least one progress event.
+/// `build_image` sends at least one progress event.
 pub struct BuildImageSendsProgress;
 impl ConformanceTest for BuildImageSendsProgress {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "build_image_sends_progress"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_builder"
     }
     fn category(&self) -> TestCategory {
@@ -116,13 +116,13 @@ impl ConformanceTest for BuildImageSendsProgress {
     }
 }
 
-/// build_image returns Err when configured to fail.
+/// `build_image` returns Err when configured to fail.
 pub struct BuildImageFailureReturnsErr;
 impl ConformanceTest for BuildImageFailureReturnsErr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "build_image_failure_returns_err"
     }
-    fn adapter(&self) -> &str {
+    fn adapter(&self) -> &'static str {
         "image_builder"
     }
     fn category(&self) -> TestCategory {
@@ -144,7 +144,8 @@ impl ConformanceTest for BuildImageFailureReturnsErr {
     }
 }
 
-/// Return all image_builder conformance tests.
+/// Return all `image_builder` conformance tests.
+#[must_use]
 pub fn all() -> Vec<Box<dyn ConformanceTest>> {
     vec![
         Box::new(BuildImageReturnsMetadata),

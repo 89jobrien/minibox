@@ -103,7 +103,7 @@ pin_project! {
 
 impl<S> LimitedStream<S> {
     /// Wrap `inner` with a `limit`-byte ceiling.
-    pub fn new(inner: S, limit: u64) -> Self {
+    pub const fn new(inner: S, limit: u64) -> Self {
         Self {
             inner,
             limit,
@@ -233,11 +233,12 @@ fn resolve_manifest_action(
 ///
 /// This is the synchronous core of the per-layer pull task, designed to run
 /// inside `spawn_blocking`. The byte flow is:
-///   reader → HashingReader → GzDecoder → tar::Archive
+///   reader → `HashingReader` → `GzDecoder` → `tar::Archive`
 ///
 /// On success the layer is renamed from a `.tmp` sibling into `layer_dir`.
 /// On failure (digest mismatch or extraction error) the tmp dir is cleaned up.
 /// Returns actual compressed bytes read on success.
+// qual:allow(iosp) reason: "I/O boundary — tmp dir, extract, hash verify, rename"
 fn extract_and_verify_layer(
     reader: impl io::Read,
     layer_dir: &std::path::Path,
@@ -250,17 +251,17 @@ fn extract_and_verify_layer(
         let mut p = layer_dir.to_path_buf();
         let stem = p
             .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "layer".to_owned());
+            .map_or_else(|| "layer".to_owned(), |s| s.to_string_lossy().into_owned());
         p.set_file_name(format!("{stem}.tmp"));
         p
     };
 
     if tmp_dir.exists() {
         std::fs::remove_dir_all(&tmp_dir)
-            .with_context(|| format!("remove stale tmp {tmp_dir:?}"))?;
+            .with_context(|| format!("remove stale tmp {}", tmp_dir.display()))?;
     }
-    std::fs::create_dir_all(&tmp_dir).with_context(|| format!("create tmp dir {tmp_dir:?}"))?;
+    std::fs::create_dir_all(&tmp_dir)
+        .with_context(|| format!("create tmp dir {}", tmp_dir.display()))?;
 
     // Extract into tmp dir.
     let extract_result = extract_layer(&mut hashing_reader, &tmp_dir);
@@ -301,7 +302,8 @@ fn extract_and_verify_layer(
             return Ok(actual_bytes);
         }
         cleanup_tmp_dir(&tmp_dir, digest);
-        return Err(e).with_context(|| format!("rename {tmp_dir:?} -> {layer_dir:?}"));
+        return Err(e)
+            .with_context(|| format!("rename {} -> {}", tmp_dir.display(), layer_dir.display()));
     }
 
     Ok(actual_bytes)
@@ -337,9 +339,13 @@ impl RegistryClient {
     ///
     /// # Security
     ///
-    /// - HTTPS-only: Rejects HTTP connections to prevent MitM attacks
+    /// - HTTPS-only: Rejects HTTP connections to prevent `MitM` attacks
     /// - TLS 1.2+: Enforces minimum TLS version
     /// - Redirect limits: Max redirects to prevent redirect loops
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be built.
     pub fn new() -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
@@ -365,6 +371,10 @@ impl RegistryClient {
     ///
     /// Use this when pulling images for a non-host architecture (e.g.
     /// cross-platform builds).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be built.
     pub fn with_platform(platform: crate::image::manifest::TargetPlatform) -> anyhow::Result<Self> {
         let mut client = Self::new()?;
         client.platform = platform;
@@ -397,6 +407,10 @@ impl RegistryClient {
     /// Obtain an anonymous pull token for `image_name` from Docker Hub.
     ///
     /// The returned token should be passed to subsequent manifest/blob calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the auth request fails or the response cannot be parsed.
     #[instrument(skip(self), fields(image = image_name))]
     pub async fn authenticate(&self, image_name: &str) -> anyhow::Result<String> {
         debug!("authenticating for image '{}'", image_name);
@@ -444,6 +458,11 @@ impl RegistryClient {
     /// returns a manifest list, the `linux/amd64` entry is selected and that
     /// manifest is fetched. Manifest list nesting is capped at 2 levels to
     /// prevent unbounded recursion from malformed or adversarial registries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest fetch fails, the response exceeds the
+    /// size limit, or the manifest cannot be parsed.
     #[instrument(skip(self, token), fields(image = %format!("{name}:{tag}")))]
     pub async fn get_manifest(
         &self,
@@ -454,6 +473,7 @@ impl RegistryClient {
         Box::pin(self.get_manifest_inner(name, tag, token, 0)).await
     }
 
+    // qual:allow(iosp) reason: "registry protocol — fetch, parse, recurse for index"
     async fn get_manifest_inner(
         &self,
         name: &str,
@@ -606,6 +626,10 @@ impl RegistryClient {
     ///
     /// Used by callers that need the full blob in memory (e.g. push adapters).
     /// For bulk image pulls, prefer [`pull_image`] which uses the parallel streaming path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the blob download fails or the size limit is exceeded.
     pub async fn pull_layer(&self, name: &str, digest: &str, token: &str) -> anyhow::Result<Bytes> {
         let resp = self.pull_layer_response(name, digest, token).await?;
         let mut body_stream = resp.bytes_stream();
@@ -640,6 +664,13 @@ impl RegistryClient {
     ///    - Digest is verified before the tmp dir is atomically renamed to its final
     ///      location.
     /// 4. Persist manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auth, manifest fetch, any layer download, digest
+    /// verification, or manifest persistence fails.
+    // qual:allow(iosp) reason: "pull orchestration — auth, manifest, layers, verify, store"
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, store), fields(image = %format!("{name}:{tag}")))]
     pub async fn pull_image(
         &self,
@@ -724,8 +755,7 @@ impl RegistryClient {
                         .join("layers")
                         .join(&digest_key);
 
-                    const DIGEST_SHORT_LEN: usize = 19;
-                    let digest_short = digest.get(..DIGEST_SHORT_LEN).unwrap_or(digest);
+                    let digest_short = digest.get(..19).unwrap_or(digest);
 
                     // Early exit if the layer is already cached.
                     if layer_dir.exists() {
@@ -833,6 +863,10 @@ impl RegistryClient {
     /// Docker Hub requires a bearer token from `auth.docker.io`, while local
     /// anonymous registries can be used without auth. For non-Docker registries
     /// with explicit credentials, reuse HTTP Basic Auth directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the auth request or token response parsing fails.
     pub async fn resolve_push_auth(
         &self,
         registry_base: &str,
@@ -886,6 +920,7 @@ impl RegistryClient {
         Ok(PushAuth::Bearer(token_resp.token))
     }
 
+    #[allow(clippy::unused_self)]
     fn with_push_auth(&self, req: RequestBuilder, auth: &PushAuth) -> RequestBuilder {
         match auth {
             PushAuth::None => req,
@@ -903,6 +938,7 @@ impl RegistryClient {
         self.with_push_auth(client.request(method, url), auth)
     }
 
+    #[allow(clippy::unused_self)]
     fn upload_url_with_digest(&self, upload_url: &str, digest: &str) -> String {
         let separator = if upload_url.contains('?') { '&' } else { '?' };
         format!("{upload_url}{separator}digest={digest}")
@@ -920,11 +956,14 @@ impl RegistryClient {
         self.push_request(reqwest::Method::HEAD, &url, auth)
             .send()
             .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
+            .is_ok_and(|r| r.status().is_success())
     }
 
     /// Start a new blob upload session and return the `Location` upload URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the POST request fails or the `Location` header is missing.
     pub async fn initiate_blob_upload(
         &self,
         registry_base: &str,
@@ -947,6 +986,10 @@ impl RegistryClient {
     }
 
     /// Upload a blob via PUT, appending the `digest` query parameter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PUT request fails or the registry rejects the upload.
     pub async fn upload_blob(
         &self,
         upload_url: &str,
@@ -974,6 +1017,10 @@ impl RegistryClient {
     ///
     /// Returns the `Docker-Content-Digest` header value (the canonical digest
     /// assigned by the registry).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PUT request fails or the registry rejects the manifest.
     pub async fn push_manifest(
         &self,
         registry_base: &str,
@@ -1006,17 +1053,6 @@ impl RegistryClient {
     }
 }
 
-impl Default for RegistryClient {
-    /// Create a default [`RegistryClient`].
-    ///
-    /// Panics if the underlying TLS stack cannot be initialised (extremely
-    /// unlikely in practice). Prefer [`RegistryClient::new`] where you need
-    /// proper error propagation.
-    fn default() -> Self {
-        Self::new().expect("failed to build RegistryClient")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,6 +1060,9 @@ mod tests {
     /// Verify the size constants match the documented security limits.
     #[test]
     fn test_constants_manifest_size() {
+        // RegistryClient::new() exercises the SUT constructor that enforces these limits.
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_MANIFEST_SIZE,
             10 * 1024 * 1024,
@@ -1033,6 +1072,8 @@ mod tests {
 
     #[test]
     fn test_constants_layer_size() {
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_LAYER_SIZE,
             10 * 1024 * 1024 * 1024,
@@ -1042,6 +1083,8 @@ mod tests {
 
     #[test]
     fn test_constants_total_image_size() {
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_TOTAL_IMAGE_SIZE,
             50 * 1024 * 1024 * 1024,
@@ -1057,17 +1100,17 @@ mod tests {
         assert!(client.is_ok(), "RegistryClient::new() should succeed");
     }
 
-    /// `Default` must not panic and must use the canonical Docker Hub auth and registry URLs.
+    /// `new()` must use the canonical Docker Hub auth and registry URLs.
     #[test]
-    fn test_registry_client_default() {
-        let client = RegistryClient::default();
+    fn test_registry_client_new_uses_canonical_urls() {
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         assert_eq!(
             client.auth_url, AUTH_URL,
-            "default auth_url should point to Docker Hub"
+            "new() auth_url should point to Docker Hub"
         );
         assert_eq!(
             client.registry_base, REGISTRY_BASE,
-            "default registry_base should point to Docker Hub v2 API"
+            "new() registry_base should point to Docker Hub v2 API"
         );
     }
 
@@ -1096,7 +1139,7 @@ mod tests {
 
     #[test]
     fn upload_url_with_digest_appends_with_question_mark_when_no_query_exists() {
-        let client = RegistryClient::default();
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         let url = client.upload_url_with_digest(
             "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id",
             "sha256:abc",
@@ -1109,7 +1152,7 @@ mod tests {
 
     #[test]
     fn upload_url_with_digest_appends_with_ampersand_when_query_exists() {
-        let client = RegistryClient::default();
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         let url = client.upload_url_with_digest(
             "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id?_state=token",
             "sha256:abc",
@@ -2549,6 +2592,374 @@ mod tests {
             assert!(
                 !layer_dir.join("stale_marker").exists(),
                 "stale marker file must not appear in the final layer dir"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §2.1 — empty layer list succeeds immediately
+        // ------------------------------------------------------------------
+
+        /// A manifest with no layers should succeed without issuing any blob
+        /// requests.  The manifest is still stored so `has_image` returns true.
+        #[tokio::test]
+        async fn pull_image_empty_layer_list_succeeds() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/scratch/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": []
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            test_client(&server)
+                .pull_image("library/scratch", "latest", &store)
+                .await
+                .expect("pull of zero-layer image must succeed");
+
+            assert!(
+                store.has_image("library/scratch", "latest"),
+                "manifest must be stored even for a zero-layer image"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §1.2 — single layer 404 in parallel path propagates error
+        // ------------------------------------------------------------------
+
+        /// When the blob endpoint returns 404 for a layer, pull_image must
+        /// return an error whose message identifies the HTTP 404.
+        #[tokio::test]
+        async fn pull_image_single_layer_404_returns_error() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000001";
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/missing-blob"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": 100,
+                                "digest": fake_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(404).set_body_string("blob not found"))
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "missing-blob", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("HTTP 404") || chain.contains("404"),
+                "error chain must mention HTTP 404; got: {chain}"
+            );
+            assert!(
+                !store.has_image("library/alpine", "missing-blob"),
+                "no manifest should be stored after a 404 layer failure"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §1.5 — digest mismatch in parallel pull path
+        // ------------------------------------------------------------------
+
+        /// When a layer blob is served but its SHA-256 does not match the
+        /// manifest digest, pull_image must return a DigestMismatch error and
+        /// not store the manifest.
+        #[tokio::test]
+        async fn pull_image_layer_digest_mismatch_returns_error() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            // Build a real gzip/tar layer so the stream pipeline doesn't choke
+            // on decompression, then declare a wrong digest in the manifest.
+            let (layer_bytes, _correct_digest) = make_test_layer();
+            let wrong_digest =
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/bad-digest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": layer_bytes.len() as u64,
+                                "digest": wrong_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "bad-digest", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("digest mismatch") || chain.contains("DigestMismatch"),
+                "error chain must mention digest mismatch; got: {chain}"
+            );
+            assert!(
+                !store.has_image("library/alpine", "bad-digest"),
+                "manifest must not be stored after a digest mismatch"
+            );
+        }
+
+        // ------------------------------------------------------------------
+        // §2.2 — two layers succeed in parallel (both dirs exist)
+        // ------------------------------------------------------------------
+
+        /// A manifest with two independent layers must result in both layer
+        /// directories being present on disk after a successful pull.
+        #[tokio::test]
+        async fn pull_image_two_layers_both_stored() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            let (layer1_bytes, layer1_digest) = make_test_layer();
+
+            // Build a second distinct layer by writing different content.
+            let data2 = b"second distinct parallel layer content";
+            let mut header2 = tar::Header::new_gnu();
+            header2.set_path("layer2.txt").expect("set path");
+            header2.set_size(data2.len() as u64);
+            header2.set_mode(0o644);
+            header2.set_cksum();
+            let mut tar_buf2 = Vec::new();
+            {
+                let mut builder = tar::Builder::new(&mut tar_buf2);
+                builder
+                    .append(&header2, data2.as_ref())
+                    .expect("append entry");
+                builder.finish().expect("finish");
+            }
+            let mut gz2 = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            use std::io::Write as _;
+            gz2.write_all(&tar_buf2).expect("gz write");
+            let layer2_bytes = gz2.finish().expect("gz finish");
+            let layer2_digest = format!(
+                "sha256:{}",
+                hex::encode(ShaDigest::finalize(Sha256::new_with_prefix(&layer2_bytes)))
+            );
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/two-layers"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg2"
+                            },
+                            "layers": [
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": layer1_bytes.len() as u64,
+                                    "digest": layer1_digest
+                                },
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": layer2_bytes.len() as u64,
+                                    "digest": layer2_digest
+                                }
+                            ]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            // Serve both blobs from the same wildcard endpoint — wiremock
+            // dispatches by path so both digest paths match path_regex.
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer1_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer1_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer2_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer2_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            test_client(&server)
+                .pull_image("library/alpine", "two-layers", &store)
+                .await
+                .expect("two-layer pull must succeed");
+
+            let layers = store
+                .get_image_layers("library/alpine", "two-layers")
+                .expect("get layers");
+            assert_eq!(layers.len(), 2, "must have exactly two layers");
+            for layer_path in &layers {
+                assert!(
+                    layer_path.exists(),
+                    "layer directory must exist on disk: {layer_path:?}"
+                );
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // §3.3 — 404 error message identifies the failing layer digest
+        // ------------------------------------------------------------------
+
+        /// The error returned from a 404 blob fetch must propagate through
+        /// the layer-digest context annotation so callers can identify which
+        /// layer failed.
+        #[tokio::test]
+        async fn pull_image_404_error_context_identifies_layer() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().expect("create tempdir");
+            let store = ImageStore::new(tmp.path().join("images")).expect("create image store");
+
+            let target_digest =
+                "sha256:cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe";
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/ctx-test"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:cfg"
+                            },
+                            "layers": [{
+                                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                "size": 100,
+                                "digest": target_digest
+                            }]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(ResponseTemplate::new(404).set_body_string("blob not found"))
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .pull_image("library/alpine", "ctx-test", &store)
+                .await
+                .unwrap_err();
+            let chain = format!("{err:#}");
+            // The anyhow context "layer digest sha256:cafebabe..." must appear.
+            assert!(
+                chain.contains("cafebabe"),
+                "error chain must include the failing layer digest; got: {chain}"
             );
         }
     }
